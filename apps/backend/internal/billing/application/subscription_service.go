@@ -136,30 +136,16 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 			return domain.ErrInvalidSubscriptionState
 		}
 
-		fromStatus := sub.Status
-		fromTariffID := sub.TariffID
-		if err := sub.Cancel(); err != nil {
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { return s.Cancel() },
+			transitionSpec{
+				reason:      domain.TransitionReasonCancelled,
+				initiator:   domain.InitiatorUser,
+				initiatorID: &userID,
+				auditAction: auditdomain.ActionSubscriptionCancelled,
+			},
+		); err != nil {
 			return err
-		}
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("update subscription: %w", err)
-		}
-
-		transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, domain.TransitionReasonCancelled, domain.InitiatorUser, &userID)
-		if err != nil {
-			return fmt.Errorf("build cancellation transition: %w", err)
-		}
-		if err := stores.transitions.Append(ctx, transition); err != nil {
-			return fmt.Errorf("append cancellation transition: %w", err)
-		}
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &userID,
-			ActorRole:  auditdomain.ActorRoleOwner,
-			Action:     auditdomain.ActionSubscriptionCancelled,
-			EntityType: auditdomain.EntitySubscription,
-			EntityID:   &sub.ID,
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
 		}
 		return nil
 	})
@@ -305,29 +291,22 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 		if sub.ValidUntil == nil {
 			return domain.ErrInvalidTariffChange
 		}
-		if err := sub.ScheduleDowngrade(currentTariff, newTariff, req.Period, *sub.ValidUntil); err != nil {
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error {
+				return s.ScheduleDowngrade(currentTariff, newTariff, req.Period, *s.ValidUntil)
+			},
+			transitionSpec{
+				reason:            domain.TransitionReasonDowngradeScheduled,
+				initiator:         domain.InitiatorUser,
+				initiatorID:       &userID,
+				scheduledTariffID: &newTariff.ID,
+				auditAction:       auditdomain.ActionSubscriptionTariffChanged,
+				auditContext: func(_ domain.Subscription, transition domain.Transition) map[string]any {
+					return map[string]any{"from_tariff_id": *transition.FromTariffID, "to_tariff_id": transition.ToTariffID}
+				},
+			},
+		); err != nil {
 			return err
-		}
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("schedule downgrade: %w", err)
-		}
-
-		transition, err := domain.NewScheduledTariffTransition(sub, newTariff.ID, domain.TransitionReasonDowngradeScheduled, domain.InitiatorUser, &userID)
-		if err != nil {
-			return fmt.Errorf("build downgrade-scheduling transition: %w", err)
-		}
-		if err := stores.transitions.Append(ctx, transition); err != nil {
-			return fmt.Errorf("append downgrade-scheduling transition: %w", err)
-		}
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &userID,
-			ActorRole:  auditdomain.ActorRoleOwner,
-			Action:     auditdomain.ActionSubscriptionTariffChanged,
-			EntityType: auditdomain.EntitySubscription,
-			EntityID:   &sub.ID,
-			Context:    map[string]any{"from_tariff_id": currentTariff.ID, "to_tariff_id": newTariff.ID},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
 		}
 		return nil
 	})

@@ -71,36 +71,26 @@ func (s *SubscriptionService) AssignServiceSubscription(ctx context.Context, adm
 		if err != nil {
 			return err
 		}
-		fromStatus := sub.Status
-		fromTariffID := sub.TariffID
-		sub.AssignService(tariff.ID, validUntil)
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("assign service subscription: %w", err)
-		}
-
-		transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, domain.TransitionReasonServiceAssigned, domain.InitiatorAdmin, &adminID)
+		applied, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { s.AssignService(tariff.ID, validUntil); return nil },
+			transitionSpec{
+				reason:      domain.TransitionReasonServiceAssigned,
+				initiator:   domain.InitiatorAdmin,
+				initiatorID: &adminID,
+				auditAction: auditdomain.ActionSubscriptionServiceAssigned,
+				auditContext: func(domain.Subscription, domain.Transition) map[string]any {
+					return map[string]any{"tariff_name": string(tariff.Name), "valid_until": validUntil}
+				},
+			},
+		)
 		if err != nil {
-			return fmt.Errorf("build service-assignment transition: %w", err)
-		}
-		if err := stores.transitions.Append(ctx, transition); err != nil {
-			return fmt.Errorf("append service-assignment transition: %w", err)
+			return err
 		}
 
-		if fromTariffID != tariff.ID {
+		if transitionChangedTariff(applied, tariff.ID) {
 			if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerServiceAssigned); err != nil {
 				return fmt.Errorf("enforce tariff limit after service assignment: %w", err)
 			}
-		}
-
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &adminID,
-			ActorRole:  auditdomain.ActorRoleAdmin,
-			Action:     auditdomain.ActionSubscriptionServiceAssigned,
-			EntityType: auditdomain.EntitySubscription,
-			EntityID:   &sub.ID,
-			Context:    map[string]any{"tariff_name": string(tariff.Name), "valid_until": validUntil},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
 		}
 		return nil
 	})
@@ -150,36 +140,23 @@ func (s *SubscriptionService) ForceChangeTariff(ctx context.Context, adminID, us
 		if err != nil {
 			return err
 		}
-		fromStatus := sub.Status
-		fromTariffID := sub.TariffID
-		if err := sub.ForceApplyTariffChange(tariff.ID, req.Period, now); err != nil {
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { return s.ForceApplyTariffChange(tariff.ID, req.Period, now) },
+			transitionSpec{
+				reason:      domain.TransitionReasonForcedChange,
+				initiator:   domain.InitiatorAdmin,
+				initiatorID: &adminID,
+				auditAction: auditdomain.ActionSubscriptionTariffForced,
+				auditContext: func(_ domain.Subscription, transition domain.Transition) map[string]any {
+					return map[string]any{"from_tariff_id": *transition.FromTariffID, "to_tariff_id": tariff.ID}
+				},
+			},
+		); err != nil {
 			return err
-		}
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("force tariff change: %w", err)
-		}
-
-		transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, domain.TransitionReasonForcedChange, domain.InitiatorAdmin, &adminID)
-		if err != nil {
-			return fmt.Errorf("build forced-change transition: %w", err)
-		}
-		if err := stores.transitions.Append(ctx, transition); err != nil {
-			return fmt.Errorf("append forced-change transition: %w", err)
 		}
 
 		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerForcedChange); err != nil {
 			return fmt.Errorf("enforce tariff limit after forced change: %w", err)
-		}
-
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &adminID,
-			ActorRole:  auditdomain.ActorRoleAdmin,
-			Action:     auditdomain.ActionSubscriptionTariffForced,
-			EntityType: auditdomain.EntitySubscription,
-			EntityID:   &sub.ID,
-			Context:    map[string]any{"from_tariff_id": fromTariffID, "to_tariff_id": tariff.ID},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
 		}
 		return nil
 	})
@@ -200,32 +177,19 @@ func (s *SubscriptionService) ExtendGrace(ctx context.Context, adminID, userID u
 		if err != nil {
 			return err
 		}
-		fromStatus := sub.Status
-		fromTariffID := sub.TariffID
-		if err := sub.ExtendGrace(now, extra); err != nil {
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { return s.ExtendGrace(now, extra) },
+			transitionSpec{
+				reason:      domain.TransitionReasonGraceExtended,
+				initiator:   domain.InitiatorAdmin,
+				initiatorID: &adminID,
+				auditAction: auditdomain.ActionSubscriptionGraceExtended,
+				auditContext: func(s domain.Subscription, _ domain.Transition) map[string]any {
+					return map[string]any{"days": days, "valid_until": *s.ValidUntil}
+				},
+			},
+		); err != nil {
 			return err
-		}
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("extend grace: %w", err)
-		}
-
-		transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, domain.TransitionReasonGraceExtended, domain.InitiatorAdmin, &adminID)
-		if err != nil {
-			return fmt.Errorf("build grace-extension transition: %w", err)
-		}
-		if err := stores.transitions.Append(ctx, transition); err != nil {
-			return fmt.Errorf("append grace-extension transition: %w", err)
-		}
-
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &adminID,
-			ActorRole:  auditdomain.ActorRoleAdmin,
-			Action:     auditdomain.ActionSubscriptionGraceExtended,
-			EntityType: auditdomain.EntitySubscription,
-			EntityID:   &sub.ID,
-			Context:    map[string]any{"days": days, "valid_until": *sub.ValidUntil},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
 		}
 		return nil
 	})
@@ -245,30 +209,16 @@ func (s *SubscriptionService) CancelSubscriptionAsAdmin(ctx context.Context, adm
 		if !sub.IsPaidSource() {
 			return domain.ErrInvalidSubscriptionState
 		}
-		fromStatus := sub.Status
-		fromTariffID := sub.TariffID
-		if err := sub.Cancel(); err != nil {
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { return s.Cancel() },
+			transitionSpec{
+				reason:      domain.TransitionReasonCancelled,
+				initiator:   domain.InitiatorAdmin,
+				initiatorID: &adminID,
+				auditAction: auditdomain.ActionSubscriptionCancelled,
+			},
+		); err != nil {
 			return err
-		}
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("cancel subscription: %w", err)
-		}
-
-		transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, domain.TransitionReasonCancelled, domain.InitiatorAdmin, &adminID)
-		if err != nil {
-			return fmt.Errorf("build cancellation transition: %w", err)
-		}
-		if err := stores.transitions.Append(ctx, transition); err != nil {
-			return fmt.Errorf("append cancellation transition: %w", err)
-		}
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &adminID,
-			ActorRole:  auditdomain.ActorRoleAdmin,
-			Action:     auditdomain.ActionSubscriptionCancelled,
-			EntityType: auditdomain.EntitySubscription,
-			EntityID:   &sub.ID,
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
 		}
 		return nil
 	})

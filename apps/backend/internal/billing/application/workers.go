@@ -146,18 +146,14 @@ func enterSubscriptionGrace(ctx context.Context, stores *txStores, sub domain.Su
 	if sub.Status == domain.SubscriptionStatusGrace && sub.IsInGrace(now) {
 		return sub, false, nil
 	}
-	fromStatus := sub.Status
-	fromTariffID := sub.TariffID
-	sub.EnterGrace(now, grace)
-	if err := stores.subscriptions.Update(ctx, sub); err != nil {
-		return domain.Subscription{}, false, fmt.Errorf("move subscription to grace: %w", err)
-	}
-	transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, domain.TransitionReasonGraceEntered, domain.InitiatorSystem, nil)
-	if err != nil {
-		return domain.Subscription{}, false, fmt.Errorf("build grace transition: %w", err)
-	}
-	if err := stores.transitions.Append(ctx, transition); err != nil {
-		return domain.Subscription{}, false, fmt.Errorf("append grace transition: %w", err)
+	if _, err := stores.applyTransition(ctx, &sub,
+		func(s *domain.Subscription) error { s.EnterGrace(now, grace); return nil },
+		transitionSpec{
+			reason:    domain.TransitionReasonGraceEntered,
+			initiator: domain.InitiatorSystem,
+		},
+	); err != nil {
+		return domain.Subscription{}, false, err
 	}
 	return sub, true, nil
 }
@@ -270,22 +266,17 @@ func (w *Workers) applyScheduledChange(ctx context.Context, listed domain.Subscr
 			return nil
 		}
 
-		fromStatus := sub.Status
-		fromTariffID := sub.TariffID
-		if err := sub.ApplyScheduledDowngrade(target, period, now); err != nil {
+		transition, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { return s.ApplyScheduledDowngrade(target, period, now) },
+			transitionSpec{
+				reason:    domain.TransitionReasonScheduledChangeApplied,
+				initiator: domain.InitiatorSystem,
+			},
+		)
+		if err != nil {
 			return err
 		}
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("update subscription after scheduled downgrade: %w", err)
-		}
-		transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, domain.TransitionReasonScheduledChangeApplied, domain.InitiatorSystem, nil)
-		if err != nil {
-			return fmt.Errorf("build scheduled-change transition: %w", err)
-		}
-		if err := stores.transitions.Append(ctx, transition); err != nil {
-			return fmt.Errorf("append scheduled-change transition: %w", err)
-		}
-		if fromTariffID != target.ID {
+		if transitionChangedTariff(transition, target.ID) {
 			if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade); err != nil {
 				return fmt.Errorf("enforce tariff limit after scheduled downgrade: %w", err)
 			}
@@ -545,42 +536,38 @@ func renewalTerms(ctx context.Context, stores *txStores, sub domain.Subscription
 // (none is seeded today, the branch keeps the phase total) renews in place or
 // applies a pending free change without a payment.
 func (w *Workers) applyFreeRenewal(ctx context.Context, stores *txStores, sub domain.Subscription, tariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time) error {
-	fromStatus := sub.Status
-	fromTariffID := sub.TariffID
-	switch {
-	case tariff.Name == domain.TariffBasic:
-		sub.DowngradeToBasic(tariff.ID)
-	case sub.TariffID == tariff.ID:
-		if err := sub.ApplyRenewal(uuid.Nil, period, now); err != nil {
-			return err
-		}
-	default:
-		current, err := stores.tariffs.GetByID(ctx, sub.TariffID)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
-			}
-			return fmt.Errorf("get current tariff: %w", err)
-		}
-		if err := sub.ApplyTariffChange(uuid.Nil, current, tariff, period, now); err != nil {
-			return err
-		}
-	}
-	if err := stores.subscriptions.Update(ctx, sub); err != nil {
-		return fmt.Errorf("update subscription after free renewal: %w", err)
-	}
 	reason := domain.TransitionReasonExpired
 	if tariff.Name != domain.TariffBasic {
 		reason = domain.TransitionReasonScheduledChangeApplied
 	}
-	transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, reason, domain.InitiatorSystem, nil)
+	applied, err := stores.applyTransition(ctx, &sub,
+		func(s *domain.Subscription) error {
+			switch {
+			case tariff.Name == domain.TariffBasic:
+				s.DowngradeToBasic(tariff.ID)
+				return nil
+			case s.TariffID == tariff.ID:
+				return s.ApplyRenewal(uuid.Nil, period, now)
+			default:
+				current, err := stores.tariffs.GetByID(ctx, s.TariffID)
+				if err != nil {
+					if errors.Is(err, ErrNotFound) {
+						return fmt.Errorf("subscription %s references missing tariff %s: %w", s.ID, s.TariffID, ErrTariffNotFound)
+					}
+					return fmt.Errorf("get current tariff: %w", err)
+				}
+				return s.ApplyTariffChange(uuid.Nil, current, tariff, period, now)
+			}
+		},
+		transitionSpec{
+			reason:    reason,
+			initiator: domain.InitiatorSystem,
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("build free-renewal transition: %w", err)
+		return err
 	}
-	if err := stores.transitions.Append(ctx, transition); err != nil {
-		return fmt.Errorf("append free-renewal transition: %w", err)
-	}
-	if fromTariffID != sub.TariffID {
+	if transitionChangedTariff(applied, sub.TariffID) {
 		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerFreeDowngrade); err != nil {
 			return fmt.Errorf("enforce tariff limit after free renewal: %w", err)
 		}
@@ -757,15 +744,11 @@ func (w *Workers) applyRenewalSuccess(ctx context.Context, payment domain.Subscr
 			return fmt.Errorf("mark renewal payment succeeded: %w", err)
 		}
 
-		sub, err := stores.subscriptionForUpdate(ctx, current.UserID)
+		applied, err := applySucceededPayment(ctx, stores, current, now)
 		if err != nil {
 			return err
 		}
-		fromTariffID := sub.TariffID
-		if err := applySucceededPayment(ctx, stores, current, now); err != nil {
-			return err
-		}
-		if fromTariffID != current.TariffID {
+		if transitionChangedTariff(applied, current.TariffID) {
 			target, err := stores.tariffs.GetByID(ctx, current.TariffID)
 			if err != nil {
 				if errors.Is(err, ErrNotFound) {
@@ -773,7 +756,7 @@ func (w *Workers) applyRenewalSuccess(ctx context.Context, payment domain.Subscr
 				}
 				return fmt.Errorf("get applied tariff: %w", err)
 			}
-			if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerRenewalDowngrade); err != nil {
+			if err := stores.enforceTariffLimit(ctx, current.UserID, target.ActivePropertyLimit, triggerRenewalDowngrade); err != nil {
 				return fmt.Errorf("enforce tariff limit after renewal downgrade: %w", err)
 			}
 		}
@@ -1055,18 +1038,14 @@ func (w *Workers) expireSubscription(ctx context.Context, listed domain.Subscrip
 		if !eligible(sub, now) {
 			return nil
 		}
-		fromStatus := sub.Status
-		fromTariffID := sub.TariffID
-		sub.DowngradeToBasic(basicTariff.ID)
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("update subscription after expiry downgrade: %w", err)
-		}
-		transition, err := domain.NewTransition(sub, &fromStatus, &fromTariffID, domain.TransitionReasonExpired, domain.InitiatorSystem, nil)
-		if err != nil {
-			return fmt.Errorf("build expiry transition: %w", err)
-		}
-		if err := stores.transitions.Append(ctx, transition); err != nil {
-			return fmt.Errorf("append expiry transition: %w", err)
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { s.DowngradeToBasic(basicTariff.ID); return nil },
+			transitionSpec{
+				reason:    domain.TransitionReasonExpired,
+				initiator: domain.InitiatorSystem,
+			},
+		); err != nil {
+			return err
 		}
 		if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, trigger); err != nil {
 			return fmt.Errorf("enforce tariff limit after expiry downgrade: %w", err)

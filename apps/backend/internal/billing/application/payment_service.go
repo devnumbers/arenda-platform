@@ -424,7 +424,7 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 			if err := stores.payments.Update(ctx, payment); err != nil {
 				return fmt.Errorf("mark payment succeeded: %w", err)
 			}
-			if err := applySucceededPayment(ctx, stores, payment, now); err != nil {
+			if _, err := applySucceededPayment(ctx, stores, payment, now); err != nil {
 				return err
 			}
 			if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -456,56 +456,46 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 // the full price of the new plan with the period counted from the payment
 // moment and auto-renew on; a same-tariff payment is a renewal. The transition
 // log records the applied change with the payment that caused it. A payment
-// the subscription already reflects is a no-op, so duplicate deliveries,
-// reconciliations and worker retries stay idempotent. Shared by the webhook
-// flow and the renewal worker (issue #252).
-func applySucceededPayment(ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time) error {
+// the subscription already reflects is a no-op — the zero transition it
+// returns keeps duplicate deliveries, reconciliations and worker retries
+// idempotent. Shared by the webhook flow and the renewal worker (issue #252).
+func applySucceededPayment(ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time) (domain.Transition, error) {
 	sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
 	if err != nil {
-		return err
+		return domain.Transition{}, err
 	}
 	if sub.LastAppliedPaymentID != nil && *sub.LastAppliedPaymentID == payment.ID {
-		return nil
+		return domain.Transition{}, nil
 	}
 
 	paymentTariff, err := stores.tariffs.GetByID(ctx, payment.TariffID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return fmt.Errorf("payment %s references missing tariff %s: %w", payment.ID, payment.TariffID, ErrTariffNotFound)
+			return domain.Transition{}, fmt.Errorf("payment %s references missing tariff %s: %w", payment.ID, payment.TariffID, ErrTariffNotFound)
 		}
-		return fmt.Errorf("get payment tariff: %w", err)
+		return domain.Transition{}, fmt.Errorf("get payment tariff: %w", err)
 	}
 
-	fromStatus := sub.Status
-	fromTariffID := sub.TariffID
-	if sub.TariffID == payment.TariffID {
-		if err := sub.ApplyRenewal(payment.ID, payment.Period, now); err != nil {
-			return err
-		}
-	} else {
-		currentTariff, err := stores.tariffs.GetByID(ctx, sub.TariffID)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
+	return stores.applyTransition(ctx, &sub,
+		func(s *domain.Subscription) error {
+			if s.TariffID == payment.TariffID {
+				return s.ApplyRenewal(payment.ID, payment.Period, now)
 			}
-			return fmt.Errorf("get current tariff: %w", err)
-		}
-		if err := sub.ApplyTariffChange(payment.ID, currentTariff, paymentTariff, payment.Period, now); err != nil {
-			return err
-		}
-	}
-	if err := stores.subscriptions.Update(ctx, sub); err != nil {
-		return fmt.Errorf("apply payment to subscription: %w", err)
-	}
-
-	transition, err := domain.NewAppliedPaymentTransition(sub, &fromStatus, &fromTariffID, payment.ID)
-	if err != nil {
-		return fmt.Errorf("build payment transition: %w", err)
-	}
-	if err := stores.transitions.Append(ctx, transition); err != nil {
-		return fmt.Errorf("append payment transition: %w", err)
-	}
-	return nil
+			currentTariff, err := stores.tariffs.GetByID(ctx, s.TariffID)
+			if err != nil {
+				if errors.Is(err, ErrNotFound) {
+					return fmt.Errorf("subscription %s references missing tariff %s: %w", s.ID, s.TariffID, ErrTariffNotFound)
+				}
+				return fmt.Errorf("get current tariff: %w", err)
+			}
+			return s.ApplyTariffChange(payment.ID, currentTariff, paymentTariff, payment.Period, now)
+		},
+		transitionSpec{
+			reason:    domain.TransitionReasonPaymentApplied,
+			initiator: domain.InitiatorSystem,
+			paymentID: new(payment.ID),
+		},
+	)
 }
 
 // applyRefundNotification records a full refund reported by the provider and

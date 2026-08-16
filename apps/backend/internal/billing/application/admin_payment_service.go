@@ -22,12 +22,11 @@ import (
 
 // refundActor identifies who applied a refund for the transition log and the
 // audit record: the admin flow passes the acting admin, the webhook and the
-// reconciliation worker pass the system.
+// reconciliation worker pass the system. The audit actor derives from the
+// initiator (auditRoleOfInitiator), so the two vocabularies cannot disagree.
 type refundActor struct {
 	initiator   domain.TransitionInitiator
 	initiatorID *uuid.UUID
-	auditRole   auditdomain.ActorRole
-	auditID     *uuid.UUID
 }
 
 // adminRefundActor attributes a refund to the acting admin.
@@ -35,8 +34,6 @@ func adminRefundActor(adminID uuid.UUID) refundActor {
 	return refundActor{
 		initiator:   domain.InitiatorAdmin,
 		initiatorID: &adminID,
-		auditRole:   auditdomain.ActorRoleAdmin,
-		auditID:     &adminID,
 	}
 }
 
@@ -45,7 +42,6 @@ func adminRefundActor(adminID uuid.UUID) refundActor {
 func systemRefundActor() refundActor {
 	return refundActor{
 		initiator: domain.InitiatorSystem,
-		auditRole: auditdomain.ActorRoleSystem,
 	}
 }
 
@@ -288,19 +284,16 @@ func (s *PaymentService) applyRefundedPayment(ctx context.Context, stores *txSto
 		}
 		return fmt.Errorf("get basic tariff for refund: %w", err)
 	}
-	fromStatus := sub.Status
-	fromTariffID := sub.TariffID
-	sub.DowngradeToBasic(basicTariff.ID)
-	if err := stores.subscriptions.Update(ctx, sub); err != nil {
-		return fmt.Errorf("downgrade subscription to basic after refund: %w", err)
-	}
-
-	transition, err := domain.NewRefundTransition(sub, &fromStatus, &fromTariffID, actor.initiator, actor.initiatorID, payment.ID)
-	if err != nil {
-		return fmt.Errorf("build refund transition: %w", err)
-	}
-	if err := stores.transitions.Append(ctx, transition); err != nil {
-		return fmt.Errorf("append refund transition: %w", err)
+	if _, err := stores.applyTransition(ctx, &sub,
+		func(s *domain.Subscription) error { s.DowngradeToBasic(basicTariff.ID); return nil },
+		transitionSpec{
+			reason:      domain.TransitionReasonRefunded,
+			initiator:   actor.initiator,
+			initiatorID: actor.initiatorID,
+			paymentID:   new(payment.ID),
+		},
+	); err != nil {
+		return err
 	}
 
 	if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, triggerRefund); err != nil {
@@ -308,8 +301,8 @@ func (s *PaymentService) applyRefundedPayment(ctx context.Context, stores *txSto
 	}
 
 	if err := stores.audit.Record(ctx, auditdomain.Entry{
-		ActorID:    actor.auditID,
-		ActorRole:  actor.auditRole,
+		ActorID:    actor.initiatorID,
+		ActorRole:  auditRoleOfInitiator(actor.initiator),
 		Action:     auditdomain.ActionSubscriptionPaymentRefunded,
 		EntityType: auditdomain.EntitySubscriptionPayment,
 		EntityID:   &payment.ID,
