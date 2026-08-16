@@ -256,9 +256,9 @@ func (w *Workers) applyScheduledChange(ctx context.Context, listed domain.Subscr
 		if sub.PendingPeriod != nil {
 			period = *sub.PendingPeriod
 		}
-		price := target.MonthlyPriceKopecks
-		if period == domain.PeriodYear {
-			price = target.YearlyPriceKopecks
+		price, err := target.Price(period)
+		if err != nil {
+			return err
 		}
 		if price > 0 {
 			// A paid target is charged at apply time; charging belongs to the
@@ -505,9 +505,9 @@ func renewalTerms(ctx context.Context, stores *txStores, sub domain.Subscription
 			}
 			return domain.Tariff{}, "", 0, fmt.Errorf("get pending tariff: %w", err)
 		}
-		amount := target.MonthlyPriceKopecks
-		if *sub.PendingPeriod == domain.PeriodYear {
-			amount = target.YearlyPriceKopecks
+		amount, err := target.Price(*sub.PendingPeriod)
+		if err != nil {
+			return domain.Tariff{}, "", 0, err
 		}
 		return target, *sub.PendingPeriod, amount, nil
 	}
@@ -522,9 +522,9 @@ func renewalTerms(ctx context.Context, stores *txStores, sub domain.Subscription
 	if sub.CurrentPeriod != nil {
 		period = *sub.CurrentPeriod
 	}
-	amount := current.MonthlyPriceKopecks
-	if period == domain.PeriodYear {
-		amount = current.YearlyPriceKopecks
+	amount, err := current.Price(period)
+	if err != nil {
+		return domain.Tariff{}, "", 0, err
 	}
 	return current, period, amount, nil
 }

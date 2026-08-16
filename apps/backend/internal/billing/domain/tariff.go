@@ -82,6 +82,21 @@ func (t Tariff) Validate() error {
 	return nil
 }
 
+// Price returns the tariff's price for one billing period in kopecks. The
+// period selects the price field; an unknown period is an error rather than a
+// silent monthly fallback, so no caller can charge the wrong amount (issue
+// #283).
+func (t Tariff) Price(period SubscriptionPeriod) (int64, error) {
+	switch period {
+	case PeriodMonth:
+		return t.MonthlyPriceKopecks, nil
+	case PeriodYear:
+		return t.YearlyPriceKopecks, nil
+	default:
+		return 0, fmt.Errorf("%w: %q", ErrInvalidPeriod, period)
+	}
+}
+
 // ClassifyTariffChange compares current and next tariffs and returns the
 // direction of the change.
 //

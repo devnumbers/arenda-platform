@@ -349,9 +349,9 @@ func (s *SubscriptionService) planPayment(
 		return nil, existing, nil
 	}
 
-	amount := newTariff.MonthlyPriceKopecks
-	if period == domain.PeriodYear {
-		amount = newTariff.YearlyPriceKopecks
+	amount, err := newTariff.Price(period)
+	if err != nil {
+		return nil, nil, err
 	}
 	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, newTariff.ID, period, amount, s.provider.Name(), s.clock.Now().UTC())
 	if err != nil {
