@@ -1,0 +1,490 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.headerMain {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.title {
+    margin: 0;
+    font-size: var(--font-size-text-l);
+}
+
+.propertyChip {
+    padding: 4px 12px;
+    border-radius: var(--radius-round);
+    background: var(--color-secondary-bg);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-text-s);
+}
+
+.newButton {
+    padding: 10px 18px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: var(--color-primary);
+    color: var(--color-white);
+    font-size: var(--font-size-text-m);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.newButton:hover {
+    background: var(--color-primary-hover);
+}
+
+.tabs {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--radius-button);
+    background: var(--color-secondary-bg);
+    align-self: flex-start;
+}
+
+.tab {
+    padding: 8px 16px;
+    border: none;
+    border-radius: var(--radius-button-small);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-text-m);
+    cursor: pointer;
+}
+
+.tabSelected {
+    background: var(--color-white);
+    color: var(--color-text);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.columns {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.listPane {
+    min-width: 0;
+}
+
+.rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.rowCard {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 14px;
+    background: var(--color-white);
+}
+
+.rowMain {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: none;
+    background: none;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    min-width: 0;
+}
+
+.dateBlock {
+    flex-shrink: 0;
+    width: 52px;
+    padding: 6px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-radius: 10px;
+    background: var(--color-secondary-bg);
+}
+
+.dateBlockOverdue {
+    background: var(--color-error-bg);
+}
+
+.dateBlockOverdue .dateDay,
+.dateBlockOverdue .dateMonth {
+    color: var(--color-error);
+}
+
+.dateDay {
+    font-size: var(--font-size-text-l);
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.dateMonth {
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.dateBlockDone {
+    flex-shrink: 0;
+    width: 52px;
+    padding: 14px 0;
+    text-align: center;
+    border-radius: 10px;
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.rowText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.rowTitle {
+    font-size: var(--font-size-text-m);
+    color: var(--color-text);
+}
+
+.rowTitleDone {
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+}
+
+.rowSub {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.overdueLabel {
+    color: var(--color-error);
+    font-weight: 600;
+}
+
+.rowNote {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.doneAction {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-button);
+    background: var(--color-white);
+    color: var(--color-primary);
+    font-size: var(--font-size-text-s);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.doneAction:hover {
+    background: var(--color-primary);
+    color: var(--color-white);
+}
+
+.undoAction {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: var(--color-secondary-bg);
+    color: var(--color-text);
+    font-size: var(--font-size-text-s);
+    cursor: pointer;
+}
+
+.calendarPane {
+    padding: 14px;
+    border-radius: 14px;
+    background: var(--color-white);
+}
+
+.dayList {
+    margin-top: 12px;
+    border-top: 1px solid var(--color-secondary-bg);
+    padding-top: 10px;
+}
+
+.dayTitle {
+    margin: 0 0 8px;
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.dayRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+}
+
+.miniCircle {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--color-secondary-pressed);
+    border-radius: 50%;
+    background: var(--color-white);
+    color: var(--color-white);
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.miniCircleDone {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+}
+
+.dayRowBody {
+    border: none;
+    background: none;
+    padding: 0;
+    font-size: var(--font-size-text-s);
+    color: var(--color-text);
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+}
+
+.empty {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-text-s);
+    padding: 16px 0;
+    list-style: none;
+}
+
+/* --- Drawer --- */
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100; /* выше плавающего свитчера вариантов (1000) */
+    background: rgba(30, 30, 30, 0.45);
+}
+
+.drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-white);
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.2);
+}
+
+.drawerHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-secondary-bg);
+}
+
+.drawerTitle {
+    margin: 0;
+    font-size: var(--font-size-text-l);
+}
+
+.drawerClose {
+    border: none;
+    background: var(--color-secondary-bg);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--color-text);
+}
+
+.drawerBody {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.scopeNote {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-input);
+    background: var(--color-warning-bg);
+    font-size: var(--font-size-text-s);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fieldGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.fieldLabel {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.fieldError {
+    font-size: var(--font-size-text-s);
+    color: var(--color-error);
+}
+
+.input {
+    border: 1px solid var(--color-secondary-pressed);
+    border-radius: var(--radius-input);
+    padding: 10px 12px;
+    font-size: var(--font-size-text-m);
+    font-family: inherit;
+    color: var(--color-text);
+    background: var(--color-white);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.input:disabled {
+    background: var(--color-secondary-bg);
+    color: var(--color-text-muted);
+}
+
+.inputError {
+    border-color: var(--color-error);
+}
+
+.repeatBlock {
+    border: 1px solid var(--color-secondary-bg);
+    border-radius: var(--radius-input);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+}
+
+.repeatBlock:disabled {
+    opacity: 0.55;
+}
+
+.sentence {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: var(--font-size-text-m);
+}
+
+.sentenceNumber {
+    width: 60px;
+    border: 1px solid var(--color-secondary-pressed);
+    border-radius: var(--radius-input);
+    padding: 8px;
+    font-size: var(--font-size-text-m);
+    font-family: inherit;
+    text-align: center;
+}
+
+.sentenceSelect {
+    border: 1px solid var(--color-secondary-pressed);
+    border-radius: var(--radius-input);
+    padding: 8px 10px;
+    font-size: var(--font-size-text-m);
+    font-family: inherit;
+    background: var(--color-white);
+}
+
+.repeatDetail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.detailLabel {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.preview {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-input);
+    background: var(--color-clear-hover);
+    color: var(--color-primary);
+    font-size: var(--font-size-text-s);
+    font-weight: 600;
+}
+
+.drawerFooter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--color-secondary-bg);
+}
+
+.footerSpacer {
+    flex: 1;
+}
+
+.deleteButton {
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    font-size: var(--font-size-text-m);
+    cursor: pointer;
+}
+
+.cancelButton {
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: var(--color-secondary-bg);
+    color: var(--color-text);
+    font-size: var(--font-size-text-m);
+    cursor: pointer;
+}
+
+.saveButton {
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: var(--color-primary);
+    color: var(--color-white);
+    font-size: var(--font-size-text-m);
+    font-weight: 600;
+    cursor: pointer;
+}

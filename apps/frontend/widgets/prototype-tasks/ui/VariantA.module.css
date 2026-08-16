@@ -1,0 +1,547 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 640px;
+}
+
+.propertyCard {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--color-white);
+}
+
+.propertyName {
+    font-size: var(--font-size-text-l);
+    font-weight: 700;
+}
+
+.propertyAddress {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.skeletonRow,
+.skeletonRowShort {
+    margin-top: 10px;
+    height: 12px;
+    border-radius: 6px;
+    background: var(--color-secondary-bg);
+}
+
+.skeletonRowShort {
+    width: 55%;
+    margin-top: 6px;
+}
+
+.card {
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--color-white);
+}
+
+.cardHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.cardTitle {
+    margin: 0;
+    font-size: var(--font-size-text-l);
+}
+
+.counter {
+    min-width: 24px;
+    padding: 2px 8px;
+    border-radius: var(--radius-round);
+    background: var(--color-secondary-bg);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-text-s);
+    text-align: center;
+}
+
+.quickAdd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-secondary-bg);
+    margin-bottom: 4px;
+}
+
+.quickAddPlus {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-white);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.quickAddInput {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: var(--font-size-text-m);
+    background: transparent;
+    color: var(--color-text);
+}
+
+.quickAddButton {
+    border: none;
+    background: none;
+    color: var(--color-primary);
+    font-size: var(--font-size-text-s);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.quickAddButton:disabled {
+    color: var(--color-text-muted);
+    cursor: default;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.listCompleted {
+    opacity: 0.75;
+}
+
+.row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--color-secondary-bg);
+}
+
+.row:last-child {
+    border-bottom: none;
+}
+
+.circle {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    margin-top: 2px;
+    border: 2px solid var(--color-secondary-pressed);
+    border-radius: 50%;
+    background: var(--color-white);
+    color: var(--color-white);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.circle:hover {
+    border-color: var(--color-primary);
+}
+
+.circleDone {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+}
+
+.rowBody {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    border: none;
+    background: none;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.rowTitle {
+    font-size: var(--font-size-text-m);
+    color: var(--color-text);
+}
+
+.rowTitleDone {
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+}
+
+.rowMeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.dateChip {
+    font-size: var(--font-size-text-s);
+    color: var(--color-primary);
+}
+
+.dateChipOverdue {
+    color: var(--color-error);
+}
+
+.repeatChip {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.rowNote {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.empty {
+    padding: 12px 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-text-s);
+    list-style: none;
+}
+
+.completedToggle {
+    margin-top: 8px;
+    padding: 8px 0;
+    width: 100%;
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-text-s);
+    text-align: left;
+    cursor: pointer;
+}
+
+.completedToggle:hover {
+    color: var(--color-text);
+}
+
+.dayList {
+    margin: 12px 0 0;
+    padding: 12px 0 0;
+    border-top: 1px solid var(--color-secondary-bg);
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- Шит редактора --- */
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100; /* выше плавающего свитчера вариантов (1000) */
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(30, 30, 30, 0.45);
+}
+
+.sheet {
+    width: 100%;
+    max-width: 560px;
+    max-height: 88vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    background: var(--color-white);
+    padding: 16px 20px 24px;
+}
+
+.sheetHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.sheetTitle {
+    margin: 0;
+    font-size: var(--font-size-text-m);
+    font-weight: 600;
+}
+
+.sheetCancel,
+.sheetSave {
+    border: none;
+    background: none;
+    color: var(--color-primary);
+    font-size: var(--font-size-text-m);
+    cursor: pointer;
+    min-width: 72px;
+}
+
+.sheetCancel {
+    text-align: left;
+}
+
+.sheetSave {
+    text-align: right;
+    font-weight: 600;
+}
+
+.scopeBanner {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-input);
+    background: var(--color-warning-bg);
+    color: var(--color-text);
+    font-size: var(--font-size-text-s);
+}
+
+.fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.titleInput {
+    border: none;
+    outline: none;
+    border-bottom: 1px solid var(--color-secondary-pressed);
+    padding: 8px 0;
+    font-size: var(--font-size-text-l);
+    color: var(--color-text);
+    background: transparent;
+}
+
+.titleInputError {
+    border-bottom-color: var(--color-error);
+}
+
+.noteInput {
+    border: none;
+    outline: none;
+    resize: vertical;
+    border-bottom: 1px solid var(--color-secondary-pressed);
+    padding: 8px 0;
+    font-size: var(--font-size-text-m);
+    font-family: inherit;
+    color: var(--color-text);
+    background: transparent;
+}
+
+.fieldRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--color-secondary-bg);
+}
+
+.fieldLabel {
+    width: 72px;
+    flex-shrink: 0;
+    font-size: var(--font-size-text-m);
+    color: var(--color-text-muted);
+}
+
+.fieldInput {
+    border: 1px solid var(--color-secondary-pressed);
+    border-radius: var(--radius-input);
+    padding: 6px 10px;
+    font-size: var(--font-size-text-m);
+    font-family: inherit;
+    color: var(--color-text);
+    background: var(--color-white);
+}
+
+.fieldInput:disabled {
+    background: var(--color-secondary-bg);
+    color: var(--color-text-muted);
+}
+
+.clearTime {
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+.repeatRow {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--color-secondary-bg);
+    background: none;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+.repeatRow:disabled {
+    cursor: default;
+}
+
+.repeatSummary {
+    flex: 1;
+    font-size: var(--font-size-text-m);
+    color: var(--color-text);
+    text-align: right;
+}
+
+.deleteButton {
+    margin-top: 16px;
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    font-size: var(--font-size-text-m);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* --- Drill-down «Повтор» --- */
+
+.presetList {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-secondary-bg);
+    border-radius: var(--radius-input);
+    overflow: hidden;
+}
+
+.presetRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border: none;
+    border-bottom: 1px solid var(--color-secondary-bg);
+    background: var(--color-white);
+    font-size: var(--font-size-text-m);
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.presetRow:last-child {
+    border-bottom: none;
+}
+
+.presetRowSelected {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.customBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px;
+    border-radius: var(--radius-input);
+    background: var(--color-secondary-bg);
+}
+
+.customRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.customRowColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.freqChips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.freqChip {
+    padding: 7px 14px;
+    border: 1px solid var(--color-secondary-pressed);
+    border-radius: var(--radius-button-small);
+    background: var(--color-white);
+    font-size: var(--font-size-text-s);
+    cursor: pointer;
+}
+
+.freqChipSelected {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: var(--color-white);
+}
+
+.stepper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stepperButton {
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--color-secondary-pressed);
+    border-radius: var(--radius-button-small);
+    background: var(--color-white);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.stepperValue {
+    min-width: 24px;
+    text-align: center;
+    font-size: var(--font-size-text-m);
+    font-weight: 600;
+}
+
+.endOption {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-size-text-m);
+    color: var(--color-text);
+}
+
+.countInput {
+    width: 64px;
+    border: 1px solid var(--color-secondary-pressed);
+    border-radius: var(--radius-input);
+    padding: 6px 8px;
+    font-size: var(--font-size-text-m);
+    font-family: inherit;
+}
+
+.repeatPreview {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-input);
+    background: var(--color-clear-hover);
+    color: var(--color-primary);
+    font-size: var(--font-size-text-s);
+    font-weight: 600;
+}
+
+.doneButton {
+    padding: 12px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: var(--color-primary);
+    color: var(--color-white);
+    font-size: var(--font-size-text-m);
+    font-weight: 600;
+    cursor: pointer;
+}

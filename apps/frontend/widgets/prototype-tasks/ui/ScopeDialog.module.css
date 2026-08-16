@@ -1,0 +1,81 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100; /* выше плавающего свитчера вариантов (1000) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(30, 30, 30, 0.45);
+    padding: 16px;
+}
+
+.dialog {
+    width: 100%;
+    max-width: 420px;
+    border-radius: 16px;
+    background: var(--color-white);
+    padding: 20px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+}
+
+.title {
+    margin: 0;
+    font-size: var(--font-size-text-l);
+    line-height: var(--line-height-text-l);
+}
+
+.subtitle {
+    margin: 6px 0 16px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-text-s);
+}
+
+.options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.option {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-secondary-pressed);
+    border-radius: var(--radius-input);
+    background: var(--color-white);
+    text-align: left;
+    cursor: pointer;
+}
+
+.option:hover {
+    border-color: var(--color-primary);
+    background: var(--color-clear-hover);
+}
+
+.optionTitle {
+    font-size: var(--font-size-text-m);
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.optionHint {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text-muted);
+}
+
+.cancel {
+    margin-top: 14px;
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: var(--radius-button);
+    background: var(--color-secondary-bg);
+    color: var(--color-text);
+    font-size: var(--font-size-text-m);
+    cursor: pointer;
+}
+
+.cancel:hover {
+    background: var(--color-secondary-hover);
+}

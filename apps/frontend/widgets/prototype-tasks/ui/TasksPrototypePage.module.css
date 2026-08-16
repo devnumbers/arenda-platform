@@ -1,0 +1,32 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-bottom: 96px; /* место под плавающий свитчер */
+}
+
+.prototypeBanner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius-input);
+    background: var(--color-warning-bg);
+    flex-wrap: wrap;
+}
+
+.prototypeBadge {
+    padding: 3px 10px;
+    border-radius: var(--radius-round);
+    background: var(--color-warning);
+    color: var(--color-white);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.prototypeText {
+    font-size: var(--font-size-text-s);
+    color: var(--color-text);
+}

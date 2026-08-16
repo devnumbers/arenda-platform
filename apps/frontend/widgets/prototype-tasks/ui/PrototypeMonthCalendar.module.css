@@ -1,0 +1,95 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.month {
+    font-size: var(--font-size-text-m);
+    font-weight: 600;
+}
+
+.nav {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: var(--radius-round);
+    background: var(--color-secondary-bg);
+    color: var(--color-text);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.nav:hover {
+    background: var(--color-secondary-hover);
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.weekday {
+    text-align: center;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    padding: 4px 0;
+}
+
+.cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0 4px;
+    border: none;
+    border-radius: var(--radius-button-small);
+    background: transparent;
+    color: var(--color-text);
+    font-size: var(--font-size-text-s);
+    cursor: pointer;
+}
+
+.cell:hover {
+    background: var(--color-secondary-bg);
+}
+
+.cellOutside {
+    color: var(--color-text-muted);
+    opacity: 0.5;
+}
+
+.cellToday {
+    font-weight: 700;
+    color: var(--color-primary);
+}
+
+.cellSelected {
+    background: var(--color-primary);
+    color: var(--color-white);
+}
+
+.cellSelected .dot {
+    background: var(--color-white);
+}
+
+.dots {
+    display: flex;
+    gap: 2px;
+    height: 4px;
+}
+
+.dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--color-primary);
+}
