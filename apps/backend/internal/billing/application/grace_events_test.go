@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,6 +17,301 @@ import (
 // publishes GraceEntered exactly once after its transaction commits, the
 // expiry reminder fires inside its window exactly once, and a failing
 // publisher never fails or rolls back the payment transition.
+
+// The grace-events module of issue #284: the single interface both payment
+// paths (the webhook finalization of a customer-initiated charge and the
+// renewal worker's merchant-initiated charge) publish the Grace events
+// through. The module tests below run the module over the in-memory fakes
+// with a recording timeline — the transaction commit and every dispatch are
+// logged in order, so "strictly after the commit" is asserted, not assumed.
+
+// timeline records one run's ordering: the transaction commit instant and
+// each event publication.
+type timeline struct {
+	events []string
+}
+
+func (tl *timeline) add(mark string) { tl.events = append(tl.events, mark) }
+
+// timelinePublisher is a capturePublisher that marks each dispatch on the
+// shared timeline.
+type timelinePublisher struct {
+	capturePublisher
+	timeline *timeline
+}
+
+func (p *timelinePublisher) PublishGraceEntered(ctx context.Context, event GraceEntered) error {
+	p.timeline.add("publish grace-entered")
+	return p.capturePublisher.PublishGraceEntered(ctx, event)
+}
+
+func (p *timelinePublisher) PublishGraceExpiring(ctx context.Context, event GraceExpiring) error {
+	p.timeline.add("publish grace-expiring")
+	return p.capturePublisher.PublishGraceExpiring(ctx, event)
+}
+
+// graceModuleHarness wires the module over the transition harness's fakes.
+// The commit runner wraps the real factory transaction and marks its success
+// on the timeline — the observable commit instant the publication ordering is
+// asserted against.
+type graceModuleHarness struct {
+	*transitionHarness
+	timeline *timeline
+	pub      *timelinePublisher
+	factory  txStoreFactory
+	graceDur time.Duration
+}
+
+func newGraceModuleHarness(t *testing.T) *graceModuleHarness {
+	t.Helper()
+	th := newTransitionHarness(t)
+	tl := &timeline{}
+	return &graceModuleHarness{
+		transitionHarness: th,
+		timeline:          tl,
+		pub:               &timelinePublisher{timeline: tl},
+		factory:           th.stores.factory(nil),
+		graceDur:          7 * 24 * time.Hour,
+	}
+}
+
+// commitRunner returns the transaction runner of the module's run: the real
+// factory transaction, with its successful commit marked on the timeline.
+func (h *graceModuleHarness) commitRunner() func(context.Context, func(*txStores) error) error {
+	return func(ctx context.Context, work func(*txStores) error) error {
+		if err := h.factory.runInTx(ctx, work); err != nil {
+			return err
+		}
+		h.timeline.add("commit")
+		return nil
+	}
+}
+
+// runGrace runs one module transaction with the harness publisher.
+func (h *graceModuleHarness) runGrace(ctx context.Context, work func(*graceEvents, *txStores) error) error {
+	grace := newGraceEvents(h.pub, slog.New(slog.DiscardHandler))
+	return grace.run(ctx, h.commitRunner(), func(stores *txStores) error {
+		return work(grace, stores)
+	})
+}
+
+// TestGraceEvents_EnteredPublishedStrictlyAfterCommit proves the module's
+// core contract: the GraceEntered event of a grace transition is published
+// strictly after the causing transaction commits — never inside it — and
+// identifies the subscription with its fresh window.
+func TestGraceEvents_EnteredPublishedStrictlyAfterCommit(t *testing.T) {
+	h := newGraceModuleHarness(t)
+	// The real grace paths arrive from an expired paid period (ADR 0008);
+	// EnterGrace then extends the validity to the fresh grace window.
+	expired := h.now.AddDate(0, -1, 0)
+	sub := h.seedSubscription(t, domain.TariffPro, func(s *domain.Subscription) {
+		s.ValidUntil = &expired
+	})
+
+	if err := h.runGrace(t.Context(), func(grace *graceEvents, stores *txStores) error {
+		return grace.enterGrace(t.Context(), stores, sub, h.now, h.graceDur)
+	}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	if !slices.Equal(h.timeline.events, []string{"commit", "publish grace-entered"}) {
+		t.Fatalf("timeline = %v, want [commit publish grace-entered] (publication strictly after the commit)", h.timeline.events)
+	}
+	if len(h.pub.entered) != 1 {
+		t.Fatalf("GraceEntered published %d times, want 1", len(h.pub.entered))
+	}
+	event := h.pub.entered[0]
+	if event.UserID != sub.UserID || event.SubscriptionID != sub.ID {
+		t.Errorf("event identifies user %s subscription %s, want user %s subscription %s", event.UserID, event.SubscriptionID, sub.UserID, sub.ID)
+	}
+	if wantUntil := h.now.Add(h.graceDur); !event.GraceUntil.Equal(wantUntil) {
+		t.Errorf("event GraceUntil = %v, want %v", event.GraceUntil, wantUntil)
+	}
+	if !event.At.Equal(h.now) {
+		t.Errorf("event At = %v, want the transition's %v", event.At, h.now)
+	}
+	if stored := h.storedSubscription(t, sub.UserID); stored.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("stored status = %q, want grace", stored.Status)
+	}
+}
+
+// TestGraceEvents_EnteredPublishedOncePerGraceWindow proves the exactly-once
+// semantics: a grace entry attempted inside an already-open window (the late
+// webhook of a crashed run, the next worker tick) captures nothing and
+// publishes no second event for the same window.
+func TestGraceEvents_EnteredPublishedOncePerGraceWindow(t *testing.T) {
+	h := newGraceModuleHarness(t)
+	sub := h.seedSubscription(t, domain.TariffPro, nil)
+
+	for range 2 {
+		if err := h.runGrace(t.Context(), func(grace *graceEvents, stores *txStores) error {
+			return grace.enterGrace(t.Context(), stores, sub, h.now, h.graceDur)
+		}); err != nil {
+			t.Fatalf("run() error = %v", err)
+		}
+		// The second attempt sees the already-entered subscription, like the
+		// re-read under the subscription lock does.
+		sub = h.storedSubscription(t, sub.UserID)
+	}
+
+	if len(h.pub.entered) != 1 {
+		t.Fatalf("GraceEntered published %d times, want 1 (no re-entry inside an open window)", len(h.pub.entered))
+	}
+}
+
+// TestGraceEvents_RollbackPublishesNothing proves the strict-after-commit
+// contract from the failure side: a transaction that rolls back after the
+// grace transition publishes nothing — the event belongs to the commit.
+func TestGraceEvents_RollbackPublishesNothing(t *testing.T) {
+	h := newGraceModuleHarness(t)
+	sub := h.seedSubscription(t, domain.TariffPro, nil)
+	cause := errors.New("payment finalization failed")
+
+	err := h.runGrace(t.Context(), func(grace *graceEvents, stores *txStores) error {
+		if err := grace.enterGrace(t.Context(), stores, sub, h.now, h.graceDur); err != nil {
+			return err
+		}
+		return cause
+	})
+	if !errors.Is(err, cause) {
+		t.Fatalf("run() error = %v, want the work's %v", err, cause)
+	}
+	if len(h.timeline.events) != 0 {
+		t.Errorf("timeline = %v, want empty (neither commit nor publication)", h.timeline.events)
+	}
+	if len(h.pub.entered) != 0 {
+		t.Errorf("GraceEntered published %d times after a rollback, want 0", len(h.pub.entered))
+	}
+}
+
+// TestGraceEvents_PublisherFailureDoesNotFailTheTransition proves the
+// best-effort contract: a failing publisher is logged and swallowed — the
+// committed grace transition stands and no error surfaces to the payment flow.
+func TestGraceEvents_PublisherFailureDoesNotFailTheTransition(t *testing.T) {
+	h := newGraceModuleHarness(t)
+	h.pub.err = errors.New("publisher down")
+	sub := h.seedSubscription(t, domain.TariffPro, nil)
+
+	if err := h.runGrace(t.Context(), func(grace *graceEvents, stores *txStores) error {
+		return grace.enterGrace(t.Context(), stores, sub, h.now, h.graceDur)
+	}); err != nil {
+		t.Fatalf("run() error = %v (a publisher failure must never surface)", err)
+	}
+	if stored := h.storedSubscription(t, sub.UserID); stored.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("stored status = %q, want grace despite the publisher failure", stored.Status)
+	}
+	if len(h.pub.entered) != 0 {
+		t.Errorf("GraceEntered recorded %d events despite the error, want 0", len(h.pub.entered))
+	}
+}
+
+// TestGraceEvents_NilPublisherKeepsPreEventBehaviour proves the nil-publisher
+// wiring keeps the pre-#253 behaviour: no dispatch, no crash, the grace
+// transition itself unaffected.
+func TestGraceEvents_NilPublisherKeepsPreEventBehaviour(t *testing.T) {
+	h := newGraceModuleHarness(t)
+	sub := h.seedSubscription(t, domain.TariffPro, nil)
+
+	grace := newGraceEvents(nil, slog.New(slog.DiscardHandler))
+	err := grace.run(t.Context(), h.commitRunner(), func(stores *txStores) error {
+		return grace.enterGrace(t.Context(), stores, sub, h.now, h.graceDur)
+	})
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if stored := h.storedSubscription(t, sub.UserID); stored.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("stored status = %q, want grace", stored.Status)
+	}
+}
+
+// TestGraceEvents_ExpiringReminderPublishedStrictlyAfterCommit proves the
+// reminder half of the module: a window marked reminded inside the transaction
+// publishes its GraceExpiring event strictly after the commit, once.
+func TestGraceEvents_ExpiringReminderPublishedStrictlyAfterCommit(t *testing.T) {
+	h := newGraceModuleHarness(t)
+	const lead = 48 * time.Hour
+	graceUntil := h.now.Add(24 * time.Hour)
+	sub := h.seedSubscription(t, domain.TariffPro, func(s *domain.Subscription) {
+		s.Status = domain.SubscriptionStatusGrace
+		s.ValidUntil = &graceUntil
+	})
+
+	if err := h.runGrace(t.Context(), func(grace *graceEvents, stores *txStores) error {
+		return grace.remindWindow(t.Context(), stores, sub, h.now, lead)
+	}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	if !slices.Equal(h.timeline.events, []string{"commit", "publish grace-expiring"}) {
+		t.Fatalf("timeline = %v, want [commit publish grace-expiring]", h.timeline.events)
+	}
+	if len(h.pub.expiring) != 1 {
+		t.Fatalf("GraceExpiring published %d times, want 1", len(h.pub.expiring))
+	}
+	event := h.pub.expiring[0]
+	if event.UserID != sub.UserID || event.SubscriptionID != sub.ID {
+		t.Errorf("event identifies user %s subscription %s, want user %s subscription %s", event.UserID, event.SubscriptionID, sub.UserID, sub.ID)
+	}
+	if !event.GraceUntil.Equal(graceUntil) {
+		t.Errorf("event GraceUntil = %v, want %v", event.GraceUntil, graceUntil)
+	}
+	if !event.At.Equal(h.now) {
+		t.Errorf("event At = %v, want the marking's %v", event.At, h.now)
+	}
+	stored := h.storedSubscription(t, sub.UserID)
+	if stored.GraceRemindedAt == nil || !stored.GraceRemindedAt.Equal(h.now) {
+		t.Errorf("GraceRemindedAt = %v, want %v", stored.GraceRemindedAt, h.now)
+	}
+}
+
+// TestGraceEvents_ExpiringReminderOncePerWindow proves the reminder's
+// once-per-window semantics inside the module: nothing before the window
+// opens, one reminder inside it, and nothing on a repeated attempt — the
+// persisted mark closes the window.
+func TestGraceEvents_ExpiringReminderOncePerWindow(t *testing.T) {
+	h := newGraceModuleHarness(t)
+	const lead = 48 * time.Hour
+	graceUntil := h.now.Add(5 * 24 * time.Hour) // window opens at now + 3 days
+	sub := h.seedSubscription(t, domain.TariffPro, func(s *domain.Subscription) {
+		s.Status = domain.SubscriptionStatusGrace
+		s.ValidUntil = &graceUntil
+	})
+
+	remind := func(now time.Time) error {
+		return h.runGrace(t.Context(), func(grace *graceEvents, stores *txStores) error {
+			return grace.remindWindow(t.Context(), stores, sub, now, lead)
+		})
+	}
+
+	// Before the window: five days left, the lead has not arrived.
+	if err := remind(h.now); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if len(h.pub.expiring) != 0 {
+		t.Fatalf("GraceExpiring published %d times before the window, want 0", len(h.pub.expiring))
+	}
+	if stored := h.storedSubscription(t, sub.UserID); stored.GraceRemindedAt != nil {
+		t.Fatalf("GraceRemindedAt = %v before the window, want nil", stored.GraceRemindedAt)
+	}
+
+	// Inside the window: two days left, one reminder.
+	inside := h.now.Add(3 * 24 * time.Hour)
+	if err := remind(inside); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if len(h.pub.expiring) != 1 {
+		t.Fatalf("GraceExpiring published %d times inside the window, want 1", len(h.pub.expiring))
+	}
+
+	// Repeated attempt in the same window: already reminded, nothing new.
+	sub = h.storedSubscription(t, sub.UserID)
+	if err := remind(inside.Add(time.Hour)); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if len(h.pub.expiring) != 1 {
+		t.Fatalf("GraceExpiring published %d times after re-run, want 1 (once per window)", len(h.pub.expiring))
+	}
+}
 
 // capturePublisher is an EventPublisher that records the published events and
 // can be scripted to fail.

@@ -133,31 +133,6 @@ const (
 	triggerRefund             = "refund"
 )
 
-// enterSubscriptionGrace moves the subscription into its grace window inside
-// the caller's transaction and appends the transition-log entry; a
-// subscription already inside grace is left untouched (an already-open window
-// is never re-extended). Shared by the renewal worker and the webhook
-// finalization of a failed merchant-initiated charge — both are the failed
-// renewal charge of ADR 0008. It returns the (possibly updated) subscription
-// and reports whether the transition actually happened, so the caller can
-// publish the grace-entered event with the new window after the transaction
-// commits (issue #253).
-func enterSubscriptionGrace(ctx context.Context, stores *txStores, sub domain.Subscription, now time.Time, grace time.Duration) (domain.Subscription, bool, error) {
-	if sub.Status == domain.SubscriptionStatusGrace && sub.IsInGrace(now) {
-		return sub, false, nil
-	}
-	if _, err := stores.applyTransition(ctx, &sub,
-		func(s *domain.Subscription) error { s.EnterGrace(now, grace); return nil },
-		transitionSpec{
-			reason:    domain.TransitionReasonGraceEntered,
-			initiator: domain.InitiatorSystem,
-		},
-	); err != nil {
-		return domain.Subscription{}, false, err
-	}
-	return sub, true, nil
-}
-
 // SetLifecycleBridges wires the cross-context lifecycle bridges the expiry and
 // downgrade phases call in their transactions: excess-property archiving
 // (properties context) and recipient-slot enforcement (access context). The
@@ -383,18 +358,16 @@ func (w *Workers) renewSubscription(ctx context.Context, sub domain.Subscription
 	var plan renewalPlan
 	// The planning transaction runs with the lifecycle bridges: its free-terms
 	// path can lower a tariff limit, and that archiving belongs to the same
-	// commit as the subscription change. Its grace path captures the entered
-	// subscription so the event is published only after the commit (issue
-	// #253).
-	err := w.runLifecycleTx(ctx, func(stores *txStores) error {
+	// commit as the subscription change. Its grace path captures the event,
+	// and the grace-events module publishes it strictly after the commit
+	// (issue #284).
+	grace := newGraceEvents(w.publisher, w.log)
+	err := grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
 		var planErr error
-		plan, planErr = w.planRenewal(ctx, stores, sub, now)
+		plan, planErr = w.planRenewal(ctx, grace, stores, sub, now)
 		return planErr
 	})
 	if err != nil || !plan.ready {
-		if err == nil && plan.graceEntered {
-			publishGraceEntered(ctx, w.publisher, w.log, plan.graceSubscription, now)
-		}
 		return err
 	}
 	return w.chargeRenewal(ctx, plan, now)
@@ -402,26 +375,21 @@ func (w *Workers) renewSubscription(ctx context.Context, sub domain.Subscription
 
 // renewalPlan is the outcome of the renewal planning transaction: a pending
 // payment, the method it charges and the tariff terms it renews. A plan that
-// is not ready marks an early exit — nothing is due for a charge — and
-// graceEntered carries the subscription that just moved into grace so the
-// caller publishes the event post-commit (issue #253).
+// is not ready marks an early exit — nothing is due for a charge (the
+// subscription renewed or changed since listing, its terms are free, or it
+// entered grace through the grace-events module).
 type renewalPlan struct {
 	ready   bool
 	payment domain.SubscriptionPayment
 	method  domain.PaymentMethod
 	tariff  domain.Tariff
-	// graceEntered is set when the planning transaction moved the subscription
-	// into grace (no chargeable method); graceSubscription is the updated
-	// subscription for the event.
-	graceEntered      bool
-	graceSubscription domain.Subscription
 }
 
 // planRenewal runs inside the planning transaction. A plan that comes back
 // not ready is an early exit: the subscription renewed or changed since
 // listing, its terms are free (applied right here), or it entered grace — so
 // no charge is due.
-func (w *Workers) planRenewal(ctx context.Context, stores *txStores, listed domain.Subscription, now time.Time) (renewalPlan, error) {
+func (w *Workers) planRenewal(ctx context.Context, grace *graceEvents, stores *txStores, listed domain.Subscription, now time.Time) (renewalPlan, error) {
 	sub, err := stores.subscriptionForUpdate(ctx, listed.UserID)
 	if err != nil {
 		return renewalPlan{}, err
@@ -448,12 +416,9 @@ func (w *Workers) planRenewal(ctx context.Context, stores *txStores, listed doma
 	if !chargeable {
 		// No chargeable method: nothing to charge and nothing failed at the
 		// provider — grace gives the user the window to bind a card. The
-		// entered subscription is captured for the post-commit event.
-		enteredSub, entered, err := w.enterGrace(ctx, stores, sub, now)
-		if err != nil {
-			return renewalPlan{}, err
-		}
-		return renewalPlan{graceEntered: entered, graceSubscription: enteredSub}, nil
+		// grace-events module captures the entry for the post-commit
+		// publication.
+		return renewalPlan{}, grace.enterGrace(ctx, stores, sub, now, w.config.GraceDuration)
 	}
 
 	// Reuse a pending renewal payment from a crashed run instead of initiating
@@ -595,14 +560,6 @@ func (w *Workers) chargeableMethod(ctx context.Context, stores *txStores, sub do
 		return domain.PaymentMethod{}, false, nil
 	}
 	return method, true, nil
-}
-
-// enterGrace moves the subscription into its grace window inside the caller's
-// transaction with the transition logged. It returns the updated subscription
-// and reports whether the transition happened (an already-open window is never
-// re-entered).
-func (w *Workers) enterGrace(ctx context.Context, stores *txStores, sub domain.Subscription, now time.Time) (domain.Subscription, bool, error) {
-	return enterSubscriptionGrace(ctx, stores, sub, now, w.config.GraceDuration)
 }
 
 // chargeRenewal runs the provider half of a renewal outside any transaction:
@@ -777,14 +734,13 @@ func (w *Workers) applyRenewalSuccess(ctx context.Context, payment domain.Subscr
 // failRenewalPayment finalizes a definitively failed renewal charge and moves
 // the subscription into grace in the same transaction: the pending window for
 // the user to fix the payment method (ADR 0008). A payment finalized by
-// another flow first is a no-op. When the grace transition happened, the
-// grace-entered event is published after the commit — best-effort, a
-// publication failure is logged and never fails the finalized payment
-// (issue #253).
+// another flow first is a no-op. The grace-entered event is captured by the
+// grace-events module inside the transaction and published strictly after the
+// commit — best-effort, a publication failure is logged and never fails the
+// finalized payment (issue #284).
 func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, errorCode *string, now time.Time) error {
-	var graceEntered bool
-	var graceSub domain.Subscription
-	err := w.runInTx(ctx, func(stores *txStores) error {
+	grace := newGraceEvents(w.publisher, w.log)
+	return grace.run(ctx, w.runInTx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, paymentID)
 		if err != nil {
 			return err
@@ -802,12 +758,9 @@ func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, e
 		if err != nil {
 			return err
 		}
-		var entered bool
-		graceSub, entered, err = w.enterGrace(ctx, stores, sub, now)
-		if err != nil {
+		if err := grace.enterGrace(ctx, stores, sub, now, w.config.GraceDuration); err != nil {
 			return err
 		}
-		graceEntered = entered
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
 			Action:     auditdomain.ActionSubscriptionPaymentFailed,
@@ -819,13 +772,6 @@ func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, e
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	if graceEntered {
-		publishGraceEntered(ctx, w.publisher, w.log, graceSub, now)
-	}
-	return nil
 }
 
 // recoverUncertainCharge resolves a renewal charge whose provider call
@@ -969,47 +915,19 @@ func (w *Workers) ProcessGraceExpiryReminders(ctx context.Context, now time.Time
 }
 
 // remindGraceExpiring applies one grace-expiry reminder: the transaction locks
-// the subscription, re-checks the reminder window under the lock (the state
-// the listing saw may be gone — recovered, expired or already reminded) and
-// marks the window reminded; the event is published after the commit,
-// best-effort (issue #253). An ineligible subscription is a no-op, not an
-// error.
+// the subscription and hands it to the grace-events module, which re-checks
+// the reminder window under the lock, marks it reminded and publishes the
+// event strictly after the commit, best-effort, once per window (issue #284).
+// An ineligible subscription is a no-op, not an error.
 func (w *Workers) remindGraceExpiring(ctx context.Context, listed domain.Subscription, now time.Time) error {
-	var reminded *domain.Subscription
-	err := w.runInTx(ctx, func(stores *txStores) error {
+	grace := newGraceEvents(w.publisher, w.log)
+	return grace.run(ctx, w.runInTx, func(stores *txStores) error {
 		sub, err := stores.subscriptionForUpdate(ctx, listed.UserID)
 		if err != nil {
 			return err
 		}
-		if !subscriptionInGraceReminderWindow(sub, now, w.config.GraceExpiryReminderBefore) {
-			return nil
-		}
-		sub.MarkGraceReminded(now)
-		if err := stores.subscriptions.Update(ctx, sub); err != nil {
-			return fmt.Errorf("mark grace window reminded: %w", err)
-		}
-		reminded = &sub
-		return nil
+		return grace.remindWindow(ctx, stores, sub, now, w.config.GraceExpiryReminderBefore)
 	})
-	if err != nil {
-		return err
-	}
-	if reminded != nil {
-		publishGraceExpiring(ctx, w.publisher, w.log, *reminded, now)
-	}
-	return nil
-}
-
-// subscriptionInGraceReminderWindow reports whether the subscription is in
-// grace, its window has not ended yet, the reminder lead time has arrived and
-// the window was not reminded yet (issue #253). lead is the reminder lead
-// duration: the window is [valid_until - lead, valid_until).
-func subscriptionInGraceReminderWindow(s domain.Subscription, now time.Time, lead time.Duration) bool {
-	return s.Status == domain.SubscriptionStatusGrace &&
-		s.ValidUntil != nil &&
-		s.ValidUntil.After(now) &&
-		!s.ValidUntil.After(now.Add(lead)) &&
-		s.GraceRemindedAt == nil
 }
 
 // subscriptionExpiredNonRenewing reports whether an active subscription with

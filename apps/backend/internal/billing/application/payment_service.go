@@ -332,12 +332,12 @@ func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment
 // audit record. allowReconcile marks callers that verified an out-of-order
 // success against the provider; without it a failed payment is never
 // overwritten by this path. When a merchant-initiated renewal charge moves
-// the subscription into grace, the grace-entered event is published after the
-// commit — best-effort (issue #253).
+// the subscription into grace, the grace-entered event is captured by the
+// grace-events module and published strictly after the commit — best-effort
+// (issue #284).
 func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotification, allowReconcile bool) error {
-	var graceEntered bool
-	var graceSub domain.Subscription
-	err := s.runInTx(ctx, func(stores *txStores) error {
+	grace := newGraceEvents(s.publisher, s.log)
+	return grace.run(ctx, s.runInTx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
 		if err != nil {
 			return err
@@ -379,12 +379,9 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 				if err != nil {
 					return err
 				}
-				var entered bool
-				graceSub, entered, err = enterSubscriptionGrace(ctx, stores, sub, now, s.config.GraceDuration)
-				if err != nil {
+				if err := grace.enterGrace(ctx, stores, sub, now, s.config.GraceDuration); err != nil {
 					return err
 				}
-				graceEntered = entered
 			}
 			if err := stores.audit.Record(ctx, auditdomain.Entry{
 				ActorRole:  auditdomain.ActorRoleSystem,
@@ -442,13 +439,6 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 			return fmt.Errorf("%w: status %q", ErrWebhookUnsupported, n.Status)
 		}
 	})
-	if err != nil {
-		return err
-	}
-	if graceEntered {
-		publishGraceEntered(ctx, s.publisher, s.log, graceSub, s.clock.Now().UTC())
-	}
-	return nil
 }
 
 // applySucceededPayment applies the subscription effects of a succeeded
