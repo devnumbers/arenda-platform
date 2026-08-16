@@ -575,7 +575,10 @@ func (w *Workers) chargeRenewal(ctx context.Context, plan renewalPlan, now time.
 			// the outcome is certain, fail it and enter grace.
 			return w.failRenewalPayment(ctx, payment.ID, providerErrorCode(err), now)
 		}
-		payment, err = w.saveProviderInitResult(ctx, payment.ID, initRes)
+		// The MIT path of the shared reference save (issue #285): the
+		// initiation result carries no payer URL; the saved payment is the
+		// charge target the rest of this phase runs on.
+		payment, err = saveProviderReference(ctx, w.runInTx, payment.ID, initRes, w.clock.Now().UTC())
 		if err != nil {
 			return err
 		}
@@ -645,38 +648,6 @@ func (w *Workers) mitInitRequest(payment domain.SubscriptionPayment, tariff doma
 		},
 		Initiator: InitiatorMerchant,
 	}
-}
-
-// saveProviderInitResult atomically persists the provider's payment id of a
-// successful MIT initiation. A crash between the provider call and this save
-// leaves the pending payment recoverable: the next run re-initiates
-// idempotently (the provider keys the payment by the internal id). A payment
-// that was finalized or re-referenced concurrently wins with its persisted
-// state.
-func (w *Workers) saveProviderInitResult(ctx context.Context, paymentID uuid.UUID, initRes InitPaymentResult) (domain.SubscriptionPayment, error) {
-	var saved domain.SubscriptionPayment
-	err := w.runInTx(ctx, func(stores *txStores) error {
-		payment, err := stores.paymentForUpdate(ctx, paymentID)
-		if err != nil {
-			return err
-		}
-		if payment.HasProviderReference() || payment.IsFinalized() {
-			saved = payment
-			return nil
-		}
-		if err := payment.SaveProviderReference(initRes.ProviderPaymentID, initRes.PaymentURL, w.clock.Now().UTC()); err != nil {
-			return err
-		}
-		if err := stores.payments.Update(ctx, payment); err != nil {
-			return fmt.Errorf("persist provider init result: %w", err)
-		}
-		saved = payment
-		return nil
-	})
-	if err != nil {
-		return domain.SubscriptionPayment{}, err
-	}
-	return saved, nil
 }
 
 // applyRenewalSuccess finalizes a provider-confirmed renewal charge and

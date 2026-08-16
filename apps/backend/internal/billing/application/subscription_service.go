@@ -404,9 +404,9 @@ func findPendingPayment(stores *txStores, ctx context.Context, userID, tariffID 
 
 // initiatePaymentAtProvider initiates the payment at the provider — fresh or
 // as the recovery of a crashed initiation, the provider's idempotent Init
-// with the same internal payment id covers both — and atomically persists the
-// initiation result. The pending row already exists, so a crash at any point
-// leaves a recoverable state.
+// with the same internal payment id covers both — and atomically persists
+// the initiation result. The pending row already exists, so a crash at any
+// point leaves a recoverable state.
 func (s *SubscriptionService) initiatePaymentAtProvider(
 	ctx context.Context,
 	payment domain.SubscriptionPayment,
@@ -418,7 +418,18 @@ func (s *SubscriptionService) initiatePaymentAtProvider(
 		s.markPaymentFailedBestEffort(ctx, payment.ID)
 		return ChangeTariffResult{}, fmt.Errorf("init payment at provider: %w", err)
 	}
-	return s.saveProviderInitResult(ctx, payment.ID, initRes)
+	// The CIT path of the shared reference save (issue #285): the initiation
+	// result carries the payer's form URL, and the answer to the user is the
+	// persisted payment's URL — the saved state, never the raw response.
+	saved, err := saveProviderReference(ctx, s.runInTx, payment.ID, initRes, s.clock.Now().UTC())
+	if err != nil {
+		return ChangeTariffResult{}, err
+	}
+	result := ChangeTariffResult{PaymentID: saved.ID}
+	if saved.HasPaymentURL() {
+		result.ConfirmURL = *saved.PaymentURL
+	}
+	return result, nil
 }
 
 // initPaymentRequest builds the provider-neutral initiation request shared by
@@ -440,43 +451,6 @@ func (s *SubscriptionService) initPaymentRequest(payment domain.SubscriptionPaym
 		Initiator:    InitiatorCustomer,
 		FormDeadline: s.clock.Now().UTC().Add(s.config.PaymentFormTTL),
 	}
-}
-
-// saveProviderInitResult atomically persists the provider payment id and the
-// payer-facing URL of a successful initiation (issue #250): a crash between
-// the provider call and this save cannot leave a half-referenced payment. If
-// the payment was finalized or referenced concurrently, the persisted state
-// wins and is returned.
-func (s *SubscriptionService) saveProviderInitResult(ctx context.Context, paymentID uuid.UUID, initRes InitPaymentResult) (ChangeTariffResult, error) {
-	var result ChangeTariffResult
-	err := s.runInTx(ctx, func(stores *txStores) error {
-		payment, err := stores.paymentForUpdate(ctx, paymentID)
-		if err != nil {
-			return err
-		}
-		result = ChangeTariffResult{PaymentID: payment.ID}
-		if payment.HasPaymentURL() {
-			result.ConfirmURL = *payment.PaymentURL
-		}
-		if payment.IsFinalized() || payment.HasProviderReference() {
-			// A concurrent webhook finalized the payment, or a concurrent
-			// request already saved the reference. The persisted state is the
-			// answer; never overwrite it.
-			return nil
-		}
-		if err := payment.SaveProviderReference(initRes.ProviderPaymentID, initRes.PaymentURL, s.clock.Now().UTC()); err != nil {
-			return err
-		}
-		if err := stores.payments.Update(ctx, payment); err != nil {
-			return fmt.Errorf("persist provider init result: %w", err)
-		}
-		result.ConfirmURL = initRes.PaymentURL
-		return nil
-	})
-	if err != nil {
-		return ChangeTariffResult{}, err
-	}
-	return result, nil
 }
 
 // markPaymentFailedBestEffort closes a pending payment as failed when the
