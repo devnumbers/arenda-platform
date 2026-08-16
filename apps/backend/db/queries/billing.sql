@@ -116,97 +116,38 @@ SELECT * FROM subscription_transitions
 WHERE subscription_id = $1
 ORDER BY created_at DESC, id DESC;
 
--- Worker batch listings (issue #252, ADR 0008 lifecycle phases). Each listing
--- is a plain selection; the processing transaction re-reads and locks the row
--- by user id, so a concurrent mutation between listing and processing is
--- re-checked under the lock and never applied twice. The partial indexes of
--- migration 000104 back every filter below.
+-- Worker batch selections (issue #252, ADR 0008 lifecycle phases; one
+-- parameterized query per aggregate since issue #286). The phases set the
+-- values through application.SubscriptionSelection / PaymentSelection; a
+-- bound left NULL drops its condition. Each listing is a plain selection; the
+-- processing transaction re-reads and locks the row by user id, so a
+-- concurrent mutation between listing and processing is re-checked under the
+-- lock and never applied twice. The composite indexes of migration 000107
+-- back every selection: the required status prefix narrows to the phase's
+-- status, the second column serves the phase-clock range and the batch order.
 
--- name: ListSubscriptionsUpForRenewal :many
+-- name: ListSubscriptionsBySelection :many
+-- The order follows the phase clock: deferred-change batches
+-- (pending_change_due set) by pending_change_at, everything else by
+-- valid_until, each with id as the tie-breaker — the oldest-first fairness of
+-- the batches. A non-NULL user_id narrows the selection to one subscription:
+-- the under-lock re-check of a phase, run in the transaction that locked the
+-- row.
 SELECT * FROM user_subscriptions
-WHERE status = 'active'
-  AND auto_renew_enabled = true
-  AND valid_until IS NOT NULL
-  AND valid_until <= $1
-ORDER BY valid_until ASC, id ASC
-LIMIT $2;
-
--- name: ListSubscriptionsInExpiredGrace :many
-SELECT * FROM user_subscriptions
-WHERE status = 'grace'
-  AND valid_until IS NOT NULL
-  AND valid_until <= $1
-ORDER BY valid_until ASC, id ASC
-LIMIT $2;
-
--- name: ListSubscriptionsInGraceReminderWindow :many
--- Grace subscriptions inside the grace-expiry reminder window — the end of the
--- window (valid_until) is still ahead of $1 but arrives no later than $2 (the
--- caller passes now and now+lead) — whose window was not reminded yet (issue
--- #253). Backed by the partial index idx_user_subscriptions_grace_unreminded
--- (migration 000105).
-SELECT * FROM user_subscriptions
-WHERE status = 'grace'
-  AND valid_until IS NOT NULL
-  AND valid_until > $1
-  AND valid_until <= $2
-  AND grace_reminded_at IS NULL
-ORDER BY valid_until ASC, id ASC
-LIMIT $3;
-
--- name: ListExpiredNonRenewingSubscriptions :many
-SELECT * FROM user_subscriptions
-WHERE status = 'active'
-  AND auto_renew_enabled = false
-  AND valid_until IS NOT NULL
-  AND valid_until <= $1
-ORDER BY valid_until ASC, id ASC
-LIMIT $2;
-
--- name: ListExpiredCancelledSubscriptions :many
-SELECT * FROM user_subscriptions
-WHERE status = 'cancelled'
-  AND valid_until IS NOT NULL
-  AND valid_until <= $1
-ORDER BY valid_until ASC, id ASC
-LIMIT $2;
-
--- name: ListSubscriptionsWithPendingChange :many
-SELECT * FROM user_subscriptions
-WHERE status = 'active'
-  AND pending_tariff_id IS NOT NULL
-  AND pending_change_at IS NOT NULL
-  AND pending_change_at <= $1
-ORDER BY pending_change_at ASC, id ASC
-LIMIT $2;
-
--- Reconciliation listings (issue #252): pending payments stale enough that a
--- webhook is presumed lost. The provider reference is mandatory — without it
--- there is nothing to query at the provider.
-
--- name: ListStalePendingSubscriptionPayments :many
-SELECT * FROM subscription_payments
-WHERE status = 'pending'
-  AND provider_payment_id IS NOT NULL
-  AND provider_payment_id <> ''
-  AND created_at < $1
-ORDER BY created_at ASC, id ASC
-LIMIT $2;
-
--- name: ListStalePendingUpgradeSubscriptionPayments :many
--- Pending payments whose target tariff differs from the subscription's current
--- one are the tariff-change payments of the ChangeTariff flow (upgrades and
--- recovery upgrades): a lost webhook here leaves the paid change unapplied.
-SELECT sp.*
-FROM subscription_payments sp
-JOIN user_subscriptions us ON us.id = sp.subscription_id
-WHERE sp.status = 'pending'
-  AND sp.provider_payment_id IS NOT NULL
-  AND sp.provider_payment_id <> ''
-  AND sp.tariff_id != us.tariff_id
-  AND sp.created_at < $1
-ORDER BY sp.created_at ASC, sp.id ASC
-LIMIT $2;
+WHERE (sqlc.narg('user_id')::uuid IS NULL OR user_id = sqlc.narg('user_id'))
+  AND status = sqlc.arg('status')
+  AND (sqlc.narg('auto_renew')::bool IS NULL OR auto_renew_enabled = sqlc.narg('auto_renew'))
+  AND (sqlc.narg('valid_until_before')::timestamptz IS NULL OR valid_until <= sqlc.narg('valid_until_before'))
+  AND (sqlc.narg('valid_until_after')::timestamptz IS NULL OR valid_until > sqlc.narg('valid_until_after'))
+  AND (sqlc.arg('unreminded')::bool = false OR grace_reminded_at IS NULL)
+  AND (sqlc.narg('pending_change_due')::timestamptz IS NULL
+       OR (pending_tariff_id IS NOT NULL AND pending_change_at IS NOT NULL AND pending_change_at <= sqlc.narg('pending_change_due')))
+ORDER BY
+  CASE WHEN sqlc.narg('pending_change_due')::timestamptz IS NOT NULL THEN pending_change_at END ASC,
+  CASE WHEN sqlc.narg('pending_change_due')::timestamptz IS NOT NULL THEN id END ASC,
+  valid_until ASC,
+  id ASC
+LIMIT sqlc.arg('batch_limit');
 
 -- Subscription payments (issue #250). The partial unique index
 -- idx_subscription_payments_one_pending_upgrade (user_id, tariff_id, period)
@@ -265,18 +206,28 @@ SET
 WHERE id = $1
 RETURNING *;
 
--- name: ListStaleRefundingSubscriptionPayments :many
--- Payments stuck in the internal refunding reservation longer than the
--- reconciliation staleness (issue #254): the refund call's outcome was never
--- finalized, so the worker asks the provider for the truth. The provider
--- reference is mandatory — without it there is nothing to query.
-SELECT * FROM subscription_payments
-WHERE status = 'refunding'
-  AND provider_payment_id IS NOT NULL
-  AND provider_payment_id <> ''
-  AND updated_at < $1
-ORDER BY updated_at ASC, id ASC
-LIMIT $2;
+-- name: ListSubscriptionPaymentsBySelection :many
+-- The reconciliation batch of the payment phases (issues #252, #254): pending
+-- payments stale enough that a webhook is presumed lost, and payments stuck in
+-- the refunding reservation. The provider reference is mandatory in every
+-- selection — without it there is nothing to query at the provider. The order
+-- follows the staleness clock the phase set: updated-stale batches
+-- (updated_before set) by updated_at, the rest by created_at, each with id as
+-- the tie-breaker.
+SELECT sp.* FROM subscription_payments sp
+LEFT JOIN user_subscriptions us ON us.id = sp.subscription_id
+WHERE sp.status = sqlc.arg('status')
+  AND sp.provider_payment_id IS NOT NULL
+  AND sp.provider_payment_id <> ''
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR sp.created_at < sqlc.narg('created_before'))
+  AND (sqlc.narg('updated_before')::timestamptz IS NULL OR sp.updated_at < sqlc.narg('updated_before'))
+  AND (sqlc.arg('tariff_change_only')::bool = false OR us.tariff_id IS DISTINCT FROM sp.tariff_id)
+ORDER BY
+  CASE WHEN sqlc.narg('updated_before')::timestamptz IS NOT NULL THEN sp.updated_at END ASC,
+  CASE WHEN sqlc.narg('updated_before')::timestamptz IS NOT NULL THEN sp.id END ASC,
+  sp.created_at ASC,
+  sp.id ASC
+LIMIT sqlc.arg('batch_limit');
 
 -- Admin payment views (issue #254). The phone filter matches the stored
 -- ciphertext (deterministic encryption) or the plaintext of a not-yet-

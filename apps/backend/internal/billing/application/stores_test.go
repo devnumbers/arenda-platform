@@ -194,81 +194,77 @@ func (r *fakeSubscriptionRepo) GetByUserIDForUpdate(ctx context.Context, userID 
 	return r.GetByUserID(ctx, userID)
 }
 
-// ListUpForRenewal mirrors the worker listing: active auto-renewing
-// subscriptions whose paid period has ended, oldest first.
-func (r *fakeSubscriptionRepo) ListUpForRenewal(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
-		return s.Status == domain.SubscriptionStatusActive && s.AutoRenewEnabled &&
-			s.ValidUntil != nil && !s.ValidUntil.After(now)
-	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
-}
-
-// ListInExpiredGrace mirrors the worker listing: grace subscriptions whose
-// window has ended.
-func (r *fakeSubscriptionRepo) ListInExpiredGrace(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
-		return s.Status == domain.SubscriptionStatusGrace &&
-			s.ValidUntil != nil && !s.ValidUntil.After(now)
-	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
-}
-
-// ListInGraceReminderWindow mirrors the worker listing: grace subscriptions
-// inside the half-open reminder window [valid_until - lead, valid_until) whose
-// window was not reminded yet (issue #253).
-func (r *fakeSubscriptionRepo) ListInGraceReminderWindow(_ context.Context, now time.Time, lead time.Duration, limit int) ([]domain.Subscription, error) {
-	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
-		return subscriptionInGraceReminderWindow(s, now, lead)
-	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
-}
-
-// ListExpiredNonRenewing mirrors the worker listing: active subscriptions with
-// auto-renew off whose retained period has ended.
-func (r *fakeSubscriptionRepo) ListExpiredNonRenewing(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
-		return s.Status == domain.SubscriptionStatusActive && !s.AutoRenewEnabled &&
-			s.ValidUntil != nil && !s.ValidUntil.After(now)
-	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
-}
-
-// ListExpiredCancelled mirrors the worker listing: cancelled subscriptions
-// whose retained period has ended.
-func (r *fakeSubscriptionRepo) ListExpiredCancelled(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
-		return s.Status == domain.SubscriptionStatusCancelled &&
-			s.ValidUntil != nil && !s.ValidUntil.After(now)
-	}, func(s domain.Subscription) time.Time { return *s.ValidUntil }), nil
-}
-
-// ListPendingChanges mirrors the worker listing: active subscriptions with a
-// deferred tariff change that is due.
-func (r *fakeSubscriptionRepo) ListPendingChanges(_ context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	return r.listWorkerBatch(limit, func(s domain.Subscription) bool {
-		return s.Status == domain.SubscriptionStatusActive && s.PendingTariffID != nil &&
-			s.PendingChangeAt != nil && !s.PendingChangeAt.After(now)
-	}, func(s domain.Subscription) time.Time { return *s.PendingChangeAt }), nil
-}
-
-// listWorkerBatch selects, orders by the phase key then id, and limits — the
-// shared shape of the worker listings.
-func (r *fakeSubscriptionRepo) listWorkerBatch(limit int, match func(domain.Subscription) bool, key func(domain.Subscription) time.Time) []domain.Subscription {
+// List interprets the worker selection the way the SQL adapter does (issue
+// #286): this mirror is the fake's only statement of batch semantics, and the
+// per-Selection integration tests pin it to the real query.
+func (r *fakeSubscriptionRepo) List(_ context.Context, sel SubscriptionSelection) ([]domain.Subscription, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	result := make([]domain.Subscription, 0)
 	for _, s := range r.subs {
-		if match(s) {
+		if subscriptionInSelection(s, sel) {
 			result = append(result, s)
 		}
 	}
+	// Mirror the SQL order: the pending-change clock for deferred-change
+	// batches, the validity clock otherwise, each with id as the tie-breaker;
+	// a nil clock sorts last, as PostgreSQL's NULLS LAST.
+	clock := func(s domain.Subscription) time.Time {
+		if s.ValidUntil != nil {
+			return *s.ValidUntil
+		}
+		return farFuture
+	}
+	if sel.PendingChangeDue != nil {
+		clock = func(s domain.Subscription) time.Time {
+			if s.PendingChangeAt != nil {
+				return *s.PendingChangeAt
+			}
+			return farFuture
+		}
+	}
 	slices.SortFunc(result, func(a, b domain.Subscription) int {
-		if c := key(a).Compare(key(b)); c != 0 {
+		if c := clock(a).Compare(clock(b)); c != 0 {
 			return c
 		}
 		return bytes.Compare(a.ID[:], b.ID[:])
 	})
-	if len(result) > limit {
-		result = result[:limit]
+	if len(result) > sel.Limit {
+		result = result[:sel.Limit]
 	}
-	return result
+	return result, nil
+}
+
+// farFuture mirrors NULLS LAST: a row without the ordering clock sorts after
+// every dated row.
+var farFuture = time.Unix(1<<62, 0)
+
+// subscriptionInSelection is the fake's reading of the worker selection — the
+// Go mirror of ListSubscriptionsBySelection's predicate.
+func subscriptionInSelection(s domain.Subscription, sel SubscriptionSelection) bool {
+	if sel.UserID != nil && s.UserID != *sel.UserID {
+		return false
+	}
+	if s.Status != sel.Status {
+		return false
+	}
+	if sel.AutoRenewEnabled != nil && s.AutoRenewEnabled != *sel.AutoRenewEnabled {
+		return false
+	}
+	if sel.ValidUntilBefore != nil && (s.ValidUntil == nil || s.ValidUntil.After(*sel.ValidUntilBefore)) {
+		return false
+	}
+	if sel.ValidUntilAfter != nil && (s.ValidUntil == nil || !s.ValidUntil.After(*sel.ValidUntilAfter)) {
+		return false
+	}
+	if sel.Unreminded && s.GraceRemindedAt != nil {
+		return false
+	}
+	if sel.PendingChangeDue != nil &&
+		(s.PendingTariffID == nil || s.PendingChangeAt == nil || s.PendingChangeAt.After(*sel.PendingChangeDue)) {
+		return false
+	}
+	return true
 }
 
 func (r *fakeSubscriptionRepo) Create(_ context.Context, sub domain.Subscription) (domain.Subscription, error) {
@@ -333,7 +329,8 @@ type fakePaymentRepo struct {
 	// writer creates the conflicting pending payment.
 	hidePending int
 	// tariffOfSubscription resolves the user's current subscription tariff for
-	// ListStalePendingUpgrades; fakeStores wires it to the subscription fake.
+	// the tariff-change narrowing of the payment selection; fakeStores wires it
+	// to the subscription fake.
 	tariffOfSubscription func(userID uuid.UUID) (uuid.UUID, bool)
 }
 
@@ -413,71 +410,59 @@ func (r *fakePaymentRepo) Update(_ context.Context, payment domain.SubscriptionP
 	return nil
 }
 
-// ListStalePending mirrors the reconciliation listing: pending payments with a
-// provider reference created before the threshold, oldest first.
-func (r *fakePaymentRepo) ListStalePending(_ context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
-	return r.listStalePending(createdBefore, limit, func(domain.SubscriptionPayment) bool { return true }), nil
-}
-
-// ListStalePendingUpgrades narrows the stale set to payments whose tariff
-// differs from the subscription's current one; fakeStores wires the
-// subscription tariff lookup.
-func (r *fakePaymentRepo) ListStalePendingUpgrades(_ context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
-	return r.listStalePending(createdBefore, limit, func(p domain.SubscriptionPayment) bool {
-		if r.tariffOfSubscription == nil {
-			return false
-		}
-		current, ok := r.tariffOfSubscription(p.UserID)
-		return ok && current != p.TariffID
-	}), nil
-}
-
-// listStalePending is the shared selection of both reconciliation listings.
-func (r *fakePaymentRepo) listStalePending(createdBefore time.Time, limit int, extra func(domain.SubscriptionPayment) bool) []domain.SubscriptionPayment {
+// List interprets the worker selection the way the SQL adapter does (issue
+// #286): the provider reference is mandatory, staleness is strict, and the
+// order follows the staleness clock — updated for updated-stale batches,
+// created otherwise, each with id as the tie-breaker.
+func (r *fakePaymentRepo) List(_ context.Context, sel PaymentSelection) ([]domain.SubscriptionPayment, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	result := make([]domain.SubscriptionPayment, 0)
 	for _, p := range r.payments {
-		if p.Status == domain.PaymentStatusPending && p.HasProviderReference() &&
-			p.CreatedAt.Before(createdBefore) && extra(p) {
-			result = append(result, p)
+		if !paymentInSelection(p, sel, r.tariffOfSubscription) {
+			continue
 		}
+		result = append(result, p)
+	}
+	clock := func(p domain.SubscriptionPayment) time.Time { return p.CreatedAt }
+	if sel.UpdatedBefore != nil {
+		clock = func(p domain.SubscriptionPayment) time.Time { return p.UpdatedAt }
 	}
 	slices.SortFunc(result, func(a, b domain.SubscriptionPayment) int {
-		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+		if c := clock(a).Compare(clock(b)); c != 0 {
 			return c
 		}
 		return bytes.Compare(a.ID[:], b.ID[:])
 	})
-	if len(result) > limit {
-		result = result[:limit]
-	}
-	return result
-}
-
-// ListStaleRefunding mirrors the refund reconciliation listing: refunding
-// payments with a provider reference updated before the threshold, oldest
-// first (issue #254).
-func (r *fakePaymentRepo) ListStaleRefunding(_ context.Context, updatedBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	result := make([]domain.SubscriptionPayment, 0)
-	for _, p := range r.payments {
-		if p.Status == domain.PaymentStatusRefunding && p.HasProviderReference() &&
-			p.UpdatedAt.Before(updatedBefore) {
-			result = append(result, p)
-		}
-	}
-	slices.SortFunc(result, func(a, b domain.SubscriptionPayment) int {
-		if c := a.UpdatedAt.Compare(b.UpdatedAt); c != 0 {
-			return c
-		}
-		return bytes.Compare(a.ID[:], b.ID[:])
-	})
-	if len(result) > limit {
-		result = result[:limit]
+	if len(result) > sel.Limit {
+		result = result[:sel.Limit]
 	}
 	return result, nil
+}
+
+// paymentInSelection is the fake's reading of the worker selection — the Go
+// mirror of ListSubscriptionPaymentsBySelection's predicate, including the
+// tariff-change join the fake resolves through tariffOfSubscription.
+func paymentInSelection(p domain.SubscriptionPayment, sel PaymentSelection, tariffOfSubscription func(uuid.UUID) (uuid.UUID, bool)) bool {
+	if p.Status != sel.Status || !p.HasProviderReference() {
+		return false
+	}
+	if sel.CreatedBefore != nil && !p.CreatedAt.Before(*sel.CreatedBefore) {
+		return false
+	}
+	if sel.UpdatedBefore != nil && !p.UpdatedAt.Before(*sel.UpdatedBefore) {
+		return false
+	}
+	if sel.TariffChangeOnly {
+		if tariffOfSubscription == nil {
+			return false
+		}
+		current, ok := tariffOfSubscription(p.UserID)
+		if !ok || current == p.TariffID {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *fakePaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository, error) {

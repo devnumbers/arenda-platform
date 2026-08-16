@@ -76,6 +76,30 @@ func (s *txStores) subscriptionForUpdate(ctx context.Context, userID uuid.UUID) 
 	return sub, nil
 }
 
+// lockInSelection locks the user's subscription and reports whether it still
+// matches the worker selection that listed it (issue #286). The batch
+// predicate lives in SQL, so the under-lock re-check re-lists the selection
+// narrowed to the locked user instead of re-stating eligibility in Go; the
+// listing runs in the caller's transaction and therefore observes the locked
+// row. ok=false means the state the listing saw is gone — the phase's no-op
+// signal.
+func (s *txStores) lockInSelection(ctx context.Context, userID uuid.UUID, sel SubscriptionSelection) (domain.Subscription, bool, error) {
+	sub, err := s.subscriptionForUpdate(ctx, userID)
+	if err != nil {
+		return domain.Subscription{}, false, err
+	}
+	sel.UserID = &userID
+	sel.Limit = 1
+	matching, err := s.subscriptions.List(ctx, sel)
+	if err != nil {
+		return domain.Subscription{}, false, fmt.Errorf("re-check subscription selection: %w", err)
+	}
+	if len(matching) == 0 {
+		return domain.Subscription{}, false, nil
+	}
+	return sub, true, nil
+}
+
 // paymentForUpdate loads a payment under the row lock and narrows the
 // repository miss to ErrPaymentNotFound — the shared first step of every
 // payment finalization (issue #250).

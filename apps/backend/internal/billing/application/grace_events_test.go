@@ -229,7 +229,6 @@ func TestGraceEvents_NilPublisherKeepsPreEventBehaviour(t *testing.T) {
 // publishes its GraceExpiring event strictly after the commit, once.
 func TestGraceEvents_ExpiringReminderPublishedStrictlyAfterCommit(t *testing.T) {
 	h := newGraceModuleHarness(t)
-	const lead = 48 * time.Hour
 	graceUntil := h.now.Add(24 * time.Hour)
 	sub := h.seedSubscription(t, domain.TariffPro, func(s *domain.Subscription) {
 		s.Status = domain.SubscriptionStatusGrace
@@ -237,7 +236,7 @@ func TestGraceEvents_ExpiringReminderPublishedStrictlyAfterCommit(t *testing.T) 
 	})
 
 	if err := h.runGrace(t.Context(), func(grace *graceEvents, stores *txStores) error {
-		return grace.remindWindow(t.Context(), stores, sub, h.now, lead)
+		return grace.remindWindow(t.Context(), stores, sub, h.now)
 	}); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
@@ -264,54 +263,12 @@ func TestGraceEvents_ExpiringReminderPublishedStrictlyAfterCommit(t *testing.T) 
 	}
 }
 
-// TestGraceEvents_ExpiringReminderOncePerWindow proves the reminder's
-// once-per-window semantics inside the module: nothing before the window
-// opens, one reminder inside it, and nothing on a repeated attempt — the
-// persisted mark closes the window.
-func TestGraceEvents_ExpiringReminderOncePerWindow(t *testing.T) {
-	h := newGraceModuleHarness(t)
-	const lead = 48 * time.Hour
-	graceUntil := h.now.Add(5 * 24 * time.Hour) // window opens at now + 3 days
-	sub := h.seedSubscription(t, domain.TariffPro, func(s *domain.Subscription) {
-		s.Status = domain.SubscriptionStatusGrace
-		s.ValidUntil = &graceUntil
-	})
-
-	remind := func(now time.Time) error {
-		return h.runGrace(t.Context(), func(grace *graceEvents, stores *txStores) error {
-			return grace.remindWindow(t.Context(), stores, sub, now, lead)
-		})
-	}
-
-	// Before the window: five days left, the lead has not arrived.
-	if err := remind(h.now); err != nil {
-		t.Fatalf("run() error = %v", err)
-	}
-	if len(h.pub.expiring) != 0 {
-		t.Fatalf("GraceExpiring published %d times before the window, want 0", len(h.pub.expiring))
-	}
-	if stored := h.storedSubscription(t, sub.UserID); stored.GraceRemindedAt != nil {
-		t.Fatalf("GraceRemindedAt = %v before the window, want nil", stored.GraceRemindedAt)
-	}
-
-	// Inside the window: two days left, one reminder.
-	inside := h.now.Add(3 * 24 * time.Hour)
-	if err := remind(inside); err != nil {
-		t.Fatalf("run() error = %v", err)
-	}
-	if len(h.pub.expiring) != 1 {
-		t.Fatalf("GraceExpiring published %d times inside the window, want 1", len(h.pub.expiring))
-	}
-
-	// Repeated attempt in the same window: already reminded, nothing new.
-	sub = h.storedSubscription(t, sub.UserID)
-	if err := remind(inside.Add(time.Hour)); err != nil {
-		t.Fatalf("run() error = %v", err)
-	}
-	if len(h.pub.expiring) != 1 {
-		t.Fatalf("GraceExpiring published %d times after re-run, want 1 (once per window)", len(h.pub.expiring))
-	}
-}
+// The window edges of the reminder — nothing before the window opens, one
+// reminder inside it, nothing once reminded — live in the worker selection
+// since issue #286 and are proven by TestWorkers_GraceExpiryReminderWindow
+// over the selection-aware fakes plus the per-Selection repository
+// integration test; the module itself only owns the marking and the
+// strictly-after-commit publication above.
 
 // capturePublisher is an EventPublisher that records the published events and
 // can be scripted to fail.

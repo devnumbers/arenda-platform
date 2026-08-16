@@ -133,6 +133,104 @@ const (
 	triggerRefund             = "refund"
 )
 
+// The phases' selections (issue #286): each phase describes its batch once as
+// values, next to the phase itself. The listing and the under-lock re-check
+// share the constructor, and the predicate behind the values lives once in
+// SQL — a new phase is a new constructor, never a new port method.
+
+// upForRenewalSelection is the renewal-charge batch: active auto-renewing
+// subscriptions whose paid period has ended (issue #252).
+func upForRenewalSelection(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusActive,
+		AutoRenewEnabled: new(true),
+		ValidUntilBefore: new(now),
+		Limit:            limit,
+	}
+}
+
+// expiredGraceSelection is the downgrade-to-basic batch: grace subscriptions
+// whose grace window has ended (issue #252).
+func expiredGraceSelection(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntilBefore: new(now),
+		Limit:            limit,
+	}
+}
+
+// graceReminderWindowSelection is the grace-expiry reminder batch: grace
+// subscriptions inside the half-open window [valid_until - lead,
+// valid_until) whose window was not reminded yet (issue #253).
+func graceReminderWindowSelection(now time.Time, lead time.Duration, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntilAfter:  new(now),
+		ValidUntilBefore: new(now.Add(lead)),
+		Unreminded:       true,
+		Limit:            limit,
+	}
+}
+
+// expiredNonRenewingSelection is the expiry batch of active subscriptions with
+// auto-renew off whose retained period has ended (issue #252).
+func expiredNonRenewingSelection(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusActive,
+		AutoRenewEnabled: new(false),
+		ValidUntilBefore: new(now),
+		Limit:            limit,
+	}
+}
+
+// expiredCancelledSelection is the expiry batch of cancelled subscriptions
+// whose retained period has ended (issue #252).
+func expiredCancelledSelection(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusCancelled,
+		ValidUntilBefore: new(now),
+		Limit:            limit,
+	}
+}
+
+// pendingChangesSelection is the batch of active subscriptions with a deferred
+// tariff change that is due (issue #252).
+func pendingChangesSelection(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusActive,
+		PendingChangeDue: new(now),
+		Limit:            limit,
+	}
+}
+
+// stalePendingSelection is the lost-webhook batch: pending payments with a
+// provider reference unresolved past the staleness (issue #252).
+func stalePendingSelection(before time.Time, limit int) PaymentSelection {
+	return PaymentSelection{
+		Status:        domain.PaymentStatusPending,
+		CreatedBefore: new(before),
+		Limit:         limit,
+	}
+}
+
+// stalePendingUpgradeSelection narrows the lost-webhook batch to the
+// tariff-change payments of the ChangeTariff flow (issue #252).
+func stalePendingUpgradeSelection(before time.Time, limit int) PaymentSelection {
+	sel := stalePendingSelection(before, limit)
+	sel.TariffChangeOnly = true
+	return sel
+}
+
+// staleRefundingSelection is the lost-outcome batch: payments stuck in the
+// refunding reservation past the staleness (issue #254).
+func staleRefundingSelection(before time.Time, limit int) PaymentSelection {
+	return PaymentSelection{
+		Status:        domain.PaymentStatusRefunding,
+		UpdatedBefore: new(before),
+		Limit:         limit,
+	}
+}
+
 // SetLifecycleBridges wires the cross-context lifecycle bridges the expiry and
 // downgrade phases call in their transactions: excess-property archiving
 // (properties context) and recipient-slot enforcement (access context). The
@@ -161,8 +259,9 @@ func (w *Workers) runLifecycleTx(ctx context.Context, work func(*txStores) error
 // their renewal charge clears them.
 func (w *Workers) ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error) {
 	processed := 0
+	sel := pendingChangesSelection(now, w.config.WorkerBatchSize)
 	for {
-		subs, err := w.subscriptions.ListPendingChanges(ctx, now, w.config.WorkerBatchSize)
+		subs, err := w.subscriptions.List(ctx, sel)
 		if err != nil {
 			return processed, fmt.Errorf("list subscriptions with pending change: %w", err)
 		}
@@ -187,7 +286,7 @@ func (w *Workers) ProcessScheduledChanges(ctx context.Context, now time.Time) (i
 			}
 		}
 		processed += applied
-		if len(subs) < w.config.WorkerBatchSize {
+		if len(subs) < sel.Limit {
 			break
 		}
 		if applied == 0 {
@@ -212,11 +311,13 @@ func (w *Workers) ProcessScheduledChanges(ctx context.Context, now time.Time) (i
 func (w *Workers) applyScheduledChange(ctx context.Context, listed domain.Subscription, now time.Time) (bool, error) {
 	applied := false
 	err := w.runLifecycleTx(ctx, func(stores *txStores) error {
-		sub, err := stores.subscriptionForUpdate(ctx, listed.UserID)
+		sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, pendingChangesSelection(now, 1))
 		if err != nil {
 			return err
 		}
-		if !sub.HasPendingChange() {
+		if !inBatch {
+			// The change was consumed, cleared or rescheduled between listing
+			// and locking — the row left the selection either way.
 			applied = true
 			return nil
 		}
@@ -274,7 +375,8 @@ func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, erro
 	}
 
 	processed := 0
-	n, err := w.processSubscriptionBatch(ctx, now, "renew", w.subscriptions.ListUpForRenewal, w.renewSubscription)
+	renewSel := upForRenewalSelection(now, w.config.WorkerBatchSize)
+	n, err := w.processSubscriptionBatch(ctx, now, "renew", renewSel, w.renewSubscription)
 	if err != nil {
 		return processed, err
 	}
@@ -284,19 +386,21 @@ func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, erro
 	if err != nil {
 		return processed, fmt.Errorf("get basic tariff for non-renewing expiry: %w", err)
 	}
-	expire := func(eligible func(domain.Subscription, time.Time) bool, trigger string) func(context.Context, domain.Subscription, time.Time) error {
+	expire := func(sel SubscriptionSelection, trigger string) func(context.Context, domain.Subscription, time.Time) error {
 		return func(ctx context.Context, sub domain.Subscription, now time.Time) error {
-			return w.expireSubscription(ctx, sub, basicTariff, now, trigger, eligible)
+			return w.expireSubscription(ctx, sub, basicTariff, trigger, sel)
 		}
 	}
 
-	n, err = w.processSubscriptionBatch(ctx, now, "expire non-renewing", w.subscriptions.ListExpiredNonRenewing, expire(subscriptionExpiredNonRenewing, triggerNonRenewingExpired))
+	nonRenewingSel := expiredNonRenewingSelection(now, w.config.WorkerBatchSize)
+	n, err = w.processSubscriptionBatch(ctx, now, "expire non-renewing", nonRenewingSel, expire(nonRenewingSel, triggerNonRenewingExpired))
 	if err != nil {
 		return processed, err
 	}
 	processed += n
 
-	n, err = w.processSubscriptionBatch(ctx, now, "expire cancelled", w.subscriptions.ListExpiredCancelled, expire(subscriptionExpiredCancelled, triggerCancelledExpired))
+	cancelledSel := expiredCancelledSelection(now, w.config.WorkerBatchSize)
+	n, err = w.processSubscriptionBatch(ctx, now, "expire cancelled", cancelledSel, expire(cancelledSel, triggerCancelledExpired))
 	if err != nil {
 		return processed, err
 	}
@@ -304,7 +408,7 @@ func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, erro
 	return processed, nil
 }
 
-// processSubscriptionBatch loops a worker listing in batches and processes
+// processSubscriptionBatch loops a worker selection in batches and processes
 // every row. A full batch with zero progress stays in the selection, so the
 // loop stops and defers to the next tick instead of spinning on the same
 // failing rows.
@@ -312,12 +416,12 @@ func (w *Workers) processSubscriptionBatch(
 	ctx context.Context,
 	now time.Time,
 	op string,
-	list func(context.Context, time.Time, int) ([]domain.Subscription, error),
+	sel SubscriptionSelection,
 	process func(context.Context, domain.Subscription, time.Time) error,
 ) (int, error) {
 	processed := 0
 	for {
-		subs, err := list(ctx, now, w.config.WorkerBatchSize)
+		subs, err := w.subscriptions.List(ctx, sel)
 		if err != nil {
 			return processed, fmt.Errorf("list subscriptions for %s: %w", op, err)
 		}
@@ -336,7 +440,7 @@ func (w *Workers) processSubscriptionBatch(
 			batchProcessed++
 		}
 		processed += batchProcessed
-		if len(subs) < w.config.WorkerBatchSize {
+		if len(subs) < sel.Limit {
 			break
 		}
 		if batchProcessed == 0 {
@@ -390,11 +494,11 @@ type renewalPlan struct {
 // listing, its terms are free (applied right here), or it entered grace — so
 // no charge is due.
 func (w *Workers) planRenewal(ctx context.Context, grace *graceEvents, stores *txStores, listed domain.Subscription, now time.Time) (renewalPlan, error) {
-	sub, err := stores.subscriptionForUpdate(ctx, listed.UserID)
+	sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, upForRenewalSelection(now, 1))
 	if err != nil {
 		return renewalPlan{}, err
 	}
-	if sub.Status != domain.SubscriptionStatusActive || !sub.AutoRenewEnabled || sub.ValidUntil == nil || sub.ValidUntil.After(now) {
+	if !inBatch {
 		// Renewed or changed between listing and locking.
 		return renewalPlan{}, nil
 	}
@@ -832,29 +936,25 @@ func (w *Workers) ProcessExpiredGrace(ctx context.Context, now time.Time) (int, 
 	if err != nil {
 		return 0, fmt.Errorf("get basic tariff: %w", err)
 	}
-	return w.processSubscriptionBatch(ctx, now, "expire grace", w.subscriptions.ListInExpiredGrace,
+	graceSel := expiredGraceSelection(now, w.config.WorkerBatchSize)
+	return w.processSubscriptionBatch(ctx, now, "expire grace", graceSel,
 		func(ctx context.Context, sub domain.Subscription, now time.Time) error {
-			return w.expireSubscription(ctx, sub, basicTariff, now, triggerGraceExpired, subscriptionInExpiredGrace)
+			return w.expireSubscription(ctx, sub, basicTariff, triggerGraceExpired, graceSel)
 		})
-}
-
-// subscriptionInExpiredGrace reports whether the subscription is in grace and
-// its grace window has ended.
-func subscriptionInExpiredGrace(s domain.Subscription, now time.Time) bool {
-	return s.Status == domain.SubscriptionStatusGrace && s.ValidUntil != nil && !s.ValidUntil.After(now)
 }
 
 // ProcessGraceExpiryReminders dispatches the grace-expiry reminder of every
 // subscription inside its reminder window — the half-open window
 // [valid_until - GraceExpiryReminderBefore, valid_until) — exactly once per
 // grace window (issue #253). The reminder is never sent before the window
-// opens or after the grace ends: the listing bounds both edges, and the
+// opens or after the grace ends: the selection bounds both edges, and the
 // processing transaction re-checks them under the subscription lock. Returns
 // the number of subscriptions reminded.
 func (w *Workers) ProcessGraceExpiryReminders(ctx context.Context, now time.Time) (int, error) {
 	processed := 0
+	sel := graceReminderWindowSelection(now, w.config.GraceExpiryReminderBefore, w.config.WorkerBatchSize)
 	for {
-		subs, err := w.subscriptions.ListInGraceReminderWindow(ctx, now, w.config.GraceExpiryReminderBefore, w.config.WorkerBatchSize)
+		subs, err := w.subscriptions.List(ctx, sel)
 		if err != nil {
 			return processed, fmt.Errorf("list subscriptions in grace reminder window: %w", err)
 		}
@@ -873,7 +973,7 @@ func (w *Workers) ProcessGraceExpiryReminders(ctx context.Context, now time.Time
 			reminded++
 			processed++
 		}
-		if len(subs) < w.config.WorkerBatchSize {
+		if len(subs) < sel.Limit {
 			break
 		}
 		if reminded == 0 {
@@ -886,45 +986,38 @@ func (w *Workers) ProcessGraceExpiryReminders(ctx context.Context, now time.Time
 }
 
 // remindGraceExpiring applies one grace-expiry reminder: the transaction locks
-// the subscription and hands it to the grace-events module, which re-checks
-// the reminder window under the lock, marks it reminded and publishes the
-// event strictly after the commit, best-effort, once per window (issue #284).
-// An ineligible subscription is a no-op, not an error.
+// the subscription, re-checks the reminder window through the selection under
+// the lock, and hands the still-eligible row to the grace-events module, which
+// marks it reminded and publishes the event strictly after the commit,
+// best-effort, once per window (issue #284). An ineligible subscription is a
+// no-op, not an error.
 func (w *Workers) remindGraceExpiring(ctx context.Context, listed domain.Subscription, now time.Time) error {
 	grace := newGraceEvents(w.publisher, w.log)
 	return grace.run(ctx, w.runInTx, func(stores *txStores) error {
-		sub, err := stores.subscriptionForUpdate(ctx, listed.UserID)
+		sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID,
+			graceReminderWindowSelection(now, w.config.GraceExpiryReminderBefore, 1))
 		if err != nil {
 			return err
 		}
-		return grace.remindWindow(ctx, stores, sub, now, w.config.GraceExpiryReminderBefore)
+		if !inBatch {
+			return nil
+		}
+		return grace.remindWindow(ctx, stores, sub, now)
 	})
 }
 
-// subscriptionExpiredNonRenewing reports whether an active subscription with
-// auto-renew off has run out its paid period.
-func subscriptionExpiredNonRenewing(s domain.Subscription, now time.Time) bool {
-	return s.Status == domain.SubscriptionStatusActive && !s.AutoRenewEnabled && s.ValidUntil != nil && !s.ValidUntil.After(now)
-}
-
-// subscriptionExpiredCancelled reports whether a cancelled subscription has
-// run out its retained paid period.
-func subscriptionExpiredCancelled(s domain.Subscription, now time.Time) bool {
-	return s.Status == domain.SubscriptionStatusCancelled && s.ValidUntil != nil && !s.ValidUntil.After(now)
-}
-
 // expireSubscription applies the shared expiry path in one transaction: it
-// locks the subscription, re-checks eligibility under the lock (the state the
+// locks the subscription, re-checks the selection under the lock (the state the
 // listing saw may be gone), downgrades to basic with its transition-log entry,
 // archives the excess properties and enforces the recipient slots. An
-// ineligible subscription is a no-op, not an error.
-func (w *Workers) expireSubscription(ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, now time.Time, trigger string, eligible func(domain.Subscription, time.Time) bool) error {
+// out-of-selection subscription is a no-op, not an error.
+func (w *Workers) expireSubscription(ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, trigger string, sel SubscriptionSelection) error {
 	return w.runLifecycleTx(ctx, func(stores *txStores) error {
-		sub, err := stores.subscriptionForUpdate(ctx, listed.UserID)
+		sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, sel)
 		if err != nil {
 			return err
 		}
-		if !eligible(sub, now) {
+		if !inBatch {
 			return nil
 		}
 		if _, err := stores.applyTransition(ctx, &sub,
@@ -949,7 +1042,8 @@ func (w *Workers) expireSubscription(ctx context.Context, listed domain.Subscrip
 // applied through the same synchronous path the webhook uses. Returns the
 // number of payments checked with the provider.
 func (w *Workers) ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error) {
-	return w.reconcileStalePendingPayments(ctx, now, "pending upgrade payments", w.txStoreFactory.payments.ListStalePendingUpgrades)
+	return w.reconcileStalePendingPayments(ctx, "pending upgrade payments",
+		stalePendingUpgradeSelection(now.Add(-w.config.PendingPaymentStaleness), w.config.WorkerBatchSize))
 }
 
 // ReconcilePendingPayments pulls the lost webhooks of every stale pending
@@ -957,21 +1051,21 @@ func (w *Workers) ProcessPendingUpgradePayments(ctx context.Context, now time.Ti
 // backstop beyond the provider's own redeliveries. Returns the number of
 // payments checked with the provider.
 func (w *Workers) ReconcilePendingPayments(ctx context.Context, now time.Time) (int, error) {
-	return w.reconcileStalePendingPayments(ctx, now, "pending payments", w.txStoreFactory.payments.ListStalePending)
+	return w.reconcileStalePendingPayments(ctx, "pending payments",
+		stalePendingSelection(now.Add(-w.config.PendingPaymentStaleness), w.config.WorkerBatchSize))
 }
 
-// reconcileStalePendingPayments batches a stale-pending listing and resolves
+// reconcileStalePendingPayments batches a stale-pending selection and resolves
 // each payment against the provider. A payment the provider has not settled
 // stays pending; a full batch with nothing finalized stays in the selection,
 // so the loop stops and defers to the next tick.
-func (w *Workers) reconcileStalePendingPayments(ctx context.Context, now time.Time, op string, list func(context.Context, time.Time, int) ([]domain.SubscriptionPayment, error)) (int, error) {
+func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, sel PaymentSelection) (int, error) {
 	if w.provider == nil {
 		return 0, fmt.Errorf("payment reconciliation worker requires a payment provider: %w", ErrPaymentUnavailable)
 	}
 	processed := 0
-	createdBefore := now.Add(-w.config.PendingPaymentStaleness)
 	for {
-		payments, err := list(ctx, createdBefore, w.config.WorkerBatchSize)
+		payments, err := w.txStoreFactory.payments.List(ctx, sel)
 		if err != nil {
 			return processed, fmt.Errorf("list stale %s: %w", op, err)
 		}
@@ -980,10 +1074,9 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, now time.Ti
 		}
 		finalized := 0
 		for _, payment := range payments {
-			if !payment.HasProviderReference() {
-				continue
-			}
 			processed++
+			// The selection guarantees the provider reference: without it
+			// there is nothing to query at the provider.
 			status, statusErr := w.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
 			if statusErr != nil {
 				w.log.WarnContext(ctx, "failed to query provider status for stale "+op,
@@ -1008,7 +1101,7 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, now time.Ti
 					slog.String("provider_status", string(status.Status)))
 			}
 		}
-		if len(payments) < w.config.WorkerBatchSize {
+		if len(payments) < sel.Limit {
 			break
 		}
 		if finalized == 0 {
@@ -1047,9 +1140,9 @@ func (w *Workers) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int
 	}
 
 	processed := 0
-	updatedBefore := now.Add(-w.config.PendingPaymentStaleness)
+	sel := staleRefundingSelection(now.Add(-w.config.PendingPaymentStaleness), w.config.WorkerBatchSize)
 	for {
-		payments, err := w.txStoreFactory.payments.ListStaleRefunding(ctx, updatedBefore, w.config.WorkerBatchSize)
+		payments, err := w.txStoreFactory.payments.List(ctx, sel)
 		if err != nil {
 			return processed, fmt.Errorf("list stale refunding payments: %w", err)
 		}
@@ -1070,7 +1163,7 @@ func (w *Workers) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int
 				resolved++
 			}
 		}
-		if len(payments) < w.config.WorkerBatchSize {
+		if len(payments) < sel.Limit {
 			break
 		}
 		if resolved == 0 {

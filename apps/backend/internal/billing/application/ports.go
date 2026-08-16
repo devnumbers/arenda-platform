@@ -33,34 +33,53 @@ type TariffRepository interface {
 	WithTx(tx transaction.Tx) (TariffRepository, error)
 }
 
+// SubscriptionSelection is the parameterized worker batch of the subscription
+// phases (issue #286): the values a phase selects its batch by. The matching
+// predicate — how these values pick rows — lives once in the SQL adapter; the
+// application never re-states it. A phase describes its selection in one
+// constructor next to the phase and uses it for both the batch listing and the
+// under-lock re-check, so a new phase is new values, not a new port method.
+type SubscriptionSelection struct {
+	// UserID narrows the selection to one user's subscription — the shape of
+	// the under-lock re-check after the phase locked the listed row. Nil lists
+	// the whole batch.
+	UserID *uuid.UUID
+	// Status is required: every phase selects exactly one lifecycle status.
+	Status domain.SubscriptionStatus
+	// AutoRenewEnabled narrows to subscriptions with the flag set either way;
+	// nil leaves both.
+	AutoRenewEnabled *bool
+	// ValidUntilBefore selects subscriptions whose paid or grace window has
+	// ended by the instant (valid_until <= t); ValidUntilAfter keeps those
+	// whose window is still open past it (valid_until > t). Nil drops the
+	// bound; a subscription without validity never matches a bounded
+	// selection.
+	ValidUntilBefore *time.Time
+	ValidUntilAfter  *time.Time
+	// Unreminded keeps only grace windows whose expiry reminder was not
+	// dispatched yet (grace_reminded_at IS NULL, issue #253).
+	Unreminded bool
+	// PendingChangeDue selects subscriptions whose deferred tariff change is
+	// due (pending_change_at <= t); nil drops the condition.
+	PendingChangeDue *time.Time
+	// Limit caps the batch; the worker loop re-lists until the selection is
+	// exhausted.
+	Limit int
+}
+
 // SubscriptionRepository is the persistence port for subscriptions. The
-// ForUpdate variants acquire a row-level pessimistic lock and must only be
-// called inside a transaction. The worker listings are plain selections; each
-// processing transaction re-reads and locks the row, so state checked between
-// listing and processing is never trusted blindly.
+// ForUpdate variant acquires a row-level pessimistic lock and must only be
+// called inside a transaction. List is the plain selection the worker phases
+// list and re-check their batches through; each processing transaction
+// re-reads and locks the row, so state checked between listing and processing
+// is never trusted blindly.
 type SubscriptionRepository interface {
 	GetByUserID(ctx context.Context, userID uuid.UUID) (domain.Subscription, error)
 	GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error)
-	// ListUpForRenewal returns a batch of active auto-renewing subscriptions
-	// whose paid period has ended (the renewal-charge selection, issue #252).
-	ListUpForRenewal(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
-	// ListInExpiredGrace returns a batch of grace subscriptions whose grace
-	// window has ended (the downgrade-to-basic selection, issue #252).
-	ListInExpiredGrace(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
-	// ListInGraceReminderWindow returns a batch of grace subscriptions inside
-	// the grace-expiry reminder window — valid_until is still in the future
-	// but arrives within the lead duration — whose window has not been
-	// reminded yet (issue #253).
-	ListInGraceReminderWindow(ctx context.Context, now time.Time, lead time.Duration, limit int) ([]domain.Subscription, error)
-	// ListExpiredNonRenewing returns a batch of active subscriptions with
-	// auto-renew off whose retained period has ended (issue #252).
-	ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
-	// ListExpiredCancelled returns a batch of cancelled subscriptions whose
-	// retained period has ended (issue #252).
-	ListExpiredCancelled(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
-	// ListPendingChanges returns a batch of active subscriptions with a
-	// deferred tariff change that is due (issue #252).
-	ListPendingChanges(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error)
+	// List returns a batch of subscriptions matching the worker selection
+	// (issue #286) — the single parameterized query behind every phase batch
+	// of the ADR 0008 lifecycle.
+	List(ctx context.Context, sel SubscriptionSelection) ([]domain.Subscription, error)
 	Create(ctx context.Context, sub domain.Subscription) (domain.Subscription, error)
 	Update(ctx context.Context, sub domain.Subscription) error
 	WithTx(tx transaction.Tx) (SubscriptionRepository, error)
@@ -72,6 +91,30 @@ type SubscriptionTransitionRepository interface {
 	Append(ctx context.Context, transition domain.Transition) error
 	ListBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) ([]domain.Transition, error)
 	WithTx(tx transaction.Tx) (SubscriptionTransitionRepository, error)
+}
+
+// PaymentSelection is the parameterized worker batch of the payment
+// reconciliation phases (issue #286). Every selection requires a provider
+// reference — without one there is nothing to reconcile with the provider —
+// and staleness is measured on exactly one clock: created (how long the
+// payment sits unresolved) or updated (how long it sits stuck), whichever the
+// phase sets. The matching predicate lives once in the SQL adapter.
+type PaymentSelection struct {
+	// Status is required: every phase selects exactly one payment status.
+	Status domain.PaymentStatus
+	// CreatedBefore selects payments sitting unresolved since before the
+	// instant (created_at < t); UpdatedBefore selects payments not updated
+	// since before it (updated_at < t). A phase sets exactly one; both nil
+	// drop the staleness bound.
+	CreatedBefore *time.Time
+	UpdatedBefore *time.Time
+	// TariffChangeOnly narrows to payments whose target tariff differs from
+	// the subscription's current one — the tariff-change payments of the
+	// ChangeTariff flow whose lost webhook leaves the paid change unapplied.
+	TariffChangeOnly bool
+	// Limit caps the batch; the worker loop re-lists until the selection is
+	// exhausted.
+	Limit int
 }
 
 // SubscriptionPaymentRepository is the persistence port for subscription
@@ -86,20 +129,10 @@ type SubscriptionPaymentRepository interface {
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	ListPendingByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
-	// ListStalePending returns a batch of pending payments with a provider
-	// reference that have been pending longer than the reconciliation
-	// staleness — the lost-webhook set the reconciliation worker re-checks with
-	// the provider (issue #252).
-	ListStalePending(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error)
-	// ListStalePendingUpgrades narrows the stale-pending set to payments whose
-	// target tariff differs from the subscription's current one — the
-	// tariff-change payments of the ChangeTariff flow (issue #252).
-	ListStalePendingUpgrades(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error)
-	// ListStaleRefunding returns a batch of payments stuck in the refunding
-	// reservation longer than the reconciliation staleness — the lost-outcome
-	// set the refund reconciliation worker re-checks with the provider
-	// (issue #254).
-	ListStaleRefunding(ctx context.Context, updatedBefore time.Time, limit int) ([]domain.SubscriptionPayment, error)
+	// List returns a batch of payments matching the worker selection (issue
+	// #286) — the single parameterized query behind every reconciliation
+	// batch.
+	List(ctx context.Context, sel PaymentSelection) ([]domain.SubscriptionPayment, error)
 	Update(ctx context.Context, payment domain.SubscriptionPayment) error
 	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -106,42 +105,19 @@ func (r *SubscriptionPaymentRepository) ListPendingByUserID(ctx context.Context,
 	return mapSubscriptionPayments(rows)
 }
 
-// ListStalePending returns a batch of pending payments with a provider
-// reference older than the threshold — the lost-webhook set of the
-// reconciliation worker (issue #252).
-func (r *SubscriptionPaymentRepository) ListStalePending(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
-	rows, err := r.q().ListStalePendingSubscriptionPayments(ctx, postgres.ListStalePendingSubscriptionPaymentsParams{
-		CreatedAt: pgtype.Timestamptz{Time: createdBefore, Valid: true},
-		Limit:     batchLimit(limit),
+// List returns a batch of payments matching the worker selection (issue #286):
+// the parameterized query every reconciliation phase lists its batch through.
+// The predicate lives here, in SQL.
+func (r *SubscriptionPaymentRepository) List(ctx context.Context, sel application.PaymentSelection) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.q().ListSubscriptionPaymentsBySelection(ctx, postgres.ListSubscriptionPaymentsBySelectionParams{
+		Status:           string(sel.Status),
+		CreatedBefore:    pgconv.TimePtrToPgtype(sel.CreatedBefore),
+		UpdatedBefore:    pgconv.TimePtrToPgtype(sel.UpdatedBefore),
+		TariffChangeOnly: sel.TariffChangeOnly,
+		BatchLimit:       batchLimit(sel.Limit),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list stale pending subscription payments: %w", err)
-	}
-	return mapSubscriptionPayments(rows)
-}
-
-// ListStalePendingUpgrades narrows the stale-pending set to payments whose
-// target tariff differs from the subscription's current one (issue #252).
-func (r *SubscriptionPaymentRepository) ListStalePendingUpgrades(ctx context.Context, createdBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
-	rows, err := r.q().ListStalePendingUpgradeSubscriptionPayments(ctx, postgres.ListStalePendingUpgradeSubscriptionPaymentsParams{
-		CreatedAt: pgtype.Timestamptz{Time: createdBefore, Valid: true},
-		Limit:     batchLimit(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list stale pending upgrade subscription payments: %w", err)
-	}
-	return mapSubscriptionPayments(rows)
-}
-
-// ListStaleRefunding returns a batch of payments stuck in the refunding
-// reservation longer than the threshold (issue #254).
-func (r *SubscriptionPaymentRepository) ListStaleRefunding(ctx context.Context, updatedBefore time.Time, limit int) ([]domain.SubscriptionPayment, error) {
-	rows, err := r.q().ListStaleRefundingSubscriptionPayments(ctx, postgres.ListStaleRefundingSubscriptionPaymentsParams{
-		UpdatedAt: pgtype.Timestamptz{Time: updatedBefore, Valid: true},
-		Limit:     batchLimit(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list stale refunding subscription payments: %w", err)
+		return nil, fmt.Errorf("list subscription payments by selection: %w", err)
 	}
 	return mapSubscriptionPayments(rows)
 }

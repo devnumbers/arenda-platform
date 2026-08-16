@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -64,84 +63,35 @@ func (r *SubscriptionRepository) GetByUserIDForUpdate(ctx context.Context, userI
 	return mapSubscription(row)
 }
 
-// ListUpForRenewal returns a batch of active auto-renewing subscriptions whose
-// paid period has ended (issue #252).
-func (r *SubscriptionRepository) ListUpForRenewal(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	rows, err := r.q().ListSubscriptionsUpForRenewal(ctx, postgres.ListSubscriptionsUpForRenewalParams{
-		ValidUntil: pgtype.Timestamptz{Time: now, Valid: true},
-		Limit:      batchLimit(limit),
-	})
+// List returns a batch of subscriptions matching the worker selection (issue
+// #286): the parameterized query every phase lists and re-checks its batch
+// through. The predicate lives here, in SQL.
+func (r *SubscriptionRepository) List(ctx context.Context, sel application.SubscriptionSelection) ([]domain.Subscription, error) {
+	rows, err := r.q().ListSubscriptionsBySelection(ctx, subscriptionSelectionParams(sel))
 	if err != nil {
-		return nil, fmt.Errorf("list subscriptions up for renewal: %w", err)
+		return nil, fmt.Errorf("list subscriptions by selection: %w", err)
 	}
 	return mapSubscriptions(rows)
 }
 
-// ListInExpiredGrace returns a batch of grace subscriptions whose grace window
-// has ended (issue #252).
-func (r *SubscriptionRepository) ListInExpiredGrace(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	rows, err := r.q().ListSubscriptionsInExpiredGrace(ctx, postgres.ListSubscriptionsInExpiredGraceParams{
-		ValidUntil: pgtype.Timestamptz{Time: now, Valid: true},
-		Limit:      batchLimit(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list subscriptions in expired grace: %w", err)
+// subscriptionSelectionParams maps the selection values to the query
+// parameters; a nil optional bound becomes an invalid (dropped) pgtype.
+func subscriptionSelectionParams(sel application.SubscriptionSelection) postgres.ListSubscriptionsBySelectionParams {
+	params := postgres.ListSubscriptionsBySelectionParams{
+		Status:     string(sel.Status),
+		Unreminded: sel.Unreminded,
+		BatchLimit: batchLimit(sel.Limit),
 	}
-	return mapSubscriptions(rows)
-}
-
-// ListInGraceReminderWindow returns a batch of grace subscriptions inside the
-// grace-expiry reminder window — valid_until still ahead but arriving within
-// the lead duration — whose window was not reminded yet (issue #253).
-func (r *SubscriptionRepository) ListInGraceReminderWindow(ctx context.Context, now time.Time, lead time.Duration, limit int) ([]domain.Subscription, error) {
-	rows, err := r.q().ListSubscriptionsInGraceReminderWindow(ctx, postgres.ListSubscriptionsInGraceReminderWindowParams{
-		ValidUntil:   pgtype.Timestamptz{Time: now, Valid: true},
-		ValidUntil_2: pgtype.Timestamptz{Time: now.Add(lead), Valid: true},
-		Limit:        batchLimit(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list subscriptions in grace reminder window: %w", err)
+	if sel.UserID != nil {
+		params.UserID = pgtype.UUID{Bytes: *sel.UserID, Valid: true}
 	}
-	return mapSubscriptions(rows)
-}
-
-// ListExpiredNonRenewing returns a batch of active subscriptions with
-// auto-renew off whose retained period has ended (issue #252).
-func (r *SubscriptionRepository) ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	rows, err := r.q().ListExpiredNonRenewingSubscriptions(ctx, postgres.ListExpiredNonRenewingSubscriptionsParams{
-		ValidUntil: pgtype.Timestamptz{Time: now, Valid: true},
-		Limit:      batchLimit(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list expired non-renewing subscriptions: %w", err)
+	if sel.AutoRenewEnabled != nil {
+		params.AutoRenew = pgtype.Bool{Bool: *sel.AutoRenewEnabled, Valid: true}
 	}
-	return mapSubscriptions(rows)
-}
-
-// ListExpiredCancelled returns a batch of cancelled subscriptions whose
-// retained period has ended (issue #252).
-func (r *SubscriptionRepository) ListExpiredCancelled(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	rows, err := r.q().ListExpiredCancelledSubscriptions(ctx, postgres.ListExpiredCancelledSubscriptionsParams{
-		ValidUntil: pgtype.Timestamptz{Time: now, Valid: true},
-		Limit:      batchLimit(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list expired cancelled subscriptions: %w", err)
-	}
-	return mapSubscriptions(rows)
-}
-
-// ListPendingChanges returns a batch of active subscriptions with a deferred
-// tariff change that is due (issue #252).
-func (r *SubscriptionRepository) ListPendingChanges(ctx context.Context, now time.Time, limit int) ([]domain.Subscription, error) {
-	rows, err := r.q().ListSubscriptionsWithPendingChange(ctx, postgres.ListSubscriptionsWithPendingChangeParams{
-		PendingChangeAt: pgtype.Timestamptz{Time: now, Valid: true},
-		Limit:           batchLimit(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list subscriptions with pending change: %w", err)
-	}
-	return mapSubscriptions(rows)
+	params.ValidUntilBefore = pgconv.TimePtrToPgtype(sel.ValidUntilBefore)
+	params.ValidUntilAfter = pgconv.TimePtrToPgtype(sel.ValidUntilAfter)
+	params.PendingChangeDue = pgconv.TimePtrToPgtype(sel.PendingChangeDue)
+	return params
 }
 
 // batchLimit converts the configured worker batch size to the sqlc parameter

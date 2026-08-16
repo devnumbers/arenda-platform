@@ -257,8 +257,6 @@ type Querier interface {
 	ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error)
 	ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error)
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
-	ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error)
-	ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error)
 	ListFreeRemindersByOwner(ctx context.Context, arg ListFreeRemindersByOwnerParams) ([]FreeReminder, error)
 	ListFreeRemindersByProperty(ctx context.Context, arg ListFreeRemindersByPropertyParams) ([]FreeReminder, error)
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]ListFutureOperationsByLeaseRow, error)
@@ -307,41 +305,38 @@ type Querier interface {
 	ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error)
 	ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error)
 	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
-	// Reconciliation listings (issue #252): pending payments stale enough that a
-	// webhook is presumed lost. The provider reference is mandatory — without it
-	// there is nothing to query at the provider.
-	ListStalePendingSubscriptionPayments(ctx context.Context, arg ListStalePendingSubscriptionPaymentsParams) ([]SubscriptionPayment, error)
-	// Pending payments whose target tariff differs from the subscription's current
-	// one are the tariff-change payments of the ChangeTariff flow (upgrades and
-	// recovery upgrades): a lost webhook here leaves the paid change unapplied.
-	ListStalePendingUpgradeSubscriptionPayments(ctx context.Context, arg ListStalePendingUpgradeSubscriptionPaymentsParams) ([]SubscriptionPayment, error)
-	// Payments stuck in the internal refunding reservation longer than the
-	// reconciliation staleness (issue #254): the refund call's outcome was never
-	// finalized, so the worker asks the provider for the truth. The provider
-	// reference is mandatory — without it there is nothing to query.
-	ListStaleRefundingSubscriptionPayments(ctx context.Context, arg ListStaleRefundingSubscriptionPaymentsParams) ([]SubscriptionPayment, error)
 	ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error)
 	// Admin payment views (issue #254). The phone filter matches the stored
 	// ciphertext (deterministic encryption) or the plaintext of a not-yet-
 	// encrypted row, mirroring ListUsersAdmin; user input is never interpolated
 	// into SQL — sort/order map to columns through fixed CASE arms.
 	ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error)
+	// The reconciliation batch of the payment phases (issues #252, #254): pending
+	// payments stale enough that a webhook is presumed lost, and payments stuck in
+	// the refunding reservation. The provider reference is mandatory in every
+	// selection — without it there is nothing to query at the provider. The order
+	// follows the staleness clock the phase set: updated-stale batches
+	// (updated_before set) by updated_at, the rest by created_at, each with id as
+	// the tie-breaker.
+	ListSubscriptionPaymentsBySelection(ctx context.Context, arg ListSubscriptionPaymentsBySelectionParams) ([]SubscriptionPayment, error)
 	ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListSubscriptionTransitionsBySubscription(ctx context.Context, subscriptionID pgtype.UUID) ([]SubscriptionTransition, error)
-	ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error)
-	// Grace subscriptions inside the grace-expiry reminder window — the end of the
-	// window (valid_until) is still ahead of $1 but arrives no later than $2 (the
-	// caller passes now and now+lead) — whose window was not reminded yet (issue
-	// #253). Backed by the partial index idx_user_subscriptions_grace_unreminded
-	// (migration 000105).
-	ListSubscriptionsInGraceReminderWindow(ctx context.Context, arg ListSubscriptionsInGraceReminderWindowParams) ([]UserSubscription, error)
-	// Worker batch listings (issue #252, ADR 0008 lifecycle phases). Each listing
-	// is a plain selection; the processing transaction re-reads and locks the row
-	// by user id, so a concurrent mutation between listing and processing is
-	// re-checked under the lock and never applied twice. The partial indexes of
-	// migration 000104 back every filter below.
-	ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSubscriptionsUpForRenewalParams) ([]UserSubscription, error)
-	ListSubscriptionsWithPendingChange(ctx context.Context, arg ListSubscriptionsWithPendingChangeParams) ([]UserSubscription, error)
+	// Worker batch selections (issue #252, ADR 0008 lifecycle phases; one
+	// parameterized query per aggregate since issue #286). The phases set the
+	// values through application.SubscriptionSelection / PaymentSelection; a
+	// bound left NULL drops its condition. Each listing is a plain selection; the
+	// processing transaction re-reads and locks the row by user id, so a
+	// concurrent mutation between listing and processing is re-checked under the
+	// lock and never applied twice. The composite indexes of migration 000107
+	// back every selection: the required status prefix narrows to the phase's
+	// status, the second column serves the phase-clock range and the batch order.
+	// The order follows the phase clock: deferred-change batches
+	// (pending_change_due set) by pending_change_at, everything else by
+	// valid_until, each with id as the tie-breaker — the oldest-first fairness of
+	// the batches. A non-NULL user_id narrows the selection to one subscription:
+	// the under-lock re-check of a phase, run in the transaction that locked the
+	// row.
+	ListSubscriptionsBySelection(ctx context.Context, arg ListSubscriptionsBySelectionParams) ([]UserSubscription, error)
 	// The FIFO recovery queue. Memberships on archived properties are excluded:
 	// an archived object does not occupy a recipient slot (issue #163), so a free
 	// slot must not be wasted on them; they re-enter the selection on unarchive.

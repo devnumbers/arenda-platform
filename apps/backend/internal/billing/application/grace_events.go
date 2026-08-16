@@ -94,14 +94,11 @@ func (g *graceEvents) enterGrace(ctx context.Context, stores *txStores, sub doma
 
 // remindWindow marks the grace-expiry reminder due now inside the caller's
 // transaction and captures the GraceExpiring event for the post-commit
-// publication. The window is re-checked under the caller's subscription lock
-// (the state the listing saw may be gone), and the persisted mark makes the
-// reminder once per window: a window already reminded — or not due yet, ended,
-// or belonging to a subscription no longer in grace — captures nothing.
-func (g *graceEvents) remindWindow(ctx context.Context, stores *txStores, sub domain.Subscription, now time.Time, lead time.Duration) error {
-	if !subscriptionInGraceReminderWindow(sub, now, lead) {
-		return nil
-	}
+// publication. The caller hands over the subscription locked and still inside
+// its reminder window — the selection re-check under the lock decided that
+// (issue #286) — and the persisted mark makes the reminder once per window: a
+// window already reminded left the selection.
+func (g *graceEvents) remindWindow(ctx context.Context, stores *txStores, sub domain.Subscription, now time.Time) error {
 	sub.MarkGraceReminded(now)
 	if err := stores.subscriptions.Update(ctx, sub); err != nil {
 		return fmt.Errorf("mark grace window reminded: %w", err)
@@ -113,18 +110,6 @@ func (g *graceEvents) remindWindow(ctx context.Context, stores *txStores, sub do
 		At:             now,
 	}
 	return nil
-}
-
-// subscriptionInGraceReminderWindow reports whether the subscription is in
-// grace, its window has not ended yet, the reminder lead time has arrived and
-// the window was not reminded yet (issue #253). lead is the reminder lead
-// duration: the window is [valid_until - lead, valid_until).
-func subscriptionInGraceReminderWindow(s domain.Subscription, now time.Time, lead time.Duration) bool {
-	return s.Status == domain.SubscriptionStatusGrace &&
-		s.ValidUntil != nil &&
-		s.ValidUntil.After(now) &&
-		!s.ValidUntil.After(now.Add(lead)) &&
-		s.GraceRemindedAt == nil
 }
 
 // graceUntilOf returns the subscription's validity — the grace window's end
