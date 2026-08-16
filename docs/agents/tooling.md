@@ -12,18 +12,18 @@ Configured per harness, outside the repo: Kimi Code — `~/.kimi-code/mcp.json`;
 
 | Server | Role | Status |
 | --- | --- | --- |
-| `lean-ctx` | Compressed reads and noisy-output compression, semantic search by meaning, dependency/diff-impact graph, session intelligence | in force — role narrows to exactly this list once Serena lands |
+| `lean-ctx` | Compressed reads and noisy-output compression, semantic search by meaning, dependency/diff-impact graph, session intelligence | in force — since 2026-08-16 narrowed to exactly this list (Serena landed; boundary rule below) |
 | `gopls` | Go semantics (navigation, references, diagnostics) | in force — **accepted: removed** when Serena passes its spike-gate; `govulncheck` moves to a pinned make target |
 | `context7` | Official library/framework documentation | in force |
 | `playwright` | Browser automation and UI verification | in force |
 | `figma` | Figma design data and image exports | in force |
 | `heroui-react` | HeroUI v3 component docs, source, theme tokens | in force |
 | `jetbrains` | GoLand inspections as a quality gate | in force — **accepted: removed** with Serena (coverage already exists: golangci-lint + live gopls diagnostics via Serena) |
-| `serena` | Unified semantic tool for the stack (TS + Go): navigation, references, rename, diagnostics, symbol-level editing | **accepted-conditionally** — spike-gate first, see below |
+| `serena` | Unified semantic tool for the stack (TS + Go): navigation, references, rename, diagnostics, symbol-level editing | in force — spike-gate passed 2026-08-16 (results below); pinned `serena-agent` 1.7.0 |
 
-**Serena target configuration** (decision [«Подключать ли Serena (и в какой конфигурации)»](https://github.com/devnumbers/arenda-platform/issues/293)): one project at the monorepo root with `languages: ["typescript", "go"]` (fallback: two projects if one tsserver can't cover both `apps/frontend` and `apps/admin` — not a reject); context `ide` so Serena's file/shell tools auto-disable and don't duplicate the harness; memories off (the "no memory branch" charting decision stands); symbol editing on from day one; `.serena/project.yml` committed to the repo; mandatory with a stop-procedure (same model as gopls today — unavailable → stop and tell the user, no silent substitution); environment prerequisite `uv` + Python 3.13; `serena-agent` version pinned in the implementation docs.
+**Serena target configuration** (decision [«Подключать ли Serena (и в какой конфигурации)»](https://github.com/devnumbers/arenda-platform/issues/293)): one project at the monorepo root with `language_servers: ["typescript", "go"]` (fallback: two projects if one tsserver can't cover both `apps/frontend` and `apps/admin` — not a reject); context `ide` so Serena's file/shell tools auto-disable and don't duplicate the harness; memories off (the "no memory branch" charting decision stands) via the `no-memories` mode in `added_modes`; symbol editing on from day one; `.serena/project.yml` committed to the repo; mandatory with a stop-procedure (same model as gopls today — unavailable → stop and tell the user, no silent substitution); environment prerequisite `uv` + Python 3.13; `serena-agent` pinned at 1.7.0 (`uv tool install -p 3.13 'serena-agent==1.7.0'`).
 
-**Spike-gate (run in both harnesses — Kimi Code and ZCode):**
+**Spike-gate (run in both harnesses — Kimi Code and ZCode; for the 2026-08-16 run the ZCode leg was waived by user decision, see results):**
 
 1. Serena's tsserver (pinned TS 5.9.3) starts on `apps/frontend` (Next 16) and `apps/admin` with meaningful diagnostics.
 2. One root project covers both TS apps (failure → two projects, not a reject).
@@ -33,6 +33,17 @@ Configured per harness, outside the repo: Kimi Code — `~/.kimi-code/mcp.json`;
 6. Symbol editing works correctly on TS and Go.
 
 Failing (1), (3), (4), or (5) = reject with recorded reasons.
+
+**Spike-gate results (run 2026-08-16, issue #299).** Setup: `serena-agent` 1.7.0 on uv-managed Python 3.13; one root project (`.serena/project.yml`), context `ide`, `no-memories` mode; Serena-pinned TS stack verified on disk: typescript 5.9.3 + typescript-language-server 5.1.3; gopls v0.23.0 from PATH. Exercised through a raw MCP stdio driver plus headless `kimi -p` sessions in Kimi Code. The ZCode leg was **waived by the user**: ZCode CLI headless cannot reuse the desktop app's OAuth tokens (the refresh flow lives in the desktop app; standalone headless needs its own `zcode login` plus an explicit `provider`+`model` section in `~/.zcode/cli/config.json`). Serena's entry is present in the ZCode MCP config and the running desktop starts the server with the target args, but tool *use* by the ZCode agent is unverified until first real use — if it misbehaves there, treat it as a late criterion-4 failure. Criteria 1, 2, 3, 5, 6 are harness-neutral (same Serena server, same project config, same tool surface for any MCP client) and hold for ZCode to the extent its MCP client is standards-conformant; only criterion 4 is genuinely per-harness, so per-criterion ZCode rows below read "waived".
+
+1. **pass** — one tsserver cluster serves both `apps/frontend` (Next 16) and `apps/admin` from the root project: overview/find_symbol/find_referencing_symbols work in both; diagnostics are meaningful — a planted `TS2322` in a scratch file was reported with code/range/source, clean files return `{}`.
+2. **pass, no fallback needed** — one root project covers both TS apps.
+3. **pass** — gopls via Serena works under `go.work`: overview/find_symbol/find_referencing_symbols/diagnostics on `apps/backend` (probe: `PaymentLifecycle` in billing; cross-file references found).
+4. **pass in Kimi Code** — across three headless tasks the agent called `get_diagnostics_for_file`, `rename_symbol`, `replace_symbol_body` and read back the results; no reminder hooks involved. Routing note: on a fully unhinted "find usages" task the agent picked text `Grep` over `find_referencing_symbols` — steering it is exactly what the boundary rule below is for. ZCode: not run (waived, see above).
+5. **pass, measured** — Serena process-tree RSS after mixed TS+Go symbol work: tsserver cluster ≈426 MB warm (≈219 MB after editing/GC), gopls ≈517 MB (568 MB post-edit), serena python ≈90 MB. Hundreds of MB, not GB.
+6. **pass** — symbol editing verified on disk: TS `replace_symbol_body` + `insert_after_symbol`; Go `replace_symbol_body` + `rename_symbol` with `go build`/`go vet`/`gofmt` clean. Contract note: in Go the symbol body excludes the leading doc comment — retrieve with `include_body` first (as Serena's own docs demand) or the comment gets duplicated.
+
+Outcome: **adopt** — one project, no fallback; the MCP re-shuffle (remove `gopls` and `jetbrains` MCP servers, move `govulncheck` to a pinned make target) is confirmed and goes through the normal implementation pipeline. Operational notes: Kimi Code headless sessions can leave the Serena MCP process running after exit (kill leftover `serena start-mcp-server` processes); Serena self-writes `.serena/.gitignore` (`/cache`, `/project.local.yml`), which is committed.
 
 **Boundary rule (one line):** code semantics (symbols, references, rename, diagnostics, symbol editing — TS and Go) → Serena; read/output compression, semantic search, dependency graph, session intelligence → lean-ctx.
 
@@ -143,7 +154,7 @@ None of the map's decisions gets an ADR, by the "offer ADRs sparingly" rule (dom
 1. Base prerequisites: Go toolchain (provides the `gopls` binary), Node/npx, Docker (integration tests; pre-push hooks once lefthook lands).
 2. Harness MCP config — Kimi Code: `~/.kimi-code/mcp.json`; ZCode: its MCP config. Servers per the table above; personal API keys (context7, figma) go into the user config only.
 3. Skills: nothing to install — `.agents/skills/` ships with the repo.
-4. Once Serena lands: install `uv` + Python 3.13, pinned `serena-agent`; `.serena/project.yml` comes from the repo.
+4. Serena (in force since 2026-08-16): install `uv`, then `uv tool install -p 3.13 'serena-agent==1.7.0'` (uv provides the managed Python 3.13); `.serena/project.yml` comes from the repo; add the `serena` MCP entry (`serena start-mcp-server --context ide --project <abs repo root>`) to each harness config. ZCode note: headless CLI use needs a separate `zcode login` and an explicit `provider`+`model` section in `~/.zcode/cli/config.json`; the desktop app needs neither.
 5. Once lefthook lands: `make hooks-install` (installs the pinned lefthook binary if missing + `lefthook install`).
 6. Harness hooks (opt-in): wire `tools/hooks/*.mjs` per the instructions that land with the implementation change.
 

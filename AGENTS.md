@@ -62,6 +62,7 @@ The following MCP servers are configured in the harness MCP config (`~/.kimi-cod
 - `figma` — Figma design data and image exports. Fallback when unavailable: manual design references.
 - `heroui-react` — HeroUI v3 component docs, source, and theme tokens for the Next.js frontend. HeroUI v3 is beta and not covered by model training data, so verify components through this server before writing HeroUI code. Fallback when unavailable: official docs at https://v3.heroui.com via `FetchURL` or `WebSearch`.
 - `jetbrains` — GoLand's built-in MCP server (IDE 2025.2+). Runs IDE inspections (`get_file_problems`) on files as a quality gate for agent work. Requires GoLand running with this project open. Fallback when unavailable: note the skipped gate in the final report.
+- `serena` — code semantics for the whole stack (TS + Go): symbol navigation, references, rename, diagnostics, symbol-level editing. Pinned `serena-agent` 1.7.0 (`uv` + managed Python 3.13); committed project config `.serena/project.yml`, one project at the repo root. Boundary rule: code semantics (symbols, references, rename, diagnostics, symbol editing) → `serena`; read/output compression, semantic search, dependency graph, session intelligence → `lean-ctx`. If the `mcp__serena__*` tools are unavailable, stop and tell the user (same stop-procedure model as `gopls`) — no silent substitution.
 
 ## Commands
 
