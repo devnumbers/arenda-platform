@@ -8,8 +8,9 @@ MANUAL_DIR="$PROJECT_ROOT/tools/bruno/arenda-api"
 E2E_DIR="$PROJECT_ROOT/tools/e2e/bruno/arenda-api-e2e/system-e2e"
 
 # Internal endpoints that are intentionally not part of user-facing collections.
+# The fake confirmation routes are mounted by the wiring only under the fake
+# provider (issue #287), so they are not part of the generated contract at all.
 ALLOW_UNCOVERED_MANUAL=(
-  "/internal/fake-subscription-payment/{}/confirm"
   "/internal/perf/db-pool"
   "/admin/subscription/payments"
   "/admin/subscription/payments/{}/refund"
@@ -24,7 +25,6 @@ ALLOW_UNCOVERED_MANUAL=(
   "/properties/{}/photos"
 )
 ALLOW_UNCOVERED_E2E=(
-  "/internal/fake-subscription-payment/{}/confirm"
   "/internal/perf/db-pool"
   # Admin endpoints are outside the owner MVP user paths covered by this suite.
   "/admin/subscription/payments"

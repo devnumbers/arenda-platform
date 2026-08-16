@@ -91,9 +91,7 @@ func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
 
 	// 2. The payer completes the form: the local confirmation drives the
 	// method-bound event through the synchronous webhook path.
-	if err := h.paymentsSvc.ConfirmFakeCardBinding(h.ctx(), session.RequestKey); err != nil {
-		t.Fatalf("ConfirmFakeCardBinding(): %v", err)
-	}
+	h.confirmFakeCardBinding(t, session.RequestKey)
 
 	// 3. The method exists, is the single active one and the subscription
 	// charges it.
@@ -137,9 +135,7 @@ func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
 	if closed.Status != domain.CardBindingCompleted {
 		t.Errorf("session status = %q, want completed", closed.Status)
 	}
-	if err := h.paymentsSvc.ConfirmFakeCardBinding(h.ctx(), session.RequestKey); err != nil {
-		t.Fatalf("ConfirmFakeCardBinding(redelivery): %v", err)
-	}
+	h.confirmFakeCardBinding(t, session.RequestKey)
 	methods, err = h.methods.ListByUserID(h.ctx(), userID)
 	if err != nil {
 		t.Fatalf("ListByUserID(redelivery): %v", err)

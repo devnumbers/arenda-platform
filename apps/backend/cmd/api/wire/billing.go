@@ -38,6 +38,11 @@ type Billing struct {
 	// the neutral provider port (issue #248, ADR 0038). Nil never occurs
 	// because config validation pins PAYMENT_PROVIDER to fake or tkassa.
 	PaymentProvider billingapp.PaymentProvider
+	// FakeConfirms serves the local-only fake confirmation endpoints
+	// (issues #250/#251); it is non-nil only when the fake provider is
+	// active, and the HTTP wiring mounts its routes only then — a tkassa
+	// (production) build has no such endpoints at all (issue #287).
+	FakeConfirms *billinghttp.FakeConfirmHandlers
 	// MutationGate adapts the subscription service to the readonly-gate port
 	// declared by platform/httpsupport (ADR 0035 consumer-side interface).
 	MutationGate httpsupport.SubscriptionMutationChecker
@@ -90,6 +95,15 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 		"payment_provider", string(provider.Name()),
 	)
 
+	// The local confirmation endpoints exist only under the fake provider:
+	// they drive the fake adapter directly at the adapter level while the
+	// application layer stays provider-neutral (issue #287). Under any other
+	// provider the handlers stay nil and the routes are never mounted.
+	var fakeConfirms *billinghttp.FakeConfirmHandlers
+	if fakeProvider, ok := provider.(*paymentfake.Provider); ok {
+		fakeConfirms = billinghttp.NewFakeConfirmHandlers(fakeProvider, services.Payments, p.Logger)
+	}
+
 	return &Billing{
 		TariffRepo:        tariffRepo,
 		SubscriptionRepo:  subscriptionRepo,
@@ -99,6 +113,7 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 		CardBindingRepo:   cardBindingRepo,
 		Services:          services,
 		PaymentProvider:   provider,
+		FakeConfirms:      fakeConfirms,
 		MutationGate:      billinghttp.NewMutationGate(services.Subscriptions, p.Clock),
 	}, nil
 }

@@ -348,12 +348,9 @@ func (s *PaymentService) resolveRefundingFromStatus(ctx context.Context, payment
 // nothing. The sync itself is audited with the acting admin regardless of the
 // outcome it resolved to.
 func (s *PaymentService) SyncPayment(ctx context.Context, adminID, paymentID uuid.UUID) error {
-	payment, err := s.payments.GetByID(ctx, paymentID)
+	payment, err := s.GetPayment(ctx, paymentID)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment: %w", err)
+		return err
 	}
 	if !payment.HasProviderReference() {
 		return fmt.Errorf("%w: payment %s has no provider reference", domain.ErrInvalidPaymentStatus, paymentID)

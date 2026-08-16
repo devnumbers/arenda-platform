@@ -13,21 +13,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
-// FakePaymentConfirmer completes a payment at the provider from the local dev
-// endpoint (issue #250). Only the fake adapter implements it; the confirm flow
-// type-asserts the active provider, so nothing fake-specific leaks into the
-// port.
-type FakePaymentConfirmer interface {
-	ConfirmPayment(ctx context.Context, internalPaymentID string) (WebhookEvent, error)
-}
-
-// FakeCardBindingConfirmer completes a card binding at the provider from the
-// local dev endpoint (issue #251) — the same consumer-side pattern as
-// FakePaymentConfirmer.
-type FakeCardBindingConfirmer interface {
-	ConfirmCardBinding(ctx context.Context, requestKey string) (WebhookEvent, error)
-}
-
 // paymentFinalizerProvider is the narrow provider slice the payment service
 // needs: parsing and acknowledging webhooks, querying the provider-side
 // payment status, refunding a payment, and the provider identity. Declared
@@ -41,13 +26,12 @@ type paymentFinalizerProvider interface {
 }
 
 // PaymentService finalizes subscription payments: it processes provider
-// webhooks synchronously (issue #250, ADR 0039),
-// serves the local fake-payment confirmation endpoint, lists the user's
-// payments, and runs the admin payment operations of issue #254 — the
-// three-phase refund saga, the manual provider sync and the admin listing.
-// The payment itself is started by SubscriptionService.ChangeTariff; this
-// service owns everything that happens after the provider reports an
-// outcome.
+// webhooks synchronously (issue #250, ADR 0039), applies parsed provider
+// events of every delivery channel, lists the user's payments, and runs the
+// admin payment operations of issue #254 — the three-phase refund saga, the
+// manual provider sync and the admin listing. The payment itself is started
+// by SubscriptionService.ChangeTariff; this service owns everything that
+// happens after the provider reports an outcome.
 type PaymentService struct {
 	txStoreFactory
 	provider paymentFinalizerProvider
@@ -127,6 +111,20 @@ func (s *PaymentService) WebhookAck() []byte {
 	return s.provider.WebhookAck()
 }
 
+// GetPayment returns one subscription payment by its id — the read behind the
+// flows that address a single payment directly (the dev-only local provider
+// confirmation, issue #287). A missing payment answers ErrPaymentNotFound.
+func (s *PaymentService) GetPayment(ctx context.Context, paymentID uuid.UUID) (domain.SubscriptionPayment, error) {
+	payment, err := s.payments.GetByID(ctx, paymentID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.SubscriptionPayment{}, ErrPaymentNotFound
+		}
+		return domain.SubscriptionPayment{}, fmt.Errorf("get payment: %w", err)
+	}
+	return payment, nil
+}
+
 // ListPayments returns the user's subscription payments with their tariffs
 // resolved, newest first (GET /subscription/payments, issue #250).
 func (s *PaymentService) ListPayments(ctx context.Context, userID uuid.UUID) ([]SubscriptionPaymentView, error) {
@@ -166,6 +164,18 @@ func (s *PaymentService) HandleWebhook(ctx context.Context, providerName string,
 	if err != nil {
 		return fmt.Errorf("%w: parse webhook: %w", ErrWebhookRejected, err)
 	}
+	return s.ApplyProviderEvent(ctx, event)
+}
+
+// ApplyProviderEvent applies one already-parsed provider notification through
+// the synchronous paths of ADR 0039: a payment notification finalizes the
+// payment with its subscription effects, a method-bound notification completes
+// a card-binding session. HandleWebhook lands here after parsing; the
+// dev-only local confirmation at the adapter/wiring level (issue #287) lands
+// here after the active provider's adapter reports the completed entry — the
+// application stays provider-neutral and knows nothing about which provider
+// produced the event.
+func (s *PaymentService) ApplyProviderEvent(ctx context.Context, event WebhookEvent) error {
 	switch {
 	case event.Payment != nil:
 		return s.handlePaymentNotification(ctx, event.Payment)
@@ -529,90 +539,4 @@ func (s *PaymentService) checkProviderPaymentID(payment domain.SubscriptionPayme
 			ErrWebhookPaymentMismatch, payment.ID, *payment.ProviderPaymentID, n.ProviderPaymentID)
 	}
 	return nil
-}
-
-// ConfirmFakePayment completes a pending payment through the fake provider's
-// local confirmation hook (POST /internal/fake-subscription-payment/{id}/confirm,
-// APP_ENV=local only). The confirmed event flows through the same synchronous
-// application path as a webhook, so local end-to-end runs exercise production
-// behaviour. Confirming a finalized payment is an idempotent no-op.
-func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error {
-	confirmer, ok := s.provider.(FakePaymentConfirmer)
-	if !ok {
-		return ErrPaymentNotConfirmable
-	}
-	payment, err := s.payments.GetByID(ctx, paymentID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment: %w", err)
-	}
-	if payment.IsFinalized() {
-		return nil
-	}
-
-	event, err := confirmer.ConfirmPayment(ctx, paymentID.String())
-	if err != nil {
-		if errors.Is(err, ErrProviderPaymentNotFound) && payment.HasProviderReference() {
-			// The provider no longer tracks the payment (it purged a
-			// long-pending entry or already settled it): the provider status
-			// is the source of truth, so finalize from it.
-			return s.confirmFromProviderStatus(ctx, payment)
-		}
-		return fmt.Errorf("confirm fake payment: %w", err)
-	}
-	if event.Payment == nil {
-		return fmt.Errorf("%w: confirm returned no payment event", ErrWebhookUnsupported)
-	}
-	return s.handlePaymentNotification(ctx, event.Payment)
-}
-
-// confirmFromProviderStatus finalizes a payment from the provider's current
-// status after its local confirmation could not resolve the entry.
-func (s *PaymentService) confirmFromProviderStatus(ctx context.Context, payment domain.SubscriptionPayment) error {
-	status, err := s.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
-	if err != nil {
-		return fmt.Errorf("provider status after lost confirm: %w", err)
-	}
-	if status.Status != domain.PaymentStatusSucceeded && status.Status != domain.PaymentStatusFailed {
-		return nil
-	}
-	var errorCode *string
-	if status.Status == domain.PaymentStatusFailed && status.ErrorCode != "" {
-		errorCode = &status.ErrorCode
-	}
-	return s.handlePaymentNotification(ctx, &PaymentNotification{
-		InternalPaymentID: payment.ID,
-		ProviderPaymentID: *payment.ProviderPaymentID,
-		Status:            status.Status,
-		ErrorCode:         errorCode,
-		AmountKopecks:     payment.AmountKopecks,
-	})
-}
-
-// ConfirmFakeCardBinding completes a pending card binding through the fake
-// provider's local confirmation hook (POST
-// /internal/fake-card-binding/{requestKey}/confirm, APP_ENV=local only,
-// issue #251). The confirmed event flows through the same synchronous
-// application path as the add-card webhook, so local end-to-end runs exercise
-// production behaviour. Confirming an already-resolved binding is an
-// idempotent no-op; an unknown request key answers ErrNotFound.
-func (s *PaymentService) ConfirmFakeCardBinding(ctx context.Context, requestKey string) error {
-	confirmer, ok := s.provider.(FakeCardBindingConfirmer)
-	if !ok {
-		return ErrPaymentNotConfirmable
-	}
-
-	event, err := confirmer.ConfirmCardBinding(ctx, requestKey)
-	if err != nil {
-		if errors.Is(err, ErrProviderBindingNotFound) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("confirm fake card binding: %w", err)
-	}
-	if event.MethodBound == nil {
-		return fmt.Errorf("%w: confirm returned no method-bound event", ErrWebhookUnsupported)
-	}
-	return s.applyMethodBoundNotification(ctx, event.MethodBound)
 }

@@ -306,7 +306,7 @@ func run() error {
 		Webhooks:                 billingMod.Services.Payments,
 		AdminPayments:            billingMod.Services.Payments,
 		AdminSubscriptions:       billingMod.Services.Subscriptions,
-		BillingDevEndpoints:      p.Cfg.AppEnv == "local",
+		BillingFakeConfirms:      billingMod.FakeConfirms,
 		ReadonlyGate:             billingMod.MutationGate,
 		Admin:                    adminMod.Service,
 		Properties:               propertiesMod.PropertyService,

@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -98,29 +97,6 @@ func (p *stubMethodProvider) ParseWebhook(_ context.Context, _ []byte) (WebhookE
 }
 
 func (p *stubMethodProvider) WebhookAck() []byte { return []byte(`{"status":"ok"}`) }
-
-// ConfirmCardBinding completes a binding the way the fake adapter does: it
-// hands back the method-bound event for the request key. A key no binding was
-// started for answers ErrProviderBindingNotFound.
-func (p *stubMethodProvider) ConfirmCardBinding(_ context.Context, requestKey string) (WebhookEvent, error) {
-	p.mu.Lock()
-	started := p.startedBindings[requestKey]
-	p.mu.Unlock()
-	if !started {
-		return WebhookEvent{}, fmt.Errorf("stub: binding not found: %w", ErrProviderBindingNotFound)
-	}
-	return WebhookEvent{
-		MethodBound: &MethodBoundNotification{
-			BindingID: requestKey,
-			Method: SavedMethod{
-				ProviderMethodID: "card_" + requestKey,
-				ChargeToken:      "token_" + requestKey,
-				MaskedPan:        "4111********1111",
-				ExpDate:          "1230",
-			},
-		},
-	}, nil
-}
 
 // Compile-time checks against the consumer-side provider slices.
 var (
@@ -886,55 +862,6 @@ func TestGetSubscription_IncludesActivePaymentMethod(t *testing.T) {
 	}
 }
 
-// TestCardBindingFlow_ConfirmCreatesActiveMethod proves the acceptance
-// criterion of issue #251 at the unit seam: AddPaymentMethod starts a binding
-// session, the local confirmation (the payer completing the provider form)
-// flows through the same synchronous path as the add-card webhook, and the
-// payment method is created, active and linked. The end-to-end run against
-// the real fake adapter lives in the integration tests.
-func TestCardBindingFlow_ConfirmCreatesActiveMethod(t *testing.T) {
-	h := newMethodHarness(t)
-	userID, _ := h.seedMethodSubscription(t)
-
-	// 1. The binding session is initiated: the answer is the form URL.
-	session := h.openSession(t, userID)
-
-	// 2. The payer completes the form: the confirmation drives the
-	// method-bound event through the synchronous webhook path.
-	if err := h.payments.ConfirmFakeCardBinding(t.Context(), session.RequestKey); err != nil {
-		t.Fatalf("ConfirmFakeCardBinding() error = %v", err)
-	}
-
-	// 3. The payment method exists, is the single active one and the
-	// subscription charges it.
-	active := h.activeMethod(t, userID)
-	if active.ProviderToken != "token_"+session.RequestKey {
-		t.Errorf("charge token = %q, want the confirmation's", active.ProviderToken)
-	}
-	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), userID)
-	if err != nil {
-		t.Fatalf("GetByUserID() error = %v", err)
-	}
-	if stored.ActivePaymentMethodID == nil || *stored.ActivePaymentMethodID != active.ID {
-		t.Fatalf("subscription active method = %v, want %v", stored.ActivePaymentMethodID, active.ID)
-	}
-	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", session.RequestKey)
-	if err != nil {
-		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
-	}
-	if closed.Status != domain.CardBindingCompleted {
-		t.Errorf("session status = %q, want completed", closed.Status)
-	}
-
-	// 4. A repeated confirmation is an idempotent no-op.
-	if err := h.payments.ConfirmFakeCardBinding(t.Context(), session.RequestKey); err != nil {
-		t.Fatalf("ConfirmFakeCardBinding(redelivery) error = %v", err)
-	}
-	list, err := h.stores.methods.ListByUserID(t.Context(), userID)
-	if err != nil {
-		t.Fatalf("ListByUserID() error = %v", err)
-	}
-	if len(list) != 1 {
-		t.Fatalf("methods after redelivery = %d, want 1", len(list))
-	}
-}
+// The local card-binding confirmation moved to the HTTP adapter level
+// (issue #287); the method-bound application path itself is covered by the
+// webhook-delivery tests above and the integration tests.

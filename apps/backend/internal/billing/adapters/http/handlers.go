@@ -50,12 +50,9 @@ type SubscriptionManager interface {
 	ChangeTariff(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error)
 }
 
-// PaymentManager serves the user's payment views and the local fake-payment
-// confirmation of issue #250.
+// PaymentManager serves the user's payment views (issue #250).
 type PaymentManager interface {
 	ListPayments(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionPaymentView, error)
-	ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error
-	ConfirmFakeCardBinding(ctx context.Context, requestKey string) error
 }
 
 // PaymentMethodManager serves the user's saved payment methods (issue #251):
@@ -114,17 +111,17 @@ const maxWebhookBody = 256 * 1024
 // live — PATCH /subscription/auto-renew, POST /subscription/cancel and POST
 // /subscription/change (downgrade scheduling; upgrades answer with a temporary
 // payment-unavailable error until #250). The payment endpoints of issue #250
-// are live — GET /subscription/payments, POST /webhooks/payment/{provider} and
-// the local-only fake-payment confirmation. The payment-method endpoints of
-// issue #251 are live — the binding flow, activation, deletion, sync and the
-// local-only fake card-binding confirmation. The admin payment endpoints of
-// issue #254 are live — the cross-user payment views, the full-refund saga
-// and the manual provider sync. The admin subscription endpoints of issue
-// #255 are live — the service assignment, the force tariff change, the grace
-// extension, the admin cancellation and the transition history. The admin
-// tariff endpoints of issue #256 are live — plan creation and the
-// prices/limit/activity edit. The user-facing contract is frozen, so the
-// routes stay mounted.
+// are live — GET /subscription/payments and POST /webhooks/payment/{provider};
+// the local-only fake confirmation lives in FakeConfirmHandlers (issue #287).
+// The payment-method endpoints of
+// issue #251 are live — the binding flow, activation, deletion and sync. The
+// admin payment endpoints of issue #254 are live — the cross-user payment
+// views, the full-refund saga and the manual provider sync. The admin
+// subscription endpoints of issue #255 are live — the service assignment, the
+// force tariff change, the grace extension, the admin cancellation and the
+// transition history. The admin tariff endpoints of issue #256 are live —
+// plan creation and the prices/limit/activity edit. The user-facing contract
+// is frozen, so the routes stay mounted.
 type BillingHandlers struct {
 	tariffs            TariffLister
 	adminTariffs       AdminTariffManager
@@ -135,10 +132,7 @@ type BillingHandlers struct {
 	webhooks           WebhookProcessor
 	adminPayments      AdminPaymentManager
 	adminSubscriptions AdminSubscriptionManager
-	// devEndpoints enables the local-only fake-payment confirmation endpoint
-	// (APP_ENV=local).
-	devEndpoints bool
-	logger       *slog.Logger
+	logger             *slog.Logger
 }
 
 // NewBillingHandlers creates HTTP handlers for the billing API.
@@ -152,7 +146,6 @@ func NewBillingHandlers(
 	webhooks WebhookProcessor,
 	adminPayments AdminPaymentManager,
 	adminSubscriptions AdminSubscriptionManager,
-	devEndpoints bool,
 	logger *slog.Logger,
 ) *BillingHandlers {
 	if logger == nil {
@@ -168,7 +161,6 @@ func NewBillingHandlers(
 		webhooks:           webhooks,
 		adminPayments:      adminPayments,
 		adminSubscriptions: adminSubscriptions,
-		devEndpoints:       devEndpoints,
 		logger:             logger,
 	}
 }
@@ -289,15 +281,6 @@ func (h *BillingHandlers) GetSubscription(w http.ResponseWriter, r *http.Request
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, httpsupport.SubscriptionResponse(view))
-}
-
-// notImplemented answers the endpoints whose flows return with later tickets
-// of the billing rewrite (#249–#254).
-func (h *BillingHandlers) notImplemented(w http.ResponseWriter, r *http.Request) {
-	h.logger.WarnContext(r.Context(), "billing endpoint not implemented yet",
-		slog.String("method", r.Method),
-		slog.String("path", r.URL.Path))
-	httpsupport.WriteProblem(w, http.StatusNotImplemented, httpsupport.Problem(r.Context(), "Not implemented", "Функционал временно недоступен"))
 }
 
 // ToggleAutoRenew implements PATCH /subscription/auto-renew (issue #249).
@@ -541,44 +524,6 @@ func paymentMethodItems(methods []domain.PaymentMethod) []openapi.PaymentMethod 
 		items = append(items, httpsupport.PaymentMethodResponse(m))
 	}
 	return items
-}
-
-// ConfirmFakeSubscriptionPayment implements
-// POST /internal/fake-subscription-payment/{id}/confirm (issue #250). Local
-// only (APP_ENV=local): it completes a pending payment at the fake provider so
-// the whole payment flow is drivable end-to-end on a developer machine.
-func (h *BillingHandlers) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	if !h.devEndpoints {
-		h.notImplemented(w, r)
-		return
-	}
-
-	if err := h.payments.ConfirmFakePayment(r.Context(), id); err != nil {
-		h.handleBillingError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
-}
-
-// ConfirmFakeCardBinding implements
-// POST /internal/fake-card-binding/{requestKey}/confirm (issue #251). Local
-// only (APP_ENV=local): it completes a card-binding session at the fake
-// provider — the counterpart of the payer completing the bank form of a real
-// provider — so the binding flow is drivable end-to-end on a developer
-// machine.
-func (h *BillingHandlers) ConfirmFakeCardBinding(w http.ResponseWriter, r *http.Request, requestKey string) {
-	if !h.devEndpoints {
-		h.notImplemented(w, r)
-		return
-	}
-
-	if err := h.payments.ConfirmFakeCardBinding(r.Context(), requestKey); err != nil {
-		h.handleBillingError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
 // HandlePaymentWebhook implements POST /webhooks/payment/{provider}
@@ -919,6 +864,12 @@ func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentVi
 
 // handleBillingError maps billing sentinel errors to RFC 7807 problems.
 func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Request, err error) {
+	writeBillingError(w, r, err)
+}
+
+// writeBillingError maps billing sentinel errors to RFC 7807 problems. Shared
+// by the billing handlers and the local fake-confirmation handlers.
+func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, billingapp.ErrNotFound),
 		errors.Is(err, billingapp.ErrTariffNotFound),
@@ -939,8 +890,6 @@ func (h *BillingHandlers) handleBillingError(w http.ResponseWriter, r *http.Requ
 		// deliberately outside the frozen contract's response list because it
 		// disappears with the payment flow.
 		httpsupport.WriteProblem(w, http.StatusServiceUnavailable, httpsupport.Problem(r.Context(), "Payment unavailable", "Оплата временно недоступна, попробуйте позже"))
-	case errors.Is(err, billingapp.ErrPaymentNotConfirmable):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Активный провайдер не поддерживает локальное подтверждение платежа"))
 	case errors.Is(err, domain.ErrAlreadyOnTariff),
 		errors.Is(err, domain.ErrInvalidTariffChange),
 		errors.Is(err, domain.ErrInvalidSubscriptionState),

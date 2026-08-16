@@ -39,9 +39,6 @@ type stubPaymentProvider struct {
 
 	parseEvent WebhookEvent
 	parseErr   error
-
-	confirmEvent WebhookEvent
-	confirmErr   error
 }
 
 func (p *stubPaymentProvider) Name() domain.PaymentProvider { return "fake" }
@@ -101,15 +98,10 @@ func (p *stubPaymentProvider) ParseWebhook(_ context.Context, _ []byte) (Webhook
 
 func (p *stubPaymentProvider) WebhookAck() []byte { return []byte(`{"status":"ok"}`) }
 
-func (p *stubPaymentProvider) ConfirmPayment(_ context.Context, _ string) (WebhookEvent, error) {
-	return p.confirmEvent, p.confirmErr
-}
-
 // Compile-time checks against both consumer-side provider slices.
 var (
 	_ paymentInitiationProvider = (*stubPaymentProvider)(nil)
 	_ paymentFinalizerProvider  = (*stubPaymentProvider)(nil)
-	_ FakePaymentConfirmer      = (*stubPaymentProvider)(nil)
 )
 
 // paymentHarness wires the subscription and payment services over the
@@ -1164,12 +1156,11 @@ func TestWebhook_Rejections(t *testing.T) {
 // (completion, redelivery idempotency, expired and unknown sessions) are
 // covered by the payment-method service tests.
 
-// TestConfirmFakePayment_AppliesUpgrade proves the local confirmation endpoint
-// drives the whole synchronous application path: confirm at the provider,
-// finalize the payment, apply the tariff, record the transition and audit
-// (issue #250). Migrated from the pre-rewrite test
-// TestBilling_ConfirmFakePayment_AppliesUpgrade.
-func TestConfirmFakePayment_AppliesUpgrade(t *testing.T) {
+// TestApplyProviderEvent_AppliesPaymentBranch proves the parsed-event seam
+// (issue #287): a payment event handed over by any delivery channel — the
+// webhook flow after parsing, the local fake confirmation after the adapter
+// reports the completed entry — runs through the same synchronous finalization.
+func TestApplyProviderEvent_AppliesPaymentBranch(t *testing.T) {
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -1177,15 +1168,15 @@ func TestConfirmFakePayment_AppliesUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
-	h.provider.confirmEvent = WebhookEvent{Payment: &PaymentNotification{
+
+	err = h.payments.ApplyProviderEvent(t.Context(), WebhookEvent{Payment: &PaymentNotification{
 		InternalPaymentID: payment.ID,
 		ProviderPaymentID: *payment.ProviderPaymentID,
 		Status:            domain.PaymentStatusSucceeded,
 		AmountKopecks:     payment.AmountKopecks,
-	}}
-
-	if err := h.payments.ConfirmFakePayment(t.Context(), payment.ID); err != nil {
-		t.Fatalf("ConfirmFakePayment() error = %v", err)
+	}})
+	if err != nil {
+		t.Fatalf("ApplyProviderEvent() error = %v", err)
 	}
 
 	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
@@ -1195,111 +1186,22 @@ func TestConfirmFakePayment_AppliesUpgrade(t *testing.T) {
 	if stored.TariffID != h.tariffID(t, domain.TariffBusiness) || stored.Status != domain.SubscriptionStatusActive {
 		t.Errorf("subscription = %q/%v, want business applied and active", stored.Status, stored.TariffID)
 	}
-	finalized, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	if finalized.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("payment status = %q, want succeeded", finalized.Status)
-	}
-	if h.transitionCount(t, sub.ID) != 1 {
-		t.Errorf("transitions = %d, want the payment_applied entry", h.transitionCount(t, sub.ID))
-	}
 }
 
-// TestConfirmFakePayment_Idempotent proves confirming a finalized payment is
-// a no-op. Migrated from the pre-rewrite test
-// TestBilling_ConfirmFakePayment_Idempotent.
-func TestConfirmFakePayment_Idempotent(t *testing.T) {
-	h := newPaymentHarness(t)
-	sub := h.seedSubscription(t, nil)
-	result := h.initiateUpgrade(t, sub)
-	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	h.provider.confirmEvent = WebhookEvent{Payment: &PaymentNotification{
-		InternalPaymentID: payment.ID,
-		ProviderPaymentID: *payment.ProviderPaymentID,
-		Status:            domain.PaymentStatusSucceeded,
-		AmountKopecks:     payment.AmountKopecks,
-	}}
-	if err := h.payments.ConfirmFakePayment(t.Context(), payment.ID); err != nil {
-		t.Fatalf("first ConfirmFakePayment() error = %v", err)
-	}
-	first, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
-	if err != nil {
-		t.Fatalf("GetByUserID() error = %v", err)
-	}
-
-	h.provider.confirmErr = errors.New("must not be called for a finalized payment")
-	if err := h.payments.ConfirmFakePayment(t.Context(), payment.ID); err != nil {
-		t.Fatalf("second ConfirmFakePayment() error = %v (finalized payments are a no-op)", err)
-	}
-	second, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
-	if err != nil {
-		t.Fatalf("GetByUserID() error = %v", err)
-	}
-	if !second.ValidUntil.Equal(*first.ValidUntil) {
-		t.Errorf("valid until moved on a repeated confirmation: %v → %v", first.ValidUntil, second.ValidUntil)
-	}
-}
-
-// TestConfirmFakePayment_LostProviderEntryFallsBackToStatus proves a
-// confirmation the provider cannot resolve (a purged or already-settled
-// entry) falls back to the provider status as the source of truth.
-func TestConfirmFakePayment_LostProviderEntryFallsBackToStatus(t *testing.T) {
-	h := newPaymentHarness(t)
-	sub := h.seedSubscription(t, nil)
-	result := h.initiateUpgrade(t, sub)
-	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	h.provider.confirmErr = ErrProviderPaymentNotFound
-	h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusSucceeded}
-
-	if err := h.payments.ConfirmFakePayment(t.Context(), payment.ID); err != nil {
-		t.Fatalf("ConfirmFakePayment() error = %v", err)
-	}
-	finalized, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	if finalized.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("payment status = %q, want succeeded from the provider status", finalized.Status)
-	}
-}
-
-// TestConfirmFakePayment_NotConfirmableProvider proves the explicit error
-// when the active provider has no local confirmation capability.
-func TestConfirmFakePayment_NotConfirmableProvider(t *testing.T) {
-	h := newPaymentHarness(t)
-	// A provider without ConfirmPayment: wrap the stub, hiding the method.
-	h.payments = NewPaymentService(
-		h.stores.factory(h.audit),
-		struct {
-			paymentFinalizerProvider
-		}{h.provider},
-		PaymentServiceConfig{Clock: fakeClock{now: h.now}},
-	)
-	sub := h.seedSubscription(t, nil)
-	result := h.initiateUpgrade(t, sub)
-
-	if err := h.payments.ConfirmFakePayment(t.Context(), result.PaymentID); !errors.Is(err, ErrPaymentNotConfirmable) {
-		t.Errorf("err = %v, want ErrPaymentNotConfirmable", err)
-	}
-}
-
-// TestConfirmFakePayment_NotFound proves a missing payment maps to the
-// explicit sentinel.
-func TestConfirmFakePayment_NotFound(t *testing.T) {
+// TestApplyProviderEvent_EmptyEventRejected proves an event with no
+// payload branch is rejected with the unsupported sentinel instead of
+// silently applying nothing.
+func TestApplyProviderEvent_EmptyEventRejected(t *testing.T) {
 	h := newPaymentHarness(t)
 
-	if err := h.payments.ConfirmFakePayment(t.Context(), uuid.New()); !errors.Is(err, ErrPaymentNotFound) {
-		t.Errorf("err = %v, want ErrPaymentNotFound", err)
+	if err := h.payments.ApplyProviderEvent(t.Context(), WebhookEvent{}); !errors.Is(err, ErrWebhookUnsupported) {
+		t.Errorf("err = %v, want ErrWebhookUnsupported", err)
 	}
 }
+
+// The local fake confirmation flow moved to the HTTP adapter level (issue
+// #287): its unit seam is the fake-confirm handlers over the ApplyProviderEvent
+// port, and its end-to-end behaviour is pinned by the integration tests.
 
 // TestListPayments_ReturnsPaymentsWithTariffs proves GET /subscription/payments
 // data: the user's payments with the tariff resolved, newest first (issue

@@ -90,9 +90,7 @@ func TestPaymentFlow_UpgradeEndToEnd(t *testing.T) {
 
 	// The user completes the payment at the provider; the webhook carries the
 	// provider's notification into the synchronous application path.
-	if err := h.paymentsSvc.ConfirmFakePayment(h.ctx(), payment.ID); err != nil {
-		t.Fatalf("ConfirmFakePayment: %v", err)
-	}
+	h.confirmFakePayment(t, payment.ID)
 
 	finalized, err := h.payments.GetByID(h.ctx(), payment.ID)
 	if err != nil {

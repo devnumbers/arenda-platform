@@ -42,13 +42,9 @@ var (
 	// handler yet — method-binding notifications land with issue #251.
 	ErrWebhookUnsupported = errors.New("webhook event not supported")
 	// ErrWebhookPaymentMismatch is returned when a notification's provider
-	// payment id contradicts the reference persisted at initiation — a
+	// payment id contradicts the reference persisted at initiation — an
 	// integrity violation, not a retryable condition.
 	ErrWebhookPaymentMismatch = errors.New("webhook provider payment id mismatch")
-	// ErrPaymentNotConfirmable is returned when the local fake-payment
-	// confirmation endpoint is called while the active provider has no local
-	// confirmation capability.
-	ErrPaymentNotConfirmable = errors.New("payment provider is not locally confirmable")
 	// ErrPaymentMethodNotFound is returned when a payment-method lookup misses
 	// or the method belongs to another user.
 	ErrPaymentMethodNotFound = errors.New("payment method not found")

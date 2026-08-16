@@ -6,14 +6,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
@@ -63,6 +68,11 @@ type integrationHarness struct {
 	tariffsSvc        *billingapp.TariffService
 	onboarding        *billingapp.OnboardingService
 	limiter           *billingapp.SubscriptionPropertyLimiter
+	// fakeConfirms mounts the local confirmation endpoints the way the wiring
+	// does under the fake provider (issue #287): the fake adapter reports the
+	// completed entry, the confirmed event runs through the production
+	// webhook path.
+	fakeConfirms http.Handler
 }
 
 // newIntegrationHarness builds a fresh harness over a clean database. The
@@ -105,6 +115,11 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		AdminPayments: paymentsRepo,
 	})
 
+	confirmHandlers := billinghttp.NewFakeConfirmHandlers(provider, services.Payments, logger)
+	confirmRouter := chi.NewRouter()
+	confirmRouter.Post(billinghttp.FakePaymentConfirmRoute, confirmHandlers.ConfirmPayment)
+	confirmRouter.Post(billinghttp.FakeCardBindingConfirmRoute, confirmHandlers.ConfirmCardBinding)
+
 	return &integrationHarness{
 		t:                 t,
 		pool:              pool,
@@ -124,6 +139,34 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		tariffsSvc:        services.Tariffs,
 		onboarding:        services.Onboarding,
 		limiter:           services.Limiter,
+		fakeConfirms:      confirmRouter,
+	}
+}
+
+// confirmFakePayment completes a pending payment through the local
+// confirmation endpoint (the fake provider's counterpart of the payer
+// completing the payment form).
+func (h *integrationHarness) confirmFakePayment(t *testing.T, paymentID uuid.UUID) {
+	t.Helper()
+	h.postFakeConfirm(t, strings.ReplaceAll(billinghttp.FakePaymentConfirmRoute, "{id}", paymentID.String()))
+}
+
+// confirmFakeCardBinding completes a binding session through the local
+// confirmation endpoint (the fake provider's counterpart of the payer
+// completing the bank form).
+func (h *integrationHarness) confirmFakeCardBinding(t *testing.T, requestKey string) {
+	t.Helper()
+	h.postFakeConfirm(t, strings.ReplaceAll(billinghttp.FakeCardBindingConfirmRoute, "{requestKey}", requestKey))
+}
+
+// postFakeConfirm drives one local confirmation request and fails the test on
+// anything but 200.
+func (h *integrationHarness) postFakeConfirm(t *testing.T, path string) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	h.fakeConfirms.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, http.NoBody))
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST %s: status = %d, want 200; body: %s", path, w.Code, w.Body.String())
 	}
 }
 

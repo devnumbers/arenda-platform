@@ -3978,56 +3978,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /internal/fake-subscription-payment/{id}/confirm:
-    post:
-      operationId: confirmFakeSubscriptionPayment
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Payment confirmed
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /internal/fake-card-binding/{requestKey}/confirm:
-    post:
-      operationId: confirmFakeCardBinding
-      description: |
-        Local-only (APP_ENV=local) completion of a card-binding session at the
-        fake provider — the counterpart of the bank form of a real provider.
-        The confirmed event flows through the same synchronous application path
-        as the add-card webhook.
-      parameters:
-        - name: requestKey
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Card binding confirmed
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
   /client-errors:
     post:
       operationId: reportClientError

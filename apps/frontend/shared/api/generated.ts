@@ -1098,6 +1098,35 @@ export interface paths {
         };
         get: operations["listAdminTariffs"];
         put?: never;
+        /**
+         * @description Creates a tariff plan (issue #256). The name comes from the closed
+         *     TariffName vocabulary the frozen user contract pins; a name that
+         *     already exists answers 409.
+         */
+        post: operations["createAdminTariff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tariffs/{tariffId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * @description Updates a tariff's prices, active-property limit and activity
+         *     (issue #256). Hiding (isActive=false) removes the plan from the
+         *     user-facing listing and blocks new selection; existing subscriptions,
+         *     renewals and the payment history keep referencing it. Paid periods
+         *     already granted are not repriced — the next renewal charges the
+         *     updated price.
+         */
+        put: operations["updateAdminTariff"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1473,23 +1502,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/internal/fake-subscription-payment/{id}/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["confirmFakeSubscriptionPayment"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/fake-card-binding/{requestKey}/confirm": {
+    "/admin/users/{id}/subscription/service": {
         parameters: {
             query?: never;
             header?: never;
@@ -1499,12 +1512,99 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * @description Local-only (APP_ENV=local) completion of a card-binding session at the
-         *     fake provider — the counterpart of the bank form of a real provider.
-         *     The confirmed event flows through the same synchronous application path
-         *     as the add-card webhook.
+         * @description Assigns a service subscription (issue #255): the tariff runs for a fixed
+         *     term without payment, auto-renew off; at the end of the term the
+         *     subscription falls to the basic tariff through the common expiry path.
+         *     The assignment overwrites the current subscription — a paid remainder
+         *     does not stack. An upgrade on top of the service subscription later
+         *     converts it back to paid from the new period.
          */
-        post: operations["confirmFakeCardBinding"];
+        post: operations["assignAdminServiceSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/subscription/force-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Force-changes the subscription tariff (issue #255): the new tariff
+         *     applies immediately without payment for the chosen period from now.
+         *     The subscription keeps its source (a paid subscription stays paid, a
+         *     service one stays service); excess properties beyond the new tariff
+         *     limit are archived. Used to repair subscription state during incidents.
+         */
+        post: operations["forceChangeAdminSubscriptionTariff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/subscription/grace-extension": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Extends the grace window manually (issue #255): gives the user extra
+         *     days to fix their payment method. Only a subscription in grace can be
+         *     extended; an already-expired window that the worker has not downgraded
+         *     yet extends from now.
+         */
+        post: operations["extendAdminSubscriptionGrace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/subscription/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Cancels the subscription on the user's behalf (issue #255): the same
+         *     semantics as the user's own cancellation — the tariff keeps working
+         *     until valid_until, auto-renew switches off immediately. Paid
+         *     subscriptions only; a service subscription is withdrawn by
+         *     reassignment, not cancellation.
+         */
+        post: operations["cancelAdminSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/subscription/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The subscription transition log of one user's subscription (issue #255): every status and tariff change with its reason, initiator (user/admin/system) and the payment that caused it, newest first. */
+        get: operations["listAdminSubscriptionTransitions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1604,6 +1704,13 @@ export interface components {
         Subscription: {
             tariff: components["schemas"]["Tariff"];
             status: components["schemas"]["SubscriptionStatus"];
+            /**
+             * @description paid — the owner pays for the tariff (or runs the free basic plan);
+             *     service — an admin assigned the tariff for a fixed term without
+             *     payment (issue #255).
+             * @enum {string}
+             */
+            source: "paid" | "service";
             /** Format: date-time */
             validUntil?: string | null;
             autoRenewEnabled: boolean;
@@ -1675,6 +1782,41 @@ export interface components {
         AdminTariffsResponse: {
             items: components["schemas"]["AdminTariff"][];
         };
+        AdminCreateTariffRequest: {
+            name: components["schemas"]["TariffName"];
+            /** @description Maximum number of active properties; -1 means unlimited. */
+            activePropertyLimit: number;
+            /**
+             * Format: int64
+             * @description Monthly price in kopecks.
+             */
+            monthlyPriceKopecks: number;
+            /**
+             * Format: int64
+             * @description Yearly price in kopecks.
+             */
+            yearlyPriceKopecks: number;
+        };
+        AdminUpdateTariffRequest: {
+            /** @description Maximum number of active properties; -1 means unlimited. */
+            activePropertyLimit: number;
+            /**
+             * Format: int64
+             * @description Monthly price in kopecks.
+             */
+            monthlyPriceKopecks: number;
+            /**
+             * Format: int64
+             * @description Yearly price in kopecks.
+             */
+            yearlyPriceKopecks: number;
+            /**
+             * @description false hides the plan: it disappears from the user-facing listing
+             *     and cannot be newly selected, while existing subscriptions,
+             *     renewals and payment history keep referencing it.
+             */
+            isActive: boolean;
+        };
         PaymentMethodsResponse: {
             items: components["schemas"]["PaymentMethod"][];
         };
@@ -1704,6 +1846,66 @@ export interface components {
         };
         AdminSubscriptionPaymentsResponse: {
             items: components["schemas"]["AdminSubscriptionPayment"][];
+            total: number;
+        };
+        AdminAssignServiceSubscriptionRequest: {
+            tariffName: components["schemas"]["TariffName"];
+            /**
+             * @description The fixed term of the service subscription: month or year counts
+             *     from the assignment moment; date runs until the end of untilDate
+             *     (UTC, inclusive).
+             * @enum {string}
+             */
+            termType: "month" | "year" | "date";
+            /**
+             * Format: date
+             * @description Required when termType is date; must be today or later.
+             */
+            untilDate?: string;
+        };
+        AdminForceChangeTariffRequest: {
+            tariffName: components["schemas"]["TariffName"];
+            period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+        };
+        AdminExtendGraceRequest: {
+            /** @description The extra days added to the current grace window. */
+            days: number;
+        };
+        AdminSubscriptionTransition: {
+            /** Format: uuid */
+            id: string;
+            fromStatus?: components["schemas"]["SubscriptionStatus"] | null;
+            toStatus: components["schemas"]["SubscriptionStatus"];
+            /** Format: uuid */
+            fromTariffId?: string | null;
+            /** Format: uuid */
+            toTariffId: string;
+            fromTariffName?: string | null;
+            toTariffName: string;
+            /**
+             * @description Why the transition happened: registered, cancelled,
+             *     downgrade_scheduled, payment_applied, grace_entered,
+             *     grace_extended, scheduled_change_applied, expired, refunded,
+             *     service_assigned, forced_change.
+             */
+            reason: string;
+            /** @enum {string} */
+            initiator: "user" | "admin" | "system";
+            /**
+             * Format: uuid
+             * @description The user or admin actor id; absent for the system.
+             */
+            initiatorId?: string | null;
+            /**
+             * Format: uuid
+             * @description The payment that caused the transition, when there was one.
+             */
+            paymentId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminSubscriptionTransitionsResponse: {
+            items: components["schemas"]["AdminSubscriptionTransition"][];
             total: number;
         };
         AdminUser: {
@@ -5284,6 +5486,74 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    createAdminTariff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateTariffRequest"];
+            };
+        };
+        responses: {
+            /** @description The created tariff */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTariff"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A tariff with this name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    updateAdminTariff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tariffId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUpdateTariffRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated tariff */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTariff"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     listAdminSubscriptionPayments: {
         parameters: {
             query?: {
@@ -5291,6 +5561,8 @@ export interface operations {
                 status?: components["schemas"]["SubscriptionPaymentStatus"];
                 /** @description Exact match on the user's phone number. */
                 user_phone?: string;
+                /** @description Filters payments by the payer's current subscription status (issue */
+                subscription_status?: components["schemas"]["SubscriptionStatus"];
                 /** @description Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending. */
                 sort?: string;
                 /** @description Sort direction: asc or desc (default desc). */
@@ -6010,7 +6282,97 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    confirmFakeSubscriptionPayment: {
+    assignAdminServiceSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminAssignServiceSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Service subscription assigned */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    forceChangeAdminSubscriptionTariff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminForceChangeTariffRequest"];
+            };
+        };
+        responses: {
+            /** @description Tariff force-changed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    extendAdminSubscriptionGrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminExtendGraceRequest"];
+            };
+        };
+        responses: {
+            /** @description Grace window extended */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    cancelAdminSubscription: {
         parameters: {
             query?: never;
             header?: never;
@@ -6021,45 +6383,44 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Payment confirmed */
-            200: {
+            /** @description Subscription cancelled */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
+                content?: never;
             };
-            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
         };
     };
-    confirmFakeCardBinding: {
+    listAdminSubscriptionTransitions: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                requestKey: string;
+                id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Card binding confirmed */
+            /** @description Subscription transition log */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminSubscriptionTransitionsResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     reportClientError: {

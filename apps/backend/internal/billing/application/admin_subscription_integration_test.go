@@ -156,9 +156,7 @@ func TestAdminSubscription_UpgradeOverServiceTurnsPaid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChangeTariff(upgrade over service) error = %v", err)
 	}
-	if err := h.paymentsSvc.ConfirmFakePayment(h.ctx(), result.PaymentID); err != nil {
-		t.Fatalf("ConfirmFakePayment() error = %v", err)
-	}
+	h.confirmFakePayment(t, result.PaymentID)
 
 	stored, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
 	if err != nil {

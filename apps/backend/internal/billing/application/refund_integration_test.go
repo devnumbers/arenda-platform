@@ -44,9 +44,7 @@ func (h *refundIntegrationHarness) succeededUpgradePayment(t *testing.T) domain.
 	if err != nil {
 		t.Fatalf("ChangeTariff(upgrade): %v", err)
 	}
-	if err := h.paymentsSvc.ConfirmFakePayment(h.ctx(), result.PaymentID); err != nil {
-		t.Fatalf("ConfirmFakePayment: %v", err)
-	}
+	h.confirmFakePayment(t, result.PaymentID)
 	payment, err := h.payments.GetByID(h.ctx(), result.PaymentID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
@@ -82,9 +80,7 @@ func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChangeTariff(upgrade): %v", err)
 	}
-	if err := h.paymentsSvc.ConfirmFakePayment(h.ctx(), result.PaymentID); err != nil {
-		t.Fatalf("ConfirmFakePayment: %v", err)
-	}
+	h.confirmFakePayment(t, result.PaymentID)
 	payment, err := h.payments.GetByID(h.ctx(), result.PaymentID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)

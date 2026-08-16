@@ -85,9 +85,7 @@ func (f *fakeSubscriptionManager) ChangeTariff(ctx context.Context, userID uuid.
 // fakePaymentManager is a func-backed PaymentManager (the consumer-side port
 // of these handlers, ADR 0035).
 type fakePaymentManager struct {
-	list        func(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionPaymentView, error)
-	confirm     func(ctx context.Context, paymentID uuid.UUID) error
-	confirmBind func(ctx context.Context, requestKey string) error
+	list func(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionPaymentView, error)
 }
 
 func (f *fakePaymentManager) ListPayments(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionPaymentView, error) {
@@ -95,20 +93,6 @@ func (f *fakePaymentManager) ListPayments(ctx context.Context, userID uuid.UUID)
 		return f.list(ctx, userID)
 	}
 	return nil, errors.New("unexpected ListPayments call")
-}
-
-func (f *fakePaymentManager) ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error {
-	if f.confirm != nil {
-		return f.confirm(ctx, paymentID)
-	}
-	return errors.New("unexpected ConfirmFakePayment call")
-}
-
-func (f *fakePaymentManager) ConfirmFakeCardBinding(ctx context.Context, requestKey string) error {
-	if f.confirmBind != nil {
-		return f.confirmBind(ctx, requestKey)
-	}
-	return errors.New("unexpected ConfirmFakeCardBinding call")
 }
 
 // fakePaymentMethodManager is a func-backed PaymentMethodManager (the
@@ -195,12 +179,12 @@ func (f *fakeAdminTariffManager) UpdateTariff(ctx context.Context, adminID, tari
 // newTestHandlers builds handlers over the given fakes; a nil fake is
 // replaced by a stub that fails the test when called.
 func newTestHandlers(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager) *BillingHandlers {
-	return newTestHandlersOpts(tariffs, subs, managers, nil, nil, nil, false)
+	return newTestHandlersOpts(tariffs, subs, managers, nil, nil, nil)
 }
 
 // newTestHandlersOpts builds handlers with explicit payment,
-// payment-method, webhook, admin-payment and dev-endpoint options.
-func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager, payments PaymentManager, methods PaymentMethodManager, webhooks WebhookProcessor, devEndpoints bool) *BillingHandlers {
+// payment-method and webhook options.
+func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager, payments PaymentManager, methods PaymentMethodManager, webhooks WebhookProcessor) *BillingHandlers {
 	if tariffs == nil {
 		tariffs = &fakeTariffLister{}
 	}
@@ -219,7 +203,7 @@ func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers
 	if webhooks == nil {
 		webhooks = &fakeWebhookProcessor{}
 	}
-	return NewBillingHandlers(tariffs, &fakeAdminTariffManager{}, subs, managers, payments, methods, webhooks, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, devEndpoints, nil)
+	return NewBillingHandlers(tariffs, &fakeAdminTariffManager{}, subs, managers, payments, methods, webhooks, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 }
 
 // fakeAdminPaymentManager fails the test when an admin payment endpoint is
@@ -461,7 +445,7 @@ func TestCreateAdminTariff_CreatesAndAnswers201(t *testing.T) {
 			t.Errorf("CreateTariff request = %+v, want the decoded body", req)
 		}
 		return created, nil
-	}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+	}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 
 	w := httptest.NewRecorder()
 	h.CreateAdminTariff(w, adminJSONRequest(t, http.MethodPost, "/admin/tariffs", adminID, map[string]any{
@@ -509,7 +493,7 @@ func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			h := NewBillingHandlers(nil, &fakeAdminTariffManager{create: func(context.Context, uuid.UUID, billingapp.CreateTariffRequest) (domain.Tariff, error) {
 				return domain.Tariff{}, tt.svcErr
-			}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+			}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 
 			w := httptest.NewRecorder()
 			h.CreateAdminTariff(w, adminJSONRequest(t, http.MethodPost, "/admin/tariffs", uuid.New(), tt.body))
@@ -521,7 +505,7 @@ func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
 	}
 
 	t.Run("requires admin session", func(t *testing.T) {
-		h := NewBillingHandlers(nil, &fakeAdminTariffManager{}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+		h := NewBillingHandlers(nil, &fakeAdminTariffManager{}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 
 		w := httptest.NewRecorder()
 		payload, err := json.Marshal(validBody())
@@ -558,7 +542,7 @@ func TestUpdateAdminTariff_UpdatesAndAnswers200(t *testing.T) {
 			t.Errorf("UpdateTariff request = %+v, want the decoded body", req)
 		}
 		return updated, nil
-	}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+	}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 
 	w := httptest.NewRecorder()
 	h.UpdateAdminTariff(w, adminJSONRequest(t, http.MethodPut, "/admin/tariffs/"+tariffID.String(), adminID, map[string]any{
@@ -595,7 +579,7 @@ func TestUpdateAdminTariff_ErrorMapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			h := NewBillingHandlers(nil, &fakeAdminTariffManager{update: func(context.Context, uuid.UUID, uuid.UUID, billingapp.UpdateTariffRequest) (domain.Tariff, error) {
 				return domain.Tariff{}, tt.svcErr
-			}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, false, nil)
+			}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 
 			tariffID := uuid.New()
 			w := httptest.NewRecorder()
@@ -1215,7 +1199,7 @@ func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
 			},
 			Tariff: domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
 		}}, nil
-	}}, nil, nil, false)
+	}}, nil, nil)
 
 	w := httptest.NewRecorder()
 	h.ListSubscriptionPayments(w, ownerRequest(t, http.MethodGet, "/subscription/payments", ownerID))
@@ -1286,7 +1270,7 @@ func TestHandlePaymentWebhook_AnswersAckOnSuccess(t *testing.T) {
 			return nil
 		},
 		ack: []byte(`{"status":"ok"}`),
-	}, false)
+	})
 
 	w := httptest.NewRecorder()
 	h.HandlePaymentWebhook(w, webhookRequest(t, "fake", `{"internal_payment_id":"11111111-1111-1111-1111-111111111111"}`), "fake")
@@ -1322,7 +1306,7 @@ func TestHandlePaymentWebhook_ErrorMapping(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newTestHandlersOpts(nil, nil, nil, nil, nil, &fakeWebhookProcessor{
 				handle: func(context.Context, string, []byte) error { return tc.err },
-			}, false)
+			})
 
 			w := httptest.NewRecorder()
 			h.HandlePaymentWebhook(w, webhookRequest(t, "fake", `{}`), "fake")
@@ -1342,7 +1326,7 @@ func TestHandlePaymentWebhook_RejectsOversizedBody(t *testing.T) {
 			t.Error("processor must not be called on an oversized body")
 			return nil
 		},
-	}, false)
+	})
 
 	big := strings.Repeat("x", maxWebhookBody+1)
 	w := httptest.NewRecorder()
@@ -1350,55 +1334,6 @@ func TestHandlePaymentWebhook_RejectsOversizedBody(t *testing.T) {
 
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413; body: %s", w.Code, w.Body.String())
-	}
-}
-
-// TestConfirmFakeSubscriptionPayment_DevGate proves the local confirmation
-// endpoint is disabled outside APP_ENV=local (501) and forwards to the service
-// when dev endpoints are enabled (issue #250).
-func TestConfirmFakeSubscriptionPayment_DevGate(t *testing.T) {
-	paymentID := uuid.New()
-
-	notDev := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirm: func(context.Context, uuid.UUID) error {
-		t.Error("service must not be called when dev endpoints are disabled")
-		return nil
-	}}, nil, nil, false)
-	w := httptest.NewRecorder()
-	notDev.ConfirmFakeSubscriptionPayment(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-subscription-payment/"+paymentID.String()+"/confirm", http.NoBody), paymentID)
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501; body: %s", w.Code, w.Body.String())
-	}
-
-	called := false
-	dev := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirm: func(_ context.Context, got uuid.UUID) error {
-		called = true
-		if got != paymentID {
-			t.Errorf("ConfirmFakePayment called with %v, want %v", got, paymentID)
-		}
-		return nil
-	}}, nil, nil, true)
-	w = httptest.NewRecorder()
-	dev.ConfirmFakeSubscriptionPayment(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-subscription-payment/"+paymentID.String()+"/confirm", http.NoBody), paymentID)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
-	}
-	if !called {
-		t.Error("service was not called")
-	}
-}
-
-// TestConfirmFakeSubscriptionPayment_NotFoundMapsTo404 proves a missing
-// payment answers the contract's 404.
-func TestConfirmFakeSubscriptionPayment_NotFoundMapsTo404(t *testing.T) {
-	h := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirm: func(context.Context, uuid.UUID) error {
-		return billingapp.ErrPaymentNotFound
-	}}, nil, nil, true)
-
-	w := httptest.NewRecorder()
-	h.ConfirmFakeSubscriptionPayment(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-subscription-payment/"+uuid.New().String()+"/confirm", http.NoBody), uuid.New())
-
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -1422,7 +1357,7 @@ func TestListPaymentMethods_MapsDomainMethodsToContract(t *testing.T) {
 			IsActive:      true,
 			CreatedAt:     createdAt,
 		}}, nil
-	}}, nil, false)
+	}}, nil)
 
 	w := httptest.NewRecorder()
 	h.ListPaymentMethods(w, ownerRequest(t, http.MethodGet, "/subscription/payment-methods", ownerID))
@@ -1481,7 +1416,7 @@ func TestAddPaymentMethod_BindingReturnsConfirmURL(t *testing.T) {
 			t.Errorf("request token = %q, want empty for the binding branch", req.ProviderToken)
 		}
 		return billingapp.AddPaymentMethodResult{ConfirmURL: "https://pay.example/bind/1"}, nil
-	}}, nil, false)
+	}}, nil)
 
 	w := httptest.NewRecorder()
 	h.AddPaymentMethod(w, ownerJSONRequest(t, http.MethodPost, "/subscription/payment-methods", ownerID, `{}`))
@@ -1519,7 +1454,7 @@ func TestAddPaymentMethod_TokenReturnsMethod(t *testing.T) {
 			ID: methodID, UserID: ownerID, Provider: "fake", ProviderToken: "raw-token", IsActive: true,
 			CreatedAt: time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC),
 		}}, nil
-	}}, nil, false)
+	}}, nil)
 
 	w := httptest.NewRecorder()
 	h.AddPaymentMethod(w, ownerJSONRequest(t, http.MethodPost, "/subscription/payment-methods", ownerID, `{"providerToken":"raw-token"}`))
@@ -1567,7 +1502,7 @@ func TestDeletePaymentMethod_MapsServiceErrors(t *testing.T) {
 					t.Errorf("DeletePaymentMethod called with %v/%v, want %v/%v", gotUser, gotMethod, ownerID, methodID)
 				}
 				return tc.err
-			}}, nil, false)
+			}}, nil)
 
 			w := httptest.NewRecorder()
 			h.DeletePaymentMethod(w, ownerRequest(t, http.MethodDelete, "/subscription/payment-methods/"+methodID.String(), ownerID), methodID)
@@ -1591,7 +1526,7 @@ func TestActivatePaymentMethod_Returns204(t *testing.T) {
 			t.Errorf("ActivatePaymentMethod called with %v/%v, want %v/%v", gotUser, gotMethod, ownerID, methodID)
 		}
 		return nil
-	}}, nil, false)
+	}}, nil)
 
 	w := httptest.NewRecorder()
 	h.ActivatePaymentMethod(w, ownerRequest(t, http.MethodPost, "/subscription/payment-methods/"+methodID.String()+"/activate", ownerID), methodID)
@@ -1613,7 +1548,7 @@ func TestSyncPaymentMethods_ReturnsList(t *testing.T) {
 			t.Errorf("SyncPaymentMethods called with %v, want %v", got, ownerID)
 		}
 		return []domain.PaymentMethod{{ID: uuid.New(), UserID: ownerID, Provider: "fake", ProviderToken: "t", IsActive: true, CreatedAt: time.Now()}}, nil
-	}}, nil, false)
+	}}, nil)
 
 	w := httptest.NewRecorder()
 	h.SyncPaymentMethods(w, ownerRequest(t, http.MethodPost, "/subscription/payment-methods/sync", ownerID))
@@ -1629,49 +1564,6 @@ func TestSyncPaymentMethods_ReturnsList(t *testing.T) {
 	}
 	if len(resp.Items) != 1 {
 		t.Fatalf("items = %d, want 1", len(resp.Items))
-	}
-}
-
-// TestConfirmFakeCardBinding proves the local card-binding confirmation is
-// dev-gated (501 outside local) and drives the service inside, with a missing
-// binding answering 404 (issue #251).
-func TestConfirmFakeCardBinding(t *testing.T) {
-	requestKey := "req_1"
-
-	notDev := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirmBind: func(context.Context, string) error {
-		t.Error("service must not be called when dev endpoints are disabled")
-		return nil
-	}}, nil, nil, false)
-	w := httptest.NewRecorder()
-	notDev.ConfirmFakeCardBinding(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-card-binding/"+requestKey+"/confirm", http.NoBody), requestKey)
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501; body: %s", w.Code, w.Body.String())
-	}
-
-	called := false
-	dev := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirmBind: func(_ context.Context, got string) error {
-		called = true
-		if got != requestKey {
-			t.Errorf("ConfirmFakeCardBinding called with %q, want %q", got, requestKey)
-		}
-		return nil
-	}}, nil, nil, true)
-	w = httptest.NewRecorder()
-	dev.ConfirmFakeCardBinding(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-card-binding/"+requestKey+"/confirm", http.NoBody), requestKey)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
-	}
-	if !called {
-		t.Error("service was not called")
-	}
-
-	missing := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{confirmBind: func(context.Context, string) error {
-		return billingapp.ErrNotFound
-	}}, nil, nil, true)
-	w = httptest.NewRecorder()
-	missing.ConfirmFakeCardBinding(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/fake-card-binding/unknown/confirm", http.NoBody), "unknown")
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body: %s", w.Code, w.Body.String())
 	}
 }
 

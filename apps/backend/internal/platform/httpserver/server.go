@@ -48,9 +48,11 @@ type Deps struct {
 	Webhooks             billinghttp.WebhookProcessor
 	AdminPayments        billinghttp.AdminPaymentManager
 	AdminSubscriptions   billinghttp.AdminSubscriptionManager
-	// BillingDevEndpoints enables the local-only fake-payment confirmation
-	// endpoint (APP_ENV=local, issue #250).
-	BillingDevEndpoints      bool
+	// BillingFakeConfirms serves the local-only fake confirmation endpoints;
+	// non-nil only when the fake provider is active (the billing wiring
+	// constructs it there), so the routes are mounted only in that case —
+	// a production build has no such endpoints at all (issue #287).
+	BillingFakeConfirms      *billinghttp.FakeConfirmHandlers
 	ReadonlyGate             httpsupport.SubscriptionMutationChecker
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
@@ -155,7 +157,7 @@ func New(deps Deps) http.Handler {
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments, deps.AdminSubscriptions, deps.BillingDevEndpoints, deps.Logger)
+	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments, deps.AdminSubscriptions, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
@@ -231,6 +233,15 @@ func New(deps Deps) http.Handler {
 	// refresh the list and show the appropriate toast.
 	r.Get("/subscription/payment-methods/add-card/success", addCardReturnHandler(deps.AppBaseURL, true))
 	r.Get("/subscription/payment-methods/add-card/fail", addCardReturnHandler(deps.AppBaseURL, false))
+
+	// The local-only fake confirmation endpoints (issues #250/#251) live
+	// outside the generated contract: the billing wiring constructs their
+	// handlers only under the fake provider, so a production build mounts no
+	// such routes at all (issue #287).
+	if deps.BillingFakeConfirms != nil {
+		r.Post(billinghttp.FakePaymentConfirmRoute, deps.BillingFakeConfirms.ConfirmPayment)
+		r.Post(billinghttp.FakeCardBindingConfirmRoute, deps.BillingFakeConfirms.ConfirmCardBinding)
+	}
 
 	return generated
 }
