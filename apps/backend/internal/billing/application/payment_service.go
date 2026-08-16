@@ -178,7 +178,7 @@ func (s *PaymentService) HandleWebhook(ctx context.Context, providerName string,
 func (s *PaymentService) ApplyProviderEvent(ctx context.Context, event WebhookEvent) error {
 	switch {
 	case event.Payment != nil:
-		return s.handlePaymentNotification(ctx, event.Payment)
+		return s.ApplyPaymentNotification(ctx, event.Payment)
 	case event.MethodBound != nil:
 		return s.applyMethodBoundNotification(ctx, event.MethodBound)
 	default:
@@ -242,11 +242,13 @@ func (s *PaymentService) applyMethodBoundNotification(ctx context.Context, n *Me
 	})
 }
 
-// handlePaymentNotification applies one payment-status notification. Terminal
+// ApplyPaymentNotification applies one payment-status notification. Terminal
 // statuses finalize the payment and apply its subscription effects in a single
 // transaction; a pending status carries no outcome and is at most a chance to
-// backfill a lost provider reference.
-func (s *PaymentService) handlePaymentNotification(ctx context.Context, n *PaymentNotification) error {
+// backfill a lost provider reference. This is the notification-application
+// method of the workers' PaymentLifecycle port; the webhook flow reaches it
+// through ApplyProviderEvent after parsing.
+func (s *PaymentService) ApplyPaymentNotification(ctx context.Context, n *PaymentNotification) error {
 	switch n.Status {
 	case domain.PaymentStatusPending:
 		return s.applyPendingNotification(ctx, n)

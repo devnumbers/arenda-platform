@@ -56,6 +56,19 @@ type renewalProvider interface {
 	ProviderNamer
 }
 
+// PaymentLifecycle is the narrow payment-finalization slice the
+// reconciliation worker phases consume: applying a provider-confirmed payment
+// notification (the same synchronous application the webhook flow ends in)
+// and resolving a payment stuck in the refunding reservation of the refund
+// saga. Declared here, at the consumer (the worker phases), per ADR 0035;
+// PaymentService implements it, and the webhook transport keeps its own
+// public entries on the service — this port is the workers' slice, not the
+// transport's.
+type PaymentLifecycle interface {
+	ApplyPaymentNotification(ctx context.Context, n *PaymentNotification) error
+	ResolveRefundingFromStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) (bool, error)
+}
+
 // Workers drives the subscription lifecycle phases of the billing background
 // workers: deferred tariff changes, renewal charges, lost-webhook
 // reconciliation and the expiry downgrades to basic (issue #252). Every phase
@@ -64,9 +77,11 @@ type renewalProvider interface {
 // retries what failed.
 type Workers struct {
 	txStoreFactory
-	// payments finalizes reconciled payments through the same synchronous
-	// notification application the webhook flow uses.
-	payments *PaymentService
+	// payments applies provider-confirmed outcomes and resolves stuck refunds
+	// through the narrow lifecycle port — the same synchronous paths the
+	// webhook flow ends in, without a reference to the whole payment service
+	// (issue #288, ADR 0035).
+	payments PaymentLifecycle
 	provider renewalProvider
 	clock    clock.Clock
 	config   Config
@@ -87,7 +102,11 @@ type WorkersConfig struct {
 	// keeps the pre-#252 behaviour: the charge-driven phases answer
 	// ErrPaymentUnavailable instead of charging blindly.
 	Provider renewalProvider
-	Payments *PaymentService
+	// Payments applies provider-confirmed payment outcomes and resolves stuck
+	// refunds — the narrow lifecycle port the reconciliation phases consume
+	// (ADR 0035). Nil is a wiring error; the refund reconciliation phase is
+	// the one that guards it explicitly.
+	Payments PaymentLifecycle
 	Clock    clock.Clock
 	Config   Config
 	Logger   *slog.Logger
@@ -1114,11 +1133,10 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, 
 }
 
 // finalizeFromProviderStatus routes a provider-confirmed outcome through the
-// synchronous notification application the webhook flow uses (issue #250,
-// ADR 0039): atomic finalization with the subscription effects, idempotent on
-// repeats.
+// lifecycle port's notification application (issue #250, ADR 0039): atomic
+// finalization with the subscription effects, idempotent on repeats.
 func (w *Workers) finalizeFromProviderStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) error {
-	return w.payments.handlePaymentNotification(ctx, notificationFromStatus(payment, status))
+	return w.payments.ApplyPaymentNotification(ctx, notificationFromStatus(payment, status))
 }
 
 // ReconcileStaleRefunds resolves payments stuck in the refunding reservation
@@ -1136,7 +1154,7 @@ func (w *Workers) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int
 		return 0, fmt.Errorf("refund reconciliation worker requires a payment provider: %w", ErrPaymentUnavailable)
 	}
 	if w.payments == nil {
-		return 0, fmt.Errorf("refund reconciliation worker requires the payment service: %w", ErrPaymentUnavailable)
+		return 0, fmt.Errorf("refund reconciliation worker requires the payment lifecycle: %w", ErrPaymentUnavailable)
 	}
 
 	processed := 0
@@ -1189,7 +1207,7 @@ func (w *Workers) resolveStaleRefund(ctx context.Context, payment domain.Subscri
 	}
 	switch status.Status {
 	case domain.PaymentStatusRefunded, domain.PaymentStatusSucceeded:
-		return w.payments.resolveRefundingFromStatus(ctx, payment, status)
+		return w.payments.ResolveRefundingFromStatus(ctx, payment, status)
 	case domain.PaymentStatusFailed:
 		// A failed provider status is ambiguous for a payment being refunded:
 		// whether the refund happened before the failure is unknowable from

@@ -313,16 +313,16 @@ func (s *PaymentService) applyRefundedPayment(ctx context.Context, stores *txSto
 	return nil
 }
 
-// resolveRefundingFromStatus resolves a payment stuck in the refunding
+// ResolveRefundingFromStatus resolves a payment stuck in the refunding
 // reservation from a provider-confirmed status — the shared seam of the
-// reconciliation worker and the admin sync (issue #254). A refunded provider
-// payment finalizes the refund with its subscription effects (attributed to
-// the system — no admin request is known to be in flight), a still-captured
-// charge reverts the reservation to the payment's previous status (a pending
-// one re-enters the pending-payment reconciliation). It reports whether the
-// reservation was actually resolved; everything else waits for the provider
-// to settle.
-func (s *PaymentService) resolveRefundingFromStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) (bool, error) {
+// reconciliation worker (its PaymentLifecycle port) and the admin sync
+// (issue #254). A refunded provider payment finalizes the refund with its
+// subscription effects (attributed to the system — no admin request is known
+// to be in flight), a still-captured charge reverts the reservation to the
+// payment's previous status (a pending one re-enters the pending-payment
+// reconciliation). It reports whether the reservation was actually resolved;
+// everything else waits for the provider to settle.
+func (s *PaymentService) ResolveRefundingFromStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) (bool, error) {
 	switch status.Status {
 	case domain.PaymentStatusRefunded:
 		return true, s.finalizeRefund(ctx, payment.ID, systemRefundActor())
@@ -366,13 +366,13 @@ func (s *PaymentService) SyncPayment(ctx context.Context, adminID, paymentID uui
 		// A stuck refund reservation resolves the same way the reconciliation
 		// worker resolves it: refunded finalizes, a still-captured charge
 		// reverts, anything else waits for the provider to settle.
-		if _, err := s.resolveRefundingFromStatus(ctx, payment, status); err != nil {
+		if _, err := s.ResolveRefundingFromStatus(ctx, payment, status); err != nil {
 			return err
 		}
 	} else {
 		switch providerStatus {
 		case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed:
-			if err := s.handlePaymentNotification(ctx, notificationFromStatus(payment, status)); err != nil {
+			if err := s.ApplyPaymentNotification(ctx, notificationFromStatus(payment, status)); err != nil {
 				return err
 			}
 		case domain.PaymentStatusRefunded:

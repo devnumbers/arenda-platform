@@ -92,6 +92,51 @@ func (p *scriptedProvider) calls() (inits, charges, statuses int) {
 	return p.initCalls, p.chargeCalls, p.statusCalls
 }
 
+// scriptedLifecycle is a programmable PaymentLifecycle: tests script the
+// answers and read the calls back, proving the worker phases run through the
+// narrow port (issue #288) — nothing else of the payment service is reachable
+// through it.
+type scriptedLifecycle struct {
+	mu         sync.Mutex
+	applyErr   error
+	resolveOut bool
+	resolveErr error
+	applied    []PaymentNotification
+	resolved   []refundResolution
+}
+
+// refundResolution is one stuck-refund resolution the port observed.
+type refundResolution struct {
+	payment domain.SubscriptionPayment
+	status  PaymentStatusResult
+}
+
+func (l *scriptedLifecycle) ApplyPaymentNotification(_ context.Context, n *PaymentNotification) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.applied = append(l.applied, *n)
+	return l.applyErr
+}
+
+func (l *scriptedLifecycle) ResolveRefundingFromStatus(_ context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) (bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.resolved = append(l.resolved, refundResolution{payment: payment, status: status})
+	return l.resolveOut, l.resolveErr
+}
+
+func (l *scriptedLifecycle) applications() []PaymentNotification {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]PaymentNotification(nil), l.applied...)
+}
+
+func (l *scriptedLifecycle) resolutions() []refundResolution {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]refundResolution(nil), l.resolved...)
+}
+
 // fakeArchiverSource records archive calls for the lifecycle-bridge tests.
 type fakeArchiverSource struct {
 	mu    sync.Mutex
@@ -1080,6 +1125,179 @@ func TestWorkers_ReconcileStalePendingPayments(t *testing.T) {
 	})
 }
 
+// TestWorkers_ReconciliationRoutesThroughLifecyclePort proves the
+// reconciliation phases depend on nothing but the narrow PaymentLifecycle
+// port (issue #288): a provider-confirmed outcome arrives as exactly one
+// notification application with the provider status translated, and a stuck
+// refund as one resolution whose answer drives the batch progress. The
+// workers hold no reference to the payment service behind the port.
+func TestWorkers_ReconciliationRoutesThroughLifecyclePort(t *testing.T) {
+	seedStalePending := func(t *testing.T, h *workersHarness, ref string) domain.SubscriptionPayment {
+		t.Helper()
+		sub := h.seedSubscription(t, nil)
+		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth, h.business.MonthlyPriceKopecks, "fake", h.now.Add(-10*time.Minute))
+		if err != nil {
+			t.Fatalf("new payment: %v", err)
+		}
+		if err := payment.SaveProviderReference(ref, "http://pay", h.now.Add(-10*time.Minute)); err != nil {
+			t.Fatalf("save reference: %v", err)
+		}
+		stored, err := h.stores.payments.Create(t.Context(), payment)
+		if err != nil {
+			t.Fatalf("seed payment: %v", err)
+		}
+		return stored
+	}
+	seedStuckRefund := func(t *testing.T, h *workersHarness) domain.SubscriptionPayment {
+		t.Helper()
+		sub := h.seedSubscription(t, nil)
+		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, h.pro.MonthlyPriceKopecks, "fake", h.now)
+		if err != nil {
+			t.Fatalf("new payment: %v", err)
+		}
+		providerPaymentID := "prov_stuck_port"
+		payment.ProviderPaymentID = &providerPaymentID
+		if err := payment.MarkSucceeded(h.now); err != nil {
+			t.Fatalf("mark succeeded: %v", err)
+		}
+		if err := payment.BeginRefund(h.now); err != nil {
+			t.Fatalf("begin refund: %v", err)
+		}
+		stored, err := h.stores.payments.Create(t.Context(), payment)
+		if err != nil {
+			t.Fatalf("seed payment: %v", err)
+		}
+		return stored
+	}
+	swapPort := func(t *testing.T, h *workersHarness) *scriptedLifecycle {
+		t.Helper()
+		lifecycle := &scriptedLifecycle{}
+		h.workers.payments = lifecycle
+		return lifecycle
+	}
+
+	t.Run("succeeded outcome arrives as one applied notification", func(t *testing.T) {
+		h := newWorkersHarness(t, Config{})
+		payment := seedStalePending(t, h, "prov_port_1")
+		lifecycle := swapPort(t, h)
+		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+			return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
+		}
+
+		count, err := h.workers.ReconcilePendingPayments(t.Context(), h.now)
+		if err != nil {
+			t.Fatalf("ReconcilePendingPayments() error = %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("count = %d, want 1", count)
+		}
+		applied := lifecycle.applications()
+		if len(applied) != 1 {
+			t.Fatalf("port applications = %d, want 1", len(applied))
+		}
+		want := PaymentNotification{
+			InternalPaymentID: payment.ID,
+			ProviderPaymentID: "prov_port_1",
+			Status:            domain.PaymentStatusSucceeded,
+			AmountKopecks:     payment.AmountKopecks,
+		}
+		if applied[0] != want {
+			t.Errorf("notification = %+v, want %+v", applied[0], want)
+		}
+		if got := lifecycle.resolutions(); len(got) != 0 {
+			t.Errorf("port resolutions = %d, want 0", len(got))
+		}
+	})
+
+	t.Run("failed outcome keeps the provider error code", func(t *testing.T) {
+		h := newWorkersHarness(t, Config{})
+		payment := seedStalePending(t, h, "prov_port_2")
+		lifecycle := swapPort(t, h)
+		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+			return PaymentStatusResult{Status: domain.PaymentStatusFailed, ErrorCode: "53"}, nil
+		}
+
+		if _, err := h.workers.ReconcilePendingPayments(t.Context(), h.now); err != nil {
+			t.Fatalf("ReconcilePendingPayments() error = %v", err)
+		}
+		applied := lifecycle.applications()
+		if len(applied) != 1 {
+			t.Fatalf("port applications = %d, want 1", len(applied))
+		}
+		if applied[0].Status != domain.PaymentStatusFailed || applied[0].ErrorCode == nil || *applied[0].ErrorCode != "53" {
+			t.Errorf("notification = %s/%v, want failed with code 53", applied[0].Status, applied[0].ErrorCode)
+		}
+		if applied[0].InternalPaymentID != payment.ID {
+			t.Errorf("notification payment = %s, want %s", applied[0].InternalPaymentID, payment.ID)
+		}
+	})
+
+	t.Run("stuck refund resolves through the port", func(t *testing.T) {
+		h := newWorkersHarness(t, Config{})
+		payment := seedStuckRefund(t, h)
+		lifecycle := swapPort(t, h)
+		lifecycle.resolveOut = true
+		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+			return PaymentStatusResult{Status: domain.PaymentStatusRefunded}, nil
+		}
+
+		processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness))
+		if err != nil {
+			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+		}
+		if processed != 1 {
+			t.Fatalf("processed = %d, want 1", processed)
+		}
+		resolutions := lifecycle.resolutions()
+		if len(resolutions) != 1 {
+			t.Fatalf("port resolutions = %d, want 1", len(resolutions))
+		}
+		if resolutions[0].payment.ID != payment.ID {
+			t.Errorf("resolution payment = %s, want %s", resolutions[0].payment.ID, payment.ID)
+		}
+		if resolutions[0].status.Status != domain.PaymentStatusRefunded {
+			t.Errorf("resolution status = %q, want refunded", resolutions[0].status.Status)
+		}
+		if got := lifecycle.applications(); len(got) != 0 {
+			t.Errorf("port applications = %d, want 0", len(got))
+		}
+	})
+
+	t.Run("unresolved answer leaves the reservation untouched", func(t *testing.T) {
+		h := newWorkersHarness(t, Config{})
+		payment := seedStuckRefund(t, h)
+		lifecycle := swapPort(t, h)
+		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+			return PaymentStatusResult{Status: domain.PaymentStatusRefunded}, nil
+		}
+
+		if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
+			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+		}
+		if got := lifecycle.resolutions(); len(got) != 1 {
+			t.Fatalf("port resolutions = %d, want 1", len(got))
+		}
+		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+		if err != nil {
+			t.Fatalf("get payment: %v", err)
+		}
+		if stored.Status != domain.PaymentStatusRefunding {
+			t.Errorf("payment status = %q, want the reservation kept when the port reports no resolution", stored.Status)
+		}
+	})
+}
+
+// TestWorkers_ReconcileStaleRefundsRequiresLifecycle proves the refund
+// reconciliation refuses to run without the payment lifecycle instead of
+// punishing users for a wiring mistake.
+func TestWorkers_ReconcileStaleRefundsRequiresLifecycle(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	h.workers.payments = nil
+	if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now); !errors.Is(err, ErrPaymentUnavailable) {
+		t.Fatalf("ReconcileStaleRefunds() error = %v, want ErrPaymentUnavailable", err)
+	}
+}
+
 // TestWorkers_AsyncFailedRenewalChargeEntersGrace proves the asynchronous
 // failure path of a merchant-initiated charge: the provider reports the
 // outcome later (webhook or reconciliation) and the payment carries the
@@ -1111,13 +1329,13 @@ func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
 
 	t.Run("merchant-initiated renewal enters grace", func(t *testing.T) {
 		h, sub, payment := newHarnessWithPayments(t)
-		err := h.workers.payments.handlePaymentNotification(t.Context(), &PaymentNotification{
+		err := h.workers.payments.ApplyPaymentNotification(t.Context(), &PaymentNotification{
 			InternalPaymentID: payment.ID,
 			ProviderPaymentID: "prov_async",
 			Status:            domain.PaymentStatusFailed,
 		})
 		if err != nil {
-			t.Fatalf("handlePaymentNotification() error = %v", err)
+			t.Fatalf("ApplyPaymentNotification() error = %v", err)
 		}
 		stored := h.storedSubscription(t, sub)
 		if stored.Status != domain.SubscriptionStatusGrace {
@@ -1140,13 +1358,13 @@ func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
 		if err := h.stores.payments.Update(t.Context(), *payment); err != nil {
 			t.Fatalf("strip method: %v", err)
 		}
-		err := h.workers.payments.handlePaymentNotification(t.Context(), &PaymentNotification{
+		err := h.workers.payments.ApplyPaymentNotification(t.Context(), &PaymentNotification{
 			InternalPaymentID: payment.ID,
 			ProviderPaymentID: "prov_async",
 			Status:            domain.PaymentStatusFailed,
 		})
 		if err != nil {
-			t.Fatalf("handlePaymentNotification() error = %v", err)
+			t.Fatalf("ApplyPaymentNotification() error = %v", err)
 		}
 		if stored := h.storedSubscription(t, sub); stored.Status != domain.SubscriptionStatusActive {
 			t.Errorf("status = %q, want active (a failed CIT payment changes nothing)", stored.Status)
