@@ -1,6 +1,6 @@
 import { formatAgo } from '@/shared/lib/format-duration';
 import { getLeaseMonthCount } from '@/shared/lib/format-lease-month';
-import type { TenantContact } from '@/entities/tenant-contact/model/types';
+import type { TenantContact } from '@/entities/tenant-contact';
 
 export function getTenantSubtitle(contact: TenantContact): string | undefined {
   if (contact.activeLease) {

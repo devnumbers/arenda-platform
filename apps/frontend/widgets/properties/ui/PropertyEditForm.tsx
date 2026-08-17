@@ -5,12 +5,12 @@ import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack} from '@/shared/lib/navigation';
-import {useProperty, useUpdateProperty} from '@/features/properties/api';
+import {useProperty, useUpdateProperty} from '@/features/properties';
 import {TextField} from '@/shared/ui/text-field';
 import {Button} from '@/shared/ui/button';
 import {PageHeader} from '@/shared/ui/page-header';
-import type {PropertyAttributes, PropertyType} from '@/entities/property/model/types';
-import {coerceAttributes} from '@/entities/property/model/attributes';
+import type {PropertyAttributes, PropertyType} from '@/entities/property';
+import {coerceAttributes} from '@/entities/property';
 import {
     PropertyAttributesFields,
     validateAttributes,
@@ -19,7 +19,7 @@ import {
     type AttrErrors,
     type AttrKey,
 } from '@/features/property-attributes';
-import {propertyTypeLabels} from '@/features/properties/lib/property-types';
+import {propertyTypeLabels} from '@/features/properties';
 import {ApiError} from '@/shared/api/errors';
 import {PropertyTypeSelect} from './PropertyTypeSelect';
 import {AddressField} from './AddressField';

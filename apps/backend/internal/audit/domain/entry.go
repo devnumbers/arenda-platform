@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
 // ActorRole identifies who performed the action.
@@ -35,7 +36,12 @@ const (
 	ActionAuthLogout       Action = "auth.logout"
 	ActionAuthLogoutAll    Action = "auth.logout_all"
 	ActionAuthPhoneChanged Action = "auth.phone_changed"
-	ActionProfileUpdated   Action = "profile.updated"
+	// ActionAuthPhoneChangeFailed records a failed phone-change verification
+	// attempt, mirroring ActionAuthLoginFailed for the login flow. Closes the
+	// audit gap where phone-change failures left no trail while the success
+	// path was fully audited.
+	ActionAuthPhoneChangeFailed Action = "auth.phone_change_failed"
+	ActionProfileUpdated        Action = "profile.updated"
 
 	ActionNotificationPreferencesUpdated Action = "notification_preferences.updated"
 
@@ -113,6 +119,13 @@ const (
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
+	// ActionSubscriptionServiceAssigned and its neighbours below are the
+	// admin subscription operations of issue #255: service assignment, force
+	// tariff change and grace extension. The admin cancel on the user's
+	// behalf reuses ActionSubscriptionCancelled with the admin actor.
+	ActionSubscriptionServiceAssigned Action = "subscription.service_assigned"
+	ActionSubscriptionTariffForced    Action = "subscription.tariff_forced"
+	ActionSubscriptionGraceExtended   Action = "subscription.grace_extended"
 
 	ActionPaymentMethodAdded     Action = "payment_method.added"
 	ActionPaymentMethodActivated Action = "payment_method.activated"
@@ -122,6 +135,13 @@ const (
 	ActionSubscriptionPaymentFailed    Action = "subscription_payment.failed"
 	ActionSubscriptionPaymentRefunded  Action = "subscription_payment.refunded"
 	ActionSubscriptionPaymentSynced    Action = "subscription_payment.synced"
+
+	// ActionTariffCreated and ActionTariffUpdated are the admin tariff
+	// management operations (issue #256): creating a plan and editing its
+	// prices, property limit or activity (hiding included). Context carries
+	// the resulting field values, never user data.
+	ActionTariffCreated Action = "tariff.created"
+	ActionTariffUpdated Action = "tariff.updated"
 )
 
 // EntityType identifies the kind of entity the action targets.
@@ -144,6 +164,7 @@ const (
 	EntitySubscription             EntityType = "subscription"
 	EntityPaymentMethod            EntityType = "payment_method"
 	EntitySubscriptionPayment      EntityType = "subscription_payment"
+	EntityTariff                   EntityType = "tariff"
 )
 
 // Entry is a single audit log record.
@@ -158,4 +179,26 @@ type Entry struct {
 	Context    map[string]any // whitelist fields only, never PII/secrets
 	RequestID  string
 	IP         string
+}
+
+// Actor identifies who performed an action, for audit recording. It carries
+// just enough identity (user ID + role) for the application layer to record
+// audit without depending on transport context or the full identity aggregate.
+type Actor struct {
+	ID   uuid.UUID
+	Role ActorRole
+}
+
+// ActorRoleFromRole maps a shared-kernel actor.Role to an audit ActorRole.
+// Unknown or future roles map to Anonymous rather than masking as Owner,
+// so a corrupt or unexpected value stays visible in the audit trail.
+func ActorRoleFromRole(role actor.Role) ActorRole {
+	switch role {
+	case actor.RoleOwner:
+		return ActorRoleOwner
+	case actor.RoleAdmin:
+		return ActorRoleAdmin
+	default:
+		return ActorRoleAnonymous
+	}
 }

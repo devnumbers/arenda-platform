@@ -1,4 +1,4 @@
-import type { Lease } from '@/entities/lease/model/types';
+import type { Lease } from '@/shared/model/lease';
 
 export type TenantContact = {
   readonly id: string;

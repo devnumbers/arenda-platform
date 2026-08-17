@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 )
 
+// fakePaymentReconciliationService is a scheduler.PaymentReconciler stub
+// returning canned results.
 type fakePaymentReconciliationService struct {
-	billingapp.PaymentProcessor
 	count       int
 	err         error
 	refundCount int

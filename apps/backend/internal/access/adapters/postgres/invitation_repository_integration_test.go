@@ -57,10 +57,10 @@ func TestInvitationRepository_CreateGetList(t *testing.T) {
 	}
 
 	// Unknown id / other property is not found.
-	if _, err := repo.GetByID(ctx, uuid.New(), property); !errors.Is(err, domain.ErrInvitationNotFound) {
+	if _, err := repo.GetByID(ctx, uuid.Must(uuid.NewV7()), property); !errors.Is(err, domain.ErrInvitationNotFound) {
 		t.Errorf("GetByID unknown: expected ErrInvitationNotFound, got %v", err)
 	}
-	if _, err := repo.GetByID(ctx, invID, uuid.New()); !errors.Is(err, domain.ErrInvitationNotFound) {
+	if _, err := repo.GetByID(ctx, invID, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrInvitationNotFound) {
 		t.Errorf("GetByID other property: expected ErrInvitationNotFound, got %v", err)
 	}
 

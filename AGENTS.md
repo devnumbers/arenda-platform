@@ -12,7 +12,7 @@ All coding agents in this repo — Kimi Code, ZCode, or any other harness — wo
 
 ## Project Map
 
-- Arenda Platform is a rental property finance tracker for private owners and small rental businesses in Russia.
+- Arenda Platform is a fintech platform for rental-property finance management for private owners and small rental businesses in Russia. The product is record-keeping, not money movement: owners record and plan income/expense operations; the only payment processing is the SaaS subscription via T-Kassa (`docs/adr/0036-fintech-domain-language.md`).
 - Backend: `apps/backend`, a separate Go module linked by root `go.work`.
 - Frontend: `apps/frontend`, a Next.js React application.
 - Admin: `apps/admin`, a Vite + React SPA built on react-admin 5 and MUI 7 — a separate stack from the Next.js frontend; its rules live in `apps/admin/AGENTS.md`.
@@ -32,6 +32,7 @@ All coding agents in this repo — Kimi Code, ZCode, or any other harness — wo
 - Keep high-risk actions behind explicit intent: destructive commands, credentials, migrations, external services, and dependency changes require normal repository safeguards, not broad wildcard trust such as `mcp__*`.
 - Keep context small: summarize decisions, touched files, commands, and unresolved risks; clear unrelated context between separate tasks.
 - Before claiming completion, run the relevant project checks and perform a fresh review of the diff for duplication, security regressions, and instruction conflicts.
+- Before claiming completion, run the test suite: `make test` (full — backend unit + integration via testcontainers + frontend + admin + tools scripts). Requires Docker. For a fast feedback loop during work, use the granular targets: `make backend-test` (unit only, no Docker needed), `make frontend-test`, `make admin-test`, `make tools-test`. See `docs/testing-strategy.md` for the full test contract.
 
 ## Workflow (Matt Pocock skills)
 
@@ -48,7 +49,7 @@ On-ramps (merge into the main flow):
 
 Reference layer other skills invoke: `/domain-modeling` (domain language in per-context `CONTEXT.md` files), `/codebase-design` (deep-module vocabulary).
 
-`/tdd` and writing tests are invoked only when the user explicitly asks for them. Do not write tests or use TDD unless requested.
+`/tdd` is the default: build every behavior change test-first (red-green-refactor) on pre-agreed seams, without waiting to be asked.
 
 ## MCP Servers
 
@@ -61,6 +62,7 @@ The following MCP servers are configured in the harness MCP config (`~/.kimi-cod
 - `figma` — Figma design data and image exports. Fallback when unavailable: manual design references.
 - `heroui-react` — HeroUI v3 component docs, source, and theme tokens for the Next.js frontend. HeroUI v3 is beta and not covered by model training data, so verify components through this server before writing HeroUI code. Fallback when unavailable: official docs at https://v3.heroui.com via `FetchURL` or `WebSearch`.
 - `jetbrains` — GoLand's built-in MCP server (IDE 2025.2+). Runs IDE inspections (`get_file_problems`) on files as a quality gate for agent work. Requires GoLand running with this project open. Fallback when unavailable: note the skipped gate in the final report.
+- `serena` — code semantics for the whole stack (TS + Go): symbol navigation, references, rename, diagnostics, symbol-level editing. Pinned `serena-agent` 1.7.0 (`uv` + managed Python 3.13); committed project config `.serena/project.yml`, one project at the repo root. Boundary rule: code semantics (symbols, references, rename, diagnostics, symbol editing) → `serena`; read/output compression, semantic search, dependency graph, session intelligence → `lean-ctx`. If the `mcp__serena__*` tools are unavailable, stop and tell the user (same stop-procedure model as `gopls`) — no silent substitution.
 
 ## Commands
 
@@ -71,6 +73,13 @@ make local-infra-up
 make local-infra-down
 make backend-run
 make backend-lint
+make backend-test
+make backend-test-integration
+make frontend-test
+make admin-test
+make tools-test
+make test
+make hooks-install
 make admin-install
 make admin-dev
 make admin-build
@@ -88,7 +97,10 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 
 - Do not create or switch to a git worktree by default. Work in the current checkout and current branch unless the user explicitly asks for a worktree or branch isolation.
 - If a generic skill recommends a worktree, this repository rule overrides it.
-- Money is stored as `BIGINT` in kopecks across the backend. See `docs/adr/0008-subscription-lifecycle.md`.
+- Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`.
+- All amounts are in RUB; there is no multi-currency support (`docs/adr/0036-fintech-domain-language.md`).
+- Format money for display only at the UI layer: frontend — `formatMoneyKopecks` (`apps/frontend/shared/lib/format-money.ts`); admin — `formatKopecks` / `MoneyField` (`apps/admin/src/fields.tsx`).
+- Two money vocabularies (`docs/adr/0036-fintech-domain-language.md`): rental money records are Операции — «платёж»/«транзакция» belong to Billing (T-Kassa processing) only. Canonical terms and `_Avoid_` lists live in `CONTEXT-MAP.md` and the per-context `CONTEXT.md` files.
 
 ## Agent skills
 

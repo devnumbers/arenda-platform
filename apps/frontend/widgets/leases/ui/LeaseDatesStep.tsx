@@ -7,8 +7,8 @@ import {Button} from '@/shared/ui/button';
 import {DateSelect} from '@/shared/ui/date-select';
 import {LinkButton} from '@/shared/ui/link-button';
 import {Select} from '@/shared/ui/select';
-import type {TenantContact} from '@/entities/tenant-contact/model/types';
-import {getTenantContactFullName} from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
+import type {TenantContact} from '@/entities/tenant-contact';
+import {getTenantContactFullName} from '@/entities/tenant-contact';
 import {PaymentDayPicker} from './PaymentDayPicker';
 import styles from './LeaseDatesStep.module.css';
 

@@ -30,8 +30,26 @@ interface ProblemDetails {
 }
 
 interface AdminDataProvider extends DataProvider {
-  refundPayment: (payload: { id: string | number; amountKopecks?: number }) => Promise<{ data: unknown }>;
+  // Возврат всегда полный (ADR 0037): контракт эндпоинта не принимает тело.
+  refundPayment: (payload: { id: string | number }) => Promise<{ data: unknown }>;
   syncPayment: (payload: { id: string | number }) => Promise<{ data: unknown }>;
+  // Админ-операции над подпиской (issue #255).
+  assignServiceSubscription: (payload: {
+    userId: string | number;
+    tariffName: string;
+    termType: 'month' | 'year' | 'date';
+    untilDate?: string;
+  }) => Promise<{ data: unknown }>;
+  forceChangeSubscriptionTariff: (payload: {
+    userId: string | number;
+    tariffName: string;
+    period: 'month' | 'year';
+  }) => Promise<{ data: unknown }>;
+  extendSubscriptionGrace: (payload: { userId: string | number; days: number }) => Promise<{ data: unknown }>;
+  cancelSubscription: (payload: { userId: string | number }) => Promise<{ data: unknown }>;
+  // Статистика дашборда (issue #307): обращения к backend — только через
+  // dataProvider, сырой fetch в компонентах запрещён ESLint-гейтом.
+  getStats: () => Promise<{ data: unknown }>;
 }
 
 const httpClient = async (url: string, options: RequestInit = {}): Promise<{ json: unknown; headers: Headers }> => {
@@ -78,6 +96,7 @@ const ensureId = <T extends RaRecord>(item: T): T => {
 // (apps/backend/internal/admin/application/service.go,
 // apps/backend/internal/billing/application/payment_service.go);
 // при расширении бэкендных списков держать мапу синхронно.
+// Ресурсы без серверной сортировки (tariffs) объявляются пустым списком.
 const sortableFieldsByResource: Record<string, readonly string[]> = {
   users: ['createdAt', 'updatedAt'],
   properties: ['name', 'createdAt', 'updatedAt', 'status'],
@@ -86,17 +105,25 @@ const sortableFieldsByResource: Record<string, readonly string[]> = {
   tenantContacts: ['name', 'updatedAt'],
   subscriptionPayments: ['createdAt', 'amountKopecks', 'status'],
   auditLogs: ['createdAt'],
+  tariffs: [],
 };
+
+// Ресурсы без серверной пагинации: эндпоинт отдаёт полный список, limit/offset
+// в его контракте не объявлены — не отправляем их, чтобы запрос соответствовал
+// OpenAPI-контракту.
+const unpaginatedResources = new Set(['tariffs', 'subscriptionTransitions']);
 
 const buildListQuery = (resource: string, params: GetListParams): string => {
   const { pagination, sort, filter } = params;
   const query = new URLSearchParams();
 
-  const page = pagination?.page ?? 1;
-  const perPage = pagination?.perPage ?? 10;
+  if (!unpaginatedResources.has(resource)) {
+    const page = pagination?.page ?? 1;
+    const perPage = pagination?.perPage ?? 10;
 
-  query.set('limit', String(perPage));
-  query.set('offset', String((page - 1) * perPage));
+    query.set('limit', String(perPage));
+    query.set('offset', String((page - 1) * perPage));
+  }
 
   // Отбрасываем sort/order вне whitelist'а ресурса: бэкенд валидирует sort
   // и отвечает 400, а в URL списков у пользователей могли остаться старые
@@ -135,8 +162,17 @@ const listUrl = (resource: string, ownerId?: string | number): string => {
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/operations` : `${API_PREFIX}/admin/operations`;
     case 'subscriptionPayments':
       return `${API_PREFIX}/admin/subscription/payments`;
+    case 'tariffs':
+      return `${API_PREFIX}/admin/tariffs`;
     case 'auditLogs':
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/audit-logs` : `${API_PREFIX}/admin/audit-logs`;
+    // История переходов подписки существует только в рамках пользователя
+    // (issue #255) — плоского эндпоинта нет.
+    case 'subscriptionTransitions':
+      if (!hasOwner) {
+        throw new Error('subscriptionTransitions requires a user id');
+      }
+      return `${API_PREFIX}/admin/users/${ownerId}/subscription/transitions`;
     default:
       throw new Error(`Unknown resource: ${resource}`);
   }
@@ -263,12 +299,38 @@ export const dataProvider: AdminDataProvider = {
     throw new HttpError(`getManyReference для ${resource} не поддерживает target=${params.target}`, 400);
   },
 
-  create: async <T extends RaRecord>(resource: string, _params: CreateParams<T>): Promise<CreateResult<T>> => {
-    throw new HttpError(`Создание для ресурса ${resource} не поддерживается`, 405);
+  create: async <T extends RaRecord>(resource: string, params: CreateParams<T>): Promise<CreateResult<T>> => {
+    if (resource !== 'tariffs') {
+      throw new HttpError(`Создание для ресурса ${resource} не поддерживается`, 405);
+    }
+    const { json } = await httpClient(`${API_PREFIX}/admin/tariffs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params.data),
+    });
+    return { data: ensureId(json as T) };
   },
 
-  update: async <T extends RaRecord>(resource: string, _params: UpdateParams<T>): Promise<UpdateResult<T>> => {
-    throw new HttpError(`Обновление для ресурса ${resource} не поддерживается`, 405);
+  update: async <T extends RaRecord>(resource: string, params: UpdateParams<T>): Promise<UpdateResult<T>> => {
+    if (resource !== 'tariffs') {
+      throw new HttpError(`Обновление для ресурса ${resource} не поддерживается`, 405);
+    }
+    // PUT /admin/tariffs/{id} принимает полное редактируемое состояние. Вызов
+    // может передать только часть (скрытие меняет один isActive) — недостающие
+    // поля догружаются из previousData; всё вне контракта (id, name) не отправляется.
+    const prev = params.previousData as Record<string, unknown> | undefined;
+    const data = params.data as Record<string, unknown>;
+    const editableFields = ['activePropertyLimit', 'monthlyPriceKopecks', 'yearlyPriceKopecks', 'isActive'] as const;
+    const body: Record<string, unknown> = {};
+    for (const field of editableFields) {
+      body[field] = data[field] !== undefined ? data[field] : prev?.[field];
+    }
+    const { json } = await httpClient(`${API_PREFIX}/admin/tariffs/${params.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { data: ensureId(json as T) };
   },
 
   updateMany: async <T extends RaRecord>(resource: string, _params: UpdateManyParams<T>): Promise<UpdateManyResult<T>> => {
@@ -283,18 +345,54 @@ export const dataProvider: AdminDataProvider = {
     throw new HttpError(`Массовое удаление для ресурса ${resource} не поддерживается`, 405);
   },
 
-  refundPayment: async ({ id, amountKopecks }) => {
-    const body = amountKopecks !== undefined ? JSON.stringify({ amount_kopecks: amountKopecks }) : undefined;
-    const { json } = await httpClient(`${API_PREFIX}/admin/subscription/payments/${id}/refund`, {
-      method: 'POST',
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body,
-    });
+  refundPayment: async ({ id }) => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/subscription/payments/${id}/refund`, { method: 'POST' });
     return { data: json };
   },
 
   syncPayment: async ({ id }) => {
     const { json } = await httpClient(`${API_PREFIX}/admin/subscription/payments/${id}/sync`, { method: 'POST' });
+    return { data: json };
+  },
+
+  assignServiceSubscription: async ({ userId, tariffName, termType, untilDate }) => {
+    const body: Record<string, string> = { tariffName, termType };
+    if (termType === 'date' && untilDate) {
+      body.untilDate = untilDate;
+    }
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/service`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { data: json };
+  },
+
+  forceChangeSubscriptionTariff: async ({ userId, tariffName, period }) => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/force-change`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tariffName, period }),
+    });
+    return { data: json };
+  },
+
+  extendSubscriptionGrace: async ({ userId, days }) => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/grace-extension`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days }),
+    });
+    return { data: json };
+  },
+
+  cancelSubscription: async ({ userId }) => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/cancel`, { method: 'POST' });
+    return { data: json };
+  },
+
+  getStats: async () => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/stats`, { method: 'GET' });
     return { data: json };
   },
 };

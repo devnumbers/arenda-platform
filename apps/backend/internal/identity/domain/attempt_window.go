@@ -25,6 +25,10 @@ func NewAttemptWindow(now time.Time) AttemptWindow {
 
 // RecordFailure increments the failure count and returns ErrTooManyAttempts
 // when the threshold is reached. It resets the window when it has expired.
+//
+// Invariant: FirstFailureAt is modified only when the window is created or
+// restarted after its TTL — never on a plain increment within the live window.
+// WasReset encodes that rule so callers can pick the persistence strategy.
 func (w *AttemptWindow) RecordFailure(now time.Time) error {
 	if w.Failures == 0 || now.Sub(w.FirstFailureAt) >= LoginAttemptWindowTTL {
 		w.FirstFailureAt = now
@@ -36,6 +40,14 @@ func (w *AttemptWindow) RecordFailure(now time.Time) error {
 		return ErrTooManyAttempts
 	}
 	return nil
+}
+
+// WasReset reports whether the window was freshly created or restarted after
+// its TTL relative to prev. It is the single read-side authority for the
+// persistence strategy: a reset writes the absolute counter, otherwise the
+// counter is incremented by the delta.
+func (w *AttemptWindow) WasReset(prev AttemptWindow) bool {
+	return !w.FirstFailureAt.Equal(prev.FirstFailureAt)
 }
 
 // Blocked reports whether attempts are currently blocked.

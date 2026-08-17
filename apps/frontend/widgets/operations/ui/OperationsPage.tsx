@@ -8,17 +8,17 @@ import {PageHeader} from '@/shared/ui/page-header';
 import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
 import {ROUTES} from '@/shared/config/routes';
-import {type OperationsFilters, useInfiniteOperations,} from '@/features/operations/api/hooks';
-import {endOfMonth, formatDateForApi, startOfMonth,} from '@/entities/operation/lib/dates';
-import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
-import {FinanceEmptyState} from '@/widgets/finance/ui/FinanceEmptyState';
-import {useArchivedProperties, useProperties} from '@/features/properties/api';
+import {type OperationsFilters, useInfiniteOperations,} from '@/features/operations';
+import {endOfMonth, formatDateForApi, startOfMonth,} from '@/entities/operation';
+import {FinanceErrorState} from '@/shared/ui/finance-error-state';
+import {FinanceEmptyState} from '@/shared/ui/finance-empty-state';
+import {useArchivedProperties, useProperties} from '@/features/properties';
 import {OperationFilters, type OperationFiltersState, type OperationPeriod,} from './OperationFilters';
-import {OperationsList} from './OperationsList';
+import {OperationsList} from '@/entities/operation';
 import {OperationsListLoading} from './OperationsListLoading';
-import {SubscriptionReadonlyBanner} from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
-import {useSubscription} from '@/features/subscription/api/hooks';
-import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
+import {SubscriptionReadonlyBanner} from '@/features/subscription';
+import {useSubscription} from '@/features/subscription';
+import {isSubscriptionReadonly} from '@/features/subscription';
 import {
     DEFAULT_OPERATION_SORT,
     type OperationInitialFilters,

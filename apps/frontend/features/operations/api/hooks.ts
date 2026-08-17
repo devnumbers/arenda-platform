@@ -14,11 +14,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { operationKeys } from './keys';
-import { financeKeys } from '@/features/finance/api/keys';
-import { leaseKeys } from '@/features/leases/api/keys';
-import { categoryKeys } from '@/features/operation-categories/api/keys';
-import type { components } from '@/shared/api/generated';
+import { categoryKeys, financeKeys, leaseKeys, operationKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
 
 type OperationResponse = components['schemas']['OperationResponse'];
 type OperationCategory = components['schemas']['OperationCategory'];

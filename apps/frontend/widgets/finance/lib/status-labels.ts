@@ -1,4 +1,4 @@
-import type { OperationStatus } from '@/entities/operation/model/types';
+import type { OperationStatus } from '@/entities/operation';
 
 export const statusLabels: Record<OperationStatus, string> = {
   pending: 'Ожидается',

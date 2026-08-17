@@ -3,7 +3,7 @@
 import { type JSX, type ChangeEvent, useCallback } from 'react';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
-import type { PropertyType, PropertyAttributes } from '@/entities/property/model/types';
+import type { PropertyType, PropertyAttributes } from '@/entities/property';
 import {
   fieldsForType,
   groupLabels,

@@ -63,17 +63,3 @@ func (c *LoginCode) Verify(codeHash string, now time.Time) error {
 
 	return nil
 }
-
-// MarkUsed marks the login code as used.
-func (c *LoginCode) MarkUsed() {
-	c.Used = true
-}
-
-// VerifyAndUse checks the code hash and, if valid, marks the code as used.
-func (c *LoginCode) VerifyAndUse(codeHash string, now time.Time) error {
-	if err := c.Verify(codeHash, now); err != nil {
-		return err
-	}
-	c.MarkUsed()
-	return nil
-}

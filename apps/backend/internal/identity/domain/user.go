@@ -46,6 +46,13 @@ func (u *User) UpdatePersonalData(name, surname, patronymic, email, timezone *st
 		if err != nil {
 			return err
 		}
+		// Changing the email invalidates verification: a new address must be
+		// confirmed again before it is trusted. Compare the normalized values
+		// before overwriting u.Email so an identical resubmit leaves the
+		// verified flag untouched.
+		if u.Email != nil && u.Email.String() != v.String() {
+			u.EmailVerifiedAt = nil
+		}
 		u.Email = &v
 	}
 	if timezone != nil {
@@ -56,6 +63,17 @@ func (u *User) UpdatePersonalData(name, surname, patronymic, email, timezone *st
 		u.Timezone = v
 	}
 	return nil
+}
+
+// VerifyEmail records the verified email address and the moment it was
+// confirmed. The email is already a validated value object and the timestamp
+// comes from the caller's clock, so this is a pure assignment with no further
+// validation or idempotency check — the creation-path always operates on a
+// fresh aggregate, and the existing-user path is handled separately in the
+// application layer (issue #241).
+func (u *User) VerifyEmail(email Email, at time.Time) {
+	u.Email = &email
+	u.EmailVerifiedAt = &at
 }
 
 func nonEmptyPtr(s string) *string {

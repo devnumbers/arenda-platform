@@ -45,6 +45,17 @@ const customMessages = {
         period: 'Период',
       },
     },
+    tariffs: {
+      name: 'Тариф |||| Тарифы',
+      fields: {
+        id: 'ID',
+        name: 'Название',
+        isActive: 'Активен',
+        activePropertyLimit: 'Лимит активных объектов',
+        monthlyPriceKopecks: 'Цена за месяц, ₽',
+        yearlyPriceKopecks: 'Цена за год, ₽',
+      },
+    },
     properties: {
       name: 'Объект |||| Объекты',
       fields: {

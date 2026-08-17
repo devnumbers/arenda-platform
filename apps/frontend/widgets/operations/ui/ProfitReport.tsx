@@ -6,14 +6,14 @@ import {
   formatDateForApi,
   startOfMonth,
   endOfMonth,
-} from '@/entities/operation/lib/dates';
-import { useFinanceReport } from '@/features/finance/api/hooks';
-import { useProperties } from '@/features/properties/api/hooks';
+} from '@/entities/operation';
+import { useFinanceReport } from '@/features/finance';
+import { useProperties } from '@/features/properties';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
-import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
-import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
-import type { OperationType } from '@/entities/operation/model/types';
+import { FinanceLoading } from '@/shared/ui/finance-loading';
+import { FinanceErrorState } from '@/shared/ui/finance-error-state';
+import { FinanceEmptyState } from '@/shared/ui/finance-empty-state';
+import type { OperationType } from '@/entities/operation';
 import styles from './ProfitReport.module.css';
 
 type Period = 'month' | 'quarter' | 'year';

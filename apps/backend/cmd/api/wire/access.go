@@ -6,7 +6,6 @@ import (
 	accessemail "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/email"
 	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -29,13 +28,13 @@ type Access struct {
 }
 
 // Compile-time checks that the access SlotCoordinator satisfies the cross-
-// context slot-policy ports consumed by billing and properties (issue #158,
-// T4), and that the PropertyDeleteMailer satisfies the properties delete-mail
-// port (issue #162, T6). These assertions live in the wiring layer (the only
-// place allowed to depend on several bounded contexts at once) so the access
-// application never imports billing or properties.
+// context slot-policy port consumed by properties (issue #158, T4), and that
+// the PropertyDeleteMailer satisfies the properties delete-mail port (issue
+// #162, T6). These assertions live in the wiring layer (the only place allowed
+// to depend on several bounded contexts at once) so the access application
+// never imports billing or properties. The billing-side recipient-slot
+// enforcer port returns with the renewal-worker ticket (#252).
 var (
-	_ billingapp.RecipientSlotEnforcer        = (*accessapp.SlotCoordinator)(nil)
 	_ propertiesapp.RecipientSlotPolicy       = (*accessapp.SlotCoordinator)(nil)
 	_ propertiesapp.SuspendedSharedCounter    = (*accesspg.SuspendedCounter)(nil)
 	_ propertiesapp.SharedMembersDeleteMailer = (*accessapp.PropertyDeleteMailer)(nil)
@@ -68,7 +67,7 @@ var (
 // emailMailer is the platform mailer (wired by the identity module) used for
 // the invite email of the email invitation lifecycle (issue #161, T5) and the
 // sharing lifecycle emails (issue #162, T6).
-func WireAccess(_ context.Context, p platformDeps, billingRepos *BillingRepos, emailMailer mailer.Sender) (*Access, error) {
+func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer mailer.Sender) (*Access, error) {
 	memberRepo := accesspg.NewMembershipRepository(p.DB)
 	invitationRepo := accesspg.NewInvitationRepository(p.DB)
 	ownerResolver := accesspg.NewOwnerResolver(p.DB)
@@ -85,7 +84,7 @@ func WireAccess(_ context.Context, p platformDeps, billingRepos *BillingRepos, e
 	// billing application SubscriptionPropertyLimiter; the occupancy and
 	// owned-property ports wrap the properties postgres adapters, rebuilt from
 	// the shared pool (they hold no state beyond the db handle).
-	propertyLimiter := billingapp.NewSubscriptionPropertyLimiter(billingRepos.SubscriptionRepo, billingRepos.TariffRepo)
+	propertyLimiter := billing.Services.Limiter
 	recipientLimiter := accesspg.NewRecipientLimiterAdapter(propertyLimiter)
 	occupancyPort := accesspg.NewOccupancyPortAdapter(propertiespg.NewOccupancyProvider(p.DB))
 	ownedActiveProps := accesspg.NewOwnedActivePropertiesAdapter(propertiespg.NewPropertyRepository(p.DB))

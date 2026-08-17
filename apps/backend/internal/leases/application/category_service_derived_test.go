@@ -18,12 +18,12 @@ func TestCategoryService_ListCategories_DerivedAccess(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	memberFull := uuid.New()
-	memberViewer := uuid.New()
-	stranger := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	memberFull := uuid.Must(uuid.NewV7())
+	memberViewer := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
 
-	ownerCat := domain.OperationCategory{ID: uuid.New(), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Owner Cat"}
+	ownerCat := domain.OperationCategory{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Owner Cat"}
 	repo := &fakeCategoryRepo{categories: []domain.OperationCategory{ownerCat}}
 
 	policy := fakePolicy{
@@ -80,8 +80,8 @@ func TestCategoryService_ListCategories_DerivedAccess_Dedup(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	ownerCat := domain.OperationCategory{ID: uuid.New(), OwnerID: owner, Type: domain.OperationTypeExpense, Name: "Rent"}
+	owner := uuid.Must(uuid.NewV7())
+	ownerCat := domain.OperationCategory{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeExpense, Name: "Rent"}
 	repo := &fakeCategoryRepo{categories: []domain.OperationCategory{ownerCat}}
 
 	policy := fakePolicy{}
@@ -113,11 +113,11 @@ func TestCategoryService_ListCategories_DerivedAccess_TypeFilter(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	member := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
 	repo := &fakeCategoryRepo{categories: []domain.OperationCategory{
-		{ID: uuid.New(), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Inc"},
-		{ID: uuid.New(), OwnerID: owner, Type: domain.OperationTypeExpense, Name: "Exp"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Inc"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeExpense, Name: "Exp"},
 	}}
 	policy := fakePolicy{roles: map[[2]uuid.UUID]sharedpolicy.Role{
 		{member, owner}: sharedpolicy.RoleFullAccess,
@@ -146,11 +146,11 @@ func TestCategoryService_ListCategories_NilSafe_OwnOnly(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	other := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	other := uuid.Must(uuid.NewV7())
 	repo := &fakeCategoryRepo{categories: []domain.OperationCategory{
-		{ID: uuid.New(), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Own"},
-		{ID: uuid.New(), OwnerID: other, Type: domain.OperationTypeIncome, Name: "Other"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Own"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: other, Type: domain.OperationTypeIncome, Name: "Other"},
 	}}
 
 	svc := NewCategoryService(repo, nil) // no SetPolicy/SetAccessibleScopes
@@ -174,9 +174,9 @@ func TestCategoryService_ListCategories_NilSafe_OnlyPolicy(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	repo := &fakeCategoryRepo{categories: []domain.OperationCategory{
-		{ID: uuid.New(), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Own"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Own"},
 	}}
 
 	svc := NewCategoryService(repo, nil)

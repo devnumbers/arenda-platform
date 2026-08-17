@@ -24,7 +24,7 @@ Services that already run inside a transaction call `audit.WithTx(tx).Record(...
 
 ### Documented exceptions to fail-safe
 
-- **Logout / logout-all (fail-open).** The session is deleted first; the entry is written post-commit in `internal/platform/httpapi/auth_handlers.go`, and a recording error is only logged. Failing the response after the session is already gone would be wrong, and there is nothing to roll back.
+- **Logout / logout-all (fail-open).** The session is deleted inside the `LogoutService` transaction, and the audit entry is recorded in the same transaction after the delete. A recording error is only logged — it is never returned, so the UoW commits the session delete regardless of the audit outcome. Failing the response after the session is already gone would be wrong, and there is nothing to roll back. The HTTP handler passes an `audit.Actor` (user ID + role extracted from the request context) into the service so the entry is recorded in-tx rather than post-commit (issue #234).
 - **Services without an explicit transaction (fail-loud).** Tenant contacts and operation categories mutate without a surrounding transaction, so the entry is written post-commit and the recording error is deliberately returned to the caller. The mutation is already committed; surfacing the error makes audit gaps visible instead of silent. A retry may duplicate the entity — accepted for these entities.
 
 ### Actors and attribution

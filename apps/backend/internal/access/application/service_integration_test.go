@@ -304,9 +304,9 @@ var (
 // listed; a stranger is denied; the owner is always listed first and cannot be
 // re-added; a duplicate add is rejected (issue #156).
 func TestAccessService_AllowDenyPath(t *testing.T) {
-	owner := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
@@ -332,7 +332,7 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 	}
 
 	// Stranger is denied listing (privacy → not found).
-	if _, err := svc.ListMembers(context.Background(), uuid.New(), property); !errors.Is(err, domain.ErrMemberNotFound) {
+	if _, err := svc.ListMembers(context.Background(), uuid.Must(uuid.NewV7()), property); !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Errorf("stranger ListMembers: expected ErrMemberNotFound, got %v", err)
 	}
 
@@ -356,7 +356,7 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 	if roleFull != sharedpolicy.RoleFullAccess {
 		t.Errorf("member role = %v, want full_access", roleFull)
 	}
-	roleNone, _ := policy.RoleForProperty(context.Background(), uuid.New(), property)
+	roleNone, _ := policy.RoleForProperty(context.Background(), uuid.Must(uuid.NewV7()), property)
 	if roleNone != sharedpolicy.RoleNone {
 		t.Errorf("stranger role = %v, want none", roleNone)
 	}
@@ -365,9 +365,9 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 // TestAccessService_LeaveProperty verifies self-exit: a member can leave, the
 // owner cannot (issue #156).
 func TestAccessService_LeaveProperty(t *testing.T) {
-	owner := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}

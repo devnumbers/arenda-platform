@@ -13,9 +13,9 @@ import {
   formatCountdownFromNow,
   formatReminderDateTime,
 } from '@/shared/lib/datetime';
-import { useFreeReminder, useDeleteFreeReminder } from '@/features/free-reminders/api';
-import { PERIODICITY_LABELS } from '@/features/free-reminders/model/types';
-import { useProperty } from '@/features/properties/api';
+import { useFreeReminder, useDeleteFreeReminder } from '@/features/free-reminders';
+import { PERIODICITY_LABELS } from '@/features/free-reminders';
+import { useProperty } from '@/features/properties';
 import { FreeReminderWizard } from './FreeReminderWizard';
 import styles from './FreeReminderDetailPage.module.css';
 

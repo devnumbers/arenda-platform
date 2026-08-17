@@ -2,7 +2,7 @@
 
 import type {JSX} from 'react';
 import {Checkbox} from '@heroui/react';
-import type {NotificationEventType} from '@/entities/user/model/types';
+import type {NotificationEventType} from '@/entities/user';
 import {
     NOTIFICATION_OPTIONS,
     type NotificationChannelState,
@@ -23,6 +23,7 @@ const EMPTY_STATE: NotificationChannelState = {
     lease_expiring: {email: false, push: false},
     lease_requires_action: {email: false, push: false},
     free_reminder: {email: false, push: false},
+    subscription_grace: {email: false, push: false},
 };
 
 export function NotificationChannelMatrix({

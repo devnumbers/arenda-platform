@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { PropertyAttributes, PropertyType } from '@/entities/property/model/types';
-import { coerceAttributes } from '@/entities/property/model/attributes';
-import { propertyTypeOptions } from '@/features/properties/lib/property-types';
+import type { PropertyAttributes, PropertyType } from '@/entities/property';
+import { coerceAttributes } from '@/entities/property';
+import { propertyTypeOptions } from '@/features/properties';
 
 // Step 1 — Тип, 2 — Адрес, 3 — Характеристики, 4 — Информация, 5 — Success.
 export type CreateStep = 1 | 2 | 3 | 4 | 5;

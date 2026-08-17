@@ -1,40 +1,19 @@
 package domain
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// PaymentStatus is the lifecycle state of a subscription payment.
-type PaymentStatus string
-
-const (
-	PaymentStatusPending   PaymentStatus = "pending"
-	PaymentStatusSucceeded PaymentStatus = "succeeded"
-	PaymentStatusFailed    PaymentStatus = "failed"
-	PaymentStatusRefunded  PaymentStatus = "refunded"
-	// PaymentStatusRefunding is an internal, non-final reservation state. A
-	// payment enters it atomically before the external provider cancel call so
-	// that concurrent refund attempts are rejected instead of refunding the
-	// payment twice. It is never produced by external payloads and is not a
-	// terminal state.
-	PaymentStatusRefunding PaymentStatus = "refunding"
-	// PaymentStatusPartialRefunded is kept for backward compatibility and external
-	// webhook payloads. The system no longer initiates partial refunds; it always
-	// refunds the full amount.
-	PaymentStatusPartialRefunded PaymentStatus = "partial_refunded"
-)
-
-// SubscriptionPeriod is the billing period for a subscription payment.
-type SubscriptionPeriod string
-
-const (
-	PeriodMonth SubscriptionPeriod = "month"
-	PeriodYear  SubscriptionPeriod = "year"
-)
-
-// SubscriptionPayment records a payment event for a user subscription.
+// SubscriptionPayment is a processing-world money event (ADR 0036): one charge
+// of a subscription tariff through the payment provider. The lifecycle states
+// and transitions mirror the subscription_payments table of migration 000104:
+// a payment is created pending, finalizes to succeeded or failed, and may later
+// move to refunded through the admin refund flow (issue #254). The internal
+// refunding reservation state is entered by the refund flow only.
 type SubscriptionPayment struct {
 	ID                    uuid.UUID
 	UserID                uuid.UUID
@@ -55,13 +34,19 @@ type SubscriptionPayment struct {
 	SucceededAt           *time.Time
 }
 
-// NewSubscriptionPayment creates a new pending subscription payment.
-func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, paymentMethodID *uuid.UUID, period SubscriptionPeriod, amountKopecks int64, provider PaymentProvider, now time.Time) (SubscriptionPayment, error) {
+// NewSubscriptionPayment builds a pending payment for a tariff purchase. The
+// provider reference fields are empty: they are filled atomically after the
+// provider accepts the initiation (the pending row survives a crash between
+// the provider call and the save).
+func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, period SubscriptionPeriod, amountKopecks int64, provider PaymentProvider, now time.Time) (SubscriptionPayment, error) {
 	if amountKopecks <= 0 {
 		return SubscriptionPayment{}, ErrInvalidAmount
 	}
 	if period != PeriodMonth && period != PeriodYear {
 		return SubscriptionPayment{}, ErrInvalidPeriod
+	}
+	if userID == uuid.Nil || subscriptionID == uuid.Nil || tariffID == uuid.Nil {
+		return SubscriptionPayment{}, ErrInvalidPayment
 	}
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -69,22 +54,98 @@ func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, paymentM
 	}
 	now = now.UTC()
 	return SubscriptionPayment{
-		ID:              id,
-		UserID:          userID,
-		SubscriptionID:  subscriptionID,
-		TariffID:        tariffID,
-		PaymentMethodID: paymentMethodID,
-		Period:          period,
-		AmountKopecks:   amountKopecks,
-		Provider:        provider,
-		Status:          PaymentStatusPending,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:             id,
+		UserID:         userID,
+		SubscriptionID: subscriptionID,
+		TariffID:       tariffID,
+		Period:         period,
+		AmountKopecks:  amountKopecks,
+		Provider:       provider,
+		Status:         PaymentStatusPending,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}, nil
 }
 
-// MarkSucceeded transitions the payment to succeeded.
-// Only pending payments can be transitioned.
+// ReconstituteSubscriptionPayment validates a payment assembled from persisted
+// state and returns it. Persistence adapters pass raw storage values through it
+// so unknown statuses or missing identity fields are rejected with a
+// descriptive error instead of silently producing an invalid aggregate.
+func ReconstituteSubscriptionPayment(p SubscriptionPayment) (SubscriptionPayment, error) {
+	if p.ID == uuid.Nil || p.UserID == uuid.Nil || p.SubscriptionID == uuid.Nil || p.TariffID == uuid.Nil {
+		return SubscriptionPayment{}, errors.New("reconstitute payment: missing identity field")
+	}
+	switch p.Status {
+	case PaymentStatusPending, PaymentStatusSucceeded, PaymentStatusFailed, PaymentStatusRefunding, PaymentStatusRefunded:
+	default:
+		return SubscriptionPayment{}, fmt.Errorf("reconstitute payment: unknown status %q", p.Status)
+	}
+	switch p.Period {
+	case PeriodMonth, PeriodYear:
+	default:
+		return SubscriptionPayment{}, fmt.Errorf("reconstitute payment: unknown period %q", p.Period)
+	}
+	if p.Provider == "" {
+		return SubscriptionPayment{}, errors.New("reconstitute payment: missing provider")
+	}
+	return p, nil
+}
+
+// HasProviderReference reports whether the provider's payment identifier is
+// persisted for this payment.
+func (p *SubscriptionPayment) HasProviderReference() bool {
+	return p.ProviderPaymentID != nil && *p.ProviderPaymentID != ""
+}
+
+// HasPaymentURL reports whether the payer-facing payment URL is persisted.
+func (p *SubscriptionPayment) HasPaymentURL() bool {
+	return p.PaymentURL != nil && *p.PaymentURL != ""
+}
+
+// IsFinalized reports whether the payment has reached a terminal outcome.
+func (p *SubscriptionPayment) IsFinalized() bool {
+	switch p.Status {
+	case PaymentStatusSucceeded, PaymentStatusFailed, PaymentStatusRefunded:
+		return true
+	case PaymentStatusPending, PaymentStatusRefunding:
+		return false
+	}
+	return false
+}
+
+// SaveProviderReference records the provider's payment identifier and the
+// payer-facing URL returned by a successful initiation. Only a pending payment
+// without a reference accepts them: once the provider knows the payment, the
+// reference never changes.
+func (p *SubscriptionPayment) SaveProviderReference(providerPaymentID, paymentURL string, now time.Time) error {
+	if p.Status != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	if p.HasProviderReference() {
+		return ErrInvalidPaymentStatus
+	}
+	if providerPaymentID == "" {
+		return ErrInvalidPayment
+	}
+	p.ProviderPaymentID = &providerPaymentID
+	if paymentURL != "" {
+		p.PaymentURL = &paymentURL
+	}
+	p.UpdatedAt = now.UTC()
+	return nil
+}
+
+// RecordChargeAttempt counts one charge attempt that ended with an unresolved
+// provider outcome (still pending or unexpected). The renewal worker caps
+// these via the configured ChargeAttemptLimit and then fails the payment with
+// grace entry, so a permanently unresolved charge cannot keep an expired
+// subscription active forever (issue #252). Outcomes the worker can resolve —
+// a definitive success or failure — never pass through here.
+func (p *SubscriptionPayment) RecordChargeAttempt() {
+	p.ChargeAttempts++
+}
+
+// MarkSucceeded finalizes a pending payment as succeeded.
 func (p *SubscriptionPayment) MarkSucceeded(now time.Time) error {
 	if p.Status != PaymentStatusPending {
 		return ErrInvalidPaymentStatus
@@ -96,8 +157,8 @@ func (p *SubscriptionPayment) MarkSucceeded(now time.Time) error {
 	return nil
 }
 
-// MarkFailed transitions the payment to failed and records an optional error code.
-// Only pending payments can be transitioned.
+// MarkFailed finalizes a pending payment as failed and records the provider
+// error code when one was reported.
 func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error {
 	if p.Status != PaymentStatusPending {
 		return ErrInvalidPaymentStatus
@@ -108,38 +169,10 @@ func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error
 	return nil
 }
 
-// BeginRefund atomically reserves the payment for an in-flight refund by moving
-// it to the internal refunding status. Only succeeded or pending payments can
-// begin a refund. The reservation is taken before the external provider cancel
-// call so that concurrent refund attempts are rejected instead of refunding the
-// payment twice. refunding is an internal, non-final state.
-func (p *SubscriptionPayment) BeginRefund(now time.Time) error {
-	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending {
-		return ErrInvalidPaymentStatus
-	}
-	p.Status = PaymentStatusRefunding
-	p.UpdatedAt = now.UTC()
-	return nil
-}
-
-// MarkRefunded transitions the payment to refunded (full amount only).
-// Only succeeded, pending, or refunding (an in-flight refund reservation)
-// payments can be refunded.
-func (p *SubscriptionPayment) MarkRefunded(now time.Time) error {
-	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending && p.Status != PaymentStatusRefunding {
-		return ErrInvalidPaymentStatus
-	}
-	now = now.UTC()
-	p.UpdatedAt = now
-	p.RefundedAmountKopecks = &p.AmountKopecks
-	p.Status = PaymentStatusRefunded
-	return nil
-}
-
-// ReconcileToSucceeded transitions a failed payment to succeeded after an
-// explicit provider-side status check. It is used for out-of-order webhooks
-// where the provider reports success after the system has already marked the
-// payment as failed.
+// ReconcileToSucceeded moves a failed payment back to succeeded after the
+// provider — the source of truth (ADR 0010) — confirmed the charge was
+// captured. Used for out-of-order webhook deliveries where a succeeded
+// notification arrives after the payment was already marked failed.
 func (p *SubscriptionPayment) ReconcileToSucceeded(now time.Time) error {
 	if p.Status != PaymentStatusFailed {
 		return ErrInvalidPaymentStatus
@@ -152,27 +185,31 @@ func (p *SubscriptionPayment) ReconcileToSucceeded(now time.Time) error {
 	return nil
 }
 
-// ReconcileToRefunded transitions a failed payment to refunded after an
-// explicit provider-side status check. It is used for out-of-order webhooks
-// where the provider reports a successful refund after the system has already
-// marked the payment as failed.
-func (p *SubscriptionPayment) ReconcileToRefunded(now time.Time) error {
-	if p.Status != PaymentStatusFailed {
+// BeginRefund reserves the payment for a full refund (issue #254): the
+// internal refunding state is the double-refund guard — the reservation
+// transaction moves the payment into it atomically, so a concurrent refund
+// loses the race and never reaches the provider. A succeeded payment (the
+// captured charge) and a still-pending one (the provider may have captured it
+// while the webhook was lost) can be reserved; every terminal or already
+// reserved state is rejected.
+func (p *SubscriptionPayment) BeginRefund(now time.Time) error {
+	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending {
 		return ErrInvalidPaymentStatus
 	}
-	now = now.UTC()
-	p.UpdatedAt = now
-	p.RefundedAmountKopecks = &p.AmountKopecks
-	p.Status = PaymentStatusRefunded
+	p.Status = PaymentStatusRefunding
+	p.UpdatedAt = now.UTC()
 	return nil
 }
 
-// RevertRefund rolls back an in-flight refund reservation, restoring the
-// payment to its previous status. It is used as compensation when the external
-// provider cancel call fails or returns a non-refund status. Only payments in
-// the refunding state can be reverted.
-func (p *SubscriptionPayment) RevertRefund(now time.Time, prev PaymentStatus) error {
+// RevertRefundReservation rolls the refunding reservation back to the status
+// the payment had before it was reserved — the compensation step of the refund
+// saga when the provider reports the refund did not happen (issue #254). Only
+// the statuses BeginRefund accepts can be restored.
+func (p *SubscriptionPayment) RevertRefundReservation(prev PaymentStatus, now time.Time) error {
 	if p.Status != PaymentStatusRefunding {
+		return ErrInvalidPaymentStatus
+	}
+	if prev != PaymentStatusSucceeded && prev != PaymentStatusPending {
 		return ErrInvalidPaymentStatus
 	}
 	p.Status = prev
@@ -180,13 +217,30 @@ func (p *SubscriptionPayment) RevertRefund(now time.Time, prev PaymentStatus) er
 	return nil
 }
 
-// IsFinalized reports whether the payment has reached a terminal state.
-func (p *SubscriptionPayment) IsFinalized() bool {
-	switch p.Status {
-	case PaymentStatusSucceeded, PaymentStatusFailed, PaymentStatusRefunded, PaymentStatusPartialRefunded:
-		return true
-	case PaymentStatusPending, PaymentStatusRefunding:
-		return false
+// StatusBeforeRefundReservation reconstructs the status the payment had before
+// the refunding reservation from its persisted shape: the reservation is taken
+// from succeeded or pending only, and a payment whose charge was captured
+// carries succeeded_at. Callers that hold the payment from before the
+// reservation capture the status directly; this serves the paths that read the
+// payment after the fact (the reconciliation worker).
+func (p *SubscriptionPayment) StatusBeforeRefundReservation() PaymentStatus {
+	if p.SucceededAt != nil {
+		return PaymentStatusSucceeded
 	}
-	return false
+	return PaymentStatusPending
+}
+
+// MarkRefunded records a full refund of the payment. Refunds are always
+// full-amount (ADR 0037); the subscription-side effects of a refund land with
+// the admin refund flow (issue #254).
+func (p *SubscriptionPayment) MarkRefunded(now time.Time) error {
+	if p.Status != PaymentStatusSucceeded && p.Status != PaymentStatusPending && p.Status != PaymentStatusRefunding {
+		return ErrInvalidPaymentStatus
+	}
+	now = now.UTC()
+	amount := p.AmountKopecks
+	p.RefundedAmountKopecks = &amount
+	p.Status = PaymentStatusRefunded
+	p.UpdatedAt = now
+	return nil
 }

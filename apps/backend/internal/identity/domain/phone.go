@@ -18,13 +18,7 @@ func NewPhone(raw string) (Phone, error) {
 	if err != nil {
 		return Phone{}, err
 	}
-	return PhoneFrom(normalized), nil
-}
-
-// PhoneFrom creates a Phone from an already-normalized/trusted string.
-// It is intended for trusted sources such as the database.
-func PhoneFrom(normalized string) Phone {
-	return Phone{value: normalized}
+	return Phone{value: normalized}, nil
 }
 
 // String returns the canonical phone string.

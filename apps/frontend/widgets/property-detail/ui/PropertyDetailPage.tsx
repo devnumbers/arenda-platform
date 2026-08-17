@@ -13,15 +13,15 @@ import {
     useProperty,
     useUnarchiveProperty,
     useUpdateProperty
-} from '@/features/properties/api/hooks';
-import {useCompleteLease, usePropertyLeases,} from '@/features/leases/api/hooks';
+} from '@/features/properties';
+import {useCompleteLease, usePropertyLeases,} from '@/features/leases';
 import {
     type OperationsFilters,
     useOperations,
     usePropertyOperationsSummary,
-} from '@/features/operations/api/hooks';
-import {useOperationCategories} from '@/features/operation-categories/api';
-import {formatDateForApi} from '@/entities/operation/lib/dates';
+} from '@/features/operations';
+import {useOperationCategories} from '@/features/operation-categories';
+import {formatDateForApi} from '@/entities/operation';
 import {ApiError} from '@/shared/api/errors';
 import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';

@@ -7,14 +7,14 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { authKeys } from '@/features/auth/api/keys';
-import { mapMeResponse } from '@/entities/user/model/mappers';
+import { authKeys } from '@/shared/api/query-keys';
+import { mapMeResponse } from '@/entities/user';
 import type {
   User,
   UserUpdateCommand,
   SendPhoneChangeCodeCommand,
   ChangePhoneCommand,
-} from '@/entities/user/model/types';
+} from '@/entities/user';
 
 export function useUpdateMe(): UseMutationResult<
   User,

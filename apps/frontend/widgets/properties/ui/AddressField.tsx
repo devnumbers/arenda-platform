@@ -1,7 +1,7 @@
 'use client';
 
 import {type ChangeEvent, type JSX, type KeyboardEvent, useCallback, useEffect, useState} from 'react';
-import {useAddressSuggestions} from '@/features/properties/api';
+import {useAddressSuggestions} from '@/features/properties';
 import {useDebounce} from '@/shared/lib/hooks/useDebounce';
 import {Select} from '@/shared/ui/select';
 

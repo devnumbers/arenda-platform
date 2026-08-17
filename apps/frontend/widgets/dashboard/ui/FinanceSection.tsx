@@ -5,12 +5,12 @@ import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
 import {BoldWallet} from '@/shared/assets/icons';
-import type {Property} from '@/entities/property/model/types';
+import type {Property} from '@/entities/property';
 import {useOperationsForProperties} from '../lib/use-operations-for-properties';
 import {aggregateOperations} from '../lib/finance-aggregator';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {EmptyState} from '@/shared/ui/empty-state';
-import {SectionHeader} from './SectionHeader';
+import {SectionHeader} from '@/shared/ui/section-header';
 import styles from './FinanceSection.module.css';
 
 type FinanceSectionProps = {

@@ -10,513 +10,421 @@ import (
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
-// pendingCardBindingTTL is the lifetime of a T-Kassa AddCard bank-form
-// session: the form expires after 2 days, so a placeholder older than that can
-// never complete and is dropped by the sync without polling the provider.
-const pendingCardBindingTTL = 48 * time.Hour
+// methodBindingProvider is the narrow provider slice the payment-method
+// service needs: starting and polling binding sessions, detaching saved
+// methods, and the provider identity. Declared here, at the consumer, per
+// ADR 0035.
+type methodBindingProvider interface {
+	PaymentMethodBinder
+	PaymentMethodBindingReader
+	PaymentMethodRemover
+	ProviderNamer
+}
 
-// PaymentMethodService manages the user's saved payment methods.
+// RawTokenMethodAcceptor is the provider capability of accepting a raw charge
+// token synchronously (the fake adapter for local runs). Bank-form providers
+// such as T-Kassa do not implement it: per the frozen contract a providerToken
+// they receive is ignored and the binding flow runs instead — an arbitrary
+// client-supplied token must never become a chargeable method there.
+type RawTokenMethodAcceptor interface {
+	AddPaymentMethodFromToken(ctx context.Context, customerRef, token string) (SavedMethod, error)
+}
+
+// PaymentMethodService manages the user's saved payment methods (issue #251):
+// the card-binding flow (initiation, polling, completion), activation of the
+// single active method, deletion, and the method list.
 type PaymentMethodService struct {
-	deps     paymentMethodServiceDeps
-	checker  PaymentMethodInUseChecker
-	provider CardProvider
+	txStoreFactory
+	provider methodBindingProvider
+	clock    clock.Clock
+	config   Config
+	log      *slog.Logger
 }
 
-// NewPaymentMethodService creates a PaymentMethodService.
-func NewPaymentMethodService(deps paymentMethodServiceDeps, checker PaymentMethodInUseChecker, provider CardProvider) *PaymentMethodService {
-	return &PaymentMethodService{deps: deps, checker: checker, provider: provider}
+// PaymentMethodServiceConfig carries the non-transactional dependencies of the
+// payment-method service.
+type PaymentMethodServiceConfig struct {
+	Config Config
+	Clock  clock.Clock
+	Log    *slog.Logger
 }
 
-// AddPaymentMethod stores a new inactive payment method for the user.
-// For the fake provider the method is created synchronously from the raw token.
-// For T-Kassa a bank-form flow is initiated and the confirmation URL is returned.
-func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid.UUID, req AddPaymentMethodRequest) (AddPaymentMethodResponse, error) {
-	if s.provider.Name() == domain.ProviderFake {
-		pm, err := domain.NewPaymentMethod(
-			userID,
-			s.provider.Name(),
-			req.ProviderToken,
-			maskToken(req.ProviderToken),
-			s.deps.clock.Now().UTC(),
-		)
-		if err != nil {
-			return AddPaymentMethodResponse{}, fmt.Errorf("create payment method: %w", err)
-		}
-
-		tx, err := s.deps.beginner.Begin(ctx)
-		if err != nil {
-			return AddPaymentMethodResponse{}, fmt.Errorf("begin transaction: %w", err)
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
-
-		txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
-		if err != nil {
-			return AddPaymentMethodResponse{}, fmt.Errorf("bind payment methods transaction: %w", err)
-		}
-
-		pm, err = txPaymentMethods.Create(ctx, pm)
-		if err != nil {
-			return AddPaymentMethodResponse{}, fmt.Errorf("save payment method: %w", err)
-		}
-
-		if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-			ActorID:    &userID,
-			ActorRole:  auditdomain.ActorRoleOwner,
-			Action:     auditdomain.ActionPaymentMethodAdded,
-			EntityType: auditdomain.EntityPaymentMethod,
-			EntityID:   &pm.ID,
-		}); err != nil {
-			return AddPaymentMethodResponse{}, fmt.Errorf("record audit: %w", err)
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return AddPaymentMethodResponse{}, fmt.Errorf("commit add payment method transaction: %w", err)
-		}
-
-		return AddPaymentMethodResponse{PaymentMethod: &pm}, nil
+// NewPaymentMethodService creates a payment-method service over the shared
+// factory.
+func NewPaymentMethodService(factory txStoreFactory, provider methodBindingProvider, cfg PaymentMethodServiceConfig) *PaymentMethodService {
+	if cfg.Clock == nil {
+		cfg.Clock = clock.Real{}
 	}
+	if cfg.Log == nil {
+		cfg.Log = slog.Default()
+	}
+	return &PaymentMethodService{
+		txStoreFactory: factory,
+		provider:       provider,
+		clock:          cfg.Clock,
+		config:         cfg.Config,
+		log:            cfg.Log,
+	}
+}
 
-	successURL, failURL := tkassaAddCardReturnURLs(s.deps.callbackBaseURL)
-	result, err := s.provider.InitAddCard(ctx, InitAddCardRequest{
-		UserID:          userID,
-		CustomerKey:     userID.String(),
-		CheckType:       CardCheckType3DSHold,
-		SuccessURL:      successURL,
-		FailURL:         failURL,
-		NotificationURL: tkassaNotificationURL(s.deps.callbackBaseURL),
+// AddPaymentMethod serves POST /subscription/payment-methods (issue #251).
+// A raw provider token creates the method directly — but only through a
+// provider that accepts raw tokens (the fake); bank-form providers ignore the
+// token per the contract and run the binding session, whose confirmation URL
+// the payer follows. Both paths converge on the same end state — a saved
+// method that is the user's single active one and the subscription's charge
+// target.
+func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid.UUID, req AddPaymentMethodRequest) (AddPaymentMethodResult, error) {
+	if s.provider == nil {
+		// No provider wired (pre-#250 construction): refuse before anything is
+		// persisted, mirroring the tariff-change flow.
+		return AddPaymentMethodResult{}, ErrPaymentUnavailable
+	}
+	if acceptor, ok := s.provider.(RawTokenMethodAcceptor); ok && req.ProviderToken != "" {
+		return s.addFromToken(ctx, acceptor, userID, req.ProviderToken)
+	}
+	return s.startBinding(ctx, userID)
+}
+
+// addFromToken creates the payment method from a raw provider token — the
+// synchronous counterpart of a completed binding, so local runs and tests
+// reach the same end state. The token itself is accepted by the provider (the
+// capability the caller checked), never trusted raw.
+func (s *PaymentMethodService) addFromToken(ctx context.Context, acceptor RawTokenMethodAcceptor, userID uuid.UUID, token string) (AddPaymentMethodResult, error) {
+	saved, err := acceptor.AddPaymentMethodFromToken(ctx, userID.String(), token)
+	if err != nil {
+		return AddPaymentMethodResult{}, fmt.Errorf("add payment method from token at provider: %w", err)
+	}
+	now := s.clock.Now().UTC()
+	method, err := domain.NewPaymentMethod(userID, s.provider.Name(), saved.ChargeToken, now)
+	if err != nil {
+		return AddPaymentMethodResult{}, err
+	}
+	method.ProviderCardID = saved.ProviderMethodID
+	method.DisplayMask = saved.MaskedPan
+	method.ExpDate = saved.ExpDate
+
+	var created domain.PaymentMethod
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var applyErr error
+		// No binding session backs the token path; nil keeps the completion
+		// shared with the binding flows.
+		created, applyErr = applyCompletedCardBinding(ctx, stores, s.log, method, nil, now)
+		return applyErr
 	})
 	if err != nil {
-		return AddPaymentMethodResponse{}, sanitize.Wrap(err, "init add card")
+		return AddPaymentMethodResult{}, err
 	}
-
-	// Note on T-Kassa error 510 ("card already bound to this CustomerKey"): it
-	// cannot surface in this initiation flow, because the AddCard request
-	// carries no card data — only the CustomerKey. A duplicate card instead
-	// appears as the binding result or is already present in GetCardList, so no
-	// idempotency handling is needed here.
-
-	// Persist a pending binding placeholder keyed by the RequestKey so
-	// SyncPaymentMethods can poll GetAddCardState when the AddCard webhook is
-	// not delivered (for example on demo terminals without a notification URL).
-	// The placeholder token carries the PendingCardBindingTokenPrefix so it is
-	// explicitly distinguishable from real card rows that store a raw RebillId
-	// (webhook, sync and RebillId-recovery paths). The placeholder is internal:
-	// it is hidden from ListPaymentMethods and is dropped by the sync once the
-	// binding completes or expires. Persistence is best-effort: when the row
-	// cannot be saved the webhook path still binds the card, only the polling
-	// fallback is lost.
-	if s.provider.Name() == domain.ProviderTkassa && result.RequestKey != "" {
-		pending, pmErr := domain.NewPaymentMethod(userID, s.provider.Name(), domain.PendingCardBindingToken(result.RequestKey), "", s.deps.clock.Now().UTC())
-		if pmErr != nil {
-			return AddPaymentMethodResponse{}, fmt.Errorf("create pending card binding: %w", pmErr)
-		}
-		if _, pmErr := s.deps.paymentMethods.Create(ctx, pending); pmErr != nil {
-			s.deps.log.WarnContext(ctx, "failed to persist pending card binding; sync polling fallback disabled for this binding",
-				slog.String("user_id", userID.String()),
-				slog.String("error", sanitize.Error(pmErr)))
-		}
-	}
-
-	return AddPaymentMethodResponse{ConfirmURL: result.PaymentURL}, nil
+	return AddPaymentMethodResult{PaymentMethod: &created}, nil
 }
 
-// SetActivePaymentMethod activates the given payment method for the user and
-// makes it the active method for subscription renewals.
-func (s *PaymentMethodService) SetActivePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
-	tx, err := s.deps.beginner.Begin(ctx)
+// startBinding initiates the card-binding session at the provider and persists
+// it with its TTL (issue #251). The provider call runs first: a crash before
+// the row is saved leaves a provider-side session that expires harmlessly —
+// never a local session without a provider counterpart.
+func (s *PaymentMethodService) startBinding(ctx context.Context, userID uuid.UUID) (AddPaymentMethodResult, error) {
+	result, err := s.provider.BindPaymentMethod(ctx, BindMethodRequest{CustomerRef: userID.String()})
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return AddPaymentMethodResult{}, fmt.Errorf("bind payment method at provider: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
-	txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
+	now := s.clock.Now().UTC()
+	session, err := domain.NewCardBindingSession(userID, s.provider.Name(), result.BindingID, now.Add(s.config.CardBindingTTL), now)
 	if err != nil {
-		return fmt.Errorf("bind payment methods transaction: %w", err)
+		return AddPaymentMethodResult{}, err
 	}
-	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind subscriptions transaction: %w", err)
+	if _, err := s.bindings.Create(ctx, session); err != nil {
+		return AddPaymentMethodResult{}, fmt.Errorf("save card binding session: %w", err)
 	}
-
-	// A pending card-binding placeholder is internal sync state, not a usable
-	// payment method: activating it must behave as if the row did not exist.
-	pm, err := txPaymentMethods.GetByID(ctx, methodID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentMethodNotFound
-		}
-		return fmt.Errorf("get payment method: %w", err)
-	}
-	if pm.PendingCardBindingRequestKey() != "" {
-		return ErrPaymentMethodNotFound
-	}
-
-	if err := txPaymentMethods.SetActive(ctx, userID, methodID); err != nil {
-		return fmt.Errorf("set active payment method: %w", err)
-	}
-
-	sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrSubscriptionNotFound
-		}
-		return fmt.Errorf("get subscription: %w", err)
-	}
-	sub.SetActivePaymentMethod(methodID)
-	if err := txSubscriptions.Update(ctx, sub); err != nil {
-		return fmt.Errorf("update subscription active payment method: %w", err)
-	}
-
-	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionPaymentMethodActivated,
-		EntityType: auditdomain.EntityPaymentMethod,
-		EntityID:   &methodID,
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit set active payment method transaction: %w", err)
-	}
-	return nil
+	return AddPaymentMethodResult{ConfirmURL: result.FormURL}, nil
 }
 
-// DeletePaymentMethod removes a payment method belonging to the user.
-// Existence, ownership, the active-method guard and the in-use check all run
-// inside a single transaction so they cannot race with concurrent updates.
-// For T-Kassa the provider card is detached best-effort afterwards, so a
-// provider failure cannot leave the local row in place.
-func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind payment methods transaction: %w", err)
-	}
-
-	txChecker, err := s.checker.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind in-use checker transaction: %w", err)
-	}
-
-	pm, err := txPaymentMethods.GetByID(ctx, methodID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentMethodNotFound
-		}
-		return fmt.Errorf("get payment method: %w", err)
-	}
-	if pm.UserID != userID {
-		return ErrPaymentMethodNotFound
-	}
-	if pm.IsActive {
-		return ErrPaymentMethodInUse
-	}
-
-	inUse, err := txChecker.IsInUse(ctx, methodID)
-	if err != nil {
-		return fmt.Errorf("check payment method in use: %w", err)
-	}
-	if inUse {
-		return ErrPaymentMethodInUse
-	}
-
-	if err := txPaymentMethods.Delete(ctx, userID, methodID); err != nil {
-		return fmt.Errorf("delete payment method: %w", err)
-	}
-
-	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionPaymentMethodDeleted,
-		EntityType: auditdomain.EntityPaymentMethod,
-		EntityID:   &methodID,
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit delete payment method transaction: %w", err)
-	}
-
-	// The local row is gone; detach the card at the provider best-effort. A
-	// provider failure must not fail the operation since the method is already deleted.
-	if s.provider.Name() == domain.ProviderTkassa && pm.ProviderCardID != "" {
-		if err := s.provider.RemoveCard(ctx, userID.String(), pm.ProviderCardID); err != nil {
-			if errors.Is(err, ErrProviderCardNotFound) {
-				s.deps.log.WarnContext(ctx, "provider card already removed; continuing local deletion",
-					slog.String("payment_method_id", methodID.String()),
-					slog.String("provider_card_id", maskCardID(pm.ProviderCardID)))
-			} else {
-				s.deps.log.ErrorContext(ctx, "failed to remove provider card after payment method deletion",
-					slog.String("payment_method_id", methodID.String()),
-					slog.String("provider_card_id", maskCardID(pm.ProviderCardID)),
-					slog.String("error", sanitize.Error(err)))
-			}
-		}
-	}
-
-	return nil
-}
-
-// ListPaymentMethods returns all payment methods for the user. Pending
-// card-binding placeholders are internal sync state and are not returned.
+// ListPaymentMethods serves GET /subscription/payment-methods: the user's
+// saved methods, newest first.
 func (s *PaymentMethodService) ListPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
-	list, err := s.deps.paymentMethods.ListByUserID(ctx, userID)
+	methods, err := s.methods.ListByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list payment methods: %w", err)
 	}
-	return filterPendingCardBindings(list), nil
+	return methods, nil
 }
 
-// filterPendingCardBindings drops pending card-binding placeholders: they are
-// internal sync state, not usable payment methods, and must not be shown to
-// users or activated.
-func filterPendingCardBindings(methods []domain.PaymentMethod) []domain.PaymentMethod {
-	out := make([]domain.PaymentMethod, 0, len(methods))
-	for _, m := range methods {
-		if m.PendingCardBindingRequestKey() != "" {
-			continue
+// ActivatePaymentMethod serves POST /subscription/payment-methods/{id}/activate
+// (issue #251): the method becomes the user's single active one — the partial
+// unique index is the durable exactly-one-active invariant — and the
+// subscription's charge target, so renewals run on the newly chosen card.
+func (s *PaymentMethodService) ActivatePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
+	return s.runInTx(ctx, func(stores *txStores) error {
+		if _, err := stores.methodForUpdate(ctx, userID, methodID); err != nil {
+			return err
 		}
-		out = append(out, m)
-	}
-	return out
+		if err := stores.methods.SetActive(ctx, userID, methodID); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrPaymentMethodNotFound
+			}
+			return fmt.Errorf("set active payment method: %w", err)
+		}
+		// Unlike the binding completion, an explicit activation requires the
+		// subscription: renewals are what the user is choosing the method for.
+		sub, err := stores.subscriptionForUpdate(ctx, userID)
+		if err != nil {
+			return err
+		}
+		sub.SetActivePaymentMethod(methodID)
+		if err := stores.subscriptions.Update(ctx, sub); err != nil {
+			return fmt.Errorf("update subscription active payment method: %w", err)
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPaymentMethodActivated,
+			EntityType: auditdomain.EntityPaymentMethod,
+			EntityID:   &methodID,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
-// SyncPaymentMethods imports the cards bound at the provider into local payment
-// methods and returns the user's up-to-date list. It is the self-healing path
-// for card binding when the AddCard webhook is not delivered (for example on
-// demo terminals without a configured notification URL).
-//
-// Before importing, every pending card-binding placeholder created by
-// AddPaymentMethod is polled via GetAddCardState: a completed binding is
-// imported from the binding state (CardID/RebillID) even when GetCardList does
-// not report the card yet, a rejected binding or a RequestKey the provider no
-// longer knows (error 502) is dropped as expired, and intermediate statuses
-// keep the binding pending. A placeholder older than pendingCardBindingTTL is
-// dropped without polling: the AddCard form has expired, so the binding can
-// never complete. Only cards the provider reports as active with a
-// recurrent token are imported, and the upsert is keyed by token hash, so
-// repeated syncs and webhook deliveries converge on the same row. A freshly
-// completed binding becomes the active method, mirroring the AddCard webhook
-// flow; otherwise, when the user has no active method after the import, the
-// freshest imported card is activated and linked to the subscription. A
-// customer that does not exist at the provider yet (never paid or bound a
-// card) is treated as "no cards": the sync returns the local list unchanged.
-// The method is idempotent.
-func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
-	existing, err := s.deps.paymentMethods.ListByUserID(ctx, userID)
+// DeletePaymentMethod serves DELETE /subscription/payment-methods/{id}
+// (issue #251). The active method cannot be deleted until another one is
+// activated — subscription renewals need a charge target. The provider-side
+// card is detached best-effort after the local row is gone, so a provider
+// failure cannot resurrect the deleted method.
+func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, methodID uuid.UUID) error {
+	var deleted domain.PaymentMethod
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		method, err := stores.methodForUpdate(ctx, userID, methodID)
+		if err != nil {
+			return err
+		}
+		if method.IsActive {
+			return ErrPaymentMethodInUse
+		}
+		if err := stores.methods.Delete(ctx, userID, methodID); err != nil {
+			return fmt.Errorf("delete payment method: %w", err)
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPaymentMethodDeleted,
+			EntityType: auditdomain.EntityPaymentMethod,
+			EntityID:   &methodID,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		deleted = method
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("list payment methods before sync: %w", err)
+		return err
 	}
 
-	// Poll pending card bindings by RequestKey. The provider calls happen
-	// outside of any database transaction. completed holds the confirmed
-	// bindings to import; stale holds placeholder rows to drop (completed,
-	// rejected or expired bindings).
-	var completed []CardBindingState
-	var stale []uuid.UUID
-	now := s.deps.clock.Now().UTC()
-	for i := range existing {
-		requestKey := existing[i].PendingCardBindingRequestKey()
-		if requestKey == "" {
+	// The local row is gone; detach the card at the provider best-effort. A
+	// provider failure must not fail the operation since the method is
+	// already deleted.
+	if s.provider != nil && deleted.ProviderCardID != "" {
+		if err := s.provider.RemovePaymentMethod(ctx, userID.String(), deleted.ProviderCardID); err != nil {
+			if errors.Is(err, ErrProviderMethodNotFound) {
+				s.log.WarnContext(ctx, "provider card already removed; continuing local deletion",
+					slog.String("payment_method_id", methodID.String()))
+			} else {
+				s.log.ErrorContext(ctx, "failed to remove provider card after payment method deletion",
+					slog.String("payment_method_id", methodID.String()),
+					slog.String("error", err.Error()))
+			}
+		}
+	}
+	return nil
+}
+
+// SyncPaymentMethods serves POST /subscription/payment-methods/sync
+// (issue #251): the self-healing path when the add-card webhook was not
+// delivered. Every open binding session of the user is polled at the
+// provider: a completed binding produces (and activates) the payment method
+// exactly like the webhook would, a failed or provider-forgotten binding is
+// closed, and an expired session is closed without polling — it can never
+// complete. The method is idempotent and returns the user's up-to-date list.
+func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
+	sessions, err := s.bindings.ListOpenByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list card binding sessions: %w", err)
+	}
+
+	now := s.clock.Now().UTC()
+	for _, session := range sessions {
+		if s.provider == nil {
+			break // nothing to poll without a provider; sessions expire by TTL
+		}
+		if session.IsExpired(now) {
+			// The binding form has expired: the binding can never complete,
+			// so close the session without polling the provider.
+			s.closeBindingSession(ctx, session, now)
 			continue
 		}
-		if existing[i].CreatedAt.Add(pendingCardBindingTTL).Before(now) {
-			// The AddCard bank form has expired: the binding can never
-			// complete, so drop the placeholder without polling the provider.
-			stale = append(stale, existing[i].ID)
-			continue
-		}
-		state, stateErr := s.provider.GetAddCardState(ctx, requestKey)
-		if stateErr != nil {
-			if code := providerErrorCode(stateErr); code != nil && *code == "502" {
-				// The provider no longer knows the RequestKey: the binding
-				// session expired without completing.
-				stale = append(stale, existing[i].ID)
+		state, pollErr := s.provider.PaymentMethodBinding(ctx, session.RequestKey)
+		if pollErr != nil {
+			if errors.Is(pollErr, ErrProviderBindingNotFound) {
+				// The provider no longer knows the request key: the binding
+				// expired provider-side and can never complete.
+				s.closeBindingSession(ctx, session, now)
 				continue
 			}
-			s.deps.log.WarnContext(ctx, "sync payment methods: failed to query add card state; keeping binding pending",
+			s.log.WarnContext(ctx, "sync payment methods: failed to poll binding state; keeping session open",
 				slog.String("user_id", userID.String()),
-				slog.String("payment_method_id", existing[i].ID.String()),
-				slog.String("error", sanitize.Error(stateErr)))
+				slog.String("binding_id", session.RequestKey),
+				slog.String("error", pollErr.Error()))
 			continue
 		}
 		switch state.Status {
-		case CardBindingStatusCompleted:
-			if state.RebillID == "" {
-				s.deps.log.WarnContext(ctx, "sync payment methods: completed card binding has no rebill id; keeping binding pending",
+		case MethodBindingCompleted:
+			if state.Method == nil || state.Method.ChargeToken == "" {
+				s.log.WarnContext(ctx, "sync payment methods: completed binding has no charge token; keeping session open",
 					slog.String("user_id", userID.String()),
-					slog.String("payment_method_id", existing[i].ID.String()))
+					slog.String("binding_id", session.RequestKey))
 				continue
 			}
-			completed = append(completed, state)
-			stale = append(stale, existing[i].ID)
-		case CardBindingStatusRejected:
-			stale = append(stale, existing[i].ID)
-		default:
-			// NEW, FORM_SHOWED, 3DS_CHECKING, 3DS_CHECKED, AUTHORIZING,
-			// AUTHORIZED: the binding is still in flight; keep it pending.
+			s.completeBindingSession(ctx, session, *state.Method, now)
+		case MethodBindingFailed:
+			s.closeBindingSession(ctx, session, now)
+		case MethodBindingPending:
+			// Still in flight; the session stays open until the webhook, a
+			// later sync, or its TTL resolves it.
 		}
 	}
 
-	cards, err := s.provider.GetCardList(ctx, userID.String())
-	if err != nil {
-		if errors.Is(err, ErrProviderCustomerNotFound) {
-			return s.ListPaymentMethods(ctx, userID)
-		}
-		if errors.Is(err, ErrProviderTerminalNotFound) {
-			s.deps.log.WarnContext(ctx, "sync payment methods: terminal not found at provider; returning local list",
-				slog.String("user_id", userID.String()),
-				slog.String("error", sanitize.Error(err)))
-			return s.ListPaymentMethods(ctx, userID)
-		}
-		return nil, sanitize.Wrap(err, "get card list")
-	}
-
-	var importable []ProviderCard
-	for _, card := range cards {
-		if card.Status != ProviderCardStatusActive || card.RebillID == "" {
-			continue
-		}
-		importable = append(importable, card)
-	}
-
-	// Cards confirmed via GetAddCardState may not appear in GetCardList yet;
-	// import them from the binding state so the sync still converges. Pan and
-	// ExpDate stay empty until a later sync fills them from GetCardList.
-	known := make(map[string]bool, len(importable))
-	for _, card := range importable {
-		known[card.RebillID] = true
-	}
-	completedRebill := make(map[string]bool, len(completed))
-	for _, state := range completed {
-		completedRebill[state.RebillID] = true
-		if !known[state.RebillID] {
-			importable = append(importable, ProviderCard{
-				CardID:   state.CardID,
-				RebillID: state.RebillID,
-				Status:   ProviderCardStatusActive,
-			})
-		}
-	}
-
-	if len(importable) == 0 && len(stale) == 0 {
-		return s.ListPaymentMethods(ctx, userID)
-	}
-
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txPaymentMethods, err := s.deps.paymentMethods.WithTx(tx)
-	if err != nil {
-		return nil, fmt.Errorf("bind payment methods transaction: %w", err)
-	}
-	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
-	if err != nil {
-		return nil, fmt.Errorf("bind subscriptions transaction: %w", err)
-	}
-
-	// The import upserts are deliberately not audited as payment_method.added:
-	// the idempotent UpsertByTokenHash (ON CONFLICT) cannot distinguish an
-	// insert from an update, and the AddCard webhook flow already records the
-	// user-visible addition.
-	var freshest *domain.PaymentMethod
-	var boundMethod *domain.PaymentMethod
-	for _, card := range importable {
-		pm, err := domain.NewPaymentMethod(userID, s.provider.Name(), card.RebillID, card.Pan, now)
-		if err != nil {
-			return nil, fmt.Errorf("create payment method from provider card: %w", err)
-		}
-		pm.ProviderCardID = card.CardID
-		pm.ExpDate = card.ExpDate
-		pm, err = txPaymentMethods.UpsertByTokenHash(ctx, pm)
-		if err != nil {
-			return nil, fmt.Errorf("upsert synced payment method: %w", err)
-		}
-		if freshest == nil || !pm.CreatedAt.Before(freshest.CreatedAt) {
-			freshest = &pm
-		}
-		if completedRebill[card.RebillID] {
-			boundMethod = &pm
-		}
-	}
-
-	// Drop the binding placeholders: completed ones are replaced by the real
-	// card rows upserted above; rejected or expired ones are abandoned and can
-	// be restarted via AddPaymentMethod. An already-missing row is fine: a
-	// concurrent sync may have dropped it first.
-	for _, id := range stale {
-		if err := txPaymentMethods.Delete(ctx, userID, id); err != nil && !errors.Is(err, ErrNotFound) {
-			return nil, fmt.Errorf("delete resolved card binding placeholder: %w", err)
-		}
-	}
-
-	methods, err := txPaymentMethods.ListByUserID(ctx, userID)
+	methods, err := s.methods.ListByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list payment methods after sync: %w", err)
 	}
+	return methods, nil
+}
 
-	hasActive := false
-	for _, m := range methods {
-		if m.IsActive {
-			hasActive = true
-			break
-		}
-	}
-
-	// A freshly completed binding becomes the active method, mirroring the
-	// AddCard webhook flow. Otherwise only bootstrap activation when nothing
-	// is active yet: an explicit user choice (or a webhook-activated method)
-	// must not be overridden by a sync.
-	activateTarget := boundMethod
-	if activateTarget == nil && !hasActive {
-		activateTarget = freshest
-	}
-	if activateTarget != nil {
-		if err := txPaymentMethods.SetActive(ctx, userID, activateTarget.ID); err != nil {
-			return nil, fmt.Errorf("activate synced payment method: %w", err)
-		}
-
-		// Link the activated card to the subscription so renewals charge the
-		// right method. A missing subscription is not fatal, same as in the
-		// AddCard webhook flow.
-		sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
+// closeBindingSession closes an open session as rejected — the terminal step
+// for bindings that expired, failed, or were forgotten by the provider.
+// Failures are logged, not propagated: the sync continues with the remaining
+// sessions.
+func (s *PaymentMethodService) closeBindingSession(ctx context.Context, session domain.CardBindingSession, now time.Time) {
+	if err := s.runInTx(ctx, func(stores *txStores) error {
+		current, err := stores.bindings.GetByRequestKeyForUpdate(ctx, session.Provider, session.RequestKey)
 		if err != nil {
-			if !errors.Is(err, ErrNotFound) {
-				return nil, fmt.Errorf("get subscription for synced payment method: %w", err)
-			}
-			s.deps.log.WarnContext(ctx, "sync payment methods: subscription not found; skipping active method link",
+			return err
+		}
+		if err := current.MarkRejected(now); err != nil {
+			return err
+		}
+		if err := stores.bindings.UpdateStatus(ctx, current); err != nil {
+			return fmt.Errorf("close card binding session: %w", err)
+		}
+		return nil
+	}); err != nil {
+		s.log.WarnContext(ctx, "sync payment methods: failed to close binding session",
+			slog.String("binding_id", session.RequestKey),
+			slog.String("error", err.Error()))
+	}
+}
+
+// completeBindingSession applies a provider-confirmed binding through the
+// shared completion path. Failures are logged, not propagated: the sync
+// continues with the remaining sessions.
+func (s *PaymentMethodService) completeBindingSession(ctx context.Context, session domain.CardBindingSession, method SavedMethod, now time.Time) {
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		current, err := stores.bindings.GetByRequestKeyForUpdate(ctx, session.Provider, session.RequestKey)
+		if err != nil {
+			return err
+		}
+		bound, err := domain.NewPaymentMethod(current.UserID, current.Provider, method.ChargeToken, now)
+		if err != nil {
+			return err
+		}
+		bound.ProviderCardID = method.ProviderMethodID
+		bound.DisplayMask = method.MaskedPan
+		bound.ExpDate = method.ExpDate
+		_, err = applyCompletedCardBinding(ctx, stores, s.log, bound, &current, now)
+		return err
+	})
+	if err != nil {
+		s.log.WarnContext(ctx, "sync payment methods: failed to complete binding session",
+			slog.String("binding_id", session.RequestKey),
+			slog.String("error", err.Error()))
+	}
+}
+
+// applyCompletedCardBinding applies a confirmed card binding inside the
+// caller's transaction (issue #251): the payment method is upserted by token
+// hash (a re-bound card converges on its row instead of duplicating), the
+// session is marked completed, the method becomes the user's single active
+// one, and the subscription's charge target points at it so renewals charge
+// the new card. session is nil on the synchronous token path. A session that
+// is already resolved (a concurrent delivery won) or expired writes nothing —
+// a repeated delivery is a no-op and an expired session never produces a
+// payment method. A missing subscription is not fatal for the binding itself:
+// the method is still saved and active, only the renewal link is skipped (the
+// webhook flow must not make the provider retry forever).
+func applyCompletedCardBinding(ctx context.Context, stores *txStores, log *slog.Logger, method domain.PaymentMethod, session *domain.CardBindingSession, now time.Time) (domain.PaymentMethod, error) {
+	if session != nil && !session.CanComplete(now) {
+		// The session is already resolved (a concurrent delivery won) or its
+		// lifetime is over — an expired session must never produce a payment
+		// method, so nothing is written at all.
+		return domain.PaymentMethod{}, nil
+	}
+
+	saved, err := stores.methods.UpsertByTokenHash(ctx, method)
+	if err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("save payment method: %w", err)
+	}
+
+	if session != nil {
+		if err := session.MarkCompleted(now); err != nil {
+			return domain.PaymentMethod{}, err
+		}
+		if err := stores.bindings.UpdateStatus(ctx, *session); err != nil {
+			return domain.PaymentMethod{}, fmt.Errorf("complete card binding session: %w", err)
+		}
+	}
+
+	if err := stores.methods.SetActive(ctx, saved.UserID, saved.ID); err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("activate payment method: %w", err)
+	}
+	saved.IsActive = true
+
+	if err := linkSubscriptionToMethod(ctx, stores, log, saved.UserID, saved.ID); err != nil {
+		return domain.PaymentMethod{}, err
+	}
+
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorRole:  auditdomain.ActorRoleSystem,
+		Action:     auditdomain.ActionPaymentMethodAdded,
+		EntityType: auditdomain.EntityPaymentMethod,
+		EntityID:   &saved.ID,
+		Context:    map[string]any{"payment_method_id": saved.ID, "provider": string(saved.Provider)},
+	}); err != nil {
+		return domain.PaymentMethod{}, fmt.Errorf("record audit: %w", err)
+	}
+	return saved, nil
+}
+
+// linkSubscriptionToMethod points the user's subscription at the activated
+// method so renewals charge it. A user without a subscription row is skipped
+// with a warning: the binding completion must not fail over it.
+func linkSubscriptionToMethod(ctx context.Context, stores *txStores, log *slog.Logger, userID, methodID uuid.UUID) error {
+	sub, err := stores.subscriptions.GetByUserIDForUpdate(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			log.WarnContext(ctx, "subscription not found; skipping active payment method link",
 				slog.String("user_id", userID.String()),
-				slog.String("payment_method_id", activateTarget.ID.String()))
-		} else {
-			sub.SetActivePaymentMethod(activateTarget.ID)
-			if err := txSubscriptions.Update(ctx, sub); err != nil {
-				return nil, fmt.Errorf("update subscription active payment method: %w", err)
-			}
+				slog.String("payment_method_id", methodID.String()))
+			return nil
 		}
-
-		methods, err = txPaymentMethods.ListByUserID(ctx, userID)
-		if err != nil {
-			return nil, fmt.Errorf("list payment methods after activation: %w", err)
-		}
+		return fmt.Errorf("get subscription for payment method: %w", err)
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit sync payment methods transaction: %w", err)
+	sub.SetActivePaymentMethod(methodID)
+	if err := stores.subscriptions.Update(ctx, sub); err != nil {
+		return fmt.Errorf("update subscription active payment method: %w", err)
 	}
-
-	return filterPendingCardBindings(methods), nil
+	return nil
 }

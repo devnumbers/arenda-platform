@@ -5,8 +5,8 @@ import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack, RETURN_TO_PARAM} from '@/shared/lib/navigation';
-import {useLease, useUpdateLease} from '@/features/leases/api/hooks';
-import {useTenantContacts} from '@/features/tenant-contacts/api/hooks';
+import {useLease, useUpdateLease} from '@/features/leases';
+import {useTenantContacts} from '@/features/tenant-contacts';
 import {TextField} from '@/shared/ui/text-field';
 import {Select} from '@/shared/ui/select';
 import {Button} from '@/shared/ui/button';
@@ -14,10 +14,10 @@ import {LinkButton} from '@/shared/ui/link-button';
 import {PageHeader} from '@/shared/ui/page-header';
 import {IconButton} from '@/shared/ui/icon-button';
 import {Cancel} from '@/shared/assets/icons';
-import {PropertyDetailSection} from '@/widgets/property-detail';
-import type {components} from '@/shared/api/generated';
-import type {TenantContact} from '@/entities/tenant-contact/model/types';
-import {getTenantContactFullName} from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
+import { DetailSection } from '@/shared/ui/detail-section';
+import type {components} from '@/shared/api/dto';
+import type {TenantContact} from '@/entities/tenant-contact';
+import {getTenantContactFullName} from '@/entities/tenant-contact';
 import {DateSelect} from '@/shared/ui/date-select';
 import {useLeaseEditDraft} from '../lib/use-lease-edit-draft';
 import {PaymentDayPicker} from './PaymentDayPicker';
@@ -332,7 +332,7 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
 
             {!leaseQuery.isPending && leaseQuery.data && (
                 <form className={styles.form} onSubmit={handleSubmit}>
-                    <PropertyDetailSection>
+                    <DetailSection>
                         <h2 className={styles.sectionTitle}>Условия аренды</h2>
                         <div className={styles.fields}>
                             <Select
@@ -418,7 +418,7 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
                                 onChange={handleTextChange('comment')}
                             />
                         </div>
-                    </PropertyDetailSection>
+                    </DetailSection>
 
                     <div className={styles.actions}>
                         <Button

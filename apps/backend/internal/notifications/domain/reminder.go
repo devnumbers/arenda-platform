@@ -26,6 +26,12 @@ const (
 	EventLeaseExpiring       EventType = "lease_expiring"
 	EventLeaseRequiresAction EventType = "lease_requires_action"
 	EventFreeReminder        EventType = "free_reminder"
+	// EventSubscriptionGrace covers the billing subscription grace lifecycle
+	// notices (issue #253): the failed-renewal alert when the subscription
+	// enters grace and the reminder before the grace window ends. One event
+	// type — both moments say the same thing to the user: fix the payment
+	// method or lose the tariff.
+	EventSubscriptionGrace EventType = "subscription_grace"
 )
 
 type ReminderStatus string

@@ -3,12 +3,12 @@
 import type {JSX, ReactNode} from 'react';
 import {Skeleton} from '@heroui/react/skeleton';
 import {Button} from '@/shared/ui/button';
-import type {OperationsFilters} from '@/features/operations/api/hooks';
-import {useOperationsByProperty} from '@/features/operations/api/hooks';
-import {OperationListItem} from '@/widgets/operations/ui/OperationListItem';
-import {PropertyDetailSection} from './PropertyDetailSection';
+import type {OperationsFilters} from '@/features/operations';
+import {useOperationsByProperty} from '@/features/operations';
+import {OperationListItem} from '@/entities/operation';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyOperationsSection.module.css';
-import {SectionHeader} from "@/widgets/dashboard/ui/SectionHeader";
+import {SectionHeader} from '@/shared/ui/section-header';
 
 export type PropertyOperationsSectionProps = {
     readonly propertyId: string;
@@ -32,7 +32,7 @@ export function PropertyOperationsSection({
     const operations = operationsQuery.data?.items ?? [];
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             {badge}
             <SectionHeader title={title} href={href}/>
 
@@ -79,6 +79,6 @@ export function PropertyOperationsSection({
                     ))}
                 </ul>
             )}
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }

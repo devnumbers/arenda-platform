@@ -3,9 +3,9 @@
 import type { JSX } from 'react';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
-import { getTenantContactFullName } from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
+import { getTenantContactFullName } from '@/entities/tenant-contact';
 import { getTenantSubtitle } from '../lib/get-tenant-subtitle';
-import type { TenantContact } from '@/entities/tenant-contact/model/types';
+import type { TenantContact } from '@/entities/tenant-contact';
 import styles from './TenantCard.module.css';
 
 export type TenantCardProps = {

@@ -16,7 +16,7 @@ import { notify } from '@/shared/lib/notifications';
 import {
     useCreateOperationCategory,
     useOperationCategories,
-} from '@/features/operation-categories/api';
+} from '@/features/operation-categories';
 import selectStyles from '@/shared/ui/select/Select.module.css';
 import styles from './CategorySelect.module.css';
 

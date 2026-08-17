@@ -14,9 +14,7 @@ import (
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	leaseshttp "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/http"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationshttp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/http"
@@ -34,18 +32,28 @@ import (
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                     identityapp.Authenticator
-	PhoneChange              identityapp.PhoneChanger
-	Profile                  identityapp.Profiler
-	Logout                   identityapp.Logout
-	Sessions                 identityapp.SessionService
-	Audit                    auditapp.Recorder
-	MeEnricher               identityhttp.MeEnricher
-	Tariffs                  billingapp.Tariffer
-	Subscriptions            billingapp.Subscriber
-	PaymentMethods           billingapp.PaymentMethodManager
-	Payments                 billingapp.PaymentProcessor
-	Webhooks                 billingapp.WebhookHandler
+	Auth                 identityhttp.Authenticator
+	PhoneChange          identityhttp.PhoneChanger
+	Profile              identityhttp.Profiler
+	Logout               identityhttp.Logout
+	Sessions             httpsupport.SessionLoader
+	Audit                auditapp.Recorder
+	MeEnricher           identityhttp.MeEnricher
+	Tariffs              billinghttp.TariffLister
+	AdminTariffs         billinghttp.AdminTariffManager
+	Subscriptions        billinghttp.SubscriptionViewer
+	SubscriptionManagers billinghttp.SubscriptionManager
+	Payments             billinghttp.PaymentManager
+	PaymentMethods       billinghttp.PaymentMethodManager
+	Webhooks             billinghttp.WebhookProcessor
+	AdminPayments        billinghttp.AdminPaymentManager
+	AdminSubscriptions   billinghttp.AdminSubscriptionManager
+	// BillingFakeConfirms serves the local-only fake confirmation endpoints;
+	// non-nil only when the fake provider is active (the billing wiring
+	// constructs it there), so the routes are mounted only in that case —
+	// a production build has no such endpoints at all (issue #287).
+	BillingFakeConfirms      *billinghttp.FakeConfirmHandlers
+	ReadonlyGate             httpsupport.SubscriptionMutationChecker
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
 	PropertyContacts         *propertiesapp.PropertyContactService
@@ -78,7 +86,6 @@ type Deps struct {
 	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
 	ClientErrorsLimiter      *httpsupport.RateLimiter
 	DBPoolStats              func() httpsupport.DBPoolSnapshot
-	DevMode                  bool
 	TrustedProxies           []string
 	AppVersion               string
 }
@@ -115,7 +122,7 @@ func New(deps Deps) http.Handler {
 	r.Use(clientErrorsBodyLimitMiddleware)
 	r.Use(securityHeaders(deps.CookieSecure))
 	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
-	r.Use(httpsupport.ReadonlyMiddleware(deps.Subscriptions, deps.Logger, deps.Clock))
+	r.Use(httpsupport.ReadonlyMiddleware(deps.ReadonlyGate, deps.Logger))
 
 	r.Get("/healthz", httpsupport.HealthHandler(deps.AppVersion))
 
@@ -130,12 +137,13 @@ func New(deps Deps) http.Handler {
 		deps.Logout,
 		deps.CookieSecure,
 		deps.Logger,
-		deps.EmailSendLimiter,
-		deps.EmailVerifyLimiter,
-		deps.PhoneChangeSendLimiter,
-		deps.PhoneChangeVerifyLimiter,
+		identityhttp.AuthRateLimits{
+			Send:              deps.EmailSendLimiter,
+			Verify:            deps.EmailVerifyLimiter,
+			PhoneChangeSend:   deps.PhoneChangeSendLimiter,
+			PhoneChangeVerify: deps.PhoneChangeVerifyLimiter,
+		},
 		deps.MeEnricher,
-		deps.Audit,
 	)
 	propertyHandlers := propertieshttp.NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock, deps.TZResolver)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
@@ -149,7 +157,7 @@ func New(deps Deps) http.Handler {
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	subscriptionHandlers := billinghttp.NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
+	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments, deps.AdminSubscriptions, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
@@ -167,7 +175,7 @@ func New(deps Deps) http.Handler {
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
 		PushSubscriptionHandlers:       pushSubscriptionHandlers,
 		PopupHandlers:                  popupHandlers,
-		SubscriptionHandlers:           subscriptionHandlers,
+		BillingHandlers:                billingHandlers,
 		FinanceHandlers:                financeHandlers,
 		AdminHandlers:                  adminHandlers,
 		CategoryHandlers:               categoryHandlers,
@@ -188,10 +196,18 @@ func New(deps Deps) http.Handler {
 		Handler:          handler,
 		ErrorHandlerFunc: httpsupport.OpenAPIErrorHandler,
 	}
+	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/tariffs", wrapper.ListAdminTariffs)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/tariffs", wrapper.CreateAdminTariff)
+	r.With(httpsupport.AdminOnlyMiddleware).Put("/admin/tariffs/{tariffId}", wrapper.UpdateAdminTariff)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments", wrapper.ListAdminSubscriptionPayments)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments/{paymentId}", wrapper.GetAdminSubscriptionPayment)
 	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/refund", wrapper.RefundSubscriptionPayment)
 	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/service", wrapper.AssignAdminServiceSubscription)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/force-change", wrapper.ForceChangeAdminSubscriptionTariff)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/grace-extension", wrapper.ExtendAdminSubscriptionGrace)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/cancel", wrapper.CancelAdminSubscription)
+	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/subscription/transitions", wrapper.ListAdminSubscriptionTransitions)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users", wrapper.ListAdminUsers)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}", wrapper.GetAdminUser)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/properties", wrapper.ListAdminUserProperties)
@@ -217,6 +233,15 @@ func New(deps Deps) http.Handler {
 	// refresh the list and show the appropriate toast.
 	r.Get("/subscription/payment-methods/add-card/success", addCardReturnHandler(deps.AppBaseURL, true))
 	r.Get("/subscription/payment-methods/add-card/fail", addCardReturnHandler(deps.AppBaseURL, false))
+
+	// The local-only fake confirmation endpoints (issues #250/#251) live
+	// outside the generated contract: the billing wiring constructs their
+	// handlers only under the fake provider, so a production build mounts no
+	// such routes at all (issue #287).
+	if deps.BillingFakeConfirms != nil {
+		r.Post(billinghttp.FakePaymentConfirmRoute, deps.BillingFakeConfirms.ConfirmPayment)
+		r.Post(billinghttp.FakeCardBindingConfirmRoute, deps.BillingFakeConfirms.ConfirmCardBinding)
+	}
 
 	return generated
 }
@@ -284,7 +309,7 @@ type composedHandler struct {
 	*notificationshttp.NotificationPreferenceHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*popupshttp.PopupHandlers
-	*billinghttp.SubscriptionHandlers
+	*billinghttp.BillingHandlers
 	*leaseshttp.FinanceHandlers
 	*adminhttp.AdminHandlers
 	*leaseshttp.CategoryHandlers

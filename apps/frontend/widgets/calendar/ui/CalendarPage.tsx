@@ -9,7 +9,7 @@ import { EmptyState } from '@/shared/ui/empty-state';
 import { IconButton } from '@/shared/ui/icon-button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { PageHeader } from '@/shared/ui/page-header';
-import { useCalendarReminders } from '@/features/reminders/api/hooks';
+import { useCalendarReminders } from '@/features/reminders';
 import { ROUTES } from '@/shared/config/routes';
 import {
   addDays,
@@ -19,7 +19,7 @@ import {
   todayISO,
   weekdayShort,
   weekDates,
-} from '@/entities/calendar/lib/dates';
+} from '@/entities/calendar';
 import {
   calendarEntryStatusLabels,
   calendarEntryTypeLabels,
@@ -27,11 +27,11 @@ import {
   isRecurring,
   mapCalendarEntry,
   propertyDisplayName,
-} from '@/entities/calendar/model/mapping';
+} from '@/entities/calendar';
 import type {
   CalendarEntry,
   CalendarEntryEventType,
-} from '@/entities/calendar/model/types';
+} from '@/entities/calendar';
 import styles from './CalendarPage.module.css';
 
 // operation/system пока ведут в stub — страницы операции/аренды вне скоупа этого тикета.

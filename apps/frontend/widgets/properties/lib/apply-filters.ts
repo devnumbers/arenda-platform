@@ -1,6 +1,6 @@
 import type { PropertyWithLease } from './use-property-list-data';
 import type { PropertyFilters, PropertySort } from './filter-types';
-import { getDisplayStatus } from '@/features/properties/lib/property-statuses';
+import { getDisplayStatus } from '@/features/properties';
 
 export type PropertiesViewMode = 'active' | 'archived';
 

@@ -1,4 +1,4 @@
-export { propertyContactKeys } from './keys';
+export { propertyContactKeys } from '@/shared/api/query-keys';
 export {
   usePropertyContacts,
   useCreatePropertyContact,

@@ -11,17 +11,17 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// RecipientLimiterAdapter bridges billing/application.PropertyLimiter to the
-// access RecipientLimiter port. It keeps the access application free of any
+// RecipientLimiterAdapter bridges the billing subscription property limiter to
+// the access RecipientLimiter port. It keeps the access application free of any
 // billing import: only this adapter layer may depend on both contexts (the
 // DDD boundary sits at the application/domain layer).
 type RecipientLimiterAdapter struct {
-	limiter billingapp.PropertyLimiter
+	limiter *billingapp.SubscriptionPropertyLimiter
 }
 
 // NewRecipientLimiterAdapter creates a RecipientLimiterAdapter over the billing
 // property limiter.
-func NewRecipientLimiterAdapter(limiter billingapp.PropertyLimiter) *RecipientLimiterAdapter {
+func NewRecipientLimiterAdapter(limiter *billingapp.SubscriptionPropertyLimiter) *RecipientLimiterAdapter {
 	return &RecipientLimiterAdapter{limiter: limiter}
 }
 

@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
-import type { Property } from '@/entities/property/model/types';
-import type { components } from '@/shared/api/generated';
+import type { Property } from '@/entities/property';
+import type { components } from '@/shared/api/dto';
 import {
   getPropertyPageStatus,
   type PropertyPageStatus,

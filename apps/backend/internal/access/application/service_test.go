@@ -29,9 +29,9 @@ var _ PropertyStatusResolver = fakeStatuses{}
 // TestAccessService_ArchivedPropertyRejectsNewMembers verifies that AddMember
 // on an archived property fails with ErrPropertyArchived (issue #163).
 func TestAccessService_ArchivedPropertyRejectsNewMembers(t *testing.T) {
-	owner := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
@@ -51,9 +51,9 @@ func TestAccessService_ArchivedPropertyRejectsNewMembers(t *testing.T) {
 // that ChangeMemberRole and RevokeMember are not blocked on an archived
 // property (issue #163).
 func TestAccessService_ArchivedPropertyKeepsExistingMembersManageable(t *testing.T) {
-	owner := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
@@ -107,9 +107,9 @@ var _ UserLookup = fakeUserLookup{}
 // sharing banner (issue T11): "Name Surname" when present, otherwise a masked
 // phone — never an email or a raw phone. Lookup failures propagate.
 func TestAccessService_DisplayName(t *testing.T) {
-	namedID := uuid.New()
-	phoneOnlyID := uuid.New()
-	missingID := uuid.New()
+	namedID := uuid.Must(uuid.NewV7())
+	phoneOnlyID := uuid.Must(uuid.NewV7())
+	missingID := uuid.Must(uuid.NewV7())
 	name, surname := "Ivan", "Petrov"
 
 	lookup := fakeUserLookup{
@@ -158,9 +158,9 @@ func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
 		{name: "full access", role: domain.RoleFullAccess, want: auditdomain.ActorRoleFullAccess},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			owner := uuid.New()
-			member := uuid.New()
-			property := uuid.New()
+			owner := uuid.Must(uuid.NewV7())
+			member := uuid.Must(uuid.NewV7())
+			property := uuid.Must(uuid.NewV7())
 
 			repo := newMemRepo()
 			resolver := staticResolver{property: owner}
@@ -196,10 +196,10 @@ func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
 // role, while the owner's own actions stay attributed as owner (issue #166
 // follow-up).
 func TestAccessService_ManageAuditActorRole(t *testing.T) {
-	owner := uuid.New()
-	full := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	full := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}

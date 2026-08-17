@@ -1,7 +1,7 @@
 import { type JSX } from 'react';
 import { Select } from '@/shared/ui/select';
-import { propertyTypeOptions } from '@/features/properties/lib/property-types';
-import type { PropertyType } from '@/entities/property/model/types';
+import { propertyTypeOptions } from '@/features/properties';
+import type { PropertyType } from '@/entities/property';
 
 export type PropertyTypeSelectProps = {
     readonly value?: PropertyType;

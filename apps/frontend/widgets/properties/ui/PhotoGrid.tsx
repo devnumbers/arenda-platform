@@ -11,7 +11,7 @@ import {
 import { Button } from '@/shared/ui/button';
 import { Icon } from '@/shared/ui/icon';
 import { Trash } from '@/shared/assets/icons';
-import type { PropertyPhoto } from '@/entities/property/model/types';
+import type { PropertyPhoto } from '@/entities/property';
 import styles from './PhotoGrid.module.css';
 
 export const MAX_PHOTO_COUNT = 10;

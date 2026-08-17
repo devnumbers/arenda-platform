@@ -9,10 +9,10 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { authKeys } from './keys';
-import type { components } from '@/shared/api/generated';
-import type { User } from '@/entities/user/model/types';
-import { mapMeResponse } from '@/entities/user/model/mappers';
+import { authKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
+import type { User } from '@/entities/user';
+import { mapMeResponse } from '@/entities/user';
 
 type MeResponse = components['schemas']['MeResponse'];
 type SendCodeRequest = components['schemas']['SendCodeRequest'];

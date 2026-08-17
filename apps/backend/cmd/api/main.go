@@ -10,13 +10,16 @@ import (
 	"time"
 
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
-	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
+	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
+	emailnotifier "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/email"
+	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	webpush "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/webpush"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
+	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpserver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 )
@@ -59,17 +62,19 @@ func run() error {
 	//    feeds the property billing lifecycle and lease/operation services.
 	notificationsMod := wire.WireNotifications(p)
 
-	// 4. Identity: repos, session service, event publisher, phone backfill,
-	//    email mailer switch, auth/phone-change/profile/logout services.
+	// 4. Identity: repos, session service, event publisher, email mailer
+	//    switch, auth/phone-change/profile/logout services.
 	identityMod, err := wire.WireIdentity(ctx, p, eventDispatcher, notificationsMod.ReminderService)
 	if err != nil {
 		return err
 	}
 
-	// 5. Billing repositories + payment provider. Built before properties
-	//    because the subscription limiter used by PropertyService needs the
-	//    tariff and subscription repositories.
-	billingRepos, err := wire.WireBillingRepos(ctx, p)
+	// 5. Billing module (rewritten core, issue #245): repositories, UoW
+	//    factory, tariff/subscription/onboarding services, limiter and worker
+	//    shells. Built before access and properties because their subscription
+	//    limiters consume the billing repositories. The grace lifecycle events
+	//    (issue #253) go through the shared event dispatcher.
+	billingMod, err := wire.WireBilling(ctx, p, eventDispatcher)
 	if err != nil {
 		return err
 	}
@@ -83,7 +88,7 @@ func run() error {
 	//    resolver, membership-aware policy and access service. Built before
 	//    properties because the policy replaces the T2 owner-only policy and is
 	//    injected into every property/lease/operation service.
-	accessMod, err := wire.WireAccess(ctx, p, billingRepos, identityMod.EmailMailer)
+	accessMod, err := wire.WireAccess(ctx, p, billingMod, identityMod.EmailMailer)
 	if err != nil {
 		return err
 	}
@@ -105,7 +110,7 @@ func run() error {
 
 	// 8. Properties: repos, subscription limiter, photo storage, property and
 	//    property-contact services, dadata suggester.
-	propertiesMod, err := wire.WireProperties(ctx, p, billingRepos, leasesRepos)
+	propertiesMod, err := wire.WireProperties(ctx, p, billingMod, leasesRepos)
 	if err != nil {
 		return err
 	}
@@ -128,8 +133,21 @@ func run() error {
 	// its former members (issue #162, T6).
 	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
 
-	// 8. Billing Services aggregate. Depends on the property service.
-	billingMod := wire.BuildBillingServices(p, billingRepos, propertiesMod.PropertyService, accessMod.SlotCoordinator)
+	// Wire the billing worker's cross-context lifecycle bridges (issue #252):
+	// the expiry and downgrade phases archive excess properties (open leases
+	// force-completed) and suspend excess shared memberships in the same
+	// transaction as the subscription change. Billing is built before the
+	// properties and access modules, so the bridges land here.
+	// The workers, the payment service and the subscription service share the
+	// same bridges: the expiry and downgrade phases (issue #252), the refund's
+	// downgrade to basic (issue #254) and the admin operations that can lower a
+	// tariff limit (issue #255) all archive excess properties and suspend excess
+	// shared memberships in the same transaction as the subscription change.
+	archiverSource := wire.NewPropertyArchiverSource(propertiesMod.PropertyService)
+	slotSource := wire.NewRecipientSlotSource(accessMod.SlotCoordinator)
+	billingMod.Services.Workers.SetLifecycleBridges(archiverSource, slotSource)
+	billingMod.Services.Payments.SetLifecycleBridges(archiverSource, slotSource)
+	billingMod.Services.Subscriptions.SetLifecycleBridges(archiverSource, slotSource)
 
 	// 9. Cross-module event subscribers: billing onboarding and default-category
 	//    seeding both react to user_registered. Kept here (not in wire) because
@@ -139,7 +157,7 @@ func run() error {
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
-		return billingMod.Services.OnUserRegistered(ctx, e.UserID)
+		return billingMod.Services.Onboarding.OnUserRegistered(ctx, e.UserID)
 	})
 	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
 		e, ok := event.(identityapp.UserRegistered)
@@ -159,10 +177,56 @@ func run() error {
 		return accessMod.InvitationService.ActivatePendingInvitations(ctx, e.UserID, e.Email.String())
 	})
 
-	// 10. Admin service (depends on billing subscriptions + occupancy provider).
+	// 10. Grace notifications (issue #253): the billing grace events deliver
+	//    through the notifications context over push and email, honouring the
+	//    per-channel preferences (ADR 0030). The Web Push sender is built when
+	//    VAPID keys are configured (RFC 8292); without them delivery is
+	//    email-only (same guard as the reminder worker below). Subscribers are
+	//    registered before the workers start so no grace event fires unwired.
+	var pushSender notificationsapp.PushSender
+	if p.Cfg.VAPIDPublicKey != "" && p.Cfg.VAPIDPrivateKey != "" {
+		pushMetrics, err := webpush.NewMetrics()
+		if err != nil {
+			return fmt.Errorf("wire push metrics: %w", err)
+		}
+		s, err := webpush.NewSender(p.Cfg.VAPIDSubject, p.Cfg.VAPIDPublicKey, p.Cfg.VAPIDPrivateKey, pushMetrics, p.Logger)
+		if err != nil {
+			return fmt.Errorf("wire webpush sender: %w", err)
+		}
+		pushSender = s
+		p.Logger.InfoContext(ctx, "web push delivery enabled")
+	} else {
+		p.Logger.WarnContext(ctx, "VAPID keys not configured; web push delivery disabled (email-only)")
+	}
+	queries := platformgenerated.New(p.DB)
+	graceNotifier := notificationsapp.NewDirectNotificationService(
+		notificationsMod.ReminderRepo,
+		notificationspg.NewContactResolver(queries),
+		emailnotifier.NewNotifier(identityMod.EmailMailer, p.Renderer),
+		pushSender,
+		notificationsMod.PushSubscriptionRepo,
+		p.Cfg.AppBaseURL,
+		p.Logger,
+	)
+	eventDispatcher.Subscribe(events.EventType("subscription_grace_entered"), func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.GraceEntered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return graceNotifier.NotifyGraceEntered(ctx, e.UserID, e.GraceUntil)
+	})
+	eventDispatcher.Subscribe(events.EventType("subscription_grace_expiring"), func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.GraceExpiring)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return graceNotifier.NotifyGraceExpiring(ctx, e.UserID, e.GraceUntil)
+	})
+
+	// 11. Admin service (depends on billing subscriptions + occupancy provider).
 	adminMod := wire.WireAdmin(p, billingMod.Services.Subscriptions, propertiesMod.OccupancyProvider)
 
-	// 11. Leases services: lease/operation/recurring/tenant-contact/export.
+	// 12. Leases services: lease/operation/recurring/tenant-contact/export.
 	leasesMod := wire.WireLeasesServices(p, leasesRepos, notificationsMod.ReminderScheduler, notificationsMod.ReminderService)
 	// Wire the membership-aware policy and the accessible-scopes adapter into
 	// the tenant contact service so list endpoints include owner-wide data the
@@ -193,28 +257,14 @@ func run() error {
 	notificationsMod.ReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
 	notificationsMod.FreeReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
 
-	// 12. Popups service.
+	// 13. Popups service.
 	popupsMod := wire.WirePopups(p)
 
-	// 13. Background workers (6 goroutines). Started before the HTTP server so
-	//     they are live while serving. The Web Push sender is constructed when
-	//     VAPID keys are configured (RFC 8292); without them the reminder worker
-	//     runs email-only and push dispatch is skipped (guard in reminder_worker).
-	var pushSender notificationsapp.PushSender
-	if p.Cfg.VAPIDPublicKey != "" && p.Cfg.VAPIDPrivateKey != "" {
-		pushMetrics, err := webpush.NewMetrics()
-		if err != nil {
-			return fmt.Errorf("wire push metrics: %w", err)
-		}
-		s, err := webpush.NewSender(p.Cfg.VAPIDSubject, p.Cfg.VAPIDPublicKey, p.Cfg.VAPIDPrivateKey, pushMetrics, p.Logger)
-		if err != nil {
-			return fmt.Errorf("wire webpush sender: %w", err)
-		}
-		pushSender = s
-		p.Logger.InfoContext(ctx, "web push delivery enabled")
-	} else {
-		p.Logger.WarnContext(ctx, "VAPID keys not configured; web push delivery disabled (email-only)")
-	}
+	// 14. Background workers (6 goroutines). Started before the HTTP server so
+	//     they are live while serving. The Web Push sender was constructed in
+	//     step 10 together with the grace notification delivery; without VAPID
+	//     keys the reminder worker runs email-only and push dispatch is skipped
+	//     (guard in reminder_worker).
 	workers := wire.NewWorkers(
 		ctx, p,
 		leasesMod.LeaseService,
@@ -224,14 +274,12 @@ func run() error {
 		identityMod.CodeRepo,
 		identityMod.AttemptRepo,
 		identityMod.EmailMailer,
-		billingMod.Services.Renewals,
-		billingMod.Services.ScheduledChanges,
-		billingMod.Services.Payments,
+		billingMod.Services.Workers,
 		notificationsMod.PushSubscriptionRepo,
 		pushSender,
 	)
 
-	// 14. HTTP rate limiters.
+	// 15. HTTP rate limiters.
 	limiters := wire.WireRateLimiters(p.Cfg)
 	defer limiters.Stop()
 
@@ -240,20 +288,26 @@ func run() error {
 		poolStats = wire.DBPoolStats(p.Pool)
 	}
 
-	// 15. HTTP handler + server.
+	// 16. HTTP handler + server.
 	handler := httpserver.New(httpserver.Deps{
 		Auth:                     identityMod.Authentication,
 		PhoneChange:              identityMod.PhoneChange,
 		Profile:                  identityMod.Profile,
 		Logout:                   identityMod.Logout,
-		Sessions:                 identityMod.SessionService,
+		Sessions:                 identityMod.SessionLoader,
 		Audit:                    p.AuditRecorder,
-		MeEnricher:               identityhttp.BillingMeEnricher(billingMod.Services.Subscriptions),
+		MeEnricher:               wire.BillingMeEnricher(billingMod.Services.Subscriptions),
 		Tariffs:                  billingMod.Services.Tariffs,
+		AdminTariffs:             billingMod.Services.Tariffs,
 		Subscriptions:            billingMod.Services.Subscriptions,
-		PaymentMethods:           billingMod.Services.PaymentMethods,
+		SubscriptionManagers:     billingMod.Services.Subscriptions,
 		Payments:                 billingMod.Services.Payments,
-		Webhooks:                 billingMod.Services.Webhooks,
+		PaymentMethods:           billingMod.Services.PaymentMethods,
+		Webhooks:                 billingMod.Services.Payments,
+		AdminPayments:            billingMod.Services.Payments,
+		AdminSubscriptions:       billingMod.Services.Subscriptions,
+		BillingFakeConfirms:      billingMod.FakeConfirms,
+		ReadonlyGate:             billingMod.MutationGate,
 		Admin:                    adminMod.Service,
 		Properties:               propertiesMod.PropertyService,
 		PropertyContacts:         propertiesMod.PropertyContactService,
@@ -286,7 +340,6 @@ func run() error {
 		PhoneChangeVerifyLimiter: limiters.PhoneChangeVerifyLimiter,
 		ClientErrorsLimiter:      limiters.ClientErrorsLimiter,
 		DBPoolStats:              poolStats,
-		DevMode:                  p.Cfg.AppEnv == "local" && p.Cfg.PaymentProvider == "fake",
 		TrustedProxies:           p.Cfg.TrustedProxies,
 		AppVersion:               p.Cfg.AppVersion,
 	})

@@ -2,110 +2,177 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 
+	"github.com/google/uuid"
+	billingevents "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/events"
+	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	paymentfake "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/fake"
 	paymenttkassa "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment/tkassa"
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
-	platformpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
-	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/config"
+	platformevents "github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
-// BillingRepos holds the billing module's repositories, onboarding service and
-// payment provider wired by WireBillingRepos. These are constructed early
-// (before the properties services) because the subscription limiter used by
-// PropertyService depends on the tariff and subscription repositories.
-type BillingRepos struct {
-	TariffRepo                *billingpg.TariffRepository
-	SubscriptionRepo          *billingpg.SubscriptionRepository
-	PaymentMethodRepo         *billingpg.PaymentMethodRepository
-	SubscriptionPaymentRepo   *billingpg.SubscriptionPaymentRepository
-	OnboardingService         *billingpg.OnboardingService
-	PaymentMethodInUseChecker *billingpg.PaymentMethodInUseChecker
-	PaymentProvider           billingapp.Provider
+// Billing holds the billing module's repositories and services wired by
+// WireBilling. It is constructed before the access and properties modules
+// because their subscription limiters consume the tariff and subscription
+// repositories.
+type Billing struct {
+	TariffRepo        *billingpg.TariffRepository
+	SubscriptionRepo  *billingpg.SubscriptionRepository
+	TransitionRepo    *billingpg.SubscriptionTransitionRepository
+	PaymentRepo       *billingpg.SubscriptionPaymentRepository
+	PaymentMethodRepo *billingpg.PaymentMethodRepository
+	CardBindingRepo   *billingpg.CardBindingSessionRepository
+	Services          billingapp.Services
+	// PaymentProvider is the single active payment provider adapter behind
+	// the neutral provider port (issue #248, ADR 0038). Nil never occurs
+	// because config validation pins PAYMENT_PROVIDER to fake or tkassa.
+	PaymentProvider billingapp.PaymentProvider
+	// FakeConfirms serves the local-only fake confirmation endpoints
+	// (issues #250/#251); it is non-nil only when the fake provider is
+	// active, and the HTTP wiring mounts its routes only then — a tkassa
+	// (production) build has no such endpoints at all (issue #287).
+	FakeConfirms *billinghttp.FakeConfirmHandlers
+	// MutationGate adapts the subscription service to the readonly-gate port
+	// declared by platform/httpsupport (ADR 0035 consumer-side interface).
+	MutationGate httpsupport.SubscriptionMutationChecker
 }
 
-// WireBillingRepos constructs the billing repositories, the onboarding service,
-// selects the payment provider based on config and logs initialization. The
-// billing Services aggregate is built later (BuildBillingServices) once the
-// properties service (property archiver) is available.
-func WireBillingRepos(ctx context.Context, p platformDeps) (*BillingRepos, error) {
+// WireBilling constructs the billing repositories, the shared txStoreFactory
+// (ADR 0033 γ-factory), every billing service of the rewritten core module
+// (issue #245), the payment flows of issue #250, the payment-method flows of
+// issue #251 and the active payment provider adapter (issue #248). The grace
+// lifecycle events of issue #253 are published through eventDispatcher.
+func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformevents.Dispatcher) (*Billing, error) {
 	tariffRepo := billingpg.NewTariffRepository(p.DB, p.Cfg.TariffCacheTTL, p.Clock)
 	subscriptionRepo := billingpg.NewSubscriptionRepository(p.DB)
-	onboardingService := billingpg.NewOnboardingService(tariffRepo, subscriptionRepo, platformpostgres.NewBeginner(p.Pool, p.Logger))
+	transitionRepo := billingpg.NewSubscriptionTransitionRepository(p.DB)
+	paymentRepo := billingpg.NewSubscriptionPaymentRepository(p.DB, p.Encryptor)
 	paymentMethodRepo := billingpg.NewPaymentMethodRepository(p.DB, p.Encryptor)
-	paymentMethodInUseChecker := billingpg.NewPaymentMethodInUseChecker(p.DB)
-	subscriptionPaymentRepo := billingpg.NewSubscriptionPaymentRepository(p.DB, p.Encryptor)
-	p.Logger.InfoContext(ctx, "billing repositories initialized",
-		"payment_methods", paymentMethodRepo != nil,
-		"subscription_payments", subscriptionPaymentRepo != nil)
+	cardBindingRepo := billingpg.NewCardBindingSessionRepository(p.DB)
 
-	var paymentProvider billingapp.Provider
 	paymentMetrics, err := payment.NewMetrics()
 	if err != nil {
 		return nil, fmt.Errorf("payment metrics: %w", err)
 	}
-	switch p.Cfg.PaymentProvider {
-	case "fake":
-		paymentProvider = paymentfake.NewProvider(p.Cfg.AppBaseURL, p.Logger, p.Clock, paymentMetrics)
-	case "tkassa":
-		paymentProvider = paymenttkassa.NewProvider(
-			p.Cfg.TKassaBaseURL,
-			p.Cfg.TKassaTerminalKey,
-			p.Cfg.TKassaPassword,
-			p.Cfg.TKassaTimeout,
-			p.Cfg.TKassaMaxRetries,
-			p.Cfg.TKassaRetryBaseDelay,
-			p.Cfg.TKassaRetryMaxDelay,
-			p.Logger,
-			paymentMetrics,
-		)
+	provider, err := wirePaymentProvider(p.Cfg, p.Logger, p.Clock, paymentMetrics)
+	if err != nil {
+		return nil, err
 	}
-	p.Logger.InfoContext(ctx, "payment provider initialized", "provider", p.Cfg.PaymentProvider, "initialized", paymentProvider != nil)
 
-	return &BillingRepos{
-		TariffRepo:                tariffRepo,
-		SubscriptionRepo:          subscriptionRepo,
-		PaymentMethodRepo:         paymentMethodRepo,
-		SubscriptionPaymentRepo:   subscriptionPaymentRepo,
-		OnboardingService:         onboardingService,
-		PaymentMethodInUseChecker: paymentMethodInUseChecker,
-		PaymentProvider:           paymentProvider,
+	factory := billingapp.NewTxStoreFactory(
+		tariffRepo,
+		subscriptionRepo,
+		transitionRepo,
+		paymentRepo,
+		paymentMethodRepo,
+		cardBindingRepo,
+		p.AuditRecorder,
+		p.UoW,
+	)
+
+	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
+		Config:        billingapp.DefaultConfig(),
+		Clock:         p.Clock,
+		Logger:        p.Logger,
+		Provider:      provider,
+		Publisher:     billingevents.NewPublisher(eventDispatcher),
+		AdminPayments: paymentRepo,
+	})
+
+	p.Logger.InfoContext(ctx, "billing module initialized",
+		"tariff_cache_ttl", p.Cfg.TariffCacheTTL.String(),
+		"payment_provider", string(provider.Name()),
+	)
+
+	// The local confirmation endpoints exist only under the fake provider:
+	// they drive the fake adapter directly at the adapter level while the
+	// application layer stays provider-neutral (issue #287). Under any other
+	// provider the handlers stay nil and the routes are never mounted.
+	var fakeConfirms *billinghttp.FakeConfirmHandlers
+	if fakeProvider, ok := provider.(*paymentfake.Provider); ok {
+		fakeConfirms = billinghttp.NewFakeConfirmHandlers(fakeProvider, services.Payments, p.Logger)
+	}
+
+	return &Billing{
+		TariffRepo:        tariffRepo,
+		SubscriptionRepo:  subscriptionRepo,
+		TransitionRepo:    transitionRepo,
+		PaymentRepo:       paymentRepo,
+		PaymentMethodRepo: paymentMethodRepo,
+		CardBindingRepo:   cardBindingRepo,
+		Services:          services,
+		PaymentProvider:   provider,
+		FakeConfirms:      fakeConfirms,
+		MutationGate:      billinghttp.NewMutationGate(services.Subscriptions, p.Clock),
 	}, nil
 }
 
-// Billing holds the billing Services aggregate wired by BuildBillingServices.
-type Billing struct {
-	Services billingapp.Services
+// wirePaymentProvider selects the single active provider adapter from the
+// configuration (ADR 0038). The adapter itself fails fast on missing
+// provider endpoint configuration — the test base URL is deliberately not a
+// default (issue #248) — and the wrap below names the env vars so the error
+// is actionable in local, where the config layer allows an empty
+// T_KASSA_BASE_URL.
+func wirePaymentProvider(cfg *config.Config, log *slog.Logger, clk clock.Clock, metrics *payment.Metrics) (billingapp.PaymentProvider, error) {
+	switch cfg.PaymentProvider {
+	case "fake":
+		return paymentfake.NewProvider(cfg.AppBaseURL, log, clk, metrics), nil
+	case "tkassa":
+		provider, err := paymenttkassa.NewProvider(paymenttkassa.Config{
+			BaseURL:        cfg.TKassaBaseURL,
+			TerminalKey:    cfg.TKassaTerminalKey,
+			Password:       cfg.TKassaPassword,
+			AppBaseURL:     cfg.AppBaseURL,
+			Timeout:        cfg.TKassaTimeout,
+			MaxRetries:     cfg.TKassaMaxRetries,
+			RetryBaseDelay: cfg.TKassaRetryBaseDelay,
+			RetryMaxDelay:  cfg.TKassaRetryMaxDelay,
+		}, log, metrics)
+		if err != nil {
+			return nil, fmt.Errorf("init tkassa payment provider (check T_KASSA_BASE_URL, T_KASSA_TERMINAL_KEY, T_KASSA_PASSWORD, APP_BASE_URL): %w", err)
+		}
+		return provider, nil
+	default:
+		return nil, fmt.Errorf("unsupported payment provider %q", cfg.PaymentProvider)
+	}
 }
 
-// BuildBillingServices constructs the billing Services aggregate from the
-// billing repos, the property service (property archiver) and the recipient
-// slot enforcer (access SlotCoordinator). It runs after the properties services
-// and the access module are built.
-func BuildBillingServices(
-	p platformDeps,
-	repos *BillingRepos,
-	propertyService *propertiesapp.PropertyService,
-	recipientSlotEnforcer billingapp.RecipientSlotEnforcer,
-) *Billing {
-	services := billingapp.NewServices(
-		repos.TariffRepo,
-		repos.SubscriptionRepo,
-		repos.PaymentMethodRepo,
-		repos.SubscriptionPaymentRepo,
-		repos.PaymentProvider,
-		platformpostgres.NewBeginner(p.Pool, p.Logger),
-		p.AuditRecorder,
-		p.Clock,
-		p.Logger,
-		p.Cfg.AppBaseURL,
-		propertyService,
-		recipientSlotEnforcer,
-		repos.OnboardingService,
-		repos.PaymentMethodInUseChecker,
-	)
-	return &Billing{Services: services}
+// subscriptionViewer is the billing port consumed by the /me enricher glue
+// below — the narrow slice of the subscription service it needs, declared at
+// the consumer per ADR 0035.
+type subscriptionViewer interface {
+	GetSubscription(ctx context.Context, userID uuid.UUID) (billingapp.SubscriptionView, error)
+}
+
+// BillingMeEnricher returns an identity MeEnricher that adds the current billing
+// subscription to a MeResponse. It is the composition-root glue between the
+// billing application layer and the identity HTTP layer (MeEnricher); keeping
+// it here means identity does not import billing.
+func BillingMeEnricher(subscriptions subscriptionViewer) identityhttp.MeEnricher {
+	return func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error {
+		if subscriptions == nil {
+			return nil
+		}
+		view, err := subscriptions.GetSubscription(ctx, userID)
+		if err != nil {
+			if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
+				return nil
+			}
+			return err
+		}
+		sub := httpsupport.SubscriptionResponse(view)
+		resp.Subscription = &sub
+		return nil
+	}
 }

@@ -28,8 +28,8 @@ func TestPropertyResponse_IncludesAttributes(t *testing.T) {
 	h := newPropertyHandlersForMapping(t)
 
 	property := domain.Property{
-		ID:         uuid.New(),
-		OwnerID:    uuid.New(),
+		ID:         uuid.Must(uuid.NewV7()),
+		OwnerID:    uuid.Must(uuid.NewV7()),
 		Name:       "Flat",
 		Type:       domain.PropertyTypeApartment,
 		Address:    " ul. Pushkina",
@@ -60,8 +60,8 @@ func TestPropertyResponse_EmptyAttributesWhenNil(t *testing.T) {
 	h := newPropertyHandlersForMapping(t)
 
 	property := domain.Property{
-		ID:         uuid.New(),
-		OwnerID:    uuid.New(),
+		ID:         uuid.Must(uuid.NewV7()),
+		OwnerID:    uuid.Must(uuid.NewV7()),
 		Name:       "Flat",
 		Type:       domain.PropertyTypeApartment,
 		Address:    "ul. Pushkina",

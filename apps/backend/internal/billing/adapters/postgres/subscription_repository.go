@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -39,19 +38,7 @@ func (r *SubscriptionRepository) WithTx(tx transaction.Tx) (application.Subscrip
 	return NewSubscriptionRepository(dbtx), nil
 }
 
-// GetByID returns a subscription by ID.
-func (r *SubscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Subscription, error) {
-	row, err := r.q().GetSubscriptionByID(ctx, pgtype.UUID{Bytes: id, Valid: true})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Subscription{}, application.ErrNotFound
-		}
-		return domain.Subscription{}, fmt.Errorf("get subscription by id: %w", err)
-	}
-	return mapSubscription(row)
-}
-
-// GetByUserID returns a subscription by user ID.
+// GetByUserID returns the user's subscription.
 func (r *SubscriptionRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
 	row, err := r.q().GetSubscriptionByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 	if err != nil {
@@ -63,19 +50,8 @@ func (r *SubscriptionRepository) GetByUserID(ctx context.Context, userID uuid.UU
 	return mapSubscription(row)
 }
 
-// GetByIDForUpdate returns a subscription by ID, locking the row for update.
-func (r *SubscriptionRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Subscription, error) {
-	row, err := r.q().GetSubscriptionByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Subscription{}, application.ErrNotFound
-		}
-		return domain.Subscription{}, fmt.Errorf("get subscription by id for update: %w", err)
-	}
-	return mapSubscription(row)
-}
-
-// GetByUserIDForUpdate returns a subscription by user ID, locking the row for update.
+// GetByUserIDForUpdate returns the user's subscription, locking the row for
+// update. Must only be called inside a transaction.
 func (r *SubscriptionRepository) GetByUserIDForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
 	row, err := r.q().GetSubscriptionByUserIDForUpdate(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 	if err != nil {
@@ -87,8 +63,60 @@ func (r *SubscriptionRepository) GetByUserIDForUpdate(ctx context.Context, userI
 	return mapSubscription(row)
 }
 
+// List returns a batch of subscriptions matching the worker selection (issue
+// #286): the parameterized query every phase lists and re-checks its batch
+// through. The predicate lives here, in SQL.
+func (r *SubscriptionRepository) List(ctx context.Context, sel application.SubscriptionSelection) ([]domain.Subscription, error) {
+	rows, err := r.q().ListSubscriptionsBySelection(ctx, subscriptionSelectionParams(sel))
+	if err != nil {
+		return nil, fmt.Errorf("list subscriptions by selection: %w", err)
+	}
+	return mapSubscriptions(rows)
+}
+
+// subscriptionSelectionParams maps the selection values to the query
+// parameters; a nil optional bound becomes an invalid (dropped) pgtype.
+func subscriptionSelectionParams(sel application.SubscriptionSelection) postgres.ListSubscriptionsBySelectionParams {
+	params := postgres.ListSubscriptionsBySelectionParams{
+		Status:     string(sel.Status),
+		Unreminded: sel.Unreminded,
+		BatchLimit: batchLimit(sel.Limit),
+	}
+	if sel.UserID != nil {
+		params.UserID = pgtype.UUID{Bytes: *sel.UserID, Valid: true}
+	}
+	if sel.AutoRenewEnabled != nil {
+		params.AutoRenew = pgtype.Bool{Bool: *sel.AutoRenewEnabled, Valid: true}
+	}
+	params.ValidUntilBefore = pgconv.TimePtrToPgtype(sel.ValidUntilBefore)
+	params.ValidUntilAfter = pgconv.TimePtrToPgtype(sel.ValidUntilAfter)
+	params.PendingChangeDue = pgconv.TimePtrToPgtype(sel.PendingChangeDue)
+	return params
+}
+
+// batchLimit converts the configured worker batch size to the sqlc parameter
+// type. The value is a small operational constant from the billing config
+// (default 100), never near the int32 bounds.
+func batchLimit(limit int) int32 {
+	return int32(limit) //nolint:gosec // bounded config constant, never overflows int32
+}
+
+// mapSubscriptions converts mapped rows, preserving the query order.
+func mapSubscriptions(rows []postgres.UserSubscription) ([]domain.Subscription, error) {
+	subs := make([]domain.Subscription, 0, len(rows))
+	for _, row := range rows {
+		sub, err := mapSubscription(row)
+		if err != nil {
+			return nil, err
+		}
+		subs = append(subs, sub)
+	}
+	return subs, nil
+}
+
 // Create inserts a new subscription. If a subscription already exists for the
-// user, the existing row is returned without error.
+// user (unique user_id), the existing row is returned without error —
+// onboarding relies on this for redelivered registration events.
 func (r *SubscriptionRepository) Create(ctx context.Context, sub domain.Subscription) (domain.Subscription, error) {
 	row, err := r.q().CreateSubscription(ctx, mapCreateSubscriptionParams(sub))
 	if err != nil {
@@ -113,110 +141,6 @@ func (r *SubscriptionRepository) Update(ctx context.Context, sub domain.Subscrip
 		return fmt.Errorf("update subscription: %w", err)
 	}
 	return nil
-}
-
-// ListUpForRenewal returns active subscriptions with auto-renew enabled whose
-// validity period has ended.
-func (r *SubscriptionRepository) ListUpForRenewal(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	rows, err := r.q().ListSubscriptionsUpForRenewal(ctx, postgres.ListSubscriptionsUpForRenewalParams{
-		ValidUntil: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
-		Limit:      limit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list subscriptions up for renewal: %w", err)
-	}
-	subs := make([]domain.Subscription, 0, len(rows))
-	for _, row := range rows {
-		sub, err := mapSubscription(row)
-		if err != nil {
-			return nil, fmt.Errorf("map subscription row: %w", err)
-		}
-		subs = append(subs, sub)
-	}
-	return subs, nil
-}
-
-// ListInExpiredGrace returns subscriptions whose grace period has ended.
-func (r *SubscriptionRepository) ListInExpiredGrace(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	rows, err := r.q().ListSubscriptionsInExpiredGrace(ctx, postgres.ListSubscriptionsInExpiredGraceParams{
-		ValidUntil: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
-		Limit:      limit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list subscriptions in expired grace: %w", err)
-	}
-	subs := make([]domain.Subscription, 0, len(rows))
-	for _, row := range rows {
-		sub, err := mapSubscription(row)
-		if err != nil {
-			return nil, fmt.Errorf("map subscription row: %w", err)
-		}
-		subs = append(subs, sub)
-	}
-	return subs, nil
-}
-
-// ListExpiredNonRenewing returns active paid subscriptions whose validity period
-// has ended and that have auto-renew disabled. They must be downgraded to basic.
-func (r *SubscriptionRepository) ListExpiredNonRenewing(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	rows, err := r.q().ListExpiredNonRenewingSubscriptions(ctx, postgres.ListExpiredNonRenewingSubscriptionsParams{
-		ValidUntil: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
-		Limit:      limit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list expired non-renewing subscriptions: %w", err)
-	}
-	subs := make([]domain.Subscription, 0, len(rows))
-	for _, row := range rows {
-		sub, err := mapSubscription(row)
-		if err != nil {
-			return nil, fmt.Errorf("map subscription row: %w", err)
-		}
-		subs = append(subs, sub)
-	}
-	return subs, nil
-}
-
-// ListExpiredCancelled returns cancelled subscriptions whose retained validity
-// period has ended. They must be downgraded to basic.
-func (r *SubscriptionRepository) ListExpiredCancelled(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	rows, err := r.q().ListExpiredCancelledSubscriptions(ctx, postgres.ListExpiredCancelledSubscriptionsParams{
-		ValidUntil: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
-		Limit:      limit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list expired cancelled subscriptions: %w", err)
-	}
-	subs := make([]domain.Subscription, 0, len(rows))
-	for _, row := range rows {
-		sub, err := mapSubscription(row)
-		if err != nil {
-			return nil, fmt.Errorf("map subscription row: %w", err)
-		}
-		subs = append(subs, sub)
-	}
-	return subs, nil
-}
-
-// ListPendingChanges returns active subscriptions whose scheduled tariff change
-// is due. They are locked with SKIP LOCKED for worker processing.
-func (r *SubscriptionRepository) ListPendingChanges(ctx context.Context, now time.Time, limit int32) ([]domain.Subscription, error) {
-	rows, err := r.q().ListSubscriptionsWithPendingChange(ctx, postgres.ListSubscriptionsWithPendingChangeParams{
-		PendingChangeAt: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
-		Limit:           limit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list subscriptions with pending change: %w", err)
-	}
-	subs := make([]domain.Subscription, 0, len(rows))
-	for _, row := range rows {
-		sub, err := mapSubscription(row)
-		if err != nil {
-			return nil, fmt.Errorf("map subscription row: %w", err)
-		}
-		subs = append(subs, sub)
-	}
-	return subs, nil
 }
 
 func periodTextPtr(p *domain.SubscriptionPeriod) pgtype.Text {
@@ -258,6 +182,7 @@ func mapUpdateSubscriptionParams(sub domain.Subscription) postgres.UpdateSubscri
 		ActivePaymentMethodID: pgconv.UUIDToPgtypePtr(sub.ActivePaymentMethodID),
 		LastAppliedPaymentID:  pgconv.UUIDToPgtypePtr(sub.LastAppliedPaymentID),
 		CurrentPeriod:         periodTextPtr(sub.CurrentPeriod),
+		GraceRemindedAt:       pgconv.TimePtrToPgtype(sub.GraceRemindedAt),
 	}
 }
 
@@ -286,5 +211,6 @@ func mapSubscription(row postgres.UserSubscription) (domain.Subscription, error)
 		ActivePaymentMethodID: pgconv.UUIDFromPgtypePtr(row.ActivePaymentMethodID),
 		LastAppliedPaymentID:  pgconv.UUIDFromPgtypePtr(row.LastAppliedPaymentID),
 		CurrentPeriod:         currentPeriod,
+		GraceRemindedAt:       pgconv.TimestamptzToPtrTime(row.GraceRemindedAt),
 	})
 }

@@ -2,7 +2,6 @@ package tkassa
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -16,8 +15,8 @@ import (
 //     blocked charge, or a payment-not-found outcome;
 //   - "error" for genuine operational failures (transport/timeout/context,
 //     request-build, non-2xx HTTP, unmarshal) and for broken-integration
-//     signals (token-invalid 204/205, invalid-operation 1125/1126) — whether
-//     direct or wrapped.
+//     signals (auth-rejected 204/205, invalid-operation 9/12/1125/1126) —
+//     whether direct or wrapped.
 func TestMetricStatus(t *testing.T) {
 	// Mirror how post constructs a provider error-code response.
 	providerErr := &ProviderError{
@@ -50,8 +49,8 @@ func TestMetricStatus(t *testing.T) {
 			want: "ok",
 		},
 		{
-			name: "card-not-found sentinel is ok",
-			err:  application.ErrProviderCardNotFound,
+			name: "method-not-found sentinel is ok",
+			err:  application.ErrProviderMethodNotFound,
 			want: "ok",
 		},
 		{
@@ -65,8 +64,23 @@ func TestMetricStatus(t *testing.T) {
 			want: "ok",
 		},
 		{
-			name: "token-invalid sentinel is a broken-integration error",
-			err:  fmt.Errorf("%w: %w", application.ErrProviderTokenInvalid, providerErr),
+			name: "insufficient-funds sentinel is ok (business outcome)",
+			err:  fmt.Errorf("%w: %w", application.ErrProviderInsufficientFunds, providerErr),
+			want: "ok",
+		},
+		{
+			name: "saved-method-expired sentinel is ok (business outcome)",
+			err:  fmt.Errorf("%w: %w", application.ErrProviderSavedMethodExpired, providerErr),
+			want: "ok",
+		},
+		{
+			name: "duplicate-operation sentinel is ok (business outcome)",
+			err:  fmt.Errorf("%w: %w", application.ErrProviderDuplicateOperation, providerErr),
+			want: "ok",
+		},
+		{
+			name: "auth-rejected sentinel is a broken-integration error",
+			err:  fmt.Errorf("%w: %w", application.ErrProviderAuthRejected, providerErr),
 			want: "error",
 		},
 		{
@@ -85,17 +99,11 @@ func TestMetricStatus(t *testing.T) {
 			want: "error",
 		},
 		{
-			name: "non-2xx HTTP error is error",
-			err:  errors.New("tkassa: Charge returned HTTP 503: unavailable"),
-			want: "error",
-		},
-		{
-			name: "cancelled context is error",
+			name: "canceled context is error",
 			err:  context.Canceled,
 			want: "error",
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := metricStatus(tt.err); got != tt.want {

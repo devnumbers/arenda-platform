@@ -7,15 +7,14 @@ package postgres
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	// The transition log is append-only (enforced by trigger, ADR 0037); the first
+	// transition of a subscription has no prior status or tariff.
+	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
-	// Atomically reserve a payment for an in-flight refund. updated_at is maintained
-	// by the trg_subscription_payments_updated_at trigger, so it is not set here.
-	BeginSubscriptionPaymentRefund(ctx context.Context, id pgtype.UUID) (pgconn.CommandTag, error)
 	CancelByIDAndOwner(ctx context.Context, arg CancelByIDAndOwnerParams) (int64, error)
 	CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error)
 	CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error)
@@ -26,6 +25,8 @@ type Querier interface {
 	CountActiveMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
+	// Admin dashboard stats. These queries are consumed by the admin context's
+	// repository, not by the billing module itself.
 	CountActiveSubscriptionsAdmin(ctx context.Context) (int64, error)
 	CountArchivedPropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountAuditLogsAdmin(ctx context.Context, arg CountAuditLogsAdminParams) (int64, error)
@@ -39,7 +40,6 @@ type Querier interface {
 	CountPropertyContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
-	CountSubscriptionsByActivePaymentMethodID(ctx context.Context, activePaymentMethodID pgtype.UUID) (int64, error)
 	// Shared objects hidden from the recipient by a tariff slot shortage (the
 	// hidden_shared_count badge). Memberships on archived properties are excluded
 	// (issue #163): those objects are hidden by the archive, not by the tariff.
@@ -48,13 +48,16 @@ type Querier interface {
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
 	CountUsersTotalAdmin(ctx context.Context) (int64, error)
+	// Card binding sessions (issue #251). One row per initiated provider binding;
+	// the request key is unique per provider, and open sessions are resolved by
+	// status polling or the add-card webhook before the TTL expires.
+	CreateCardBindingSession(ctx context.Context, arg CreateCardBindingSessionParams) (CardBindingSession, error)
 	CreateFreeReminder(ctx context.Context, arg CreateFreeReminderParams) (FreeReminder, error)
 	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
 	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error
 	CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error)
 	CreateOperationCategory(ctx context.Context, arg CreateOperationCategoryParams) (OperationCategory, error)
 	CreateOperationCategoryIgnoreConflict(ctx context.Context, arg CreateOperationCategoryIgnoreConflictParams) error
-	CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreatePropertyContact(ctx context.Context, arg CreatePropertyContactParams) (PropertyContact, error)
 	CreatePropertyMember(ctx context.Context, arg CreatePropertyMemberParams) (PropertyMember, error)
@@ -68,7 +71,15 @@ type Querier interface {
 	CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (int64, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
+	// Subscription payments (issue #250). The partial unique index
+	// idx_subscription_payments_one_pending_upgrade (user_id, tariff_id, period)
+	// WHERE status = 'pending' is the durable idempotency backstop against double
+	// payment initiation; Create surfaces its violation as a unique-constraint
+	// error the application maps to ErrAlreadyExists.
 	CreateSubscriptionPayment(ctx context.Context, arg CreateSubscriptionPaymentParams) (SubscriptionPayment, error)
+	// Admin tariff creation (issue #256). The name is UNIQUE; a duplicate surfaces
+	// as a unique violation the adapter narrows to ErrAlreadyExists.
+	CreateTariff(ctx context.Context, arg CreateTariffParams) (Tariff, error)
 	CreateTenantContact(ctx context.Context, arg CreateTenantContactParams) (TenantContact, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
@@ -86,7 +97,8 @@ type Querier interface {
 	DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteOperationsByProperty(ctx context.Context, arg DeleteOperationsByPropertyParams) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, arg DeleteOperationsOutsideLeaseRangeParams) error
-	DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) error
+	// Owner-scoped: the row must belong to the user issuing the deletion.
+	DeletePaymentMethodByID(ctx context.Context, arg DeletePaymentMethodByIDParams) error
 	DeleteProperty(ctx context.Context, arg DeletePropertyParams) error
 	DeletePropertyContact(ctx context.Context, arg DeletePropertyContactParams) error
 	DeletePropertyMember(ctx context.Context, arg DeletePropertyMemberParams) error
@@ -109,13 +121,22 @@ type Querier interface {
 	DeleteUneditedOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedOperationsByRecurringOperationParams) error
 	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
 	GetAuditLogByIDAdmin(ctx context.Context, id pgtype.UUID) (AuditLog, error)
+	GetCardBindingSessionByRequestKeyForUpdate(ctx context.Context, arg GetCardBindingSessionByRequestKeyForUpdateParams) (CardBindingSession, error)
 	GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error)
 	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
 	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
 	GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error)
 	GetFreeReminderByIDAndOwner(ctx context.Context, arg GetFreeReminderByIDAndOwnerParams) (FreeReminder, error)
 	GetFreeReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (FreeReminder, error)
-	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
+	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
+	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
+	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
+	// WHERE used=false created by migration 000063 — the same index that backs
+	// CreateLoginCode's ON CONFLICT upsert. The index serves both writes and reads; no
+	// separate read index is needed (issue #224, EXPLAIN-verified: at production scale
+	// the planner chooses an index scan over this index; email falls into Filter, not
+	// Index Cond, because the index column is COALESCE(email, ...) and cannot match a raw
+	// email=$2 equality, but the phone+purpose prefix narrows the scan efficiently).
 	GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByPhoneAndEmailAndPurposeParams) (GetLatestLoginCodeByPhoneAndEmailAndPurposeRow, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLeaseByIDAdmin(ctx context.Context, id pgtype.UUID) (GetLeaseByIDAdminRow, error)
@@ -181,13 +202,19 @@ type Querier interface {
 	GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
+	GetSubscriptionPaymentAdmin(ctx context.Context, id pgtype.UUID) (GetSubscriptionPaymentAdminRow, error)
 	GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error)
-	GetSubscriptionPaymentByIDAdmin(ctx context.Context, id pgtype.UUID) (GetSubscriptionPaymentByIDAdminRow, error)
 	GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error)
-	// Aggregates over payments created in the last 30 days. "refunded" covers both
-	// full and partial refunds.
+	// Aggregates over payments created in the last 30 days. Refunds are full-amount
+	// only in the rewritten schema (ADR 0037): the legacy partial_refunded status
+	// is gone.
 	GetSubscriptionPaymentsStatsLast30dAdmin(ctx context.Context) (GetSubscriptionPaymentsStatsLast30dAdminRow, error)
 	GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error)
+	// Billing context queries (rewritten module, issue #245).
+	//
+	// Only the queries consumed by the rewritten core module and by the admin
+	// dashboard live here. The payment, payment-method and webhook queries return
+	// with their tickets (#250, #251, #254).
 	GetTariffByName(ctx context.Context, name string) (Tariff, error)
 	// GetTenantContactByID is intentionally unscoped: it resolves the contact's
 	// data owner before the policy gate authorizes the actor (Property Sharing
@@ -204,10 +231,11 @@ type Querier interface {
 	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
 	HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error)
 	HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error)
-	// Atomically increment the renewal charge attempt counter and return the new
-	// value so the renewal job can cap retries on persistent charge failures.
-	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
-	IncrementSubscriptionPaymentChargeAttempts(ctx context.Context, id pgtype.UUID) (int32, error)
+	// IncrementLoginAttempt atomically increments the failure counter on the
+	// existing row, so concurrent upserts cannot lose an increment (issue #215).
+	// failures carries the delta to add; first_failure_at is intentionally left
+	// untouched on the conflict branch because the window is not being reset.
+	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error)
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
@@ -222,13 +250,13 @@ type Querier interface {
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	ListAllFreeRemindersByOwner(ctx context.Context, arg ListAllFreeRemindersByOwnerParams) ([]ListAllFreeRemindersByOwnerRow, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
+	// Admin tariff listing: every tariff including hidden ones (issue #247).
+	ListAllTariffs(ctx context.Context) ([]Tariff, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
 	ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error)
 	ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error)
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
-	ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error)
-	ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error)
 	ListFreeRemindersByOwner(ctx context.Context, arg ListFreeRemindersByOwnerParams) ([]FreeReminder, error)
 	ListFreeRemindersByProperty(ctx context.Context, arg ListFreeRemindersByPropertyParams) ([]FreeReminder, error)
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]ListFutureOperationsByLeaseRow, error)
@@ -238,6 +266,7 @@ type Querier interface {
 	ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error)
 	ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
+	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	ListOpenLeasesWithPastEndDate(ctx context.Context, arg ListOpenLeasesWithPastEndDateParams) ([]Lease, error)
 	ListOperationCategoriesByOwner(ctx context.Context, arg ListOperationCategoriesByOwnerParams) ([]OperationCategory, error)
@@ -256,9 +285,7 @@ type Querier interface {
 	// registration is FIFO across properties (T5, issue #161).
 	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
 	ListPendingOperationsWithPastDate(ctx context.Context, arg ListPendingOperationsWithPastDateParams) ([]Operation, error)
-	ListPendingPayments(ctx context.Context, arg ListPendingPaymentsParams) ([]SubscriptionPayment, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
-	ListPendingUpgradePayments(ctx context.Context, arg ListPendingUpgradePaymentsParams) ([]SubscriptionPayment, error)
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
 	ListPropertyContactsAdmin(ctx context.Context, arg ListPropertyContactsAdminParams) ([]PropertyContact, error)
 	ListPropertyContactsByProperty(ctx context.Context, arg ListPropertyContactsByPropertyParams) ([]PropertyContact, error)
@@ -278,19 +305,44 @@ type Querier interface {
 	ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error)
 	ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error)
 	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
-	// Payments stuck in the refunding state (refund reserved but never finalized or
-	// reverted). updated_at is trigger-maintained and marks entry into refunding.
-	ListStaleRefundingPayments(ctx context.Context, arg ListStaleRefundingPaymentsParams) ([]SubscriptionPayment, error)
 	ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error)
+	// Admin payment views (issue #254). The phone filter matches the stored
+	// ciphertext (deterministic encryption) or the plaintext of a not-yet-
+	// encrypted row, mirroring ListUsersAdmin; user input is never interpolated
+	// into SQL — sort/order map to columns through fixed CASE arms.
 	ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error)
+	// The reconciliation batch of the payment phases (issues #252, #254): pending
+	// payments stale enough that a webhook is presumed lost, and payments stuck in
+	// the refunding reservation. The provider reference is mandatory in every
+	// selection — without it there is nothing to query at the provider. The order
+	// follows the staleness clock the phase set: updated-stale batches
+	// (updated_before set) by updated_at, the rest by created_at, each with id as
+	// the tie-breaker.
+	ListSubscriptionPaymentsBySelection(ctx context.Context, arg ListSubscriptionPaymentsBySelectionParams) ([]SubscriptionPayment, error)
 	ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
-	ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error)
-	ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSubscriptionsUpForRenewalParams) ([]UserSubscription, error)
-	ListSubscriptionsWithPendingChange(ctx context.Context, arg ListSubscriptionsWithPendingChangeParams) ([]UserSubscription, error)
+	ListSubscriptionTransitionsBySubscription(ctx context.Context, subscriptionID pgtype.UUID) ([]SubscriptionTransition, error)
+	// Worker batch selections (issue #252, ADR 0008 lifecycle phases; one
+	// parameterized query per aggregate since issue #286). The phases set the
+	// values through application.SubscriptionSelection / PaymentSelection; a
+	// bound left NULL drops its condition. Each listing is a plain selection; the
+	// processing transaction re-reads and locks the row by user id, so a
+	// concurrent mutation between listing and processing is re-checked under the
+	// lock and never applied twice. The composite indexes of migration 000107
+	// back every selection: the required status prefix narrows to the phase's
+	// status, the second column serves the phase-clock range and the batch order.
+	// The order follows the phase clock: deferred-change batches
+	// (pending_change_due set) by pending_change_at, everything else by
+	// valid_until, each with id as the tie-breaker — the oldest-first fairness of
+	// the batches. A non-NULL user_id narrows the selection to one subscription:
+	// the under-lock re-check of a phase, run in the transaction that locked the
+	// row.
+	ListSubscriptionsBySelection(ctx context.Context, arg ListSubscriptionsBySelectionParams) ([]UserSubscription, error)
 	// The FIFO recovery queue. Memberships on archived properties are excluded:
 	// an archived object does not occupy a recipient slot (issue #163), so a free
 	// slot must not be wasted on them; they re-enter the selection on unarchive.
 	ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
+	// User-facing tariff listing: hidden tariffs stay referable by FK but are not
+	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)
 	ListTenantContactsAdmin(ctx context.Context, arg ListTenantContactsAdminParams) ([]ListTenantContactsAdminRow, error)
 	ListTenantContactsByIDs(ctx context.Context, arg ListTenantContactsByIDsParams) ([]TenantContact, error)
@@ -298,6 +350,9 @@ type Querier interface {
 	ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID pgtype.UUID) ([]ListTenantContactsWithLeaseStatusRow, error)
 	ListUpcomingFreeRemindersByProperty(ctx context.Context, arg ListUpcomingFreeRemindersByPropertyParams) ([]ListUpcomingFreeRemindersByPropertyRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
+	// Serializes activation switches per user: the deactivate-all / activate-one
+	// pair must not interleave with a concurrent switch, or the one-active
+	// partial unique index rejects the second committer.
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkOperationOverdue(ctx context.Context, arg MarkOperationOverdueParams) (Operation, error)
@@ -308,24 +363,14 @@ type Querier interface {
 	MarkReminderSkipped(ctx context.Context, id pgtype.UUID) (int64, error)
 	MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error)
 	MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error)
-	MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSubscriptionPaymentFailedParams) (SubscriptionPayment, error)
-	// Transition a failed payment to refunded after an explicit provider-side
-	// status check. This handles out-of-order webhooks where the provider reports
-	// a refund after the system has already marked the payment as failed.
-	MarkSubscriptionPaymentReconciledRefunded(ctx context.Context, arg MarkSubscriptionPaymentReconciledRefundedParams) (SubscriptionPayment, error)
-	// Transition a failed payment to succeeded after an explicit provider-side
-	// status check. This handles out-of-order webhooks where the provider reports
-	// success after the system has already marked the payment as failed.
-	MarkSubscriptionPaymentReconciledSucceeded(ctx context.Context, arg MarkSubscriptionPaymentReconciledSucceededParams) (SubscriptionPayment, error)
-	MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkSubscriptionPaymentRefundedParams) (SubscriptionPayment, error)
-	MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error)
 	MoveOperationToProperty(ctx context.Context, arg MoveOperationToPropertyParams) (Operation, error)
 	ReactivatePropertyMember(ctx context.Context, arg ReactivatePropertyMemberParams) (PropertyMember, error)
 	ReschedulePendingRemindersByOwner(ctx context.Context, arg ReschedulePendingRemindersByOwnerParams) (int64, error)
+	// ResetLoginAttempt writes the absolute attempt-window state, used when the
+	// window is new or has expired (TTL reset) and the failure counter must be set
+	// to an absolute value rather than incremented.
+	ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
-	// Roll back an in-flight refund reservation to the previous status ($2).
-	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
-	RevertSubscriptionPaymentRefund(ctx context.Context, arg RevertSubscriptionPaymentRefundParams) (pgconn.CommandTag, error)
 	SaveFreeReminder(ctx context.Context, arg SaveFreeReminderParams) (int64, error)
 	SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error)
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error)
@@ -334,6 +379,7 @@ type Querier interface {
 	SoftDeleteRecurringOperation(ctx context.Context, arg SoftDeleteRecurringOperationParams) (RecurringOperation, error)
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
+	UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error)
 	UpdateFreeReminder(ctx context.Context, arg UpdateFreeReminderParams) (FreeReminder, error)
 	UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, arg UpdateFutureGeneratedOperationReminderOffsetsParams) (int64, error)
 	UpdateLease(ctx context.Context, arg UpdateLeaseParams) (Lease, error)
@@ -354,16 +400,30 @@ type Querier interface {
 	UpdateSentSMSReminderProviderResponse(ctx context.Context, arg UpdateSentSMSReminderProviderResponseParams) (int64, error)
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) error
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error)
-	UpdateSubscriptionPaymentMethodAndProviderID(ctx context.Context, arg UpdateSubscriptionPaymentMethodAndProviderIDParams) (SubscriptionPayment, error)
-	UpdateSubscriptionPaymentMethodID(ctx context.Context, arg UpdateSubscriptionPaymentMethodIDParams) (SubscriptionPayment, error)
-	UpdateSubscriptionPaymentPaymentURL(ctx context.Context, arg UpdateSubscriptionPaymentPaymentURLParams) (SubscriptionPayment, error)
-	UpdateSubscriptionPaymentProviderPaymentID(ctx context.Context, arg UpdateSubscriptionPaymentProviderPaymentIDParams) (SubscriptionPayment, error)
+	UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubscriptionPaymentParams) (SubscriptionPayment, error)
+	// Admin tariff edit (issue #256): prices, property limit and the activity
+	// flag. The name is immutable — user-facing tariff selection is by name, so a
+	// rename would silently change what existing references point at.
+	UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tariff, error)
 	UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
-	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
 	UpsertNotificationChannelPreference(ctx context.Context, arg UpsertNotificationChannelPreferenceParams) error
+	// Payment methods (issue #251). Token uniqueness is enforced per user by the
+	// UNIQUE (user_id, token_hash) constraint: the upsert converges on the
+	// existing row instead of creating a duplicate card, and exactly one active
+	// method per user is enforced by the partial unique index
+	// idx_payment_methods_one_active_per_user. Sensitive columns (provider_token,
+	// provider_card_id, exp_date) hold ciphertext; the application encrypts
+	// before writing and decrypts after reading.
+	// Inserts a method or converges on the row with the same (user_id,
+	// token_hash): a re-bound card (webhook redelivery, sync polling, duplicate
+	// binding) updates the token and display fields instead of duplicating the
+	// row. Empty incoming display fields do not wipe stored ones, so completion
+	// paths that do not know the card data cannot erase what an earlier delivery
+	// stored. is_active is deliberately not in the update set: activation is a
+	// separate explicit step.
 	UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error)
 	// Insert a push subscription keyed by endpoint, or update its mutable fields
 	// (user_id, p256dh, auth, expiration_time) when the endpoint already exists.

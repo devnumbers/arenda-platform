@@ -11,10 +11,8 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
-import { Link } from 'react-admin';
+import { Link, useDataProvider } from 'react-admin';
 import { formatKopecks, fullName, subscriptionPaymentStatusChoices } from './fields';
-
-const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api';
 
 // Ссылка на список пользователей с активной подпиской: react-admin читает фильтры списка
 // из query-параметра filter (JSON), ключ совпадает с source фильтра в UserList.
@@ -58,26 +56,6 @@ interface AdminStats {
   recentUsers: AdminStatsRecentUser[];
   recentPayments: AdminStatsRecentPayment[];
 }
-
-interface ProblemDetails {
-  detail?: string;
-  title?: string;
-}
-
-const fetchStats = async (): Promise<AdminStats> => {
-  const response = await fetch(`${API_PREFIX}/admin/stats`, { credentials: 'include' });
-  if (!response.ok) {
-    let message = `Ошибка ${response.status}`;
-    try {
-      const body = (await response.json()) as ProblemDetails;
-      message = body.detail || body.title || message;
-    } catch {
-      // Тело ответа не JSON — оставляем сообщение по коду статуса.
-    }
-    throw new Error(message);
-  }
-  return (await response.json()) as AdminStats;
-};
 
 interface StatCardProps {
   title: string;
@@ -217,6 +195,7 @@ const RecentPaymentsCard = ({ payments }: { payments: AdminStatsRecentPayment[] 
 );
 
 export const Dashboard = () => {
+  const dataProvider = useDataProvider();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -226,10 +205,11 @@ export const Dashboard = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchStats()
-      .then((data) => {
+    dataProvider
+      .getStats()
+      .then((result: { data: unknown }) => {
         if (!cancelled) {
-          setStats(data);
+          setStats(result.data as AdminStats);
         }
       })
       .catch((err: unknown) => {
@@ -245,7 +225,7 @@ export const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+  }, [dataProvider, reloadToken]);
 
   if (loading) {
     return (

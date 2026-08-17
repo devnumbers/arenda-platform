@@ -9,9 +9,9 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { mapNotificationPreferencesResponse } from '@/entities/user/model/mappers';
-import type { NotificationPreference } from '@/entities/user/model/types';
-import type { components } from '@/shared/api/generated';
+import { mapNotificationPreferencesResponse } from '@/entities/user';
+import type { NotificationPreference } from '@/entities/user';
+import type { components } from '@/shared/api/dto';
 
 type NotificationPreferencesResponse =
   components['schemas']['NotificationPreferencesResponse'];

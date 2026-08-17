@@ -8,21 +8,21 @@ import { PageHeader } from '@/shared/ui/page-header';
 import {
   useNotificationPreferences,
   useUpdateNotificationPreferences,
-} from '@/features/notification-preferences/api/hooks';
+} from '@/features/notification-preferences';
 import {
   buildChannelPreferencePayload,
   buildInitialChannelPreferences,
   channelPreferencesEqual,
   type NotificationChannelState,
-} from '@/features/notification-preferences/lib/preferences';
-import { NotificationChannelMatrix } from '@/features/notification-preferences/ui/NotificationChannelMatrix';
-import { usePushSubscriptionStatus } from '@/features/push-notifications/api/use-push-subscription-status';
-import { useSubscribePush } from '@/features/push-notifications/api/use-subscribe-push';
-import { isPushSupported } from '@/features/push-notifications/lib/platform';
+} from '@/features/notification-preferences';
+import { NotificationChannelMatrix } from '@/features/notification-preferences';
+import { usePushSubscriptionStatus } from '@/features/push-notifications';
+import { useSubscribePush } from '@/features/push-notifications';
+import { isPushSupported } from '@/features/push-notifications';
 import type {
   NotificationEventType,
   NotificationPreference,
-} from '@/entities/user/model/types';
+} from '@/entities/user';
 import styles from './NotificationSettings.module.css';
 
 type NotificationSettingsViewProps = {

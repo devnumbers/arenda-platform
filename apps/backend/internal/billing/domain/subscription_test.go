@@ -8,13 +8,16 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestNewOwnerSubscription(t *testing.T) {
+// graceDuration mirrors the production default (ADR 0008) for the tests below.
+const graceDuration = 7 * 24 * time.Hour
+
+func TestNewBasicSubscription(t *testing.T) {
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 
-	sub, err := NewOwnerSubscription(userID, tariffID)
+	sub, err := NewBasicSubscription(userID, tariffID)
 	if err != nil {
-		t.Fatalf("NewOwnerSubscription() error = %v", err)
+		t.Fatalf("NewBasicSubscription() error = %v", err)
 	}
 
 	if sub.UserID != userID {
@@ -340,6 +343,52 @@ func TestSubscriptionSetAutoRenew(t *testing.T) {
 	if err := subNoValidUntil.SetAutoRenew(true); !errors.Is(err, ErrCannotEnableAutoRenew) {
 		t.Errorf("SetAutoRenew(true) without ValidUntil error = %v, want ErrCannotEnableAutoRenew", err)
 	}
+
+	// A cancelled subscription never renews: restoration goes through paying
+	// for a tariff (ADR 0008).
+	subCancelled := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &validUntil}
+	if err := subCancelled.SetAutoRenew(true); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("SetAutoRenew(true) on cancelled error = %v, want ErrInvalidSubscriptionState", err)
+	}
+}
+
+func TestSubscriptionCancel(t *testing.T) {
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	pendingAt := validUntil
+	period := PeriodMonth
+	pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
+
+	sub := Subscription{
+		Status:           SubscriptionStatusActive,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &pendingID,
+		PendingChangeAt:  &pendingAt,
+		PendingPeriod:    &period,
+	}
+
+	if err := sub.Cancel(); err != nil {
+		t.Fatalf("Cancel() error = %v", err)
+	}
+	if sub.Status != SubscriptionStatusCancelled {
+		t.Errorf("Status = %q, want cancelled", sub.Status)
+	}
+	if sub.AutoRenewEnabled {
+		t.Error("expected auto-renew disabled")
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil) {
+		t.Errorf("ValidUntil = %v, want retained %v", sub.ValidUntil, validUntil)
+	}
+	// A cancelled subscription no longer switches tariffs: the scheduled
+	// change is dropped and the expiry path moves the user to basic.
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Error("expected pending change fields cleared on cancel")
+	}
+
+	cancelled := Subscription{Status: SubscriptionStatusCancelled}
+	if err := cancelled.Cancel(); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("second Cancel() error = %v, want ErrInvalidSubscriptionState", err)
+	}
 }
 
 func TestSubscriptionDowngradeToBasic(t *testing.T) {
@@ -399,12 +448,12 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			Status:   SubscriptionStatusActive,
 		}
 
-		sub.EnterGrace(now)
+		sub.EnterGrace(now, graceDuration)
 
 		if sub.Status != SubscriptionStatusGrace {
 			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
 		}
-		wantValidUntil := now.Add(gracePeriod)
+		wantValidUntil := now.Add(graceDuration)
 		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
 			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
 		}
@@ -420,7 +469,7 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			ValidUntil: &farFuture,
 		}
 
-		sub.EnterGrace(now)
+		sub.EnterGrace(now, graceDuration)
 
 		if sub.Status != SubscriptionStatusGrace {
 			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
@@ -446,7 +495,7 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			PendingPeriod:   &period,
 		}
 
-		sub.EnterGrace(now)
+		sub.EnterGrace(now, graceDuration)
 
 		if sub.Status != SubscriptionStatusGrace {
 			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusGrace)
@@ -455,7 +504,7 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 			t.Errorf("expected pending change fields cleared, got %+v/%+v/%+v",
 				sub.PendingTariffID, sub.PendingChangeAt, sub.PendingPeriod)
 		}
-		wantValidUntil := now.Add(gracePeriod)
+		wantValidUntil := now.Add(graceDuration)
 		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
 			t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
 		}
@@ -738,5 +787,236 @@ func TestReconstituteSubscription(t *testing.T) {
 				t.Error("ReconstituteSubscription() error = nil, want error")
 			}
 		})
+	}
+}
+
+// TestSubscriptionAssignService proves the admin service-subscription
+// assignment (issue #255): the tariff runs a fixed term without payment,
+// auto-renew is off, and every planning field of the overwritten subscription
+// is cleared while the active payment method survives.
+func TestSubscriptionAssignService(t *testing.T) {
+	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	oldValidUntil := now.AddDate(0, 0, 10)
+	termUntil := now.AddDate(0, 1, 0)
+	businessID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	pendingTariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
+	methodID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15")
+	pendingPeriod := PeriodMonth
+	remindedAt := now.Add(-24 * time.Hour)
+
+	sub := Subscription{
+		ID:               uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"),
+		UserID:           uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"),
+		TariffID:         uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16"),
+		Source:           SubscriptionSourcePaid,
+		Status:           SubscriptionStatusActive,
+		ValidUntil:       &oldValidUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &pendingTariffID,
+		PendingChangeAt:  &oldValidUntil,
+		PendingPeriod:    &pendingPeriod,
+		CurrentPeriod:    &pendingPeriod,
+		GraceRemindedAt:  &remindedAt,
+	}
+	sub.SetActivePaymentMethod(methodID)
+
+	sub.AssignService(businessID, termUntil)
+
+	if sub.TariffID != businessID {
+		t.Errorf("TariffID = %v, want %v", sub.TariffID, businessID)
+	}
+	if sub.Source != SubscriptionSourceService {
+		t.Errorf("Source = %v, want service", sub.Source)
+	}
+	if sub.Status != SubscriptionStatusActive {
+		t.Errorf("Status = %v, want active", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(termUntil) {
+		t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, termUntil)
+	}
+	if sub.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = true, want false")
+	}
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Error("expected pending change cleared")
+	}
+	if sub.CurrentPeriod != nil {
+		t.Errorf("CurrentPeriod = %v, want nil", sub.CurrentPeriod)
+	}
+	if sub.GraceRemindedAt != nil {
+		t.Errorf("GraceRemindedAt = %v, want nil", sub.GraceRemindedAt)
+	}
+	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != methodID {
+		t.Errorf("ActivePaymentMethodID = %v, want the surviving method", sub.ActivePaymentMethodID)
+	}
+}
+
+// TestSubscriptionForceApplyTariffChange proves the admin force change
+// (issue #255): the new tariff applies immediately for the chosen period, the
+// source and auto-renew setting keep their value, and a cancelled subscription
+// is out of scope.
+func TestSubscriptionForceApplyTariffChange(t *testing.T) {
+	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	fromID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	toID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+
+	sub := Subscription{
+		ID:               uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13"),
+		UserID:           uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
+		TariffID:         fromID,
+		Source:           SubscriptionSourceService,
+		Status:           SubscriptionStatusActive,
+		AutoRenewEnabled: false,
+	}
+	if err := sub.ForceApplyTariffChange(toID, PeriodYear, now); err != nil {
+		t.Fatalf("ForceApplyTariffChange() error = %v", err)
+	}
+	if sub.TariffID != toID {
+		t.Errorf("TariffID = %v, want %v", sub.TariffID, toID)
+	}
+	wantValidUntil := now.AddDate(1, 0, 0)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
+	}
+	if sub.Status != SubscriptionStatusActive {
+		t.Errorf("Status = %v, want active", sub.Status)
+	}
+	if sub.Source != SubscriptionSourceService {
+		t.Errorf("Source = %v, want the unchanged service source", sub.Source)
+	}
+	if sub.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = true, want the unchanged value false")
+	}
+	if sub.CurrentPeriod == nil || *sub.CurrentPeriod != PeriodYear {
+		t.Errorf("CurrentPeriod = %v, want year", sub.CurrentPeriod)
+	}
+
+	if err := sub.ForceApplyTariffChange(toID, PeriodMonth, now); !errors.Is(err, ErrAlreadyOnTariff) {
+		t.Errorf("ForceApplyTariffChange same tariff error = %v, want ErrAlreadyOnTariff", err)
+	}
+	if err := sub.ForceApplyTariffChange(fromID, "quarter", now); !errors.Is(err, ErrInvalidPeriod) {
+		t.Errorf("ForceApplyTariffChange invalid period error = %v, want ErrInvalidPeriod", err)
+	}
+	sub.Status = SubscriptionStatusCancelled
+	if err := sub.ForceApplyTariffChange(fromID, PeriodMonth, now); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("ForceApplyTariffChange cancelled error = %v, want ErrInvalidSubscriptionState", err)
+	}
+}
+
+// TestSubscriptionForceApplyTariffChangeFromGrace proves a grace subscription
+// leaves grace when the admin force-changes its tariff (issue #255): the
+// repaired subscription is active for the new period.
+func TestSubscriptionForceApplyTariffChangeFromGrace(t *testing.T) {
+	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	fromID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	toID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	graceUntil := now.Add(2 * 24 * time.Hour)
+	remindedAt := now.Add(-12 * time.Hour)
+
+	sub := Subscription{
+		ID:              uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13"),
+		UserID:          uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
+		TariffID:        fromID,
+		Source:          SubscriptionSourcePaid,
+		Status:          SubscriptionStatusGrace,
+		ValidUntil:      &graceUntil,
+		GraceRemindedAt: &remindedAt,
+	}
+	if err := sub.ForceApplyTariffChange(toID, PeriodMonth, now); err != nil {
+		t.Fatalf("ForceApplyTariffChange() error = %v", err)
+	}
+	if sub.Status != SubscriptionStatusActive {
+		t.Errorf("Status = %v, want active", sub.Status)
+	}
+	if sub.GraceRemindedAt != nil {
+		t.Errorf("GraceRemindedAt = %v, want nil", sub.GraceRemindedAt)
+	}
+	if !sub.IsPaidSource() {
+		t.Error("expected the unchanged paid source")
+	}
+}
+
+// TestSubscriptionExtendGrace proves the manual grace extension (issue #255):
+// the window lengthens from the later of now and the current deadline, and
+// only a subscription in grace qualifies.
+func TestSubscriptionExtendGrace(t *testing.T) {
+	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	graceUntil := now.Add(48 * time.Hour)
+	remindedAt := now.Add(-6 * time.Hour)
+
+	sub := Subscription{
+		ID:              uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"),
+		UserID:          uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"),
+		TariffID:        uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13"),
+		Status:          SubscriptionStatusGrace,
+		ValidUntil:      &graceUntil,
+		GraceRemindedAt: &remindedAt,
+	}
+
+	// The deadline is still ahead: the extension stacks on it.
+	if err := sub.ExtendGrace(now, 3*24*time.Hour); err != nil {
+		t.Fatalf("ExtendGrace() error = %v", err)
+	}
+	want := graceUntil.Add(3 * 24 * time.Hour)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(want) {
+		t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, want)
+	}
+	if sub.GraceRemindedAt != nil {
+		t.Errorf("GraceRemindedAt = %v, want nil for the fresh reminder window", sub.GraceRemindedAt)
+	}
+
+	// The window has expired but the worker has not closed it: the extension
+	// counts from now, so the user still gets the full extra time.
+	later := want.Add(6 * time.Hour)
+	if err := sub.ExtendGrace(later, 24*time.Hour); err != nil {
+		t.Fatalf("ExtendGrace(expired window) error = %v", err)
+	}
+	wantFromNow := later.Add(24 * time.Hour)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantFromNow) {
+		t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantFromNow)
+	}
+
+	// Only a grace subscription can be extended.
+	sub.Status = SubscriptionStatusActive
+	if err := sub.ExtendGrace(later, 24*time.Hour); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("ExtendGrace(active) error = %v, want ErrInvalidSubscriptionState", err)
+	}
+}
+
+// TestSubscriptionPaymentFlipsServiceSourceToPaid proves the upgrade-over-
+// service rule (issue #255): both a tariff change and a renewal applied by a
+// succeeded payment put the subscription on the paid track.
+func TestSubscriptionPaymentFlipsServiceSourceToPaid(t *testing.T) {
+	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	basic := Tariff{ID: basicID, Name: TariffBasic, ActivePropertyLimit: 1}
+	pro := Tariff{ID: proID, Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000}
+
+	sub := Subscription{
+		ID:       uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
+		UserID:   uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+		TariffID: basicID,
+		Source:   SubscriptionSourceService,
+		Status:   SubscriptionStatusActive,
+	}
+	if err := sub.ApplyTariffChange(paymentID, basic, pro, PeriodMonth, now); err != nil {
+		t.Fatalf("ApplyTariffChange() error = %v", err)
+	}
+	if sub.Source != SubscriptionSourcePaid {
+		t.Errorf("Source = %v, want paid after the applied upgrade", sub.Source)
+	}
+	if !sub.AutoRenewEnabled {
+		t.Error("expected auto-renew enabled after the applied upgrade")
+	}
+
+	sub.Source = SubscriptionSourceService
+	sub.TariffID = proID
+	if err := sub.ApplyRenewal(paymentID, PeriodMonth, now); err != nil {
+		t.Fatalf("ApplyRenewal() error = %v", err)
+	}
+	if sub.Source != SubscriptionSourcePaid {
+		t.Errorf("Source = %v, want paid after the applied renewal", sub.Source)
 	}
 }

@@ -1,6 +1,6 @@
 import type {Metadata} from 'next';
 import {PropertiesPage} from '@/widgets/properties';
-import {parseFiltersFromParams, parseSortFromParams} from '@/widgets/properties/lib/parse-property-search-params';
+import {parseFiltersFromParams, parseSortFromParams} from '@/widgets/properties';
 
 export const metadata: Metadata = {
     title: 'Мои объекты — Рентли',

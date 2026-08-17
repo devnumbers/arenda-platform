@@ -6,14 +6,14 @@ import { notify } from '@/shared/lib/notifications';
 import {
   useTenantContact,
   useUpdateTenantContact,
-} from '@/features/tenant-contacts/api';
+} from '@/features/tenant-contacts';
 import { Skeleton } from '@heroui/react/skeleton';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { PageHeader } from '@/shared/ui/page-header';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import { TenantForm, type TenantContactFormData } from './TenantForm';
 import styles from './TenantEditForm.module.css';
 

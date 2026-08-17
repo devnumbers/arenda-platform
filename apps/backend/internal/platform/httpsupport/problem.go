@@ -8,10 +8,7 @@ import (
 	"net/http"
 
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
-	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
@@ -64,22 +61,6 @@ func InternalError(ctx context.Context, err error) openapi.Problem {
 // is not a recognized domain error.
 func UserFacingDetail(err error) (string, bool) {
 	switch {
-	// Identity / auth.
-	case errors.Is(err, identityapp.ErrUserBlocked):
-		return "Пользователь временно заблокирован", true
-	case errors.Is(err, identityapp.ErrCodeSentTooRecently):
-		return "Код отправлен слишком недавно", true
-	case errors.Is(err, identityapp.ErrPhoneAlreadyTaken):
-		return "Этот номер телефона уже используется", true
-	case errors.Is(err, identityapp.ErrPhoneUnchanged):
-		return "Новый номер должен отличаться от текущего", true
-	case errors.Is(err, identitydomain.ErrTooManyAttempts):
-		return "Слишком много попыток", true
-	case errors.Is(err, identityapp.ErrEmailDoesNotMatch):
-		return "Некорректные учётные данные", true
-	case errors.Is(err, identityapp.ErrEmailAlreadyTaken):
-		return "Эта почта уже используется", true
-
 	// Properties.
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
 		return "Некорректные данные объекта", true
@@ -125,8 +106,6 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Арендатор с таким телефоном уже существует", true
 
 	// Billing / subscriptions.
-	case errors.Is(err, billingdomain.ErrInvalidAmount):
-		return "Сумма должна быть больше нуля", true
 	case errors.Is(err, billingdomain.ErrInvalidPeriod):
 		return "Период должен быть месяц или год", true
 	case errors.Is(err, billingdomain.ErrInvalidTariff):
@@ -137,16 +116,20 @@ func UserFacingDetail(err error) (string, bool) {
 		return "Некорректная смена тарифа", true
 	case errors.Is(err, billingdomain.ErrInvalidSubscriptionState):
 		return "Некорректное состояние подписки", true
-	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
-		return "Возврат платежа невозможен в текущем статусе", true
 	case errors.Is(err, billingdomain.ErrCannotEnableAutoRenew):
 		return "Нельзя включить автопродление без срока действия", true
-	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
-		return "Способ оплаты используется", true
-	case errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists):
-		return "Способ оплаты уже добавлен", true
-	case errors.Is(err, billingapp.ErrInvalidFilter):
-		return "Некорректный фильтр", true
+	case errors.Is(err, billingdomain.ErrInvalidAmount):
+		return "Некорректная сумма платежа", true
+	case errors.Is(err, billingdomain.ErrInvalidPayment):
+		return "Некорректный платёж", true
+	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
+		return "Некорректный статус платежа для этой операции", true
+	case errors.Is(err, billingdomain.ErrInvalidTerm):
+		return "Некорректный срок служебной подписки", true
+	case errors.Is(err, billingdomain.ErrInvalidGraceExtension):
+		return "Некорректное продление льготного периода", true
+	case errors.Is(err, billingdomain.ErrInvalidTariffPricing):
+		return "Некорректные цены или лимит тарифа", true
 
 	// Admin.
 	case errors.Is(err, adminapp.ErrInvalidFilter):

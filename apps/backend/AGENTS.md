@@ -56,8 +56,8 @@ Follow the workflow from the root `AGENTS.md`. For backend tasks, additionally:
 - Current bounded contexts under `internal` include `identity`, `properties`, `leases`, `billing`, `notifications`, and `platform`. Add new contexts according to docs, glossary, and ADR boundaries.
 - `internal/audit` is the audit log module: `domain` holds the `Entry` model and the action registry, `application` exposes the `Recorder` port, `adapters/postgres` writes entries. Audit records go in the business operation's transaction (fail-safe: an insert error rolls the operation back); see `docs/adr/0020-audit-log.md`.
 - Layer direction is inward only: transport/adapters → application → domain.
-- Domain packages contain business language and rules only. They must not import HTTP, OpenAPI generated types, `pgx`, `sqlc`, `database/sql`, config, or adapters.
-- Application packages own use cases, ports, orchestration, transaction boundaries, and calls into domain code.
+- Domain packages contain business language and rules only. They must not import HTTP, OpenAPI generated types, `pgx`, `sqlc`, `database/sql`, config, or adapters (enforced by depguard `domain-clean` in `.golangci.yml`).
+- Application packages own use cases, ports, orchestration, transaction boundaries, and calls into domain code; their import boundaries are enforced by depguard `application-clean` in `.golangci.yml`.
 - Adapter/platform packages own HTTP, persistence, config, logging, external services, and generated code.
 - Keep packages small, names explicit, errors intentional, and dependencies boring. Prefer simple Go over clever abstractions.
 
@@ -65,7 +65,7 @@ Follow the workflow from the root `AGENTS.md`. For backend tasks, additionally:
 
 - API is contract-first: change `api/openapi/openapi.yaml` before changing HTTP behavior.
 - Generated OpenAPI DTOs stay at the HTTP edge and must be mapped explicitly to application/domain models.
-- Regenerate from `apps/backend` after API/schema query changes:
+- Regenerate from `apps/backend` after API/schema query changes (freshness enforced by `make backend-openapi-check` / `make backend-sqlc-check` in `.github/workflows/ci.yml`):
 
 ```bash
 go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
@@ -73,16 +73,17 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 ```
 
 - The property attributes catalog (`internal/properties/domain` field maps, `ValidateAttributes`, `crossFieldErrors`, …) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts.
-- Do not hand-edit generated files (`spec.gen.go`, sqlc output, `zz_catalog.gen.go.txt`); change the OpenAPI contract, SQL, migrations, `catalog.json`, or generator configuration, then regenerate.
-- Use explicit PostgreSQL SQL with `sqlc`; do not introduce ORM models.
+- Do not hand-edit generated files (`spec.gen.go`, sqlc output, `zz_catalog.gen.go`); change the OpenAPI contract, SQL, migrations, `catalog.json`, or generator configuration, then regenerate (freshness enforced by `make backend-tkassa-spec-check` / `make backend-openapi-check` / `make backend-sqlc-check` / `make attributes-check` in `.github/workflows/ci.yml`).
+- Use explicit PostgreSQL SQL with `sqlc`; do not introduce ORM models (enforced by depguard `no-orm` in `.golangci.yml`).
 - Schema changes require versioned migrations in `db/migrations` and matching queries in `db/queries`.
 - Keep database invariants in PostgreSQL with `NOT NULL`, foreign keys, `CHECK` constraints, indexes, and triggers where they protect durable rules.
 - Authorization goes through the policy port (`internal/shared/policy.Policy`), the single point that maps an actor and a data owner (scope) to a role. Owner-scoped repository queries filter by the data owner (`scope`), not by the actor; membership is resolved by the policy port, not in SQL. See ADR 0028 (`docs/adr/0028-object-data-access-model.md`).
 - Application-layer services receive `actor` (the operation initiator) and thread `scope` (the data owner) into repository calls. For the owner's own data `actor == scope`. Do not reintroduce a bare `ownerID` parameter that conflates the two; the split is the seam for property sharing (T3).
 - Use `date` for domain dates, `timestamptz` for system timestamps, and `BIGINT` (kopecks) for money.
-- Identifiers are UUIDv7, generated in the application via `uuid.NewV7()`; `id` columns have no `DEFAULT` in the database. Set `id` explicitly in new migrations and seeds (in SQL, use PostgreSQL 18 `uuidv7()`). See `docs/adr/0019-uuid-v7-app-generated-ids.md`.
+- Money arithmetic is integer-only (`int64` kopecks); never use floating-point for money at any layer.
+- Identifiers are UUIDv7, generated in the application via `uuid.NewV7()`; `id` columns have no `DEFAULT` in the database. Set `id` explicitly in new migrations and seeds (in SQL, use PostgreSQL 18 `uuidv7()`). See `docs/adr/0019-uuid-v7-app-generated-ids.md`. `uuid.New()`/`uuid.NewV4()`/`uuid.NewString()`/`uuid.NewRandom()`/`uuid.NewRandomFromReader()` are banned at every layer, tests included (enforced by forbidigo in `.golangci.yml`); the panicking sites use `uuid.Must(uuid.NewV7())`.
 - Browser auth uses opaque server-side sessions with `HttpOnly` cookies. Do not replace this with browser-readable JWT/session storage without a new ADR.
-- Store property photos through a storage port backed by REG.RU S3-compatible storage. Do not add MinIO as a local dependency.
+- Store property photos through a storage port backed by REG.RU S3-compatible storage. Do not add MinIO as a local dependency (enforced by depguard `no-minio` in `.golangci.yml`).
 
 ## Observability
 
@@ -97,6 +98,20 @@ Backend observability code conventions (slog, OpenTelemetry, request IDs, span n
 
 ```bash
 make backend-lint
-cd apps/backend && go test ./...
+make backend-test
 cd apps/backend && go vet ./...
 ```
+
+For changes that touch adapters, repositories, or DB queries, also run:
+
+```bash
+make backend-test-integration
+```
+
+This uses testcontainers-go (requires Docker) to start a dedicated PostgreSQL 18
+container per test binary. Alternatively, use an external database via
+`make test-infra-up` then `TEST_DATABASE_URL=... make backend-test-integration`.
+
+CI backstop: the `backend` job runs the unit suite and the `backend-integration`
+job runs the same `-tags=integration -race` suite (testcontainers via the mounted
+Docker socket) in `.github/workflows/ci.yml`.

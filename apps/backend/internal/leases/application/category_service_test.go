@@ -15,7 +15,7 @@ type fakeCategoryRepo struct {
 
 func (f *fakeCategoryRepo) Create(ctx context.Context, ownerID uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error) {
 	c := domain.OperationCategory{
-		ID:      uuid.New(),
+		ID:      uuid.Must(uuid.NewV7()),
 		OwnerID: ownerID,
 		Type:    categoryType,
 		Name:    name,
@@ -67,12 +67,12 @@ func (f *fakeCategoryRepo) WithTx(tx transaction.Tx) OperationCategoryRepository
 func TestCreateOperationCategoryCommand_Validate(t *testing.T) {
 	svc := NewCategoryService(&fakeCategoryRepo{}, nil)
 
-	_, err := svc.CreateCategory(context.Background(), uuid.New(), CreateOperationCategoryCommand{Type: "invalid", Name: "Foo"})
+	_, err := svc.CreateCategory(context.Background(), uuid.Must(uuid.NewV7()), CreateOperationCategoryCommand{Type: "invalid", Name: "Foo"})
 	if err == nil {
 		t.Fatal("expected error for invalid type")
 	}
 
-	_, err = svc.CreateCategory(context.Background(), uuid.New(), CreateOperationCategoryCommand{Type: "income", Name: ""})
+	_, err = svc.CreateCategory(context.Background(), uuid.Must(uuid.NewV7()), CreateOperationCategoryCommand{Type: "income", Name: ""})
 	if err == nil {
 		t.Fatal("expected error for empty name")
 	}
@@ -80,7 +80,7 @@ func TestCreateOperationCategoryCommand_Validate(t *testing.T) {
 
 func TestCategoryService_CreateCategory(t *testing.T) {
 	ctx := t.Context()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	repo := &fakeCategoryRepo{}
 	svc := NewCategoryService(repo, nil)
 

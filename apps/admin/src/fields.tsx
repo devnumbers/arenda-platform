@@ -29,12 +29,13 @@ export const subscriptionStatusChoices: Choice[] = [
   { id: 'cancelled', name: 'Отменена' },
 ];
 
+// partial_refunded отсутствует: возвраты всегда полные (ADR 0037), статус
+// выпадает из нового домена и строк с ним быть не может.
 export const subscriptionPaymentStatusChoices: Choice[] = [
   { id: 'pending', name: 'Ожидает оплаты' },
   { id: 'succeeded', name: 'Оплачен' },
   { id: 'failed', name: 'Ошибка оплаты' },
   { id: 'refunded', name: 'Возвращён' },
-  { id: 'partial_refunded', name: 'Частичный возврат' },
   { id: 'refunding', name: 'Возврат выполняется' },
 ];
 
@@ -120,6 +121,7 @@ export const auditEntityTypeChoices: Choice[] = [
   { id: 'subscription', name: 'Подписка' },
   { id: 'payment_method', name: 'Способ оплаты' },
   { id: 'subscription_payment', name: 'Платёж подписки' },
+  { id: 'tariff', name: 'Тариф' },
 ];
 
 export const auditActionChoices: Choice[] = [
@@ -156,6 +158,9 @@ export const auditActionChoices: Choice[] = [
   { id: 'operation_category.created', name: 'Создание категории' },
   { id: 'subscription.tariff_changed', name: 'Смена тарифа' },
   { id: 'subscription.cancelled', name: 'Отмена подписки' },
+  { id: 'subscription.service_assigned', name: 'Назначение служебной подписки' },
+  { id: 'subscription.tariff_forced', name: 'Принудительная смена тарифа' },
+  { id: 'subscription.grace_extended', name: 'Продление грейс-периода' },
   { id: 'subscription.auto_renew_toggled', name: 'Переключение автопродления' },
   { id: 'payment_method.added', name: 'Добавление способа оплаты' },
   { id: 'payment_method.activated', name: 'Активация способа оплаты' },
@@ -164,6 +169,8 @@ export const auditActionChoices: Choice[] = [
   { id: 'subscription_payment.failed', name: 'Платёж не удался' },
   { id: 'subscription_payment.refunded', name: 'Возврат платежа' },
   { id: 'subscription_payment.synced', name: 'Синхронизация платежа' },
+  { id: 'tariff.created', name: 'Создание тарифа' },
+  { id: 'tariff.updated', name: 'Изменение тарифа' },
 ];
 
 interface PersonName {

@@ -2,7 +2,7 @@ import type {Metadata} from 'next';
 import {Suspense} from 'react';
 import {PageShell} from '@/shared/ui/page-shell';
 import {PropertyLeasesPage} from '@/widgets/property-detail';
-import {FinanceLoading} from '@/widgets/finance/ui/FinanceLoading';
+import {FinanceLoading} from '@/shared/ui/finance-loading';
 
 export const metadata: Metadata = {
     title: 'Аренды объекта — Рентли',

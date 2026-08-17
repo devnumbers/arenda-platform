@@ -5,8 +5,8 @@ import { useState } from 'react';
 import { Modal } from '@heroui/react';
 import { Button } from '@/shared/ui/button';
 import { pluralize } from '@/shared/lib/pluralize';
-import type { components } from '@/shared/api/generated';
-import type { DeletePropertyMode } from '@/features/properties/api/hooks';
+import type { components } from '@/shared/api/dto';
+import type { DeletePropertyMode } from '@/features/properties';
 import styles from './PropertyDeleteModal.module.css';
 
 export type PropertyDeleteModalProps = {

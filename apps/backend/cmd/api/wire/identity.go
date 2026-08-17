@@ -6,10 +6,12 @@ import (
 
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
 	identityevents "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/events"
+	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	mailerfake "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/fake"
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
@@ -23,6 +25,10 @@ type Identity struct {
 	AttemptRepo    *identitypg.AttemptRepository
 	SessionRepo    *identitypg.SessionRepository
 	SessionService identityapp.SessionService
+	// SessionLoader is the platform-neutral adapter over SessionService that the
+	// HTTP session middleware consumes. It keeps platform/httpsupport free of any
+	// identity/domain import (ADR 0034).
+	SessionLoader  httpsupport.SessionLoader
 	EventPublisher *identityevents.Publisher
 	Authentication *identityapp.AuthenticationService
 	PhoneChange    *identityapp.PhoneChangeService
@@ -34,12 +40,12 @@ type Identity struct {
 }
 
 // WireIdentity constructs the identity repositories, session service, event
-// publisher, runs the phone-encryption backfill when a key is set, selects the
-// email mailer based on config, and builds the authentication, phone-change,
-// profile and logout services. It takes the event dispatcher (for the publisher)
-// and the reminder service (notifications module) that profile depends on.
+// publisher, selects the email mailer based on config, and builds the
+// authentication, phone-change, profile and logout services. It takes the event
+// dispatcher (for the publisher) and the reminder service (notifications module)
+// that profile depends on.
 func WireIdentity(
-	ctx context.Context,
+	_ context.Context,
 	p platformDeps,
 	eventDispatcher *events.InProcessDispatcher,
 	reminderService *notificationsapp.ReminderService,
@@ -48,17 +54,23 @@ func WireIdentity(
 	codeRepo := identitypg.NewLoginCodeRepository(p.DB, p.Encryptor)
 	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
 	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
-	sessionService := identityapp.NewSessionService(sessionRepo, p.Encryptor)
+
+	// factory is the single canonical txStoreFactory bundling the four identity
+	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
+	// passed to every identity service so adding an Nth repository is a change
+	// here, not in six constructors.
+	factory := identityapp.NewTxStoreFactory(
+		userRepo, codeRepo, attemptRepo, sessionRepo,
+		p.AuditRecorder, p.UoW,
+	)
+
+	sessionService := identityapp.NewSessionService(
+		factory,
+		identityapp.SessionServiceConfig{Hasher: p.Encryptor},
+	)
+	sessionLoader := identityhttp.NewSessionLoader(sessionService)
 
 	eventPublisher := identityevents.NewPublisher(eventDispatcher)
-
-	if p.Cfg.EncryptionKey != "" {
-		if err := BackfillPhoneEncryption(ctx, p.DB, p.Encryptor, p.Logger); err != nil {
-			return nil, fmt.Errorf("backfill phone encryption: %w", err)
-		}
-	} else {
-		p.Logger.WarnContext(ctx, "skipping phone encryption backfill: ENCRYPTION_KEY is empty")
-	}
 
 	var emailMailer mailer.Sender
 	switch p.Cfg.EmailSender {
@@ -80,46 +92,52 @@ func WireIdentity(
 
 	emailSender := identityemail.NewSender(emailMailer, p.Renderer)
 
-	authenticationService := identityapp.NewAuthenticationService(
-		userRepo,
-		codeRepo,
-		attemptRepo,
-		sessionRepo,
-		identityapp.AuthenticationServiceConfig{
+	// loginCodeService is the deep module for login-code issuance/verification
+	// shared by AuthenticationService and PhoneChangeService (ADR 0033, step 4).
+	loginCodeService := identityapp.NewLoginCodeService(
+		factory,
+		identityapp.LoginCodeServiceConfig{
 			CodeSender: emailSender,
 			Clock:      p.Clock,
-			Publisher:  eventPublisher,
-			DB:         p.Beginner,
-			Logger:     p.Logger,
 			Hasher:     p.Encryptor,
-			Audit:      p.AuditRecorder,
+			Logger:     p.Logger,
+		},
+	)
+
+	authenticationService := identityapp.NewAuthenticationService(
+		factory,
+		identityapp.AuthenticationServiceConfig{
+			LoginCodes: loginCodeService,
+			Sessions:   sessionService,
+			Publisher:  eventPublisher,
+			Clock:      p.Clock,
+			Logger:     p.Logger,
 		},
 	)
 
 	phoneChangeService := identityapp.NewPhoneChangeService(
-		userRepo,
-		codeRepo,
-		attemptRepo,
-		sessionRepo,
+		factory,
 		identityapp.PhoneChangeServiceConfig{
-			Sender: emailSender,
-			Clock:  p.Clock,
-			DB:     p.Beginner,
-			Hasher: p.Encryptor,
-			Audit:  p.AuditRecorder,
+			LoginCodes: loginCodeService,
+			Clock:      p.Clock,
+			Hasher:     p.Encryptor,
+			Logger:     p.Logger,
 		},
 	)
 
 	profileService := identityapp.NewProfileService(
-		userRepo,
-		p.AuditRecorder,
-		p.Beginner,
-		reminderService,
+		factory,
+		identityapp.ProfileServiceConfig{
+			ReminderRescheduler: reminderService,
+		},
 	)
 
 	logoutService := identityapp.NewLogoutService(
-		sessionRepo,
-		p.Encryptor,
+		factory,
+		identityapp.LogoutServiceConfig{
+			Hasher: p.Encryptor,
+			Logger: p.Logger,
+		},
 	)
 
 	return &Identity{
@@ -128,6 +146,7 @@ func WireIdentity(
 		AttemptRepo:    attemptRepo,
 		SessionRepo:    sessionRepo,
 		SessionService: sessionService,
+		SessionLoader:  sessionLoader,
 		EventPublisher: eventPublisher,
 		Authentication: authenticationService,
 		PhoneChange:    phoneChangeService,

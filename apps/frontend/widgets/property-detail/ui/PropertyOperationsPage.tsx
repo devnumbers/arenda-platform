@@ -12,20 +12,20 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import {
   useInfiniteOperations,
   usePropertyOperationsSummary,
-} from '@/features/operations/api/hooks';
-import { useProperty } from '@/features/properties/api/hooks';
+} from '@/features/operations';
+import { useProperty } from '@/features/properties';
 import {
   formatDateForApi,
   startOfMonth,
   endOfMonth,
-} from '@/entities/operation/lib/dates';
-import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
-import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
-import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
-import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
-import { useSubscription } from '@/features/subscription/api/hooks';
-import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
-import { OperationsList } from '@/widgets/operations/ui/OperationsList';
+} from '@/entities/operation';
+import { FinanceLoading } from '@/shared/ui/finance-loading';
+import { FinanceErrorState } from '@/shared/ui/finance-error-state';
+import { FinanceEmptyState } from '@/shared/ui/finance-empty-state';
+import { SubscriptionReadonlyBanner } from '@/features/subscription';
+import { useSubscription } from '@/features/subscription';
+import { isSubscriptionReadonly } from '@/features/subscription';
+import { OperationsList } from '@/entities/operation';
 import styles from './PropertyOperationsPage.module.css';
 
 type Period = 'month' | 'quarter' | 'year';

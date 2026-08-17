@@ -2,7 +2,7 @@
 
 import type { JSX } from 'react';
 import { TenantCard } from './TenantCard';
-import type { TenantContact } from '@/entities/tenant-contact/model/types';
+import type { TenantContact } from '@/entities/tenant-contact';
 import styles from './TenantSection.module.css';
 
 export type TenantSectionProps = {

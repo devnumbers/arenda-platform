@@ -1,4 +1,4 @@
-import type { PropertyType } from '@/entities/property/model/types';
+import type { PropertyType } from '@/entities/property';
 
 export const propertyTypeLabels: Record<PropertyType, string> = {
   apartment: 'Квартира',

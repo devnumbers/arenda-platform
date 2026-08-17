@@ -7,7 +7,7 @@ import {
     startOfMonth,
     startOfQuarter,
     startOfYear,
-} from '@/entities/operation/lib/dates';
+} from '@/entities/operation';
 import type {OperationPeriod} from '../ui/OperationFilters';
 
 export type OperationTypeFilter = 'income' | 'expense';

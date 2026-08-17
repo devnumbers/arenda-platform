@@ -1,14 +1,14 @@
 'use client';
 
 import { useMemo } from 'react';
-import {useArchivedProperties, useProperties} from '@/features/properties/api/hooks';
-import { useLeases } from '@/features/leases/api/hooks';
+import {useArchivedProperties, useProperties} from '@/features/properties';
+import { useLeases } from '@/features/leases';
 import type {PropertiesViewMode} from './apply-filters';
 import { ApiError } from '@/shared/api/errors';
-import { mapLeaseResponse } from '@/entities/lease/model/mappers';
-import type { Property } from '@/entities/property/model/types';
-import type { Lease } from '@/entities/lease/model/types';
-import { getEffectiveLeaseStatus, isOpenLease } from '@/entities/lease/lib/status';
+import { mapLeaseResponse } from '@/entities/lease';
+import type { Property } from '@/entities/property';
+import type { Lease } from '@/entities/lease';
+import { getEffectiveLeaseStatus, isOpenLease } from '@/entities/lease';
 
 export type PropertyWithLease = Property;
 

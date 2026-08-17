@@ -1,74 +1,145 @@
 package application
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
-// ChangeTariffRequest asks to move a user to another tariff for a period.
-type ChangeTariffRequest struct {
-	TariffName domain.TariffName
-	Period     domain.SubscriptionPeriod
-}
-
-// ChangeTariffResponse returns the pending payment the user must confirm.
-type ChangeTariffResponse struct {
-	PaymentID  uuid.UUID
-	ConfirmURL string
-}
-
-// AddPaymentMethodRequest carries a raw payment instrument token from the provider.
-type AddPaymentMethodRequest struct {
-	ProviderToken string
-}
-
-// AddPaymentMethodResponse is the result of adding a payment method.
-// For providers that require confirmation (e.g. T-Kassa) ConfirmURL is set.
-// For synchronous providers (e.g. fake) PaymentMethod is set.
-type AddPaymentMethodResponse struct {
-	ConfirmURL    string
-	PaymentMethod *domain.PaymentMethod
-}
-
-// SubscriptionView is the current subscription together with its tariff,
-// pending tariff, active payment method, and current paid period.
+// SubscriptionView is the read model of the user's current subscription with
+// its tariffs and the active payment method resolved (issue #251).
 type SubscriptionView struct {
 	Subscription        domain.Subscription
 	Tariff              domain.Tariff
 	PendingTariff       *domain.Tariff
 	ActivePaymentMethod *domain.PaymentMethod
-	CurrentPeriod       *domain.SubscriptionPeriod
 }
 
-// SubscriptionPaymentView is a subscription payment together with its tariff.
+// ChangeTariffRequest is the application-layer input of the tariff-change use
+// case: the target plan by canonical name and the billing period to apply.
+type ChangeTariffRequest struct {
+	TariffName domain.TariffName
+	Period     domain.SubscriptionPeriod
+}
+
+// ChangeTariffResult is the outcome of the tariff-change use case. The
+// downgrade path schedules the change and returns zero values: no payment is
+// involved. PaymentID and ConfirmURL are populated by the payment flow (issue
+// #250) for upgrades and same-tariff grace renewals.
+type ChangeTariffResult struct {
+	PaymentID  uuid.UUID
+	ConfirmURL string
+}
+
+// SubscriptionPaymentView is the read model of one subscription payment with
+// its tariff resolved — the shape of GET /subscription/payments (issue #250).
 type SubscriptionPaymentView struct {
 	Payment domain.SubscriptionPayment
 	Tariff  domain.Tariff
 }
 
-// SubscriptionPaymentWithUser is a subscription payment together with its tariff and the user's phone.
-type SubscriptionPaymentWithUser struct {
+// AdminPaymentFilters carries the optional filters of the admin payment
+// listing (issue #254). Status and SubscriptionStatus are validated against
+// the domain vocabularies; Sort against the endpoint whitelist; the repository
+// layer encrypts the phone filter.
+type AdminPaymentFilters struct {
+	UserID             *uuid.UUID
+	Status             string
+	UserPhone          string
+	SubscriptionStatus string
+	Sort               string
+	Order              string
+	Limit              int
+	Offset             int
+}
+
+// AdminPaymentRow is one row of the admin payment listing as the persistence
+// adapter produces it: the payment aggregate plus the payer's phone resolved
+// from identity (decrypted when stored as ciphertext).
+type AdminPaymentRow struct {
 	Payment   domain.SubscriptionPayment
 	UserPhone string
 }
 
-// AdminSubscriptionPaymentView is a subscription payment with tariff and user phone for admin view.
+// AdminSubscriptionPaymentView is the read model of one subscription payment
+// for the admin views (issue #254): the payment with its tariff resolved and
+// the payer's phone.
 type AdminSubscriptionPaymentView struct {
 	Payment   domain.SubscriptionPayment
 	Tariff    domain.Tariff
 	UserPhone string
 }
 
-// ListAllPaymentsFilters carries optional filters for the admin list endpoint.
-type ListAllPaymentsFilters struct {
-	Status string
-	UserID uuid.UUID
-	// UserPhone filters by the exact user phone number. The repository
-	// deterministically encrypts it before matching, like the admin users
-	// phone filter.
-	UserPhone string
-	Limit     int
-	Offset    int
-	Sort      string
-	Order     string
+// AddPaymentMethodRequest is the application-layer input of the
+// add-payment-method use case (issue #251). ProviderToken carries the raw
+// charge token of synchronous providers (the fake); bank-form providers such
+// as T-Kassa ignore it and run the binding-session flow instead.
+type AddPaymentMethodRequest struct {
+	ProviderToken string
+}
+
+// AddPaymentMethodResult carries either the created payment method (the
+// synchronous token path) or the confirmation URL of the binding form the
+// payer follows (the binding-session path). Exactly one of the two is set.
+type AddPaymentMethodResult struct {
+	ConfirmURL    string
+	PaymentMethod *domain.PaymentMethod
+}
+
+// ServiceTermType names the fixed term of an admin-assigned service
+// subscription (issue #255): a month or a year from the assignment moment, or
+// an explicit until date.
+type ServiceTermType string
+
+const (
+	ServiceTermMonth ServiceTermType = "month"
+	ServiceTermYear  ServiceTermType = "year"
+	ServiceTermDate  ServiceTermType = "date"
+)
+
+// AssignServiceSubscriptionRequest is the application-layer input of the
+// admin service-subscription assignment (issue #255). UntilDate is the UTC
+// date at midnight and is required with ServiceTermDate.
+type AssignServiceSubscriptionRequest struct {
+	TariffName domain.TariffName
+	TermType   ServiceTermType
+	UntilDate  *time.Time
+}
+
+// ForceChangeTariffRequest is the application-layer input of the admin force
+// tariff change (issue #255).
+type ForceChangeTariffRequest struct {
+	TariffName domain.TariffName
+	Period     domain.SubscriptionPeriod
+}
+
+// SubscriptionTransitionView is one row of the admin subscription transition
+// history (issue #255): the transition with the tariff names resolved — the
+// incident-review view of the user card's «Подписка» block.
+type SubscriptionTransitionView struct {
+	Transition     domain.Transition
+	FromTariffName *string
+	ToTariffName   string
+}
+
+// CreateTariffRequest is the application-layer input of the admin tariff
+// creation (issue #256). The name comes from the closed TariffName vocabulary
+// the frozen user contract pins; domain.NewTariff validates it together with
+// the pricing fields.
+type CreateTariffRequest struct {
+	Name                domain.TariffName
+	ActivePropertyLimit int
+	MonthlyPriceKopecks int64
+	YearlyPriceKopecks  int64
+}
+
+// UpdateTariffRequest is the application-layer input of the admin tariff edit
+// (issue #256): the prices, the property limit and the activity flag whose
+// false value hides the plan. The name is immutable and absent by design.
+type UpdateTariffRequest struct {
+	ActivePropertyLimit int
+	MonthlyPriceKopecks int64
+	YearlyPriceKopecks  int64
+	IsActive            bool
 }

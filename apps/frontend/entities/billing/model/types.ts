@@ -1,4 +1,4 @@
-import type { TariffName } from '@/entities/user/model/types';
+import type { TariffName } from '@/shared/model/tariff';
 
 export type PaymentStatus =
   | 'pending'

@@ -142,7 +142,7 @@ func TestListTenantContactsByIDsRepositoryError(t *testing.T) {
 	repo := &fakeTenantContactRepo{err: errors.New("boom")}
 	svc := NewTenantContactService(repo, nil, nil)
 
-	_, err := svc.ListTenantContactsByIDs(context.Background(), ownerID, []uuid.UUID{uuid.New()})
+	_, err := svc.ListTenantContactsByIDs(context.Background(), ownerID, []uuid.UUID{uuid.Must(uuid.NewV7())})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

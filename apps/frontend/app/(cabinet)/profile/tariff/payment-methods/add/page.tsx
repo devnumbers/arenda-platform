@@ -6,7 +6,7 @@ import { notify } from '@/shared/lib/notifications';
 import { PageHeader } from '@/shared/ui/page-header';
 import { PageShell } from '@/shared/ui/page-shell';
 import { Button } from '@/shared/ui/button';
-import { useAddPaymentMethod } from '@/features/billing/api/hooks';
+import { useAddPaymentMethod } from '@/features/billing';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import styles from './page.module.css';

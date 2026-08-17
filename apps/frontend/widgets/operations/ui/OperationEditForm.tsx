@@ -17,17 +17,17 @@ import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import type { components } from '@/shared/api/generated';
-import { type OperationType } from '@/entities/operation/model/types';
+import type { components } from '@/shared/api/dto';
+import { type OperationType } from '@/entities/operation';
 import {
   useOperation,
   useUpdateOperation,
-} from '@/features/operations/api/hooks';
-import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
-import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
-import { SubscriptionReadonlyBanner } from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
-import { useSubscription } from '@/features/subscription/api/hooks';
-import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
+} from '@/features/operations';
+import { FinanceLoading } from '@/shared/ui/finance-loading';
+import { FinanceErrorState } from '@/shared/ui/finance-error-state';
+import { SubscriptionReadonlyBanner } from '@/features/subscription';
+import { useSubscription } from '@/features/subscription';
+import { isSubscriptionReadonly } from '@/features/subscription';
 import { CategorySelect } from './CategorySelect';
 import { TypeSelect } from './TypeSelect';
 import { ReminderSection } from './ReminderSection';

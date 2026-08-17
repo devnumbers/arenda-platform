@@ -4,14 +4,14 @@ import type {JSX} from 'react';
 import Link from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
 import {LinkButton} from '@/shared/ui/link-button';
-import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
-import {PropertyDetailSection} from './PropertyDetailSection';
+import {SectionHeader} from '@/shared/ui/section-header';
+import { DetailSection } from '@/shared/ui/detail-section';
 import {EmptyState} from '@/shared/ui/empty-state';
 import {Icon} from '@/shared/ui/icon';
 import {ArrowRight, Bell, Plus} from '@/shared/assets/icons';
 import {formatReminderDateTime} from '@/shared/lib/datetime';
-import {PERIODICITY_LABELS} from '@/features/free-reminders/model/types';
-import {useUpcomingFreeReminders} from '@/features/free-reminders/api';
+import {PERIODICITY_LABELS} from '@/features/free-reminders';
+import {useUpcomingFreeReminders} from '@/features/free-reminders';
 import styles from './PropertyRemindersSection.module.css';
 
 export type PropertyRemindersSectionProps = {
@@ -27,7 +27,7 @@ export function PropertyRemindersSection({
     const items = data?.items;
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <div className={styles.headerRow}>
                 <SectionHeader title="Напоминания" count={items?.length}/>
                 <Link href={ROUTES.calendar} className={styles.calendarLink}>
@@ -84,6 +84,6 @@ export function PropertyRemindersSection({
                     </LinkButton>
                 </>
             )}
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }

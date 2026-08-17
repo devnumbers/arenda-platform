@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -34,12 +36,65 @@ const (
 // an unlimited number of properties.
 const UnlimitedPropertyLimit = -1
 
+// Tariff is a subscription plan. IsActive=false hides the plan from users
+// (listing) without breaking foreign keys that still reference it (issue #245).
 type Tariff struct {
 	ID                  uuid.UUID
 	Name                TariffName
 	ActivePropertyLimit int
 	MonthlyPriceKopecks int64
 	YearlyPriceKopecks  int64
+	IsActive            bool
+}
+
+// NewTariff builds a new plan with a minted id, validating the name and the
+// pricing fields (issue #256). It is the only way the admin create flow
+// produces a Tariff, so an unvalidated plan never reaches persistence.
+func NewTariff(name TariffName, activePropertyLimit int, monthlyPriceKopecks, yearlyPriceKopecks int64, isActive bool) (Tariff, error) {
+	if _, err := ParseTariffName(string(name)); err != nil {
+		return Tariff{}, fmt.Errorf("%w: %q", ErrInvalidTariff, name)
+	}
+	tariff := Tariff{
+		ID:                  uuid.Must(uuid.NewV7()),
+		Name:                name,
+		ActivePropertyLimit: activePropertyLimit,
+		MonthlyPriceKopecks: monthlyPriceKopecks,
+		YearlyPriceKopecks:  yearlyPriceKopecks,
+		IsActive:            isActive,
+	}
+	if err := tariff.Validate(); err != nil {
+		return Tariff{}, err
+	}
+	return tariff, nil
+}
+
+// Validate checks the admin-editable tariff invariants (issue #256): prices
+// are non-negative kopecks and the property limit is UnlimitedPropertyLimit
+// (-1) or a non-negative count. The schema's CHECK constraints mirror these
+// rules durably; this is the application-side gate.
+func (t Tariff) Validate() error {
+	if t.MonthlyPriceKopecks < 0 || t.YearlyPriceKopecks < 0 {
+		return fmt.Errorf("%w: prices must be non-negative kopecks", ErrInvalidTariffPricing)
+	}
+	if t.ActivePropertyLimit < UnlimitedPropertyLimit {
+		return fmt.Errorf("%w: active property limit must be %d (unlimited) or greater", ErrInvalidTariffPricing, UnlimitedPropertyLimit)
+	}
+	return nil
+}
+
+// Price returns the tariff's price for one billing period in kopecks. The
+// period selects the price field; an unknown period is an error rather than a
+// silent monthly fallback, so no caller can charge the wrong amount (issue
+// #283).
+func (t Tariff) Price(period SubscriptionPeriod) (int64, error) {
+	switch period {
+	case PeriodMonth:
+		return t.MonthlyPriceKopecks, nil
+	case PeriodYear:
+		return t.YearlyPriceKopecks, nil
+	default:
+		return 0, fmt.Errorf("%w: %q", ErrInvalidPeriod, period)
+	}
 }
 
 // ClassifyTariffChange compares current and next tariffs and returns the

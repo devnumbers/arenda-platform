@@ -9,7 +9,7 @@ import {
     usePropertyContact,
     useUpdatePropertyContact,
     useDeletePropertyContact,
-} from '@/features/property-contacts/api';
+} from '@/features/property-contacts';
 import {PageHeader} from '@/shared/ui/page-header';
 import {IconButton} from '@/shared/ui/icon-button';
 import {Button} from '@/shared/ui/button';

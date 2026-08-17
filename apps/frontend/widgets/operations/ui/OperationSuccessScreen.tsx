@@ -5,7 +5,7 @@ import { StatusGood } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
 import { LinkButton } from '@/shared/ui/link-button';
 import { ROUTES } from '@/shared/config/routes';
-import { type OperationType } from '@/entities/operation/model/types';
+import { type OperationType } from '@/entities/operation';
 import styles from './OperationSuccessScreen.module.css';
 
 export type OperationSuccessScreenProps = {

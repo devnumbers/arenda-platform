@@ -6,39 +6,40 @@ package spec
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// Defines values for AddAccountQrDataType.
+// Defines values for AddAccountQrRequestDataType.
 const (
-	AddAccountQrDataTypeIMAGE   AddAccountQrDataType = "IMAGE"
-	AddAccountQrDataTypePAYLOAD AddAccountQrDataType = "PAYLOAD"
+	AddAccountQrRequestDataTypeIMAGE   AddAccountQrRequestDataType = "IMAGE"
+	AddAccountQrRequestDataTypePAYLOAD AddAccountQrRequestDataType = "PAYLOAD"
 )
 
-// Valid indicates whether the value is a known member of the AddAccountQrDataType enum.
-func (e AddAccountQrDataType) Valid() bool {
+// Valid indicates whether the value is a known member of the AddAccountQrRequestDataType enum.
+func (e AddAccountQrRequestDataType) Valid() bool {
 	switch e {
-	case AddAccountQrDataTypeIMAGE:
+	case AddAccountQrRequestDataTypeIMAGE:
 		return true
-	case AddAccountQrDataTypePAYLOAD:
+	case AddAccountQrRequestDataTypePAYLOAD:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for AddCardCheckType.
+// Defines values for AddCardRequestCheckType.
 const (
-	HOLD     AddCardCheckType = "HOLD"
-	N3DS     AddCardCheckType = "3DS"
-	N3DSHOLD AddCardCheckType = "3DSHOLD"
-	NO       AddCardCheckType = "NO"
+	HOLD     AddCardRequestCheckType = "HOLD"
+	N3DS     AddCardRequestCheckType = "3DS"
+	N3DSHOLD AddCardRequestCheckType = "3DSHOLD"
+	NO       AddCardRequestCheckType = "NO"
 )
 
-// Valid indicates whether the value is a known member of the AddCardCheckType enum.
-func (e AddCardCheckType) Valid() bool {
+// Valid indicates whether the value is a known member of the AddCardRequestCheckType enum.
+func (e AddCardRequestCheckType) Valid() bool {
 	switch e {
 	case HOLD:
 		return true
@@ -122,36 +123,36 @@ func (e AttachCardResponseStatus) Valid() bool {
 	}
 }
 
-// Defines values for CancelRoute.
+// Defines values for CancelRequestRoute.
 const (
-	CancelRouteBNPL CancelRoute = "BNPL"
-	CancelRouteTCB  CancelRoute = "TCB"
+	CancelRequestRouteBNPL CancelRequestRoute = "BNPL"
+	CancelRequestRouteTCB  CancelRequestRoute = "TCB"
 )
 
-// Valid indicates whether the value is a known member of the CancelRoute enum.
-func (e CancelRoute) Valid() bool {
+// Valid indicates whether the value is a known member of the CancelRequestRoute enum.
+func (e CancelRequestRoute) Valid() bool {
 	switch e {
-	case CancelRouteBNPL:
+	case CancelRequestRouteBNPL:
 		return true
-	case CancelRouteTCB:
+	case CancelRequestRouteTCB:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for CancelSource.
+// Defines values for CancelRequestSource.
 const (
-	CancelSourceBNPL        CancelSource = "BNPL"
-	CancelSourceInstallment CancelSource = "installment"
+	CancelRequestSourceBNPL        CancelRequestSource = "BNPL"
+	CancelRequestSourceInstallment CancelRequestSource = "installment"
 )
 
-// Valid indicates whether the value is a known member of the CancelSource enum.
-func (e CancelSource) Valid() bool {
+// Valid indicates whether the value is a known member of the CancelRequestSource enum.
+func (e CancelRequestSource) Valid() bool {
 	switch e {
-	case CancelSourceBNPL:
+	case CancelRequestSourceBNPL:
 		return true
-	case CancelSourceInstallment:
+	case CancelRequestSourceInstallment:
 		return true
 	default:
 		return false
@@ -212,163 +213,163 @@ func (e CommonOperationInitiatorType) Valid() bool {
 	}
 }
 
-// Defines values for ConfirmRoute.
+// Defines values for ConfirmRequestRoute.
 const (
-	ConfirmRouteBNPL ConfirmRoute = "BNPL"
-	ConfirmRouteTCB  ConfirmRoute = "TCB"
+	ConfirmRequestRouteBNPL ConfirmRequestRoute = "BNPL"
+	ConfirmRequestRouteTCB  ConfirmRequestRoute = "TCB"
 )
 
-// Valid indicates whether the value is a known member of the ConfirmRoute enum.
-func (e ConfirmRoute) Valid() bool {
+// Valid indicates whether the value is a known member of the ConfirmRequestRoute enum.
+func (e ConfirmRequestRoute) Valid() bool {
 	switch e {
-	case ConfirmRouteBNPL:
+	case ConfirmRequestRouteBNPL:
 		return true
-	case ConfirmRouteTCB:
+	case ConfirmRequestRouteTCB:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ConfirmSource.
+// Defines values for ConfirmRequestSource.
 const (
-	ConfirmSourceBNPL        ConfirmSource = "BNPL"
-	ConfirmSourceInstallment ConfirmSource = "installment"
+	ConfirmRequestSourceBNPL        ConfirmRequestSource = "BNPL"
+	ConfirmRequestSourceInstallment ConfirmRequestSource = "installment"
 )
 
-// Valid indicates whether the value is a known member of the ConfirmSource enum.
-func (e ConfirmSource) Valid() bool {
+// Valid indicates whether the value is a known member of the ConfirmRequestSource enum.
+func (e ConfirmRequestSource) Valid() bool {
 	switch e {
-	case ConfirmSourceBNPL:
+	case ConfirmRequestSourceBNPL:
 		return true
-	case ConfirmSourceInstallment:
+	case ConfirmRequestSourceInstallment:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for Confirm2Status.
+// Defines values for ConfirmResponseStatus.
 const (
-	Confirm2StatusAUTHFAIL        Confirm2Status = "AUTH_FAIL"
-	Confirm2StatusAUTHORIZED      Confirm2Status = "AUTHORIZED"
-	Confirm2StatusAUTHORIZING     Confirm2Status = "AUTHORIZING"
-	Confirm2StatusCANCELED        Confirm2Status = "CANCELED"
-	Confirm2StatusCHECKED         Confirm2Status = "CHECKED"
-	Confirm2StatusCHECKING        Confirm2Status = "CHECKING"
-	Confirm2StatusCOMPLETED       Confirm2Status = "COMPLETED"
-	Confirm2StatusCOMPLETING      Confirm2Status = "COMPLETING"
-	Confirm2StatusCONFIRMED       Confirm2Status = "CONFIRMED"
-	Confirm2StatusCONFIRMING      Confirm2Status = "CONFIRMING"
-	Confirm2StatusDEADLINEEXPIRED Confirm2Status = "DEADLINE_EXPIRED"
-	Confirm2StatusFORMSHOWED      Confirm2Status = "FORM_SHOWED"
-	Confirm2StatusN3DSCHECKED     Confirm2Status = "3DS_CHECKED"
-	Confirm2StatusN3DSCHECKING    Confirm2Status = "3DS_CHECKING"
-	Confirm2StatusNEW             Confirm2Status = "NEW"
-	Confirm2StatusPARTIALREFUNDED Confirm2Status = "PARTIAL_REFUNDED"
-	Confirm2StatusPREAUTHORIZING  Confirm2Status = "PREAUTHORIZING"
-	Confirm2StatusPROCESSING      Confirm2Status = "PROCESSING"
-	Confirm2StatusREFUNDED        Confirm2Status = "REFUNDED"
-	Confirm2StatusREFUNDING       Confirm2Status = "REFUNDING"
-	Confirm2StatusREJECTED        Confirm2Status = "REJECTED"
-	Confirm2StatusREVERSED        Confirm2Status = "REVERSED"
-	Confirm2StatusREVERSING       Confirm2Status = "REVERSING"
-	Confirm2StatusUNKNOWN         Confirm2Status = "UNKNOWN"
+	ConfirmResponseStatusAUTHFAIL        ConfirmResponseStatus = "AUTH_FAIL"
+	ConfirmResponseStatusAUTHORIZED      ConfirmResponseStatus = "AUTHORIZED"
+	ConfirmResponseStatusAUTHORIZING     ConfirmResponseStatus = "AUTHORIZING"
+	ConfirmResponseStatusCANCELED        ConfirmResponseStatus = "CANCELED"
+	ConfirmResponseStatusCHECKED         ConfirmResponseStatus = "CHECKED"
+	ConfirmResponseStatusCHECKING        ConfirmResponseStatus = "CHECKING"
+	ConfirmResponseStatusCOMPLETED       ConfirmResponseStatus = "COMPLETED"
+	ConfirmResponseStatusCOMPLETING      ConfirmResponseStatus = "COMPLETING"
+	ConfirmResponseStatusCONFIRMED       ConfirmResponseStatus = "CONFIRMED"
+	ConfirmResponseStatusCONFIRMING      ConfirmResponseStatus = "CONFIRMING"
+	ConfirmResponseStatusDEADLINEEXPIRED ConfirmResponseStatus = "DEADLINE_EXPIRED"
+	ConfirmResponseStatusFORMSHOWED      ConfirmResponseStatus = "FORM_SHOWED"
+	ConfirmResponseStatusN3DSCHECKED     ConfirmResponseStatus = "3DS_CHECKED"
+	ConfirmResponseStatusN3DSCHECKING    ConfirmResponseStatus = "3DS_CHECKING"
+	ConfirmResponseStatusNEW             ConfirmResponseStatus = "NEW"
+	ConfirmResponseStatusPARTIALREFUNDED ConfirmResponseStatus = "PARTIAL_REFUNDED"
+	ConfirmResponseStatusPREAUTHORIZING  ConfirmResponseStatus = "PREAUTHORIZING"
+	ConfirmResponseStatusPROCESSING      ConfirmResponseStatus = "PROCESSING"
+	ConfirmResponseStatusREFUNDED        ConfirmResponseStatus = "REFUNDED"
+	ConfirmResponseStatusREFUNDING       ConfirmResponseStatus = "REFUNDING"
+	ConfirmResponseStatusREJECTED        ConfirmResponseStatus = "REJECTED"
+	ConfirmResponseStatusREVERSED        ConfirmResponseStatus = "REVERSED"
+	ConfirmResponseStatusREVERSING       ConfirmResponseStatus = "REVERSING"
+	ConfirmResponseStatusUNKNOWN         ConfirmResponseStatus = "UNKNOWN"
 )
 
-// Valid indicates whether the value is a known member of the Confirm2Status enum.
-func (e Confirm2Status) Valid() bool {
+// Valid indicates whether the value is a known member of the ConfirmResponseStatus enum.
+func (e ConfirmResponseStatus) Valid() bool {
 	switch e {
-	case Confirm2StatusAUTHFAIL:
+	case ConfirmResponseStatusAUTHFAIL:
 		return true
-	case Confirm2StatusAUTHORIZED:
+	case ConfirmResponseStatusAUTHORIZED:
 		return true
-	case Confirm2StatusAUTHORIZING:
+	case ConfirmResponseStatusAUTHORIZING:
 		return true
-	case Confirm2StatusCANCELED:
+	case ConfirmResponseStatusCANCELED:
 		return true
-	case Confirm2StatusCHECKED:
+	case ConfirmResponseStatusCHECKED:
 		return true
-	case Confirm2StatusCHECKING:
+	case ConfirmResponseStatusCHECKING:
 		return true
-	case Confirm2StatusCOMPLETED:
+	case ConfirmResponseStatusCOMPLETED:
 		return true
-	case Confirm2StatusCOMPLETING:
+	case ConfirmResponseStatusCOMPLETING:
 		return true
-	case Confirm2StatusCONFIRMED:
+	case ConfirmResponseStatusCONFIRMED:
 		return true
-	case Confirm2StatusCONFIRMING:
+	case ConfirmResponseStatusCONFIRMING:
 		return true
-	case Confirm2StatusDEADLINEEXPIRED:
+	case ConfirmResponseStatusDEADLINEEXPIRED:
 		return true
-	case Confirm2StatusFORMSHOWED:
+	case ConfirmResponseStatusFORMSHOWED:
 		return true
-	case Confirm2StatusN3DSCHECKED:
+	case ConfirmResponseStatusN3DSCHECKED:
 		return true
-	case Confirm2StatusN3DSCHECKING:
+	case ConfirmResponseStatusN3DSCHECKING:
 		return true
-	case Confirm2StatusNEW:
+	case ConfirmResponseStatusNEW:
 		return true
-	case Confirm2StatusPARTIALREFUNDED:
+	case ConfirmResponseStatusPARTIALREFUNDED:
 		return true
-	case Confirm2StatusPREAUTHORIZING:
+	case ConfirmResponseStatusPREAUTHORIZING:
 		return true
-	case Confirm2StatusPROCESSING:
+	case ConfirmResponseStatusPROCESSING:
 		return true
-	case Confirm2StatusREFUNDED:
+	case ConfirmResponseStatusREFUNDED:
 		return true
-	case Confirm2StatusREFUNDING:
+	case ConfirmResponseStatusREFUNDING:
 		return true
-	case Confirm2StatusREJECTED:
+	case ConfirmResponseStatusREJECTED:
 		return true
-	case Confirm2StatusREVERSED:
+	case ConfirmResponseStatusREVERSED:
 		return true
-	case Confirm2StatusREVERSING:
+	case ConfirmResponseStatusREVERSING:
 		return true
-	case Confirm2StatusUNKNOWN:
+	case ConfirmResponseStatusUNKNOWN:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for FinishAuthorizeRoute.
+// Defines values for FinishAuthorizeRequestRoute.
 const (
-	FinishAuthorizeRouteACQ  FinishAuthorizeRoute = "ACQ"
-	FinishAuthorizeRouteEINV FinishAuthorizeRoute = "EINV"
-	FinishAuthorizeRouteMC   FinishAuthorizeRoute = "MC"
-	FinishAuthorizeRouteWM   FinishAuthorizeRoute = "WM"
+	FinishAuthorizeRequestRouteACQ  FinishAuthorizeRequestRoute = "ACQ"
+	FinishAuthorizeRequestRouteEINV FinishAuthorizeRequestRoute = "EINV"
+	FinishAuthorizeRequestRouteMC   FinishAuthorizeRequestRoute = "MC"
+	FinishAuthorizeRequestRouteWM   FinishAuthorizeRequestRoute = "WM"
 )
 
-// Valid indicates whether the value is a known member of the FinishAuthorizeRoute enum.
-func (e FinishAuthorizeRoute) Valid() bool {
+// Valid indicates whether the value is a known member of the FinishAuthorizeRequestRoute enum.
+func (e FinishAuthorizeRequestRoute) Valid() bool {
 	switch e {
-	case FinishAuthorizeRouteACQ:
+	case FinishAuthorizeRequestRouteACQ:
 		return true
-	case FinishAuthorizeRouteEINV:
+	case FinishAuthorizeRequestRouteEINV:
 		return true
-	case FinishAuthorizeRouteMC:
+	case FinishAuthorizeRequestRouteMC:
 		return true
-	case FinishAuthorizeRouteWM:
+	case FinishAuthorizeRequestRouteWM:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for FinishAuthorizeSource.
+// Defines values for FinishAuthorizeRequestSource.
 const (
-	Beeline    FinishAuthorizeSource = "beeline"
-	Cards      FinishAuthorizeSource = "cards"
-	Einvoicing FinishAuthorizeSource = "einvoicing"
-	Megafon    FinishAuthorizeSource = "megafon"
-	Mts        FinishAuthorizeSource = "mts"
-	Tele2      FinishAuthorizeSource = "tele2"
-	Webmoney   FinishAuthorizeSource = "webmoney"
+	Beeline    FinishAuthorizeRequestSource = "beeline"
+	Cards      FinishAuthorizeRequestSource = "cards"
+	Einvoicing FinishAuthorizeRequestSource = "einvoicing"
+	Megafon    FinishAuthorizeRequestSource = "megafon"
+	Mts        FinishAuthorizeRequestSource = "mts"
+	Tele2      FinishAuthorizeRequestSource = "tele2"
+	Webmoney   FinishAuthorizeRequestSource = "webmoney"
 )
 
-// Valid indicates whether the value is a known member of the FinishAuthorizeSource enum.
-func (e FinishAuthorizeSource) Valid() bool {
+// Valid indicates whether the value is a known member of the FinishAuthorizeRequestSource enum.
+func (e FinishAuthorizeRequestSource) Valid() bool {
 	switch e {
 	case Beeline:
 		return true
@@ -473,50 +474,50 @@ func (e GetAddCardStateResponseStatus) Valid() bool {
 	}
 }
 
-// Defines values for GetQrDataType.
+// Defines values for GetQrBankListRequestDeviceType.
 const (
-	GetQrDataTypeIMAGE   GetQrDataType = "IMAGE"
-	GetQrDataTypePAYLOAD GetQrDataType = "PAYLOAD"
+	GetQrBankListRequestDeviceTypeDesktop GetQrBankListRequestDeviceType = "desktop"
+	GetQrBankListRequestDeviceTypeMobile  GetQrBankListRequestDeviceType = "mobile"
 )
 
-// Valid indicates whether the value is a known member of the GetQrDataType enum.
-func (e GetQrDataType) Valid() bool {
+// Valid indicates whether the value is a known member of the GetQrBankListRequestDeviceType enum.
+func (e GetQrBankListRequestDeviceType) Valid() bool {
 	switch e {
-	case GetQrDataTypeIMAGE:
+	case GetQrBankListRequestDeviceTypeDesktop:
 		return true
-	case GetQrDataTypePAYLOAD:
+	case GetQrBankListRequestDeviceTypeMobile:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for GetQrBankListDeviceType.
+// Defines values for GetQrBankListRequestPaymentMethod.
 const (
-	GetQrBankListDeviceTypeDesktop GetQrBankListDeviceType = "desktop"
-	GetQrBankListDeviceTypeMobile  GetQrBankListDeviceType = "mobile"
+	GetQrBankListRequestPaymentMethodDR  GetQrBankListRequestPaymentMethod = "DR"
+	GetQrBankListRequestPaymentMethodSBP GetQrBankListRequestPaymentMethod = "SBP"
 )
 
-// Valid indicates whether the value is a known member of the GetQrBankListDeviceType enum.
-func (e GetQrBankListDeviceType) Valid() bool {
+// Valid indicates whether the value is a known member of the GetQrBankListRequestPaymentMethod enum.
+func (e GetQrBankListRequestPaymentMethod) Valid() bool {
 	switch e {
-	case GetQrBankListDeviceTypeDesktop:
+	case GetQrBankListRequestPaymentMethodDR:
 		return true
-	case GetQrBankListDeviceTypeMobile:
+	case GetQrBankListRequestPaymentMethodSBP:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for GetQrBankListScenarioType.
+// Defines values for GetQrBankListRequestScenarioType.
 const (
-	Qr  GetQrBankListScenarioType = "qr"
-	Sub GetQrBankListScenarioType = "sub"
+	Qr  GetQrBankListRequestScenarioType = "qr"
+	Sub GetQrBankListRequestScenarioType = "sub"
 )
 
-// Valid indicates whether the value is a known member of the GetQrBankListScenarioType enum.
-func (e GetQrBankListScenarioType) Valid() bool {
+// Valid indicates whether the value is a known member of the GetQrBankListRequestScenarioType enum.
+func (e GetQrBankListRequestScenarioType) Valid() bool {
 	switch e {
 	case Qr:
 		return true
@@ -527,14 +528,50 @@ func (e GetQrBankListScenarioType) Valid() bool {
 	}
 }
 
-// Defines values for InitPayType.
+// Defines values for GetQrRequestDataType.
 const (
-	O InitPayType = "O"
-	T InitPayType = "T"
+	GetQrRequestDataTypeIMAGE   GetQrRequestDataType = "IMAGE"
+	GetQrRequestDataTypePAYLOAD GetQrRequestDataType = "PAYLOAD"
 )
 
-// Valid indicates whether the value is a known member of the InitPayType enum.
-func (e InitPayType) Valid() bool {
+// Valid indicates whether the value is a known member of the GetQrRequestDataType enum.
+func (e GetQrRequestDataType) Valid() bool {
+	switch e {
+	case GetQrRequestDataTypeIMAGE:
+		return true
+	case GetQrRequestDataTypePAYLOAD:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetQrRequestPaymentMethod.
+const (
+	GetQrRequestPaymentMethodDR  GetQrRequestPaymentMethod = "DR"
+	GetQrRequestPaymentMethodSBP GetQrRequestPaymentMethod = "SBP"
+)
+
+// Valid indicates whether the value is a known member of the GetQrRequestPaymentMethod enum.
+func (e GetQrRequestPaymentMethod) Valid() bool {
+	switch e {
+	case GetQrRequestPaymentMethodDR:
+		return true
+	case GetQrRequestPaymentMethodSBP:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InitRequestPayType.
+const (
+	O InitRequestPayType = "O"
+	T InitRequestPayType = "T"
+)
+
+// Valid indicates whether the value is a known member of the InitRequestPayType enum.
+func (e InitRequestPayType) Valid() bool {
 	switch e {
 	case O:
 		return true
@@ -545,13 +582,13 @@ func (e InitPayType) Valid() bool {
 	}
 }
 
-// Defines values for InitRecurrent.
+// Defines values for InitRequestRecurrent.
 const (
-	Y InitRecurrent = "Y"
+	Y InitRequestRecurrent = "Y"
 )
 
-// Valid indicates whether the value is a known member of the InitRecurrent enum.
-func (e InitRecurrent) Valid() bool {
+// Valid indicates whether the value is a known member of the InitRequestRecurrent enum.
+func (e InitRequestRecurrent) Valid() bool {
 	switch e {
 	case Y:
 		return true
@@ -560,202 +597,202 @@ func (e InitRecurrent) Valid() bool {
 	}
 }
 
-// Defines values for ItemsFFD105PaymentMethod.
+// Defines values for ItemsFfd105PaymentMethod.
 const (
-	ItemsFFD105PaymentMethodAdvance        ItemsFFD105PaymentMethod = "advance"
-	ItemsFFD105PaymentMethodCredit         ItemsFFD105PaymentMethod = "credit"
-	ItemsFFD105PaymentMethodCreditPayment  ItemsFFD105PaymentMethod = "credit_payment"
-	ItemsFFD105PaymentMethodFullPayment    ItemsFFD105PaymentMethod = "full_payment"
-	ItemsFFD105PaymentMethodFullPrepayment ItemsFFD105PaymentMethod = "full_prepayment"
-	ItemsFFD105PaymentMethodPartialPayment ItemsFFD105PaymentMethod = "partial_payment"
-	ItemsFFD105PaymentMethodPrepayment     ItemsFFD105PaymentMethod = "prepayment"
+	ItemsFfd105PaymentMethodAdvance        ItemsFfd105PaymentMethod = "advance"
+	ItemsFfd105PaymentMethodCredit         ItemsFfd105PaymentMethod = "credit"
+	ItemsFfd105PaymentMethodCreditPayment  ItemsFfd105PaymentMethod = "credit_payment"
+	ItemsFfd105PaymentMethodFullPayment    ItemsFfd105PaymentMethod = "full_payment"
+	ItemsFfd105PaymentMethodFullPrepayment ItemsFfd105PaymentMethod = "full_prepayment"
+	ItemsFfd105PaymentMethodPartialPayment ItemsFfd105PaymentMethod = "partial_payment"
+	ItemsFfd105PaymentMethodPrepayment     ItemsFfd105PaymentMethod = "prepayment"
 )
 
-// Valid indicates whether the value is a known member of the ItemsFFD105PaymentMethod enum.
-func (e ItemsFFD105PaymentMethod) Valid() bool {
+// Valid indicates whether the value is a known member of the ItemsFfd105PaymentMethod enum.
+func (e ItemsFfd105PaymentMethod) Valid() bool {
 	switch e {
-	case ItemsFFD105PaymentMethodAdvance:
+	case ItemsFfd105PaymentMethodAdvance:
 		return true
-	case ItemsFFD105PaymentMethodCredit:
+	case ItemsFfd105PaymentMethodCredit:
 		return true
-	case ItemsFFD105PaymentMethodCreditPayment:
+	case ItemsFfd105PaymentMethodCreditPayment:
 		return true
-	case ItemsFFD105PaymentMethodFullPayment:
+	case ItemsFfd105PaymentMethodFullPayment:
 		return true
-	case ItemsFFD105PaymentMethodFullPrepayment:
+	case ItemsFfd105PaymentMethodFullPrepayment:
 		return true
-	case ItemsFFD105PaymentMethodPartialPayment:
+	case ItemsFfd105PaymentMethodPartialPayment:
 		return true
-	case ItemsFFD105PaymentMethodPrepayment:
+	case ItemsFfd105PaymentMethodPrepayment:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ItemsFFD105PaymentObject.
+// Defines values for ItemsFfd105PaymentObject.
 const (
-	ItemsFFD105PaymentObjectAgentCommission      ItemsFFD105PaymentObject = "agent_commission"
-	ItemsFFD105PaymentObjectAnother              ItemsFFD105PaymentObject = "another"
-	ItemsFFD105PaymentObjectCommodity            ItemsFFD105PaymentObject = "commodity"
-	ItemsFFD105PaymentObjectComposite            ItemsFFD105PaymentObject = "composite"
-	ItemsFFD105PaymentObjectExcise               ItemsFFD105PaymentObject = "excise"
-	ItemsFFD105PaymentObjectGamblingBet          ItemsFFD105PaymentObject = "gambling_bet"
-	ItemsFFD105PaymentObjectGamblingPrize        ItemsFFD105PaymentObject = "gambling_prize"
-	ItemsFFD105PaymentObjectIntellectualActivity ItemsFFD105PaymentObject = "intellectual_activity"
-	ItemsFFD105PaymentObjectJob                  ItemsFFD105PaymentObject = "job"
-	ItemsFFD105PaymentObjectLottery              ItemsFFD105PaymentObject = "lottery"
-	ItemsFFD105PaymentObjectLotteryPrize         ItemsFFD105PaymentObject = "lottery_prize"
-	ItemsFFD105PaymentObjectPayment              ItemsFFD105PaymentObject = "payment"
-	ItemsFFD105PaymentObjectService              ItemsFFD105PaymentObject = "service"
+	ItemsFfd105PaymentObjectAgentCommission      ItemsFfd105PaymentObject = "agent_commission"
+	ItemsFfd105PaymentObjectAnother              ItemsFfd105PaymentObject = "another"
+	ItemsFfd105PaymentObjectCommodity            ItemsFfd105PaymentObject = "commodity"
+	ItemsFfd105PaymentObjectComposite            ItemsFfd105PaymentObject = "composite"
+	ItemsFfd105PaymentObjectExcise               ItemsFfd105PaymentObject = "excise"
+	ItemsFfd105PaymentObjectGamblingBet          ItemsFfd105PaymentObject = "gambling_bet"
+	ItemsFfd105PaymentObjectGamblingPrize        ItemsFfd105PaymentObject = "gambling_prize"
+	ItemsFfd105PaymentObjectIntellectualActivity ItemsFfd105PaymentObject = "intellectual_activity"
+	ItemsFfd105PaymentObjectJob                  ItemsFfd105PaymentObject = "job"
+	ItemsFfd105PaymentObjectLottery              ItemsFfd105PaymentObject = "lottery"
+	ItemsFfd105PaymentObjectLotteryPrize         ItemsFfd105PaymentObject = "lottery_prize"
+	ItemsFfd105PaymentObjectPayment              ItemsFfd105PaymentObject = "payment"
+	ItemsFfd105PaymentObjectService              ItemsFfd105PaymentObject = "service"
 )
 
-// Valid indicates whether the value is a known member of the ItemsFFD105PaymentObject enum.
-func (e ItemsFFD105PaymentObject) Valid() bool {
+// Valid indicates whether the value is a known member of the ItemsFfd105PaymentObject enum.
+func (e ItemsFfd105PaymentObject) Valid() bool {
 	switch e {
-	case ItemsFFD105PaymentObjectAgentCommission:
+	case ItemsFfd105PaymentObjectAgentCommission:
 		return true
-	case ItemsFFD105PaymentObjectAnother:
+	case ItemsFfd105PaymentObjectAnother:
 		return true
-	case ItemsFFD105PaymentObjectCommodity:
+	case ItemsFfd105PaymentObjectCommodity:
 		return true
-	case ItemsFFD105PaymentObjectComposite:
+	case ItemsFfd105PaymentObjectComposite:
 		return true
-	case ItemsFFD105PaymentObjectExcise:
+	case ItemsFfd105PaymentObjectExcise:
 		return true
-	case ItemsFFD105PaymentObjectGamblingBet:
+	case ItemsFfd105PaymentObjectGamblingBet:
 		return true
-	case ItemsFFD105PaymentObjectGamblingPrize:
+	case ItemsFfd105PaymentObjectGamblingPrize:
 		return true
-	case ItemsFFD105PaymentObjectIntellectualActivity:
+	case ItemsFfd105PaymentObjectIntellectualActivity:
 		return true
-	case ItemsFFD105PaymentObjectJob:
+	case ItemsFfd105PaymentObjectJob:
 		return true
-	case ItemsFFD105PaymentObjectLottery:
+	case ItemsFfd105PaymentObjectLottery:
 		return true
-	case ItemsFFD105PaymentObjectLotteryPrize:
+	case ItemsFfd105PaymentObjectLotteryPrize:
 		return true
-	case ItemsFFD105PaymentObjectPayment:
+	case ItemsFfd105PaymentObjectPayment:
 		return true
-	case ItemsFFD105PaymentObjectService:
+	case ItemsFfd105PaymentObjectService:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ItemsFFD105Tax.
+// Defines values for ItemsFfd105Tax.
 const (
-	ItemsFFD105TaxNone   ItemsFFD105Tax = "none"
-	ItemsFFD105TaxVat0   ItemsFFD105Tax = "vat0"
-	ItemsFFD105TaxVat10  ItemsFFD105Tax = "vat10"
-	ItemsFFD105TaxVat105 ItemsFFD105Tax = "vat105"
-	ItemsFFD105TaxVat107 ItemsFFD105Tax = "vat107"
-	ItemsFFD105TaxVat110 ItemsFFD105Tax = "vat110"
-	ItemsFFD105TaxVat122 ItemsFFD105Tax = "vat122"
-	ItemsFFD105TaxVat22  ItemsFFD105Tax = "vat22"
-	ItemsFFD105TaxVat5   ItemsFFD105Tax = "vat5"
-	ItemsFFD105TaxVat7   ItemsFFD105Tax = "vat7"
+	ItemsFfd105TaxNone   ItemsFfd105Tax = "none"
+	ItemsFfd105TaxVat0   ItemsFfd105Tax = "vat0"
+	ItemsFfd105TaxVat10  ItemsFfd105Tax = "vat10"
+	ItemsFfd105TaxVat105 ItemsFfd105Tax = "vat105"
+	ItemsFfd105TaxVat107 ItemsFfd105Tax = "vat107"
+	ItemsFfd105TaxVat110 ItemsFfd105Tax = "vat110"
+	ItemsFfd105TaxVat122 ItemsFfd105Tax = "vat122"
+	ItemsFfd105TaxVat22  ItemsFfd105Tax = "vat22"
+	ItemsFfd105TaxVat5   ItemsFfd105Tax = "vat5"
+	ItemsFfd105TaxVat7   ItemsFfd105Tax = "vat7"
 )
 
-// Valid indicates whether the value is a known member of the ItemsFFD105Tax enum.
-func (e ItemsFFD105Tax) Valid() bool {
+// Valid indicates whether the value is a known member of the ItemsFfd105Tax enum.
+func (e ItemsFfd105Tax) Valid() bool {
 	switch e {
-	case ItemsFFD105TaxNone:
+	case ItemsFfd105TaxNone:
 		return true
-	case ItemsFFD105TaxVat0:
+	case ItemsFfd105TaxVat0:
 		return true
-	case ItemsFFD105TaxVat10:
+	case ItemsFfd105TaxVat10:
 		return true
-	case ItemsFFD105TaxVat105:
+	case ItemsFfd105TaxVat105:
 		return true
-	case ItemsFFD105TaxVat107:
+	case ItemsFfd105TaxVat107:
 		return true
-	case ItemsFFD105TaxVat110:
+	case ItemsFfd105TaxVat110:
 		return true
-	case ItemsFFD105TaxVat122:
+	case ItemsFfd105TaxVat122:
 		return true
-	case ItemsFFD105TaxVat22:
+	case ItemsFfd105TaxVat22:
 		return true
-	case ItemsFFD105TaxVat5:
+	case ItemsFfd105TaxVat5:
 		return true
-	case ItemsFFD105TaxVat7:
+	case ItemsFfd105TaxVat7:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ItemsFFD12PaymentMethod.
+// Defines values for ItemsFfd12PaymentMethod.
 const (
-	ItemsFFD12PaymentMethodAdvance        ItemsFFD12PaymentMethod = "advance"
-	ItemsFFD12PaymentMethodCredit         ItemsFFD12PaymentMethod = "credit"
-	ItemsFFD12PaymentMethodCreditPayment  ItemsFFD12PaymentMethod = "credit_payment"
-	ItemsFFD12PaymentMethodFullPayment    ItemsFFD12PaymentMethod = "full_payment"
-	ItemsFFD12PaymentMethodFullPrepayment ItemsFFD12PaymentMethod = "full_prepayment"
-	ItemsFFD12PaymentMethodPartialPayment ItemsFFD12PaymentMethod = "partial_payment"
-	ItemsFFD12PaymentMethodPrepayment     ItemsFFD12PaymentMethod = "prepayment"
+	ItemsFfd12PaymentMethodAdvance        ItemsFfd12PaymentMethod = "advance"
+	ItemsFfd12PaymentMethodCredit         ItemsFfd12PaymentMethod = "credit"
+	ItemsFfd12PaymentMethodCreditPayment  ItemsFfd12PaymentMethod = "credit_payment"
+	ItemsFfd12PaymentMethodFullPayment    ItemsFfd12PaymentMethod = "full_payment"
+	ItemsFfd12PaymentMethodFullPrepayment ItemsFfd12PaymentMethod = "full_prepayment"
+	ItemsFfd12PaymentMethodPartialPayment ItemsFfd12PaymentMethod = "partial_payment"
+	ItemsFfd12PaymentMethodPrepayment     ItemsFfd12PaymentMethod = "prepayment"
 )
 
-// Valid indicates whether the value is a known member of the ItemsFFD12PaymentMethod enum.
-func (e ItemsFFD12PaymentMethod) Valid() bool {
+// Valid indicates whether the value is a known member of the ItemsFfd12PaymentMethod enum.
+func (e ItemsFfd12PaymentMethod) Valid() bool {
 	switch e {
-	case ItemsFFD12PaymentMethodAdvance:
+	case ItemsFfd12PaymentMethodAdvance:
 		return true
-	case ItemsFFD12PaymentMethodCredit:
+	case ItemsFfd12PaymentMethodCredit:
 		return true
-	case ItemsFFD12PaymentMethodCreditPayment:
+	case ItemsFfd12PaymentMethodCreditPayment:
 		return true
-	case ItemsFFD12PaymentMethodFullPayment:
+	case ItemsFfd12PaymentMethodFullPayment:
 		return true
-	case ItemsFFD12PaymentMethodFullPrepayment:
+	case ItemsFfd12PaymentMethodFullPrepayment:
 		return true
-	case ItemsFFD12PaymentMethodPartialPayment:
+	case ItemsFfd12PaymentMethodPartialPayment:
 		return true
-	case ItemsFFD12PaymentMethodPrepayment:
+	case ItemsFfd12PaymentMethodPrepayment:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ItemsFFD12PaymentObject.
+// Defines values for ItemsFfd12PaymentObject.
 const (
-	AgentCommission                   ItemsFFD12PaymentObject = "agent_commission"
-	AgentPayment                      ItemsFFD12PaymentObject = "agent_payment"
-	Another                           ItemsFFD12PaymentObject = "another"
-	CasinoChips                       ItemsFFD12PaymentObject = "casino_chips"
-	Commodity                         ItemsFFD12PaymentObject = "commodity"
-	Contribution                      ItemsFFD12PaymentObject = "contribution"
-	ExcisableGoodsWithMarkingCode     ItemsFFD12PaymentObject = "excisable_goods_with_marking_code"
-	ExcisableGoodsWithoutMarkingCode  ItemsFFD12PaymentObject = "excisable_goods_without_marking_code"
-	Excise                            ItemsFFD12PaymentObject = "excise"
-	GamblingBet                       ItemsFFD12PaymentObject = "gambling_bet"
-	GamblingPrize                     ItemsFFD12PaymentObject = "gambling_prize"
-	GoodsWithMarkingCode              ItemsFFD12PaymentObject = "goods_with_marking_code"
-	GoodsWithoutMarkingCode           ItemsFFD12PaymentObject = "goods_without_marking_code"
-	IeMedicalInsuranceWithPayments    ItemsFFD12PaymentObject = "ie_medical_insurance_with_payments"
-	IeMedicalInsuranceWithoutPayments ItemsFFD12PaymentObject = "ie_medical_insurance_without_payments"
-	IePensionInsuranceWithPayments    ItemsFFD12PaymentObject = "ie_pension_insurance_with_payments"
-	IePensionInsuranceWithoutPayments ItemsFFD12PaymentObject = "ie_pension_insurance_without_payments"
-	IncomeDecrease                    ItemsFFD12PaymentObject = "income_decrease"
-	IntellectualActivity              ItemsFFD12PaymentObject = "intellectual_activity"
-	Job                               ItemsFFD12PaymentObject = "job"
-	Lottery                           ItemsFFD12PaymentObject = "lottery"
-	LotteryPrize                      ItemsFFD12PaymentObject = "lottery_prize"
-	Payment                           ItemsFFD12PaymentObject = "payment"
-	Pledge                            ItemsFFD12PaymentObject = "pledge"
-	PropertyRights                    ItemsFFD12PaymentObject = "property_rights"
-	ResortTax                         ItemsFFD12PaymentObject = "resort_tax"
-	Service                           ItemsFFD12PaymentObject = "service"
-	SocialInsurance                   ItemsFFD12PaymentObject = "social_insurance"
-	TaxReduction                      ItemsFFD12PaymentObject = "tax_reduction"
-	TradeFee                          ItemsFFD12PaymentObject = "trade_fee"
-	Unrealization                     ItemsFFD12PaymentObject = "unrealization"
+	AgentCommission                   ItemsFfd12PaymentObject = "agent_commission"
+	AgentPayment                      ItemsFfd12PaymentObject = "agent_payment"
+	Another                           ItemsFfd12PaymentObject = "another"
+	CasinoChips                       ItemsFfd12PaymentObject = "casino_chips"
+	Commodity                         ItemsFfd12PaymentObject = "commodity"
+	Contribution                      ItemsFfd12PaymentObject = "contribution"
+	ExcisableGoodsWithMarkingCode     ItemsFfd12PaymentObject = "excisable_goods_with_marking_code"
+	ExcisableGoodsWithoutMarkingCode  ItemsFfd12PaymentObject = "excisable_goods_without_marking_code"
+	Excise                            ItemsFfd12PaymentObject = "excise"
+	GamblingBet                       ItemsFfd12PaymentObject = "gambling_bet"
+	GamblingPrize                     ItemsFfd12PaymentObject = "gambling_prize"
+	GoodsWithMarkingCode              ItemsFfd12PaymentObject = "goods_with_marking_code"
+	GoodsWithoutMarkingCode           ItemsFfd12PaymentObject = "goods_without_marking_code"
+	IeMedicalInsuranceWithPayments    ItemsFfd12PaymentObject = "ie_medical_insurance_with_payments"
+	IeMedicalInsuranceWithoutPayments ItemsFfd12PaymentObject = "ie_medical_insurance_without_payments"
+	IePensionInsuranceWithPayments    ItemsFfd12PaymentObject = "ie_pension_insurance_with_payments"
+	IePensionInsuranceWithoutPayments ItemsFfd12PaymentObject = "ie_pension_insurance_without_payments"
+	IncomeDecrease                    ItemsFfd12PaymentObject = "income_decrease"
+	IntellectualActivity              ItemsFfd12PaymentObject = "intellectual_activity"
+	Job                               ItemsFfd12PaymentObject = "job"
+	Lottery                           ItemsFfd12PaymentObject = "lottery"
+	LotteryPrize                      ItemsFfd12PaymentObject = "lottery_prize"
+	Payment                           ItemsFfd12PaymentObject = "payment"
+	Pledge                            ItemsFfd12PaymentObject = "pledge"
+	PropertyRights                    ItemsFfd12PaymentObject = "property_rights"
+	ResortTax                         ItemsFfd12PaymentObject = "resort_tax"
+	Service                           ItemsFfd12PaymentObject = "service"
+	SocialInsurance                   ItemsFfd12PaymentObject = "social_insurance"
+	TaxReduction                      ItemsFfd12PaymentObject = "tax_reduction"
+	TradeFee                          ItemsFfd12PaymentObject = "trade_fee"
+	Unrealization                     ItemsFfd12PaymentObject = "unrealization"
 )
 
-// Valid indicates whether the value is a known member of the ItemsFFD12PaymentObject enum.
-func (e ItemsFFD12PaymentObject) Valid() bool {
+// Valid indicates whether the value is a known member of the ItemsFfd12PaymentObject enum.
+func (e ItemsFfd12PaymentObject) Valid() bool {
 	switch e {
 	case AgentCommission:
 		return true
@@ -824,42 +861,42 @@ func (e ItemsFFD12PaymentObject) Valid() bool {
 	}
 }
 
-// Defines values for ItemsFFD12Tax.
+// Defines values for ItemsFfd12Tax.
 const (
-	ItemsFFD12TaxNone   ItemsFFD12Tax = "none"
-	ItemsFFD12TaxVat0   ItemsFFD12Tax = "vat0"
-	ItemsFFD12TaxVat10  ItemsFFD12Tax = "vat10"
-	ItemsFFD12TaxVat105 ItemsFFD12Tax = "vat105"
-	ItemsFFD12TaxVat107 ItemsFFD12Tax = "vat107"
-	ItemsFFD12TaxVat110 ItemsFFD12Tax = "vat110"
-	ItemsFFD12TaxVat122 ItemsFFD12Tax = "vat122"
-	ItemsFFD12TaxVat22  ItemsFFD12Tax = "vat22"
-	ItemsFFD12TaxVat5   ItemsFFD12Tax = "vat5"
-	ItemsFFD12TaxVat7   ItemsFFD12Tax = "vat7"
+	ItemsFfd12TaxNone   ItemsFfd12Tax = "none"
+	ItemsFfd12TaxVat0   ItemsFfd12Tax = "vat0"
+	ItemsFfd12TaxVat10  ItemsFfd12Tax = "vat10"
+	ItemsFfd12TaxVat105 ItemsFfd12Tax = "vat105"
+	ItemsFfd12TaxVat107 ItemsFfd12Tax = "vat107"
+	ItemsFfd12TaxVat110 ItemsFfd12Tax = "vat110"
+	ItemsFfd12TaxVat122 ItemsFfd12Tax = "vat122"
+	ItemsFfd12TaxVat22  ItemsFfd12Tax = "vat22"
+	ItemsFfd12TaxVat5   ItemsFfd12Tax = "vat5"
+	ItemsFfd12TaxVat7   ItemsFfd12Tax = "vat7"
 )
 
-// Valid indicates whether the value is a known member of the ItemsFFD12Tax enum.
-func (e ItemsFFD12Tax) Valid() bool {
+// Valid indicates whether the value is a known member of the ItemsFfd12Tax enum.
+func (e ItemsFfd12Tax) Valid() bool {
 	switch e {
-	case ItemsFFD12TaxNone:
+	case ItemsFfd12TaxNone:
 		return true
-	case ItemsFFD12TaxVat0:
+	case ItemsFfd12TaxVat0:
 		return true
-	case ItemsFFD12TaxVat10:
+	case ItemsFfd12TaxVat10:
 		return true
-	case ItemsFFD12TaxVat105:
+	case ItemsFfd12TaxVat105:
 		return true
-	case ItemsFFD12TaxVat107:
+	case ItemsFfd12TaxVat107:
 		return true
-	case ItemsFFD12TaxVat110:
+	case ItemsFfd12TaxVat110:
 		return true
-	case ItemsFFD12TaxVat122:
+	case ItemsFfd12TaxVat122:
 		return true
-	case ItemsFFD12TaxVat22:
+	case ItemsFfd12TaxVat22:
 		return true
-	case ItemsFFD12TaxVat5:
+	case ItemsFfd12TaxVat5:
 		return true
-	case ItemsFFD12TaxVat7:
+	case ItemsFfd12TaxVat7:
 		return true
 	default:
 		return false
@@ -868,15 +905,24 @@ func (e ItemsFFD12Tax) Valid() bool {
 
 // Defines values for ItemsParamsKey.
 const (
-	CreditAmount ItemsParamsKey = "CreditAmount"
-	Route        ItemsParamsKey = "Route"
-	Source       ItemsParamsKey = "Source"
+	CreditAmount            ItemsParamsKey = "CreditAmount"
+	DrPaymentId             ItemsParamsKey = "DrPaymentId"
+	DrPaymentSettlementDate ItemsParamsKey = "DrPaymentSettlementDate"
+	ParticipantWalletId     ItemsParamsKey = "ParticipantWalletId"
+	Route                   ItemsParamsKey = "Route"
+	Source                  ItemsParamsKey = "Source"
 )
 
 // Valid indicates whether the value is a known member of the ItemsParamsKey enum.
 func (e ItemsParamsKey) Valid() bool {
 	switch e {
 	case CreditAmount:
+		return true
+	case DrPaymentId:
+		return true
+	case DrPaymentSettlementDate:
+		return true
+	case ParticipantWalletId:
 		return true
 	case Route:
 		return true
@@ -889,17 +935,19 @@ func (e ItemsParamsKey) Valid() bool {
 
 // Defines values for ItemsParamsValue.
 const (
-	ItemsParamsValueACQ         ItemsParamsValue = "ACQ"
-	ItemsParamsValueBNPL        ItemsParamsValue = "BNPL"
-	ItemsParamsValueCards       ItemsParamsValue = "cards"
-	ItemsParamsValueInstallment ItemsParamsValue = "Installment"
-	ItemsParamsValueMirPay      ItemsParamsValue = "MirPay"
-	ItemsParamsValueQrsbp       ItemsParamsValue = "qrsbp"
-	ItemsParamsValueSBER        ItemsParamsValue = "SBER"
-	ItemsParamsValueSberPay     ItemsParamsValue = "SberPay"
-	ItemsParamsValueTCB         ItemsParamsValue = "TCB"
-	ItemsParamsValueTinkoffPay  ItemsParamsValue = "TinkoffPay"
-	ItemsParamsValueYandexPay   ItemsParamsValue = "YandexPay"
+	ItemsParamsValueACQ            ItemsParamsValue = "ACQ"
+	ItemsParamsValueBNPL           ItemsParamsValue = "BNPL"
+	ItemsParamsValueCards          ItemsParamsValue = "cards"
+	ItemsParamsValueInstallment    ItemsParamsValue = "Installment"
+	ItemsParamsValueMirPay         ItemsParamsValue = "MirPay"
+	ItemsParamsValueQRDR           ItemsParamsValue = "QRDR"
+	ItemsParamsValueQrdigitalruble ItemsParamsValue = "qrdigitalruble"
+	ItemsParamsValueQrsbp          ItemsParamsValue = "qrsbp"
+	ItemsParamsValueSBER           ItemsParamsValue = "SBER"
+	ItemsParamsValueSberPay        ItemsParamsValue = "SberPay"
+	ItemsParamsValueTCB            ItemsParamsValue = "TCB"
+	ItemsParamsValueTinkoffPay     ItemsParamsValue = "TinkoffPay"
+	ItemsParamsValueYandexPay      ItemsParamsValue = "YandexPay"
 )
 
 // Valid indicates whether the value is a known member of the ItemsParamsValue enum.
@@ -914,6 +962,10 @@ func (e ItemsParamsValue) Valid() bool {
 	case ItemsParamsValueInstallment:
 		return true
 	case ItemsParamsValueMirPay:
+		return true
+	case ItemsParamsValueQRDR:
+		return true
+	case ItemsParamsValueQrdigitalruble:
 		return true
 	case ItemsParamsValueQrsbp:
 		return true
@@ -932,54 +984,54 @@ func (e ItemsParamsValue) Valid() bool {
 	}
 }
 
-// Defines values for ReceiptFFD105Taxation.
+// Defines values for ReceiptFfd105Taxation.
 const (
-	ReceiptFFD105TaxationEsn              ReceiptFFD105Taxation = "esn"
-	ReceiptFFD105TaxationOsn              ReceiptFFD105Taxation = "osn"
-	ReceiptFFD105TaxationPatent           ReceiptFFD105Taxation = "patent"
-	ReceiptFFD105TaxationUsnIncome        ReceiptFFD105Taxation = "usn_income"
-	ReceiptFFD105TaxationUsnIncomeOutcome ReceiptFFD105Taxation = "usn_income_outcome"
+	ReceiptFfd105TaxationEsn              ReceiptFfd105Taxation = "esn"
+	ReceiptFfd105TaxationOsn              ReceiptFfd105Taxation = "osn"
+	ReceiptFfd105TaxationPatent           ReceiptFfd105Taxation = "patent"
+	ReceiptFfd105TaxationUsnIncome        ReceiptFfd105Taxation = "usn_income"
+	ReceiptFfd105TaxationUsnIncomeOutcome ReceiptFfd105Taxation = "usn_income_outcome"
 )
 
-// Valid indicates whether the value is a known member of the ReceiptFFD105Taxation enum.
-func (e ReceiptFFD105Taxation) Valid() bool {
+// Valid indicates whether the value is a known member of the ReceiptFfd105Taxation enum.
+func (e ReceiptFfd105Taxation) Valid() bool {
 	switch e {
-	case ReceiptFFD105TaxationEsn:
+	case ReceiptFfd105TaxationEsn:
 		return true
-	case ReceiptFFD105TaxationOsn:
+	case ReceiptFfd105TaxationOsn:
 		return true
-	case ReceiptFFD105TaxationPatent:
+	case ReceiptFfd105TaxationPatent:
 		return true
-	case ReceiptFFD105TaxationUsnIncome:
+	case ReceiptFfd105TaxationUsnIncome:
 		return true
-	case ReceiptFFD105TaxationUsnIncomeOutcome:
+	case ReceiptFfd105TaxationUsnIncomeOutcome:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ReceiptFFD12Taxation.
+// Defines values for ReceiptFfd12Taxation.
 const (
-	ReceiptFFD12TaxationEsn              ReceiptFFD12Taxation = "esn"
-	ReceiptFFD12TaxationOsn              ReceiptFFD12Taxation = "osn"
-	ReceiptFFD12TaxationPatent           ReceiptFFD12Taxation = "patent"
-	ReceiptFFD12TaxationUsnIncome        ReceiptFFD12Taxation = "usn_income"
-	ReceiptFFD12TaxationUsnIncomeOutcome ReceiptFFD12Taxation = "usn_income_outcome"
+	ReceiptFfd12TaxationEsn              ReceiptFfd12Taxation = "esn"
+	ReceiptFfd12TaxationOsn              ReceiptFfd12Taxation = "osn"
+	ReceiptFfd12TaxationPatent           ReceiptFfd12Taxation = "patent"
+	ReceiptFfd12TaxationUsnIncome        ReceiptFfd12Taxation = "usn_income"
+	ReceiptFfd12TaxationUsnIncomeOutcome ReceiptFfd12Taxation = "usn_income_outcome"
 )
 
-// Valid indicates whether the value is a known member of the ReceiptFFD12Taxation enum.
-func (e ReceiptFFD12Taxation) Valid() bool {
+// Valid indicates whether the value is a known member of the ReceiptFfd12Taxation enum.
+func (e ReceiptFfd12Taxation) Valid() bool {
 	switch e {
-	case ReceiptFFD12TaxationEsn:
+	case ReceiptFfd12TaxationEsn:
 		return true
-	case ReceiptFFD12TaxationOsn:
+	case ReceiptFfd12TaxationOsn:
 		return true
-	case ReceiptFFD12TaxationPatent:
+	case ReceiptFfd12TaxationPatent:
 		return true
-	case ReceiptFFD12TaxationUsnIncome:
+	case ReceiptFfd12TaxationUsnIncome:
 		return true
-	case ReceiptFFD12TaxationUsnIncomeOutcome:
+	case ReceiptFfd12TaxationUsnIncomeOutcome:
 		return true
 	default:
 		return false
@@ -1007,6 +1059,51 @@ func (e RemoveCardResponseCardType) Valid() bool {
 	}
 }
 
+// Defines values for SessionStatusEnum.
+const (
+	AUTHORIZED      SessionStatusEnum = "AUTHORIZED"
+	CONFIRMED       SessionStatusEnum = "CONFIRMED"
+	DEADLINEEXPIRED SessionStatusEnum = "DEADLINE_EXPIRED"
+	FORMSHOWED      SessionStatusEnum = "FORM_SHOWED"
+	N3DSCHECKED     SessionStatusEnum = "3DS_CHECKED"
+	N3DSCHECKING    SessionStatusEnum = "3DS_CHECKING"
+	NEW             SessionStatusEnum = "NEW"
+	PARTIALREFUNDED SessionStatusEnum = "PARTIAL_REFUNDED"
+	REFUNDED        SessionStatusEnum = "REFUNDED"
+	REJECTED        SessionStatusEnum = "REJECTED"
+	REVERSED        SessionStatusEnum = "REVERSED"
+)
+
+// Valid indicates whether the value is a known member of the SessionStatusEnum enum.
+func (e SessionStatusEnum) Valid() bool {
+	switch e {
+	case AUTHORIZED:
+		return true
+	case CONFIRMED:
+		return true
+	case DEADLINEEXPIRED:
+		return true
+	case FORMSHOWED:
+		return true
+	case N3DSCHECKED:
+		return true
+	case N3DSCHECKING:
+		return true
+	case NEW:
+		return true
+	case PARTIALREFUNDED:
+		return true
+	case REFUNDED:
+		return true
+	case REJECTED:
+		return true
+	case REVERSED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TPayDevice.
 const (
 	TPayDeviceDesktop TPayDevice = "Desktop"
@@ -1028,15 +1125,15 @@ func (e TPayDevice) Valid() bool {
 	}
 }
 
-// Defines values for GetCardList200JSONResponseBodyCardType.
+// Defines values for GetCardList200JSONResponseBody0CardType.
 const (
-	N0 GetCardList200JSONResponseBodyCardType = 0
-	N1 GetCardList200JSONResponseBodyCardType = 1
-	N2 GetCardList200JSONResponseBodyCardType = 2
+	N0 GetCardList200JSONResponseBody0CardType = 0
+	N1 GetCardList200JSONResponseBody0CardType = 1
+	N2 GetCardList200JSONResponseBody0CardType = 2
 )
 
-// Valid indicates whether the value is a known member of the GetCardList200JSONResponseBodyCardType enum.
-func (e GetCardList200JSONResponseBodyCardType) Valid() bool {
+// Valid indicates whether the value is a known member of the GetCardList200JSONResponseBody0CardType enum.
+func (e GetCardList200JSONResponseBody0CardType) Valid() bool {
 	switch e {
 	case N0:
 		return true
@@ -1049,14 +1146,14 @@ func (e GetCardList200JSONResponseBodyCardType) Valid() bool {
 	}
 }
 
-// Defines values for GetCardList200JSONResponseBodyStatus.
+// Defines values for GetCardList200JSONResponseBody0Status.
 const (
-	A GetCardList200JSONResponseBodyStatus = "A"
-	D GetCardList200JSONResponseBodyStatus = "D"
+	A GetCardList200JSONResponseBody0Status = "A"
+	D GetCardList200JSONResponseBody0Status = "D"
 )
 
-// Valid indicates whether the value is a known member of the GetCardList200JSONResponseBodyStatus enum.
-func (e GetCardList200JSONResponseBodyStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the GetCardList200JSONResponseBody0Status enum.
+func (e GetCardList200JSONResponseBody0Status) Valid() bool {
 	switch e {
 	case A:
 		return true
@@ -1065,90 +1162,6 @@ func (e GetCardList200JSONResponseBodyStatus) Valid() bool {
 	default:
 		return false
 	}
-}
-
-// N3DSMethod defines model for 3DSMethod.
-type N3DSMethod struct {
-	// ThreeDSMethodData JSON-объект, закодированный в формат `Base64` с параметрами:
-	//
-	// * `threeDSMethodNotificationURL` — обратный адрес, на который будет отправлен запрос после прохождения threeDSMethod;
-	// * `threeDSServerTransID` — идентификатор платежа из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version). Генерируется 3DS Server.
-	ThreeDSMethodData string `json:"threeDSMethodData"`
-}
-
-// N3DSMethod2 defines model for 3DSMethod-2.
-type N3DSMethod2 struct {
-	// ThreeDSServerTransID Идентификатор платежа, который генерируется 3DS Server.
-	ThreeDSServerTransID string `json:"threeDSServerTransID"`
-}
-
-// N3DSv2 defines model for 3DSv2.
-type N3DSv2 struct {
-	// ColorDepth `deviceChannel 02 — BRW`
-	//
-	//
-	// Глубина цвета в битах.
-	//
-	//
-	// Допустимые значения — 1/4/8/15/16/24/32/48.
-	//
-	//
-	// Рекомендуем получать значение в браузере из глобального объекта `screen` — `screen.colorDepth`.
-	ColorDepth *string `json:"colorDepth,omitempty"`
-
-	// CresCallbackUrl `deviceChannel 02 — BRW`
-	//
-	//
-	// URL, который будет использоваться для получения результата (CRES) после завершения Challenge Flow
-	// — аутентификации с дополнительным переходом на страницу ACS.
-	CresCallbackUrl string `json:"cresCallbackUrl"`
-
-	// JavaEnabled `deviceChannel 02 — BRW`
-	//
-	// Поддержка Java браузером пользователя:
-	// * `true`,
-	// * `false`.
-	//
-	//
-	// Значение по умолчанию — `false`.
-	JavaEnabled *string `json:"javaEnabled,omitempty"`
-
-	// Language `deviceChannel 02 — BRW`
-	//
-	//
-	// Язык браузера в формате `IETF BCP47`.
-	// Рекомендуем получать значение в браузере из глобального объекта `navigator` — `navigator.language`.
-	Language string `json:"language"`
-
-	// ScreenHeight `deviceChannel 02 — BRW`
-	//
-	//
-	// Высота экрана в пикселях.
-	// Рекомендуем получать значение в браузере из глобального объекта `screen` — `screen.height`.
-	ScreenHeight string `json:"screen_height"`
-
-	// ScreenWidth `deviceChannel 02 — BRW`
-	//
-	//
-	// Ширина экрана в пикселях.
-	// Рекомендуем получать значение в браузере из глобального объекта `screen` — `screen.width`.
-	ScreenWidth string `json:"screen_width"`
-
-	// ThreeDSCompInd `deviceChannel 02 — BRW`
-	//
-	//
-	// Идентификатор выполнения метода [Пройти этап 3DS Method](/eacq/api/3-ds-method):
-	// * `Y` — выполнение метода успешно завершено;
-	// * `N` — выполнение метода завершено неуспешно или метод не выполнялся;
-	// * `U` — в ответе метода [Проверить версию 3DS](/eacq/api/check-3-ds-version) не вернулось значение `threeDSMethodURL`.
-	ThreeDSCompInd string `json:"threeDSCompInd"`
-
-	// Timezone `deviceChannel 02 — BRW`
-	//
-	//
-	// Часовой пояс пользователя в минутах.
-	// Рекомендуем получать значение в браузере через вызов метода **getTimezoneOffset()**.
-	Timezone string `json:"timezone"`
 }
 
 // N500 defines model for 500.
@@ -1164,45 +1177,13 @@ type N500 struct {
 
 	// StackTrace Отчет об ошибке.
 	StackTrace *string `json:"StackTrace,omitempty"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success *bool `json:"Success,omitempty"`
 }
 
-// ACSUrlResponseV1 defines model for ACSUrlResponseV1.
-type ACSUrlResponseV1 struct {
-	// FallbackOnTdsV1 Если аутентификация по 3DS v2.1 невозможна, выполняется переход на 3DS v1.0 и параметр устанавливается в значение `true`, иначе параметр не передается в ответе.
-	FallbackOnTdsV1 *string `json:"FallbackOnTdsV1,omitempty"`
-
-	// MD Идентификатор платежа в ACS из ответа метода [Подтвердить платеж](/eacq/api/finish-authorize).
-	MD string `json:"MD"`
-
-	// PaRes Результат 3D Secure аутентификации.
-	PaRes string `json:"PaRes"`
-}
-
-// ACSUrlResponseV2 defines model for ACSUrlResponseV2.
-type ACSUrlResponseV2 struct {
-	// Cres JSON/JWE-объект с параметрами, закодированный в формат `Base64`. Ответ отправляется на URL, который был указан в методе [Подтвердить платеж](/eacq/api/finish-authorize). После получения на `NotificationUrl` ответа ACS (CRes) с результатами прохождения 3DS v2.1 нужно отправить запрос через метод [Подтвердить прохождение 3DS v2.1](/eacq/api/submit-3-ds-authorization-v-2).
-	Cres struct {
-		// AcsTransID Идентификатор платежа из ответа метода [Подтвердить платеж](/eacq/api/finish-authorize). Назначается ACS.
-		AcsTransID string `json:"acsTransID"`
-
-		// MessageType Фиксированное значение `CRes`.
-		MessageType string `json:"messageType"`
-
-		// MessageVersion Версия 3DS из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version).
-		MessageVersion string `json:"messageVersion"`
-
-		// ThreeDSServerTransID Идентификатор платежа из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version). Генерируется 3DS Server.
-		ThreeDSServerTransID string `json:"threeDSServerTransID"`
-
-		// TransStatus Результат выполнения Challenge Flow:
-		// * `Y` — аутентификация выполнена успешна;
-		// * `N` — аутентификация не пройдена, покупатель отказался или ввел неверные данные.
-		TransStatus string `json:"transStatus"`
-	} `json:"cres"`
-}
-
-// ACSUrlV1 defines model for ACSUrl_V1.
-type ACSUrlV1 struct {
+// AcsUrlv1Request defines model for AcsUrlv1Request.
+type AcsUrlv1Request struct {
 	// MD Идентификатор платежа в ACS из ответа метода [Подтвердить платеж](/eacq/api/finish-authorize).
 	MD string `json:"MD"`
 
@@ -1213,9 +1194,21 @@ type ACSUrlV1 struct {
 	TermUrl string `json:"TermUrl"`
 }
 
-// ACSUrlV2 defines model for ACSUrl_V2.
-type ACSUrlV2 struct {
-	// Creq JSON-объект с параметрами, закодированный в форматe `Base64`.
+// AcsUrlv1Response defines model for AcsUrlv1Response.
+type AcsUrlv1Response struct {
+	// FallbackOnTdsV1 Если аутентификация по 3DS v2.1 невозможна, выполняется переход на 3DS v1.0 и параметр устанавливается в значение `true`, иначе параметр не передается в ответе.
+	FallbackOnTdsV1 *string `json:"FallbackOnTdsV1,omitempty"`
+
+	// MD Идентификатор платежа в ACS из ответа метода [Подтвердить платеж](/eacq/api/finish-authorize).
+	MD string `json:"MD"`
+
+	// PaRes Результат 3D Secure аутентификации.
+	PaRes string `json:"PaRes"`
+}
+
+// AcsUrlv2Request defines model for AcsUrlv2Request.
+type AcsUrlv2Request struct {
+	// Creq JSON-объект с параметрами в форматe `Base64`.
 	Creq struct {
 		// AcsTransID Идентификатор платежа из ответа метода [Подтвердить платеж](/eacq/api/finish-authorize). Назначается ACS.
 		AcsTransID string `json:"acsTransID"`
@@ -1240,17 +1233,40 @@ type ACSUrlV2 struct {
 	} `json:"creq"`
 }
 
-// AddAccountQr defines model for AddAccountQr.
-type AddAccountQr struct {
+// AcsUrlv2Response defines model for AcsUrlv2Response.
+type AcsUrlv2Response struct {
+	// Cres JSON/JWE-объект с параметрами, закодированный в формат `Base64`. Ответ отправляется на URL, который был указан в методе [Подтвердить платеж](/eacq/api/finish-authorize). После получения на `NotificationUrl` ответа ACS (CRes) с результатами прохождения 3DS v2.1 нужно отправить запрос через метод [Подтвердить прохождение 3DS v2.1](/eacq/api/submit-3-ds-authorization-v-2).
+	Cres struct {
+		// AcsTransID Идентификатор платежа из ответа метода [Подтвердить платеж](/eacq/api/finish-authorize). Назначается ACS.
+		AcsTransID string `json:"acsTransID"`
+
+		// MessageType Фиксированное значение `CRes`.
+		MessageType string `json:"messageType"`
+
+		// MessageVersion Версия 3DS из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version).
+		MessageVersion string `json:"messageVersion"`
+
+		// ThreeDSServerTransID Идентификатор платежа из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version). Генерируется 3DS Server.
+		ThreeDSServerTransID string `json:"threeDSServerTransID"`
+
+		// TransStatus Результат выполнения Challenge Flow:
+		// * `Y` — аутентификация выполнена успешна;
+		// * `N` — аутентификация не пройдена, покупатель отказался или ввел неверные данные.
+		TransStatus string `json:"transStatus"`
+	} `json:"cres"`
+}
+
+// AddAccountQrRequest defines model for AddAccountQrRequest.
+type AddAccountQrRequest struct {
 	// BankId Внутренний идентификатор банка, который выбран для оплаты.
 	//
 	//
-	// Cписок доступных `BankId` можно получить через метод [Получить список банков-участников СБП для платежа](/eacq/api/get-qr-bank-list).
+	// Список доступных `BankId` можно получить через метод [Получить список банков-участников СБП для платежа](/eacq/api/get-qr-bank-list).
 	// Если передается, в ответе в параметре `Data` вместо функциональной платежной ссылки (payload) возвращается deeplink.
 	//
 	//
 	// `BankId` передается только для `DataType = PAYLOAD` или `null`.
-	BankId *openapi_types.UUID `json:"BankId,omitempty"`
+	BankId *string `json:"BankId,omitempty"`
 
 	// Data JSON-объект, который содержит дополнительные параметры в виде `ключ`:`значение`. Эти параметры будут
 	// переданы на страницу оплаты, если она кастомизирована.
@@ -1273,12 +1289,12 @@ type AddAccountQr struct {
 	// * `IMAGE` — в ответе возвращается SVG-изображение QR.
 	//
 	// Значение по умолчанию — `PAYLOAD`.
-	DataType *AddAccountQrDataType `json:"DataType,omitempty"`
+	DataType *AddAccountQrRequestDataType `json:"DataType,omitempty"`
 
 	// Description Подробное описание деталей заказа.
 	Description string `json:"Description"`
 
-	// RedirectDueDate Cрок жизни ссылки или динамического QR-кода СБП, если выбран этот способ оплаты.<br><br>
+	// RedirectDueDate Срок жизни ссылки или динамического QR-кода СБП, если выбран этот способ оплаты.<br><br>
 	//
 	// Если дата в параметре меньше текущей, оплата по ссылке и QR будет недоступна.
 	//
@@ -1294,7 +1310,7 @@ type AddAccountQr struct {
 	//
 	// * больше нуля — оно будет установлено в качестве срока жизни ссылки или динамического QR-кода;
 	// * меньше нуля — устанавливается значение по умолчанию: 1440 мин. (1 сутки).
-	RedirectDueDate *string `json:"RedirectDueDate,omitempty"`
+	RedirectDueDate *time.Time `json:"RedirectDueDate,omitempty"`
 
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
@@ -1303,12 +1319,12 @@ type AddAccountQr struct {
 	Token string `json:"Token"`
 }
 
-// AddAccountQrDataType Тип возвращаемых данных:
+// AddAccountQrRequestDataType Тип возвращаемых данных:
 // * `PAYLOAD` — в ответе возвращается только Payload;
 // * `IMAGE` — в ответе возвращается SVG-изображение QR.
 //
 // Значение по умолчанию — `PAYLOAD`.
-type AddAccountQrDataType string
+type AddAccountQrRequestDataType string
 
 // AddAccountQrResponse defines model for AddAccountQrResponse.
 type AddAccountQrResponse struct {
@@ -1333,8 +1349,8 @@ type AddAccountQrResponse struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// AddCard defines model for AddCard.
-type AddCard struct {
+// AddCardRequest defines model for AddCardRequest.
+type AddCardRequest struct {
 	// CheckType Если `CheckType` не передается, автоматически проставляется значение `NO`.
 	//
 	//
@@ -1342,7 +1358,7 @@ type AddCard struct {
 	//  * `HOLD` — при сохранении сделать списание на 0 руб. `RebillID` возвращается для терминалов без поддержки 3DS.
 	//  * `3DS` — при сохранении карты выполнить проверку 3DS и выполнить списание на 0 р. `RebillID` будет возвращаться только для карт с поддержкой 3DS. Карты, которые не поддерживают 3DS, привязаны не будут.
 	//  * `3DSHOLD` – при привязке карты выполнить проверку, поддерживает карта 3DS или нет. Если карта не поддерживает 3DS, выполняется списание на 0 руб.
-	CheckType *AddCardCheckType `json:"CheckType,omitempty"`
+	CheckType *AddCardRequestCheckType `json:"CheckType,omitempty"`
 
 	// CustomerKey Идентификатор покупателя в системе мерчанта.
 	CustomerKey string `json:"CustomerKey"`
@@ -1364,13 +1380,13 @@ type AddCard struct {
 	Token string `json:"Token"`
 }
 
-// AddCardCheckType Если `CheckType` не передается, автоматически проставляется значение `NO`.
+// AddCardRequestCheckType Если `CheckType` не передается, автоматически проставляется значение `NO`.
 //
 //   - `NO` — сохранить карту без проверок. `RebillID` для рекуррентных платежей не возвращается.
 //   - `HOLD` — при сохранении сделать списание на 0 руб. `RebillID` возвращается для терминалов без поддержки 3DS.
 //   - `3DS` — при сохранении карты выполнить проверку 3DS и выполнить списание на 0 р. `RebillID` будет возвращаться только для карт с поддержкой 3DS. Карты, которые не поддерживают 3DS, привязаны не будут.
 //   - `3DSHOLD` – при привязке карты выполнить проверку, поддерживает карта 3DS или нет. Если карта не поддерживает 3DS, выполняется списание на 0 руб.
-type AddCardCheckType string
+type AddCardRequestCheckType string
 
 // AddCardResponse defines model for AddCardResponse.
 type AddCardResponse struct {
@@ -1387,7 +1403,7 @@ type AddCardResponse struct {
 	Message *string `json:"Message,omitempty"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// PaymentURL Ссылка на форму привязки карты. Используется для работы с платежной формой Т-Банка.
 	PaymentURL string `json:"PaymentURL"`
@@ -1402,8 +1418,8 @@ type AddCardResponse struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// AddCustomer defines model for AddCustomer.
-type AddCustomer struct {
+// AddCustomerRequest defines model for AddCustomerRequest.
+type AddCustomerRequest struct {
 	// CustomerKey Идентификатор покупателя в системе мерчанта.
 	CustomerKey string `json:"CustomerKey"`
 
@@ -1539,10 +1555,10 @@ type AgentData struct {
 // * `another` — другой тип агента.
 type AgentDataAgentSign string
 
-// AlfaPayLink defines model for AlfaPayLink.
-type AlfaPayLink struct {
+// AlfaPayLinkRequest defines model for AlfaPayLinkRequest.
+type AlfaPayLinkRequest struct {
 	// PaymentId Идентификатор платежа в системе Т-Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
@@ -1572,8 +1588,8 @@ type AlfaPayLinkResponse struct {
 	Success bool `json:"Success"`
 }
 
-// AttachCard defines model for AttachCard.
-type AttachCard struct {
+// AttachCardRequest defines model for AttachCardRequest.
+type AttachCardRequest struct {
 	// CardData Зашифрованные данные карты в формате `PAN=4300000000000777;ExpDate=0519;CardHolder=IVAN PETROV;CVV=111`.
 	CardData string `json:"CardData"`
 
@@ -1585,8 +1601,8 @@ type AttachCard struct {
 	//
 	// Если ключи или значения содержат в себе специальные символы, получившееся значение должно быть закодировано функцией `urlencode`.
 	//
-	// Для 3DS v2.1 в `DATA` нужно передавать параметры, которые описаны в объекте `3DSv2`. В `HttpHeaders` запроса обязательны заголовки `User-Agent` и `Accept`.
-	DATA *AttachCard_DATA `json:"DATA,omitempty"`
+	// Для 3DS v2.1 в `DATA` нужно передавать параметры, которые описаны в объекте `ThreeDSv2`. В `HttpHeaders` запроса обязательны заголовки `User-Agent` и `Accept`.
+	DATA *AttachCardRequest_DATA `json:"DATA,omitempty"`
 
 	// RequestKey Идентификатор запроса на привязку карты.
 	RequestKey openapi_types.UUID `json:"RequestKey"`
@@ -1604,10 +1620,10 @@ type AttachCard struct {
 	DeviceChannel string `json:"deviceChannel"`
 }
 
-// AttachCardDATA0 defines model for .
-type AttachCardDATA0 map[string]string
+// AttachCardRequestDATA0 defines model for .
+type AttachCardRequestDATA0 map[string]string
 
-// AttachCard_DATA JSON-объект с дополнительными параметрами по операции и настройками в формате `ключ:значение`.
+// AttachCardRequest_DATA JSON-объект с дополнительными параметрами по операции и настройками в формате `ключ:значение`.
 //
 // Максимальная длина ключа — 20 знаков, значения — 100 знаков.
 //
@@ -1615,8 +1631,8 @@ type AttachCardDATA0 map[string]string
 //
 // Если ключи или значения содержат в себе специальные символы, получившееся значение должно быть закодировано функцией `urlencode`.
 //
-// Для 3DS v2.1 в `DATA` нужно передавать параметры, которые описаны в объекте `3DSv2`. В `HttpHeaders` запроса обязательны заголовки `User-Agent` и `Accept`.
-type AttachCard_DATA struct {
+// Для 3DS v2.1 в `DATA` нужно передавать параметры, которые описаны в объекте `ThreeDSv2`. В `HttpHeaders` запроса обязательны заголовки `User-Agent` и `Accept`.
+type AttachCardRequest_DATA struct {
 	union json.RawMessage
 }
 
@@ -1627,7 +1643,7 @@ type AttachCardResponse struct {
 	// Возвращается в ответе для статуса `3DS_CHECKING`.
 	ACSUrl *string `json:"ACSUrl,omitempty"`
 
-	// CardId Идентификатор карты в системе Т‑Бизнес.
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
 	//
 	// Для сценария 3D Secure Authentication Challenge `CardId` можно получить после успешного прохождения 3DS.
 	CardId *string `json:"CardId,omitempty"`
@@ -1654,7 +1670,7 @@ type AttachCardResponse struct {
 	// Возвращается в ответе для статуса `3DS_CHECKING`.
 	PaReq *string `json:"PaReq,omitempty"`
 
-	// RebillId Уникальный идентификатор сохраненных реквизитов карты покупателя.
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
 	RebillId *string `json:"RebillId,omitempty"`
 
 	// RequestKey Идентификатор запроса на привязку карты.
@@ -1689,33 +1705,15 @@ type AttachCardResponse struct {
 // * `REJECTED` — привязать карту не удалось.
 type AttachCardResponseStatus string
 
-// BankList defines model for BankList.
-type BankList struct {
-	// BankId Внутренний идентификатор банка.
-	BankId openapi_types.UUID `json:"BankId"`
-
-	// BankLogo Ссылка на логотип банка.
-	BankLogo string `json:"BankLogo"`
-
-	// BankName Наименование банка.
-	BankName string `json:"BankName"`
-
-	// BankOrder Порядок для сортировки.
-	BankOrder int `json:"BankOrder"`
-
-	// NspkBankId Идентификатор банка в системе НСПК.
-	NspkBankId string `json:"NspkBankId"`
-}
-
-// Cancel defines model for Cancel.
-type Cancel struct {
+// CancelRequest defines model for CancelRequest.
+type CancelRequest struct {
 	// Amount Сумма в копейках. Если не передан, используется `Amount`, переданный в методе [Инициировать платеж](/eacq/api/init).
 	//
 	//
 	// При отмене операции в статусе `NEW` поле `Amount` игнорируется, даже если оно заполнено. Отмена проводится на полную сумму.
 	Amount *int64 `json:"Amount,omitempty"`
 
-	// ExternalRequestId Идентификатор операции на стороне мерчанта.
+	// ExternalRequestId Ключ [идемпотентости](/eacq/intro/developer/glossary) и идентификатор операции на стороне мерчанта.
 	//
 	// Параметр обязательный для операций «Долями» и в рассрочку.
 	//
@@ -1739,22 +1737,21 @@ type Cancel struct {
 	// Подробнее — в параметре `MemberId` метода [Получить список банков-пользователей QR](/eacq/api/qr-members-list).
 	QrMemberId *string `json:"QrMemberId,omitempty"`
 
-	// Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
+	// Receipt JSON-объект с данными чека. Обязателен при частичной отмене, если подключена онлайн-касса.
 	//
 	// При частичной отмене данные, которые передаются в этом запросе, могут отличаться от данных, которые были переданы в методе [Инициировать платеж](/eacq/api/init).
 	//
-	//
 	// При полной отмене структура чека не передается, при частичной — передаются товары, которые нужно отменить.
-	Receipt *Cancel_Receipt `json:"Receipt,omitempty"`
+	Receipt *CancelRequest_Receipt `json:"Receipt,omitempty"`
 
 	// Route Способ платежа.
-	Route *CancelRoute `json:"Route,omitempty"`
+	Route *CancelRequestRoute `json:"Route,omitempty"`
 
 	// Shops JSON-объект с данными маркетплейса. Обязательный для маркетплейсов.
 	Shops *[]ShopsCancel `json:"Shops,omitempty"`
 
 	// Source Источник платежа.
-	Source *CancelSource `json:"Source,omitempty"`
+	Source *CancelRequestSource `json:"Source,omitempty"`
 
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
@@ -1763,23 +1760,23 @@ type Cancel struct {
 	Token string `json:"Token"`
 }
 
-// Cancel_Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
+// CancelRequest_Receipt JSON-объект с данными чека. Обязателен при частичной отмене, если подключена онлайн-касса.
 //
 // При частичной отмене данные, которые передаются в этом запросе, могут отличаться от данных, которые были переданы в методе [Инициировать платеж](/eacq/api/init).
 //
 // При полной отмене структура чека не передается, при частичной — передаются товары, которые нужно отменить.
-type Cancel_Receipt struct {
+type CancelRequest_Receipt struct {
 	union json.RawMessage
 }
 
-// CancelRoute Способ платежа.
-type CancelRoute string
+// CancelRequestRoute Способ платежа.
+type CancelRequestRoute string
 
-// CancelSource Источник платежа.
-type CancelSource string
+// CancelRequestSource Источник платежа.
+type CancelRequestSource string
 
-// Cancel2 defines model for Cancel-2.
-type Cancel2 struct {
+// CancelResponse defines model for CancelResponse.
+type CancelResponse struct {
 	// Details Подробное описание ошибки.
 	Details *string `json:"Details,omitempty"`
 
@@ -1793,16 +1790,16 @@ type Cancel2 struct {
 	Message *string `json:"Message,omitempty"`
 
 	// NewAmount Сумма в копейках после операции отмены.
-	NewAmount float32 `json:"NewAmount"`
+	NewAmount int64 `json:"NewAmount"`
 
 	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
 	OrderId string `json:"OrderId"`
 
 	// OriginalAmount Сумма в копейках до операции отмены.
-	OriginalAmount float32 `json:"OriginalAmount"`
+	OriginalAmount int64 `json:"OriginalAmount"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// Status Статус транзакции.
 	Status string `json:"Status"`
@@ -1817,35 +1814,8 @@ type Cancel2 struct {
 // Causes Подробное описание причины ошибки.
 type Causes = []string
 
-// Charge defines model for Charge.
-type Charge struct {
-	// IP IP-адрес покупателя.
-	IP *string `json:"IP,omitempty"`
-
-	// InfoEmail Адрес электронной почты покупателя.
-	// Параметр обязательный, если передан `SendEmail`=`true`.
-	InfoEmail *openapi_types.Email `json:"InfoEmail,omitempty"`
-
-	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId string `json:"PaymentId"`
-
-	// RebillId Уникальный идентификатор сохраненных реквизитов карты покупателя. Возвращается в уведомлении после успешного проведения родительской CC-операции.
-	RebillId string `json:"RebillId"`
-
-	// SendEmail Отправка уведомлений об оплате на почту покупателя:
-	// * `true` — отправлять;
-	// * `false` — не отправлять.
-	SendEmail *bool `json:"SendEmail,omitempty"`
-
-	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-	TerminalKey string `json:"TerminalKey"`
-
-	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
-	Token string `json:"Token"`
-}
-
-// ChargeQr defines model for ChargeQr.
-type ChargeQr struct {
+// ChargeQrRequest defines model for ChargeQrRequest.
+type ChargeQrRequest struct {
 	// AccountToken Идентификатор привязки счета.
 	// Назначается банком-эмитентом.
 	AccountToken string `json:"AccountToken"`
@@ -1879,10 +1849,10 @@ type ChargeQr struct {
 // ChargeQrResponse defines model for ChargeQrResponse.
 type ChargeQrResponse struct {
 	// Amount Сумма в копейках.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
 	// Currency Код валюты по `ISO 4217`.
-	Currency *float32 `json:"Currency,omitempty"`
+	Currency *string `json:"Currency,omitempty"`
 
 	// Details Подробное описание ошибки.
 	Details *string `json:"Details,omitempty"`
@@ -1918,8 +1888,35 @@ type ChargeQrResponse struct {
 // * `FORM SHOWED` — если был совершен переход на платежную форму, но покупатель еще не успел провести оплату.
 type ChargeQrResponseStatus string
 
-// CheckOrder defines model for CheckOrder.
-type CheckOrder struct {
+// ChargeRequest defines model for ChargeRequest.
+type ChargeRequest struct {
+	// IP IP-адрес покупателя.
+	IP *string `json:"IP,omitempty"`
+
+	// InfoEmail Адрес электронной почты покупателя.
+	// Параметр обязательный, если передан `SendEmail`=`true`.
+	InfoEmail *openapi_types.Email `json:"InfoEmail,omitempty"`
+
+	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
+	PaymentId string `json:"PaymentId"`
+
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя. Возвращается в уведомлении после успешного проведения родительской CC-операции.
+	RebillId string `json:"RebillId"`
+
+	// SendEmail Отправка уведомлений об оплате на почту покупателя:
+	// * `true` — отправлять;
+	// * `false` — не отправлять.
+	SendEmail *bool `json:"SendEmail,omitempty"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+
+	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
+	Token string `json:"Token"`
+}
+
+// CheckOrderRequest defines model for CheckOrderRequest.
+type CheckOrderRequest struct {
 	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
 	OrderId string `json:"OrderId"`
 
@@ -1930,8 +1927,8 @@ type CheckOrder struct {
 	Token string `json:"Token"`
 }
 
-// CheckOrder2 defines model for CheckOrder-2.
-type CheckOrder2 struct {
+// CheckOrderResponse defines model for CheckOrderResponse.
+type CheckOrderResponse struct {
 	// Details Подробное описание ошибки.
 	Details *string `json:"Details,omitempty"`
 
@@ -1969,12 +1966,7 @@ type ClientInfo struct {
 	// Числовой код страны, гражданином которой является покупатель. Код страны указывается в соответствии с Общероссийским классификатором стран мира [ОКСМ](https://classifikators.ru/oksm).
 	Citizenship *string `json:"Citizenship,omitempty"`
 
-	// DocumentData `Тег ФФД: 1246`
-	//
-	// Реквизиты документа, удостоверяющего личность. Например, серия и номер паспорта.
-	DocumentData *string `json:"DocumentData,omitempty"`
-
-	// DocumentСode `Тег ФФД: 1245`
+	// DocumentCode `Тег ФФД: 1245`
 	//
 	// Числовой код вида документа, удостоверяющего личность.
 	//
@@ -1994,7 +1986,12 @@ type ClientInfo struct {
 	// * `37` — удостоверение беженца.
 	// * `38` — иные документы, признаваемые документами, удостоверяющими личность лиц без гражданства в соответствии с законодательством Российской Федерации и международным договором Российской Федерации.
 	// * `40` — документ, удостоверяющий личность лица, не имеющего действительного документа, удостоверяющего личность, на период рассмотрения заявления о признании гражданином Российской Федерации или о приеме в гражданство Российской Федерации.
-	DocumentСode *string `json:"DocumentСode,omitempty"`
+	DocumentCode *string `json:"DocumentCode,omitempty"`
+
+	// DocumentData `Тег ФФД: 1246`
+	//
+	// Реквизиты документа, удостоверяющего личность. Например, серия и номер паспорта.
+	DocumentData *string `json:"DocumentData,omitempty"`
 }
 
 // Common defines model for Common.
@@ -2035,10 +2032,66 @@ type Common struct {
 // значения `rebillId` или `Recurrent` с переданным значением `OperationInitiatorType`.
 type CommonOperationInitiatorType string
 
-// Confirm defines model for Confirm.
-type Confirm struct {
+// ConfirmByEmailRequest defines model for ConfirmByEmailRequest.
+type ConfirmByEmailRequest struct {
+	// EmailList JSON-массив, который содержит перечень `Email` с типом `String`. Можно указать до трех адресов.
+	EmailList []string `json:"EmailList"`
+
+	// PaymentIdList JSON-массив, который содержит в себе перечень `PaymentId` c типом `Number`.
+	PaymentIdList []float32 `json:"PaymentIdList"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+
+	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token). Для создания токена используйте только `Password` и `TerminalKey`.
+	Token string `json:"Token"`
+}
+
+// ConfirmByEmailResponse defines model for ConfirmByEmailResponse.
+type ConfirmByEmailResponse struct {
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message       *string         `json:"Message,omitempty"`
+	PaymentIdList []PaymentIdList `json:"PaymentIdList"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+}
+
+// ConfirmByUrlRequest defines model for ConfirmByUrlRequest.
+type ConfirmByUrlRequest struct {
+	// CallbackUrl URL сервиса получения справок.
+	CallbackUrl string `json:"CallbackUrl"`
+
+	// PaymentIdList JSON-массив, который содержит в себе перечень `PaymentId` c типом `Number`.
+	PaymentIdList []float32 `json:"PaymentIdList"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+
+	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token). Для создания токена используйте только `Password` и `TerminalKey`.
+	Token string `json:"Token"`
+}
+
+// ConfirmByUrlResponse defines model for ConfirmByUrlResponse.
+type ConfirmByUrlResponse struct {
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message       *string         `json:"Message,omitempty"`
+	PaymentIdList []PaymentIdList `json:"PaymentIdList"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+}
+
+// ConfirmRequest defines model for ConfirmRequest.
+type ConfirmRequest struct {
 	// Amount Сумма в копейках. Если не передан, используется `Amount`, который был передан в методе [Инициировать платеж](/eacq/api/init).
-	Amount *float32 `json:"Amount,omitempty"`
+	Amount *int64 `json:"Amount,omitempty"`
 
 	// IP IP-адрес покупателя.
 	IP *string `json:"IP,omitempty"`
@@ -2047,16 +2100,16 @@ type Confirm struct {
 	PaymentId string `json:"PaymentId"`
 
 	// Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
-	Receipt *Confirm_Receipt `json:"Receipt,omitempty"`
+	Receipt *ConfirmRequest_Receipt `json:"Receipt,omitempty"`
 
 	// Route Способ платежа.
-	Route *ConfirmRoute `json:"Route,omitempty"`
+	Route *ConfirmRequestRoute `json:"Route,omitempty"`
 
 	// Shops JSON-объект с данными маркетплейса. Обязательный для маркетплейсов.
 	Shops *[]Shops `json:"Shops,omitempty"`
 
 	// Source Источник платежа.
-	Source *ConfirmSource `json:"Source,omitempty"`
+	Source *ConfirmRequestSource `json:"Source,omitempty"`
 
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
@@ -2065,19 +2118,19 @@ type Confirm struct {
 	Token string `json:"Token"`
 }
 
-// Confirm_Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
-type Confirm_Receipt struct {
+// ConfirmRequest_Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
+type ConfirmRequest_Receipt struct {
 	union json.RawMessage
 }
 
-// ConfirmRoute Способ платежа.
-type ConfirmRoute string
+// ConfirmRequestRoute Способ платежа.
+type ConfirmRequestRoute string
 
-// ConfirmSource Источник платежа.
-type ConfirmSource string
+// ConfirmRequestSource Источник платежа.
+type ConfirmRequestSource string
 
-// Confirm2 defines model for Confirm-2.
-type Confirm2 struct {
+// ConfirmResponse defines model for ConfirmResponse.
+type ConfirmResponse struct {
 	// Details Подробное описание ошибки.
 	Details *string `json:"Details,omitempty"`
 
@@ -2097,7 +2150,7 @@ type Confirm2 struct {
 	PaymentId string `json:"PaymentId"`
 
 	// Status Статус транзакции.
-	Status Confirm2Status `json:"Status"`
+	Status ConfirmResponseStatus `json:"Status"`
 
 	// Success Успешность прохождения запроса — `true`/`false`.
 	Success bool `json:"Success"`
@@ -2106,13 +2159,28 @@ type Confirm2 struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// Confirm2Status Статус транзакции.
-type Confirm2Status string
+// ConfirmResponseStatus Статус транзакции.
+type ConfirmResponseStatus string
 
-// FinishAuthorize defines model for FinishAuthorize.
-type FinishAuthorize struct {
+// ErrorResponse Стандартная модель ошибки
+type ErrorResponse struct {
+	// Details Детальное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode *string `json:"ErrorCode,omitempty"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success *bool `json:"Success,omitempty"`
+}
+
+// FinishAuthorizeRequest defines model for FinishAuthorizeRequest.
+type FinishAuthorizeRequest struct {
 	// Amount Сумма в копейках.
-	Amount *float32 `json:"Amount,omitempty"`
+	Amount *int64 `json:"Amount,omitempty"`
 
 	// CardData Объект `CardData` собирается в виде списка `ключ=значение` (разделитель `;`) и зашифровывается открытым ключом — X509 RSA 2048. Бинарное значение кодируется в `Base64`.
 	//
@@ -2121,13 +2189,13 @@ type FinishAuthorize struct {
 	//
 	// Обязательные параметры с типом данных `number`:
 	//
-	// * `PAN` — номер карты;
-	// * `ExpDate` — месяц и год срока действия карты в формате MMYY.
+	// * `PAN` — номер платежного средства;
+	// * `ExpDate` — месяц и год срока действия платежного средства в формате MMYY.
 	//
 	// Необязательные параметры с типом данных `string`:
 	//
-	// * `CardHolder` — имя и фамилия держателя карты как на карте.
-	// * `CVV` — код защиты с обратной стороны карты. Параметр необязательный для платежей через Apple Pay с расшифровкой токена на своей стороне.
+	// * `CardHolder` — имя и фамилия покупателя.
+	// * `CVV` — код защиты с обратной стороны платежного средства. Параметр необязательный для платежей через Apple Pay с расшифровкой токена на своей стороне.
 	// * `ECI` — Electronic Commerce Indicator. Индикатор, который показывает степень защиты, применяемой при предоставлении покупателя своих данных ТСП.
 	// * `CAVV` — Cardholder Authentication Verification Value или Accountholder Authentication Value.
 	//
@@ -2164,7 +2232,7 @@ type FinishAuthorize struct {
 	//
 	//
 	// Если ключи или значения содержат в себе специальные символы, получившееся значение должно быть закодировано функцией `urlencode`.
-	DATA *FinishAuthorize_DATA `json:"DATA,omitempty"`
+	DATA *FinishAuthorizeRequest_DATA `json:"DATA,omitempty"`
 
 	// EncryptedPaymentData Данные карты.
 	// Параметр обязательный только для ApplePay или GooglePay.
@@ -2185,7 +2253,7 @@ type FinishAuthorize struct {
 
 	// Route Способ платежа.
 	// Параметр обязательный для ApplePay или GooglePay.
-	Route *FinishAuthorizeRoute `json:"Route,omitempty"`
+	Route *FinishAuthorizeRequestRoute `json:"Route,omitempty"`
 
 	// SendEmail Отправка уведомлений об оплате на почту покупателя:
 	//
@@ -2199,7 +2267,7 @@ type FinishAuthorize struct {
 	// - `MC` — `beeline`, `mts`, `tele2`, `megafon`;
 	// - `EINV` — `einvoicing`;
 	// - `WM` — `webmoney`.
-	Source *FinishAuthorizeSource `json:"Source,omitempty"`
+	Source *FinishAuthorizeRequestSource `json:"Source,omitempty"`
 
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
@@ -2219,10 +2287,10 @@ type FinishAuthorize struct {
 	DeviceChannel *string `json:"deviceChannel,omitempty"`
 }
 
-// FinishAuthorizeDATA1 defines model for .
-type FinishAuthorizeDATA1 map[string]string
+// FinishAuthorizeRequestDATA1 defines model for .
+type FinishAuthorizeRequestDATA1 map[string]string
 
-// FinishAuthorize_DATA JSON-объект, который содержит дополнительные
+// FinishAuthorizeRequest_DATA JSON-объект, который содержит дополнительные
 // параметры в виде `ключ:значение`. Эти параметры будут переданы на страницу
 // оплаты, если она кастомизирована.
 //
@@ -2234,28 +2302,28 @@ type FinishAuthorizeDATA1 map[string]string
 // Максимальное количество пар `ключ`:`значение` — не больше 20.
 //
 // Если ключи или значения содержат в себе специальные символы, получившееся значение должно быть закодировано функцией `urlencode`.
-type FinishAuthorize_DATA struct {
+type FinishAuthorizeRequest_DATA struct {
 	union json.RawMessage
 }
 
-// FinishAuthorizeRoute Способ платежа.
+// FinishAuthorizeRequestRoute Способ платежа.
 // Параметр обязательный для ApplePay или GooglePay.
-type FinishAuthorizeRoute string
+type FinishAuthorizeRequestRoute string
 
-// FinishAuthorizeSource Источник платежа.
+// FinishAuthorizeRequestSource Источник платежа.
 // Значение параметра зависит от параметра `Route`:
 // - `ACQ` — `cards` или `Cards`;
 // - `MC` — `beeline`, `mts`, `tele2`, `megafon`;
 // - `EINV` — `einvoicing`;
 // - `WM` — `webmoney`.
-type FinishAuthorizeSource string
+type FinishAuthorizeRequestSource string
 
-// FinishAuthorize2 defines model for FinishAuthorize-2.
-type FinishAuthorize2 struct {
+// FinishAuthorizeResponse defines model for FinishAuthorizeResponse.
+type FinishAuthorizeResponse struct {
 	// Amount Сумма в копейках.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
-	// CardId Идентификатор карты в системе Т‑Бизнес. Передается только для cохраненной карты.
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
 	CardId *string `json:"CardId,omitempty"`
 
 	// Details Подробное описание ошибки.
@@ -2273,7 +2341,7 @@ type FinishAuthorize2 struct {
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
 	PaymentId *string `json:"PaymentId,omitempty"`
 
-	// RebillId Уникальный идентификатор сохраненных реквизитов карты покупателя.
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
 	RebillId *string `json:"RebillId,omitempty"`
 
 	// Status Статус транзакции.
@@ -2291,8 +2359,8 @@ type FinishAuthorize2 struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// GetAccountQrList defines model for GetAccountQrList.
-type GetAccountQrList struct {
+// GetAccountQrListRequest defines model for GetAccountQrListRequest.
+type GetAccountQrListRequest struct {
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
 
@@ -2344,10 +2412,10 @@ type GetAccountQrListResponse struct {
 // * `INACTIVE` — привязка счета неуспешна или деактивирована.
 type GetAccountQrListResponseAccountTokensStatus string
 
-// GetAddAccountQrState defines model for GetAddAccountQrState.
-type GetAddAccountQrState struct {
+// GetAddAccountQrStateRequest defines model for GetAddAccountQrStateRequest.
+type GetAddAccountQrStateRequest struct {
 	// RequestKey Идентификатор запроса на привязку счета.
-	RequestKey float32 `json:"RequestKey"`
+	RequestKey string `json:"RequestKey"`
 
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
@@ -2374,7 +2442,7 @@ type GetAddAccountQrStateResponse struct {
 	Message *string `json:"Message,omitempty"`
 
 	// RequestKey Идентификатор запроса на привязку счета.
-	RequestKey float32 `json:"RequestKey"`
+	RequestKey string `json:"RequestKey"`
 
 	// Status Статус привязки карты:
 	// * `NEW` — получен запрос на привязку счета;
@@ -2397,8 +2465,8 @@ type GetAddAccountQrStateResponse struct {
 // * `INACTIVE` — привязка счета неуспешна или деактивирована.
 type GetAddAccountQrStateResponseStatus string
 
-// GetAddCardState defines model for GetAddCardState.
-type GetAddCardState struct {
+// GetAddCardStateRequest defines model for GetAddCardStateRequest.
+type GetAddCardStateRequest struct {
 	// RequestKey Идентификатор запроса на привязку карты.
 	RequestKey string `json:"RequestKey"`
 
@@ -2411,7 +2479,7 @@ type GetAddCardState struct {
 
 // GetAddCardStateResponse defines model for GetAddCardStateResponse.
 type GetAddCardStateResponse struct {
-	// CardId Идентификатор карты в системе Т‑Бизнес.
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
 	CardId *string `json:"CardId,omitempty"`
 
 	// CustomerKey Идентификатор покупателя в системе мерчанта.
@@ -2426,7 +2494,7 @@ type GetAddCardStateResponse struct {
 	// Message Краткое описание ошибки.
 	Message *string `json:"Message,omitempty"`
 
-	// RebillId Уникальный идентификатор сохраненных реквизитов карты покупателя.
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
 	RebillId *string `json:"RebillId,omitempty"`
 
 	// RequestKey Идентификатор запроса на привязку карты.
@@ -2461,8 +2529,8 @@ type GetAddCardStateResponse struct {
 // * `REJECTED` — привязать карту не удалось.
 type GetAddCardStateResponseStatus string
 
-// GetCardList defines model for GetCardList.
-type GetCardList struct {
+// GetCardListRequest defines model for GetCardListRequest.
+type GetCardListRequest struct {
 	// CustomerKey Идентификатор покупателя в системе мерчанта.
 	CustomerKey string `json:"CustomerKey"`
 
@@ -2506,8 +2574,8 @@ type GetCustomerResponse struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// GetDeepLink defines model for GetDeepLink.
-type GetDeepLink struct {
+// GetDeepLinkRequest defines model for GetDeepLinkRequest.
+type GetDeepLinkRequest struct {
 	// PaymentId Идентификатор платежа в системе Т-Бизнес.
 	PaymentId string `json:"PaymentId"`
 
@@ -2536,8 +2604,8 @@ type GetDeepLinkResponse struct {
 	Success bool `json:"Success"`
 }
 
-// GetOrRemoveCustomer defines model for GetOrRemoveCustomer.
-type GetOrRemoveCustomer struct {
+// GetOrRemoveCustomerRequest defines model for GetOrRemoveCustomerRequest.
+type GetOrRemoveCustomerRequest struct {
 	// CustomerKey Идентификатор покупателя в системе мерчанта.
 	CustomerKey string `json:"CustomerKey"`
 
@@ -2551,10 +2619,123 @@ type GetOrRemoveCustomer struct {
 	Token string `json:"Token"`
 }
 
-// GetQRStateResponse defines model for GetQRStateResponse.
-type GetQRStateResponse struct {
+// GetQrBankListRequest defines model for GetQrBankListRequest.
+type GetQrBankListRequest struct {
+	// Device Тип и ОС устройства.
+	Device struct {
+		// Os ОС устройства.
+		Os *string `json:"Os,omitempty"`
+
+		// Type Тип устройства.
+		Type GetQrBankListRequestDeviceType `json:"Type"`
+	} `json:"Device"`
+
+	// PaymentMethod Способ оплаты.
+	PaymentMethod *GetQrBankListRequestPaymentMethod `json:"PaymentMethod,omitempty"`
+
+	// ScenarioType Тип сценария оплаты:
+	// * `qr` - оплата;
+	// * `sub` - привязка счета.
+	//
+	// Значение по умолчанию — `qr`.
+	ScenarioType *GetQrBankListRequestScenarioType `json:"ScenarioType,omitempty"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+
+	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
+	Token string `json:"Token"`
+}
+
+// GetQrBankListRequestDeviceType Тип устройства.
+type GetQrBankListRequestDeviceType string
+
+// GetQrBankListRequestPaymentMethod Способ оплаты.
+type GetQrBankListRequestPaymentMethod string
+
+// GetQrBankListRequestScenarioType Тип сценария оплаты:
+// * `qr` - оплата;
+// * `sub` - привязка счета.
+//
+// Значение по умолчанию — `qr`.
+type GetQrBankListRequestScenarioType string
+
+// GetQrBankListResponse defines model for GetQrBankListResponse.
+type GetQrBankListResponse struct {
+	// BankList Список банков от НСПК.
+	BankList []struct {
+		// BankId Внутренний идентификатор банка.
+		BankId openapi_types.UUID `json:"BankId"`
+
+		// BankLogo Ссылка на логотип банка.
+		BankLogo string `json:"BankLogo"`
+
+		// BankName Наименование банка.
+		BankName string `json:"BankName"`
+
+		// BankOrder Порядок для сортировки.
+		BankOrder int `json:"BankOrder"`
+
+		// NspkBankId Идентификатор банка в системе НСПК.
+		NspkBankId string `json:"NspkBankId"`
+	} `json:"BankList"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+}
+
+// GetQrRequest defines model for GetQrRequest.
+type GetQrRequest struct {
+	// BankId Внутренний идентификатор банка, который выбран для оплаты.
+	//
+	//
+	// Список доступных `BankId` можно получить через метод [Получить список банков-участников СБП для платежа](/eacq/api/get-qr-bank-list).
+	// Если передается, в ответе в параметре `Data` вместо функциональной платежной ссылки (payload) возвращается deeplink.
+	//
+	//
+	// `BankId` передается только для `DataType = PAYLOAD` или `null`.
+	BankId *string `json:"BankId,omitempty"`
+
+	// DataType Тип возвращаемых данных:
+	// * `PAYLOAD` — в ответе возвращается только Payload;
+	// * `IMAGE` — в ответе возвращается SVG изображение QR.
+	//
+	// Значение по умолчанию — `PAYLOAD`.
+	DataType *GetQrRequestDataType `json:"DataType,omitempty"`
+
+	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
+	PaymentId string `json:"PaymentId"`
+
+	// PaymentMethod Способ оплаты.
+	PaymentMethod *GetQrRequestPaymentMethod `json:"PaymentMethod,omitempty"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т-Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+
+	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
+	Token string `json:"Token"`
+}
+
+// GetQrRequestDataType Тип возвращаемых данных:
+// * `PAYLOAD` — в ответе возвращается только Payload;
+// * `IMAGE` — в ответе возвращается SVG изображение QR.
+//
+// Значение по умолчанию — `PAYLOAD`.
+type GetQrRequestDataType string
+
+// GetQrRequestPaymentMethod Способ оплаты.
+type GetQrRequestPaymentMethod string
+
+// GetQrStateResponse defines model for GetQrStateResponse.
+type GetQrStateResponse struct {
 	// Amount Сумма отмены в копейках.
-	Amount *float32 `json:"Amount,omitempty"`
+	Amount *int64 `json:"Amount,omitempty"`
 
 	// ErrorCode Код ошибки.
 	ErrorCode string `json:"ErrorCode"`
@@ -2580,94 +2761,8 @@ type GetQRStateResponse struct {
 	Success bool `json:"Success"`
 }
 
-// GetQr defines model for GetQr.
-type GetQr struct {
-	// BankId Внутренний идентификатор банка, который выбран для оплаты.
-	//
-	//
-	// Cписок доступных `BankId` можно получить через метод [Получить список банков-участников СБП для платежа](/eacq/api/get-qr-bank-list).
-	// Если передается, в ответе в параметре `Data` вместо функциональной платежной ссылки (payload) возвращается deeplink.
-	//
-	//
-	// `BankId` передается только для `DataType = PAYLOAD` или `null`.
-	BankId *openapi_types.UUID `json:"BankId,omitempty"`
-
-	// DataType Тип возвращаемых данных:
-	// * `PAYLOAD` — в ответе возвращается только Payload;
-	// * `IMAGE` — в ответе возвращается SVG изображение QR.
-	//
-	// Значение по умолчанию — `PAYLOAD`.
-	DataType *GetQrDataType `json:"DataType,omitempty"`
-
-	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
-
-	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т-Бизнес при заведении терминала.
-	TerminalKey string `json:"TerminalKey"`
-
-	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
-	Token string `json:"Token"`
-}
-
-// GetQrDataType Тип возвращаемых данных:
-// * `PAYLOAD` — в ответе возвращается только Payload;
-// * `IMAGE` — в ответе возвращается SVG изображение QR.
-//
-// Значение по умолчанию — `PAYLOAD`.
-type GetQrDataType string
-
-// GetQrBankList defines model for GetQrBankList.
-type GetQrBankList struct {
-	// Device Тип и ОС устройства.
-	Device struct {
-		// Os ОС устройства.
-		Os *string `json:"Os,omitempty"`
-
-		// Type Тип устройства.
-		Type GetQrBankListDeviceType `json:"Type"`
-	} `json:"Device"`
-
-	// ScenarioType Тип сценария оплаты:
-	// * `qr` - оплата;
-	// * `sub` - привязка счета.
-	//
-	// Значение по умолчанию — `qr`.
-	ScenarioType *GetQrBankListScenarioType `json:"ScenarioType,omitempty"`
-
-	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-	TerminalKey string `json:"TerminalKey"`
-
-	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
-	Token string `json:"Token"`
-}
-
-// GetQrBankListDeviceType Тип устройства.
-type GetQrBankListDeviceType string
-
-// GetQrBankListScenarioType Тип сценария оплаты:
-// * `qr` - оплата;
-// * `sub` - привязка счета.
-//
-// Значение по умолчанию — `qr`.
-type GetQrBankListScenarioType string
-
-// GetQrBankListResponse defines model for GetQrBankListResponse.
-type GetQrBankListResponse struct {
-	// BankList Список банков от НСПК.
-	BankList []BankList `json:"BankList"`
-
-	// ErrorCode Код ошибки.
-	ErrorCode string `json:"ErrorCode"`
-
-	// Message Краткое описание ошибки.
-	Message *string `json:"Message,omitempty"`
-
-	// Success Успешность прохождения запроса — `true`/`false`.
-	Success bool `json:"Success"`
-}
-
-// GetState defines model for GetState.
-type GetState struct {
+// GetStateRequest defines model for GetStateRequest.
+type GetStateRequest struct {
 	// GetPhone Получение номера телефона.
 	GetPhone *bool `json:"GetPhone,omitempty"`
 
@@ -2684,8 +2779,8 @@ type GetState struct {
 	Token string `json:"Token"`
 }
 
-// Init defines model for Init.
-type Init struct {
+// InitRequest defines model for InitRequest.
+type InitRequest struct {
 	// Amount * Сумма в копейках. Например, 3 руб. 12коп. — это число 312.
 	// * Параметр должен быть равен сумме всех параметров `Amount`, переданных в объекте `Items`.
 	// * Минимальная сумма операции с помощью СБП составляет 10 руб.
@@ -2715,7 +2810,7 @@ type Init struct {
 	// Параметр `notificationEnableSource` позволяет отправлять уведомлении, только если Source платежа входит в перечень указанных в параметре — он также есть в параметрах сессии — `T‑Pay`, `sbpqr`.
 	// Пример: `notificationEnableSource=T‑Pay`.
 	// -->
-	DATA *Init_DATA `json:"DATA,omitempty"`
+	DATA *InitRequest_DATA `json:"DATA,omitempty"`
 
 	// Description Описание заказа.
 	// Значение параметра будет отображено на платежной форме.
@@ -2761,20 +2856,20 @@ type Init struct {
 	//
 	//
 	// Если параметр передан, используется его значение, если нет — значение из настроек терминала.
-	PayType *InitPayType `json:"PayType,omitempty"`
+	PayType *InitRequestPayType `json:"PayType,omitempty"`
 
 	// Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
-	Receipt *Init_Receipt `json:"Receipt,omitempty"`
+	Receipt *InitRequest_Receipt `json:"Receipt,omitempty"`
 
 	// Recurrent Признак родительского CC-платежа. Обязателен для проведения операции с сохранением реквизитов карты покупателя.
 	//
 	//
 	// Если передается и установлен в `Y`, при платеже будут сохранены реквизиты карты покупателя.
 	// В этом случае после оплаты в уведомлении на `AUTHORIZED` будет передан параметр `RebillId` для использования в методе [Провести платеж по сохраненным реквизитам](/eacq/api/charge).
-	// Для привязки и одновременной оплаты по CБП передавайте `Y`.
-	Recurrent *InitRecurrent `json:"Recurrent,omitempty"`
+	// Для привязки и одновременной оплаты по СБП передавайте `Y`.
+	Recurrent *InitRequestRecurrent `json:"Recurrent,omitempty"`
 
-	// RedirectDueDate Cрок жизни ссылки или динамического QR-кода СБП, если выбран этот способ оплаты.
+	// RedirectDueDate Срок жизни ссылки или динамического QR-кода СБП, если выбран этот способ оплаты.
 	//
 	//
 	// Если дата в параметре меньше текущей, оплата по ссылке и QR будет недоступна.
@@ -2790,7 +2885,7 @@ type Init struct {
 	// Если параметр не был передан, проверяется настроечный параметр терминала `REDIRECT_TIMEOUT`, который содержит значение срока жизни ссылки в часах. Если его значение:
 	// * больше нуля — оно будет установлено в качестве срока жизни ссылки или динамического QR-кода;
 	// * меньше нуля — устанавливается значение по умолчанию: 1440 мин. (1 сутки).
-	RedirectDueDate interface{} `json:"RedirectDueDate,omitempty"`
+	RedirectDueDate *time.Time `json:"RedirectDueDate,omitempty"`
 
 	// Shops JSON-объект с данными маркетплейса. Параметр обязательный для маркетплейсов.
 	Shops *[]Shops `json:"Shops,omitempty"`
@@ -2806,17 +2901,9 @@ type Init struct {
 
 	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
 	Token string `json:"Token"`
-
-	// Ttl Время жизни операции в минутах.
-	//
-	// * Минимальное значение — 5 минут.
-	// * Макисмальное значение — 20 минут.
-	//
-	// Параметр используется, если нужно ограничить время, в течение которого можно совершить оплату.
-	Ttl interface{} `json:"ttl,omitempty"`
 }
 
-// Init_DATA JSON-объект с дополнительными параметрами по операции и настройками в формате `ключ:значение`.
+// InitRequest_DATA JSON-объект с дополнительными параметрами по операции и настройками в формате `ключ:значение`.
 //
 // Максимальная длина ключа — 20 знаков, значения — 100 знаков.
 //
@@ -2828,32 +2915,65 @@ type Init struct {
 // Параметр `notificationEnableSource` позволяет отправлять уведомлении, только если Source платежа входит в перечень указанных в параметре — он также есть в параметрах сессии — `T‑Pay`, `sbpqr`.
 // Пример: `notificationEnableSource=T‑Pay`.
 // -->
-type Init_DATA struct {
+type InitRequest_DATA struct {
 	union json.RawMessage
 }
 
-// InitPayType Определяет тип проведения платежа:
+// InitRequestPayType Определяет тип проведения платежа:
 //
 // * `O` — одностадийная оплата;
 // * `T` — двухстадийная оплата.
 //
 // Если параметр передан, используется его значение, если нет — значение из настроек терминала.
-type InitPayType string
+type InitRequestPayType string
 
-// Init_Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
-type Init_Receipt struct {
+// InitRequest_Receipt JSON-объект с данными чека. Обязателен, если подключена онлайн-касса.
+type InitRequest_Receipt struct {
 	union json.RawMessage
 }
 
-// InitRecurrent Признак родительского CC-платежа. Обязателен для проведения операции с сохранением реквизитов карты покупателя.
+// InitRequestRecurrent Признак родительского CC-платежа. Обязателен для проведения операции с сохранением реквизитов карты покупателя.
 //
 // Если передается и установлен в `Y`, при платеже будут сохранены реквизиты карты покупателя.
 // В этом случае после оплаты в уведомлении на `AUTHORIZED` будет передан параметр `RebillId` для использования в методе [Провести платеж по сохраненным реквизитам](/eacq/api/charge).
-// Для привязки и одновременной оплаты по CБП передавайте `Y`.
-type InitRecurrent string
+// Для привязки и одновременной оплаты по СБП передавайте `Y`.
+type InitRequestRecurrent string
 
-// ItemsFFD105 defines model for Items_FFD_105.
-type ItemsFFD105 struct {
+// InitResponse defines model for InitResponse.
+type InitResponse struct {
+	// Amount Сумма в копейках.
+	Amount int64 `json:"Amount"`
+
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+	OrderId string `json:"OrderId"`
+
+	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
+	PaymentId string `json:"PaymentId"`
+
+	// PaymentURL Ссылка на платежную форму. Параметр возвращается только для мерчантов, которые используют платежную форму Т-Банка.
+	PaymentURL *string `json:"PaymentURL,omitempty"`
+
+	// Status Статус транзакции.
+	Status SessionStatusEnum `json:"Status"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+}
+
+// ItemsFfd105 defines model for ItemsFfd105.
+type ItemsFfd105 struct {
 	// AgentData Данные агента. Параметр обязательный, если используется агентская схема.
 	AgentData *AgentData `json:"AgentData,omitempty"`
 
@@ -2861,7 +2981,7 @@ type ItemsFFD105 struct {
 	//
 	// Стоимость товара в копейках.
 	// Произведение `Quantity` и `Price`.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
 	// Ean13 `Тег ФФД: 1162`
 	//
@@ -2912,7 +3032,7 @@ type ItemsFFD105 struct {
 	//
 	// Если значение не передано, по умолчанию в онлайн-кассу
 	// отправляется признак предмета расчета `full_payment`.
-	PaymentMethod *ItemsFFD105PaymentMethod `json:"PaymentMethod,omitempty"`
+	PaymentMethod *ItemsFfd105PaymentMethod `json:"PaymentMethod,omitempty"`
 
 	// PaymentObject `Тег ФФД: 1212`
 	//
@@ -2934,12 +3054,12 @@ type ItemsFFD105 struct {
 	//
 	// Если значение не передано, по умолчанию в онлайн-кассу
 	// отправляется признак предмета расчета `commodity`.
-	PaymentObject *ItemsFFD105PaymentObject `json:"PaymentObject,omitempty"`
+	PaymentObject *ItemsFfd105PaymentObject `json:"PaymentObject,omitempty"`
 
 	// Price `Тег ФФД: 1078`
 	//
 	// Цена в копейках.
-	Price float32 `json:"Price"`
+	Price int64 `json:"Price"`
 
 	// Quantity `Тег ФФД: 1023`
 	//
@@ -2948,7 +3068,7 @@ type ItemsFFD105 struct {
 	// * дробная — не больше 6 знаков.
 	Quantity float32 `json:"Quantity"`
 
-	// ShopCode Код магазина. Для параметра `ShopСode`
+	// ShopCode Код магазина. Для параметра `ShopCode`
 	// нужно использовать значение параметра
 	// `Submerchant_ID`, который возвращается в ответе при
 	// регистрации магазинов через XML. Если XML не
@@ -2972,10 +3092,10 @@ type ItemsFFD105 struct {
 	// * `vat107` — НДС чека по расчетной ставке 7/107;
 	// * `vat110` — НДС чека по расчетной ставке 10/110;
 	// * `vat122` — НДС чека по расчетной ставке 22/122.
-	Tax ItemsFFD105Tax `json:"Tax"`
+	Tax ItemsFfd105Tax `json:"Tax"`
 }
 
-// ItemsFFD105PaymentMethod `Тег ФФД: 1214`
+// ItemsFfd105PaymentMethod `Тег ФФД: 1214`
 //
 // Признак способа расчета:
 // * `full_prepayment` — предоплата 100%;
@@ -2988,9 +3108,9 @@ type ItemsFFD105 struct {
 //
 // Если значение не передано, по умолчанию в онлайн-кассу
 // отправляется признак предмета расчета `full_payment`.
-type ItemsFFD105PaymentMethod string
+type ItemsFfd105PaymentMethod string
 
-// ItemsFFD105PaymentObject `Тег ФФД: 1212`
+// ItemsFfd105PaymentObject `Тег ФФД: 1212`
 //
 // Признак предмета расчета:
 // * `commodity` — товар;
@@ -3009,9 +3129,9 @@ type ItemsFFD105PaymentMethod string
 //
 // Если значение не передано, по умолчанию в онлайн-кассу
 // отправляется признак предмета расчета `commodity`.
-type ItemsFFD105PaymentObject string
+type ItemsFfd105PaymentObject string
 
-// ItemsFFD105Tax `Тег ФФД: 1199`
+// ItemsFfd105Tax `Тег ФФД: 1199`
 //
 // Ставка НДС:
 // * `none` — без НДС,
@@ -3024,16 +3144,16 @@ type ItemsFFD105PaymentObject string
 // * `vat107` — НДС чека по расчетной ставке 7/107;
 // * `vat110` — НДС чека по расчетной ставке 10/110;
 // * `vat122` — НДС чека по расчетной ставке 22/122.
-type ItemsFFD105Tax string
+type ItemsFfd105Tax string
 
-// ItemsFFD12 Массив с информацией о товарах.
+// ItemsFfd12 Массив с информацией о товарах.
 //
 // Параметры, предусмотренные в протоколе для отправки чеков по маркируемым товарам. Необязательные
 // для товаров без маркировки.
 //
 // Если используется ФФД 1.2, но реализуемый товар не
 // подлежит маркировке, поля можно не отправлять или отправить со значением `null`.
-type ItemsFFD12 struct {
+type ItemsFfd12 struct {
 	// AgentData Данные агента. Параметр обязательный, если используется агентская схема.
 	AgentData *AgentData `json:"AgentData,omitempty"`
 
@@ -3041,7 +3161,7 @@ type ItemsFFD12 struct {
 	//
 	// Стоимость товара в копейках.
 	// Произведение `Quantity` и `Price`.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
 	// CountryCode `Тег ФФД: 1230`
 	//
@@ -3154,7 +3274,7 @@ type ItemsFFD12 struct {
 	//
 	// Если значение не передано, по умолчанию в онлайн-кассу
 	// отправляется признак предмета расчета `full_payment`.
-	PaymentMethod ItemsFFD12PaymentMethod `json:"PaymentMethod"`
+	PaymentMethod ItemsFfd12PaymentMethod `json:"PaymentMethod"`
 
 	// PaymentObject `Тег ФФД: 1212`
 	//
@@ -3192,12 +3312,12 @@ type ItemsFFD12 struct {
 	// * `goods_without_marking_code` — ТНМ;
 	// * `goods_with_marking_code` — ТМ;
 	// * `another` — иной предмет расчета.
-	PaymentObject ItemsFFD12PaymentObject `json:"PaymentObject"`
+	PaymentObject ItemsFfd12PaymentObject `json:"PaymentObject"`
 
 	// Price `Тег ФФД: 1079`
 	//
 	// Цена в копейках.
-	Price float32 `json:"Price"`
+	Price int64 `json:"Price"`
 
 	// Quantity `Тег ФФД: 1023`
 	//
@@ -3210,7 +3330,7 @@ type ItemsFFD12 struct {
 
 	// SectoralItemProps Отраслевой реквизит предмета расчета. Указывается только для товаров, которые подлежат обязательной маркировке сканером. Включение этого реквизита предусмотрено НПА отраслевого регулирования для
 	// соответствующей товарной группы.
-	SectoralItemProps *SectoralItemProps `json:"SectoralItemProps,omitempty"`
+	SectoralItemProps interface{} `json:"SectoralItemProps,omitempty"`
 
 	// SupplierInfo Данные поставщика платежного агента.
 	// Параметр обязательный, если передается значение `AgentSign` в объекте `AgentData`.
@@ -3229,7 +3349,7 @@ type ItemsFFD12 struct {
 	// * `vat107` — НДС чека по расчетной ставке 7/107;
 	// * `vat110` — НДС чека по расчетной ставке 10/110;
 	// * `vat122` — НДС чека по расчетной ставке 22/122.
-	Tax ItemsFFD12Tax `json:"Tax"`
+	Tax ItemsFfd12Tax `json:"Tax"`
 
 	// UserData `Тег ФФД: 1191`
 	//
@@ -3238,7 +3358,7 @@ type ItemsFFD12 struct {
 	UserData *string `json:"UserData,omitempty"`
 }
 
-// ItemsFFD12PaymentMethod `Тег ФФД: 1214`
+// ItemsFfd12PaymentMethod `Тег ФФД: 1214`
 //
 // Признак способа расчета:
 //   - `full_prepayment` — предоплата 100%;
@@ -3251,9 +3371,9 @@ type ItemsFFD12 struct {
 //
 // Если значение не передано, по умолчанию в онлайн-кассу
 // отправляется признак предмета расчета `full_payment`.
-type ItemsFFD12PaymentMethod string
+type ItemsFfd12PaymentMethod string
 
-// ItemsFFD12PaymentObject `Тег ФФД: 1212`
+// ItemsFfd12PaymentObject `Тег ФФД: 1212`
 //
 // Значения реквизита «Признак предмета расчета» — тег 1212, таблица 101:
 //
@@ -3289,9 +3409,9 @@ type ItemsFFD12PaymentMethod string
 //   - `goods_without_marking_code` — ТНМ;
 //   - `goods_with_marking_code` — ТМ;
 //   - `another` — иной предмет расчета.
-type ItemsFFD12PaymentObject string
+type ItemsFfd12PaymentObject string
 
-// ItemsFFD12Tax `Тег ФФД: 1199`
+// ItemsFfd12Tax `Тег ФФД: 1199`
 //
 // Ставка НДС:
 // * `none` — без НДС;
@@ -3304,7 +3424,7 @@ type ItemsFFD12PaymentObject string
 // * `vat107` — НДС чека по расчетной ставке 7/107;
 // * `vat110` — НДС чека по расчетной ставке 10/110;
 // * `vat122` — НДС чека по расчетной ставке 22/122.
-type ItemsFFD12Tax string
+type ItemsFfd12Tax string
 
 // ItemsParams Информация по способу оплаты или деталям для платежей в рассрочку.
 type ItemsParams struct {
@@ -3312,12 +3432,19 @@ type ItemsParams struct {
 	// * `Route` — способ оплаты.
 	// * `Source` — источник платежа.
 	// * `CreditAmount` — сумма выданного кредита в копейках. Возвращается только для платежей в рассрочку.
+	// * `EndCoolingPeriod` — дата окончания периода охлаждения в формате `date-time`. Возвращается только для платежей через сервис «Долями».
+	// * `DrPaymentId` – идентификатор операции в ЦБ при оплате цифровым рублем.
+	// * `DrPaymentSettlementDate` — дата и время исполнения распоряжения от ЦБ.
+	// * `ParticipantWalletId` —  идентификатор счета цифрового рубля (СЦР) плательщика-физлица.
 	Key *ItemsParamsKey `json:"Key,omitempty"`
 
 	// Value
-	// * для `Route` — `ACQ`, `BNPL`, `TCB`, `SBER`;
-	// * для `Source` — `BNPL`, `cards`, `Installment`, `MirPay`, `qrsbp`, `SberPay`, `TinkoffPay`, `YandexPay`;
+	// * для `Route` — `ACQ`, `BNPL`, `TCB`, `SBER`, `QRDR`;
+	// * для `Source` — `BNPL`, `cards`, `Installment`, `MirPay`, `qrsbp`, `SberPay`, `TinkoffPay`, `YandexPay`, `qrdigitalruble`;
 	// * для `CreditAmount` — сумма в копейках.
+	// * для `DrPaymentId` — идентификатор операции в ЦБ при оплате цифровым рублем.
+	// * для `DrPaymentSettlementDate` — дата и время исполнения распоряжения в формате `date-time`.
+	// * для `ParticipantWalletId` — идентификатор СЦР.
 	Value *ItemsParamsValue `json:"Value,omitempty"`
 }
 
@@ -3325,23 +3452,29 @@ type ItemsParams struct {
 // * `Route` — способ оплаты.
 // * `Source` — источник платежа.
 // * `CreditAmount` — сумма выданного кредита в копейках. Возвращается только для платежей в рассрочку.
+// * `EndCoolingPeriod` — дата окончания периода охлаждения в формате `date-time`. Возвращается только для платежей через сервис «Долями».
+// * `DrPaymentId` – идентификатор операции в ЦБ при оплате цифровым рублем.
+// * `DrPaymentSettlementDate` — дата и время исполнения распоряжения от ЦБ.
+// * `ParticipantWalletId` —  идентификатор счета цифрового рубля (СЦР) плательщика-физлица.
 type ItemsParamsKey string
 
 // ItemsParamsValue
-// * для `Route` — `ACQ`, `BNPL`, `TCB`, `SBER`;
-// * для `Source` — `BNPL`, `cards`, `Installment`, `MirPay`, `qrsbp`, `SberPay`, `TinkoffPay`, `YandexPay`;
+// * для `Route` — `ACQ`, `BNPL`, `TCB`, `SBER`, `QRDR`;
+// * для `Source` — `BNPL`, `cards`, `Installment`, `MirPay`, `qrsbp`, `SberPay`, `TinkoffPay`, `YandexPay`, `qrdigitalruble`;
 // * для `CreditAmount` — сумма в копейках.
+// * для `DrPaymentId` — идентификатор операции в ЦБ при оплате цифровым рублем.
+// * для `DrPaymentSettlementDate` — дата и время исполнения распоряжения в формате `date-time`.
+// * для `ParticipantWalletId` — идентификатор СЦР.
 type ItemsParamsValue string
 
 // LongPay Расширенный набор параметров авиабилета передается при создании платежа (метод [Инициировать платеж](/eacq/api/init)) в параметре `DATA`.
 type LongPay struct {
-	ПараметрыБилета *LongPay1 `json:"Параметры билета,omitempty"`
+	// FlightParams Суффикс 1–4 — порядковый номер сегмента перелёта. Обязательно передается набор данных как минимум 1 сегмента.
+	FlightParams *LongPay3 `json:"flightParams,omitempty"`
 
-	// ПараметрыПассажира `%` — порядковый номер пассажира от 1 до 4.
-	ПараметрыПассажира *LongPay2 `json:"Параметры пассажира,omitempty"`
-
-	// ПараметрыПерелета `#` — порядковый номер пассажира от 1 до 4.
-	ПараметрыПерелета *LongPay3 `json:"Параметры перелета,omitempty"`
+	// PassengerParams Суффикс 1–4 — порядковый номер пассажира. Обязательно передается набор данных как минимум 1 пассажира.
+	PassengerParams *LongPay2 `json:"passengerParams,omitempty"`
+	TicketParams    *LongPay1 `json:"ticketParams,omitempty"`
 }
 
 // LongPay1 defines model for LongPay1.
@@ -3373,60 +3506,210 @@ type LongPay1 struct {
 	TicketSystem *string `json:"ticketSystem,omitempty"`
 }
 
-// LongPay2 `%` — порядковый номер пассажира от 1 до 4.
+// LongPay2 Суффикс 1–4 — порядковый номер пассажира. Обязательно передается набор данных как минимум 1 пассажира.
 type LongPay2 struct {
-	// PassengerCountry Гражданство по стандарту `ISO 3166-1 alpha-3`.
-	PassengerCountry *string `json:"passengerCountry%,omitempty"`
+	// PassengerCountry1 Гражданство по стандарту `ISO 3166-1 alpha-3`.
+	PassengerCountry1 *string `json:"passengerCountry1,omitempty"`
 
-	// PassengerPassport Серия и номер паспорта.
-	PassengerPassport *string `json:"passengerPassport%,omitempty"`
+	// PassengerCountry2 Гражданство по стандарту `ISO 3166-1 alpha-3`.
+	PassengerCountry2 *string `json:"passengerCountry2,omitempty"`
 
-	// TicketPassengerBirthDate Дата рождения в формате `YYYY-DD-MM`.
-	TicketPassengerBirthDate *string `json:"ticketPassengerBirthDate%,omitempty"`
+	// PassengerCountry3 Гражданство по стандарту `ISO 3166-1 alpha-3`.
+	PassengerCountry3 *string `json:"passengerCountry3,omitempty"`
 
-	// TicketPassengerFirstname Имя латиницей.
-	TicketPassengerFirstname string `json:"ticketPassengerFirstname%"`
+	// PassengerCountry4 Гражданство по стандарту `ISO 3166-1 alpha-3`.
+	PassengerCountry4 *string `json:"passengerCountry4,omitempty"`
 
-	// TicketPassengerSurname Фамилия латиницей.
-	TicketPassengerSurname string `json:"ticketPassengerSurname%"`
+	// PassengerPassport1 Серия и номер паспорта.
+	PassengerPassport1 *string `json:"passengerPassport1,omitempty"`
+
+	// PassengerPassport2 Серия и номер паспорта.
+	PassengerPassport2 *string `json:"passengerPassport2,omitempty"`
+
+	// PassengerPassport3 Серия и номер паспорта.
+	PassengerPassport3 *string `json:"passengerPassport3,omitempty"`
+
+	// PassengerPassport4 Серия и номер паспорта.
+	PassengerPassport4 *string `json:"passengerPassport4,omitempty"`
+
+	// TicketPassengerBirthDate1 Дата рождения в формате `YYYY-MM-DD`.
+	TicketPassengerBirthDate1 *string `json:"ticketPassengerBirthDate1,omitempty"`
+
+	// TicketPassengerBirthDate2 Дата рождения в формате `YYYY-MM-DD`.
+	TicketPassengerBirthDate2 *string `json:"ticketPassengerBirthDate2,omitempty"`
+
+	// TicketPassengerBirthDate3 Дата рождения в формате `YYYY-MM-DD`.
+	TicketPassengerBirthDate3 *string `json:"ticketPassengerBirthDate3,omitempty"`
+
+	// TicketPassengerBirthDate4 Дата рождения в формате `YYYY-MM-DD`.
+	TicketPassengerBirthDate4 *string `json:"ticketPassengerBirthDate4,omitempty"`
+
+	// TicketPassengerFirstname1 Имя латиницей.
+	TicketPassengerFirstname1 string `json:"ticketPassengerFirstname1"`
+
+	// TicketPassengerFirstname2 Имя латиницей.
+	TicketPassengerFirstname2 *string `json:"ticketPassengerFirstname2,omitempty"`
+
+	// TicketPassengerFirstname3 Имя латиницей.
+	TicketPassengerFirstname3 *string `json:"ticketPassengerFirstname3,omitempty"`
+
+	// TicketPassengerFirstname4 Имя латиницей.
+	TicketPassengerFirstname4 *string `json:"ticketPassengerFirstname4,omitempty"`
+
+	// TicketPassengerSurname1 Фамилия латиницей.
+	TicketPassengerSurname1 string `json:"ticketPassengerSurname1"`
+
+	// TicketPassengerSurname2 Фамилия латиницей.
+	TicketPassengerSurname2 *string `json:"ticketPassengerSurname2,omitempty"`
+
+	// TicketPassengerSurname3 Фамилия латиницей.
+	TicketPassengerSurname3 *string `json:"ticketPassengerSurname3,omitempty"`
+
+	// TicketPassengerSurname4 Фамилия латиницей.
+	TicketPassengerSurname4 *string `json:"ticketPassengerSurname4,omitempty"`
 }
 
-// LongPay3 `#` — порядковый номер пассажира от 1 до 4.
+// LongPay3 Суффикс 1–4 — порядковый номер сегмента перелёта. Обязательно передается набор данных как минимум 1 сегмента.
 type LongPay3 struct {
-	// TriplegCarrier Код перевозчика `ИАТА`.
-	TriplegCarrier string `json:"triplegCarrier#"`
+	// TriplegCarrier1 Код перевозчика `ИАТА`.
+	TriplegCarrier1 string `json:"triplegCarrier1"`
 
-	// TriplegClass Класс перелета.
-	TriplegClass *string `json:"triplegClass#,omitempty"`
+	// TriplegCarrier2 Код перевозчика `ИАТА`.
+	TriplegCarrier2 *string `json:"triplegCarrier2,omitempty"`
 
-	// TriplegCountryFrom Код страны вылета по стандарту `ISO 3166-1 numeric`.
-	TriplegCountryFrom *string `json:"triplegCountryFrom#,omitempty"`
+	// TriplegCarrier3 Код перевозчика `ИАТА`.
+	TriplegCarrier3 *string `json:"triplegCarrier3,omitempty"`
 
-	// TriplegCountryTo Код страны прилета по стандарту `ISO 3166-1 numeric`.
-	TriplegCountryTo *string `json:"triplegCountryTo#,omitempty"`
+	// TriplegCarrier4 Код перевозчика `ИАТА`.
+	TriplegCarrier4 *string `json:"triplegCarrier4,omitempty"`
 
-	// TriplegDate Дата вылета в формате `YYYY-DD-MM`.
-	TriplegDate string `json:"triplegDate#"`
+	// TriplegClass1 Класс перелета.
+	TriplegClass1 *string `json:"triplegClass1,omitempty"`
 
-	// TriplegDestinationFrom Код аэропорта вылета ИАТА.
-	TriplegDestinationFrom string `json:"triplegDestinationFrom#"`
+	// TriplegClass2 Класс перелета.
+	TriplegClass2 *string `json:"triplegClass2,omitempty"`
 
-	// TriplegDestinationTo Код аэропорта прилета ИАТА.
-	TriplegDestinationTo string `json:"triplegDestinationTo#"`
+	// TriplegClass3 Класс перелета.
+	TriplegClass3 *string `json:"triplegClass3,omitempty"`
 
-	// TriplegFareBasisCode Код тарифа.
-	TriplegFareBasisCode *string `json:"triplegFareBasisCode#,omitempty"`
+	// TriplegClass4 Класс перелета.
+	TriplegClass4 *string `json:"triplegClass4,omitempty"`
 
-	// TriplegFlightNumber Номер рейса.
-	TriplegFlightNumber *string `json:"triplegFlightNumber#,omitempty"`
+	// TriplegCountryFrom1 Код страны вылета по стандарту `ISO 3166-1 numeric`.
+	TriplegCountryFrom1 *string `json:"triplegCountryFrom1,omitempty"`
 
-	// TriplegStopover Остановка при пересадке:
+	// TriplegCountryFrom2 Код страны вылета по стандарту `ISO 3166-1 numeric`.
+	TriplegCountryFrom2 *string `json:"triplegCountryFrom2,omitempty"`
+
+	// TriplegCountryFrom3 Код страны вылета по стандарту `ISO 3166-1 numeric`.
+	TriplegCountryFrom3 *string `json:"triplegCountryFrom3,omitempty"`
+
+	// TriplegCountryFrom4 Код страны вылета по стандарту `ISO 3166-1 numeric`.
+	TriplegCountryFrom4 *string `json:"triplegCountryFrom4,omitempty"`
+
+	// TriplegCountryTo1 Код страны прилета по стандарту `ISO 3166-1 numeric`.
+	TriplegCountryTo1 *string `json:"triplegCountryTo1,omitempty"`
+
+	// TriplegCountryTo2 Код страны прилета по стандарту `ISO 3166-1 numeric`.
+	TriplegCountryTo2 *string `json:"triplegCountryTo2,omitempty"`
+
+	// TriplegCountryTo3 Код страны прилета по стандарту `ISO 3166-1 numeric`.
+	TriplegCountryTo3 *string `json:"triplegCountryTo3,omitempty"`
+
+	// TriplegCountryTo4 Код страны прилета по стандарту `ISO 3166-1 numeric`.
+	TriplegCountryTo4 *string `json:"triplegCountryTo4,omitempty"`
+
+	// TriplegDate1 Дата вылета в формате `YYYY-MM-DD`.
+	TriplegDate1 string `json:"triplegDate1"`
+
+	// TriplegDate2 Дата вылета в формате `YYYY-MM-DD`.
+	TriplegDate2 *string `json:"triplegDate2,omitempty"`
+
+	// TriplegDate3 Дата вылета в формате `YYYY-MM-DD`.
+	TriplegDate3 *string `json:"triplegDate3,omitempty"`
+
+	// TriplegDate4 Дата вылета в формате `YYYY-MM-DD`.
+	TriplegDate4 *string `json:"triplegDate4,omitempty"`
+
+	// TriplegDestinationFrom1 Код аэропорта вылета ИАТА.
+	TriplegDestinationFrom1 string `json:"triplegDestinationFrom1"`
+
+	// TriplegDestinationFrom2 Код аэропорта вылета ИАТА.
+	TriplegDestinationFrom2 *string `json:"triplegDestinationFrom2,omitempty"`
+
+	// TriplegDestinationFrom3 Код аэропорта вылета ИАТА.
+	TriplegDestinationFrom3 *string `json:"triplegDestinationFrom3,omitempty"`
+
+	// TriplegDestinationFrom4 Код аэропорта вылета ИАТА.
+	TriplegDestinationFrom4 *string `json:"triplegDestinationFrom4,omitempty"`
+
+	// TriplegDestinationTo1 Код аэропорта прилета ИАТА.
+	TriplegDestinationTo1 string `json:"triplegDestinationTo1"`
+
+	// TriplegDestinationTo2 Код аэропорта прилета ИАТА.
+	TriplegDestinationTo2 *string `json:"triplegDestinationTo2,omitempty"`
+
+	// TriplegDestinationTo3 Код аэропорта прилета ИАТА.
+	TriplegDestinationTo3 *string `json:"triplegDestinationTo3,omitempty"`
+
+	// TriplegDestinationTo4 Код аэропорта прилета ИАТА.
+	TriplegDestinationTo4 *string `json:"triplegDestinationTo4,omitempty"`
+
+	// TriplegFareBasisCode1 Код тарифа.
+	TriplegFareBasisCode1 *string `json:"triplegFareBasisCode1,omitempty"`
+
+	// TriplegFareBasisCode2 Код тарифа.
+	TriplegFareBasisCode2 *string `json:"triplegFareBasisCode2,omitempty"`
+
+	// TriplegFareBasisCode3 Код тарифа.
+	TriplegFareBasisCode3 *string `json:"triplegFareBasisCode3,omitempty"`
+
+	// TriplegFareBasisCode4 Код тарифа.
+	TriplegFareBasisCode4 *string `json:"triplegFareBasisCode4,omitempty"`
+
+	// TriplegFlightNumber1 Номер рейса.
+	TriplegFlightNumber1 *string `json:"triplegFlightNumber1,omitempty"`
+
+	// TriplegFlightNumber2 Номер рейса.
+	TriplegFlightNumber2 *string `json:"triplegFlightNumber2,omitempty"`
+
+	// TriplegFlightNumber3 Номер рейса.
+	TriplegFlightNumber3 *string `json:"triplegFlightNumber3,omitempty"`
+
+	// TriplegFlightNumber4 Номер рейса.
+	TriplegFlightNumber4 *string `json:"triplegFlightNumber4,omitempty"`
+
+	// TriplegStopover1 Остановка при пересадке:
 	// * `0` — разрешена;
 	// * `X` — запрещена.
-	TriplegStopover *string `json:"triplegStopover#,omitempty"`
+	TriplegStopover1 *string `json:"triplegStopover1,omitempty"`
 
-	// TriplegTime Время вылета в формате `hh24:mm:ss`.
-	TriplegTime *string `json:"triplegTime#,omitempty"`
+	// TriplegStopover2 Остановка при пересадке:
+	// * `0` — разрешена;
+	// * `X` — запрещена.
+	TriplegStopover2 *string `json:"triplegStopover2,omitempty"`
+
+	// TriplegStopover3 Остановка при пересадке:
+	// * `0` — разрешена;
+	// * `X` — запрещена.
+	TriplegStopover3 *string `json:"triplegStopover3,omitempty"`
+
+	// TriplegStopover4 Остановка при пересадке:
+	// * `0` — разрешена;
+	// * `X` — запрещена.
+	TriplegStopover4 *string `json:"triplegStopover4,omitempty"`
+
+	// TriplegTime1 Время вылета в формате `hh24:mm:ss`.
+	TriplegTime1 *string `json:"triplegTime1,omitempty"`
+
+	// TriplegTime2 Время вылета в формате `hh24:mm:ss`.
+	TriplegTime2 *string `json:"triplegTime2,omitempty"`
+
+	// TriplegTime3 Время вылета в формате `hh24:mm:ss`.
+	TriplegTime3 *string `json:"triplegTime3,omitempty"`
+
+	// TriplegTime4 Время вылета в формате `hh24:mm:ss`.
+	TriplegTime4 *string `json:"triplegTime4,omitempty"`
 }
 
 // MarkCode Код маркировки. Предназначен
@@ -3517,8 +3800,8 @@ type OperatingCheckProps struct {
 	Value string `json:"Value"`
 }
 
-// PaymentIdListForGCO JSON-массив с объектами, которые содержат информацию по запросу.
-type PaymentIdListForGCO struct {
+// PaymentIdList JSON-массив с объектами, которые содержат информацию по запросу.
+type PaymentIdList struct {
 	// ErrorCode Код ошибки.
 	ErrorCode string `json:"ErrorCode"`
 
@@ -3526,7 +3809,7 @@ type PaymentIdListForGCO struct {
 	Message string `json:"Message"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
 	// Success Успешность прохождения запроса — `true`/`false`.
 	Success bool `json:"Success"`
@@ -3579,18 +3862,27 @@ type Payments struct {
 // PaymentsCheckOrder Детали
 type PaymentsCheckOrder struct {
 	// Amount Сумма операции в копейках.
-	Amount *float32 `json:"Amount,omitempty"`
+	Amount *int64 `json:"Amount,omitempty"`
+
+	// DrPaymentId Идентификатор операции в ЦБ при оплате цифровым рублем.
+	DrPaymentId *string `json:"DrPaymentId,omitempty"`
+
+	// DrPaymentSettlementDate Дата и время исполнения распоряжения от ЦБ.
+	DrPaymentSettlementDate *time.Time `json:"DrPaymentSettlementDate,omitempty"`
 
 	// ErrorCode Код ошибки.
-	ErrorCode *float32 `json:"ErrorCode,omitempty"`
+	ErrorCode *string `json:"ErrorCode,omitempty"`
 
 	// Message Краткое описание ошибки.
 	Message *string `json:"Message,omitempty"`
 
+	// ParticipantWalletId Идентификатор счета цифрового рубля (СЦР) плательщика-физлица.
+	ParticipantWalletId *string `json:"ParticipantWalletId,omitempty"`
+
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
 	PaymentId string `json:"PaymentId"`
 
-	// RRN RRN операции.
+	// RRN Уникальный идентификатор операции.
 	RRN *string `json:"RRN,omitempty"`
 
 	// SbpCustomerId Хэшированный номер телефона покупателя.
@@ -3626,9 +3918,9 @@ type QrResponse struct {
 	OrderId string `json:"OrderId"`
 
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId float32 `json:"PaymentId"`
+	PaymentId string `json:"PaymentId"`
 
-	// RequestKey Идентификатор запроса на привязку счета. Передается в случае привязки счета после оплаты по CБП.
+	// RequestKey Идентификатор запроса на привязку счета. Передается в случае привязки счета после оплаты по СБП.
 	RequestKey string `json:"RequestKey"`
 
 	// Success Успешность прохождения запроса — `true`/`false`.
@@ -3638,8 +3930,8 @@ type QrResponse struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// ReceiptFFD105 Объект с информацией о видах суммы платежа. Если объект не передан, автоматически указывается итоговая сумма чека с видом оплаты «Безналичная».
-type ReceiptFFD105 struct {
+// ReceiptFfd105 Объект с информацией о видах суммы платежа. Если объект не передан, автоматически указывается итоговая сумма чека с видом оплаты «Безналичная».
+type ReceiptFfd105 struct {
 	// AddUserProp Дополнительный реквизит пользователя.
 	AddUserProp *AddUserProp `json:"AddUserProp,omitempty"`
 
@@ -3650,7 +3942,7 @@ type ReceiptFFD105 struct {
 	Email *openapi_types.Email `json:"Email,omitempty"`
 
 	// Items Массив позиций чека с информацией о товарах. Количество товаров в чеке — не больше 100.
-	Items []ItemsFFD105 `json:"Items"`
+	Items []ItemsFfd105 `json:"Items"`
 
 	// Payments Детали платежа.
 	//
@@ -3676,7 +3968,7 @@ type ReceiptFFD105 struct {
 	// * `usn_income_outcome` — упрощенная СН (доходы минус расходы). Налоговая автоматически определит АУСН по ИНН и пробьет чеки с нужной СНО;
 	// * `esn` — единый сельскохозяйственный налог;
 	// * `patent` — патентная СН.
-	Taxation ReceiptFFD105Taxation `json:"Taxation"`
+	Taxation ReceiptFfd105Taxation `json:"Taxation"`
 
 	// AdditionalCheckProps `Тег ФФД: 1192`
 	//
@@ -3684,7 +3976,7 @@ type ReceiptFFD105 struct {
 	AdditionalCheckProps *string `json:"additionalCheckProps,omitempty"`
 }
 
-// ReceiptFFD105Taxation `Тег ФФД: 1055`
+// ReceiptFfd105Taxation `Тег ФФД: 1055`
 //
 // Система налогообложения:
 // * `osn` — общая СН;
@@ -3692,10 +3984,10 @@ type ReceiptFFD105 struct {
 // * `usn_income_outcome` — упрощенная СН (доходы минус расходы). Налоговая автоматически определит АУСН по ИНН и пробьет чеки с нужной СНО;
 // * `esn` — единый сельскохозяйственный налог;
 // * `patent` — патентная СН.
-type ReceiptFFD105Taxation string
+type ReceiptFfd105Taxation string
 
-// ReceiptFFD12 Объект с информацией о видах суммы платежа. Если не передан, автоматически указывается итоговая сумма чека с видом оплаты «Безналичная».
-type ReceiptFFD12 struct {
+// ReceiptFfd12 Объект с информацией о видах суммы платежа. Если не передан, автоматически указывается итоговая сумма чека с видом оплаты «Безналичная».
+type ReceiptFfd12 struct {
 	// AddUserProp Дополнительный реквизит пользователя.
 	AddUserProp *AddUserProp `json:"AddUserProp,omitempty"`
 
@@ -3726,19 +4018,17 @@ type ReceiptFFD12 struct {
 	// Параметр обязательный, если не передан `Phone`.
 	Email *openapi_types.Email `json:"Email,omitempty"`
 
-	// Items Массив с информацией о товарах.
+	// Items Массив с информацией о товарах. Количество товаров в чеке — не больше 100.
 	//
 	//
-	// Параметры, предусмотренные в протоколе для отправки чеков по маркируемым товарам. Необязательные
-	// для товаров без маркировки.
+	// Параметры, которые предусмотрены в протоколе для отправки чеков по маркируемым товарам, не являются обязательными для товаров без маркировки.
 	//
 	//
-	// Если используется ФФД 1.2, но реализуемый товар не
-	// подлежит маркировке, поля можно не отправлять или отправить со значением `null`.
-	Items ItemsFFD12 `json:"Items"`
+	// Если используется ФФД 1.2, но реализуемый товар не подлежит маркировке, поля можно не отправлять или отправить со значением `null`.
+	Items interface{} `json:"Items"`
 
-	// OperatingСheckProps Операционный реквизит чека.
-	OperatingСheckProps *OperatingCheckProps `json:"OperatingСheckProps,omitempty"`
+	// OperatingCheckProps Операционный реквизит чека.
+	OperatingCheckProps *OperatingCheckProps `json:"OperatingCheckProps,omitempty"`
 
 	// Payments Детали платежа.
 	//
@@ -3756,8 +4046,10 @@ type ReceiptFFD12 struct {
 	// Параметр обязательный, если не передан `Email`.
 	Phone *string `json:"Phone,omitempty"`
 
-	// SectoralCheckProps Отраслевой реквизит чека.
-	SectoralCheckProps *SectoralCheckProps `json:"SectoralCheckProps,omitempty"`
+	// SectoralCheckProps `Тег ФФД: 1261`
+	//
+	// Отраслевой реквизит чека.
+	SectoralCheckProps interface{} `json:"SectoralCheckProps,omitempty"`
 
 	// Taxation `Тег ФФД: 1055`
 	//
@@ -3767,10 +4059,10 @@ type ReceiptFFD12 struct {
 	// * `usn_income_outcome` — упрощенная СН (доходы минус расходы). Налоговая автоматически определит АУСН по ИНН и пробьет чеки с нужной СНО;
 	// * `esn` — единый сельскохозяйственный налог;
 	// * `patent` — патентная СН.
-	Taxation ReceiptFFD12Taxation `json:"Taxation"`
+	Taxation ReceiptFfd12Taxation `json:"Taxation"`
 }
 
-// ReceiptFFD12Taxation `Тег ФФД: 1055`
+// ReceiptFfd12Taxation `Тег ФФД: 1055`
 //
 // Система налогообложения:
 // * `osn` — общая СН;
@@ -3778,10 +4070,10 @@ type ReceiptFFD12 struct {
 // * `usn_income_outcome` — упрощенная СН (доходы минус расходы). Налоговая автоматически определит АУСН по ИНН и пробьет чеки с нужной СНО;
 // * `esn` — единый сельскохозяйственный налог;
 // * `patent` — патентная СН.
-type ReceiptFFD12Taxation string
+type ReceiptFfd12Taxation string
 
-// RemoveCard defines model for RemoveCard.
-type RemoveCard struct {
+// RemoveCardRequest defines model for RemoveCardRequest.
+type RemoveCardRequest struct {
 	// CardId Идентификатор карты в системе Т‑Бизнес.
 	CardId string `json:"CardId"`
 
@@ -3800,7 +4092,7 @@ type RemoveCard struct {
 
 // RemoveCardResponse defines model for RemoveCardResponse.
 type RemoveCardResponse struct {
-	// CardId Идентификатор карты в системе Т‑Бизнес.
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
 	CardId string `json:"CardId"`
 
 	// CardType Тип карты:
@@ -3858,11 +4150,23 @@ type RemoveCustomerResponse struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// Response defines model for Response.
-type Response struct {
-	// Amount Сумма в копейках.
-	Amount float32 `json:"Amount"`
+// SberPayLinkGet Список доступных методов оплаты.
+type SberPayLinkGet struct {
+	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
+	PaymentId string `json:"PaymentId"`
 
+	// Phone Телефон покупателя в формате `+{Ц}`. Параметр обязательный при оплате на десктопе.
+	Phone *string `json:"Phone,omitempty"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+
+	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
+	Token string `json:"Token"`
+}
+
+// SberPayLinkGetResponse defines model for SberPayLinkGetResponse.
+type SberPayLinkGetResponse struct {
 	// Details Подробное описание ошибки.
 	Details *string `json:"Details,omitempty"`
 
@@ -3872,27 +4176,18 @@ type Response struct {
 	// Message Краткое описание ошибки.
 	Message *string `json:"Message,omitempty"`
 
-	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
-	OrderId string `json:"OrderId"`
-
-	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
-	PaymentId string `json:"PaymentId"`
-
-	// PaymentURL Ссылка на платежную форму. Параметр возвращается только для мерчантов, которые используют платежную форму Т-Банка.
-	PaymentURL *string `json:"PaymentURL,omitempty"`
-
-	// Status Статус транзакции.
-	Status string `json:"Status"`
+	// Params Параметры ответа.
+	Params *struct {
+		// RedirectUrl URL для перехода, если оплата проводится через мобильное устройство.
+		RedirectUrl string `json:"RedirectUrl"`
+	} `json:"Params,omitempty"`
 
 	// Success Успешность прохождения запроса — `true`/`false`.
 	Success bool `json:"Success"`
-
-	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-	TerminalKey string `json:"TerminalKey"`
 }
 
-// SbpPayTest defines model for SbpPayTest.
-type SbpPayTest struct {
+// SbpPayTestRequest defines model for SbpPayTestRequest.
+type SbpPayTestRequest struct {
 	// IsDeadlineExpired Признак эмуляции отказа проведения платежа банком по таймауту:
 	// * `false` — эмуляция не требуется;
 	// * `true` — требуется эмуляция. Не может быть использован вместе с `IsRejected=true`.
@@ -3980,13 +4275,13 @@ type SectoralItemProps struct {
 	Value string `json:"Value"`
 }
 
-// SendClosingReceipt defines model for SendClosingReceipt.
-type SendClosingReceipt struct {
+// SendClosingReceiptRequest defines model for SendClosingReceiptRequest.
+type SendClosingReceiptRequest struct {
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
 	PaymentId string `json:"PaymentId"`
 
 	// Receipt JSON-объект с данными чека.
-	Receipt SendClosingReceipt_Receipt `json:"Receipt"`
+	Receipt SendClosingReceiptRequest_Receipt `json:"Receipt"`
 
 	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
 	TerminalKey string `json:"TerminalKey"`
@@ -3995,13 +4290,13 @@ type SendClosingReceipt struct {
 	Token string `json:"Token"`
 }
 
-// SendClosingReceipt_Receipt JSON-объект с данными чека.
-type SendClosingReceipt_Receipt struct {
+// SendClosingReceiptRequest_Receipt JSON-объект с данными чека.
+type SendClosingReceiptRequest_Receipt struct {
 	union json.RawMessage
 }
 
-// SendClosingReceipt2 defines model for SendClosingReceipt-2.
-type SendClosingReceipt2 struct {
+// SendClosingReceiptResponse defines model for SendClosingReceiptResponse.
+type SendClosingReceiptResponse struct {
 	// ErrorCode Код ошибки.
 	ErrorCode string `json:"ErrorCode"`
 
@@ -4012,10 +4307,24 @@ type SendClosingReceipt2 struct {
 	Success bool `json:"Success"`
 }
 
+// SessionStatusEnum Статус транзакции:
+// * `NEW` — платеж создан;
+// * `AUTHORIZED` — платеж авторизован;
+// * `CONFIRMED` — платеж подтверждён;
+// * `REVERSED` — платеж отменён;
+// * `REFUNDED` — возврат выполнен;
+// * `PARTIAL_REFUNDED` — частичный возврат;
+// * `REJECTED` — платеж отклонён;
+// * `DEADLINE_EXPIRED` — срок жизни платежа истёк;
+// * `3DS_CHECKING` — идёт проверка 3DS;
+// * `3DS_CHECKED` — проверка 3DS завершена;
+// * `FORM_SHOWED` — форма показана;
+type SessionStatusEnum string
+
 // Shops JSON-объект с данными маркетплейса. Обязательный для маркетплейсов.
 type Shops struct {
-	// Amount Cумма в копейках, которая относится к указанному `ShopCode`.
-	Amount float32 `json:"Amount"`
+	// Amount Сумма в копейках, которая относится к указанному `ShopCode`.
+	Amount int64 `json:"Amount"`
 
 	// Fee Сумма комиссии в копейках, которая удерживается из возмещения партнера в пользу маркетплейса.
 	// Если параметр не передан, используется комиссия, которая была указана при регистрации.
@@ -4032,7 +4341,7 @@ type Shops struct {
 type ShopsCancel struct {
 	// Amount Cумма в копейках, которая относится к
 	// указанному `ShopCode`.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
 	// Name Наименование товара.
 	Name *string `json:"Name,omitempty"`
@@ -4072,7 +4381,7 @@ type SupplierInfo struct {
 	Phones *[]string `json:"Phones,omitempty"`
 }
 
-// TPay defines model for T-Pay.
+// TPay defines model for TPay.
 type TPay struct {
 	// Device Тип устройства:
 	// * `SDK` — вызов из мобильного приложения,
@@ -4096,16 +4405,100 @@ type TPay struct {
 // * `Mobile` — вызов из браузера с мобильного устройства.
 type TPayDevice string
 
-// With3DS defines model for With3DS.
-type With3DS struct {
+// ThreeDSMethodRequest defines model for ThreeDSMethodRequest.
+type ThreeDSMethodRequest struct {
+	// ThreeDSMethodData JSON-объект, закодированный в формат `Base64` с параметрами:
+	//
+	// * `threeDSMethodNotificationURL` — обратный адрес, на который будет отправлен запрос после прохождения threeDSMethod;
+	// * `threeDSServerTransID` — идентификатор платежа из ответа метода [Проверить версию 3DS](/eacq/api/check-3-ds-version). Генерируется 3DS Server.
+	ThreeDSMethodData string `json:"threeDSMethodData"`
+}
+
+// ThreeDSMethodResponse defines model for ThreeDSMethodResponse.
+type ThreeDSMethodResponse struct {
+	// ThreeDSServerTransID Идентификатор платежа, который генерируется 3DS Server.
+	ThreeDSServerTransID string `json:"threeDSServerTransID"`
+}
+
+// ThreeDSv2 defines model for ThreeDSv2.
+type ThreeDSv2 struct {
+	// ColorDepth `deviceChannel 02 — BRW`
+	//
+	//
+	// Глубина цвета в битах.
+	//
+	//
+	// Допустимые значения — 1/4/8/15/16/24/32/48.
+	//
+	//
+	// Рекомендуем получать значение в браузере из глобального объекта `screen` — `screen.colorDepth`.
+	ColorDepth *string `json:"colorDepth,omitempty"`
+
+	// CresCallbackUrl `deviceChannel 02 — BRW`
+	//
+	//
+	// URL, который будет использоваться для получения результата (CRES) после завершения Challenge Flow
+	// — аутентификации с дополнительным переходом на страницу ACS.
+	CresCallbackUrl string `json:"cresCallbackUrl"`
+
+	// JavaEnabled `deviceChannel 02 — BRW`
+	//
+	// Поддержка Java браузером пользователя:
+	// * `true`,
+	// * `false`.
+	//
+	//
+	// Значение по умолчанию — `false`.
+	JavaEnabled *bool `json:"javaEnabled,omitempty"`
+
+	// Language `deviceChannel 02 — BRW`
+	//
+	//
+	// Язык браузера в формате `IETF BCP47`.
+	// Рекомендуем получать значение в браузере из глобального объекта `navigator` — `navigator.language`.
+	Language string `json:"language"`
+
+	// ScreenHeight `deviceChannel 02 — BRW`
+	//
+	//
+	// Высота экрана в пикселях.
+	// Рекомендуем получать значение в браузере из глобального объекта `screen` — `screen.height`.
+	ScreenHeight string `json:"screen_height"`
+
+	// ScreenWidth `deviceChannel 02 — BRW`
+	//
+	//
+	// Ширина экрана в пикселях.
+	// Рекомендуем получать значение в браузере из глобального объекта `screen` — `screen.width`.
+	ScreenWidth string `json:"screen_width"`
+
+	// ThreeDSCompInd `deviceChannel 02 — BRW`
+	//
+	//
+	// Идентификатор выполнения метода [Пройти этап 3DS Method](/eacq/api/three-ds-method):
+	// * `Y` — выполнение метода успешно завершено;
+	// * `N` — выполнение метода завершено неуспешно или метод не выполнялся;
+	// * `U` — в ответе метода [Проверить версию 3DS](/eacq/api/check-3-ds-version) не вернулось значение `threeDSMethodURL`.
+	ThreeDSCompInd string `json:"threeDSCompInd"`
+
+	// Timezone `deviceChannel 02 — BRW`
+	//
+	//
+	// Часовой пояс пользователя в минутах.
+	// Рекомендуем получать значение в браузере через вызов метода **getTimezoneOffset()**.
+	Timezone string `json:"timezone"`
+}
+
+// WithThreeDS defines model for WithThreeDS.
+type WithThreeDS struct {
 	// ACSUrl Если в ответе метода [Подтвердить платеж](/eacq/api/finish-authorize) возвращается статус `3DS_CHECKING`,
 	// мерчанту нужно сформировать запрос на URL ACS банка, который выпустил карту — параметр `ACSUrl` в ответе, и вместе с этим перенаправить покупателя на эту же страницу ACSUrl для прохождения 3DS.
 	ACSUrl *string `json:"ACSUrl,omitempty"`
 
 	// Amount Сумма в копейках.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
-	// CardId Идентификатор карты в системе Т‑Бизнес. Передается только для cохраненной карты.
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
 	CardId *string `json:"CardId,omitempty"`
 
 	// Details Подробное описание ошибки.
@@ -4129,7 +4522,7 @@ type With3DS struct {
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
 	PaymentId *string `json:"PaymentId,omitempty"`
 
-	// RebillId Уникальный идентификатор сохраненных реквизитов карты покупателя.
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
 	RebillId *string `json:"RebillId,omitempty"`
 
 	// Status Статус транзакции.
@@ -4147,8 +4540,8 @@ type With3DS struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// With3DSv2APP defines model for With3DSv2APP.
-type With3DSv2APP struct {
+// WithThreeDSv2APP defines model for WithThreeDSv2APP.
+type WithThreeDSv2APP struct {
 	// AcsInterface Обязательное поле, если `Transaction Status` = `C`.`
 	//
 	//
@@ -4184,9 +4577,9 @@ type With3DSv2APP struct {
 	AcsUiTemplate *string `json:"AcsUiTemplate,omitempty"`
 
 	// Amount Сумма в копейках.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
-	// CardId Идентификатор карты в системе Т‑Бизнес. Передается только для cохраненной карты.
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
 	CardId *string `json:"CardId,omitempty"`
 
 	// Details Подробное описание ошибки.
@@ -4204,7 +4597,7 @@ type With3DSv2APP struct {
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
 	PaymentId *string `json:"PaymentId,omitempty"`
 
-	// RebillId Уникальный идентификатор сохраненных реквизитов карты покупателя.
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
 	RebillId *string `json:"RebillId,omitempty"`
 
 	// SdkTransID Идентификатор платежа, который назначается 3DS SDK.
@@ -4228,8 +4621,8 @@ type With3DSv2APP struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// With3DSv2BRW defines model for With3DSv2BRW.
-type With3DSv2BRW struct {
+// WithThreeDSv2BRW defines model for WithThreeDSv2BRW.
+type WithThreeDSv2BRW struct {
 	// ACSUrl Если в ответе метода [Подтвердить платеж](/eacq/api/finish-authorize) возвращается статус `3DS_CHECKING`,
 	// мерчанту нужно сформировать запрос на URL ACS банка, который выпустил карту — параметр `ACSUrl` в ответе, и вместе с этим перенаправить покупателя на эту же страницу ACSUrl для прохождения 3DS.
 	ACSUrl *string `json:"ACSUrl,omitempty"`
@@ -4238,9 +4631,9 @@ type With3DSv2BRW struct {
 	AcsTransId string `json:"AcsTransId"`
 
 	// Amount Сумма в копейках.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
-	// CardId Идентификатор карты в системе Т‑Бизнес. Передается только для cохраненной карты.
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
 	CardId *string `json:"CardId,omitempty"`
 
 	// Details Подробное описание ошибки.
@@ -4258,7 +4651,7 @@ type With3DSv2BRW struct {
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
 	PaymentId *string `json:"PaymentId,omitempty"`
 
-	// RebillId Уникальный идентификатор сохраненных реквизитов карты покупателя.
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
 	RebillId *string `json:"RebillId,omitempty"`
 
 	// Status Статус транзакции.
@@ -4279,13 +4672,12 @@ type With3DSv2BRW struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// Without3DS defines model for Without3DS.
-type Without3DS struct {
+// WithoutThreeDS defines model for WithoutThreeDS.
+type WithoutThreeDS struct {
 	// Amount Сумма в копейках.
-	Amount float32 `json:"Amount"`
+	Amount int64 `json:"Amount"`
 
-	// CardId Идентификатор карты в системе Т‑Бизнес.
-	// Передается только для сохраненной карты.
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
 	CardId *string `json:"CardId,omitempty"`
 
 	// Details Подробное описание ошибки.
@@ -4303,7 +4695,7 @@ type Without3DS struct {
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
 	PaymentId *string `json:"PaymentId,omitempty"`
 
-	// RebillId Уникальный идентификатор сохраненных реквизитов карты покупателя.
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
 	RebillId *string `json:"RebillId,omitempty"`
 
 	// Status Статус транзакции.
@@ -4321,69 +4713,92 @@ type Without3DS struct {
 	TerminalKey string `json:"TerminalKey"`
 }
 
-// ByEmail defines model for by_email.
-type ByEmail struct {
-	// EmailList JSON-массив, который содержит перечень `Email` с типом `String`. Можно указать до трех адресов.
-	EmailList []string `json:"EmailList"`
-
-	// PaymentIdList JSON-массив, который содержит в себе перечень `PaymentId` c типом `Number`.
-	PaymentIdList []float32 `json:"PaymentIdList"`
-
-	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-	TerminalKey string `json:"TerminalKey"`
-
-	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token). Для создания токена используйте только `Password` и `TerminalKey`.
-	Token string `json:"Token"`
-}
-
-// ByUrl defines model for by_url.
-type ByUrl struct {
-	// CallbackUrl URL сервиса получения справок.
-	CallbackUrl string `json:"CallbackUrl"`
-
-	// PaymentIdList JSON-массив, который содержит в себе перечень `PaymentId` c типом `Number`.
-	PaymentIdList []float32 `json:"PaymentIdList"`
-
-	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
-	TerminalKey string `json:"TerminalKey"`
-
-	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token). Для создания токена используйте только `Password` и `TerminalKey`.
-	Token string `json:"Token"`
-}
-
-// ResponseByEmail defines model for response_by_email.
-type ResponseByEmail struct {
-	// ErrorCode Код ошибки.
-	ErrorCode string `json:"ErrorCode"`
-
-	// Message Краткое описание ошибки.
-	Message       *string               `json:"Message,omitempty"`
-	PaymentIdList []PaymentIdListForGCO `json:"PaymentIdList"`
-
-	// Success Успешность прохождения запроса — `true`/`false`.
-	Success bool `json:"Success"`
-}
-
-// ResponseByUrl defines model for response_by_url.
-type ResponseByUrl struct {
-	// ErrorCode Код ошибки.
-	ErrorCode string `json:"ErrorCode"`
-
-	// Message Краткое описание ошибки.
-	Message       *string               `json:"Message,omitempty"`
-	PaymentIdList []PaymentIdListForGCO `json:"PaymentIdList"`
-
-	// Success Успешность прохождения запроса — `true`/`false`.
-	Success bool `json:"Success"`
-}
-
-// ACSUrlFormdataBody defines parameters for ACSUrl.
-type ACSUrlFormdataBody struct {
+// SendClosingReceipt200JSONResponseBody defines parameters for SendClosingReceipt.
+type SendClosingReceipt200JSONResponseBody struct {
 	union json.RawMessage
 }
 
-// ACSUrl200JSONResponseBody defines parameters for ACSUrl.
-type ACSUrl200JSONResponseBody struct {
+// AcsUrlFormdataBody defines parameters for AcsUrl.
+type AcsUrlFormdataBody struct {
+	union json.RawMessage
+}
+
+// AcsUrl200JSONResponseBody defines parameters for AcsUrl.
+type AcsUrl200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// AddAccountQr200JSONResponseBody defines parameters for AddAccountQr.
+type AddAccountQr200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// AddCard200JSONResponseBody defines parameters for AddCard.
+type AddCard200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// AddCustomer200JSONResponseBody defines parameters for AddCustomer.
+type AddCustomer200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// AlfaPayLink200JSONResponseBody defines parameters for AlfaPayLink.
+type AlfaPayLink200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// AttachCard200JSONResponseBody defines parameters for AttachCard.
+type AttachCard200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// Cancel200JSONResponseBody defines parameters for Cancel.
+type Cancel200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// Charge200JSONResponseBody0 defines parameters for Charge.
+type Charge200JSONResponseBody0 struct {
+	// Amount Сумма в копейках.
+	Amount int64 `json:"Amount"`
+
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+	OrderId string `json:"OrderId"`
+
+	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
+	PaymentId string `json:"PaymentId"`
+
+	// Status Статус платежа.
+	//
+	// Возвращается один из статусов:
+	// * `CONFIRMED` — если платеж выполнен;
+	// * `REJECTED` — если платеж не выполнен.
+	Status string `json:"Status"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+}
+
+// Charge200JSONResponseBody defines parameters for Charge.
+type Charge200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// ChargeQr200JSONResponseBody defines parameters for ChargeQr.
+type ChargeQr200JSONResponseBody struct {
 	union json.RawMessage
 }
 
@@ -4405,16 +4820,122 @@ type Check3dsVersionJSONBody struct {
 	Token string `json:"Token"`
 }
 
+// Check3dsVersion200JSONResponseBody0 defines parameters for Check3dsVersion.
+type Check3dsVersion200JSONResponseBody0 struct {
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// PaymentSystem Платежная система карты.
+	PaymentSystem string `json:"PaymentSystem"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+
+	// TdsServerTransID Идентификатор платежа, который генерируется 3DS Server. Параметр обязательный для 3DS v2.1.
+	TdsServerTransID *string `json:"TdsServerTransID,omitempty"`
+
+	// ThreeDSMethodURL Дополнительный параметр для 3DS v2.1, который позволяет пройти этап по сбору данных браузера ACS-ом.
+	ThreeDSMethodURL *string `json:"ThreeDSMethodURL,omitempty"`
+
+	// Version Версия протокола 3DS.
+	// Примеры:
+	// * `1.0.0` — первая версия,
+	// * `2.1.0` — вторая версия.
+	Version string `json:"Version"`
+}
+
+// Check3dsVersion200JSONResponseBody defines parameters for Check3dsVersion.
+type Check3dsVersion200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// CheckOrder200JSONResponseBody defines parameters for CheckOrder.
+type CheckOrder200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// Confirm200JSONResponseBody defines parameters for Confirm.
+type Confirm200JSONResponseBody struct {
+	union json.RawMessage
+}
+
 // FinishAuthorize200JSONResponseBody defines parameters for FinishAuthorize.
 type FinishAuthorize200JSONResponseBody struct {
 	union json.RawMessage
 }
 
-// GetCardList200JSONResponseBodyCardType defines parameters for GetCardList.
-type GetCardList200JSONResponseBodyCardType float32
+// GetAccountQrList200JSONResponseBody defines parameters for GetAccountQrList.
+type GetAccountQrList200JSONResponseBody struct {
+	union json.RawMessage
+}
 
-// GetCardList200JSONResponseBodyStatus defines parameters for GetCardList.
-type GetCardList200JSONResponseBodyStatus string
+// GetAddAccountQrState200JSONResponseBody defines parameters for GetAddAccountQrState.
+type GetAddAccountQrState200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// GetAddCardState200JSONResponseBody defines parameters for GetAddCardState.
+type GetAddCardState200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// GetCardList200JSONResponseBody0 defines parameters for GetCardList.
+type GetCardList200JSONResponseBody0 = []struct {
+	// CardId Идентификатор платежного средства в системе Т‑Бизнес.
+	CardId string `json:"CardId"`
+
+	// CardType Тип карты:
+	// * `0` — карта списания;
+	// * `1` — карта пополнения;
+	// * `2` — карта пополнения и списания.
+	CardType GetCardList200JSONResponseBody0CardType `json:"CardType"`
+
+	// ExpDate Срок действия платежного средства.
+	ExpDate *string `json:"ExpDate,omitempty"`
+
+	// Pan Номер карты.
+	Pan string `json:"Pan"`
+
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
+	RebillId *string `json:"RebillId,omitempty"`
+
+	// Status Статус карты:
+	// * `A` — активная;
+	// * `D` — удаленная.
+	Status GetCardList200JSONResponseBody0Status `json:"Status"`
+}
+
+// GetCardList200JSONResponseBody0CardType defines parameters for GetCardList.
+type GetCardList200JSONResponseBody0CardType float32
+
+// GetCardList200JSONResponseBody0Status defines parameters for GetCardList.
+type GetCardList200JSONResponseBody0Status string
+
+// GetCardList200JSONResponseBody defines parameters for GetCardList.
+type GetCardList200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// GetCustomer200JSONResponseBody defines parameters for GetCustomer.
+type GetCustomer200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// GetQr200JSONResponseBody defines parameters for GetQr.
+type GetQr200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// GetQrBankList200JSONResponseBody defines parameters for GetQrBankList.
+type GetQrBankList200JSONResponseBody struct {
+	union json.RawMessage
+}
 
 // GetQrStateJSONBody defines parameters for GetQrState.
 type GetQrStateJSONBody struct {
@@ -4428,6 +4949,66 @@ type GetQrStateJSONBody struct {
 	Token string `json:"Token"`
 }
 
+// GetQrState200JSONResponseBody defines parameters for GetQrState.
+type GetQrState200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// GetState200JSONResponseBody0 defines parameters for GetState.
+type GetState200JSONResponseBody0 struct {
+	// Amount Сумма в копейках.
+	Amount int64 `json:"Amount"`
+
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	//
+	// При успешном прохождении запроса для СБП возвращается `0`. Ориентируйтесь на статус платежа.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	//
+	// При успешном прохождении запроса для СБП возвращается `ОК`.
+	Message *string `json:"Message,omitempty"`
+
+	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+	OrderId string `json:"OrderId"`
+
+	// Params Информация по способу оплаты или деталям для платежей в рассрочку.
+	Params *[]ItemsParams `json:"Params,omitempty"`
+
+	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
+	PaymentId string `json:"PaymentId"`
+
+	// RebillId Уникальный идентификатор сохраненных платежных реквизитов покупателя.
+	RebillId *string `json:"RebillId,omitempty"`
+
+	// Status Статус платежа.
+	Status string `json:"Status"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+}
+
+// GetState200JSONResponseBody defines parameters for GetState.
+type GetState200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// Init200JSONResponseBody defines parameters for Init.
+type Init200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// GetDeepLink200JSONResponseBody defines parameters for GetDeepLink.
+type GetDeepLink200JSONResponseBody struct {
+	union json.RawMessage
+}
+
 // QrMembersListJSONBody defines parameters for QrMembersList.
 type QrMembersListJSONBody struct {
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
@@ -4438,6 +5019,75 @@ type QrMembersListJSONBody struct {
 
 	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
 	Token string `json:"Token"`
+}
+
+// QrMembersList200JSONResponseBody0 defines parameters for QrMembersList.
+type QrMembersList200JSONResponseBody0 struct {
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Members Массив списка участников. Возвращается, только если возврат возможен.
+	Members *[]Member `json:"Members,omitempty"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+	OrderId string `json:"OrderId"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+}
+
+// QrMembersList200JSONResponseBody defines parameters for QrMembersList.
+type QrMembersList200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// RemoveCard200JSONResponseBody defines parameters for RemoveCard.
+type RemoveCard200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// RemoveCustomer200JSONResponseBody defines parameters for RemoveCustomer.
+type RemoveCustomer200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// SberpayLinkGet200JSONResponseBody defines parameters for SberpayLinkGet.
+type SberpayLinkGet200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// SberPaylink200JSONResponseBody0 defines parameters for SberPaylink.
+type SberPaylink200JSONResponseBody0 struct {
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// Params Параметры ответа.
+	Params struct {
+		// RedirectUrl URL для перехода.
+		RedirectUrl string `json:"RedirectUrl"`
+	} `json:"Params"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+}
+
+// SberPaylink200JSONResponseBody defines parameters for SberPaylink.
+type SberPaylink200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// SbpPayTest200JSONResponseBody defines parameters for SbpPayTest.
+type SbpPayTest200JSONResponseBody struct {
+	union json.RawMessage
 }
 
 // Submit3DSAuthorizationFormdataBody defines parameters for Submit3DSAuthorization.
@@ -4458,6 +5108,41 @@ type Submit3DSAuthorizationFormdataBody struct {
 	Token *string `form:"Token,omitempty" json:"Token,omitempty"`
 }
 
+// Submit3DSAuthorization200JSONResponseBody0 defines parameters for Submit3DSAuthorization.
+type Submit3DSAuthorization200JSONResponseBody0 struct {
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+	OrderId string `json:"OrderId"`
+
+	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
+	PaymentId string `json:"PaymentId"`
+
+	// Status Статус транзакции:
+	// - `CONFIRMED` — при успешном сценарии и одностадийном проведении платежа;
+	// - `AUTHORIZED` — при успешном сценарии и двухстадийном проведении платежа;
+	// - `REJECTED` — при неуспешном сценарии.
+	Status string `json:"Status"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+}
+
+// Submit3DSAuthorization200JSONResponseBody defines parameters for Submit3DSAuthorization.
+type Submit3DSAuthorization200JSONResponseBody struct {
+	union json.RawMessage
+}
+
 // Submit3DSAuthorizationV2FormdataBody defines parameters for Submit3DSAuthorizationV2.
 type Submit3DSAuthorizationV2FormdataBody struct {
 	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
@@ -4468,6 +5153,104 @@ type Submit3DSAuthorizationV2FormdataBody struct {
 
 	// Token Подпись запроса. [Как сформировать](/eacq/intro/developer/token).
 	Token string `form:"Token" json:"Token"`
+}
+
+// Submit3DSAuthorizationV2200JSONResponseBody0 defines parameters for Submit3DSAuthorizationV2.
+type Submit3DSAuthorizationV2200JSONResponseBody0 struct {
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// OrderId Идентификатор заказа в системе мерчанта. Должен быть уникальным для каждой операции.
+	OrderId string `json:"OrderId"`
+
+	// PaymentId Идентификатор платежа в системе Т‑Бизнес.
+	PaymentId string `json:"PaymentId"`
+
+	// Status Статус транзакции
+	Status string `json:"Status"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+
+	// TerminalKey Идентификатор терминала. Выдается мерчанту в Т‑Бизнес при заведении терминала.
+	TerminalKey string `json:"TerminalKey"`
+}
+
+// Submit3DSAuthorizationV2200JSONResponseBody defines parameters for Submit3DSAuthorizationV2.
+type Submit3DSAuthorizationV2200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// ThreeDSMethod200JSONResponseBody defines parameters for ThreeDSMethod.
+type ThreeDSMethod200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// Status200JSONResponseBody0 defines parameters for Status.
+type Status200JSONResponseBody0 struct {
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// Params Параметры ответа.
+	Params struct {
+		// Allowed Наличие возможности проведения оплаты
+		// T‑Pay по API.
+		Allowed bool `json:"Allowed"`
+
+		// Version Версия T‑Pay, доступная на терминале:
+		// * `1.0` — e-invoice;
+		// * `2.0` — T‑Pay.
+		Version *string `json:"Version,omitempty"`
+	} `json:"Params"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+}
+
+// Status200JSONResponseBody defines parameters for Status.
+type Status200JSONResponseBody struct {
+	union json.RawMessage
+}
+
+// Link200JSONResponseBody0 defines parameters for Link.
+type Link200JSONResponseBody0 struct {
+	// Details Подробное описание ошибки.
+	Details *string `json:"Details,omitempty"`
+
+	// ErrorCode Код ошибки.
+	ErrorCode string `json:"ErrorCode"`
+
+	// Message Краткое описание ошибки.
+	Message *string `json:"Message,omitempty"`
+
+	// Params Параметры ответа.
+	Params struct {
+		// RedirectUrl URL для перехода.
+		RedirectUrl string `json:"RedirectUrl"`
+
+		// WebQR URL для получения QR.
+		WebQR *string `json:"WebQR,omitempty"`
+	} `json:"Params"`
+
+	// Success Успешность прохождения запроса — `true`/`false`.
+	Success bool `json:"Success"`
+}
+
+// Link200JSONResponseBody defines parameters for Link.
+type Link200JSONResponseBody struct {
+	union json.RawMessage
 }
 
 // GetConfirmOperationJSONBody defines parameters for GetConfirmOperation.
@@ -4481,100 +5264,103 @@ type GetConfirmOperation200JSONResponseBody struct {
 }
 
 // SendClosingReceiptJSONRequestBody defines body for SendClosingReceipt for application/json ContentType.
-type SendClosingReceiptJSONRequestBody = SendClosingReceipt
+type SendClosingReceiptJSONRequestBody = SendClosingReceiptRequest
 
-// N3DSMethodFormdataRequestBody defines body for N3DSMethod for application/x-www-form-urlencoded ContentType.
-type N3DSMethodFormdataRequestBody = N3DSMethod
-
-// ACSUrlFormdataRequestBody defines body for ACSUrl for application/x-www-form-urlencoded ContentType.
-type ACSUrlFormdataRequestBody ACSUrlFormdataBody
+// AcsUrlFormdataRequestBody defines body for AcsUrl for application/x-www-form-urlencoded ContentType.
+type AcsUrlFormdataRequestBody AcsUrlFormdataBody
 
 // AddAccountQrJSONRequestBody defines body for AddAccountQr for application/json ContentType.
-type AddAccountQrJSONRequestBody = AddAccountQr
+type AddAccountQrJSONRequestBody = AddAccountQrRequest
 
 // AddCardJSONRequestBody defines body for AddCard for application/json ContentType.
-type AddCardJSONRequestBody = AddCard
+type AddCardJSONRequestBody = AddCardRequest
 
 // AddCustomerJSONRequestBody defines body for AddCustomer for application/json ContentType.
-type AddCustomerJSONRequestBody = AddCustomer
+type AddCustomerJSONRequestBody = AddCustomerRequest
 
 // AlfaPayLinkJSONRequestBody defines body for AlfaPayLink for application/json ContentType.
-type AlfaPayLinkJSONRequestBody = AlfaPayLink
+type AlfaPayLinkJSONRequestBody = AlfaPayLinkRequest
 
 // AttachCardJSONRequestBody defines body for AttachCard for application/json ContentType.
-type AttachCardJSONRequestBody = AttachCard
+type AttachCardJSONRequestBody = AttachCardRequest
 
 // CancelJSONRequestBody defines body for Cancel for application/json ContentType.
-type CancelJSONRequestBody = Cancel
+type CancelJSONRequestBody = CancelRequest
 
 // ChargeJSONRequestBody defines body for Charge for application/json ContentType.
-type ChargeJSONRequestBody = Charge
+type ChargeJSONRequestBody = ChargeRequest
 
 // ChargeQrJSONRequestBody defines body for ChargeQr for application/json ContentType.
-type ChargeQrJSONRequestBody = ChargeQr
+type ChargeQrJSONRequestBody = ChargeQrRequest
 
 // Check3dsVersionJSONRequestBody defines body for Check3dsVersion for application/json ContentType.
 type Check3dsVersionJSONRequestBody Check3dsVersionJSONBody
 
 // CheckOrderJSONRequestBody defines body for CheckOrder for application/json ContentType.
-type CheckOrderJSONRequestBody = CheckOrder
+type CheckOrderJSONRequestBody = CheckOrderRequest
 
 // ConfirmJSONRequestBody defines body for Confirm for application/json ContentType.
-type ConfirmJSONRequestBody = Confirm
+type ConfirmJSONRequestBody = ConfirmRequest
 
 // FinishAuthorizeJSONRequestBody defines body for FinishAuthorize for application/json ContentType.
-type FinishAuthorizeJSONRequestBody = FinishAuthorize
+type FinishAuthorizeJSONRequestBody = FinishAuthorizeRequest
 
 // GetAccountQrListJSONRequestBody defines body for GetAccountQrList for application/json ContentType.
-type GetAccountQrListJSONRequestBody = GetAccountQrList
+type GetAccountQrListJSONRequestBody = GetAccountQrListRequest
 
 // GetAddAccountQrStateJSONRequestBody defines body for GetAddAccountQrState for application/json ContentType.
-type GetAddAccountQrStateJSONRequestBody = GetAddAccountQrState
+type GetAddAccountQrStateJSONRequestBody = GetAddAccountQrStateRequest
 
 // GetAddCardStateJSONRequestBody defines body for GetAddCardState for application/json ContentType.
-type GetAddCardStateJSONRequestBody = GetAddCardState
+type GetAddCardStateJSONRequestBody = GetAddCardStateRequest
 
 // GetCardListJSONRequestBody defines body for GetCardList for application/json ContentType.
-type GetCardListJSONRequestBody = GetCardList
+type GetCardListJSONRequestBody = GetCardListRequest
 
 // GetCustomerJSONRequestBody defines body for GetCustomer for application/json ContentType.
-type GetCustomerJSONRequestBody = GetOrRemoveCustomer
+type GetCustomerJSONRequestBody = GetOrRemoveCustomerRequest
 
 // GetQrJSONRequestBody defines body for GetQr for application/json ContentType.
-type GetQrJSONRequestBody = GetQr
+type GetQrJSONRequestBody = GetQrRequest
 
 // GetQrBankListJSONRequestBody defines body for GetQrBankList for application/json ContentType.
-type GetQrBankListJSONRequestBody = GetQrBankList
+type GetQrBankListJSONRequestBody = GetQrBankListRequest
 
 // GetQrStateJSONRequestBody defines body for GetQrState for application/json ContentType.
 type GetQrStateJSONRequestBody GetQrStateJSONBody
 
 // GetStateJSONRequestBody defines body for GetState for application/json ContentType.
-type GetStateJSONRequestBody = GetState
+type GetStateJSONRequestBody = GetStateRequest
 
 // InitJSONRequestBody defines body for Init for application/json ContentType.
-type InitJSONRequestBody = Init
+type InitJSONRequestBody = InitRequest
 
 // GetDeepLinkJSONRequestBody defines body for GetDeepLink for application/json ContentType.
-type GetDeepLinkJSONRequestBody = GetDeepLink
+type GetDeepLinkJSONRequestBody = GetDeepLinkRequest
 
 // QrMembersListJSONRequestBody defines body for QrMembersList for application/json ContentType.
 type QrMembersListJSONRequestBody QrMembersListJSONBody
 
 // RemoveCardJSONRequestBody defines body for RemoveCard for application/json ContentType.
-type RemoveCardJSONRequestBody = RemoveCard
+type RemoveCardJSONRequestBody = RemoveCardRequest
 
 // RemoveCustomerJSONRequestBody defines body for RemoveCustomer for application/json ContentType.
-type RemoveCustomerJSONRequestBody = GetOrRemoveCustomer
+type RemoveCustomerJSONRequestBody = GetOrRemoveCustomerRequest
+
+// SberpayLinkGetJSONRequestBody defines body for SberpayLinkGet for application/json ContentType.
+type SberpayLinkGetJSONRequestBody = SberPayLinkGet
 
 // SbpPayTestJSONRequestBody defines body for SbpPayTest for application/json ContentType.
-type SbpPayTestJSONRequestBody = SbpPayTest
+type SbpPayTestJSONRequestBody = SbpPayTestRequest
 
 // Submit3DSAuthorizationFormdataRequestBody defines body for Submit3DSAuthorization for application/x-www-form-urlencoded ContentType.
 type Submit3DSAuthorizationFormdataRequestBody Submit3DSAuthorizationFormdataBody
 
 // Submit3DSAuthorizationV2FormdataRequestBody defines body for Submit3DSAuthorizationV2 for application/x-www-form-urlencoded ContentType.
 type Submit3DSAuthorizationV2FormdataRequestBody Submit3DSAuthorizationV2FormdataBody
+
+// ThreeDSMethodFormdataRequestBody defines body for ThreeDSMethod for application/x-www-form-urlencoded ContentType.
+type ThreeDSMethodFormdataRequestBody = ThreeDSMethodRequest
 
 // GetConfirmOperationJSONRequestBody defines body for GetConfirmOperation for application/json ContentType.
 type GetConfirmOperationJSONRequestBody GetConfirmOperationJSONBody
@@ -4647,22 +5433,22 @@ func (a Common) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
-// AsAttachCardDATA0 returns the union data inside the AttachCard_DATA as a AttachCardDATA0
-func (t AttachCard_DATA) AsAttachCardDATA0() (AttachCardDATA0, error) {
-	var body AttachCardDATA0
+// AsAttachCardRequestDATA0 returns the union data inside the AttachCardRequest_DATA as a AttachCardRequestDATA0
+func (t AttachCardRequest_DATA) AsAttachCardRequestDATA0() (AttachCardRequestDATA0, error) {
+	var body AttachCardRequestDATA0
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromAttachCardDATA0 overwrites any union data inside the AttachCard_DATA as the provided AttachCardDATA0
-func (t *AttachCard_DATA) FromAttachCardDATA0(v AttachCardDATA0) error {
+// FromAttachCardRequestDATA0 overwrites any union data inside the AttachCardRequest_DATA as the provided AttachCardRequestDATA0
+func (t *AttachCardRequest_DATA) FromAttachCardRequestDATA0(v AttachCardRequestDATA0) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeAttachCardDATA0 performs a merge with any union data inside the AttachCard_DATA, using the provided AttachCardDATA0
-func (t *AttachCard_DATA) MergeAttachCardDATA0(v AttachCardDATA0) error {
+// MergeAttachCardRequestDATA0 performs a merge with any union data inside the AttachCardRequest_DATA, using the provided AttachCardRequestDATA0
+func (t *AttachCardRequest_DATA) MergeAttachCardRequestDATA0(v AttachCardRequestDATA0) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4673,22 +5459,22 @@ func (t *AttachCard_DATA) MergeAttachCardDATA0(v AttachCardDATA0) error {
 	return err
 }
 
-// AsN3DSv2 returns the union data inside the AttachCard_DATA as a N3DSv2
-func (t AttachCard_DATA) AsN3DSv2() (N3DSv2, error) {
-	var body N3DSv2
+// AsThreeDSv2 returns the union data inside the AttachCardRequest_DATA as a ThreeDSv2
+func (t AttachCardRequest_DATA) AsThreeDSv2() (ThreeDSv2, error) {
+	var body ThreeDSv2
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromN3DSv2 overwrites any union data inside the AttachCard_DATA as the provided N3DSv2
-func (t *AttachCard_DATA) FromN3DSv2(v N3DSv2) error {
+// FromThreeDSv2 overwrites any union data inside the AttachCardRequest_DATA as the provided ThreeDSv2
+func (t *AttachCardRequest_DATA) FromThreeDSv2(v ThreeDSv2) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeN3DSv2 performs a merge with any union data inside the AttachCard_DATA, using the provided N3DSv2
-func (t *AttachCard_DATA) MergeN3DSv2(v N3DSv2) error {
+// MergeThreeDSv2 performs a merge with any union data inside the AttachCardRequest_DATA, using the provided ThreeDSv2
+func (t *AttachCardRequest_DATA) MergeThreeDSv2(v ThreeDSv2) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4699,32 +5485,32 @@ func (t *AttachCard_DATA) MergeN3DSv2(v N3DSv2) error {
 	return err
 }
 
-func (t AttachCard_DATA) MarshalJSON() ([]byte, error) {
+func (t AttachCardRequest_DATA) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *AttachCard_DATA) UnmarshalJSON(b []byte) error {
+func (t *AttachCardRequest_DATA) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsReceiptFFD12 returns the union data inside the Cancel_Receipt as a ReceiptFFD12
-func (t Cancel_Receipt) AsReceiptFFD12() (ReceiptFFD12, error) {
-	var body ReceiptFFD12
+// AsReceiptFfd12 returns the union data inside the CancelRequest_Receipt as a ReceiptFfd12
+func (t CancelRequest_Receipt) AsReceiptFfd12() (ReceiptFfd12, error) {
+	var body ReceiptFfd12
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromReceiptFFD12 overwrites any union data inside the Cancel_Receipt as the provided ReceiptFFD12
-func (t *Cancel_Receipt) FromReceiptFFD12(v ReceiptFFD12) error {
+// FromReceiptFfd12 overwrites any union data inside the CancelRequest_Receipt as the provided ReceiptFfd12
+func (t *CancelRequest_Receipt) FromReceiptFfd12(v ReceiptFfd12) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeReceiptFFD12 performs a merge with any union data inside the Cancel_Receipt, using the provided ReceiptFFD12
-func (t *Cancel_Receipt) MergeReceiptFFD12(v ReceiptFFD12) error {
+// MergeReceiptFfd12 performs a merge with any union data inside the CancelRequest_Receipt, using the provided ReceiptFfd12
+func (t *CancelRequest_Receipt) MergeReceiptFfd12(v ReceiptFfd12) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4735,22 +5521,22 @@ func (t *Cancel_Receipt) MergeReceiptFFD12(v ReceiptFFD12) error {
 	return err
 }
 
-// AsReceiptFFD105 returns the union data inside the Cancel_Receipt as a ReceiptFFD105
-func (t Cancel_Receipt) AsReceiptFFD105() (ReceiptFFD105, error) {
-	var body ReceiptFFD105
+// AsReceiptFfd105 returns the union data inside the CancelRequest_Receipt as a ReceiptFfd105
+func (t CancelRequest_Receipt) AsReceiptFfd105() (ReceiptFfd105, error) {
+	var body ReceiptFfd105
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromReceiptFFD105 overwrites any union data inside the Cancel_Receipt as the provided ReceiptFFD105
-func (t *Cancel_Receipt) FromReceiptFFD105(v ReceiptFFD105) error {
+// FromReceiptFfd105 overwrites any union data inside the CancelRequest_Receipt as the provided ReceiptFfd105
+func (t *CancelRequest_Receipt) FromReceiptFfd105(v ReceiptFfd105) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeReceiptFFD105 performs a merge with any union data inside the Cancel_Receipt, using the provided ReceiptFFD105
-func (t *Cancel_Receipt) MergeReceiptFFD105(v ReceiptFFD105) error {
+// MergeReceiptFfd105 performs a merge with any union data inside the CancelRequest_Receipt, using the provided ReceiptFfd105
+func (t *CancelRequest_Receipt) MergeReceiptFfd105(v ReceiptFfd105) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4761,32 +5547,32 @@ func (t *Cancel_Receipt) MergeReceiptFFD105(v ReceiptFFD105) error {
 	return err
 }
 
-func (t Cancel_Receipt) MarshalJSON() ([]byte, error) {
+func (t CancelRequest_Receipt) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *Cancel_Receipt) UnmarshalJSON(b []byte) error {
+func (t *CancelRequest_Receipt) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsReceiptFFD12 returns the union data inside the Confirm_Receipt as a ReceiptFFD12
-func (t Confirm_Receipt) AsReceiptFFD12() (ReceiptFFD12, error) {
-	var body ReceiptFFD12
+// AsReceiptFfd12 returns the union data inside the ConfirmRequest_Receipt as a ReceiptFfd12
+func (t ConfirmRequest_Receipt) AsReceiptFfd12() (ReceiptFfd12, error) {
+	var body ReceiptFfd12
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromReceiptFFD12 overwrites any union data inside the Confirm_Receipt as the provided ReceiptFFD12
-func (t *Confirm_Receipt) FromReceiptFFD12(v ReceiptFFD12) error {
+// FromReceiptFfd12 overwrites any union data inside the ConfirmRequest_Receipt as the provided ReceiptFfd12
+func (t *ConfirmRequest_Receipt) FromReceiptFfd12(v ReceiptFfd12) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeReceiptFFD12 performs a merge with any union data inside the Confirm_Receipt, using the provided ReceiptFFD12
-func (t *Confirm_Receipt) MergeReceiptFFD12(v ReceiptFFD12) error {
+// MergeReceiptFfd12 performs a merge with any union data inside the ConfirmRequest_Receipt, using the provided ReceiptFfd12
+func (t *ConfirmRequest_Receipt) MergeReceiptFfd12(v ReceiptFfd12) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4797,22 +5583,22 @@ func (t *Confirm_Receipt) MergeReceiptFFD12(v ReceiptFFD12) error {
 	return err
 }
 
-// AsReceiptFFD105 returns the union data inside the Confirm_Receipt as a ReceiptFFD105
-func (t Confirm_Receipt) AsReceiptFFD105() (ReceiptFFD105, error) {
-	var body ReceiptFFD105
+// AsReceiptFfd105 returns the union data inside the ConfirmRequest_Receipt as a ReceiptFfd105
+func (t ConfirmRequest_Receipt) AsReceiptFfd105() (ReceiptFfd105, error) {
+	var body ReceiptFfd105
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromReceiptFFD105 overwrites any union data inside the Confirm_Receipt as the provided ReceiptFFD105
-func (t *Confirm_Receipt) FromReceiptFFD105(v ReceiptFFD105) error {
+// FromReceiptFfd105 overwrites any union data inside the ConfirmRequest_Receipt as the provided ReceiptFfd105
+func (t *ConfirmRequest_Receipt) FromReceiptFfd105(v ReceiptFfd105) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeReceiptFFD105 performs a merge with any union data inside the Confirm_Receipt, using the provided ReceiptFFD105
-func (t *Confirm_Receipt) MergeReceiptFFD105(v ReceiptFFD105) error {
+// MergeReceiptFfd105 performs a merge with any union data inside the ConfirmRequest_Receipt, using the provided ReceiptFfd105
+func (t *ConfirmRequest_Receipt) MergeReceiptFfd105(v ReceiptFfd105) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4823,32 +5609,32 @@ func (t *Confirm_Receipt) MergeReceiptFFD105(v ReceiptFFD105) error {
 	return err
 }
 
-func (t Confirm_Receipt) MarshalJSON() ([]byte, error) {
+func (t ConfirmRequest_Receipt) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *Confirm_Receipt) UnmarshalJSON(b []byte) error {
+func (t *ConfirmRequest_Receipt) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsN3DSv2 returns the union data inside the FinishAuthorize_DATA as a N3DSv2
-func (t FinishAuthorize_DATA) AsN3DSv2() (N3DSv2, error) {
-	var body N3DSv2
+// AsThreeDSv2 returns the union data inside the FinishAuthorizeRequest_DATA as a ThreeDSv2
+func (t FinishAuthorizeRequest_DATA) AsThreeDSv2() (ThreeDSv2, error) {
+	var body ThreeDSv2
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromN3DSv2 overwrites any union data inside the FinishAuthorize_DATA as the provided N3DSv2
-func (t *FinishAuthorize_DATA) FromN3DSv2(v N3DSv2) error {
+// FromThreeDSv2 overwrites any union data inside the FinishAuthorizeRequest_DATA as the provided ThreeDSv2
+func (t *FinishAuthorizeRequest_DATA) FromThreeDSv2(v ThreeDSv2) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeN3DSv2 performs a merge with any union data inside the FinishAuthorize_DATA, using the provided N3DSv2
-func (t *FinishAuthorize_DATA) MergeN3DSv2(v N3DSv2) error {
+// MergeThreeDSv2 performs a merge with any union data inside the FinishAuthorizeRequest_DATA, using the provided ThreeDSv2
+func (t *FinishAuthorizeRequest_DATA) MergeThreeDSv2(v ThreeDSv2) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4859,22 +5645,22 @@ func (t *FinishAuthorize_DATA) MergeN3DSv2(v N3DSv2) error {
 	return err
 }
 
-// AsFinishAuthorizeDATA1 returns the union data inside the FinishAuthorize_DATA as a FinishAuthorizeDATA1
-func (t FinishAuthorize_DATA) AsFinishAuthorizeDATA1() (FinishAuthorizeDATA1, error) {
-	var body FinishAuthorizeDATA1
+// AsFinishAuthorizeRequestDATA1 returns the union data inside the FinishAuthorizeRequest_DATA as a FinishAuthorizeRequestDATA1
+func (t FinishAuthorizeRequest_DATA) AsFinishAuthorizeRequestDATA1() (FinishAuthorizeRequestDATA1, error) {
+	var body FinishAuthorizeRequestDATA1
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromFinishAuthorizeDATA1 overwrites any union data inside the FinishAuthorize_DATA as the provided FinishAuthorizeDATA1
-func (t *FinishAuthorize_DATA) FromFinishAuthorizeDATA1(v FinishAuthorizeDATA1) error {
+// FromFinishAuthorizeRequestDATA1 overwrites any union data inside the FinishAuthorizeRequest_DATA as the provided FinishAuthorizeRequestDATA1
+func (t *FinishAuthorizeRequest_DATA) FromFinishAuthorizeRequestDATA1(v FinishAuthorizeRequestDATA1) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeFinishAuthorizeDATA1 performs a merge with any union data inside the FinishAuthorize_DATA, using the provided FinishAuthorizeDATA1
-func (t *FinishAuthorize_DATA) MergeFinishAuthorizeDATA1(v FinishAuthorizeDATA1) error {
+// MergeFinishAuthorizeRequestDATA1 performs a merge with any union data inside the FinishAuthorizeRequest_DATA, using the provided FinishAuthorizeRequestDATA1
+func (t *FinishAuthorizeRequest_DATA) MergeFinishAuthorizeRequestDATA1(v FinishAuthorizeRequestDATA1) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4885,32 +5671,32 @@ func (t *FinishAuthorize_DATA) MergeFinishAuthorizeDATA1(v FinishAuthorizeDATA1)
 	return err
 }
 
-func (t FinishAuthorize_DATA) MarshalJSON() ([]byte, error) {
+func (t FinishAuthorizeRequest_DATA) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *FinishAuthorize_DATA) UnmarshalJSON(b []byte) error {
+func (t *FinishAuthorizeRequest_DATA) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsCommon returns the union data inside the Init_DATA as a Common
-func (t Init_DATA) AsCommon() (Common, error) {
+// AsCommon returns the union data inside the InitRequest_DATA as a Common
+func (t InitRequest_DATA) AsCommon() (Common, error) {
 	var body Common
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromCommon overwrites any union data inside the Init_DATA as the provided Common
-func (t *Init_DATA) FromCommon(v Common) error {
+// FromCommon overwrites any union data inside the InitRequest_DATA as the provided Common
+func (t *InitRequest_DATA) FromCommon(v Common) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeCommon performs a merge with any union data inside the Init_DATA, using the provided Common
-func (t *Init_DATA) MergeCommon(v Common) error {
+// MergeCommon performs a merge with any union data inside the InitRequest_DATA, using the provided Common
+func (t *InitRequest_DATA) MergeCommon(v Common) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4921,22 +5707,22 @@ func (t *Init_DATA) MergeCommon(v Common) error {
 	return err
 }
 
-// AsTPay returns the union data inside the Init_DATA as a TPay
-func (t Init_DATA) AsTPay() (TPay, error) {
+// AsTPay returns the union data inside the InitRequest_DATA as a TPay
+func (t InitRequest_DATA) AsTPay() (TPay, error) {
 	var body TPay
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromTPay overwrites any union data inside the Init_DATA as the provided TPay
-func (t *Init_DATA) FromTPay(v TPay) error {
+// FromTPay overwrites any union data inside the InitRequest_DATA as the provided TPay
+func (t *InitRequest_DATA) FromTPay(v TPay) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeTPay performs a merge with any union data inside the Init_DATA, using the provided TPay
-func (t *Init_DATA) MergeTPay(v TPay) error {
+// MergeTPay performs a merge with any union data inside the InitRequest_DATA, using the provided TPay
+func (t *InitRequest_DATA) MergeTPay(v TPay) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4947,22 +5733,22 @@ func (t *Init_DATA) MergeTPay(v TPay) error {
 	return err
 }
 
-// AsLongPay returns the union data inside the Init_DATA as a LongPay
-func (t Init_DATA) AsLongPay() (LongPay, error) {
+// AsLongPay returns the union data inside the InitRequest_DATA as a LongPay
+func (t InitRequest_DATA) AsLongPay() (LongPay, error) {
 	var body LongPay
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromLongPay overwrites any union data inside the Init_DATA as the provided LongPay
-func (t *Init_DATA) FromLongPay(v LongPay) error {
+// FromLongPay overwrites any union data inside the InitRequest_DATA as the provided LongPay
+func (t *InitRequest_DATA) FromLongPay(v LongPay) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeLongPay performs a merge with any union data inside the Init_DATA, using the provided LongPay
-func (t *Init_DATA) MergeLongPay(v LongPay) error {
+// MergeLongPay performs a merge with any union data inside the InitRequest_DATA, using the provided LongPay
+func (t *InitRequest_DATA) MergeLongPay(v LongPay) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4973,32 +5759,32 @@ func (t *Init_DATA) MergeLongPay(v LongPay) error {
 	return err
 }
 
-func (t Init_DATA) MarshalJSON() ([]byte, error) {
+func (t InitRequest_DATA) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *Init_DATA) UnmarshalJSON(b []byte) error {
+func (t *InitRequest_DATA) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsReceiptFFD105 returns the union data inside the Init_Receipt as a ReceiptFFD105
-func (t Init_Receipt) AsReceiptFFD105() (ReceiptFFD105, error) {
-	var body ReceiptFFD105
+// AsReceiptFfd105 returns the union data inside the InitRequest_Receipt as a ReceiptFfd105
+func (t InitRequest_Receipt) AsReceiptFfd105() (ReceiptFfd105, error) {
+	var body ReceiptFfd105
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromReceiptFFD105 overwrites any union data inside the Init_Receipt as the provided ReceiptFFD105
-func (t *Init_Receipt) FromReceiptFFD105(v ReceiptFFD105) error {
+// FromReceiptFfd105 overwrites any union data inside the InitRequest_Receipt as the provided ReceiptFfd105
+func (t *InitRequest_Receipt) FromReceiptFfd105(v ReceiptFfd105) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeReceiptFFD105 performs a merge with any union data inside the Init_Receipt, using the provided ReceiptFFD105
-func (t *Init_Receipt) MergeReceiptFFD105(v ReceiptFFD105) error {
+// MergeReceiptFfd105 performs a merge with any union data inside the InitRequest_Receipt, using the provided ReceiptFfd105
+func (t *InitRequest_Receipt) MergeReceiptFfd105(v ReceiptFfd105) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5009,22 +5795,22 @@ func (t *Init_Receipt) MergeReceiptFFD105(v ReceiptFFD105) error {
 	return err
 }
 
-// AsReceiptFFD12 returns the union data inside the Init_Receipt as a ReceiptFFD12
-func (t Init_Receipt) AsReceiptFFD12() (ReceiptFFD12, error) {
-	var body ReceiptFFD12
+// AsReceiptFfd12 returns the union data inside the InitRequest_Receipt as a ReceiptFfd12
+func (t InitRequest_Receipt) AsReceiptFfd12() (ReceiptFfd12, error) {
+	var body ReceiptFfd12
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromReceiptFFD12 overwrites any union data inside the Init_Receipt as the provided ReceiptFFD12
-func (t *Init_Receipt) FromReceiptFFD12(v ReceiptFFD12) error {
+// FromReceiptFfd12 overwrites any union data inside the InitRequest_Receipt as the provided ReceiptFfd12
+func (t *InitRequest_Receipt) FromReceiptFfd12(v ReceiptFfd12) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeReceiptFFD12 performs a merge with any union data inside the Init_Receipt, using the provided ReceiptFFD12
-func (t *Init_Receipt) MergeReceiptFFD12(v ReceiptFFD12) error {
+// MergeReceiptFfd12 performs a merge with any union data inside the InitRequest_Receipt, using the provided ReceiptFfd12
+func (t *InitRequest_Receipt) MergeReceiptFfd12(v ReceiptFfd12) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5035,32 +5821,32 @@ func (t *Init_Receipt) MergeReceiptFFD12(v ReceiptFFD12) error {
 	return err
 }
 
-func (t Init_Receipt) MarshalJSON() ([]byte, error) {
+func (t InitRequest_Receipt) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *Init_Receipt) UnmarshalJSON(b []byte) error {
+func (t *InitRequest_Receipt) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsReceiptFFD12 returns the union data inside the SendClosingReceipt_Receipt as a ReceiptFFD12
-func (t SendClosingReceipt_Receipt) AsReceiptFFD12() (ReceiptFFD12, error) {
-	var body ReceiptFFD12
+// AsReceiptFfd12 returns the union data inside the SendClosingReceiptRequest_Receipt as a ReceiptFfd12
+func (t SendClosingReceiptRequest_Receipt) AsReceiptFfd12() (ReceiptFfd12, error) {
+	var body ReceiptFfd12
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromReceiptFFD12 overwrites any union data inside the SendClosingReceipt_Receipt as the provided ReceiptFFD12
-func (t *SendClosingReceipt_Receipt) FromReceiptFFD12(v ReceiptFFD12) error {
+// FromReceiptFfd12 overwrites any union data inside the SendClosingReceiptRequest_Receipt as the provided ReceiptFfd12
+func (t *SendClosingReceiptRequest_Receipt) FromReceiptFfd12(v ReceiptFfd12) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeReceiptFFD12 performs a merge with any union data inside the SendClosingReceipt_Receipt, using the provided ReceiptFFD12
-func (t *SendClosingReceipt_Receipt) MergeReceiptFFD12(v ReceiptFFD12) error {
+// MergeReceiptFfd12 performs a merge with any union data inside the SendClosingReceiptRequest_Receipt, using the provided ReceiptFfd12
+func (t *SendClosingReceiptRequest_Receipt) MergeReceiptFfd12(v ReceiptFfd12) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5071,22 +5857,22 @@ func (t *SendClosingReceipt_Receipt) MergeReceiptFFD12(v ReceiptFFD12) error {
 	return err
 }
 
-// AsReceiptFFD105 returns the union data inside the SendClosingReceipt_Receipt as a ReceiptFFD105
-func (t SendClosingReceipt_Receipt) AsReceiptFFD105() (ReceiptFFD105, error) {
-	var body ReceiptFFD105
+// AsReceiptFfd105 returns the union data inside the SendClosingReceiptRequest_Receipt as a ReceiptFfd105
+func (t SendClosingReceiptRequest_Receipt) AsReceiptFfd105() (ReceiptFfd105, error) {
+	var body ReceiptFfd105
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromReceiptFFD105 overwrites any union data inside the SendClosingReceipt_Receipt as the provided ReceiptFFD105
-func (t *SendClosingReceipt_Receipt) FromReceiptFFD105(v ReceiptFFD105) error {
+// FromReceiptFfd105 overwrites any union data inside the SendClosingReceiptRequest_Receipt as the provided ReceiptFfd105
+func (t *SendClosingReceiptRequest_Receipt) FromReceiptFfd105(v ReceiptFfd105) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeReceiptFFD105 performs a merge with any union data inside the SendClosingReceipt_Receipt, using the provided ReceiptFFD105
-func (t *SendClosingReceipt_Receipt) MergeReceiptFFD105(v ReceiptFFD105) error {
+// MergeReceiptFfd105 performs a merge with any union data inside the SendClosingReceiptRequest_Receipt, using the provided ReceiptFfd105
+func (t *SendClosingReceiptRequest_Receipt) MergeReceiptFfd105(v ReceiptFfd105) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5097,32 +5883,32 @@ func (t *SendClosingReceipt_Receipt) MergeReceiptFFD105(v ReceiptFFD105) error {
 	return err
 }
 
-func (t SendClosingReceipt_Receipt) MarshalJSON() ([]byte, error) {
+func (t SendClosingReceiptRequest_Receipt) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *SendClosingReceipt_Receipt) UnmarshalJSON(b []byte) error {
+func (t *SendClosingReceiptRequest_Receipt) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsACSUrlV1 returns the union data inside the ACSUrlFormdataBody as a ACSUrlV1
-func (t ACSUrlFormdataBody) AsACSUrlV1() (ACSUrlV1, error) {
-	var body ACSUrlV1
+// AsSendClosingReceiptResponse returns the union data inside the SendClosingReceipt200JSONResponseBody as a SendClosingReceiptResponse
+func (t SendClosingReceipt200JSONResponseBody) AsSendClosingReceiptResponse() (SendClosingReceiptResponse, error) {
+	var body SendClosingReceiptResponse
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromACSUrlV1 overwrites any union data inside the ACSUrlFormdataBody as the provided ACSUrlV1
-func (t *ACSUrlFormdataBody) FromACSUrlV1(v ACSUrlV1) error {
+// FromSendClosingReceiptResponse overwrites any union data inside the SendClosingReceipt200JSONResponseBody as the provided SendClosingReceiptResponse
+func (t *SendClosingReceipt200JSONResponseBody) FromSendClosingReceiptResponse(v SendClosingReceiptResponse) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeACSUrlV1 performs a merge with any union data inside the ACSUrlFormdataBody, using the provided ACSUrlV1
-func (t *ACSUrlFormdataBody) MergeACSUrlV1(v ACSUrlV1) error {
+// MergeSendClosingReceiptResponse performs a merge with any union data inside the SendClosingReceipt200JSONResponseBody, using the provided SendClosingReceiptResponse
+func (t *SendClosingReceipt200JSONResponseBody) MergeSendClosingReceiptResponse(v SendClosingReceiptResponse) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5133,22 +5919,22 @@ func (t *ACSUrlFormdataBody) MergeACSUrlV1(v ACSUrlV1) error {
 	return err
 }
 
-// AsACSUrlV2 returns the union data inside the ACSUrlFormdataBody as a ACSUrlV2
-func (t ACSUrlFormdataBody) AsACSUrlV2() (ACSUrlV2, error) {
-	var body ACSUrlV2
+// AsErrorResponse returns the union data inside the SendClosingReceipt200JSONResponseBody as a ErrorResponse
+func (t SendClosingReceipt200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromACSUrlV2 overwrites any union data inside the ACSUrlFormdataBody as the provided ACSUrlV2
-func (t *ACSUrlFormdataBody) FromACSUrlV2(v ACSUrlV2) error {
+// FromErrorResponse overwrites any union data inside the SendClosingReceipt200JSONResponseBody as the provided ErrorResponse
+func (t *SendClosingReceipt200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeACSUrlV2 performs a merge with any union data inside the ACSUrlFormdataBody, using the provided ACSUrlV2
-func (t *ACSUrlFormdataBody) MergeACSUrlV2(v ACSUrlV2) error {
+// MergeErrorResponse performs a merge with any union data inside the SendClosingReceipt200JSONResponseBody, using the provided ErrorResponse
+func (t *SendClosingReceipt200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5159,32 +5945,32 @@ func (t *ACSUrlFormdataBody) MergeACSUrlV2(v ACSUrlV2) error {
 	return err
 }
 
-func (t ACSUrlFormdataBody) MarshalJSON() ([]byte, error) {
+func (t SendClosingReceipt200JSONResponseBody) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *ACSUrlFormdataBody) UnmarshalJSON(b []byte) error {
+func (t *SendClosingReceipt200JSONResponseBody) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsACSUrlResponseV1 returns the union data inside the ACSUrl200JSONResponseBody as a ACSUrlResponseV1
-func (t ACSUrl200JSONResponseBody) AsACSUrlResponseV1() (ACSUrlResponseV1, error) {
-	var body ACSUrlResponseV1
+// AsAcsUrlv1Request returns the union data inside the AcsUrlFormdataBody as a AcsUrlv1Request
+func (t AcsUrlFormdataBody) AsAcsUrlv1Request() (AcsUrlv1Request, error) {
+	var body AcsUrlv1Request
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromACSUrlResponseV1 overwrites any union data inside the ACSUrl200JSONResponseBody as the provided ACSUrlResponseV1
-func (t *ACSUrl200JSONResponseBody) FromACSUrlResponseV1(v ACSUrlResponseV1) error {
+// FromAcsUrlv1Request overwrites any union data inside the AcsUrlFormdataBody as the provided AcsUrlv1Request
+func (t *AcsUrlFormdataBody) FromAcsUrlv1Request(v AcsUrlv1Request) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeACSUrlResponseV1 performs a merge with any union data inside the ACSUrl200JSONResponseBody, using the provided ACSUrlResponseV1
-func (t *ACSUrl200JSONResponseBody) MergeACSUrlResponseV1(v ACSUrlResponseV1) error {
+// MergeAcsUrlv1Request performs a merge with any union data inside the AcsUrlFormdataBody, using the provided AcsUrlv1Request
+func (t *AcsUrlFormdataBody) MergeAcsUrlv1Request(v AcsUrlv1Request) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5195,22 +5981,22 @@ func (t *ACSUrl200JSONResponseBody) MergeACSUrlResponseV1(v ACSUrlResponseV1) er
 	return err
 }
 
-// AsACSUrlResponseV2 returns the union data inside the ACSUrl200JSONResponseBody as a ACSUrlResponseV2
-func (t ACSUrl200JSONResponseBody) AsACSUrlResponseV2() (ACSUrlResponseV2, error) {
-	var body ACSUrlResponseV2
+// AsAcsUrlv2Request returns the union data inside the AcsUrlFormdataBody as a AcsUrlv2Request
+func (t AcsUrlFormdataBody) AsAcsUrlv2Request() (AcsUrlv2Request, error) {
+	var body AcsUrlv2Request
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromACSUrlResponseV2 overwrites any union data inside the ACSUrl200JSONResponseBody as the provided ACSUrlResponseV2
-func (t *ACSUrl200JSONResponseBody) FromACSUrlResponseV2(v ACSUrlResponseV2) error {
+// FromAcsUrlv2Request overwrites any union data inside the AcsUrlFormdataBody as the provided AcsUrlv2Request
+func (t *AcsUrlFormdataBody) FromAcsUrlv2Request(v AcsUrlv2Request) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeACSUrlResponseV2 performs a merge with any union data inside the ACSUrl200JSONResponseBody, using the provided ACSUrlResponseV2
-func (t *ACSUrl200JSONResponseBody) MergeACSUrlResponseV2(v ACSUrlResponseV2) error {
+// MergeAcsUrlv2Request performs a merge with any union data inside the AcsUrlFormdataBody, using the provided AcsUrlv2Request
+func (t *AcsUrlFormdataBody) MergeAcsUrlv2Request(v AcsUrlv2Request) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5221,32 +6007,32 @@ func (t *ACSUrl200JSONResponseBody) MergeACSUrlResponseV2(v ACSUrlResponseV2) er
 	return err
 }
 
-func (t ACSUrl200JSONResponseBody) MarshalJSON() ([]byte, error) {
+func (t AcsUrlFormdataBody) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *ACSUrl200JSONResponseBody) UnmarshalJSON(b []byte) error {
+func (t *AcsUrlFormdataBody) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
-// AsWithout3DS returns the union data inside the FinishAuthorize200JSONResponseBody as a Without3DS
-func (t FinishAuthorize200JSONResponseBody) AsWithout3DS() (Without3DS, error) {
-	var body Without3DS
+// AsAcsUrlv1Response returns the union data inside the AcsUrl200JSONResponseBody as a AcsUrlv1Response
+func (t AcsUrl200JSONResponseBody) AsAcsUrlv1Response() (AcsUrlv1Response, error) {
+	var body AcsUrlv1Response
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromWithout3DS overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided Without3DS
-func (t *FinishAuthorize200JSONResponseBody) FromWithout3DS(v Without3DS) error {
+// FromAcsUrlv1Response overwrites any union data inside the AcsUrl200JSONResponseBody as the provided AcsUrlv1Response
+func (t *AcsUrl200JSONResponseBody) FromAcsUrlv1Response(v AcsUrlv1Response) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeWithout3DS performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided Without3DS
-func (t *FinishAuthorize200JSONResponseBody) MergeWithout3DS(v Without3DS) error {
+// MergeAcsUrlv1Response performs a merge with any union data inside the AcsUrl200JSONResponseBody, using the provided AcsUrlv1Response
+func (t *AcsUrl200JSONResponseBody) MergeAcsUrlv1Response(v AcsUrlv1Response) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5257,22 +6043,22 @@ func (t *FinishAuthorize200JSONResponseBody) MergeWithout3DS(v Without3DS) error
 	return err
 }
 
-// AsWith3DS returns the union data inside the FinishAuthorize200JSONResponseBody as a With3DS
-func (t FinishAuthorize200JSONResponseBody) AsWith3DS() (With3DS, error) {
-	var body With3DS
+// AsAcsUrlv2Response returns the union data inside the AcsUrl200JSONResponseBody as a AcsUrlv2Response
+func (t AcsUrl200JSONResponseBody) AsAcsUrlv2Response() (AcsUrlv2Response, error) {
+	var body AcsUrlv2Response
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromWith3DS overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided With3DS
-func (t *FinishAuthorize200JSONResponseBody) FromWith3DS(v With3DS) error {
+// FromAcsUrlv2Response overwrites any union data inside the AcsUrl200JSONResponseBody as the provided AcsUrlv2Response
+func (t *AcsUrl200JSONResponseBody) FromAcsUrlv2Response(v AcsUrlv2Response) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeWith3DS performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided With3DS
-func (t *FinishAuthorize200JSONResponseBody) MergeWith3DS(v With3DS) error {
+// MergeAcsUrlv2Response performs a merge with any union data inside the AcsUrl200JSONResponseBody, using the provided AcsUrlv2Response
+func (t *AcsUrl200JSONResponseBody) MergeAcsUrlv2Response(v AcsUrlv2Response) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5283,22 +6069,22 @@ func (t *FinishAuthorize200JSONResponseBody) MergeWith3DS(v With3DS) error {
 	return err
 }
 
-// AsWith3DSv2APP returns the union data inside the FinishAuthorize200JSONResponseBody as a With3DSv2APP
-func (t FinishAuthorize200JSONResponseBody) AsWith3DSv2APP() (With3DSv2APP, error) {
-	var body With3DSv2APP
+// AsErrorResponse returns the union data inside the AcsUrl200JSONResponseBody as a ErrorResponse
+func (t AcsUrl200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromWith3DSv2APP overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided With3DSv2APP
-func (t *FinishAuthorize200JSONResponseBody) FromWith3DSv2APP(v With3DSv2APP) error {
+// FromErrorResponse overwrites any union data inside the AcsUrl200JSONResponseBody as the provided ErrorResponse
+func (t *AcsUrl200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeWith3DSv2APP performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided With3DSv2APP
-func (t *FinishAuthorize200JSONResponseBody) MergeWith3DSv2APP(v With3DSv2APP) error {
+// MergeErrorResponse performs a merge with any union data inside the AcsUrl200JSONResponseBody, using the provided ErrorResponse
+func (t *AcsUrl200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5309,22 +6095,818 @@ func (t *FinishAuthorize200JSONResponseBody) MergeWith3DSv2APP(v With3DSv2APP) e
 	return err
 }
 
-// AsWith3DSv2BRW returns the union data inside the FinishAuthorize200JSONResponseBody as a With3DSv2BRW
-func (t FinishAuthorize200JSONResponseBody) AsWith3DSv2BRW() (With3DSv2BRW, error) {
-	var body With3DSv2BRW
+func (t AcsUrl200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *AcsUrl200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsAddAccountQrResponse returns the union data inside the AddAccountQr200JSONResponseBody as a AddAccountQrResponse
+func (t AddAccountQr200JSONResponseBody) AsAddAccountQrResponse() (AddAccountQrResponse, error) {
+	var body AddAccountQrResponse
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromWith3DSv2BRW overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided With3DSv2BRW
-func (t *FinishAuthorize200JSONResponseBody) FromWith3DSv2BRW(v With3DSv2BRW) error {
+// FromAddAccountQrResponse overwrites any union data inside the AddAccountQr200JSONResponseBody as the provided AddAccountQrResponse
+func (t *AddAccountQr200JSONResponseBody) FromAddAccountQrResponse(v AddAccountQrResponse) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeWith3DSv2BRW performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided With3DSv2BRW
-func (t *FinishAuthorize200JSONResponseBody) MergeWith3DSv2BRW(v With3DSv2BRW) error {
+// MergeAddAccountQrResponse performs a merge with any union data inside the AddAccountQr200JSONResponseBody, using the provided AddAccountQrResponse
+func (t *AddAccountQr200JSONResponseBody) MergeAddAccountQrResponse(v AddAccountQrResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the AddAccountQr200JSONResponseBody as a ErrorResponse
+func (t AddAccountQr200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the AddAccountQr200JSONResponseBody as the provided ErrorResponse
+func (t *AddAccountQr200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the AddAccountQr200JSONResponseBody, using the provided ErrorResponse
+func (t *AddAccountQr200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t AddAccountQr200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *AddAccountQr200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsAddCardResponse returns the union data inside the AddCard200JSONResponseBody as a AddCardResponse
+func (t AddCard200JSONResponseBody) AsAddCardResponse() (AddCardResponse, error) {
+	var body AddCardResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAddCardResponse overwrites any union data inside the AddCard200JSONResponseBody as the provided AddCardResponse
+func (t *AddCard200JSONResponseBody) FromAddCardResponse(v AddCardResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAddCardResponse performs a merge with any union data inside the AddCard200JSONResponseBody, using the provided AddCardResponse
+func (t *AddCard200JSONResponseBody) MergeAddCardResponse(v AddCardResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the AddCard200JSONResponseBody as a ErrorResponse
+func (t AddCard200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the AddCard200JSONResponseBody as the provided ErrorResponse
+func (t *AddCard200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the AddCard200JSONResponseBody, using the provided ErrorResponse
+func (t *AddCard200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t AddCard200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *AddCard200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsAddCustomerResponse returns the union data inside the AddCustomer200JSONResponseBody as a AddCustomerResponse
+func (t AddCustomer200JSONResponseBody) AsAddCustomerResponse() (AddCustomerResponse, error) {
+	var body AddCustomerResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAddCustomerResponse overwrites any union data inside the AddCustomer200JSONResponseBody as the provided AddCustomerResponse
+func (t *AddCustomer200JSONResponseBody) FromAddCustomerResponse(v AddCustomerResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAddCustomerResponse performs a merge with any union data inside the AddCustomer200JSONResponseBody, using the provided AddCustomerResponse
+func (t *AddCustomer200JSONResponseBody) MergeAddCustomerResponse(v AddCustomerResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the AddCustomer200JSONResponseBody as a ErrorResponse
+func (t AddCustomer200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the AddCustomer200JSONResponseBody as the provided ErrorResponse
+func (t *AddCustomer200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the AddCustomer200JSONResponseBody, using the provided ErrorResponse
+func (t *AddCustomer200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t AddCustomer200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *AddCustomer200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsAlfaPayLinkResponse returns the union data inside the AlfaPayLink200JSONResponseBody as a AlfaPayLinkResponse
+func (t AlfaPayLink200JSONResponseBody) AsAlfaPayLinkResponse() (AlfaPayLinkResponse, error) {
+	var body AlfaPayLinkResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAlfaPayLinkResponse overwrites any union data inside the AlfaPayLink200JSONResponseBody as the provided AlfaPayLinkResponse
+func (t *AlfaPayLink200JSONResponseBody) FromAlfaPayLinkResponse(v AlfaPayLinkResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAlfaPayLinkResponse performs a merge with any union data inside the AlfaPayLink200JSONResponseBody, using the provided AlfaPayLinkResponse
+func (t *AlfaPayLink200JSONResponseBody) MergeAlfaPayLinkResponse(v AlfaPayLinkResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the AlfaPayLink200JSONResponseBody as a ErrorResponse
+func (t AlfaPayLink200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the AlfaPayLink200JSONResponseBody as the provided ErrorResponse
+func (t *AlfaPayLink200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the AlfaPayLink200JSONResponseBody, using the provided ErrorResponse
+func (t *AlfaPayLink200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t AlfaPayLink200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *AlfaPayLink200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsAttachCardResponse returns the union data inside the AttachCard200JSONResponseBody as a AttachCardResponse
+func (t AttachCard200JSONResponseBody) AsAttachCardResponse() (AttachCardResponse, error) {
+	var body AttachCardResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAttachCardResponse overwrites any union data inside the AttachCard200JSONResponseBody as the provided AttachCardResponse
+func (t *AttachCard200JSONResponseBody) FromAttachCardResponse(v AttachCardResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAttachCardResponse performs a merge with any union data inside the AttachCard200JSONResponseBody, using the provided AttachCardResponse
+func (t *AttachCard200JSONResponseBody) MergeAttachCardResponse(v AttachCardResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the AttachCard200JSONResponseBody as a ErrorResponse
+func (t AttachCard200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the AttachCard200JSONResponseBody as the provided ErrorResponse
+func (t *AttachCard200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the AttachCard200JSONResponseBody, using the provided ErrorResponse
+func (t *AttachCard200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t AttachCard200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *AttachCard200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsCancelResponse returns the union data inside the Cancel200JSONResponseBody as a CancelResponse
+func (t Cancel200JSONResponseBody) AsCancelResponse() (CancelResponse, error) {
+	var body CancelResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCancelResponse overwrites any union data inside the Cancel200JSONResponseBody as the provided CancelResponse
+func (t *Cancel200JSONResponseBody) FromCancelResponse(v CancelResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCancelResponse performs a merge with any union data inside the Cancel200JSONResponseBody, using the provided CancelResponse
+func (t *Cancel200JSONResponseBody) MergeCancelResponse(v CancelResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Cancel200JSONResponseBody as a ErrorResponse
+func (t Cancel200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Cancel200JSONResponseBody as the provided ErrorResponse
+func (t *Cancel200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Cancel200JSONResponseBody, using the provided ErrorResponse
+func (t *Cancel200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Cancel200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Cancel200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsCharge200JSONResponseBody0 returns the union data inside the Charge200JSONResponseBody as a Charge200JSONResponseBody0
+func (t Charge200JSONResponseBody) AsCharge200JSONResponseBody0() (Charge200JSONResponseBody0, error) {
+	var body Charge200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCharge200JSONResponseBody0 overwrites any union data inside the Charge200JSONResponseBody as the provided Charge200JSONResponseBody0
+func (t *Charge200JSONResponseBody) FromCharge200JSONResponseBody0(v Charge200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCharge200JSONResponseBody0 performs a merge with any union data inside the Charge200JSONResponseBody, using the provided Charge200JSONResponseBody0
+func (t *Charge200JSONResponseBody) MergeCharge200JSONResponseBody0(v Charge200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Charge200JSONResponseBody as a ErrorResponse
+func (t Charge200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Charge200JSONResponseBody as the provided ErrorResponse
+func (t *Charge200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Charge200JSONResponseBody, using the provided ErrorResponse
+func (t *Charge200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Charge200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Charge200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsChargeQrResponse returns the union data inside the ChargeQr200JSONResponseBody as a ChargeQrResponse
+func (t ChargeQr200JSONResponseBody) AsChargeQrResponse() (ChargeQrResponse, error) {
+	var body ChargeQrResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromChargeQrResponse overwrites any union data inside the ChargeQr200JSONResponseBody as the provided ChargeQrResponse
+func (t *ChargeQr200JSONResponseBody) FromChargeQrResponse(v ChargeQrResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeChargeQrResponse performs a merge with any union data inside the ChargeQr200JSONResponseBody, using the provided ChargeQrResponse
+func (t *ChargeQr200JSONResponseBody) MergeChargeQrResponse(v ChargeQrResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the ChargeQr200JSONResponseBody as a ErrorResponse
+func (t ChargeQr200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the ChargeQr200JSONResponseBody as the provided ErrorResponse
+func (t *ChargeQr200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the ChargeQr200JSONResponseBody, using the provided ErrorResponse
+func (t *ChargeQr200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ChargeQr200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ChargeQr200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsCheck3dsVersion200JSONResponseBody0 returns the union data inside the Check3dsVersion200JSONResponseBody as a Check3dsVersion200JSONResponseBody0
+func (t Check3dsVersion200JSONResponseBody) AsCheck3dsVersion200JSONResponseBody0() (Check3dsVersion200JSONResponseBody0, error) {
+	var body Check3dsVersion200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCheck3dsVersion200JSONResponseBody0 overwrites any union data inside the Check3dsVersion200JSONResponseBody as the provided Check3dsVersion200JSONResponseBody0
+func (t *Check3dsVersion200JSONResponseBody) FromCheck3dsVersion200JSONResponseBody0(v Check3dsVersion200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCheck3dsVersion200JSONResponseBody0 performs a merge with any union data inside the Check3dsVersion200JSONResponseBody, using the provided Check3dsVersion200JSONResponseBody0
+func (t *Check3dsVersion200JSONResponseBody) MergeCheck3dsVersion200JSONResponseBody0(v Check3dsVersion200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Check3dsVersion200JSONResponseBody as a ErrorResponse
+func (t Check3dsVersion200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Check3dsVersion200JSONResponseBody as the provided ErrorResponse
+func (t *Check3dsVersion200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Check3dsVersion200JSONResponseBody, using the provided ErrorResponse
+func (t *Check3dsVersion200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Check3dsVersion200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Check3dsVersion200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsCheckOrderResponse returns the union data inside the CheckOrder200JSONResponseBody as a CheckOrderResponse
+func (t CheckOrder200JSONResponseBody) AsCheckOrderResponse() (CheckOrderResponse, error) {
+	var body CheckOrderResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCheckOrderResponse overwrites any union data inside the CheckOrder200JSONResponseBody as the provided CheckOrderResponse
+func (t *CheckOrder200JSONResponseBody) FromCheckOrderResponse(v CheckOrderResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCheckOrderResponse performs a merge with any union data inside the CheckOrder200JSONResponseBody, using the provided CheckOrderResponse
+func (t *CheckOrder200JSONResponseBody) MergeCheckOrderResponse(v CheckOrderResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the CheckOrder200JSONResponseBody as a ErrorResponse
+func (t CheckOrder200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the CheckOrder200JSONResponseBody as the provided ErrorResponse
+func (t *CheckOrder200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the CheckOrder200JSONResponseBody, using the provided ErrorResponse
+func (t *CheckOrder200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t CheckOrder200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *CheckOrder200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsConfirmResponse returns the union data inside the Confirm200JSONResponseBody as a ConfirmResponse
+func (t Confirm200JSONResponseBody) AsConfirmResponse() (ConfirmResponse, error) {
+	var body ConfirmResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConfirmResponse overwrites any union data inside the Confirm200JSONResponseBody as the provided ConfirmResponse
+func (t *Confirm200JSONResponseBody) FromConfirmResponse(v ConfirmResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConfirmResponse performs a merge with any union data inside the Confirm200JSONResponseBody, using the provided ConfirmResponse
+func (t *Confirm200JSONResponseBody) MergeConfirmResponse(v ConfirmResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Confirm200JSONResponseBody as a ErrorResponse
+func (t Confirm200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Confirm200JSONResponseBody as the provided ErrorResponse
+func (t *Confirm200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Confirm200JSONResponseBody, using the provided ErrorResponse
+func (t *Confirm200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Confirm200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Confirm200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsWithoutThreeDS returns the union data inside the FinishAuthorize200JSONResponseBody as a WithoutThreeDS
+func (t FinishAuthorize200JSONResponseBody) AsWithoutThreeDS() (WithoutThreeDS, error) {
+	var body WithoutThreeDS
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWithoutThreeDS overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided WithoutThreeDS
+func (t *FinishAuthorize200JSONResponseBody) FromWithoutThreeDS(v WithoutThreeDS) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWithoutThreeDS performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided WithoutThreeDS
+func (t *FinishAuthorize200JSONResponseBody) MergeWithoutThreeDS(v WithoutThreeDS) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWithThreeDS returns the union data inside the FinishAuthorize200JSONResponseBody as a WithThreeDS
+func (t FinishAuthorize200JSONResponseBody) AsWithThreeDS() (WithThreeDS, error) {
+	var body WithThreeDS
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWithThreeDS overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided WithThreeDS
+func (t *FinishAuthorize200JSONResponseBody) FromWithThreeDS(v WithThreeDS) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWithThreeDS performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided WithThreeDS
+func (t *FinishAuthorize200JSONResponseBody) MergeWithThreeDS(v WithThreeDS) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWithThreeDSv2APP returns the union data inside the FinishAuthorize200JSONResponseBody as a WithThreeDSv2APP
+func (t FinishAuthorize200JSONResponseBody) AsWithThreeDSv2APP() (WithThreeDSv2APP, error) {
+	var body WithThreeDSv2APP
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWithThreeDSv2APP overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided WithThreeDSv2APP
+func (t *FinishAuthorize200JSONResponseBody) FromWithThreeDSv2APP(v WithThreeDSv2APP) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWithThreeDSv2APP performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided WithThreeDSv2APP
+func (t *FinishAuthorize200JSONResponseBody) MergeWithThreeDSv2APP(v WithThreeDSv2APP) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWithThreeDSv2BRW returns the union data inside the FinishAuthorize200JSONResponseBody as a WithThreeDSv2BRW
+func (t FinishAuthorize200JSONResponseBody) AsWithThreeDSv2BRW() (WithThreeDSv2BRW, error) {
+	var body WithThreeDSv2BRW
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWithThreeDSv2BRW overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided WithThreeDSv2BRW
+func (t *FinishAuthorize200JSONResponseBody) FromWithThreeDSv2BRW(v WithThreeDSv2BRW) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWithThreeDSv2BRW performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided WithThreeDSv2BRW
+func (t *FinishAuthorize200JSONResponseBody) MergeWithThreeDSv2BRW(v WithThreeDSv2BRW) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the FinishAuthorize200JSONResponseBody as a ErrorResponse
+func (t FinishAuthorize200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the FinishAuthorize200JSONResponseBody as the provided ErrorResponse
+func (t *FinishAuthorize200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the FinishAuthorize200JSONResponseBody, using the provided ErrorResponse
+func (t *FinishAuthorize200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5345,22 +6927,22 @@ func (t *FinishAuthorize200JSONResponseBody) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-// AsByUrl returns the union data inside the GetConfirmOperationJSONBody as a ByUrl
-func (t GetConfirmOperationJSONBody) AsByUrl() (ByUrl, error) {
-	var body ByUrl
+// AsGetAccountQrListResponse returns the union data inside the GetAccountQrList200JSONResponseBody as a GetAccountQrListResponse
+func (t GetAccountQrList200JSONResponseBody) AsGetAccountQrListResponse() (GetAccountQrListResponse, error) {
+	var body GetAccountQrListResponse
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromByUrl overwrites any union data inside the GetConfirmOperationJSONBody as the provided ByUrl
-func (t *GetConfirmOperationJSONBody) FromByUrl(v ByUrl) error {
+// FromGetAccountQrListResponse overwrites any union data inside the GetAccountQrList200JSONResponseBody as the provided GetAccountQrListResponse
+func (t *GetAccountQrList200JSONResponseBody) FromGetAccountQrListResponse(v GetAccountQrListResponse) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeByUrl performs a merge with any union data inside the GetConfirmOperationJSONBody, using the provided ByUrl
-func (t *GetConfirmOperationJSONBody) MergeByUrl(v ByUrl) error {
+// MergeGetAccountQrListResponse performs a merge with any union data inside the GetAccountQrList200JSONResponseBody, using the provided GetAccountQrListResponse
+func (t *GetAccountQrList200JSONResponseBody) MergeGetAccountQrListResponse(v GetAccountQrListResponse) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5371,22 +6953,1386 @@ func (t *GetConfirmOperationJSONBody) MergeByUrl(v ByUrl) error {
 	return err
 }
 
-// AsByEmail returns the union data inside the GetConfirmOperationJSONBody as a ByEmail
-func (t GetConfirmOperationJSONBody) AsByEmail() (ByEmail, error) {
-	var body ByEmail
+// AsErrorResponse returns the union data inside the GetAccountQrList200JSONResponseBody as a ErrorResponse
+func (t GetAccountQrList200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromByEmail overwrites any union data inside the GetConfirmOperationJSONBody as the provided ByEmail
-func (t *GetConfirmOperationJSONBody) FromByEmail(v ByEmail) error {
+// FromErrorResponse overwrites any union data inside the GetAccountQrList200JSONResponseBody as the provided ErrorResponse
+func (t *GetAccountQrList200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeByEmail performs a merge with any union data inside the GetConfirmOperationJSONBody, using the provided ByEmail
-func (t *GetConfirmOperationJSONBody) MergeByEmail(v ByEmail) error {
+// MergeErrorResponse performs a merge with any union data inside the GetAccountQrList200JSONResponseBody, using the provided ErrorResponse
+func (t *GetAccountQrList200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetAccountQrList200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetAccountQrList200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsGetAddAccountQrStateResponse returns the union data inside the GetAddAccountQrState200JSONResponseBody as a GetAddAccountQrStateResponse
+func (t GetAddAccountQrState200JSONResponseBody) AsGetAddAccountQrStateResponse() (GetAddAccountQrStateResponse, error) {
+	var body GetAddAccountQrStateResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGetAddAccountQrStateResponse overwrites any union data inside the GetAddAccountQrState200JSONResponseBody as the provided GetAddAccountQrStateResponse
+func (t *GetAddAccountQrState200JSONResponseBody) FromGetAddAccountQrStateResponse(v GetAddAccountQrStateResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGetAddAccountQrStateResponse performs a merge with any union data inside the GetAddAccountQrState200JSONResponseBody, using the provided GetAddAccountQrStateResponse
+func (t *GetAddAccountQrState200JSONResponseBody) MergeGetAddAccountQrStateResponse(v GetAddAccountQrStateResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetAddAccountQrState200JSONResponseBody as a ErrorResponse
+func (t GetAddAccountQrState200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetAddAccountQrState200JSONResponseBody as the provided ErrorResponse
+func (t *GetAddAccountQrState200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetAddAccountQrState200JSONResponseBody, using the provided ErrorResponse
+func (t *GetAddAccountQrState200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetAddAccountQrState200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetAddAccountQrState200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsGetAddCardStateResponse returns the union data inside the GetAddCardState200JSONResponseBody as a GetAddCardStateResponse
+func (t GetAddCardState200JSONResponseBody) AsGetAddCardStateResponse() (GetAddCardStateResponse, error) {
+	var body GetAddCardStateResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGetAddCardStateResponse overwrites any union data inside the GetAddCardState200JSONResponseBody as the provided GetAddCardStateResponse
+func (t *GetAddCardState200JSONResponseBody) FromGetAddCardStateResponse(v GetAddCardStateResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGetAddCardStateResponse performs a merge with any union data inside the GetAddCardState200JSONResponseBody, using the provided GetAddCardStateResponse
+func (t *GetAddCardState200JSONResponseBody) MergeGetAddCardStateResponse(v GetAddCardStateResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetAddCardState200JSONResponseBody as a ErrorResponse
+func (t GetAddCardState200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetAddCardState200JSONResponseBody as the provided ErrorResponse
+func (t *GetAddCardState200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetAddCardState200JSONResponseBody, using the provided ErrorResponse
+func (t *GetAddCardState200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetAddCardState200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetAddCardState200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsGetCardList200JSONResponseBody0 returns the union data inside the GetCardList200JSONResponseBody as a GetCardList200JSONResponseBody0
+func (t GetCardList200JSONResponseBody) AsGetCardList200JSONResponseBody0() (GetCardList200JSONResponseBody0, error) {
+	var body GetCardList200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGetCardList200JSONResponseBody0 overwrites any union data inside the GetCardList200JSONResponseBody as the provided GetCardList200JSONResponseBody0
+func (t *GetCardList200JSONResponseBody) FromGetCardList200JSONResponseBody0(v GetCardList200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGetCardList200JSONResponseBody0 performs a merge with any union data inside the GetCardList200JSONResponseBody, using the provided GetCardList200JSONResponseBody0
+func (t *GetCardList200JSONResponseBody) MergeGetCardList200JSONResponseBody0(v GetCardList200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetCardList200JSONResponseBody as a ErrorResponse
+func (t GetCardList200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetCardList200JSONResponseBody as the provided ErrorResponse
+func (t *GetCardList200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetCardList200JSONResponseBody, using the provided ErrorResponse
+func (t *GetCardList200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetCardList200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetCardList200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsGetCustomerResponse returns the union data inside the GetCustomer200JSONResponseBody as a GetCustomerResponse
+func (t GetCustomer200JSONResponseBody) AsGetCustomerResponse() (GetCustomerResponse, error) {
+	var body GetCustomerResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGetCustomerResponse overwrites any union data inside the GetCustomer200JSONResponseBody as the provided GetCustomerResponse
+func (t *GetCustomer200JSONResponseBody) FromGetCustomerResponse(v GetCustomerResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGetCustomerResponse performs a merge with any union data inside the GetCustomer200JSONResponseBody, using the provided GetCustomerResponse
+func (t *GetCustomer200JSONResponseBody) MergeGetCustomerResponse(v GetCustomerResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetCustomer200JSONResponseBody as a ErrorResponse
+func (t GetCustomer200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetCustomer200JSONResponseBody as the provided ErrorResponse
+func (t *GetCustomer200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetCustomer200JSONResponseBody, using the provided ErrorResponse
+func (t *GetCustomer200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetCustomer200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetCustomer200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsQrResponse returns the union data inside the GetQr200JSONResponseBody as a QrResponse
+func (t GetQr200JSONResponseBody) AsQrResponse() (QrResponse, error) {
+	var body QrResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromQrResponse overwrites any union data inside the GetQr200JSONResponseBody as the provided QrResponse
+func (t *GetQr200JSONResponseBody) FromQrResponse(v QrResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeQrResponse performs a merge with any union data inside the GetQr200JSONResponseBody, using the provided QrResponse
+func (t *GetQr200JSONResponseBody) MergeQrResponse(v QrResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetQr200JSONResponseBody as a ErrorResponse
+func (t GetQr200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetQr200JSONResponseBody as the provided ErrorResponse
+func (t *GetQr200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetQr200JSONResponseBody, using the provided ErrorResponse
+func (t *GetQr200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetQr200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetQr200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsGetQrBankListResponse returns the union data inside the GetQrBankList200JSONResponseBody as a GetQrBankListResponse
+func (t GetQrBankList200JSONResponseBody) AsGetQrBankListResponse() (GetQrBankListResponse, error) {
+	var body GetQrBankListResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGetQrBankListResponse overwrites any union data inside the GetQrBankList200JSONResponseBody as the provided GetQrBankListResponse
+func (t *GetQrBankList200JSONResponseBody) FromGetQrBankListResponse(v GetQrBankListResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGetQrBankListResponse performs a merge with any union data inside the GetQrBankList200JSONResponseBody, using the provided GetQrBankListResponse
+func (t *GetQrBankList200JSONResponseBody) MergeGetQrBankListResponse(v GetQrBankListResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetQrBankList200JSONResponseBody as a ErrorResponse
+func (t GetQrBankList200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetQrBankList200JSONResponseBody as the provided ErrorResponse
+func (t *GetQrBankList200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetQrBankList200JSONResponseBody, using the provided ErrorResponse
+func (t *GetQrBankList200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetQrBankList200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetQrBankList200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsGetQrStateResponse returns the union data inside the GetQrState200JSONResponseBody as a GetQrStateResponse
+func (t GetQrState200JSONResponseBody) AsGetQrStateResponse() (GetQrStateResponse, error) {
+	var body GetQrStateResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGetQrStateResponse overwrites any union data inside the GetQrState200JSONResponseBody as the provided GetQrStateResponse
+func (t *GetQrState200JSONResponseBody) FromGetQrStateResponse(v GetQrStateResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGetQrStateResponse performs a merge with any union data inside the GetQrState200JSONResponseBody, using the provided GetQrStateResponse
+func (t *GetQrState200JSONResponseBody) MergeGetQrStateResponse(v GetQrStateResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetQrState200JSONResponseBody as a ErrorResponse
+func (t GetQrState200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetQrState200JSONResponseBody as the provided ErrorResponse
+func (t *GetQrState200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetQrState200JSONResponseBody, using the provided ErrorResponse
+func (t *GetQrState200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetQrState200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetQrState200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsGetState200JSONResponseBody0 returns the union data inside the GetState200JSONResponseBody as a GetState200JSONResponseBody0
+func (t GetState200JSONResponseBody) AsGetState200JSONResponseBody0() (GetState200JSONResponseBody0, error) {
+	var body GetState200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGetState200JSONResponseBody0 overwrites any union data inside the GetState200JSONResponseBody as the provided GetState200JSONResponseBody0
+func (t *GetState200JSONResponseBody) FromGetState200JSONResponseBody0(v GetState200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGetState200JSONResponseBody0 performs a merge with any union data inside the GetState200JSONResponseBody, using the provided GetState200JSONResponseBody0
+func (t *GetState200JSONResponseBody) MergeGetState200JSONResponseBody0(v GetState200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetState200JSONResponseBody as a ErrorResponse
+func (t GetState200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetState200JSONResponseBody as the provided ErrorResponse
+func (t *GetState200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetState200JSONResponseBody, using the provided ErrorResponse
+func (t *GetState200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetState200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetState200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsInitResponse returns the union data inside the Init200JSONResponseBody as a InitResponse
+func (t Init200JSONResponseBody) AsInitResponse() (InitResponse, error) {
+	var body InitResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromInitResponse overwrites any union data inside the Init200JSONResponseBody as the provided InitResponse
+func (t *Init200JSONResponseBody) FromInitResponse(v InitResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeInitResponse performs a merge with any union data inside the Init200JSONResponseBody, using the provided InitResponse
+func (t *Init200JSONResponseBody) MergeInitResponse(v InitResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Init200JSONResponseBody as a ErrorResponse
+func (t Init200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Init200JSONResponseBody as the provided ErrorResponse
+func (t *Init200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Init200JSONResponseBody, using the provided ErrorResponse
+func (t *Init200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Init200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Init200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsGetDeepLinkResponse returns the union data inside the GetDeepLink200JSONResponseBody as a GetDeepLinkResponse
+func (t GetDeepLink200JSONResponseBody) AsGetDeepLinkResponse() (GetDeepLinkResponse, error) {
+	var body GetDeepLinkResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGetDeepLinkResponse overwrites any union data inside the GetDeepLink200JSONResponseBody as the provided GetDeepLinkResponse
+func (t *GetDeepLink200JSONResponseBody) FromGetDeepLinkResponse(v GetDeepLinkResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGetDeepLinkResponse performs a merge with any union data inside the GetDeepLink200JSONResponseBody, using the provided GetDeepLinkResponse
+func (t *GetDeepLink200JSONResponseBody) MergeGetDeepLinkResponse(v GetDeepLinkResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetDeepLink200JSONResponseBody as a ErrorResponse
+func (t GetDeepLink200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetDeepLink200JSONResponseBody as the provided ErrorResponse
+func (t *GetDeepLink200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetDeepLink200JSONResponseBody, using the provided ErrorResponse
+func (t *GetDeepLink200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GetDeepLink200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *GetDeepLink200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsQrMembersList200JSONResponseBody0 returns the union data inside the QrMembersList200JSONResponseBody as a QrMembersList200JSONResponseBody0
+func (t QrMembersList200JSONResponseBody) AsQrMembersList200JSONResponseBody0() (QrMembersList200JSONResponseBody0, error) {
+	var body QrMembersList200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromQrMembersList200JSONResponseBody0 overwrites any union data inside the QrMembersList200JSONResponseBody as the provided QrMembersList200JSONResponseBody0
+func (t *QrMembersList200JSONResponseBody) FromQrMembersList200JSONResponseBody0(v QrMembersList200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeQrMembersList200JSONResponseBody0 performs a merge with any union data inside the QrMembersList200JSONResponseBody, using the provided QrMembersList200JSONResponseBody0
+func (t *QrMembersList200JSONResponseBody) MergeQrMembersList200JSONResponseBody0(v QrMembersList200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the QrMembersList200JSONResponseBody as a ErrorResponse
+func (t QrMembersList200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the QrMembersList200JSONResponseBody as the provided ErrorResponse
+func (t *QrMembersList200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the QrMembersList200JSONResponseBody, using the provided ErrorResponse
+func (t *QrMembersList200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t QrMembersList200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *QrMembersList200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsRemoveCardResponse returns the union data inside the RemoveCard200JSONResponseBody as a RemoveCardResponse
+func (t RemoveCard200JSONResponseBody) AsRemoveCardResponse() (RemoveCardResponse, error) {
+	var body RemoveCardResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRemoveCardResponse overwrites any union data inside the RemoveCard200JSONResponseBody as the provided RemoveCardResponse
+func (t *RemoveCard200JSONResponseBody) FromRemoveCardResponse(v RemoveCardResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRemoveCardResponse performs a merge with any union data inside the RemoveCard200JSONResponseBody, using the provided RemoveCardResponse
+func (t *RemoveCard200JSONResponseBody) MergeRemoveCardResponse(v RemoveCardResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the RemoveCard200JSONResponseBody as a ErrorResponse
+func (t RemoveCard200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the RemoveCard200JSONResponseBody as the provided ErrorResponse
+func (t *RemoveCard200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the RemoveCard200JSONResponseBody, using the provided ErrorResponse
+func (t *RemoveCard200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t RemoveCard200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *RemoveCard200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsRemoveCustomerResponse returns the union data inside the RemoveCustomer200JSONResponseBody as a RemoveCustomerResponse
+func (t RemoveCustomer200JSONResponseBody) AsRemoveCustomerResponse() (RemoveCustomerResponse, error) {
+	var body RemoveCustomerResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRemoveCustomerResponse overwrites any union data inside the RemoveCustomer200JSONResponseBody as the provided RemoveCustomerResponse
+func (t *RemoveCustomer200JSONResponseBody) FromRemoveCustomerResponse(v RemoveCustomerResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRemoveCustomerResponse performs a merge with any union data inside the RemoveCustomer200JSONResponseBody, using the provided RemoveCustomerResponse
+func (t *RemoveCustomer200JSONResponseBody) MergeRemoveCustomerResponse(v RemoveCustomerResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the RemoveCustomer200JSONResponseBody as a ErrorResponse
+func (t RemoveCustomer200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the RemoveCustomer200JSONResponseBody as the provided ErrorResponse
+func (t *RemoveCustomer200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the RemoveCustomer200JSONResponseBody, using the provided ErrorResponse
+func (t *RemoveCustomer200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t RemoveCustomer200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *RemoveCustomer200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsSberPayLinkGetResponse returns the union data inside the SberpayLinkGet200JSONResponseBody as a SberPayLinkGetResponse
+func (t SberpayLinkGet200JSONResponseBody) AsSberPayLinkGetResponse() (SberPayLinkGetResponse, error) {
+	var body SberPayLinkGetResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSberPayLinkGetResponse overwrites any union data inside the SberpayLinkGet200JSONResponseBody as the provided SberPayLinkGetResponse
+func (t *SberpayLinkGet200JSONResponseBody) FromSberPayLinkGetResponse(v SberPayLinkGetResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSberPayLinkGetResponse performs a merge with any union data inside the SberpayLinkGet200JSONResponseBody, using the provided SberPayLinkGetResponse
+func (t *SberpayLinkGet200JSONResponseBody) MergeSberPayLinkGetResponse(v SberPayLinkGetResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the SberpayLinkGet200JSONResponseBody as a ErrorResponse
+func (t SberpayLinkGet200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the SberpayLinkGet200JSONResponseBody as the provided ErrorResponse
+func (t *SberpayLinkGet200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the SberpayLinkGet200JSONResponseBody, using the provided ErrorResponse
+func (t *SberpayLinkGet200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t SberpayLinkGet200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *SberpayLinkGet200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsSberPaylink200JSONResponseBody0 returns the union data inside the SberPaylink200JSONResponseBody as a SberPaylink200JSONResponseBody0
+func (t SberPaylink200JSONResponseBody) AsSberPaylink200JSONResponseBody0() (SberPaylink200JSONResponseBody0, error) {
+	var body SberPaylink200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSberPaylink200JSONResponseBody0 overwrites any union data inside the SberPaylink200JSONResponseBody as the provided SberPaylink200JSONResponseBody0
+func (t *SberPaylink200JSONResponseBody) FromSberPaylink200JSONResponseBody0(v SberPaylink200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSberPaylink200JSONResponseBody0 performs a merge with any union data inside the SberPaylink200JSONResponseBody, using the provided SberPaylink200JSONResponseBody0
+func (t *SberPaylink200JSONResponseBody) MergeSberPaylink200JSONResponseBody0(v SberPaylink200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the SberPaylink200JSONResponseBody as a ErrorResponse
+func (t SberPaylink200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the SberPaylink200JSONResponseBody as the provided ErrorResponse
+func (t *SberPaylink200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the SberPaylink200JSONResponseBody, using the provided ErrorResponse
+func (t *SberPaylink200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t SberPaylink200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *SberPaylink200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsSbpPayTestResponse returns the union data inside the SbpPayTest200JSONResponseBody as a SbpPayTestResponse
+func (t SbpPayTest200JSONResponseBody) AsSbpPayTestResponse() (SbpPayTestResponse, error) {
+	var body SbpPayTestResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSbpPayTestResponse overwrites any union data inside the SbpPayTest200JSONResponseBody as the provided SbpPayTestResponse
+func (t *SbpPayTest200JSONResponseBody) FromSbpPayTestResponse(v SbpPayTestResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSbpPayTestResponse performs a merge with any union data inside the SbpPayTest200JSONResponseBody, using the provided SbpPayTestResponse
+func (t *SbpPayTest200JSONResponseBody) MergeSbpPayTestResponse(v SbpPayTestResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the SbpPayTest200JSONResponseBody as a ErrorResponse
+func (t SbpPayTest200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the SbpPayTest200JSONResponseBody as the provided ErrorResponse
+func (t *SbpPayTest200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the SbpPayTest200JSONResponseBody, using the provided ErrorResponse
+func (t *SbpPayTest200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t SbpPayTest200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *SbpPayTest200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsSubmit3DSAuthorization200JSONResponseBody0 returns the union data inside the Submit3DSAuthorization200JSONResponseBody as a Submit3DSAuthorization200JSONResponseBody0
+func (t Submit3DSAuthorization200JSONResponseBody) AsSubmit3DSAuthorization200JSONResponseBody0() (Submit3DSAuthorization200JSONResponseBody0, error) {
+	var body Submit3DSAuthorization200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSubmit3DSAuthorization200JSONResponseBody0 overwrites any union data inside the Submit3DSAuthorization200JSONResponseBody as the provided Submit3DSAuthorization200JSONResponseBody0
+func (t *Submit3DSAuthorization200JSONResponseBody) FromSubmit3DSAuthorization200JSONResponseBody0(v Submit3DSAuthorization200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSubmit3DSAuthorization200JSONResponseBody0 performs a merge with any union data inside the Submit3DSAuthorization200JSONResponseBody, using the provided Submit3DSAuthorization200JSONResponseBody0
+func (t *Submit3DSAuthorization200JSONResponseBody) MergeSubmit3DSAuthorization200JSONResponseBody0(v Submit3DSAuthorization200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Submit3DSAuthorization200JSONResponseBody as a ErrorResponse
+func (t Submit3DSAuthorization200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Submit3DSAuthorization200JSONResponseBody as the provided ErrorResponse
+func (t *Submit3DSAuthorization200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Submit3DSAuthorization200JSONResponseBody, using the provided ErrorResponse
+func (t *Submit3DSAuthorization200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Submit3DSAuthorization200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Submit3DSAuthorization200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsSubmit3DSAuthorizationV2200JSONResponseBody0 returns the union data inside the Submit3DSAuthorizationV2200JSONResponseBody as a Submit3DSAuthorizationV2200JSONResponseBody0
+func (t Submit3DSAuthorizationV2200JSONResponseBody) AsSubmit3DSAuthorizationV2200JSONResponseBody0() (Submit3DSAuthorizationV2200JSONResponseBody0, error) {
+	var body Submit3DSAuthorizationV2200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSubmit3DSAuthorizationV2200JSONResponseBody0 overwrites any union data inside the Submit3DSAuthorizationV2200JSONResponseBody as the provided Submit3DSAuthorizationV2200JSONResponseBody0
+func (t *Submit3DSAuthorizationV2200JSONResponseBody) FromSubmit3DSAuthorizationV2200JSONResponseBody0(v Submit3DSAuthorizationV2200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSubmit3DSAuthorizationV2200JSONResponseBody0 performs a merge with any union data inside the Submit3DSAuthorizationV2200JSONResponseBody, using the provided Submit3DSAuthorizationV2200JSONResponseBody0
+func (t *Submit3DSAuthorizationV2200JSONResponseBody) MergeSubmit3DSAuthorizationV2200JSONResponseBody0(v Submit3DSAuthorizationV2200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Submit3DSAuthorizationV2200JSONResponseBody as a ErrorResponse
+func (t Submit3DSAuthorizationV2200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Submit3DSAuthorizationV2200JSONResponseBody as the provided ErrorResponse
+func (t *Submit3DSAuthorizationV2200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Submit3DSAuthorizationV2200JSONResponseBody, using the provided ErrorResponse
+func (t *Submit3DSAuthorizationV2200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Submit3DSAuthorizationV2200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Submit3DSAuthorizationV2200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsThreeDSMethodResponse returns the union data inside the ThreeDSMethod200JSONResponseBody as a ThreeDSMethodResponse
+func (t ThreeDSMethod200JSONResponseBody) AsThreeDSMethodResponse() (ThreeDSMethodResponse, error) {
+	var body ThreeDSMethodResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromThreeDSMethodResponse overwrites any union data inside the ThreeDSMethod200JSONResponseBody as the provided ThreeDSMethodResponse
+func (t *ThreeDSMethod200JSONResponseBody) FromThreeDSMethodResponse(v ThreeDSMethodResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeThreeDSMethodResponse performs a merge with any union data inside the ThreeDSMethod200JSONResponseBody, using the provided ThreeDSMethodResponse
+func (t *ThreeDSMethod200JSONResponseBody) MergeThreeDSMethodResponse(v ThreeDSMethodResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the ThreeDSMethod200JSONResponseBody as a ErrorResponse
+func (t ThreeDSMethod200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the ThreeDSMethod200JSONResponseBody as the provided ErrorResponse
+func (t *ThreeDSMethod200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the ThreeDSMethod200JSONResponseBody, using the provided ErrorResponse
+func (t *ThreeDSMethod200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ThreeDSMethod200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ThreeDSMethod200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsStatus200JSONResponseBody0 returns the union data inside the Status200JSONResponseBody as a Status200JSONResponseBody0
+func (t Status200JSONResponseBody) AsStatus200JSONResponseBody0() (Status200JSONResponseBody0, error) {
+	var body Status200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromStatus200JSONResponseBody0 overwrites any union data inside the Status200JSONResponseBody as the provided Status200JSONResponseBody0
+func (t *Status200JSONResponseBody) FromStatus200JSONResponseBody0(v Status200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeStatus200JSONResponseBody0 performs a merge with any union data inside the Status200JSONResponseBody, using the provided Status200JSONResponseBody0
+func (t *Status200JSONResponseBody) MergeStatus200JSONResponseBody0(v Status200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Status200JSONResponseBody as a ErrorResponse
+func (t Status200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Status200JSONResponseBody as the provided ErrorResponse
+func (t *Status200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Status200JSONResponseBody, using the provided ErrorResponse
+func (t *Status200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Status200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Status200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsLink200JSONResponseBody0 returns the union data inside the Link200JSONResponseBody as a Link200JSONResponseBody0
+func (t Link200JSONResponseBody) AsLink200JSONResponseBody0() (Link200JSONResponseBody0, error) {
+	var body Link200JSONResponseBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromLink200JSONResponseBody0 overwrites any union data inside the Link200JSONResponseBody as the provided Link200JSONResponseBody0
+func (t *Link200JSONResponseBody) FromLink200JSONResponseBody0(v Link200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeLink200JSONResponseBody0 performs a merge with any union data inside the Link200JSONResponseBody, using the provided Link200JSONResponseBody0
+func (t *Link200JSONResponseBody) MergeLink200JSONResponseBody0(v Link200JSONResponseBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the Link200JSONResponseBody as a ErrorResponse
+func (t Link200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the Link200JSONResponseBody as the provided ErrorResponse
+func (t *Link200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the Link200JSONResponseBody, using the provided ErrorResponse
+func (t *Link200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Link200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Link200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsConfirmByUrlRequest returns the union data inside the GetConfirmOperationJSONBody as a ConfirmByUrlRequest
+func (t GetConfirmOperationJSONBody) AsConfirmByUrlRequest() (ConfirmByUrlRequest, error) {
+	var body ConfirmByUrlRequest
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConfirmByUrlRequest overwrites any union data inside the GetConfirmOperationJSONBody as the provided ConfirmByUrlRequest
+func (t *GetConfirmOperationJSONBody) FromConfirmByUrlRequest(v ConfirmByUrlRequest) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConfirmByUrlRequest performs a merge with any union data inside the GetConfirmOperationJSONBody, using the provided ConfirmByUrlRequest
+func (t *GetConfirmOperationJSONBody) MergeConfirmByUrlRequest(v ConfirmByUrlRequest) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsConfirmByEmailRequest returns the union data inside the GetConfirmOperationJSONBody as a ConfirmByEmailRequest
+func (t GetConfirmOperationJSONBody) AsConfirmByEmailRequest() (ConfirmByEmailRequest, error) {
+	var body ConfirmByEmailRequest
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConfirmByEmailRequest overwrites any union data inside the GetConfirmOperationJSONBody as the provided ConfirmByEmailRequest
+func (t *GetConfirmOperationJSONBody) FromConfirmByEmailRequest(v ConfirmByEmailRequest) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConfirmByEmailRequest performs a merge with any union data inside the GetConfirmOperationJSONBody, using the provided ConfirmByEmailRequest
+func (t *GetConfirmOperationJSONBody) MergeConfirmByEmailRequest(v ConfirmByEmailRequest) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5407,22 +8353,22 @@ func (t *GetConfirmOperationJSONBody) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-// AsResponseByUrl returns the union data inside the GetConfirmOperation200JSONResponseBody as a ResponseByUrl
-func (t GetConfirmOperation200JSONResponseBody) AsResponseByUrl() (ResponseByUrl, error) {
-	var body ResponseByUrl
+// AsConfirmByUrlResponse returns the union data inside the GetConfirmOperation200JSONResponseBody as a ConfirmByUrlResponse
+func (t GetConfirmOperation200JSONResponseBody) AsConfirmByUrlResponse() (ConfirmByUrlResponse, error) {
+	var body ConfirmByUrlResponse
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromResponseByUrl overwrites any union data inside the GetConfirmOperation200JSONResponseBody as the provided ResponseByUrl
-func (t *GetConfirmOperation200JSONResponseBody) FromResponseByUrl(v ResponseByUrl) error {
+// FromConfirmByUrlResponse overwrites any union data inside the GetConfirmOperation200JSONResponseBody as the provided ConfirmByUrlResponse
+func (t *GetConfirmOperation200JSONResponseBody) FromConfirmByUrlResponse(v ConfirmByUrlResponse) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeResponseByUrl performs a merge with any union data inside the GetConfirmOperation200JSONResponseBody, using the provided ResponseByUrl
-func (t *GetConfirmOperation200JSONResponseBody) MergeResponseByUrl(v ResponseByUrl) error {
+// MergeConfirmByUrlResponse performs a merge with any union data inside the GetConfirmOperation200JSONResponseBody, using the provided ConfirmByUrlResponse
+func (t *GetConfirmOperation200JSONResponseBody) MergeConfirmByUrlResponse(v ConfirmByUrlResponse) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5433,22 +8379,48 @@ func (t *GetConfirmOperation200JSONResponseBody) MergeResponseByUrl(v ResponseBy
 	return err
 }
 
-// AsResponseByEmail returns the union data inside the GetConfirmOperation200JSONResponseBody as a ResponseByEmail
-func (t GetConfirmOperation200JSONResponseBody) AsResponseByEmail() (ResponseByEmail, error) {
-	var body ResponseByEmail
+// AsConfirmByEmailResponse returns the union data inside the GetConfirmOperation200JSONResponseBody as a ConfirmByEmailResponse
+func (t GetConfirmOperation200JSONResponseBody) AsConfirmByEmailResponse() (ConfirmByEmailResponse, error) {
+	var body ConfirmByEmailResponse
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromResponseByEmail overwrites any union data inside the GetConfirmOperation200JSONResponseBody as the provided ResponseByEmail
-func (t *GetConfirmOperation200JSONResponseBody) FromResponseByEmail(v ResponseByEmail) error {
+// FromConfirmByEmailResponse overwrites any union data inside the GetConfirmOperation200JSONResponseBody as the provided ConfirmByEmailResponse
+func (t *GetConfirmOperation200JSONResponseBody) FromConfirmByEmailResponse(v ConfirmByEmailResponse) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeResponseByEmail performs a merge with any union data inside the GetConfirmOperation200JSONResponseBody, using the provided ResponseByEmail
-func (t *GetConfirmOperation200JSONResponseBody) MergeResponseByEmail(v ResponseByEmail) error {
+// MergeConfirmByEmailResponse performs a merge with any union data inside the GetConfirmOperation200JSONResponseBody, using the provided ConfirmByEmailResponse
+func (t *GetConfirmOperation200JSONResponseBody) MergeConfirmByEmailResponse(v ConfirmByEmailResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the GetConfirmOperation200JSONResponseBody as a ErrorResponse
+func (t GetConfirmOperation200JSONResponseBody) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the GetConfirmOperation200JSONResponseBody as the provided ErrorResponse
+func (t *GetConfirmOperation200JSONResponseBody) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the GetConfirmOperation200JSONResponseBody, using the provided ErrorResponse
+func (t *GetConfirmOperation200JSONResponseBody) MergeErrorResponse(v ErrorResponse) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

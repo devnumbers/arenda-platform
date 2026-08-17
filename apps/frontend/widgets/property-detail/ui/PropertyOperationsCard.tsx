@@ -4,9 +4,9 @@ import type {JSX} from 'react';
 import {Card} from '@heroui/react/card';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {ROUTES} from '@/shared/config/routes';
-import type {components} from '@/shared/api/generated';
-import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
-import {PropertyDetailSection} from './PropertyDetailSection';
+import type {components} from '@/shared/api/dto';
+import {SectionHeader} from '@/shared/ui/section-header';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyOperationsCard.module.css';
 
 type PropertyOperationsSummaryResponse =
@@ -26,7 +26,7 @@ export function PropertyOperationsCard({
     const isEmpty = !summary || (income === 0 && expense === 0);
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <SectionHeader
                 title="Операции объекта"
                 href={`${ROUTES.financeOperations}?property_id=${propertyId}&period=all`}
@@ -63,6 +63,6 @@ export function PropertyOperationsCard({
                     </div>
                 </Card>
             )}
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }

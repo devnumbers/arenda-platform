@@ -15,6 +15,10 @@ type TokenHasher interface {
 	HashToken(plaintext string) string
 }
 
+// LoginCodeSender delivers a login code for the phone+email triple. Phone
+// identifies the recipient (the code is bound to the triple via
+// LoginCodeService.hashCode) and is reserved for a future SMS channel
+// (ADR 0006); the email implementation only uses email and code.
 type LoginCodeSender interface {
 	Send(ctx context.Context, phone domain.Phone, email domain.Email, code string) error
 }
@@ -40,7 +44,6 @@ type LoginCodeRepository interface {
 	MarkUsedByID(ctx context.Context, id uuid.UUID) error
 	DeleteByID(ctx context.Context, id uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
-	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	DeleteExpiredByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, before time.Time) error
 	DeleteUnusedByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error
 	WithTx(tx transaction.Tx) (LoginCodeRepository, error)
@@ -50,10 +53,15 @@ type AttemptRepository interface {
 	GetByPhone(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
 	// GetByPhoneForUpdate acquires a row-level pessimistic lock and must only be called inside a transaction.
 	GetByPhoneForUpdate(ctx context.Context, phone domain.Phone) (domain.AttemptWindow, error)
-	Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow) error
+	// Save persists the attempt window for phone. When delta > 0 the failure
+	// counter is atomically incremented by delta on the database side so
+	// concurrent upserts cannot lose an increment (issue #215); the window's
+	// timestamps are written as absolutes. When delta <= 0 the counter is set
+	// to the absolute window.Failures value — the reset path used when the
+	// window is new or has expired (TTL reset).
+	Save(ctx context.Context, phone domain.Phone, userID uuid.UUID, window domain.AttemptWindow, delta int) error
 	DeleteByPhone(ctx context.Context, phone domain.Phone) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
-	DeleteStaleBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) (AttemptRepository, error)
 }
 
@@ -64,6 +72,5 @@ type SessionRepository interface {
 	DeleteByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteByUserIDExcept(ctx context.Context, userID uuid.UUID, tokenHash string) error
-	DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error)
 	WithTx(tx transaction.Tx) (SessionRepository, error)
 }

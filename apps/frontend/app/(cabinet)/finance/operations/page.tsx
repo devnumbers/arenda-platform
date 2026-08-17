@@ -1,6 +1,6 @@
 import type {Metadata} from 'next';
-import {OperationsPage} from '@/widgets/operations/ui/OperationsPage';
-import {parseOperationsFromParams} from '@/widgets/operations/lib/parse-operation-search-params';
+import {OperationsPage} from '@/widgets/operations';
+import {parseOperationsFromParams} from '@/widgets/operations';
 
 export const metadata: Metadata = {
     title: 'Операции — Рентли',

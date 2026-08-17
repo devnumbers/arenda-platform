@@ -18,12 +18,12 @@ func TestTenantContactService_ListTenantContacts_DerivedAccess(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	memberFull := uuid.New()
-	memberViewer := uuid.New()
-	stranger := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	memberFull := uuid.Must(uuid.NewV7())
+	memberViewer := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
 
-	ownerContact := domain.TenantContact{ID: uuid.New(), OwnerID: owner, Name: "Owner Contact"}
+	ownerContact := domain.TenantContact{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: "Owner Contact"}
 	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{ownerContact}}
 
 	policy := fakePolicy{
@@ -80,8 +80,8 @@ func TestTenantContactService_ListTenantContacts_DerivedAccess_Dedup(t *testing.
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	ownerContact := domain.TenantContact{ID: uuid.New(), OwnerID: owner, Name: "Owner"}
+	owner := uuid.Must(uuid.NewV7())
+	ownerContact := domain.TenantContact{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: "Owner"}
 	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{ownerContact}}
 
 	policy := fakePolicy{}
@@ -114,11 +114,11 @@ func TestTenantContactService_ListTenantContactsWithLeaseStatus_DerivedAccess(t 
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	member := uuid.New()
-	stranger := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
 
-	ownerContact := domain.TenantContact{ID: uuid.New(), OwnerID: owner, Name: "Owner"}
+	ownerContact := domain.TenantContact{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: "Owner"}
 	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{ownerContact}}
 
 	policy := fakePolicy{roles: map[[2]uuid.UUID]sharedpolicy.Role{
@@ -169,11 +169,11 @@ func TestTenantContactService_ListTenantContacts_NilSafe_OwnOnly(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	other := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	other := uuid.Must(uuid.NewV7())
 	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{
-		{ID: uuid.New(), OwnerID: owner, Name: "Own"},
-		{ID: uuid.New(), OwnerID: other, Name: "Other"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: "Own"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: other, Name: "Other"},
 	}}
 
 	svc := NewTenantContactService(repo, nil, nil) // no SetPolicy/SetAccessibleScopes
@@ -197,9 +197,9 @@ func TestTenantContactService_ListTenantContacts_NilSafe_OnlyScopes(t *testing.T
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{
-		{ID: uuid.New(), OwnerID: owner, Name: "Own"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: "Own"},
 	}}
 
 	svc := NewTenantContactService(repo, nil, nil)
@@ -222,12 +222,12 @@ func TestTenantContactService_GetTenantContact_DerivedAccess(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	owner := uuid.New()
-	memberFull := uuid.New()
-	memberViewer := uuid.New()
-	stranger := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	memberFull := uuid.Must(uuid.NewV7())
+	memberViewer := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
 
-	ownerContact := domain.TenantContact{ID: uuid.New(), OwnerID: owner, Name: "Owner Contact"}
+	ownerContact := domain.TenantContact{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: "Owner Contact"}
 	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{ownerContact}}
 
 	policy := fakePolicy{

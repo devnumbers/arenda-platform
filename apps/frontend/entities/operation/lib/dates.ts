@@ -1,4 +1,4 @@
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import { formatCountdownLabel } from '@/shared/lib/format-countdown';
 import { diffDays, parseLocalDate } from '@/shared/lib/lease-payment';
 

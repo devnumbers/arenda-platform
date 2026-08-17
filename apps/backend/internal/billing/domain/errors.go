@@ -3,20 +3,45 @@ package domain
 import "errors"
 
 var (
-	// ErrInvalidAmount indicates an invalid (zero or negative) amount was supplied for a payment.
-	ErrInvalidAmount = errors.New("amount must be positive")
-	// ErrInvalidPeriod indicates a subscription period other than month/year was supplied.
-	ErrInvalidPeriod = errors.New("period must be month or year")
-	// ErrInvalidTariff indicates a tariff name that does not match a known tariff.
-	ErrInvalidTariff = errors.New("invalid tariff name")
-	// ErrInvalidPaymentStatus indicates a status transition that is not allowed.
-	ErrInvalidPaymentStatus = errors.New("payment status transition is invalid")
-	// ErrAlreadyOnTariff indicates an attempt to change to the current tariff.
-	ErrAlreadyOnTariff = errors.New("already on selected tariff")
-	// ErrInvalidTariffChange indicates a tariff change that violates domain rules.
+	// ErrInvalidPeriod is returned when a subscription period value is neither
+	// "month" nor "year".
+	ErrInvalidPeriod = errors.New("invalid subscription period")
+	// ErrInvalidTariff is returned when a tariff name is not one of the known
+	// tariff plans.
+	ErrInvalidTariff = errors.New("invalid tariff")
+	// ErrAlreadyOnTariff is returned when a tariff change requests the tariff
+	// the subscription is already on.
+	ErrAlreadyOnTariff = errors.New("subscription is already on the requested tariff")
+	// ErrInvalidTariffChange is returned when the requested tariff change
+	// direction or timing contradicts the subscription state (ADR 0008).
 	ErrInvalidTariffChange = errors.New("invalid tariff change")
-	// ErrInvalidSubscriptionState indicates a subscription state transition that is not allowed.
+	// ErrInvalidSubscriptionState is returned when a transition is attempted
+	// from a status that does not allow it.
 	ErrInvalidSubscriptionState = errors.New("invalid subscription state")
-	// ErrCannotEnableAutoRenew indicates an attempt to enable auto-renew for a subscription without a validity period.
-	ErrCannotEnableAutoRenew = errors.New("cannot enable auto-renew without a validity period")
+	// ErrCannotEnableAutoRenew is returned when auto-renew is enabled on a
+	// subscription without a validity period (the basic tariff never expires,
+	// so there is nothing to renew).
+	ErrCannotEnableAutoRenew = errors.New("cannot enable auto renew without a validity period")
+	// ErrInvalidTransition is returned when a subscription transition record is
+	// built from an incomplete or inconsistent subscription state.
+	ErrInvalidTransition = errors.New("invalid subscription transition")
+	// ErrInvalidAmount is returned when a payment amount is not a positive
+	// integer number of kopecks.
+	ErrInvalidAmount = errors.New("invalid payment amount")
+	// ErrInvalidPayment is returned when a payment is built from incomplete or
+	// inconsistent identity data.
+	ErrInvalidPayment = errors.New("invalid subscription payment")
+	// ErrInvalidPaymentStatus is returned when a payment transition is
+	// attempted from a status that does not allow it.
+	ErrInvalidPaymentStatus = errors.New("invalid payment status transition")
+	// ErrInvalidTerm is returned when an admin service-subscription term is
+	// inconsistent: an explicit until date in the past (issue #255).
+	ErrInvalidTerm = errors.New("invalid service subscription term")
+	// ErrInvalidGraceExtension is returned when an admin grace extension adds
+	// no time or more than the operational cap allows (issue #255).
+	ErrInvalidGraceExtension = errors.New("invalid grace extension")
+	// ErrInvalidTariffPricing is returned when a tariff's admin-editable
+	// fields break their invariants: a negative price or a property limit
+	// below -1 (issue #256).
+	ErrInvalidTariffPricing = errors.New("invalid tariff pricing")
 )

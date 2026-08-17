@@ -1,7 +1,6 @@
-export type AccessRole = 'owner' | 'full_access' | 'viewer';
+import type { AccessRole } from '@/shared/model/access';
 
-/** Роли участника совместного доступа (владелец не является membership). */
-export type SharedAccessRole = Exclude<AccessRole, 'owner'>;
+export type { AccessRole, SharedAccessRole } from '@/shared/model/access';
 
 export type AccessMemberStatus = 'active' | 'suspended' | 'pending';
 

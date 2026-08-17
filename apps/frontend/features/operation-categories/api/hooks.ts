@@ -9,8 +9,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import type { components } from '@/shared/api/generated';
-import { categoryKeys, type OperationCategoryType } from './keys';
+import type { components } from '@/shared/api/dto';
+import { categoryKeys, type OperationCategoryType } from '@/shared/api/query-keys';
 
 type OperationCategory = components['schemas']['OperationCategory'];
 type OperationCategoryCreateRequest =

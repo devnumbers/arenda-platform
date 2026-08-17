@@ -1,5 +1,4 @@
 import {
-  BooleanField,
   Datagrid,
   DateField,
   FilterForm,
@@ -29,6 +28,7 @@ import {
 import { AuditLogDatagrid } from './auditLogs';
 import { LeaseDatagrid } from './leases';
 import { OperationDatagrid } from './operations';
+import { SubscriptionActions, SubscriptionStateFields, SubscriptionTransitionsPanel } from './userSubscription';
 
 const userFilters = [
   <TextInput key="phone" source="phone" label="Телефон" />,
@@ -152,10 +152,9 @@ export const UserShow = () => (
         </ReferenceManyField>
       </Tab>
       <Tab label="Подписка">
-        <SelectField source="subscription.status" choices={subscriptionStatusChoices} />
-        <TextField source="subscription.tariff.name" />
-        <DateField source="subscription.validUntil" />
-        <BooleanField source="subscription.autoRenewEnabled" />
+        <SubscriptionActions />
+        <SubscriptionStateFields />
+        <SubscriptionTransitionsPanel />
       </Tab>
       <Tab label="Статистика">
         <TextField source="stats.activePropertiesCount" />

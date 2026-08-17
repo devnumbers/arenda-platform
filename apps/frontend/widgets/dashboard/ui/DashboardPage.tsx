@@ -1,12 +1,12 @@
 'use client';
 
 import {type JSX, useMemo} from 'react';
-import {useMe} from '@/features/auth/api/hooks';
-import {useProperties} from '@/features/properties/api/hooks';
-import {useLeases} from '@/features/leases/api/hooks';
-import {useTenantContacts} from '@/features/tenant-contacts/api';
-import type {OperationsFilters} from '@/features/operations/api/hooks';
-import {formatDateForApi} from '@/entities/operation/lib/dates';
+import {useMe} from '@/features/auth';
+import {useProperties} from '@/features/properties';
+import {useLeases} from '@/features/leases';
+import {useTenantContacts} from '@/features/tenant-contacts';
+import type {OperationsFilters} from '@/features/operations';
+import {formatDateForApi} from '@/entities/operation';
 import {ROUTES} from '@/shared/config/routes';
 import {useOperationsForProperties} from '../lib/use-operations-for-properties';
 import {UserHeader} from './UserHeader';

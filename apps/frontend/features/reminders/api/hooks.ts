@@ -9,8 +9,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { reminderKeys } from './keys';
-import type { components } from '@/shared/api/generated';
+import { reminderKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
 
 type ReminderResponse = components['schemas']['ReminderResponse'];
 type ReminderUpdateRequest = components['schemas']['ReminderUpdateRequest'];

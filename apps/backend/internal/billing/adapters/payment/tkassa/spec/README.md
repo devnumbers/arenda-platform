@@ -7,7 +7,7 @@ specification and the Go types generated from it. See ADR 0016
 ## Upstream
 
 - URL: <https://developer.tbank.ru/schemas/eacq/openapi.yaml>
-- Vendored version: 1.21 (verify: `grep '^  version:' openapi.yaml`)
+- Vendored version: 1.28 (verify: `grep '^  version:' openapi.yaml`)
 - `openapi.yaml` is byte-identical to upstream — never edit it by hand.
   Verify with:
 
@@ -18,7 +18,7 @@ specification and the Go types generated from it. See ADR 0016
 ## Why the spec is patched
 
 `openapi.patched.yaml` is produced from `openapi.yaml` by `./patch.sh` and is
-the input to code generation. Two upstream bugs are fixed:
+the input to code generation. One upstream bug is fixed:
 
 1. **`Common.additionalProperties` is nested inside `properties:`** — it is
    declared as a regular property named `additionalProperties` instead of a
@@ -26,11 +26,11 @@ the input to code generation. Two upstream bugs are fixed:
    `AdditionalProperties *string` field. After the fix `spec.Common` carries a
    real `map[string]string` additional-properties map (used for `DATA` in
    `Init`).
-2. **`Amount` is `type: number` in the `Init` and `Cancel` request schemas** —
-   oapi-codegen maps that to `float32`, which loses integer precision above
-   ~16.7M kopecks. The patch changes only those two `Amount` properties to
-   `type: integer` + `format: int64`. The backend stores money as `BIGINT`
-   kopecks (ADR 0008), so request amounts must be `int64`.
+
+Until spec 1.21 a second fix changed `Amount` in the `Init` and `Cancel`
+request schemas from `type: number` (oapi-codegen: float32, losing integer
+precision above ~16.7M kopecks) to `integer/int64`; upstream fixed both
+declarations in 1.27 and the patch was removed.
 
 `patch.sh` fails loudly when an expected upstream pattern is missing, so a
 re-vendored spec that already contains the fix (or changed shape) cannot be
@@ -38,7 +38,7 @@ patched silently.
 
 ## Re-vendor procedure
 
-Requires `python3` on the PATH — `patch.sh` applies the spec fixes with an
+Requires `python3` on the PATH — `patch.sh` applies the spec fix with an
 embedded Python script.
 
 From this directory:
@@ -46,7 +46,7 @@ From this directory:
 ```bash
 # 1. Download the new upstream spec.
 curl -fsSL https://developer.tbank.ru/schemas/eacq/openapi.yaml -o openapi.yaml
-# 2. Apply the local fixes (fails if a pattern no longer matches).
+# 2. Apply the local fix (fails if a pattern no longer matches).
 ./patch.sh
 # 3. Regenerate the Go types.
 go generate ./...
@@ -54,8 +54,8 @@ go generate ./...
 cd ../../../../.. && go test ./internal/billing/...
 ```
 
-If step 2 fails because upstream fixed one of the bugs, remove the
-corresponding fix from `patch.sh` and regenerate.
+If step 2 fails because upstream fixed the bug, remove the fix from
+`patch.sh` and regenerate.
 
 ## Files
 

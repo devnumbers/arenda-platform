@@ -2,7 +2,7 @@
 
 import {useMemo, type JSX} from 'react';
 import NextLink from 'next/link';
-import {useTenantContacts} from '@/features/tenant-contacts/api';
+import {useTenantContacts} from '@/features/tenant-contacts';
 import {PageHeader} from '@/shared/ui/page-header';
 import {Icon} from '@/shared/ui/icon';
 import {ArendatorAdd} from '@/shared/assets/icons';

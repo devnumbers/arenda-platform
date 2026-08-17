@@ -5,7 +5,7 @@ import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
 import {Icon} from '@/shared/ui/icon';
 import {ArrowRight, StarColored} from '@/shared/assets/icons';
-import {getTariffLabel} from '@/entities/user/lib/get-tariff-label';
+import {getTariffLabel} from '@/entities/user';
 import styles from './UserHeader.module.css';
 
 export type UserHeaderProps = {

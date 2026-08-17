@@ -15,12 +15,13 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 	resp := openapi.Subscription{
 		Tariff:           TariffResponse(view.Tariff),
 		Status:           openapi.SubscriptionStatus(sub.Status),
+		Source:           openapi.SubscriptionSource(sub.Source),
 		ValidUntil:       sub.ValidUntil,
 		AutoRenewEnabled: sub.AutoRenewEnabled,
 		PendingChangeAt:  sub.PendingChangeAt,
 	}
-	if view.CurrentPeriod != nil {
-		period := openapi.AdminSubscriptionPaymentPeriod(*view.CurrentPeriod)
+	if sub.CurrentPeriod != nil {
+		period := openapi.AdminSubscriptionPaymentPeriod(*sub.CurrentPeriod)
 		resp.CurrentPeriod = &period
 	}
 	if view.PendingTariff != nil {
@@ -32,9 +33,23 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 		resp.PendingPeriod = &period
 	}
 	if view.ActivePaymentMethod != nil {
-		resp.ActivePaymentMethod = PaymentMethodResponse(*view.ActivePaymentMethod)
+		method := PaymentMethodResponse(*view.ActivePaymentMethod)
+		resp.ActivePaymentMethod = &method
 	}
 	return resp
+}
+
+// PaymentMethodResponse maps a billing PaymentMethod domain value to the
+// OpenAPI PaymentMethod DTO (issue #251): display fields only — the charge
+// token stays server-side.
+func PaymentMethodResponse(m domain.PaymentMethod) openapi.PaymentMethod {
+	return openapi.PaymentMethod{
+		Id:          m.ID,
+		Provider:    string(m.Provider),
+		DisplayMask: m.DisplayMask,
+		IsActive:    m.IsActive,
+		CreatedAt:   m.CreatedAt,
+	}
 }
 
 // TariffResponse maps a billing Tariff domain value to the OpenAPI Tariff DTO.
@@ -48,15 +63,16 @@ func TariffResponse(t domain.Tariff) openapi.Tariff {
 	}
 }
 
-// PaymentMethodResponse maps a billing PaymentMethod domain value to the
-// OpenAPI PaymentMethod DTO pointer. Exported so the billing and identity HTTP
-// adapters share a single mapper.
-func PaymentMethodResponse(pm domain.PaymentMethod) *openapi.PaymentMethod {
-	return &openapi.PaymentMethod{
-		Id:          pm.ID,
-		Provider:    string(pm.Provider),
-		DisplayMask: pm.DisplayMask,
-		IsActive:    pm.IsActive,
-		CreatedAt:   pm.CreatedAt,
+// AdminTariffResponse maps a billing Tariff domain value to the OpenAPI
+// AdminTariff DTO: the user-facing shape plus the id and the active flag the
+// admin tariff screen needs (issue #247).
+func AdminTariffResponse(t domain.Tariff) openapi.AdminTariff {
+	return openapi.AdminTariff{
+		Id:                  t.ID,
+		Name:                openapi.TariffName(t.Name),
+		IsActive:            t.IsActive,
+		ActivePropertyLimit: t.ActivePropertyLimit,
+		MonthlyPriceKopecks: int(t.MonthlyPriceKopecks),
+		YearlyPriceKopecks:  int(t.YearlyPriceKopecks),
 	}
 }

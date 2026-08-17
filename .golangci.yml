@@ -77,6 +77,7 @@ linters:
     - recvcheck
     - revive
     - sloglint
+    - testifylint        # testify в go.mod (v1.11.1); включён по результату прогона 2026-08-17 — 0 нарушений (#302)
   settings:
     depguard:
       rules:
@@ -110,6 +111,14 @@ linters:
               desc: domain must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
               desc: domain must not depend on adapters
+            # Явные deny для config и openapi-gen (волна 1A, решение #295): раньше
+            # ловились только через префикс internal/platform — намерение теперь
+            # записано напрямую и переживёт перестройку platform-пакетов.
+            # (desc — plain YAML-скаляр: без «#» внутри, иначе комментарий съест хвост.)
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi
+              desc: domain must not import generated OpenAPI types
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform/config
+              desc: domain must not read infrastructure configuration
         application-clean:
           list-mode: lax
           files:
@@ -144,6 +153,47 @@ linters:
               desc: application layer must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
               desc: application layer must not depend on adapters
+            # Явные deny для config и openapi-gen (волна 1A, решение #295) —
+            # симметрично domain-clean выше.
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi
+              desc: application layer must not import generated OpenAPI types
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform/config
+              desc: application layer must not read infrastructure configuration
+        # platform-clean (ADR 0034): platform infrastructure must depend on the
+        # shared actor kernel, never on a bounded context's domain. httpserver is
+        # the composition root that legitimately wires identity handlers and
+        # services, so its identity imports are allow-listed; the deny keeps every
+        # other platform package (notably httpsupport) identity-free.
+        platform-clean:
+          list-mode: lax
+          files:
+            - "**/internal/platform/**/*.go"
+            - "!**/*_test.go"
+          allow:
+            # httpserver is the composition root: it wires identity HTTP handlers
+            # and the session service into the server.
+            - github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http
+            - github.com/nambers/arenda-planform/apps/backend/internal/identity/application
+          deny:
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/identity
+              desc: platform infrastructure must not depend on a bounded context; use shared/actor
+        # Волна 1A (решение #295, issue #302): модуль-широкие запреты. Без files —
+        # правило действует на все Go-файлы модуля, включая тесты: ORM в тестовой
+        # инфраструктуре — такое же нарушение, как в прод-коде.
+        no-orm:
+          list-mode: lax
+          deny:
+            - pkg: gorm.io
+              desc: persistence is explicit SQL through sqlc; ORM libraries are banned
+            - pkg: entgo.io
+              desc: persistence is explicit SQL through sqlc; ORM libraries are banned
+            - pkg: xorm.io
+              desc: persistence is explicit SQL through sqlc; ORM libraries are banned
+        no-minio:
+          list-mode: lax
+          deny:
+            - pkg: github.com/minio
+              desc: S3-compatible storage access goes through the storage port; MinIO is not a dependency
     govet:
       enable:
         - nilness          # SSA-анализ nil-дерефов; shadow НЕ включать (139 шумовых срабатываний)
@@ -192,6 +242,29 @@ linters:
         - pattern: ^(fmt\.Print(|f|ln)|print|println)$   # дефолтный паттерн, сохранён явно
         - pattern: ^log\.                                 # логируем только через log/slog
           msg: use log/slog instead of stdlib log
+        # ADR 0033: identity and billing use cases open transactions through
+        # runInTx/UoW, not by hand. forbidigo keeps a new use case from silently
+        # reintroducing the manual Begin/WithTx/Commit pattern while UoW is
+        # available. Scoped to identity/application (тикетов #210–#212) and
+        # billing/application (перезапись модуля, issue #245) — the two contexts
+        # fully migrated to UoW. The rule is suppressed everywhere else
+        # via linters.exclusions.rules (path-except) until each remaining context
+        # completes its own UoW migration; then it is added to the except list so
+        # the rule starts protecting it too.
+        #
+        # The pattern matches the selector `.Begin` (forbidigo renders a
+        # SelectorExpr without its arguments, so b.Begin(ctx) is seen as
+        # "b.Begin"); the implicit receiver is always a transaction.Beginner.
+        - pattern: '\.Begin$'
+          msg: "use runInTx/UoW instead of manual Begin (ADR 0033)"
+        # ADR 0019: идентификаторы только UUIDv7. uuid.New/NewV4/NewString/
+        # NewRandom/NewRandomFromReader порождают v4 — использовать uuid.NewV7()
+        # (с прокидыванием ошибки) или uuid.Must(uuid.NewV7()) там, где раньше
+        # паниковали. Паттерн покрывает обе формы рендеринга forbidigo: исходную
+        # (uuid.New) и с полным путём пакета при analyze-types
+        # (github.com/google/uuid.New).
+        - pattern: '^(github\.com/google/)?uuid\.New(|V4|String|Random|RandomFromReader)$'
+          msg: "identifiers are UUIDv7 only (ADR 0019): use uuid.NewV7() or uuid.Must(uuid.NewV7())"
     modernize:
       disable:
         - forvar           # дублирует copyloopvar
@@ -215,7 +288,31 @@ linters:
   exclusions:
     generated: strict      # покрывает sqlc/oapi-codegen целиком (маркер DO NOT EDIT)
     warn-unused: true      # страховка от гнилых паттернов исключений
-    # paths осознанно не задаём: прежние правила были мёртвыми/избыточными.
+    # Поле paths осознанно не задаём: прежние top-level path-исключения были
+    # мёртвыми/избыточными. Ниже — rules (structured exclude rules, не paths):
+    # каждое несёт ADR-обоснование и точечный lint+text+path-фильтр, warn-unused
+    # выше ловит гнилые правила.
+    rules:
+      # ADR 0033 (forbidigo на ручной Begin): identity и billing — контексты,
+      # полностью мигрировавшие на UoW (billing — с перезаписи модуля, issue
+      # #245). Begin легитимно используется в platform (реализация transaction
+      # layer: postgres/transaction, postgres/uow, instrumentation, scheduler)
+      # и в adapters остальных контекстов — их миграция на UoW отдельные тикеты.
+      # Правило ниже подавляет forbidigo-паттерн Begin ВЕЗДЕ, кроме
+      # identity/application и billing/application (path-except). Когда новый
+      # контекст мигрирует на UoW, сузьте path-except, добавив его в разрешённые.
+      # Правила для *_test.go подавляют тот же паттерн в тест-фикстурах
+      # (они легитимно вызывают transaction.Beginner.Begin); text должен совпадать
+      # с msg forbidigo-паттерна выше.
+      - linters: [forbidigo]
+        path-except: internal/(identity|billing)/application
+        text: 'use runInTx/UoW instead of manual Begin'
+      - linters: [forbidigo]
+        path: internal/identity/application/.*_test\.go
+        text: 'use runInTx/UoW instead of manual Begin'
+      - linters: [forbidigo]
+        path: internal/billing/application/.*_test\.go
+        text: 'use runInTx/UoW instead of manual Begin'
 
 formatters:
   enable:
@@ -235,7 +332,7 @@ issues:
 #   interfacebloat, wrapcheck, err113, paralleltest, grouper, decorder, goheader,
 #   nestif, tagalign, dogsled, funcorder — opinionated/стилевые, борются с идиомами проекта.
 # - cyclop, gocyclo, gocognit, maintidx — метрики сложности, шумны как CI-гейт.
-# - testifylint, ginkgolinter (нет testify/ginkgo), protogetter (нет .pb.go в модуле),
+# - ginkgolinter (нет ginkgo), protogetter (нет .pb.go в модуле),
 #   promlinter (нет prometheus client), zerologlint (стек на slog), arangolint, clickhouselint,
 #   unqueryvet (нет SELECT * в Go-коде), importas (нет алиасов для enforce).
 # - exptostd: включить, если в go.mod появится golang.org/x/exp.

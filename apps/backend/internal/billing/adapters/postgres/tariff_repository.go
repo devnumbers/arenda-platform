@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -14,19 +15,25 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// TariffRepository persists tariffs.
+// TariffRepository persists tariffs. Reads are served from an in-memory cache
+// with a TTL (tariffs change rarely and are read on every limit check and
+// listing). The admin listing keeps its own cache entry and its own TTL
+// timestamp, so refreshing one cache never extends the other's lifetime.
 type TariffRepository struct {
-	db       postgres.DBTX
-	mu       sync.RWMutex
-	byID     map[uuid.UUID]domain.Tariff
-	byName   map[domain.TariffName]domain.Tariff
-	list     []domain.Tariff
-	cachedAt time.Time
-	ttl      time.Duration
-	clock    clock.Clock
+	db              postgres.DBTX
+	mu              sync.RWMutex
+	byID            map[uuid.UUID]domain.Tariff
+	byName          map[domain.TariffName]domain.Tariff
+	list            []domain.Tariff
+	listAll         []domain.Tariff
+	cachedAt        time.Time
+	listAllCachedAt time.Time
+	ttl             time.Duration
+	clock           clock.Clock
 }
 
 // NewTariffRepository creates a new tariff repository.
@@ -62,7 +69,7 @@ func (r *TariffRepository) WithTx(tx transaction.Tx) (application.TariffReposito
 	return NewTariffRepository(dbtx, r.ttl, r.clock), nil
 }
 
-// GetByID returns a tariff by ID.
+// GetByID returns a tariff by ID, active or hidden.
 func (r *TariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Tariff, error) {
 	if tariff, ok := r.cachedByID(id); ok {
 		return tariff, nil
@@ -80,7 +87,7 @@ func (r *TariffRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Ta
 	return tariff, nil
 }
 
-// GetByName returns a tariff by its unique name.
+// GetByName returns a tariff by its unique name, active or hidden.
 func (r *TariffRepository) GetByName(ctx context.Context, name domain.TariffName) (domain.Tariff, error) {
 	if tariff, ok := r.cachedByName(name); ok {
 		return tariff, nil
@@ -98,7 +105,7 @@ func (r *TariffRepository) GetByName(ctx context.Context, name domain.TariffName
 	return tariff, nil
 }
 
-// List returns all tariffs ordered by price.
+// List returns all active tariffs ordered by price.
 func (r *TariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
 	if list, ok := r.cachedList(); ok {
 		return list, nil
@@ -111,6 +118,94 @@ func (r *TariffRepository) List(ctx context.Context) ([]domain.Tariff, error) {
 	list := mapTariffs(rows)
 	r.storeList(list)
 	return copyTariffs(list), nil
+}
+
+// ListAll returns every tariff, hidden ones included, ordered by price. It
+// backs the admin tariff views (issue #247) and keeps its own cache entry and
+// TTL timestamp, so the user-facing List cache is not polluted with hidden
+// tariffs and neither cache can extend the other's lifetime.
+func (r *TariffRepository) ListAll(ctx context.Context) ([]domain.Tariff, error) {
+	if listAll, ok := r.cachedListAll(); ok {
+		return listAll, nil
+	}
+
+	rows, err := r.q().ListAllTariffs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	listAll := mapTariffs(rows)
+	r.storeListAll(listAll)
+	return copyTariffs(listAll), nil
+}
+
+// tariffLimitForColumn maps the domain property limit onto the INT column.
+// The domain bound is ≥ -1; anything above the column range is clamped — a
+// limit past two billion properties is unlimited in practice.
+func tariffLimitForColumn(limit int) int32 {
+	return int32(min(limit, math.MaxInt32)) //nolint:gosec // clamped to math.MaxInt32 by min above
+}
+
+// Create inserts a new tariff (issue #256). A unique violation on the name is
+// narrowed to ErrAlreadyExists — the durable backstop of the closed tariff
+// name vocabulary. The returned row is cached so intra-transaction reads of
+// this instance observe it.
+func (r *TariffRepository) Create(ctx context.Context, tariff domain.Tariff) (domain.Tariff, error) {
+	row, err := r.q().CreateTariff(ctx, postgres.CreateTariffParams{
+		ID:                  pgtype.UUID{Bytes: tariff.ID, Valid: true},
+		Name:                string(tariff.Name),
+		ActivePropertyLimit: tariffLimitForColumn(tariff.ActivePropertyLimit),
+		MonthlyPriceKopecks: tariff.MonthlyPriceKopecks,
+		YearlyPriceKopecks:  tariff.YearlyPriceKopecks,
+		IsActive:            tariff.IsActive,
+	})
+	if err != nil {
+		if pgerr.IsUniqueViolation(err) {
+			return domain.Tariff{}, application.ErrAlreadyExists
+		}
+		return domain.Tariff{}, fmt.Errorf("create tariff: %w", err)
+	}
+	created := mapTariff(row)
+	r.store(created)
+	return created, nil
+}
+
+// Update saves the admin-editable fields of a tariff (issue #256): prices,
+// property limit and the activity flag; the name is immutable. A miss answers
+// ErrNotFound. The returned row is cached so intra-transaction reads of this
+// instance observe it.
+func (r *TariffRepository) Update(ctx context.Context, tariff domain.Tariff) (domain.Tariff, error) {
+	row, err := r.q().UpdateTariff(ctx, postgres.UpdateTariffParams{
+		ID:                  pgtype.UUID{Bytes: tariff.ID, Valid: true},
+		ActivePropertyLimit: tariffLimitForColumn(tariff.ActivePropertyLimit),
+		MonthlyPriceKopecks: tariff.MonthlyPriceKopecks,
+		YearlyPriceKopecks:  tariff.YearlyPriceKopecks,
+		IsActive:            tariff.IsActive,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Tariff{}, application.ErrNotFound
+		}
+		return domain.Tariff{}, fmt.Errorf("update tariff: %w", err)
+	}
+	updated := mapTariff(row)
+	r.store(updated)
+	return updated, nil
+}
+
+// Invalidate drops every cached read of this instance (issue #256). Writes go
+// through transaction-bound instances with their own caches, so after a
+// committed admin write the caller invalidates the shared instance to make
+// the change visible to its readers without waiting out the TTL.
+func (r *TariffRepository) Invalidate(context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byID = make(map[uuid.UUID]domain.Tariff)
+	r.byName = make(map[domain.TariffName]domain.Tariff)
+	r.list = nil
+	r.listAll = nil
+	r.cachedAt = time.Time{}
+	r.listAllCachedAt = time.Time{}
+	return nil
 }
 
 func (r *TariffRepository) cachedByID(id uuid.UUID) (domain.Tariff, bool) {
@@ -142,6 +237,22 @@ func (r *TariffRepository) cachedList() ([]domain.Tariff, bool) {
 	return copyTariffs(r.list), true
 }
 
+func (r *TariffRepository) cachedListAll() ([]domain.Tariff, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.listAllStaleLocked() || r.listAll == nil {
+		return nil, false
+	}
+	return copyTariffs(r.listAll), true
+}
+
+// listAllStaleLocked reports whether the admin listing cache is empty or past
+// its TTL. It reads a dedicated timestamp, not the shared cachedAt, so a
+// user-facing cache refresh cannot extend the admin listing's lifetime.
+func (r *TariffRepository) listAllStaleLocked() bool {
+	return r.listAllCachedAt.IsZero() || r.clock.Now().Sub(r.listAllCachedAt) >= r.ttl
+}
+
 func (r *TariffRepository) staleLocked() bool {
 	return r.cachedAt.IsZero() || r.clock.Now().Sub(r.cachedAt) >= r.ttl
 }
@@ -156,8 +267,9 @@ func (r *TariffRepository) store(tariff domain.Tariff) {
 	r.cachedAt = r.clock.Now()
 }
 
-// storeList caches a full tariff list in this repository instance, refreshes the
-// instance-level cachedAt timestamp, and also populates the by-ID/by-name maps.
+// storeList caches a full tariff list in this repository instance, refreshes
+// the instance-level cachedAt timestamp, and also populates the by-ID/by-name
+// maps.
 func (r *TariffRepository) storeList(list []domain.Tariff) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -169,6 +281,21 @@ func (r *TariffRepository) storeList(list []domain.Tariff) {
 	r.cachedAt = r.clock.Now()
 }
 
+// storeListAll caches the full tariff list including hidden tariffs, refreshes
+// the by-ID/by-name maps alongside it, and stamps its own TTL timestamp — the
+// shared cachedAt stays untouched so the admin listing cannot extend the
+// user-facing caches' lifetime.
+func (r *TariffRepository) storeListAll(listAll []domain.Tariff) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.listAll = copyTariffs(listAll)
+	for _, tariff := range listAll {
+		r.byID[tariff.ID] = tariff
+		r.byName[tariff.Name] = tariff
+	}
+	r.listAllCachedAt = r.clock.Now()
+}
+
 func mapTariff(row postgres.Tariff) domain.Tariff {
 	return domain.Tariff{
 		ID:                  uuid.UUID(row.ID.Bytes),
@@ -176,6 +303,7 @@ func mapTariff(row postgres.Tariff) domain.Tariff {
 		ActivePropertyLimit: int(row.ActivePropertyLimit),
 		MonthlyPriceKopecks: row.MonthlyPriceKopecks,
 		YearlyPriceKopecks:  row.YearlyPriceKopecks,
+		IsActive:            row.IsActive,
 	}
 }
 

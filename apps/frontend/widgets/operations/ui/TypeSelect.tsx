@@ -2,7 +2,7 @@
 
 import type { JSX } from 'react';
 import { Button } from '@/shared/ui/button';
-import { type OperationType } from '@/entities/operation/model/types';
+import { type OperationType } from '@/entities/operation';
 import styles from './TypeSelect.module.css';
 
 export type TypeSelectProps = {

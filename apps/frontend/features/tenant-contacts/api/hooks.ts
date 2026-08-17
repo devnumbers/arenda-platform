@@ -9,10 +9,10 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { mapTenantContactResponse } from '@/entities/tenant-contact/model/mappers';
-import type { TenantContact } from '@/entities/tenant-contact/model/types';
-import { tenantContactKeys } from './keys';
-import type { components } from '@/shared/api/generated';
+import { mapTenantContactResponse } from '@/entities/tenant-contact';
+import type { TenantContact } from '@/entities/tenant-contact';
+import { tenantContactKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
 
 type TenantContactResponse = components['schemas']['TenantContactResponse'];
 type TenantContactCreateRequest =

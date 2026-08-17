@@ -1,0 +1,40 @@
+# Git hooks for this monorepo (decision: issue #294, registry: docs/agents/tooling.md).
+# Setup: `make hooks-install` — installs the pinned lefthook binary when missing
+# and wires .git/hooks.
+# Deliberate bypass: `LEFTHOOK=0 git commit|push`, `git commit --no-verify`,
+# or a personal lefthook-local.yml (gitignored).
+
+pre-commit:
+  parallel: true
+  jobs:
+    # Whole-repo backend lint: golangci-lint cannot take files from multiple
+    # packages at once, and the warm full run (~4 s) fits the pre-commit budget.
+    - name: backend lint
+      glob: "**/*.go"
+      run: make backend-lint
+    # The repo's lint script as-is (same invocation as CI): staged files act
+    # only as the trigger.
+    - name: frontend lint
+      glob: "apps/frontend/**/*.{ts,tsx}"
+      run: npm --prefix apps/frontend run lint
+    - name: admin typecheck
+      glob: "apps/admin/**/*.{ts,tsx}"
+      run: make admin-typecheck
+    # Admin ESLint gate (wave 2C, #307): dataProvider/generated/URL boundaries.
+    - name: admin lint
+      glob: "apps/admin/**/*.{ts,tsx}"
+      run: npm --prefix apps/admin run lint
+
+pre-push:
+  parallel: true
+  jobs:
+    # Verify everything + security; time is not critical here (make test
+    # requires Docker and blocks the push with a clear message without it).
+    - name: full test suite
+      run: make test
+    - name: govulncheck
+      run: make backend-vulncheck
+    - name: npm audit
+      run: make npm-audit
+    - name: trivy fs
+      run: make trivy-fs

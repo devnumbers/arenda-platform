@@ -4,7 +4,7 @@ import {type JSX, useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import {buildReturnUrl, goBack} from '@/shared/lib/navigation';
-import {useCreateProperty} from '@/features/properties/api';
+import {useCreateProperty} from '@/features/properties';
 import {filterByType} from '@/features/property-attributes';
 import {
     clearPropertyCreateDraft,

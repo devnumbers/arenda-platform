@@ -6,19 +6,21 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// PaymentMethodRepository persists payment methods.
+// PaymentMethodRepository persists payment methods (issue #251). The charge
+// token, provider card id and expiry date are encrypted at rest; duplicate
+// detection runs on the HMAC token hash, so the plaintext token never sits in
+// an index.
 type PaymentMethodRepository struct {
 	db        postgres.DBTX
 	encryptor encryption.Encryptor
@@ -33,26 +35,6 @@ func (r *PaymentMethodRepository) q() *postgres.Queries {
 	return postgres.New(r.db)
 }
 
-type encryptor interface {
-	Encrypt(ctx context.Context, plaintext string) (string, error)
-}
-
-func encryptPaymentMethodFields(ctx context.Context, encryptor encryptor, pm domain.PaymentMethod) (token, cardID, expDate string, err error) {
-	token, err = encryptor.Encrypt(ctx, pm.ProviderToken)
-	if err != nil {
-		return "", "", "", fmt.Errorf("encrypt provider token: %w", err)
-	}
-	cardID, err = encryptOptional(ctx, encryptor, pm.ProviderCardID)
-	if err != nil {
-		return "", "", "", fmt.Errorf("encrypt provider card id: %w", err)
-	}
-	expDate, err = encryptOptional(ctx, encryptor, pm.ExpDate)
-	if err != nil {
-		return "", "", "", fmt.Errorf("encrypt expiry date: %w", err)
-	}
-	return token, cardID, expDate, nil
-}
-
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *PaymentMethodRepository) WithTx(tx transaction.Tx) (application.PaymentMethodRepository, error) {
 	dbtx, ok := tx.(postgres.DBTX)
@@ -62,65 +44,22 @@ func (r *PaymentMethodRepository) WithTx(tx transaction.Tx) (application.Payment
 	return NewPaymentMethodRepository(dbtx, r.encryptor), nil
 }
 
-// Create inserts a new payment method. The provider token, provider card id and
-// expiry date are encrypted at rest before persistence.
-func (r *PaymentMethodRepository) Create(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
-	encryptedToken, encryptedCardID, encryptedExpDate, err := encryptPaymentMethodFields(ctx, r.encryptor, pm)
+// UpsertByTokenHash inserts the method or converges on the row with the same
+// (user_id, token_hash): a re-bound card updates its token and display fields
+// instead of duplicating. Sensitive fields are encrypted before persistence.
+func (r *PaymentMethodRepository) UpsertByTokenHash(ctx context.Context, method domain.PaymentMethod) (domain.PaymentMethod, error) {
+	params, err := r.upsertParams(ctx, method)
 	if err != nil {
 		return domain.PaymentMethod{}, err
 	}
-
-	row, err := r.q().CreatePaymentMethod(ctx, postgres.CreatePaymentMethodParams{
-		ID:             pgtype.UUID{Bytes: pm.ID, Valid: true},
-		UserID:         pgtype.UUID{Bytes: pm.UserID, Valid: true},
-		Provider:       string(pm.Provider),
-		ProviderToken:  encryptedToken,
-		TokenHash:      r.encryptor.HashToken(pm.ProviderToken),
-		DisplayMask:    pgtype.Text{String: pm.DisplayMask, Valid: pm.DisplayMask != ""},
-		ProviderCardID: pgtype.Text{String: encryptedCardID, Valid: encryptedCardID != ""},
-		ExpDate:        pgtype.Text{String: encryptedExpDate, Valid: encryptedExpDate != ""},
-		IsActive:       pm.IsActive,
-	})
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return domain.PaymentMethod{}, application.ErrPaymentMethodAlreadyExists
-		}
-		return domain.PaymentMethod{}, fmt.Errorf("create payment method: %w", err)
-	}
-	return mapPaymentMethod(ctx, row, r.encryptor)
-}
-
-// UpsertByTokenHash inserts a payment method or updates the mutable fields when
-// a row with the same (user_id, token_hash) already exists. Sensitive fields are
-// encrypted at rest before persistence. An empty incoming card id, display mask
-// or expiry date does not wipe the stored values (COALESCE in the query), so
-// recovery/status-poll upserts that do not know the card data cannot erase what
-// a previous webhook or card-list sync stored.
-func (r *PaymentMethodRepository) UpsertByTokenHash(ctx context.Context, pm domain.PaymentMethod) (domain.PaymentMethod, error) {
-	encryptedToken, encryptedCardID, encryptedExpDate, err := encryptPaymentMethodFields(ctx, r.encryptor, pm)
-	if err != nil {
-		return domain.PaymentMethod{}, err
-	}
-
-	row, err := r.q().UpsertPaymentMethodByTokenHash(ctx, postgres.UpsertPaymentMethodByTokenHashParams{
-		ID:             pgtype.UUID{Bytes: pm.ID, Valid: true},
-		UserID:         pgtype.UUID{Bytes: pm.UserID, Valid: true},
-		Provider:       string(pm.Provider),
-		ProviderToken:  encryptedToken,
-		TokenHash:      r.encryptor.HashToken(pm.ProviderToken),
-		DisplayMask:    pgtype.Text{String: pm.DisplayMask, Valid: pm.DisplayMask != ""},
-		ProviderCardID: pgtype.Text{String: encryptedCardID, Valid: encryptedCardID != ""},
-		ExpDate:        pgtype.Text{String: encryptedExpDate, Valid: encryptedExpDate != ""},
-		IsActive:       pm.IsActive,
-	})
+	row, err := r.q().UpsertPaymentMethodByTokenHash(ctx, params)
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("upsert payment method by token hash: %w", err)
 	}
-	return mapPaymentMethod(ctx, row, r.encryptor)
+	return r.mapMethod(ctx, row)
 }
 
-// GetByID returns a payment method by ID.
+// GetByID returns a payment method by its identifier.
 func (r *PaymentMethodRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.PaymentMethod, error) {
 	row, err := r.q().GetPaymentMethodByID(ctx, pgtype.UUID{Bytes: id, Valid: true})
 	if err != nil {
@@ -129,37 +68,48 @@ func (r *PaymentMethodRepository) GetByID(ctx context.Context, id uuid.UUID) (do
 		}
 		return domain.PaymentMethod{}, fmt.Errorf("get payment method by id: %w", err)
 	}
-	return mapPaymentMethod(ctx, row, r.encryptor)
+	return r.mapMethod(ctx, row)
 }
 
-// ListByUserID returns all payment methods for a user ordered by creation date descending.
+// GetByIDForUpdate returns a payment method by its identifier, locking the
+// row for update. Must only be called inside a transaction.
+func (r *PaymentMethodRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.PaymentMethod, error) {
+	row, err := r.q().GetPaymentMethodByIDForUpdate(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.PaymentMethod{}, application.ErrNotFound
+		}
+		return domain.PaymentMethod{}, fmt.Errorf("get payment method for update: %w", err)
+	}
+	return r.mapMethod(ctx, row)
+}
+
+// ListByUserID returns the user's payment methods, newest first.
 func (r *PaymentMethodRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
 	rows, err := r.q().ListPaymentMethodsByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 	if err != nil {
 		return nil, fmt.Errorf("list payment methods by user id: %w", err)
 	}
-	return mapPaymentMethods(ctx, rows, r.encryptor)
+	methods := make([]domain.PaymentMethod, 0, len(rows))
+	for _, row := range rows {
+		method, err := r.mapMethod(ctx, row)
+		if err != nil {
+			return nil, err
+		}
+		methods = append(methods, method)
+	}
+	return methods, nil
 }
 
-// SetActive deactivates all payment methods for the user and activates the given one.
-// Callers must wrap the call in a transaction via repo.WithTx(tx) when atomicity
-// is required.
+// SetActive makes the method the user's single active one: the user's rows
+// are locked first so concurrent switches serialize (the one-active partial
+// unique index would otherwise reject the second committer), then every other
+// method is deactivated and this one activated. Must run inside a
+// transaction.
 func (r *PaymentMethodRepository) SetActive(ctx context.Context, userID, methodID uuid.UUID) error {
 	if _, err := r.q().LockPaymentMethodsByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true}); err != nil {
 		return fmt.Errorf("lock payment methods: %w", err)
 	}
-
-	pm, err := r.q().GetPaymentMethodByID(ctx, pgtype.UUID{Bytes: methodID, Valid: true})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return application.ErrNotFound
-		}
-		return fmt.Errorf("get payment method: %w", err)
-	}
-	if uuid.UUID(pm.UserID.Bytes) != userID {
-		return application.ErrNotFound
-	}
-
 	if err := r.q().DeactivateAllPaymentMethodsForUser(ctx, pgtype.UUID{Bytes: userID, Valid: true}); err != nil {
 		return fmt.Errorf("deactivate payment methods for user: %w", err)
 	}
@@ -167,33 +117,25 @@ func (r *PaymentMethodRepository) SetActive(ctx context.Context, userID, methodI
 		ID:       pgtype.UUID{Bytes: methodID, Valid: true},
 		IsActive: true,
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrNotFound
+		}
 		return fmt.Errorf("activate payment method: %w", err)
 	}
 	return nil
 }
 
-// Delete removes a payment method for the given user after verifying that it
-// exists and belongs to the user. Callers are responsible for checking whether
-// the method is referenced by an active subscription.
+// Delete removes the user's payment method. The
+// active_payment_method_id FK (ON DELETE RESTRICT) is the durable backstop of
+// the "active method cannot be deleted" rule: a still-referenced method
+// surfaces as ErrPaymentMethodInUse instead of disappearing under the
+// subscription.
 func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID uuid.UUID) error {
-	pm, err := r.q().GetPaymentMethodByIDForUpdate(ctx, pgtype.UUID{Bytes: methodID, Valid: true})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return application.ErrNotFound
-		}
-		return fmt.Errorf("get payment method: %w", err)
-	}
-	if uuid.UUID(pm.UserID.Bytes) != userID {
-		return application.ErrNotFound
-	}
-
-	if pm.IsActive {
-		return application.ErrPaymentMethodInUse
-	}
-
-	if err := r.q().DeletePaymentMethodByID(ctx, pgtype.UUID{Bytes: methodID, Valid: true}); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
+	if err := r.q().DeletePaymentMethodByID(ctx, postgres.DeletePaymentMethodByIDParams{
+		ID:     pgtype.UUID{Bytes: methodID, Valid: true},
+		UserID: pgtype.UUID{Bytes: userID, Valid: true},
+	}); err != nil {
+		if pgerr.IsForeignKeyViolation(err) {
 			return application.ErrPaymentMethodInUse
 		}
 		return fmt.Errorf("delete payment method: %w", err)
@@ -201,34 +143,62 @@ func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID u
 	return nil
 }
 
-func mapPaymentMethod(ctx context.Context, row postgres.PaymentMethod, encryptor encryption.Encryptor) (domain.PaymentMethod, error) {
-	providerToken, err := encryptor.Decrypt(ctx, row.ProviderToken)
+// upsertParams encrypts the sensitive fields, derives the token hash and
+// builds the upsert parameters.
+func (r *PaymentMethodRepository) upsertParams(ctx context.Context, method domain.PaymentMethod) (postgres.UpsertPaymentMethodByTokenHashParams, error) {
+	token, err := r.encryptor.Encrypt(ctx, method.ProviderToken)
+	if err != nil {
+		return postgres.UpsertPaymentMethodByTokenHashParams{}, fmt.Errorf("encrypt provider token: %w", err)
+	}
+	cardID, err := encryptOptional(ctx, r.encryptor, method.ProviderCardID)
+	if err != nil {
+		return postgres.UpsertPaymentMethodByTokenHashParams{}, fmt.Errorf("encrypt provider card id: %w", err)
+	}
+	expDate, err := encryptOptional(ctx, r.encryptor, method.ExpDate)
+	if err != nil {
+		return postgres.UpsertPaymentMethodByTokenHashParams{}, fmt.Errorf("encrypt expiry date: %w", err)
+	}
+	return postgres.UpsertPaymentMethodByTokenHashParams{
+		ID:             pgtype.UUID{Bytes: method.ID, Valid: true},
+		UserID:         pgtype.UUID{Bytes: method.UserID, Valid: true},
+		Provider:       string(method.Provider),
+		ProviderToken:  token,
+		TokenHash:      r.encryptor.HashToken(method.ProviderToken),
+		DisplayMask:    pgtype.Text{String: method.DisplayMask, Valid: method.DisplayMask != ""},
+		ProviderCardID: pgtype.Text{String: cardID, Valid: cardID != ""},
+		ExpDate:        pgtype.Text{String: expDate, Valid: expDate != ""},
+		IsActive:       method.IsActive,
+	}, nil
+}
+
+func (r *PaymentMethodRepository) mapMethod(ctx context.Context, row postgres.PaymentMethod) (domain.PaymentMethod, error) {
+	providerToken, err := r.encryptor.Decrypt(ctx, row.ProviderToken)
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt provider token: %w", err)
 	}
-	providerCardID, err := decryptOptional(ctx, encryptor, pgconv.TextToString(row.ProviderCardID))
+	providerCardID, err := decryptOptional(ctx, r.encryptor, pgconv.TextToString(row.ProviderCardID))
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt provider card id: %w", err)
 	}
-	expDate, err := decryptOptional(ctx, encryptor, pgconv.TextToString(row.ExpDate))
+	expDate, err := decryptOptional(ctx, r.encryptor, pgconv.TextToString(row.ExpDate))
 	if err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("decrypt expiry date: %w", err)
 	}
-	return domain.PaymentMethod{
-		ID:             uuid.UUID(row.ID.Bytes),
-		UserID:         uuid.UUID(row.UserID.Bytes),
+	return domain.ReconstitutePaymentMethod(domain.PaymentMethod{
+		ID:             pgconv.UUIDFromPgtype(row.ID),
+		UserID:         pgconv.UUIDFromPgtype(row.UserID),
 		Provider:       domain.PaymentProvider(row.Provider),
 		ProviderToken:  providerToken,
 		ProviderCardID: providerCardID,
 		DisplayMask:    pgconv.TextToString(row.DisplayMask),
 		ExpDate:        expDate,
 		IsActive:       row.IsActive,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
-	}, nil
+		CreatedAt:      pgconv.TimestamptzToTime(row.CreatedAt),
+		UpdatedAt:      pgconv.TimestamptzToTime(row.UpdatedAt),
+	})
 }
 
-func encryptOptional(ctx context.Context, encryptor encryptor, plaintext string) (string, error) {
+func encryptOptional(ctx context.Context, encryptor encryption.Encryptor, plaintext string) (string, error) {
 	if plaintext == "" {
 		return "", nil
 	}
@@ -240,16 +210,4 @@ func decryptOptional(ctx context.Context, encryptor encryption.Encryptor, cipher
 		return "", nil
 	}
 	return encryptor.Decrypt(ctx, ciphertext)
-}
-
-func mapPaymentMethods(ctx context.Context, rows []postgres.PaymentMethod, encryptor encryption.Encryptor) ([]domain.PaymentMethod, error) {
-	result := make([]domain.PaymentMethod, len(rows))
-	for i, row := range rows {
-		pm, err := mapPaymentMethod(ctx, row, encryptor)
-		if err != nil {
-			return nil, err
-		}
-		result[i] = pm
-	}
-	return result, nil
 }

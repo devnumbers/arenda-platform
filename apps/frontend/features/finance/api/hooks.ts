@@ -3,8 +3,8 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { financeKeys } from './keys';
-import type { components } from '@/shared/api/generated';
+import { financeKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
 
 type FinanceReportResponse = components['schemas']['FinanceReportResponse'];
 

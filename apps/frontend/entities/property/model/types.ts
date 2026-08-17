@@ -1,5 +1,5 @@
-import type { AccessRole } from '@/entities/access/model/types';
-import type { Lease } from '@/entities/lease/model/types';
+import type { AccessRole } from '@/shared/model/access';
+import type { Lease } from '@/shared/model/lease';
 
 export type PropertyStatus = 'active' | 'maintenance' | 'archived';
 export type Occupancy = 'free' | 'occupied';

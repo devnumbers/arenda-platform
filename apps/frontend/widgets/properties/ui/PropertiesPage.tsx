@@ -2,8 +2,8 @@
 
 import {type JSX, useCallback, useMemo, useState} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
-import {useProperties, usePropertiesWithMeta} from '@/features/properties/api/hooks';
-import {useSubscription} from '@/features/subscription/api/hooks';
+import {useProperties, usePropertiesWithMeta} from '@/features/properties';
+import {useSubscription} from '@/features/subscription';
 import {PageHeader} from '@/shared/ui/page-header';
 import {ROUTES} from '@/shared/config/routes';
 import {usePropertyListData} from '../lib/use-property-list-data';

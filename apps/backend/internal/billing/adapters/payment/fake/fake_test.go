@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -29,20 +30,29 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-func TestProviderInit(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-
-	res, err := p.Init(context.Background(), application.InitRequest{
+func validInitRequest(paymentID uuid.UUID) application.InitPaymentRequest {
+	return application.InitPaymentRequest{
 		PaymentID:     paymentID,
 		AmountKopecks: 10000,
 		Period:        domain.PeriodMonth,
-		UserID:        userID,
-		Description:   "Test subscription",
-	})
+		CustomerRef:   "22222222-2222-2222-2222-222222222222",
+		Purpose: application.PaymentPurpose{
+			Kind:       application.PaymentPurposeSubscription,
+			TariffName: domain.TariffPro,
+			Period:     domain.PeriodMonth,
+		},
+		SaveMethod: true,
+		Initiator:  application.InitiatorCustomer,
+	}
+}
+
+func TestProviderInitPayment(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	res, err := p.InitPayment(context.Background(), validInitRequest(paymentID))
 	if err != nil {
-		t.Fatalf("Init error: %v", err)
+		t.Fatalf("InitPayment error: %v", err)
 	}
 
 	if res.Status != domain.PaymentStatusPending {
@@ -51,8 +61,8 @@ func TestProviderInit(t *testing.T) {
 	if !strings.HasPrefix(res.ProviderPaymentID, "fake_") {
 		t.Errorf("expected provider payment id to start with fake_, got %q", res.ProviderPaymentID)
 	}
-	if !strings.HasPrefix(res.SavedToken, "fake_token_") {
-		t.Errorf("expected saved token to start with fake_token_, got %q", res.SavedToken)
+	if res.SavedMethod == nil || !strings.HasPrefix(res.SavedMethod.ChargeToken, "fake_token_") {
+		t.Errorf("expected saved method with fake_token_ charge token, got %+v", res.SavedMethod)
 	}
 	wantURL := "http://localhost:8080/internal/fake-subscription-payment/" + paymentID.String() + "/confirm"
 	if res.PaymentURL != wantURL {
@@ -60,27 +70,18 @@ func TestProviderInit(t *testing.T) {
 	}
 }
 
-func TestProviderInit_IdempotentByInternalPaymentID(t *testing.T) {
+func TestProviderInitPaymentIdempotentByPaymentID(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	req := validInitRequest(paymentID)
 
-	req := application.InitRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: 10000,
-		Period:        domain.PeriodMonth,
-		UserID:        userID,
-		Description:   "Test subscription",
-	}
-
-	first, err := p.Init(context.Background(), req)
+	first, err := p.InitPayment(context.Background(), req)
 	if err != nil {
-		t.Fatalf("first Init error: %v", err)
+		t.Fatalf("first InitPayment error: %v", err)
 	}
-
-	second, err := p.Init(context.Background(), req)
+	second, err := p.InitPayment(context.Background(), req)
 	if err != nil {
-		t.Fatalf("second Init error: %v", err)
+		t.Fatalf("second InitPayment error: %v", err)
 	}
 
 	if first.ProviderPaymentID != second.ProviderPaymentID {
@@ -89,468 +90,350 @@ func TestProviderInit_IdempotentByInternalPaymentID(t *testing.T) {
 	if first.PaymentURL != second.PaymentURL {
 		t.Errorf("expected same confirm URL, got %q and %q", first.PaymentURL, second.PaymentURL)
 	}
-	if first.SavedToken != second.SavedToken {
-		t.Errorf("expected same saved token, got %q and %q", first.SavedToken, second.SavedToken)
+	if first.SavedMethod.ChargeToken != second.SavedMethod.ChargeToken {
+		t.Errorf("expected same charge token, got %q and %q", first.SavedMethod.ChargeToken, second.SavedMethod.ChargeToken)
 	}
 }
 
-func TestProviderInitValidation(t *testing.T) {
+func TestProviderInitPaymentValidation(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	validPaymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	validUserID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	cases := []struct {
 		name    string
-		req     application.InitRequest
+		mutate  func(req *application.InitPaymentRequest)
 		wantErr string
 	}{
 		{
-			name: "nil payment id",
-			req: application.InitRequest{
-				PaymentID:     uuid.Nil,
-				AmountKopecks: 10000,
-				Period:        domain.PeriodMonth,
-				UserID:        validUserID,
-			},
+			name:    "nil payment id",
+			mutate:  func(req *application.InitPaymentRequest) { req.PaymentID = uuid.Nil },
 			wantErr: "payment id is required",
 		},
 		{
-			name: "zero amount",
-			req: application.InitRequest{
-				PaymentID:     validPaymentID,
-				AmountKopecks: 0,
-				Period:        domain.PeriodMonth,
-				UserID:        validUserID,
-			},
+			name:    "zero amount",
+			mutate:  func(req *application.InitPaymentRequest) { req.AmountKopecks = 0 },
 			wantErr: "amount must be positive",
 		},
 		{
-			name: "negative amount",
-			req: application.InitRequest{
-				PaymentID:     validPaymentID,
-				AmountKopecks: -1,
-				Period:        domain.PeriodMonth,
-				UserID:        validUserID,
-			},
-			wantErr: "amount must be positive",
+			name:    "empty initiator",
+			mutate:  func(req *application.InitPaymentRequest) { req.Initiator = "" },
+			wantErr: "unknown operation initiator",
 		},
 	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := p.Init(context.Background(), tc.req)
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			req := validInitRequest(validPaymentID)
+			tt.mutate(&req)
+			_, err := p.InitPayment(context.Background(), req)
 			if err == nil {
-				t.Fatal("expected error, got nil")
+				t.Fatalf("expected error %q, got nil", tt.wantErr)
 			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("expected error to contain %q, got %q", tc.wantErr, err.Error())
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
 			}
 		})
 	}
 }
 
-func TestProviderCharge(t *testing.T) {
+func TestProviderConfirmPaymentFlow(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	paymentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
-	success, err := p.Charge(context.Background(), application.ChargeRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: 10000,
-		Token:         "fake_token_normal",
-	})
+	init, err := p.InitPayment(context.Background(), validInitRequest(paymentID))
 	if err != nil {
-		t.Fatalf("Charge success error: %v", err)
-	}
-	if success.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("expected succeeded status, got %q", success.Status)
+		t.Fatalf("InitPayment error: %v", err)
 	}
 
-	failed, err := p.Charge(context.Background(), application.ChargeRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: 10000,
-		Token:         "fake_fail_token",
-	})
+	event, err := p.ConfirmPayment(context.Background(), paymentID.String())
 	if err != nil {
-		t.Fatalf("Charge failed error: %v", err)
+		t.Fatalf("ConfirmPayment error: %v", err)
 	}
-	if failed.Status != domain.PaymentStatusFailed {
-		t.Errorf("expected failed status, got %q", failed.Status)
+	if event.Payment == nil || event.Payment.Status != domain.PaymentStatusSucceeded {
+		t.Fatalf("expected succeeded payment event, got %+v", event)
+	}
+	if event.Payment.AmountKopecks != 10000 {
+		t.Errorf("amount: got %d, want 10000", event.Payment.AmountKopecks)
+	}
+	if event.Payment.SavedMethod == nil || event.Payment.SavedMethod.ChargeToken != init.SavedMethod.ChargeToken {
+		t.Errorf("expected saved method with the init token, got %+v", event.Payment.SavedMethod)
+	}
+
+	// Status resolves a confirmed payment as succeeded and reports the
+	// provider payment id of the init.
+	status, err := p.PaymentStatus(context.Background(), paymentID, init.ProviderPaymentID)
+	if err != nil {
+		t.Fatalf("PaymentStatus error: %v", err)
+	}
+	if status.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("status: got %q, want %q", status.Status, domain.PaymentStatusSucceeded)
 	}
 }
 
-func TestProviderCharge_FullRefund(t *testing.T) {
+func TestProviderConfirmPaymentFailedFlow(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	paymentID := uuid.MustParse("33333333-3333-3333-3333-333333333334")
-	amount := int64(15000)
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
-	chargeRes, err := p.Charge(t.Context(), application.ChargeRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: amount,
-		Token:         "fake_token_normal",
-	})
-	if err != nil {
-		t.Fatalf("Charge error: %v", err)
-	}
-	if chargeRes.Status != domain.PaymentStatusSucceeded {
-		t.Fatalf("expected succeeded status, got %q", chargeRes.Status)
+	if _, err := p.InitPayment(context.Background(), validInitRequest(paymentID)); err != nil {
+		t.Fatalf("InitPayment error: %v", err)
 	}
 
-	cancelRes, err := p.Cancel(t.Context(), application.CancelRequest{
-		PaymentID:         paymentID,
-		ProviderPaymentID: chargeRes.ProviderPaymentID,
-		AmountKopecks:     amount,
-	})
+	event, err := p.ConfirmPaymentFailed(context.Background(), paymentID.String(), nil)
 	if err != nil {
-		t.Fatalf("Cancel error: %v", err)
+		t.Fatalf("ConfirmPaymentFailed error: %v", err)
 	}
-	if cancelRes.Status != domain.PaymentStatusRefunded {
-		t.Errorf("expected status %q, got %q", domain.PaymentStatusRefunded, cancelRes.Status)
+	if event.Payment == nil || event.Payment.Status != domain.PaymentStatusFailed {
+		t.Fatalf("expected failed payment event, got %+v", event)
 	}
-	if cancelRes.RefundedAmountKopecks != amount {
-		t.Errorf("expected refunded amount %d, got %d", amount, cancelRes.RefundedAmountKopecks)
+	if event.Payment.ErrorCode == nil || *event.Payment.ErrorCode == "" {
+		t.Errorf("expected a default error code on failed confirm")
+	}
+	if event.Payment.SavedMethod != nil {
+		t.Errorf("failed confirm must not produce a saved method")
 	}
 }
 
-func TestProviderChargeValidation(t *testing.T) {
+func TestProviderConfirmPaymentUnknownID(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	validPaymentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	_, err := p.ConfirmPayment(context.Background(), uuid.Must(uuid.NewV7()).String())
+	if err == nil {
+		t.Fatal("expected error for unknown payment")
+	}
+}
 
-	cases := []struct {
-		name    string
-		req     application.ChargeRequest
-		wantErr string
-	}{
-		{
-			name: "nil payment id",
-			req: application.ChargeRequest{
-				PaymentID:     uuid.Nil,
-				AmountKopecks: 10000,
-				Token:         "fake_token_normal",
-			},
-			wantErr: "payment id is required",
-		},
-		{
-			name: "zero amount",
-			req: application.ChargeRequest{
-				PaymentID:     validPaymentID,
-				AmountKopecks: 0,
-				Token:         "fake_token_normal",
-			},
-			wantErr: "amount must be positive",
-		},
-		{
-			name: "negative amount",
-			req: application.ChargeRequest{
-				PaymentID:     validPaymentID,
-				AmountKopecks: -1,
-				Token:         "fake_token_normal",
-			},
-			wantErr: "amount must be positive",
-		},
+func TestProviderPendingPurgedAfterTTL(t *testing.T) {
+	clk := newTestClock(time.Now())
+	p := NewProvider("http://localhost:8080", discardLogger(), clk, nil)
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	if _, err := p.InitPayment(context.Background(), validInitRequest(paymentID)); err != nil {
+		t.Fatalf("InitPayment error: %v", err)
+	}
+	clk.Add(pendingTTL + time.Minute)
+	if _, err := p.ConfirmPayment(context.Background(), paymentID.String()); err == nil {
+		t.Fatal("expected error for purged pending payment")
+	}
+}
+
+func TestProviderChargePayment(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+
+	res, err := p.ChargePayment(context.Background(), application.ChargeRequest{
+		PaymentID:         uuid.Must(uuid.NewV7()),
+		ProviderPaymentID: "fake_1",
+		AmountKopecks:     5000,
+		ChargeToken:       "fake_token_1",
+	})
+	if err != nil {
+		t.Fatalf("ChargePayment error: %v", err)
+	}
+	if res.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("status: got %q, want %q", res.Status, domain.PaymentStatusSucceeded)
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := p.Charge(context.Background(), tc.req)
-			if err == nil {
-				t.Fatal("expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("expected error to contain %q, got %q", tc.wantErr, err.Error())
-			}
-		})
+	// A charge token with the fail prefix declines.
+	failRes, err := p.ChargePayment(context.Background(), application.ChargeRequest{
+		PaymentID:         uuid.Must(uuid.NewV7()),
+		ProviderPaymentID: "fake_2",
+		AmountKopecks:     5000,
+		ChargeToken:       fakeFailTokenPrefix + "1",
+	})
+	if err != nil {
+		t.Fatalf("ChargePayment error: %v", err)
+	}
+	if failRes.Status != domain.PaymentStatusFailed {
+		t.Errorf("status: got %q, want %q", failRes.Status, domain.PaymentStatusFailed)
+	}
+	if failRes.ErrorCode == "" {
+		t.Errorf("expected error code on failed charge")
+	}
+}
+
+func TestProviderRefundPayment(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+
+	res, err := p.RefundPayment(context.Background(), application.RefundRequest{
+		PaymentID:         uuid.Must(uuid.NewV7()),
+		ProviderPaymentID: "fake_1",
+		AmountKopecks:     10000,
+	})
+	if err != nil {
+		t.Fatalf("RefundPayment error: %v", err)
+	}
+	if res.Status != domain.PaymentStatusRefunded {
+		t.Errorf("status: got %q, want %q", res.Status, domain.PaymentStatusRefunded)
+	}
+	if res.RefundedAmountKopecks != 10000 {
+		t.Errorf("refunded amount: got %d, want 10000", res.RefundedAmountKopecks)
 	}
 }
 
 func TestProviderParseWebhook(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	internalID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-
-	cases := []struct {
-		name        string
-		status      string
-		errorCode   string
-		wantErr     bool
-		wantStatus  domain.PaymentStatus
-		wantErrCode bool
-	}{
-		{"succeeded", "succeeded", "", false, domain.PaymentStatusSucceeded, false},
-		{"failed with code", "failed", "card_declined", false, domain.PaymentStatusFailed, true},
-		{"failed default code", "failed", "", false, domain.PaymentStatusFailed, true},
-		{"invalid status", "unknown", "", true, "", false},
+	paymentID := uuid.Must(uuid.NewV7())
+	payload, err := json.Marshal(map[string]any{
+		"provider_payment_id": "fake_1",
+		"internal_payment_id": paymentID.String(),
+		"status":              "succeeded",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			payload := map[string]string{
-				"provider_payment_id": "fake_abc",
-				"internal_payment_id": internalID.String(),
-				"status":              tc.status,
-			}
-			if tc.errorCode != "" {
-				payload["error_code"] = tc.errorCode
-			}
-			body, err := json.Marshal(payload)
-			if err != nil {
-				t.Fatalf("Marshal error: %v", err)
-			}
+	event, err := p.ParseWebhook(context.Background(), payload)
+	if err != nil {
+		t.Fatalf("ParseWebhook error: %v", err)
+	}
+	if event.Payment == nil {
+		t.Fatal("expected payment event")
+	}
+	if event.Payment.InternalPaymentID != paymentID {
+		t.Errorf("internal payment id: got %v, want %v", event.Payment.InternalPaymentID, paymentID)
+	}
+	if event.Payment.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("status: got %q, want succeeded", event.Payment.Status)
+	}
 
-			wh, err := p.ParseWebhook(context.Background(), body)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ParseWebhook error: %v", err)
-			}
-			if wh.ProviderPaymentID != "fake_abc" {
-				t.Errorf("expected provider payment id %q, got %q", "fake_abc", wh.ProviderPaymentID)
-			}
-			if wh.InternalPaymentID != internalID {
-				t.Errorf("expected internal payment id %q, got %q", internalID, wh.InternalPaymentID)
-			}
-			if wh.Status != tc.wantStatus {
-				t.Errorf("expected status %q, got %q", tc.wantStatus, wh.Status)
-			}
-			if tc.wantErrCode && wh.ErrorCode == nil {
-				t.Errorf("expected error code, got nil")
-			}
-			if !tc.wantErrCode && wh.ErrorCode != nil {
-				t.Errorf("expected nil error code, got %q", *wh.ErrorCode)
-			}
-			if tc.errorCode != "" && wh.ErrorCode != nil && *wh.ErrorCode != tc.errorCode {
-				t.Errorf("expected error code %q, got %q", tc.errorCode, *wh.ErrorCode)
-			}
-		})
+	// Unsupported statuses and broken payloads are rejected.
+	if _, err := p.ParseWebhook(context.Background(), []byte(`{"status":"refunding"}`)); err == nil {
+		t.Error("expected error for unsupported webhook status")
+	}
+	if _, err := p.ParseWebhook(context.Background(), []byte(`not json`)); err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+	if _, err := p.ParseWebhook(context.Background(), []byte(`{"internal_payment_id":"nope","status":"succeeded"}`)); err == nil {
+		t.Error("expected error for invalid internal payment id")
 	}
 }
 
-func TestProviderConfirmPayment(t *testing.T) {
+func TestProviderBindingAPIs(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	paymentID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	ctx := context.Background()
 
-	initRes, err := p.Init(context.Background(), application.InitRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: 10000,
-		Period:        domain.PeriodYear,
-		UserID:        uuid.MustParse("66666666-6666-6666-6666-666666666666"),
+	if _, err := p.BindPaymentMethod(ctx, application.BindMethodRequest{}); err == nil {
+		t.Error("expected BindPaymentMethod to require a customer ref")
+	}
+
+	// The raw-token capability mints the provider-side card fields around the
+	// caller's token (issue #251): local runs drive the whole method flow
+	// without the binding form.
+	fromToken, err := p.AddPaymentMethodFromToken(ctx, "c1", "raw_token")
+	if err != nil {
+		t.Fatalf("AddPaymentMethodFromToken error: %v", err)
+	}
+	if fromToken.ChargeToken != "raw_token" || fromToken.ProviderMethodID == "" || fromToken.MaskedPan == "" {
+		t.Fatalf("method from token: got %+v, want the token with card fields", fromToken)
+	}
+	if _, err := p.AddPaymentMethodFromToken(ctx, "c1", ""); err == nil {
+		t.Error("expected AddPaymentMethodFromToken to require a token")
+	}
+
+	// A started binding is pending until confirmed and its form URL points at
+	// the local confirmation endpoint (issue #251).
+	bind, err := p.BindPaymentMethod(ctx, application.BindMethodRequest{CustomerRef: "c1"})
+	if err != nil {
+		t.Fatalf("BindPaymentMethod error: %v", err)
+	}
+	if bind.BindingID == "" {
+		t.Fatal("BindPaymentMethod must return a binding id")
+	}
+	if want := "http://localhost:8080/internal/fake-card-binding/" + bind.BindingID + "/confirm"; bind.FormURL != want {
+		t.Fatalf("FormURL: got %q, want %q", bind.FormURL, want)
+	}
+	state, err := p.PaymentMethodBinding(ctx, bind.BindingID)
+	if err != nil {
+		t.Fatalf("PaymentMethodBinding before confirm: %v", err)
+	}
+	if state.Status != application.MethodBindingPending || state.Method != nil {
+		t.Fatalf("state before confirm: got %+v, want pending without a method", state)
+	}
+
+	// Confirming completes the binding and yields the add-card event; the
+	// poll then reports the completed state with the bound method.
+	event, err := p.ConfirmCardBinding(ctx, bind.BindingID)
+	if err != nil {
+		t.Fatalf("ConfirmCardBinding error: %v", err)
+	}
+	if event.MethodBound == nil || event.MethodBound.BindingID != bind.BindingID {
+		t.Fatalf("confirm event: got %+v, want a method-bound notification", event.MethodBound)
+	}
+	if event.MethodBound.Method.ChargeToken == "" || event.MethodBound.Method.ProviderMethodID == "" {
+		t.Fatalf("bound method: got %+v, want card id and charge token", event.MethodBound.Method)
+	}
+	state, err = p.PaymentMethodBinding(ctx, bind.BindingID)
+	if err != nil {
+		t.Fatalf("PaymentMethodBinding after confirm: %v", err)
+	}
+	if state.Status != application.MethodBindingCompleted || state.Method == nil ||
+		state.Method.ChargeToken != event.MethodBound.Method.ChargeToken {
+		t.Fatalf("state after confirm: got %+v, want the completed binding", state)
+	}
+
+	// Repeated confirmation returns the same notification (idempotent at the
+	// provider; the application session state makes reprocessing a no-op).
+	again, err := p.ConfirmCardBinding(ctx, bind.BindingID)
+	if err != nil {
+		t.Fatalf("ConfirmCardBinding(repeat) error: %v", err)
+	}
+	if again.MethodBound.Method.ChargeToken != event.MethodBound.Method.ChargeToken {
+		t.Fatalf("repeat confirm changed the charge token: %q vs %q",
+			again.MethodBound.Method.ChargeToken, event.MethodBound.Method.ChargeToken)
+	}
+
+	// An unknown request key is a forgotten binding, not a hard failure.
+	if _, err := p.PaymentMethodBinding(ctx, "unknown"); !errors.Is(err, application.ErrProviderBindingNotFound) {
+		t.Errorf("PaymentMethodBinding(unknown) error = %v, want ErrProviderBindingNotFound", err)
+	}
+	if _, err := p.ConfirmCardBinding(ctx, "unknown"); !errors.Is(err, application.ErrProviderBindingNotFound) {
+		t.Errorf("ConfirmCardBinding(unknown) error = %v, want ErrProviderBindingNotFound", err)
+	}
+
+	// Programmed states still take precedence over real entries, so tests can
+	// force outcomes the local flow cannot produce.
+	method := application.SavedMethod{ProviderMethodID: "card-1", ChargeToken: "t"}
+	p.SetBindingState("binding-1", application.MethodBindingState{
+		Status: application.MethodBindingCompleted,
+		Method: &method,
 	})
+	state, err = p.PaymentMethodBinding(ctx, "binding-1")
 	if err != nil {
-		t.Fatalf("Init error: %v", err)
+		t.Fatalf("PaymentMethodBinding(programmed) error: %v", err)
+	}
+	if state.Status != application.MethodBindingCompleted || state.Method.ChargeToken != "t" {
+		t.Fatalf("programmed state: got %+v", state)
 	}
 
-	wh, err := p.ConfirmPayment(context.Background(), paymentID.String())
+	if err := p.RemovePaymentMethod(ctx, "c1", "card-1"); err != nil {
+		t.Errorf("RemovePaymentMethod error: %v", err)
+	}
+
+	methods, err := p.ListPaymentMethods(ctx, "c1")
 	if err != nil {
-		t.Fatalf("ConfirmPayment error: %v", err)
+		t.Fatalf("ListPaymentMethods error: %v", err)
 	}
-	if wh.ProviderPaymentID != initRes.ProviderPaymentID {
-		t.Errorf("expected provider payment id %q, got %q", initRes.ProviderPaymentID, wh.ProviderPaymentID)
-	}
-	if wh.InternalPaymentID != paymentID {
-		t.Errorf("expected internal payment id %q, got %q", paymentID, wh.InternalPaymentID)
-	}
-	if wh.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("expected status %q, got %q", domain.PaymentStatusSucceeded, wh.Status)
-	}
-	if wh.ErrorCode != nil {
-		t.Errorf("expected nil error code, got %q", *wh.ErrorCode)
-	}
-
-	_, err = p.ConfirmPayment(context.Background(), paymentID.String())
-	if err == nil {
-		t.Fatal("expected error for already confirmed internal payment id")
-	}
-
-	_, err = p.ConfirmPayment(context.Background(), "fake_unknown")
-	if err == nil {
-		t.Fatal("expected error for unknown internal payment id")
+	if len(methods) != 0 {
+		t.Errorf("methods: got %d, want 0", len(methods))
 	}
 }
 
-func TestProviderConfirmPaymentFailed(t *testing.T) {
+func TestProviderWebhookAck(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	paymentID := uuid.MustParse("77777777-7777-7777-7777-777777777777")
-
-	_, err := p.Init(context.Background(), application.InitRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: 20000,
-		Period:        domain.PeriodMonth,
-		UserID:        uuid.MustParse("88888888-8888-8888-8888-888888888888"),
-	})
-	if err != nil {
-		t.Fatalf("Init error: %v", err)
-	}
-
-	customCode := "insufficient_funds"
-	wh, err := p.ConfirmPaymentFailed(context.Background(), paymentID.String(), &customCode)
-	if err != nil {
-		t.Fatalf("ConfirmPaymentFailed error: %v", err)
-	}
-	if wh.Status != domain.PaymentStatusFailed {
-		t.Errorf("expected status %q, got %q", domain.PaymentStatusFailed, wh.Status)
-	}
-	if wh.ErrorCode == nil {
-		t.Fatal("expected error code, got nil")
-	}
-	if *wh.ErrorCode != customCode {
-		t.Errorf("expected error code %q, got %q", customCode, *wh.ErrorCode)
-	}
-
-	// Default error code when nil.
-	paymentID2 := uuid.MustParse("99999999-9999-9999-9999-999999999999")
-	_, err = p.Init(context.Background(), application.InitRequest{
-		PaymentID:     paymentID2,
-		AmountKopecks: 30000,
-		Period:        domain.PeriodYear,
-		UserID:        uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-	})
-	if err != nil {
-		t.Fatalf("Init error: %v", err)
-	}
-	wh2, err := p.ConfirmPaymentFailed(context.Background(), paymentID2.String(), nil)
-	if err != nil {
-		t.Fatalf("ConfirmPaymentFailed error: %v", err)
-	}
-	if wh2.ErrorCode == nil || *wh2.ErrorCode != defaultErrorCode {
-		t.Errorf("expected default error code %q, got %v", defaultErrorCode, wh2.ErrorCode)
+	if got, want := string(p.WebhookAck()), `{"status":"ok"}`; got != want {
+		t.Fatalf("WebhookAck: got %q, want %q", got, want)
 	}
 }
 
-func TestProviderConfirmPaymentIgnoresErrorCodeOnSuccess(t *testing.T) {
+func TestProviderName(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	paymentID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
-
-	_, err := p.Init(context.Background(), application.InitRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: 10000,
-		Period:        domain.PeriodMonth,
-		UserID:        uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
-	})
-	if err != nil {
-		t.Fatalf("Init error: %v", err)
-	}
-
-	wh, err := p.ConfirmPayment(context.Background(), paymentID.String())
-	if err != nil {
-		t.Fatalf("ConfirmPayment error: %v", err)
-	}
-	if wh.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("expected status %q, got %q", domain.PaymentStatusSucceeded, wh.Status)
-	}
-	if wh.ErrorCode != nil {
-		t.Errorf("expected nil error code on success, got %q", *wh.ErrorCode)
+	if got, want := p.Name(), domain.PaymentProvider("fake"); got != want {
+		t.Fatalf("Name: got %q, want %q", got, want)
 	}
 }
 
-func TestProviderPurgePendingTTL(t *testing.T) {
-	clk := newTestClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	p := NewProvider("http://localhost:8080", discardLogger(), clk, nil)
-	paymentID := uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd")
-
-	_, err := p.Init(context.Background(), application.InitRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: 10000,
-		Period:        domain.PeriodMonth,
-		UserID:        uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
-	})
-	if err != nil {
-		t.Fatalf("Init error: %v", err)
-	}
-
-	// Move time past the TTL and trigger a purge via Init.
-	clk.Add(pendingTTL + time.Second)
-	_, err = p.Init(context.Background(), application.InitRequest{
-		PaymentID:     uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
-		AmountKopecks: 20000,
-		Period:        domain.PeriodYear,
-		UserID:        uuid.MustParse("11111111-1111-1111-1111-111111111112"),
-	})
-	if err != nil {
-		t.Fatalf("second Init error: %v", err)
-	}
-
-	_, err = p.ConfirmPayment(context.Background(), paymentID.String())
-	if err == nil {
-		t.Fatal("expected error for purged payment")
-	}
-}
-
-func TestProviderCancel(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111113")
-	providerPaymentID := "fake_cancel_1"
-	amount := int64(10000)
-
-	if _, err := p.Init(t.Context(), application.InitRequest{
-		PaymentID:     paymentID,
-		AmountKopecks: amount,
-		Period:        domain.PeriodMonth,
-		UserID:        uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-	}); err != nil {
-		t.Fatalf("Init error: %v", err)
-	}
-	if _, err := p.ConfirmPayment(t.Context(), paymentID.String()); err != nil {
-		t.Fatalf("ConfirmPayment error: %v", err)
-	}
-
-	full, err := p.Cancel(t.Context(), application.CancelRequest{
-		PaymentID:         paymentID,
-		ProviderPaymentID: providerPaymentID,
-		AmountKopecks:     amount,
-	})
-	if err != nil {
-		t.Fatalf("Cancel full refund error: %v", err)
-	}
-	if full.Status != domain.PaymentStatusRefunded {
-		t.Errorf("expected status %q for full refund, got %q", domain.PaymentStatusRefunded, full.Status)
-	}
-	if full.RefundedAmountKopecks != amount {
-		t.Errorf("expected refunded amount %d for full refund, got %d", amount, full.RefundedAmountKopecks)
-	}
-	if full.ProviderPaymentID != providerPaymentID {
-		t.Errorf("expected provider payment id %q, got %q", providerPaymentID, full.ProviderPaymentID)
-	}
-}
-
-func TestProviderCancelValidation(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-
-	cases := []struct {
-		name    string
-		req     application.CancelRequest
-		wantErr string
-	}{
-		{
-			name: "nil payment id",
-			req: application.CancelRequest{
-				PaymentID:         uuid.Nil,
-				ProviderPaymentID: "fake_cancel_1",
-				AmountKopecks:     0,
-			},
-			wantErr: "payment id is required",
-		},
-		{
-			name: "empty provider payment id",
-			req: application.CancelRequest{
-				PaymentID:         uuid.MustParse("11111111-1111-1111-1111-111111111113"),
-				ProviderPaymentID: "",
-				AmountKopecks:     0,
-			},
-			wantErr: "provider payment id is required",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := p.Cancel(context.Background(), tc.req)
-			if err == nil {
-				t.Fatal("expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("expected error to contain %q, got %q", tc.wantErr, err.Error())
-			}
-		})
+// TestProviderSatisfiesPort asserts the aggregate port at runtime in addition
+// to the package-level compile-time assertions.
+func TestProviderSatisfiesPort(t *testing.T) {
+	var provider application.PaymentProvider = NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	if got, want := provider.Name(), domain.PaymentProvider("fake"); got != want {
+		t.Fatalf("Name: got %q, want %q", got, want)
 	}
 }

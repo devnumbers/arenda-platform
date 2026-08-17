@@ -2,12 +2,10 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
@@ -20,30 +18,25 @@ import (
 
 // LoginCodeRepository persists login codes.
 type LoginCodeRepository struct {
-	db  pgen.DBTX
-	enc encryption.Encryptor
+	repoBase
 }
 
 // NewLoginCodeRepository creates a new login code repository.
 func NewLoginCodeRepository(db pgen.DBTX, enc encryption.Encryptor) *LoginCodeRepository {
-	return &LoginCodeRepository{db: db, enc: enc}
-}
-
-func (r *LoginCodeRepository) q() *pgen.Queries {
-	return pgen.New(r.db)
+	return &LoginCodeRepository{repoBase{db: db, enc: enc}}
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
 func (r *LoginCodeRepository) WithTx(tx transaction.Tx) (application.LoginCodeRepository, error) {
-	dbtx, ok := tx.(pgen.DBTX)
-	if !ok {
-		return nil, fmt.Errorf("identity.LoginCodeRepository.WithTx: %T is not a postgres.DBTX", tx)
+	dbtx, err := assertTxDB(tx)
+	if err != nil {
+		return nil, fmt.Errorf("identity.LoginCodeRepository.WithTx: %w", err)
 	}
 	return NewLoginCodeRepository(dbtx, r.enc), nil
 }
 
 func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) error {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, code.Phone.String())
+	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, code.Phone.String())
 	if err != nil {
 		return err
 	}
@@ -55,7 +48,7 @@ func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) e
 		ExpiresAt:      pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
 		UserID:         pgconv.UUIDToPgtypePtr(code.UserID),
 		Purpose:        code.Purpose.String(),
-		PhoneEncrypted: !r.enc.IsNoop(),
+		PhoneEncrypted: phoneEncrypted,
 	}); err != nil {
 		if pgerr.IsUniqueViolation(err) {
 			return application.ErrCodeSentTooRecently
@@ -77,7 +70,7 @@ func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(ctx context.Context, phon
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if notFound(err) {
 			return domain.LoginCode{}, application.ErrNotFound
 		}
 		return domain.LoginCode{}, fmt.Errorf("get latest login code: %w", err)
@@ -137,15 +130,21 @@ func (r *LoginCodeRepository) DeleteByUserID(ctx context.Context, userID uuid.UU
 	return nil
 }
 
-func (r *LoginCodeRepository) DeleteExpiredBeforeBatch(ctx context.Context, before time.Time, batchSize int32) (int64, error) {
-	n, err := r.q().DeleteExpiredLoginCodesBatch(ctx, pgen.DeleteExpiredLoginCodesBatchParams{
-		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
-		Limit:     batchSize,
+func (r *LoginCodeRepository) DeleteExpiredBefore(ctx context.Context, before time.Time) (int64, error) {
+	total, err := deleteBatched(ctx, before, func(ctx context.Context, before time.Time, limit int32) (int64, error) {
+		n, err := r.q().DeleteExpiredLoginCodesBatch(ctx, pgen.DeleteExpiredLoginCodesBatchParams{
+			ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
+			Limit:     limit,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("delete expired login codes batch: %w", err)
+		}
+		return n, nil
 	})
 	if err != nil {
-		return 0, fmt.Errorf("delete expired login codes batch: %w", err)
+		return 0, fmt.Errorf("delete expired login codes: %w", err)
 	}
-	return n, nil
+	return total, nil
 }
 
 type loginCodeRow struct {
@@ -177,30 +176,22 @@ func toLoginCodeRowPhoneEmail(row pgen.GetLatestLoginCodeByPhoneAndEmailAndPurpo
 }
 
 func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow) (domain.LoginCode, error) {
-	phone, err := decryptPhone(ctx, r.enc, row.phone.String, row.phoneEncrypted)
+	phone, err := decryptPhoneField(ctx, r.enc, row.phone.String, row.phoneEncrypted)
 	if err != nil {
 		return domain.LoginCode{}, err
 	}
-	parsedPhone, err := domain.NewPhone(phone)
+	email, _, err := parseEmailField(row.email)
 	if err != nil {
 		return domain.LoginCode{}, err
-	}
-	var email domain.Email
-	if row.email.Valid && row.email.String != "" {
-		e, err := domain.EmailFrom(row.email.String)
-		if err != nil {
-			return domain.LoginCode{}, fmt.Errorf("invalid email in DB: %w", err)
-		}
-		email = e
 	}
 	purpose, err := domain.NewLoginCodePurpose(row.purpose)
 	if err != nil {
-		return domain.LoginCode{}, err
+		return domain.LoginCode{}, fmt.Errorf("invalid login code purpose from DB: %w", err)
 	}
 	return domain.LoginCode{
 		ID:        pgconv.UUIDFromPgtype(row.id),
 		UserID:    pgconv.UUIDFromPgtypePtr(row.userID),
-		Phone:     parsedPhone,
+		Phone:     phone,
 		Email:     email,
 		Purpose:   purpose,
 		CodeHash:  row.codeHash,

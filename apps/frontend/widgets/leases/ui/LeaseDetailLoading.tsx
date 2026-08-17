@@ -1,19 +1,19 @@
 import type {JSX} from 'react';
 import {Skeleton} from '@heroui/react/skeleton';
-import {PropertyDetailSection} from '@/widgets/property-detail';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './LeaseDetailLoading.module.css';
 
 export function LeaseDetailLoading(): JSX.Element {
     return (
         <div className={styles.root} aria-busy="true" aria-label="Загрузка аренды">
-            <PropertyDetailSection>
+            <DetailSection>
                 <h2 className={styles.sectionTitle}>Арендатор</h2>
                 <div className={styles.card}>
                     <Skeleton className={styles.longBar}/>
                 </div>
-            </PropertyDetailSection>
+            </DetailSection>
 
-            <PropertyDetailSection>
+            <DetailSection>
                 <h2 className={styles.sectionTitle}>Условия аренды</h2>
                 <div className={styles.card}>
                     <div className={styles.row}>
@@ -33,14 +33,14 @@ export function LeaseDetailLoading(): JSX.Element {
                         <Skeleton className={styles.shortBar}/>
                     </div>
                 </div>
-            </PropertyDetailSection>
+            </DetailSection>
 
-            <PropertyDetailSection>
+            <DetailSection>
                 <h2 className={styles.sectionTitle}>Арендная плата</h2>
                 <div className={styles.card}>
                     <Skeleton className={styles.longBar}/>
                 </div>
-            </PropertyDetailSection>
+            </DetailSection>
         </div>
     );
 }

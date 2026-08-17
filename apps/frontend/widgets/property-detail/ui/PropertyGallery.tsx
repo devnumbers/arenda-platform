@@ -1,7 +1,7 @@
 'use client';
 
 import type {JSX} from 'react';
-import {PropertyThumbnail} from '@/widgets/properties/ui/PropertyThumbnail';
+import {PropertyThumbnail} from '@/entities/property';
 
 export function PropertyGallery(): JSX.Element {
     return <PropertyThumbnail size="large"/>;

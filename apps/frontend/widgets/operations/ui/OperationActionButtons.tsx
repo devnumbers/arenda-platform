@@ -1,8 +1,8 @@
 'use client';
 
 import type {JSX} from 'react';
-import type {components} from '@/shared/api/generated';
-import type {OperationStatus} from '@/entities/operation/model/types';
+import type {components} from '@/shared/api/dto';
+import type {OperationStatus} from '@/entities/operation';
 import {Button} from '@/shared/ui/button';
 import styles from './OperationActionButtons.module.css';
 

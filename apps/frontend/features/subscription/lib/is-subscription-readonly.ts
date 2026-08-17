@@ -1,4 +1,4 @@
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 
 type Subscription = components['schemas']['Subscription'];
 type SubscriptionStatus = Subscription['status'];

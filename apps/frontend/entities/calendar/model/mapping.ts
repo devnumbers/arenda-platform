@@ -1,5 +1,5 @@
 // Мэппинг DTO CalendarReminderItem → entity CalendarEntry и доменные лейблы/селекторы.
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import type {
   CalendarEntry,
   CalendarEntryEventType,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import { mapPropertyResponse } from './mappers';
 
 function makeDto(

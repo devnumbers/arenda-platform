@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import type { PushSubscriptionPayload } from '../lib/subscribe';
 
 type VapidPublicKeyResponse = components['schemas']['VapidPublicKeyResponse'];

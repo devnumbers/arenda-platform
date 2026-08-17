@@ -2,7 +2,7 @@
 
 import { type JSX, useCallback, useMemo, useState } from 'react';
 import { Button } from '@/shared/ui/button';
-import type { PropertyType, PropertyAttributes } from '@/entities/property/model/types';
+import type { PropertyType, PropertyAttributes } from '@/entities/property';
 import {
   PropertyAttributesFields,
   validateAttributes,

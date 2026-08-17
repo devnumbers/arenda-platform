@@ -11,7 +11,7 @@
 _Avoid_: уведомление (notification — это канал-агностичное сообщение, reminder — конкретный экземпляр)
 
 **EventType / Тип события**:
-Категория напоминания. Значения: `operation_due` (предстоящая операция), `operation_overdue` (просроченная операция), `lease_expiring` (аренда заканчивается), `lease_requires_action` (аренда требует действия), `free_reminder` (свободное напоминание).
+Категория напоминания. Значения: `operation_due` (предстоящая операция), `operation_overdue` (просроченная операция), `lease_expiring` (аренда заканчивается), `lease_requires_action` (аренда требует действия), `free_reminder` (свободное напоминание), `subscription_grace` (grace-события подписки: неудачное списание и истечение льготного периода, issue #253).
 _Avoid_: категория
 
 **TargetType / Тип цели**:
@@ -58,6 +58,11 @@ RFC 8292. P-256 ключ pair для идентификации application serv
 Запись об успешно отправленном пуше per (reminder, recipient). Дедупликация: при повторной dispatch проверка `IsPushReminderSent` предотвращает дубль. Симметрична `sent_email_reminders`.
 
 ## Architecture
+
+### Direct notifications
+
+**Прямое уведомление / Direct Notification**:
+Сообщение, доставляемое одному пользователю немедленно, вне жизненного цикла Reminder: без строки в `reminders`, без клейма и без повторов. Отправитель публикует событие один раз — `DirectNotificationService` доставляет оба канала один раз. Оба канала уважают per-channel предпочтения пользователя (ADR 0030); оба best-effort: сбой канала логируется и никогда не валит другой канал и не влияет на переход, вызвавший событие. Текущий отправитель — grace-события billing (issue #253): «вход в grace» доставляется немедленно, «grace истекает» — по расписанию воркера billing.
 
 ### Multi-channel dispatch (single worker)
 

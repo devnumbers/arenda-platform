@@ -113,10 +113,10 @@ type contactFixture struct {
 
 func newContactFixture() *contactFixture {
 	f := &contactFixture{
-		ownerID:    uuid.New(),
-		actor:      uuid.New(),
-		propertyID: uuid.New(),
-		contactID:  uuid.New(),
+		ownerID:    uuid.Must(uuid.NewV7()),
+		actor:      uuid.Must(uuid.NewV7()),
+		propertyID: uuid.Must(uuid.NewV7()),
+		contactID:  uuid.Must(uuid.NewV7()),
 	}
 	f.contactRepo = newFakePropertyContactRepo(domain.PropertyContact{
 		ID:         f.contactID,

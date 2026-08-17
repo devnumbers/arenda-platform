@@ -44,8 +44,8 @@ func (f *fakeAuthenticator) VerifyCode(ctx context.Context, phone domain.Phone, 
 	return domain.RawSession{}, domain.User{}, errors.New("unexpected VerifyCode call")
 }
 
-func newTestAuthHandlers(auth application.Authenticator) *AuthHandlers {
-	return NewAuthHandlers(auth, nil, nil, nil, false, slog.New(slog.DiscardHandler), nil, nil, nil, nil, nil, nil)
+func newTestAuthHandlers(auth Authenticator) *AuthHandlers {
+	return NewAuthHandlers(auth, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, nil)
 }
 
 func doJSON(t *testing.T, handler http.HandlerFunc, path, body string) *httptest.ResponseRecorder {

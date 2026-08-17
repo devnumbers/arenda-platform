@@ -6,10 +6,10 @@ import {Icon} from '@/shared/ui/icon';
 import {UserSmall} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import {RETURN_TO_PARAM} from '@/shared/lib/navigation';
-import type {Lease} from '@/entities/lease/model/types';
-import {PropertyDetailSection} from './PropertyDetailSection';
+import type {Lease} from '@/entities/lease';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyTenantCard.module.css';
-import {SectionHeader} from "@/widgets/dashboard/ui/SectionHeader";
+import {SectionHeader} from '@/shared/ui/section-header';
 
 export type PropertyTenantCardProps = {
     readonly lease: Lease | null | undefined;
@@ -26,7 +26,7 @@ export function PropertyTenantCard({
     const leaseEditHref = `${ROUTES.leaseEdit(lease.id)}?${RETURN_TO_PARAM}=${encodeURIComponent(lease.propertyId ? ROUTES.property(lease.propertyId) : ROUTES.properties)}`;
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <SectionHeader title="Арендатор" href={tenant ? ROUTES.tenant(tenant.id) : ROUTES.tenants}/>
 
             {tenant ? (
@@ -58,6 +58,6 @@ export function PropertyTenantCard({
                     </NextLink>
                 </div>
             )}
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }

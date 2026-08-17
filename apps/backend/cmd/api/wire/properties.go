@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	billingpg "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/postgres"
-	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/dadata"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/storage"
@@ -29,13 +28,13 @@ type Properties struct {
 func WireProperties(
 	ctx context.Context,
 	p platformDeps,
-	billingRepos *BillingRepos,
+	billing *Billing,
 	leasesRepos *LeasesRepos,
 ) (*Properties, error) {
 	propertyRepo := propertiespg.NewPropertyRepository(p.DB)
 	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(p.DB)
 	occupancyProvider := propertiespg.NewOccupancyProvider(p.DB)
-	propertyLimiter := application.NewSubscriptionPropertyLimiter(billingRepos.SubscriptionRepo, billingRepos.TariffRepo)
+	propertyLimiter := billing.Services.Limiter
 	limiter := billingpg.NewSubscriptionLimiter(propertyLimiter)
 
 	var photoStorage propertiesapp.PhotoStorage

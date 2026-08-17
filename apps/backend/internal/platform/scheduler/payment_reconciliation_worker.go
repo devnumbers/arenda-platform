@@ -7,10 +7,18 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
+
+// PaymentReconciler is the billing port consumed only by this worker shell;
+// per the consumer-side interface rule (ADR 0035) it is declared here next to
+// its consumer. It reconciles payments the webhooks may have lost: stale
+// pending payments and payments stuck in the refunding state.
+type PaymentReconciler interface {
+	ReconcilePendingPayments(ctx context.Context, now time.Time) (int, error)
+	ReconcileStaleRefunds(ctx context.Context, now time.Time) (int, error)
+}
 
 // paymentReconciliationWorkerLockKey is a stable application-level key for the
 // PostgreSQL advisory lock used to ensure only one payment reconciliation
@@ -21,7 +29,7 @@ const paymentReconciliationWorkerLockKey int64 = 0xB112
 // subscription payments. It delegates the actual reconciliation to the billing
 // payments port so the worker stays a thin scheduling shell.
 type PaymentReconciliationWorker struct {
-	payments billingapp.PaymentProcessor
+	payments PaymentReconciler
 	pool     *pgxpool.Pool
 	clock    clock.Clock
 	interval time.Duration
@@ -29,7 +37,7 @@ type PaymentReconciliationWorker struct {
 }
 
 // NewPaymentReconciliationWorker creates a new payment reconciliation worker.
-func NewPaymentReconciliationWorker(payments billingapp.PaymentProcessor, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *PaymentReconciliationWorker {
+func NewPaymentReconciliationWorker(payments PaymentReconciler, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *PaymentReconciliationWorker {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}

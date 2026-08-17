@@ -5,31 +5,45 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // ProfileService provides read and update operations for the user's own profile.
+//
+// It embeds the identity txStoreFactory so UpdateProfile runs through runInTx
+// (ADR 0033, migration step 3): the user repository and audit recorder are
+// bound to the transaction by the factory, and the use case describes only the
+// business logic. Me is a plain read and stays outside the transaction.
 type ProfileService struct {
-	users               UserRepository
-	audit               auditapp.Recorder
-	db                  transaction.Beginner
+	txStoreFactory
 	reminderRescheduler sharedtz.ReminderRescheduler
 }
 
-// NewProfileService creates a ProfileService. A nil reminderRescheduler is
-// replaced with a no-op implementation.
-func NewProfileService(users UserRepository, audit auditapp.Recorder, db transaction.Beginner, reminderRescheduler sharedtz.ReminderRescheduler) *ProfileService {
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
+// ProfileServiceConfig carries the non-transactional dependencies for
+// ProfileService. The transactional repositories, audit recorder, and UoW
+// live in the shared txStoreFactory passed to NewProfileService.
+type ProfileServiceConfig struct {
+	ReminderRescheduler sharedtz.ReminderRescheduler
+}
+
+// NewProfileService creates a ProfileService. It embeds the shared identity
+// txStoreFactory so UpdateProfile runs through runInTx; the repositories and
+// audit recorder are shared by every identity service (ADR 0033 γ-factory). A
+// nil ReminderRescheduler is replaced with a no-op implementation.
+func NewProfileService(
+	factory txStoreFactory,
+	cfg ProfileServiceConfig,
+) *ProfileService {
+	reminderRescheduler := cfg.ReminderRescheduler
 	if reminderRescheduler == nil {
 		reminderRescheduler = noopReminderRescheduler{}
 	}
-	return &ProfileService{users: users, audit: audit, db: db, reminderRescheduler: reminderRescheduler}
+	return &ProfileService{
+		txStoreFactory:      factory,
+		reminderRescheduler: reminderRescheduler,
+	}
 }
 
 type noopReminderRescheduler struct{}
@@ -43,93 +57,61 @@ func (s *ProfileService) Me(ctx context.Context, userID uuid.UUID) (domain.User,
 	return s.users.GetByID(ctx, userID)
 }
 
-// UpdateProfile updates the user's personal data. When the email changes, the
-// new address is marked as unverified until confirmed.
+// UpdateProfile updates the user's personal data. The email-change →
+// unverified reset is owned by domain.User.UpdatePersonalData; the mutation
+// and the audit entry run in a single transaction through runInTx (ADR 0033,
+// ADR 0020); the timezone reschedule stays post-commit because it writes to
+// the notifications context, not the identity transaction.
 func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cmd UpdateProfileCommand) (domain.User, error) {
-	tx, err := s.db.Begin(ctx)
+	var updated domain.User
+	oldTimezone := ""
+
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		user, err := stores.users.GetByIDForUpdate(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
+		}
+
+		// Capture the old timezone before mutation so we can reschedule
+		// reminders after commit.
+		oldTimezone = user.Timezone.String()
+
+		if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email, cmd.Timezone); err != nil {
+			return fmt.Errorf("update personal data: %w", err)
+		}
+
+		updated, err = stores.users.Update(ctx, user)
+		if err != nil {
+			return fmt.Errorf("update user: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleFromRole(updated.Role),
+			Action:     auditdomain.ActionProfileUpdated,
+			EntityType: auditdomain.EntityUser,
+			EntityID:   &userID,
+			Context:    map[string]any{"fields": cmd.ChangedFields()},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return domain.User{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	users, err := s.users.WithTx(tx)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("bind user repository to tx: %w", err)
-	}
-	user, err := users.GetByIDForUpdate(ctx, userID)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("get user: %w", err)
+		return domain.User{}, err
 	}
 
-	// Capture old timezone before mutation so we can reschedule reminders if it changed.
-	oldTimezone := user.Timezone.String()
-
-	var oldEmail string
-	if user.Email != nil {
-		oldEmail = user.Email.String()
-	}
-
-	if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email, cmd.Timezone); err != nil {
-		return domain.User{}, fmt.Errorf("update personal data: %w", err)
-	}
-
-	emailChanged := cmd.Email != nil && user.Email != nil && user.Email.String() != oldEmail
-	if emailChanged {
-		user.EmailVerifiedAt = nil
-	}
-
-	updated, err := users.Update(ctx, user)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("update user: %w", err)
-	}
-	user = updated
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  AuditActorRole(user.Role),
-		Action:     auditdomain.ActionProfileUpdated,
-		EntityType: auditdomain.EntityUser,
-		EntityID:   &userID,
-		Context:    map[string]any{"fields": updatedProfileFields(cmd)},
-	}); err != nil {
-		return domain.User{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.User{}, fmt.Errorf("commit tx: %w", err)
-	}
-
-	// Reschedule pending reminders if the timezone changed (wall-clock semantics).
-	// The profile update is already committed; this runs synchronously so the
-	// user sees the reschedule complete within the request.
-	newTimezone := user.Timezone.String()
+	// Reschedule pending reminders if the timezone changed (wall-clock
+	// semantics). The profile update is already committed; this runs
+	// synchronously so the user sees the reschedule complete within the
+	// request. It belongs to the notifications context, so it stays outside
+	// the identity transaction.
+	newTimezone := updated.Timezone.String()
 	if cmd.Timezone != nil && newTimezone != oldTimezone {
 		if err := s.reminderRescheduler.RescheduleForTimezoneChange(ctx, userID, oldTimezone, newTimezone); err != nil {
 			return domain.User{}, fmt.Errorf("reschedule reminders for timezone change: %w", err)
 		}
 	}
 
-	return user, nil
-}
-
-// updatedProfileFields lists the names of the fields a command changes. Only
-// field names are audited, never their values.
-func updatedProfileFields(cmd UpdateProfileCommand) []string {
-	fields := make([]string, 0, 5)
-	if cmd.Name != nil {
-		fields = append(fields, "name")
-	}
-	if cmd.Surname != nil {
-		fields = append(fields, "surname")
-	}
-	if cmd.Patronymic != nil {
-		fields = append(fields, "patronymic")
-	}
-	if cmd.Email != nil {
-		fields = append(fields, "email")
-	}
-	if cmd.Timezone != nil {
-		fields = append(fields, "timezone")
-	}
-	return fields
+	return updated, nil
 }

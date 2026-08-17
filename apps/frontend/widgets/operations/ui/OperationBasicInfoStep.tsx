@@ -3,7 +3,7 @@
 import { type ChangeEvent, type JSX } from 'react';
 import { TextField } from '@/shared/ui/text-field';
 import { LinkButton } from '@/shared/ui/link-button';
-import { type OperationType } from '@/entities/operation/model/types';
+import { type OperationType } from '@/entities/operation';
 import { PropertySelect } from '@/features/properties';
 import { type BasicInfoData, type BasicInfoErrors } from '../model/types';
 import { CategorySelect } from './CategorySelect';

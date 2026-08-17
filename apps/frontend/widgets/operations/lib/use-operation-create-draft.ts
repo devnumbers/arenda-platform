@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { OperationFrequency, OperationType } from '@/entities/operation/model/types';
+import type { OperationFrequency, OperationType } from '@/entities/operation';
 import type { BasicInfoData, ReminderData, ScheduleData } from '../model/types';
 
 export type OperationCreateStep = 'basic' | 'schedule' | 'reminder' | 'success';

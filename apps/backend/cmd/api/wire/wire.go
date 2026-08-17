@@ -54,6 +54,7 @@ type platformDeps struct {
 	Policy        sharedpolicy.Policy
 	Clock         clock.Clock
 	Beginner      transaction.Beginner
+	UoW           transaction.UoW
 	OTelShutdown  func(ctx context.Context) error
 	StopSignalCtx context.CancelFunc
 	PoolConfigLog func() // logs the database pool config; nil-safe
@@ -168,6 +169,7 @@ func WirePlatform() (*Platform, error) {
 		Policy:        policy,
 		Clock:         clock.Real{},
 		Beginner:      platformpostgres.NewBeginner(pool, appLogger),
+		UoW:           platformpostgres.NewUoW(pool, appLogger),
 		OTelShutdown:  otelSDK.Shutdown,
 		StopSignalCtx: stop,
 	}
@@ -204,47 +206,4 @@ func DBPoolStats(pool *pgxpool.Pool) func() httpsupport.DBPoolSnapshot {
 			NewConnsCount:          stat.NewConnsCount(),
 		}
 	}
-}
-
-// BackfillPhoneEncryption re-encrypts plaintext phone columns left over from
-// earlier schema versions. It runs at startup when an encryption key is set.
-func BackfillPhoneEncryption(ctx context.Context, db *database.InstrumentedPool, enc encryption.Encryptor, logger *slog.Logger) error {
-	backfillTable := func(table string) (int64, error) {
-		rows, err := db.Query(ctx, "SELECT id, phone FROM "+table+" WHERE phone_encrypted = false")
-		if err != nil {
-			return 0, fmt.Errorf("select unencrypted %s: %w", table, err)
-		}
-		defer rows.Close()
-
-		var updated int64
-		for rows.Next() {
-			var id, phone string
-			if err := rows.Scan(&id, &phone); err != nil {
-				return updated, fmt.Errorf("scan %s: %w", table, err)
-			}
-			encrypted, err := enc.DeterministicEncrypt(ctx, phone)
-			if err != nil {
-				return updated, fmt.Errorf("encrypt %s phone: %w", table, err)
-			}
-			tag, err := db.Exec(ctx, "UPDATE "+table+" SET phone = $1, phone_encrypted = true WHERE id = $2", encrypted, id)
-			if err != nil {
-				return updated, fmt.Errorf("update %s: %w", table, err)
-			}
-			updated += tag.RowsAffected()
-		}
-		if err := rows.Err(); err != nil {
-			return updated, fmt.Errorf("iterate %s: %w", table, err)
-		}
-		return updated, nil
-	}
-
-	tables := []string{"users", "login_attempts", "login_codes"}
-	for _, table := range tables {
-		count, err := backfillTable(table)
-		if err != nil {
-			return err
-		}
-		logger.InfoContext(ctx, "phone encryption backfill complete", "table", table, "rows_updated", count)
-	}
-	return nil
 }

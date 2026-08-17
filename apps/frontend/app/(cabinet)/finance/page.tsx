@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { FinancePage } from '@/widgets/finance/ui/FinancePage';
+import { FinancePage } from '@/widgets/finance';
 
 export const metadata: Metadata = {
   title: 'Финансы — Рентли',

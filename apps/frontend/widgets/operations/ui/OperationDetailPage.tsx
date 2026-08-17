@@ -3,7 +3,7 @@
 import {useParams, useRouter} from 'next/navigation';
 import {useState, type ComponentType, type JSX} from 'react';
 import {Modal} from '@heroui/react';
-import type {components} from '@/shared/api/generated';
+import type {components} from '@/shared/api/dto';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack} from '@/shared/lib/navigation';
 import {ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo} from '@/shared/assets/icons';
@@ -14,19 +14,19 @@ import {
     useDeleteOperation,
     useMarkOperationIncomplete,
     useOperation,
-} from '@/features/operations/api/hooks';
-import {useProperty} from '@/features/properties/api';
+} from '@/features/operations';
+import {useProperty} from '@/features/properties';
 import {
     getOperationStatusLabel,
     operationStatusOptions,
-} from '@/entities/operation/lib/statuses';
-import {formatOperationDate} from '@/entities/operation/lib/dates';
-import {formatMoneyKopecks} from '@/entities/operation/lib/formatMoney';
+} from '@/entities/operation';
+import {formatOperationDate} from '@/entities/operation';
+import {formatMoneyKopecks} from '@/entities/operation';
 import {OperationDetailLoading} from './OperationDetailLoading';
-import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
-import {SubscriptionReadonlyBanner} from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
-import {useSubscription} from '@/features/subscription/api/hooks';
-import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
+import {FinanceErrorState} from '@/shared/ui/finance-error-state';
+import {SubscriptionReadonlyBanner} from '@/features/subscription';
+import {useSubscription} from '@/features/subscription';
+import {isSubscriptionReadonly} from '@/features/subscription';
 import {OperationActionButtons} from './OperationActionButtons';
 import styles from './OperationDetailPage.module.css';
 

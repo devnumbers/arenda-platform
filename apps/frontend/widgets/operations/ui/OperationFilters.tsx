@@ -13,7 +13,7 @@ import {
   startOfMonth,
   startOfQuarter,
   startOfYear,
-} from '@/entities/operation/lib/dates';
+} from '@/entities/operation';
 import styles from './OperationFilters.module.css';
 import clsx from "clsx";
 import {PropertyFilter} from './PropertyFilter';

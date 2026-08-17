@@ -1,4 +1,4 @@
-export { freeReminderKeys } from './keys';
+export { freeReminderKeys } from '@/shared/api/query-keys';
 export {
   useCreateFreeReminder,
   useDeleteFreeReminder,

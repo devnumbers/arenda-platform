@@ -1,8 +1,8 @@
 'use client';
 
 import type {JSX} from 'react';
-import {AccessRoleBadge} from '@/entities/access/ui/AccessRoleBadge';
-import type {PropertyAccess} from '@/entities/property/model/types';
+import {AccessRoleBadge} from '@/entities/access';
+import type {PropertyAccess} from '@/entities/property';
 import styles from './PropertySharedBanner.module.css';
 
 export type PropertySharedBannerProps = {
