@@ -3,7 +3,7 @@
 import { useQueries } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { operationKeys } from '@/shared/api/query-keys';
-import type { Property } from '@/entities/property/model/types';
+import type { Property } from '@/entities/property';
 import type { components } from '@/shared/api/dto';
 
 type OperationsResponse = components['schemas']['OperationsResponse'];

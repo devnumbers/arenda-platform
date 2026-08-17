@@ -5,10 +5,10 @@ import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatLeaseRemainingDuration } from '@/shared/lib/format-lease-card-values';
-import { useProperty } from '@/features/properties/api';
+import { useProperty } from '@/features/properties';
 import { DetailSection } from '@/shared/ui/detail-section';
 import { getLeaseStatusLabel } from '../lib/get-lease-status-label';
-import type { Lease } from '@/entities/lease/model/types';
+import type { Lease } from '@/entities/lease';
 import styles from './TenantLeaseSection.module.css';
 
 export type TenantLeaseSectionProps = {

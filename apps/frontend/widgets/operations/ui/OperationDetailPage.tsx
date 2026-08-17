@@ -14,19 +14,19 @@ import {
     useDeleteOperation,
     useMarkOperationIncomplete,
     useOperation,
-} from '@/features/operations/api/hooks';
-import {useProperty} from '@/features/properties/api';
+} from '@/features/operations';
+import {useProperty} from '@/features/properties';
 import {
     getOperationStatusLabel,
     operationStatusOptions,
-} from '@/entities/operation/lib/statuses';
-import {formatOperationDate} from '@/entities/operation/lib/dates';
-import {formatMoneyKopecks} from '@/entities/operation/lib/formatMoney';
+} from '@/entities/operation';
+import {formatOperationDate} from '@/entities/operation';
+import {formatMoneyKopecks} from '@/entities/operation';
 import {OperationDetailLoading} from './OperationDetailLoading';
 import {FinanceErrorState} from '@/shared/ui/finance-error-state';
-import {SubscriptionReadonlyBanner} from '@/features/subscription/ui/SubscriptionReadonlyBanner';
-import {useSubscription} from '@/features/subscription/api/hooks';
-import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
+import {SubscriptionReadonlyBanner} from '@/features/subscription';
+import {useSubscription} from '@/features/subscription';
+import {isSubscriptionReadonly} from '@/features/subscription';
 import {OperationActionButtons} from './OperationActionButtons';
 import styles from './OperationDetailPage.module.css';
 

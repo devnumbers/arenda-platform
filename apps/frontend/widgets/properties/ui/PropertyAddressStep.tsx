@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type ChangeEvent,
 } from 'react';
-import { useAddressSuggestions } from '@/features/properties/api';
+import { useAddressSuggestions } from '@/features/properties';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';

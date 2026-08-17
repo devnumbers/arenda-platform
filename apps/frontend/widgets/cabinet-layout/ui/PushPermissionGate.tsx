@@ -2,12 +2,12 @@
 
 import { useEffect, type JSX } from 'react';
 import { reportClientError } from '@/shared/lib/error-reporting/report-client-error';
-import { useNotificationPreferences } from '@/features/notification-preferences/api/hooks';
+import { useNotificationPreferences } from '@/features/notification-preferences';
 import {
   ensureActiveSubscription,
   useEnsureSubscriptionTools,
-} from '@/features/push-notifications/lib/subscription-sync';
-import { readNotificationPermission } from '@/features/push-notifications/lib/platform';
+} from '@/features/push-notifications';
+import { readNotificationPermission } from '@/features/push-notifications';
 
 /**
  * Invisible side-effect component: keeps the push subscription alive.

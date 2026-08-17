@@ -12,7 +12,7 @@ import {
   useActivatePaymentMethod,
   useDeletePaymentMethod,
   useSyncPaymentMethods,
-} from '@/features/billing/api/hooks';
+} from '@/features/billing';
 import { formatDate } from '@/shared/lib/format-date';
 import { ApiError } from '@/shared/api/errors';
 import styles from './PaymentMethodList.module.css';

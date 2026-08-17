@@ -9,12 +9,12 @@ import { Button } from '@/shared/ui/button';
 import {
   PAYMENT_STALE_MS,
   useSubscriptionPayment,
-} from '@/features/billing/api/hooks';
+} from '@/features/billing';
 import {
   PAYMENT_PERIOD_LABELS,
   PAYMENT_STATUS_LABELS,
-} from '@/entities/billing/model/types';
-import { getTariffLabel } from '@/entities/user/lib/get-tariff-label';
+} from '@/entities/billing';
+import { getTariffLabel } from '@/entities/user';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatDate } from '@/shared/lib/format-date';
 import styles from './PaymentDetail.module.css';

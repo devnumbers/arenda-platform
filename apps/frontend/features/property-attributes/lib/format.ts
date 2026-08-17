@@ -1,4 +1,4 @@
-import type { PropertyType, PropertyAttributes } from '@/entities/property/model/types';
+import type { PropertyType, PropertyAttributes } from '@/entities/property';
 import { type AttrGroup, fieldsForType, findField, groupLabels } from '@/features/property-attributes/lib/catalog';
 import { fieldLabels, enumLabels } from '@/features/property-attributes/lib/labels';
 import type { AttrKey } from '@/features/property-attributes/model/attr-keys';

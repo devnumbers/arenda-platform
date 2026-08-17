@@ -6,7 +6,7 @@ import { notify } from '@/shared/lib/notifications';
 import {
   useTenantContact,
   useUpdateTenantContact,
-} from '@/features/tenant-contacts/api';
+} from '@/features/tenant-contacts';
 import { Skeleton } from '@heroui/react/skeleton';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';

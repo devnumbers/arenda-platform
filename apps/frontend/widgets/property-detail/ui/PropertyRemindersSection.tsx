@@ -10,8 +10,8 @@ import {EmptyState} from '@/shared/ui/empty-state';
 import {Icon} from '@/shared/ui/icon';
 import {ArrowRight, Bell, Plus} from '@/shared/assets/icons';
 import {formatReminderDateTime} from '@/shared/lib/datetime';
-import {PERIODICITY_LABELS} from '@/features/free-reminders/model/types';
-import {useUpcomingFreeReminders} from '@/features/free-reminders/api';
+import {PERIODICITY_LABELS} from '@/features/free-reminders';
+import {useUpcomingFreeReminders} from '@/features/free-reminders';
 import styles from './PropertyRemindersSection.module.css';
 
 export type PropertyRemindersSectionProps = {

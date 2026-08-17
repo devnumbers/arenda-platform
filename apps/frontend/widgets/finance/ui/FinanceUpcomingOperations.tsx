@@ -5,7 +5,7 @@ import {Skeleton} from '@heroui/react/skeleton';
 import type {components} from '@/shared/api/dto';
 import {ROUTES} from '@/shared/config/routes';
 import {SectionHeader} from '@/shared/ui/section-header';
-import {OperationListItem} from '@/entities/operation/ui/OperationListItem';
+import {OperationListItem} from '@/entities/operation';
 import {FinanceErrorState} from '@/shared/ui/finance-error-state';
 import sectionStyles from './FinanceSection.module.css';
 import styles from './FinanceUpcomingOperations.module.css';

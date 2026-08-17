@@ -12,11 +12,11 @@ import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { PageHeader } from '@/shared/ui/page-header';
-import { useMe } from '@/features/auth/api/hooks';
+import { useMe } from '@/features/auth';
 import {
   useChangePhone,
   useChangePhoneSendCode,
-} from '@/features/profile/api/hooks';
+} from '@/features/profile';
 import { formatPhoneInput, normalizePhone } from '@/shared/lib/phone';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';

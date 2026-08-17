@@ -8,10 +8,10 @@ import {notify} from '@/shared/lib/notifications';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
 import {StarColored} from '@/shared/assets/icons';
-import {useLogout, useMe} from '@/features/auth/api/hooks';
+import {useLogout, useMe} from '@/features/auth';
 import {ROUTES} from '@/shared/config/routes';
-import type {User} from '@/entities/user/model/types';
-import {getTariffLabel} from '@/entities/user/lib/get-tariff-label';
+import type {User} from '@/entities/user';
+import {getTariffLabel} from '@/entities/user';
 import {ProfileMenu} from './ProfileMenu';
 import styles from './ProfileOverview.module.css';
 

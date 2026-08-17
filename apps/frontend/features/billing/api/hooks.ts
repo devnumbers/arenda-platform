@@ -10,7 +10,7 @@ import {
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
-import { type TariffName } from '@/entities/user/model/types';
+import { type TariffName } from '@/entities/user';
 import {
   mapAddPaymentMethodResponse,
   mapChangeTariffResponse,
@@ -18,7 +18,7 @@ import {
   mapSubscriptionPaymentResponse,
   mapSubscriptionResponse,
   mapTariffResponse,
-} from '@/entities/billing/model/mappers';
+} from '@/entities/billing';
 import type {
   AddPaymentMethodResult,
   ChangeTariffResult,
@@ -26,7 +26,7 @@ import type {
   Subscription,
   SubscriptionPayment,
   Tariff,
-} from '@/entities/billing/model/types';
+} from '@/entities/billing';
 import { billingKeys } from '@/shared/api/query-keys';
 
 type AutoRenewRequest = components['schemas']['AutoRenewRequest'];

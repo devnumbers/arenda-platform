@@ -1,5 +1,5 @@
 import type {JSX} from 'react';
-import type {PropertyType, PropertyAttributes} from '@/entities/property/model/types';
+import type {PropertyType, PropertyAttributes} from '@/entities/property';
 import {formatAttributesForCardGrouped} from '@/features/property-attributes';
 import {ROUTES} from '@/shared/config/routes';
 import {LinkButton} from '@/shared/ui/link-button';

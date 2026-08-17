@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PropertyType, PropertyAttributes } from '@/entities/property/model/types';
+import type { PropertyType, PropertyAttributes } from '@/entities/property';
 import type { AttrKey } from '@/features/property-attributes/model/attr-keys';
 import { findField } from '@/features/property-attributes/lib/catalog';
 import {

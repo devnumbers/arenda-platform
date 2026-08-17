@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { PageShell } from '@/shared/ui/page-shell';
-import { PersonalDataForm } from '@/widgets/profile/ui/PersonalDataForm';
+import { PersonalDataForm } from '@/widgets/profile';
 
 export const metadata: Metadata = {
   title: 'Мои данные — Рентли',

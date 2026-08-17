@@ -6,9 +6,9 @@ import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
 import { PageHeader } from '@/shared/ui/page-header';
-import { useMe } from '@/features/auth/api/hooks';
-import { useUpdateMe } from '@/features/profile/api/hooks';
-import type { User, UserUpdateCommand } from '@/entities/user/model/types';
+import { useMe } from '@/features/auth';
+import { useUpdateMe } from '@/features/profile';
+import type { User, UserUpdateCommand } from '@/entities/user';
 import { TimezoneSelect } from './TimezoneSelect';
 import styles from './PersonalDataForm.module.css';
 

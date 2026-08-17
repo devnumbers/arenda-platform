@@ -19,17 +19,17 @@ import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import type { components } from '@/shared/api/dto';
-import { type OperationType } from '@/entities/operation/model/types';
+import { type OperationType } from '@/entities/operation';
 import {
   useRecurringOperation,
   useUpdateRecurringOperation,
   useDeleteRecurringOperation,
-} from '@/features/recurring-operations/api/hooks';
+} from '@/features/recurring-operations';
 import { FinanceLoading } from '@/shared/ui/finance-loading';
 import { FinanceErrorState } from '@/shared/ui/finance-error-state';
-import { SubscriptionReadonlyBanner } from '@/features/subscription/ui/SubscriptionReadonlyBanner';
-import { useSubscription } from '@/features/subscription/api/hooks';
-import { isSubscriptionReadonly } from '@/features/subscription/lib/is-subscription-readonly';
+import { SubscriptionReadonlyBanner } from '@/features/subscription';
+import { useSubscription } from '@/features/subscription';
+import { isSubscriptionReadonly } from '@/features/subscription';
 import { CategorySelect } from './CategorySelect';
 import { TypeSelect } from './TypeSelect';
 import { ReminderSection } from './ReminderSection';

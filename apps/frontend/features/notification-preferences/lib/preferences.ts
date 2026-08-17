@@ -1,7 +1,7 @@
 import type {
   NotificationEventType,
   NotificationPreference,
-} from '@/entities/user/model/types';
+} from '@/entities/user';
 
 export const NOTIFICATION_OPTIONS: {
   readonly eventType: NotificationEventType;

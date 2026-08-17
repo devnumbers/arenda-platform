@@ -7,7 +7,7 @@ import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
 import {PageHeader} from '@/shared/ui/page-header';
 import {ArrowRight} from '@/shared/assets/icons';
-import {useMe} from '@/features/auth/api/hooks';
+import {useMe} from '@/features/auth';
 import {ROUTES} from '@/shared/config/routes';
 import styles from './AccountOverview.module.css';
 

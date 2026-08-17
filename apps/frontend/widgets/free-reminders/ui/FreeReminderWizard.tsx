@@ -17,11 +17,11 @@ import { PropertySelect } from '@/features/properties';
 import {
   useCreateFreeReminder,
   useUpdateFreeReminder,
-} from '@/features/free-reminders/api';
+} from '@/features/free-reminders';
 import {
   PERIODICITY_OPTIONS,
   type FreeReminderPeriodicity,
-} from '@/features/free-reminders/model/types';
+} from '@/features/free-reminders';
 import type { components } from '@/shared/api/dto';
 import styles from './FreeReminderWizard.module.css';
 

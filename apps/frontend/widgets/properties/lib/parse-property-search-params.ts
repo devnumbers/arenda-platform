@@ -1,6 +1,6 @@
-import {propertyTypeOptions} from '@/features/properties/lib/property-types';
-import {statusFilterOptions, type StatusFilterValue} from '@/features/properties/lib/property-statuses';
-import type {PropertyType} from '@/entities/property/model/types';
+import {propertyTypeOptions} from '@/features/properties';
+import {statusFilterOptions, type StatusFilterValue} from '@/features/properties';
+import type {PropertyType} from '@/entities/property';
 import type {PropertyFilters, PropertySort} from './filter-types';
 
 export const DEFAULT_PROPERTY_SORT: PropertySort = 'name_asc';

@@ -47,6 +47,7 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 - `entities/` — domain models mapped from the backend: owner, property, lease, operation, subscription.
 - `shared/` — reusable infrastructure: UI kit, API client, config, helpers, types, and hooks not tied to a specific feature. Cross-entity model types referenced by several entity slices (`shared/model/`) and the react-query key registry (`shared/api/query-keys.ts`) live here because cross-slice imports are banned above `shared`.
 - Dependency direction is inward only: `app/widgets` → `features` → `entities` → `shared`. No imports upward or sideways between slices — cross-slice imports inside a layer are banned too (enforced by `boundaries/dependencies` in `eslint.config.mjs`, `eslint-plugin-boundaries`).
+- Every slice in `widgets/`, `features/`, and `entities/` is consumed from outside only through its public API — the slice's `index.ts` (enforced by the `fileInternalPath: "!index.ts"` policy of `boundaries/dependencies` in `eslint.config.mjs`). Keep the index minimal: export only what other elements actually import. `shared/` modules are entry points themselves and are imported directly.
 - Keep UI dumb; business logic lives in `features/` and `entities/`. Server calls live in `shared/api` or Next.js route handlers.
 
 ## API & Data Flow

@@ -14,12 +14,12 @@ import {
     useCancelSubscription,
     usePendingPayment,
     useSubscription,
-} from '@/features/billing/api/hooks';
+} from '@/features/billing';
 import {billingKeys} from '@/shared/api/query-keys';
 import {ROUTES} from '@/shared/config/routes';
-import {getTariffLabel} from '@/entities/user/lib/get-tariff-label';
-import {isPaidTariff} from '@/entities/user/lib/is-paid-tariff';
-import {PAYMENT_PERIOD_LABELS} from '@/entities/billing/model/types';
+import {getTariffLabel} from '@/entities/user';
+import {isPaidTariff} from '@/entities/user';
+import {PAYMENT_PERIOD_LABELS} from '@/entities/billing';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {formatDate} from '@/shared/lib/format-date';
 import styles from './TariffOverview.module.css';

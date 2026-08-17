@@ -20,15 +20,15 @@ import {
   useSubscription,
   useChangeTariff,
   usePendingPayment,
-} from '@/features/billing/api/hooks';
-import { getTariffLabel } from '@/entities/user/lib/get-tariff-label';
-import { isPaidTariff } from '@/entities/user/lib/is-paid-tariff';
-import { type TariffName } from '@/entities/user/model/types';
+} from '@/features/billing';
+import { getTariffLabel } from '@/entities/user';
+import { isPaidTariff } from '@/entities/user';
+import { type TariffName } from '@/entities/user';
 import type {
   Subscription,
   SubscriptionPayment,
   Tariff,
-} from '@/entities/billing/model/types';
+} from '@/entities/billing';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { ROUTES } from '@/shared/config/routes';
 import { ApiError } from '@/shared/api/errors';

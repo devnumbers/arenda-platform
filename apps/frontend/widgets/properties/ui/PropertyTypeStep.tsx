@@ -2,8 +2,8 @@
 
 import type { JSX } from 'react';
 import { Button } from '@/shared/ui/button';
-import { propertyTypeOptions } from '@/features/properties/lib/property-types';
-import type { PropertyType } from '@/entities/property/model/types';
+import { propertyTypeOptions } from '@/features/properties';
+import type { PropertyType } from '@/entities/property';
 import styles from './PropertyTypeStep.module.css';
 
 export type PropertyTypeStepProps = {

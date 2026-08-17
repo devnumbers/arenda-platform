@@ -3,9 +3,9 @@
 import type { JSX } from 'react';
 import { Icon } from '@/shared/ui/icon';
 import { UserSmall } from '@/shared/assets/icons';
-import type { TenantContact } from '@/entities/tenant-contact/model/types';
+import type { TenantContact } from '@/entities/tenant-contact';
 import { DetailSection } from '@/shared/ui/detail-section';
-import { getTenantContactFullName } from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
+import { getTenantContactFullName } from '@/entities/tenant-contact';
 import styles from './TenantInfoSection.module.css';
 
 export type TenantInfoSectionProps = {

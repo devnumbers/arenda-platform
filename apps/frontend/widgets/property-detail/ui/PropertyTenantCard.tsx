@@ -6,7 +6,7 @@ import {Icon} from '@/shared/ui/icon';
 import {UserSmall} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import {RETURN_TO_PARAM} from '@/shared/lib/navigation';
-import type {Lease} from '@/entities/lease/model/types';
+import type {Lease} from '@/entities/lease';
 import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyTenantCard.module.css';
 import {SectionHeader} from '@/shared/ui/section-header';

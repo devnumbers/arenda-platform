@@ -3,9 +3,9 @@
 import type {JSX, ReactNode} from 'react';
 import {Skeleton} from '@heroui/react/skeleton';
 import {Button} from '@/shared/ui/button';
-import type {OperationsFilters} from '@/features/operations/api/hooks';
-import {useOperationsByProperty} from '@/features/operations/api/hooks';
-import {OperationListItem} from '@/entities/operation/ui/OperationListItem';
+import type {OperationsFilters} from '@/features/operations';
+import {useOperationsByProperty} from '@/features/operations';
+import {OperationListItem} from '@/entities/operation';
 import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyOperationsSection.module.css';
 import {SectionHeader} from '@/shared/ui/section-header';

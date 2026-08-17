@@ -71,7 +71,25 @@ const eslintConfig = defineConfig([
         "error",
         {
           default: "disallow",
-          policies: FSD_POLICIES,
+          policies: [
+            ...FSD_POLICIES,
+            // Публичный API слайса (после FSD-политик — last-write-wins):
+            // извне widgets/features/entities импортируется только index.ts.
+            // Внутренние импорты слайса не проверяются (checkInternals=false);
+            // shared — слой файловых модулей без ограничения точек входа.
+            {
+              disallow: {
+                to: {
+                  element: {
+                    types: { anyOf: ["widget", "feature", "entity"] },
+                    fileInternalPath: "!index.ts",
+                  },
+                },
+              },
+              message:
+                "FSD: слайс импортируется извне только через свой публичный API — index.ts слайса",
+            },
+          ],
         },
       ],
       // Imports of local files matching no element pattern are reported, so a

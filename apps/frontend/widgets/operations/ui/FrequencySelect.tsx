@@ -2,7 +2,7 @@
 
 import { useId, type JSX } from 'react';
 import clsx from 'clsx';
-import { type OperationFrequency } from '@/entities/operation/model/types';
+import { type OperationFrequency } from '@/entities/operation';
 import styles from './FrequencySelect.module.css';
 
 export type FrequencySelectProps = {

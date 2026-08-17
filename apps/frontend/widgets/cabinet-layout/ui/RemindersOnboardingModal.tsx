@@ -8,20 +8,20 @@ import {reportClientError} from '@/shared/lib/error-reporting/report-client-erro
 import {Bell, BellOff} from '@/shared/assets/icons';
 import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
-import {REMINDERS_ONBOARDING_POPUP_KEY, useMarkPopupSeen, usePendingPopups,} from '@/features/popups/api/hooks';
+import {REMINDERS_ONBOARDING_POPUP_KEY, useMarkPopupSeen, usePendingPopups,} from '@/features/popups';
 import {
     useNotificationPreferences,
     useUpdateNotificationPreferences,
-} from '@/features/notification-preferences/api/hooks';
+} from '@/features/notification-preferences';
 import {
     buildInitialPreferences,
     buildPreferencePayload,
     type NotificationPreferencesState,
-} from '@/features/notification-preferences/lib/preferences';
-import {NotificationPreferencesFields} from '@/features/notification-preferences/ui/NotificationPreferencesFields';
-import {useSubscribePush} from '@/features/push-notifications/api/use-subscribe-push';
-import {isPushSupported} from '@/features/push-notifications/lib/platform';
-import type {NotificationEventType, NotificationPreference,} from '@/entities/user/model/types';
+} from '@/features/notification-preferences';
+import {NotificationPreferencesFields} from '@/features/notification-preferences';
+import {useSubscribePush} from '@/features/push-notifications';
+import {isPushSupported} from '@/features/push-notifications';
+import type {NotificationEventType, NotificationPreference,} from '@/entities/user';
 import styles from './RemindersOnboardingModal.module.css';
 
 const MOBILE_MEDIA_QUERY = '(max-width: 767px)';

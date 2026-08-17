@@ -9,8 +9,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { mapPropertyResponse } from '@/entities/property/model/mappers';
-import type { Property } from '@/entities/property/model/types';
+import { mapPropertyResponse } from '@/entities/property';
+import type { Property } from '@/entities/property';
 import { financeKeys, leaseKeys, operationKeys, propertyKeys, recurringOperationKeys } from '@/shared/api/query-keys';
 import type { components, operations } from '@/shared/api/dto';
 

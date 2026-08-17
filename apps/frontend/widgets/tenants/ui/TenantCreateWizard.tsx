@@ -2,7 +2,7 @@
 
 import {type JSX, useCallback, useMemo, useState} from 'react';
 import {useRouter} from 'next/navigation';
-import {useCreateTenantContact} from '@/features/tenant-contacts/api';
+import {useCreateTenantContact} from '@/features/tenant-contacts';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {buildReturnUrl, goBack} from '@/shared/lib/navigation';

@@ -1,5 +1,5 @@
 import type { components } from '@/shared/api/dto';
-import type { OperationStatus } from '@/entities/operation/model/types';
+import type { OperationStatus } from '@/entities/operation';
 
 type OperationsResponse = components['schemas']['OperationsResponse'];
 type OperationResponse = components['schemas']['OperationResponse'];

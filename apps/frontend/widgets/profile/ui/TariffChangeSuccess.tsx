@@ -12,7 +12,7 @@ import {
   PAYMENT_STALE_MS,
   useSubscription,
   useSubscriptionPayment,
-} from '@/features/billing/api/hooks';
+} from '@/features/billing';
 import { billingKeys } from '@/shared/api/query-keys';
 import { formatDate } from '@/shared/lib/format-date';
 import { ROUTES } from '@/shared/config/routes';

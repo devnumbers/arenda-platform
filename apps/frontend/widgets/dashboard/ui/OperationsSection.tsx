@@ -3,9 +3,9 @@
 import {type JSX} from 'react';
 import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
-import {type OperationsFilters, useOperations} from '@/features/operations/api/hooks';
+import {type OperationsFilters, useOperations} from '@/features/operations';
 import {SectionHeader} from '@/shared/ui/section-header';
-import {OperationListItem} from '@/entities/operation/ui/OperationListItem';
+import {OperationListItem} from '@/entities/operation';
 import {FinanceErrorState} from '@/shared/ui/finance-error-state';
 import styles from './OperationsSection.module.css';
 

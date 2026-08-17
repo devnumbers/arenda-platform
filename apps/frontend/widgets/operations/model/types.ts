@@ -1,7 +1,7 @@
 import type {
   OperationFrequency,
   OperationType,
-} from '@/entities/operation/model/types';
+} from '@/entities/operation';
 
 export type BasicInfoData = {
   amount: string;

@@ -1,10 +1,10 @@
 'use client';
 
 import { useMemo, type JSX } from 'react';
-import { useTenantContact } from '@/features/tenant-contacts/api';
-import { useLeases } from '@/features/leases/api';
-import { mapLeaseResponse } from '@/entities/lease/model/mappers';
-import type { Lease } from '@/entities/lease/model/types';
+import { useTenantContact } from '@/features/tenant-contacts';
+import { useLeases } from '@/features/leases';
+import { mapLeaseResponse } from '@/entities/lease';
+import type { Lease } from '@/entities/lease';
 import { TenantDetailHeader } from './TenantDetailHeader';
 import { TenantInfoSection } from './TenantInfoSection';
 import { TenantLeaseSection } from './TenantLeaseSection';
@@ -12,7 +12,7 @@ import { TenantCommentSection } from './TenantCommentSection';
 import { TenantDetailLoading } from './TenantDetailLoading';
 import { TenantDetailError } from './TenantDetailError';
 import { TenantActionMenu } from './TenantActionMenu';
-import { getTenantContactFullName } from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
+import { getTenantContactFullName } from '@/entities/tenant-contact';
 import styles from './TenantDetailPage.module.css';
 
 function findCurrentLeaseByTenant(

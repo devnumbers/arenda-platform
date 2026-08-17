@@ -5,7 +5,7 @@ import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/notifications';
 import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
-import {useCreatePropertyContact} from '@/features/property-contacts/api';
+import {useCreatePropertyContact} from '@/features/property-contacts';
 import {PageHeader} from '@/shared/ui/page-header';
 import {IconButton} from '@/shared/ui/icon-button';
 import {Cancel} from '@/shared/assets/icons';

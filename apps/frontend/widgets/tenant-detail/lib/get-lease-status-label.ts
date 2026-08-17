@@ -1,4 +1,4 @@
-import type { LeaseStatus } from '@/entities/lease/model/types';
+import type { LeaseStatus } from '@/entities/lease';
 
 const labels: Record<LeaseStatus, string> = {
   awaiting_start: 'Скоро начнётся',

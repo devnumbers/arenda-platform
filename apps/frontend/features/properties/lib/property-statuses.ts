@@ -1,5 +1,5 @@
-import type { PropertyStatus, Occupancy } from '@/entities/property/model/types';
-import type { LeaseStatus } from '@/entities/lease/model/types';
+import type { PropertyStatus, Occupancy } from '@/entities/property';
+import type { LeaseStatus } from '@/entities/lease';
 
 export type DisplayStatus =
   | 'rented'

@@ -1,5 +1,5 @@
-import type { PropertyType } from '@/entities/property/model/types';
-import type { StatusFilterValue } from '@/features/properties/lib/property-statuses';
+import type { PropertyType } from '@/entities/property';
+import type { StatusFilterValue } from '@/features/properties';
 
 export type PropertyFilters = {
   readonly types: readonly PropertyType[];

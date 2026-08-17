@@ -4,7 +4,7 @@ import type {JSX} from 'react';
 import {Skeleton} from '@heroui/react/skeleton';
 import {Icon} from '@/shared/ui/icon';
 import {Arendator, Arendators} from '@/shared/assets/icons';
-import type {TenantContact} from '@/entities/tenant-contact/model/types';
+import type {TenantContact} from '@/entities/tenant-contact';
 import {SectionHeader} from '@/shared/ui/section-header';
 import {EntityCard} from './EntityCard';
 import {IconActionCard} from './IconActionCard';

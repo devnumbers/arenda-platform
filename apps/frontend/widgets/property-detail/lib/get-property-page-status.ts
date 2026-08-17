@@ -1,9 +1,9 @@
-import type { Property } from '@/entities/property/model/types';
+import type { Property } from '@/entities/property';
 import type { components } from '@/shared/api/dto';
 import {
   getEffectiveLeaseStatus,
   isOpenLeaseStatus,
-} from '@/entities/lease/lib/status';
+} from '@/entities/lease';
 
 type PropertyStatus = Property['status'];
 type Lease = components['schemas']['LeaseResponse'];

@@ -5,7 +5,7 @@ import NextLink from 'next/link';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
-import {LeaseInfo} from '@/entities/lease/ui/LeaseInfo';
+import {LeaseInfo} from '@/entities/lease';
 import type {components} from '@/shared/api/dto';
 import type {PropertyPageStatus} from '../lib/get-property-page-status';
 import { DetailSection } from '@/shared/ui/detail-section';

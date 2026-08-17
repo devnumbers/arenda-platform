@@ -5,7 +5,7 @@ import {Skeleton} from '@heroui/react/skeleton';
 import {Icon} from '@/shared/ui/icon';
 import {Home, Objects} from '@/shared/assets/icons';
 import {EmptyState} from '@/shared/ui/empty-state';
-import type {Property} from '@/entities/property/model/types';
+import type {Property} from '@/entities/property';
 import {SectionHeader} from '@/shared/ui/section-header';
 import {EntityCard} from './EntityCard';
 import {IconActionCard} from './IconActionCard';

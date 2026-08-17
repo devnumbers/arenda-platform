@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { Menu } from '@/shared/assets/icons';
-import type { PropertyStatus } from '@/entities/property/model/types';
+import type { PropertyStatus } from '@/entities/property';
 import { IconButton } from '@/shared/ui/icon-button';
 import { Select, type SelectOption } from '@/shared/ui/select';
 import styles from './PropertyActionMenu.module.css';

@@ -3,11 +3,11 @@
 import {type JSX, useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {useQueryClient} from '@tanstack/react-query';
-import {propertyKeys, useProperty} from '@/features/properties/api';
+import {propertyKeys, useProperty} from '@/features/properties';
 
-import {useCreateLease, usePropertyLeases} from '@/features/leases/api';
-import {useTenantContacts} from '@/features/tenant-contacts/api/hooks';
-import {isOpenLeaseStatus} from '@/entities/lease/lib/status';
+import {useCreateLease, usePropertyLeases} from '@/features/leases';
+import {useTenantContacts} from '@/features/tenant-contacts';
+import {isOpenLeaseStatus} from '@/entities/lease';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack, RETURN_TO_PARAM} from '@/shared/lib/navigation';

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
 import {LinkButton} from '@/shared/ui/link-button';
 import {SectionHeader} from '@/shared/ui/section-header';
-import {usePropertyContacts} from '@/features/property-contacts/api';
+import {usePropertyContacts} from '@/features/property-contacts';
 import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyContactsSection.module.css';
 

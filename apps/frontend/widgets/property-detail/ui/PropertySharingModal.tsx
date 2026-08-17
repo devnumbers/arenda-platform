@@ -9,9 +9,9 @@ import {Button} from '@/shared/ui/button';
 import {TextField} from '@/shared/ui/text-field';
 import {Select, type SelectOption} from '@/shared/ui/select';
 import {Cancel, ChevronDown} from '@/shared/assets/icons';
-import {ACCESS_ROLE_LABELS} from '@/entities/access/lib/role-labels';
-import {accessRoleIcon} from '@/entities/access/lib/role-icons';
-import {AccessRoleBadge} from '@/entities/access/ui/AccessRoleBadge';
+import {ACCESS_ROLE_LABELS} from '@/entities/access';
+import {accessRoleIcon} from '@/entities/access';
+import {AccessRoleBadge} from '@/entities/access';
 import {
     useCancelPropertyAccessInvitation,
     useDeletePropertyAccessMember,
@@ -20,14 +20,14 @@ import {
     useResendPropertyAccessInvitation,
     useUpdatePropertyAccessInvitation,
     useUpdatePropertyAccessMember,
-} from '@/features/access/api';
-import {useMe} from '@/features/auth/api/hooks';
-import type {MemberRole} from '@/features/access/lib/roles';
+} from '@/features/access';
+import {useMe} from '@/features/auth';
+import type {MemberRole} from '@/features/access';
 import type {
     AccessMemberStatus,
     AccessRole,
     PropertyAccessMember,
-} from '@/entities/access/model/types';
+} from '@/entities/access';
 import styles from './PropertySharingModal.module.css';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
