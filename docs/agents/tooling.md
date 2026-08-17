@@ -110,6 +110,10 @@ Both harnesses fail open and Kimi Code hooks are user-level config, so harness h
 
 No `PostToolUse` lint per edit: observation-only event, ~2.7 s per edit — friction without a win. Wiring: Kimi Code — opt-in `[[hooks]]` stanzas from `tools/hooks/README.md` into `~/.kimi-code/config.toml`; ZCode — deferred until its plugin mechanism matures (project hooks are ignored by design today).
 
+### knip — dead-code advisory report (in force since 2026-08-17, [issue #305](https://github.com/devnumbers/arenda-platform/issues/305))
+
+knip (pinned 6.32.2, run via `npx` — nothing installed, no lockfile changes) reports unused files, exports and dependencies. Advisory by design, not a gate: `make knip` loops `apps/frontend`, `apps/admin`, `tools/property-attributes`, `tools/hooks` standalone (`--directory`, `--no-exit-code`) — findings never fail the run, the printed report is the signal; only an infrastructure failure (npx download, broken config) exits non-zero. The target is self-sufficient like `tools-test`: it installs a package's `node_modules` when missing (knip resolves imports through them). The CI `knip` job mirrors it with `continue-on-error: true`, so the report lands in the job logs without any way to block a PR. Monorepo mode was rejected for the same reason as husky: it requires a root `package.json` the repo deliberately doesn't have. `apps/landing` is out of scope — a Figma Make export whose template ui-library makes the dead-code signal non-actionable (a raw run reports ~56 unused files and 52 unused dependencies by construction); revisit if the landing ever becomes hand-maintained. Per-package `knip.json` configs are calibrated to real false positives only: frontend ignores `public/sw.js` (registered by string path from PWA code) and `@svgr/webpack` (string webpack loader in `next.config.ts`); `tools/hooks` declares the two `.mjs` hook scripts as entry (invoked by harness config, never imported); `tools/property-attributes` ignores the `gofmt` binary (a system tool, not an npm dependency). Promoting knip to a blocking gate is a separate decision once these configs stabilize.
+
 ### Rules translated from prose to tools
 
 Decision [«Какие правила переводим из прозы в инструментальные гейты»](https://github.com/devnumbers/arenda-platform/issues/295): five packages in three waves by cost/win, plus closing the CI test gap. Translated rules get a one-line "enforced by X (config)" pointer in the relevant AGENTS.md — the prose compresses, it doesn't disappear.
@@ -122,7 +126,7 @@ Decision [«Какие правила переводим из прозы в ин
 
 ### Stays prose
 
-41 audited rules stay as prose in the four AGENTS.md files (workflow/skills/TDD/process, domain language, semantic invariants) — separate coding-standards documents are not introduced: AGENTS.md is the only file guaranteed to load into every harness session. Advisory-only: `knip` (dead-code) runs as a make target + non-blocking CI report; promoting it to a blocking gate is a separate decision once its config stabilizes.
+41 audited rules stay as prose in the four AGENTS.md files (workflow/skills/TDD/process, domain language, semantic invariants) — separate coding-standards documents are not introduced: AGENTS.md is the only file guaranteed to load into every harness session. Advisory-only: `knip` (dead-code) — in force as a make target + non-blocking CI report (section above); promoting it to a blocking gate is a separate decision once its config stabilizes.
 
 ## Rejected
 

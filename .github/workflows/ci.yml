@@ -312,6 +312,32 @@ jobs:
       - name: Tools contract tests
         run: make tools-test
 
+  # knip — advisory dead-code/unused-exports отчёт (#305): НЕ гейт. continue-on-error
+  # держит чек зелёным при любых находках (make knip и сам не падает на findings —
+  # --no-exit-code), сигнал — сам отчёт в логах джобы. make knip самодостаточен:
+  # ставит node_modules отсутствующих пакетов (tools-test паттерн).
+  knip:
+    name: Knip (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/frontend/package-lock.json
+            apps/admin/package-lock.json
+            tools/property-attributes/package-lock.json
+            tools/hooks/package-lock.json
+
+      - name: knip report
+        run: make knip
+
   landing:
     name: Landing
     runs-on: ubuntu-latest

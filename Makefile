@@ -14,6 +14,8 @@ TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a
 TRIVY_CACHE_VOLUME := arenda-trivy-cache
 NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks
 TOOLS_TEST_DIRS := tools/hooks
+KNIP_VERSION := 6.32.2
+KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks
 TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
 
 .PHONY: local-infra-up local-infra-down local-infra-reset \
@@ -25,7 +27,7 @@ TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disa
         admin-install admin-dev admin-build admin-typecheck \
         landing-install landing-dev landing-build \
         attributes-install attributes-gen attributes-check \
-        hooks-install backend-vulncheck npm-audit trivy-fs tools-test
+        hooks-install backend-vulncheck npm-audit trivy-fs tools-test knip
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -162,6 +164,24 @@ trivy-fs:
 		--exit-code 1 \
 		--skip-dirs node_modules \
 		--skip-dirs .git
+
+# Advisory dead-code/unused-exports/unused-dependencies report (knip, decision
+# #295 / issue #305). NOT a gate: --no-exit-code keeps the run green on
+# findings — the printed report is the signal; only an infrastructure failure
+# (npx download, broken config) fails. Promoting knip to a blocking gate is a
+# separate decision once the per-package knip.json configs stabilize
+# (docs/agents/tooling.md). Monorepo mode requires a root package.json the
+# repo deliberately doesn't have, so each package runs standalone; apps/landing
+# is out of scope — a Figma Make export whose template ui-library makes the
+# dead-code signal non-actionable. Self-sufficient like tools-test: installs
+# node_modules when missing (knip resolves imports through them).
+knip:
+	@set -e; status=0; for dir in $(KNIP_DIRS); do \
+		echo "==> knip $$dir"; \
+		{ [ -d $$dir/node_modules ] || npm --prefix $$dir install; } && \
+		npx --yes knip@$(KNIP_VERSION) --directory $$dir --no-exit-code || status=1; \
+	done; \
+	if [ $$status -ne 0 ]; then echo "ERROR: knip run failed (infrastructure, not findings — see above)"; exit 1; fi
 
 # Regenerates the T-Kassa spec artifacts and fails if regenerating changed
 # them, so CI catches a vendored/patched spec whose generated files were not
