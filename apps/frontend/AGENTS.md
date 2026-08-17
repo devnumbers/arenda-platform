@@ -85,6 +85,9 @@ cd apps/frontend && npm run build
 make frontend-test
 ```
 
+CI backstop: the `frontend-test` job in `.github/workflows/ci.yml` runs this
+vitest suite on every PR.
+
 ## Commands
 
 ```bash

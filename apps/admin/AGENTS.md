@@ -50,6 +50,9 @@ make admin-build
 make admin-test
 ```
 
+CI backstop: the `admin-test` job in `.github/workflows/ci.yml` runs this
+vitest suite on every PR.
+
 ## Commands
 
 ```bash

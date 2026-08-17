@@ -88,6 +88,40 @@ jobs:
       - name: Migrate up again
         run: go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -database "$DATABASE_URL" -path "$MIGRATIONS_DIR" up
 
+  # Интеграционные тесты бэкенда (волна 1B, #304) — закрывают CI-гэп: локальный
+  # `make backend-test-integration` теперь подстрахован CI. Toolchain та же, что у
+  # unit-степа джобы backend: контейнер golang:1.26-bookworm (образ прода),
+  # GOCACHE/GOMODCACHE в /tmp. Testcontainers работает изнутри контейнера (DooD):
+  # примонтирован Docker-сокет (--group-add даёт runner-юзеру право на него),
+  # PostgreSQL 18 стартует sibling-контейнером, а TESTCONTAINERS_HOST_OVERRIDE +
+  # host-gateway ведут тесты к опубликованным портам sibling-контейнеров через
+  # хост (localhost внутри контейнера указывал бы на сам контейнер).
+  # TESTCONTAINERS_RYUK_DISABLED: у параллельных тест-бинарей один sessionID (по
+  # родительскому go test), и переиспользование общего reaper-контейнера race-ит —
+  # бинар, поймавший reaper в статусе "created", терминирует его на всех. Без ryuk
+  # TestMain в testdb убирает контейнер только собственного бинар; контейнеры
+  # бинарей-потребителей остаются до пересоздания ephemeral-раннера — плата за
+  # детерминизм (локальный make-таргет ryuk оставляет: там демон живой).
+  backend-integration:
+    name: Backend integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Test (testcontainers, -race)
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" \
+            --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+            --add-host=host.docker.internal:host-gateway \
+            -e GOCACHE=/tmp/gocache -e GOMODCACHE=/tmp/gomodcache \
+            -e DOCKER_HOST=unix:///var/run/docker.sock \
+            -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
+            -e TESTCONTAINERS_RYUK_DISABLED=true \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ github.workspace }}:/src" -w /src/apps/backend \
+            golang:1.26-bookworm go test -tags=integration -race ./...
+
   # Freshness-гейты generated-кода платформенной спеки и sqlc (волна 1B, #303):
   # make-таргет перегенерирует артефакт и сравнивает git hash-object до/после —
   # протухший артефакт роняет джобу с инструкцией, как перегенерировать.
@@ -185,6 +219,30 @@ jobs:
       - name: Generated API client freshness
         run: make frontend-api-check
 
+  # Vitest-сьют фронтенда (волна 1B, #304) — закрывает CI-гэп: локальный
+  # `make frontend-test` теперь подстрахован CI.
+  frontend-test:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install
+        working-directory: apps/frontend
+        run: npm ci
+
+      - name: Test
+        working-directory: apps/frontend
+        run: npm run test
+
   admin:
     name: Admin
     runs-on: ubuntu-latest
@@ -210,6 +268,30 @@ jobs:
       - name: Build
         working-directory: apps/admin
         run: npm run build
+
+  # Vitest-сьют админки (волна 1B, #304) — закрывает CI-гэп: локальный
+  # `make admin-test` теперь подстрахован CI.
+  admin-test:
+    name: Admin tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+
+      - name: Install
+        working-directory: apps/admin
+        run: npm ci
+
+      - name: Test
+        working-directory: apps/admin
+        run: npm run test
 
   tools:
     name: Tools

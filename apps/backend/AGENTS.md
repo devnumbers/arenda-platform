@@ -111,3 +111,7 @@ make backend-test-integration
 This uses testcontainers-go (requires Docker) to start a dedicated PostgreSQL 18
 container per test binary. Alternatively, use an external database via
 `make test-infra-up` then `TEST_DATABASE_URL=... make backend-test-integration`.
+
+CI backstop: the `backend` job runs the unit suite and the `backend-integration`
+job runs the same `-tags=integration -race` suite (testcontainers via the mounted
+Docker socket) in `.github/workflows/ci.yml`.
