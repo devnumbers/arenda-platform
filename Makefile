@@ -7,6 +7,8 @@ LANDING_DIR := apps/landing
 GOLANGCI_LINT_VERSION := v2.12.2
 GOVULNCHECK_VERSION := v1.7.0
 LEFTHOOK_VERSION := v2.1.10
+OAPI_CODEGEN_VERSION := v2.7.1
+SQLC_VERSION := v1.31.1
 # aquasec/trivy 0.74.0, multi-arch manifest digest
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
 TRIVY_CACHE_VOLUME := arenda-trivy-cache
@@ -17,7 +19,8 @@ TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disa
 .PHONY: local-infra-up local-infra-down local-infra-reset \
         test-infra-up test-infra-down \
         backend-test backend-test-integration frontend-test admin-test test \
-        backend-run backend-lint backend-tkassa-spec-check check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
+        backend-run backend-lint backend-tkassa-spec-check backend-openapi-check backend-sqlc-check frontend-api-check \
+        check-bruno-coverage check-backend-env check-migrate-env migrate-up migrate-down \
         perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown \
         admin-install admin-dev admin-build admin-typecheck \
         landing-install landing-dev landing-build \
@@ -166,6 +169,9 @@ trivy-fs:
 # git status so the check also works on a dirty tree with in-flight spec work;
 # on CI's clean checkout a hash change is exactly a git status change.
 TKASSA_SPEC_DIR := $(BACKEND_DIR)/internal/billing/adapters/payment/tkassa/spec
+BACKEND_OPENAPI_OUT := $(BACKEND_DIR)/internal/platform/openapi/generated.gen.go
+BACKEND_SQLC_OUT_DIR := $(BACKEND_DIR)/internal/platform/generated/postgres
+FRONTEND_API_OUT := $(FRONTEND_DIR)/shared/api/generated.ts
 ATTRIBUTES_DIR := tools/property-attributes
 ATTRIBUTES_ARTIFACTS := \
 	apps/backend/internal/properties/domain/zz_catalog.gen.go \
@@ -191,6 +197,69 @@ backend-tkassa-spec-check:
 		exit 1; \
 	fi && \
 		echo "backend-tkassa-spec-check: spec generated files are fresh"
+
+# Regenerates the platform OpenAPI server types (internal/platform/openapi/
+# generated.gen.go from api/openapi/openapi.yaml + oapi-codegen.yaml) and
+# fails if regenerating changed them, so CI catches a contract or generator
+# config change whose generated file was not committed — the platform-spec
+# sibling of backend-tkassa-spec-check. Content hashes (git hash-object) are
+# compared instead of git status so the check also works on a dirty tree with
+# in-flight spec work; on CI's clean checkout a hash change is exactly a git
+# status change.
+backend-openapi-check:
+	@cd $(BACKEND_DIR) && \
+	before=$$(git hash-object internal/platform/openapi/generated.gen.go) && \
+	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION) \
+		-config api/openapi/oapi-codegen.yaml api/openapi/openapi.yaml && \
+	after=$$(git hash-object internal/platform/openapi/generated.gen.go) && \
+	if [ "$$before" != "$$after" ]; then \
+		echo "ERROR: OpenAPI generated code is stale — regenerating changed it:"; \
+		git -C $(CURDIR) status --porcelain -- $(BACKEND_OPENAPI_OUT); \
+		echo "Run 'cd $(BACKEND_DIR) && go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION) -config api/openapi/oapi-codegen.yaml api/openapi/openapi.yaml' and commit the regenerated file ($(BACKEND_OPENAPI_OUT))."; \
+		exit 1; \
+	fi && \
+	echo "backend-openapi-check: OpenAPI generated code is fresh"
+
+# Regenerates the sqlc output (internal/platform/generated/postgres/*.go from
+# db/queries + db/migrations + sqlc.yaml) and fails if regenerating changed
+# it, so CI catches a query, migration, or config change whose generated code
+# was not committed. The artifact list is a runtime shell glob, not a make
+# variable, so a .sql.go file added by generate changes the hash list too.
+# Content hashes (git hash-object) are compared instead of git status so the
+# check also works on a dirty tree.
+backend-sqlc-check:
+	@cd $(BACKEND_DIR) && \
+	before=$$(cd internal/platform/generated/postgres && git hash-object *.go) && \
+	go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate && \
+	after=$$(cd internal/platform/generated/postgres && git hash-object *.go) && \
+	if [ "$$before" != "$$after" ]; then \
+		echo "ERROR: sqlc generated code is stale — regenerating changed it:"; \
+		git -C $(CURDIR) status --porcelain -- $(BACKEND_SQLC_OUT_DIR); \
+		echo "Run 'cd $(BACKEND_DIR) && go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate' and commit the regenerated files ($(BACKEND_SQLC_OUT_DIR))."; \
+		exit 1; \
+	fi && \
+	echo "backend-sqlc-check: sqlc generated code is fresh"
+
+# Regenerates the frontend API client (shared/api/generated.ts from the
+# backend OpenAPI contract) and fails if regenerating changed it, so CI
+# catches an api/openapi/openapi.yaml change whose frontend client was not
+# committed. Content hashes (git hash-object) are compared instead of git
+# status so the check also works on a dirty tree. `npm install` runs only
+# when node_modules is missing so the gate stays fast (attributes-check
+# pattern); npm is invoked via `--prefix` to target apps/frontend, which also
+# sets the script cwd so its relative paths resolve.
+frontend-api-check:
+	@before=$$(git hash-object $(FRONTEND_API_OUT)) && \
+	{ [ -d $(FRONTEND_DIR)/node_modules ] || npm --prefix $(FRONTEND_DIR) install; } && \
+	npm --prefix $(FRONTEND_DIR) run generate:api && \
+	after=$$(git hash-object $(FRONTEND_API_OUT)) && \
+	if [ "$$before" != "$$after" ]; then \
+		echo "ERROR: frontend API client is stale — regenerating changed it:"; \
+		git status --porcelain -- $(FRONTEND_API_OUT); \
+		echo "Run 'cd $(FRONTEND_DIR) && npm run generate:api' and commit the regenerated file ($(FRONTEND_API_OUT))."; \
+		exit 1; \
+	fi && \
+	echo "frontend-api-check: frontend API client is fresh"
 
 attributes-install:
 	cd $(ATTRIBUTES_DIR) && npm install

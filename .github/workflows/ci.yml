@@ -88,6 +88,41 @@ jobs:
       - name: Migrate up again
         run: go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -database "$DATABASE_URL" -path "$MIGRATIONS_DIR" up
 
+  # Freshness-гейты generated-кода платформенной спеки и sqlc (волна 1B, #303):
+  # make-таргет перегенерирует артефакт и сравнивает git hash-object до/после —
+  # протухший артефакт роняет джобу с инструкцией, как перегенерировать.
+  backend-openapi-freshness:
+    name: Backend OpenAPI freshness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: OpenAPI generated code freshness
+        run: make backend-openapi-check
+
+  backend-sqlc-freshness:
+    name: Backend sqlc freshness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: sqlc generated code freshness
+        run: make backend-sqlc-check
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
@@ -129,6 +164,26 @@ jobs:
       - name: Typecheck
         working-directory: apps/frontend
         run: npx tsc --noEmit
+
+  # Freshness-гейт сгенерированного API-клиента фронтенда (волна 1B, #303):
+  # make-таргет ставит node_modules, если их нет, перегенерирует
+  # shared/api/generated.ts из бэкенд-спеки и сравнивает git hash-object.
+  frontend-api-freshness:
+    name: Frontend API client freshness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Generated API client freshness
+        run: make frontend-api-check
 
   admin:
     name: Admin
