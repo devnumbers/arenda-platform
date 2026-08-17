@@ -32,7 +32,7 @@ func TestPublisher_PublishUserRegistered(t *testing.T) {
 	d := &fakeDispatcher{}
 	pub := NewPublisher(d)
 
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	phone, err := domain.NewPhone("+79160004000")
 	if err != nil {
 		t.Fatalf("parse phone: %v", err)

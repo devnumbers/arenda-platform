@@ -80,7 +80,7 @@ func TestOnboarding_Integration_RedeliveryIsIdempotent(t *testing.T) {
 func TestSubscriptionService_Integration_GetSubscription(t *testing.T) {
 	h := newIntegrationHarness(t)
 
-	if _, err := h.subscriptionsSvc.GetSubscription(h.ctx(), uuid.New()); err == nil {
+	if _, err := h.subscriptionsSvc.GetSubscription(h.ctx(), uuid.Must(uuid.NewV7())); err == nil {
 		t.Fatal("GetSubscription() error = nil, want ErrSubscriptionNotFound")
 	}
 

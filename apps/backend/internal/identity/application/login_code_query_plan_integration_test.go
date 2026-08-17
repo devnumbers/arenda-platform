@@ -54,17 +54,17 @@ func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
 	now := time.Now().UTC()
 
 	// Seed the target row: an unused, non-expired code for the target tuple.
-	seedLoginCodeRow(t, pool, uuid.New(), targetPhone, targetEmail, targetPurpose,
+	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetPhone, targetEmail, targetPurpose,
 		false, now.Add(5*time.Minute), now.Add(-1*time.Minute))
 
 	// Same phone, different purpose — should not match the target query but lives
 	// in the same partial-index partition.
-	seedLoginCodeRow(t, pool, uuid.New(), targetPhone, targetEmail, "phone_change",
+	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetPhone, targetEmail, "phone_change",
 		false, now.Add(5*time.Minute), now.Add(-30*time.Second))
 	// Same phone+email+purpose, but already used — excluded by the partial predicate.
 	// A used+expired row cannot coexist with an unused one under the partial unique
 	// index, so this also exercises the expires_at filter indirectly.
-	seedLoginCodeRow(t, pool, uuid.New(), targetPhone, targetEmail, targetPurpose,
+	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetPhone, targetEmail, targetPurpose,
 		true, now.Add(-1*time.Hour), now.Add(-2*time.Hour))
 
 	// Seed enough rows so the planner treats the table as non-trivial and prefers
@@ -198,7 +198,7 @@ func bulkSeedLoginCodes(t *testing.T, pool *pgxpool.Pool, n int, usedRows bool, 
 				expiresAt = now.Add(-time.Duration(global+1) * time.Minute)
 			}
 			args = append(args,
-				uuid.New(), phone, "bulk@example.com", "bulkhash",
+				uuid.Must(uuid.NewV7()), phone, "bulk@example.com", "bulkhash",
 				expiresAt, usedRows, now.Add(-time.Duration(global+1)*time.Second), "login", false,
 			)
 			if j > 0 {

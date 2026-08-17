@@ -21,9 +21,9 @@ func newOnboardingHarness() (*OnboardingService, *fakeStores) {
 // testTariffs returns the three canonical tariffs with generated ids.
 func testTariffs() []domain.Tariff {
 	return []domain.Tariff{
-		{ID: uuid.New(), Name: domain.TariffBasic, ActivePropertyLimit: 1, IsActive: true},
-		{ID: uuid.New(), Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
-		{ID: uuid.New(), Name: domain.TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: true},
+		{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBasic, ActivePropertyLimit: 1, IsActive: true},
+		{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
+		{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: true},
 	}
 }
 
@@ -44,7 +44,7 @@ func basicTariffID(t *testing.T, tariffs []domain.Tariff) uuid.UUID {
 // transaction.
 func TestOnboardingService_OnUserRegistered_CreatesBasicSubscription(t *testing.T) {
 	svc, stores := newOnboardingHarness()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 
 	if err := svc.OnUserRegistered(t.Context(), userID); err != nil {
 		t.Fatalf("OnUserRegistered() error = %v", err)
@@ -97,7 +97,7 @@ func TestOnboardingService_OnUserRegistered_CreatesBasicSubscription(t *testing.
 // does not append a second transition.
 func TestOnboardingService_OnUserRegistered_IdempotentOnRedelivery(t *testing.T) {
 	svc, stores := newOnboardingHarness()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 
 	if err := svc.OnUserRegistered(t.Context(), userID); err != nil {
 		t.Fatalf("first OnUserRegistered() error = %v", err)
@@ -148,7 +148,7 @@ func (r *racingSubscriptionRepo) Create(context.Context, domain.Subscription) (d
 // delivery won the race), no duplicate transition is appended.
 func TestOnboardingService_OnUserRegistered_ConcurrentCreateSkipsTransition(t *testing.T) {
 	stores := newFakeStores(testTariffs()...)
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	winner, err := domain.NewBasicSubscription(userID, basicTariffID(t, testTariffs()))
 	if err != nil {
 		t.Fatalf("NewBasicSubscription() error = %v", err)
@@ -178,7 +178,7 @@ func TestOnboardingService_OnUserRegistered_MissingBasicSeedFails(t *testing.T) 
 	stores := newFakeStores() // no tariffs seeded
 	svc := NewOnboardingService(stores.factory(nil), OnboardingServiceConfig{Logger: slog.New(slog.DiscardHandler)})
 
-	err := svc.OnUserRegistered(t.Context(), uuid.New())
+	err := svc.OnUserRegistered(t.Context(), uuid.Must(uuid.NewV7()))
 	if err == nil {
 		t.Fatal("OnUserRegistered() error = nil, want error for missing seed")
 	}

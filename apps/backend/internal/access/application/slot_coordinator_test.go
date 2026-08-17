@@ -273,12 +273,12 @@ func TestSlotCoordinator_EnforceRecipientLimit_DowngradeSuspendsExcess(t *testin
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	recipient := uuid.New()
-	m1 := uuid.New()
-	m2 := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	m1 := uuid.Must(uuid.NewV7())
+	m2 := uuid.Must(uuid.NewV7())
 
 	// Recipient holds active shared memberships on both of owner's properties.
 	// m1 is the earlier-updated (recency comparator ranks it "worse", so it is
@@ -310,11 +310,11 @@ func TestSlotCoordinator_EnforceRecipientLimit_OwnObjectsNotTouched(t *testing.T
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	ownProp := uuid.New()
-	sharedProp := uuid.New()
-	recipient := uuid.New()
-	sharedMember := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	ownProp := uuid.Must(uuid.NewV7())
+	sharedProp := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	sharedMember := uuid.Must(uuid.NewV7())
 
 	// Recipient has one own property (registered with ownedProps only — it is
 	// NOT a membership row, the coordinator never sees it in memRepo) and one
@@ -344,12 +344,12 @@ func TestSlotCoordinator_EnforceRecipientLimit_OpenLeaseProtects(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pNoLease := uuid.New()   // shared membership, no open lease
-	pOpenLease := uuid.New() // shared membership, open lease present
-	recipient := uuid.New()
-	mNo := uuid.New()
-	mOpen := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pNoLease := uuid.Must(uuid.NewV7())   // shared membership, no open lease
+	pOpenLease := uuid.Must(uuid.NewV7()) // shared membership, open lease present
+	recipient := uuid.Must(uuid.NewV7())
+	mNo := uuid.Must(uuid.NewV7())
+	mOpen := uuid.Must(uuid.NewV7())
 
 	// mNo is the more-recently-updated but has no lease; mOpen is older but has
 	// an open lease. The open lease must win and protect mOpen.
@@ -374,12 +374,12 @@ func TestSlotCoordinator_EnforceRecipientLimit_RepeatDowngradeDoesNotRetouchSusp
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	recipient := uuid.New()
-	mAlready := uuid.New()
-	mActive := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mAlready := uuid.Must(uuid.NewV7())
+	mActive := uuid.Must(uuid.NewV7())
 
 	// mAlready is pre-suspended with a fixed timestamp; mActive is still active.
 	originalSuspended := t1Old
@@ -410,7 +410,7 @@ func TestSlotCoordinator_EnforceRecipientLimit_RepeatDowngradeDoesNotRetouchSusp
 func TestSlotCoordinator_EnforceOnActivation_FreeSlotReturnsFalse(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
-	recipient := uuid.New()
+	recipient := uuid.Must(uuid.NewV7())
 	f.limiter.set(recipient, 1) // used=0 < limit=1 → free slot
 
 	got, err := f.coordinator.EnforceOnActivation(context.Background(), noopTx{}, recipient)
@@ -428,8 +428,8 @@ func TestSlotCoordinator_EnforceOnActivation_PoolFullReturnsTrue(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	recipient := uuid.New()
-	ownProp := uuid.New()
+	recipient := uuid.Must(uuid.NewV7())
+	ownProp := uuid.Must(uuid.NewV7())
 	f.ownedProps.add(recipient, ownProp, t1Old)
 	f.limiter.set(recipient, 1) // used=1 >= limit=1 → no free slot
 
@@ -448,12 +448,12 @@ func TestSlotCoordinator_RecoverSuspended_FIFORecoversEarliest(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	recipient := uuid.New()
-	m1 := uuid.New() // suspended earlier
-	m2 := uuid.New() // suspended later
+	owner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	m1 := uuid.Must(uuid.NewV7()) // suspended earlier
+	m2 := uuid.Must(uuid.NewV7()) // suspended later
 
 	f.addSuspendedMember(t, m1, p1, owner, recipient, t1Old, t1Old)
 	f.addSuspendedMember(t, m2, p2, owner, recipient, t2New, t2New)
@@ -481,12 +481,12 @@ func TestSlotCoordinator_RecoverSuspended_NoFreeSlotRecoverNothing(t *testing.T)
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pActive := uuid.New()
-	pSuspended := uuid.New()
-	recipient := uuid.New()
-	mActive := uuid.New()
-	mSuspended := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pActive := uuid.Must(uuid.NewV7())
+	pSuspended := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mActive := uuid.Must(uuid.NewV7())
+	mSuspended := uuid.Must(uuid.NewV7())
 
 	// One active shared membership (occupies the slot) + one suspended.
 	f.addActiveMember(t, mActive, pActive, owner, recipient, t1Old)
@@ -515,12 +515,12 @@ func TestSlotCoordinator_RecoverSuspended_BatchTieBreakOpenLeaseFirst(t *testing
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pNoLease := uuid.New()
-	pOpenLease := uuid.New()
-	recipient := uuid.New()
-	mNo := uuid.New()
-	mOpen := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pNoLease := uuid.Must(uuid.NewV7())
+	pOpenLease := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mNo := uuid.Must(uuid.NewV7())
+	mOpen := uuid.Must(uuid.NewV7())
 
 	// Same SuspendedAt (a downgrade batch). mOpen's property has an open lease,
 	// so the batch tie-break recovers it first. Only one free slot → only one
@@ -545,13 +545,13 @@ func TestSlotCoordinator_EnforceRecipientLimit_MultipleRecipients(t *testing.T) 
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	r1 := uuid.New() // limit 0 → suspended
-	r2 := uuid.New() // limit 1 → stays active
-	m1 := uuid.New()
-	m2 := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	r1 := uuid.Must(uuid.NewV7()) // limit 0 → suspended
+	r2 := uuid.Must(uuid.NewV7()) // limit 1 → stays active
+	m1 := uuid.Must(uuid.NewV7())
+	m2 := uuid.Must(uuid.NewV7())
 
 	f.addActiveMember(t, m1, p1, owner, r1, t1Old)
 	f.addActiveMember(t, m2, p2, owner, r2, t2New)
@@ -574,12 +574,12 @@ func TestSlotCoordinator_EnforceRecipientLimit_DowngradingUserAsRecipient(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	foreignOwner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	downgrading := uuid.New() // the user whose tariff dropped; billing passes his id
-	m1 := uuid.New()
-	m2 := uuid.New()
+	foreignOwner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	downgrading := uuid.Must(uuid.NewV7()) // the user whose tariff dropped; billing passes his id
+	m1 := uuid.Must(uuid.NewV7())
+	m2 := uuid.Must(uuid.NewV7())
 
 	// The downgrading user holds active shared memberships on a foreign owner's
 	// properties; m1 is the earlier-updated eviction candidate.
@@ -602,13 +602,13 @@ func TestSlotCoordinator_EnforceRecipientLimit_OwnerAndRecipientInOneCall(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	user := uuid.New()
-	ownProp := uuid.New()
-	foreignOwner := uuid.New()
-	foreignProp := uuid.New()
-	member := uuid.New()   // member of the user's own property
-	mOwn := uuid.New()     // the member's membership on the user's property
-	mForeign := uuid.New() // the user's membership on the foreign property
+	user := uuid.Must(uuid.NewV7())
+	ownProp := uuid.Must(uuid.NewV7())
+	foreignOwner := uuid.Must(uuid.NewV7())
+	foreignProp := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())   // member of the user's own property
+	mOwn := uuid.Must(uuid.NewV7())     // the member's membership on the user's property
+	mForeign := uuid.Must(uuid.NewV7()) // the user's membership on the foreign property
 
 	f.addActiveMember(t, mOwn, ownProp, user, member, t1Old)
 	f.addActiveMember(t, mForeign, foreignProp, foreignOwner, user, t2New)
@@ -630,18 +630,18 @@ func TestSlotCoordinator_RecoverSuspendedForProperty_PerRecipientRecovery(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pArchived := uuid.New() // the object being archived (both recipients hold it)
+	owner := uuid.Must(uuid.NewV7())
+	pArchived := uuid.Must(uuid.NewV7()) // the object being archived (both recipients hold it)
 	// Each recipient also has a suspended membership on another of owner's
 	// properties, which should be recovered once their slot frees.
-	pR1Suspended := uuid.New()
-	pR2Suspended := uuid.New()
-	r1 := uuid.New()
-	r2 := uuid.New()
-	mArchivedR1 := uuid.New()
-	mArchivedR2 := uuid.New()
-	mR1Suspended := uuid.New()
-	mR2Suspended := uuid.New()
+	pR1Suspended := uuid.Must(uuid.NewV7())
+	pR2Suspended := uuid.Must(uuid.NewV7())
+	r1 := uuid.Must(uuid.NewV7())
+	r2 := uuid.Must(uuid.NewV7())
+	mArchivedR1 := uuid.Must(uuid.NewV7())
+	mArchivedR2 := uuid.Must(uuid.NewV7())
+	mR1Suspended := uuid.Must(uuid.NewV7())
+	mR2Suspended := uuid.Must(uuid.NewV7())
 
 	// Active memberships on the archived object (these would be removed by the
 	// properties service in a real archive flow; here they still occupy slots
@@ -701,12 +701,12 @@ func TestSlotCoordinator_RecoverAfterPropertyDelete_DropsAndRecovers(t *testing.
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pDeleted := uuid.New()
-	pSuspended := uuid.New()
-	recipient := uuid.New()
-	mDeleted := uuid.New()
-	mSuspended := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pDeleted := uuid.Must(uuid.NewV7())
+	pSuspended := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mDeleted := uuid.Must(uuid.NewV7())
+	mSuspended := uuid.Must(uuid.NewV7())
 
 	f.addActiveMember(t, mDeleted, pDeleted, owner, recipient, t1Old)
 	f.addSuspendedMember(t, mSuspended, pSuspended, owner, recipient, t2New, t2New)
@@ -730,11 +730,11 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_SuspendsWhenNoSlot(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pUnarchived := uuid.New()
-	pOwn := uuid.New()
-	recipient := uuid.New()
-	mUnarchived := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pUnarchived := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mUnarchived := uuid.Must(uuid.NewV7())
 
 	f.addActiveMember(t, mUnarchived, pUnarchived, owner, recipient, t1Old)
 	f.ownedProps.add(recipient, pOwn, t2New) // own property occupies one slot
@@ -755,12 +755,12 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_StaysActiveAtLimit(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pUnarchived := uuid.New()
-	pOther := uuid.New()
-	recipient := uuid.New()
-	mUnarchived := uuid.New()
-	mOther := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pUnarchived := uuid.Must(uuid.NewV7())
+	pOther := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mUnarchived := uuid.Must(uuid.NewV7())
+	mOther := uuid.Must(uuid.NewV7())
 
 	f.addActiveMember(t, mUnarchived, pUnarchived, owner, recipient, t1Old)
 	f.addActiveMember(t, mOther, pOther, owner, recipient, t2New)
@@ -787,11 +787,11 @@ func TestSlotCoordinator_RecoverSuspended_RecipientFreesOwnSlot(t *testing.T) {
 	f := newCoordinatorFixture()
 
 	// owner has a property shared with recipient; recipient holds it suspended.
-	owner := uuid.New()
-	pShared := uuid.New()
-	pOwn := uuid.New()
-	recipient := uuid.New()
-	mShared := uuid.New() // suspended shared membership on owner's object
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7()) // suspended shared membership on owner's object
 
 	// Recipient's tariff pool was full (limit 1, own property occupying the slot)
 	// so the shared membership was created suspended.

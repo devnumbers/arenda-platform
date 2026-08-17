@@ -150,12 +150,12 @@ func (h *sessionHarness) seedSessionUser(t *testing.T, phone domain.Phone, email
 
 func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) {
 	beginner := &fakeBeginner{}
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	rawToken := "plain-token"
 	tokenHash := fakeHasher{}.HashToken(rawToken)
 
 	wantSession := domain.Session{
-		ID:         uuid.New(),
+		ID:         uuid.Must(uuid.NewV7()),
 		UserID:     userID,
 		TokenHash:  tokenHash,
 		ExpiresAt:  testNow.Add(domain.SessionBaseTTL),
@@ -192,7 +192,7 @@ func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) 
 func TestSessionService_Update_DelegatesToRepository(t *testing.T) {
 	h := newSessionHarness()
 	sess := domain.Session{
-		ID:        uuid.New(),
+		ID:        uuid.Must(uuid.NewV7()),
 		TokenHash: "hash-update",
 		ExpiresAt: testNow.Add(time.Hour),
 	}

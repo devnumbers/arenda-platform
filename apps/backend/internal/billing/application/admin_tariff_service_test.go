@@ -50,7 +50,7 @@ func TestCreateTariff_PersistsValidatedPlanWithAudit(t *testing.T) {
 	// Drop pro so the name is free to create; the closed vocabulary keeps the
 	// same name space the user contract pins.
 	h.stores.tariffs.tariffs = h.stores.tariffs.tariffs[:1]
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	created, err := h.svc.CreateTariff(t.Context(), adminID, CreateTariffRequest{
 		Name:                domain.TariffPro,
@@ -91,7 +91,7 @@ func TestCreateTariff_DuplicateNameRejected(t *testing.T) {
 	h := newTariffHarness(t)
 	before := len(h.stores.tariffs.tariffs)
 
-	_, err := h.svc.CreateTariff(t.Context(), uuid.New(), CreateTariffRequest{
+	_, err := h.svc.CreateTariff(t.Context(), uuid.Must(uuid.NewV7()), CreateTariffRequest{
 		Name:                domain.TariffPro,
 		ActivePropertyLimit: 5,
 		MonthlyPriceKopecks: 59000,
@@ -116,7 +116,7 @@ func TestCreateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
 	h.stores.tariffs.tariffs = h.stores.tariffs.tariffs[:1]
 	before := len(h.stores.tariffs.tariffs)
 
-	_, err := h.svc.CreateTariff(t.Context(), uuid.New(), CreateTariffRequest{
+	_, err := h.svc.CreateTariff(t.Context(), uuid.Must(uuid.NewV7()), CreateTariffRequest{
 		Name:                domain.TariffPro,
 		ActivePropertyLimit: 5,
 		MonthlyPriceKopecks: -1,
@@ -137,7 +137,7 @@ func TestCreateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
 func TestUpdateTariff_RewritesPricingLimitAndActivityWithAudit(t *testing.T) {
 	h := newTariffHarness(t)
 	proID := h.tariffID(t, domain.TariffPro)
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	updated, err := h.svc.UpdateTariff(t.Context(), adminID, proID, UpdateTariffRequest{
 		ActivePropertyLimit: 7,
@@ -178,7 +178,7 @@ func TestUpdateTariff_RewritesPricingLimitAndActivityWithAudit(t *testing.T) {
 func TestUpdateTariff_MissingTariffRejected(t *testing.T) {
 	h := newTariffHarness(t)
 
-	_, err := h.svc.UpdateTariff(t.Context(), uuid.New(), uuid.New(), UpdateTariffRequest{
+	_, err := h.svc.UpdateTariff(t.Context(), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), UpdateTariffRequest{
 		ActivePropertyLimit: 5,
 		MonthlyPriceKopecks: 49000,
 		YearlyPriceKopecks:  440000,
@@ -199,7 +199,7 @@ func TestUpdateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
 	h := newTariffHarness(t)
 	proID := h.tariffID(t, domain.TariffPro)
 
-	_, err := h.svc.UpdateTariff(t.Context(), uuid.New(), proID, UpdateTariffRequest{
+	_, err := h.svc.UpdateTariff(t.Context(), uuid.Must(uuid.NewV7()), proID, UpdateTariffRequest{
 		ActivePropertyLimit: -2,
 		MonthlyPriceKopecks: 49000,
 		YearlyPriceKopecks:  440000,

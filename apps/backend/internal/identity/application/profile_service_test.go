@@ -227,7 +227,7 @@ func TestProfileService_UpdateProfile_RollsBackOnGetError(t *testing.T) {
 	h := newProfileHarness(t)
 	// No seeded user → GetByIDForUpdate returns ErrNotFound.
 
-	_, err := h.svc.UpdateProfile(context.Background(), uuid.New(), UpdateProfileCommand{Name: new("Ivan")})
+	_, err := h.svc.UpdateProfile(context.Background(), uuid.Must(uuid.NewV7()), UpdateProfileCommand{Name: new("Ivan")})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("UpdateProfile error = %v, want wrap of ErrNotFound", err)
 	}

@@ -11,7 +11,7 @@ import (
 // TestTariffService_ListTariffs_ReturnsActiveOnly proves the user-facing tariff
 // listing hides inactive tariffs.
 func TestTariffService_ListTariffs_ReturnsActiveOnly(t *testing.T) {
-	hidden := domain.Tariff{ID: uuid.New(), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
+	hidden := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
 	stores := newFakeStores(append(testTariffs(), hidden)...)
 	svc := NewTariffService(stores.factory(nil))
 
@@ -32,7 +32,7 @@ func TestTariffService_ListTariffs_ReturnsActiveOnly(t *testing.T) {
 // TestTariffService_ListAllTariffs_ReturnsHiddenToo proves the admin tariff
 // listing includes hidden tariffs (issue #247).
 func TestTariffService_ListAllTariffs_ReturnsHiddenToo(t *testing.T) {
-	hidden := domain.Tariff{ID: uuid.New(), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
+	hidden := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
 	seeded := append(testTariffs(), hidden)
 	stores := newFakeStores(seeded...)
 	svc := NewTariffService(stores.factory(nil))
@@ -64,7 +64,7 @@ func TestSubscriptionService_GetSubscription_AssemblesView(t *testing.T) {
 	tariffs := testTariffs()
 	stores := newFakeStores(tariffs...)
 	svc := NewSubscriptionService(stores.factory(nil), SubscriptionServiceConfig{})
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 
 	sub, err := domain.NewBasicSubscription(userID, tariffs[0].ID)
 	if err != nil {
@@ -94,7 +94,7 @@ func TestSubscriptionService_GetSubscription_AssemblesView(t *testing.T) {
 func TestSubscriptionService_GetSubscription_NotFound(t *testing.T) {
 	svc := NewSubscriptionService(newFakeStores().factory(nil), SubscriptionServiceConfig{})
 
-	_, err := svc.GetSubscription(t.Context(), uuid.New())
+	_, err := svc.GetSubscription(t.Context(), uuid.Must(uuid.NewV7()))
 	if !errors.Is(err, ErrSubscriptionNotFound) {
 		t.Fatalf("err = %v, want ErrSubscriptionNotFound", err)
 	}

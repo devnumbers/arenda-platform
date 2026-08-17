@@ -154,7 +154,7 @@ func TestPhoneChangeService_SendChangeCode(t *testing.T) {
 		h := newPhoneChangeHarness()
 		newPhone := mustPhone(t, "+79160000104")
 
-		err := h.svc.SendChangeCode(t.Context(), uuid.New(), newPhone)
+		err := h.svc.SendChangeCode(t.Context(), uuid.Must(uuid.NewV7()), newPhone)
 		if !errors.Is(err, ErrNotFound) {
 			t.Fatalf("SendChangeCode error = %v, want wrap of ErrNotFound", err)
 		}
@@ -335,7 +335,7 @@ func TestPhoneChangeService_ChangePhone(t *testing.T) {
 		h := newPhoneChangeHarness()
 		newPhone := mustPhone(t, "+79160000700")
 
-		_, err := h.svc.ChangePhone(t.Context(), uuid.New(), newPhone, "123456", "token")
+		_, err := h.svc.ChangePhone(t.Context(), uuid.Must(uuid.NewV7()), newPhone, "123456", "token")
 		if !errors.Is(err, ErrNotFound) {
 			t.Fatalf("ChangePhone error = %v, want wrap of ErrNotFound", err)
 		}

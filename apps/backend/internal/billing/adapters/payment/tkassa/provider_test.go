@@ -271,7 +271,7 @@ func TestProviderInitPaymentInitiatorRequired(t *testing.T) {
 
 	p := newTestProvider(server.URL)
 	_, err := p.InitPayment(context.Background(), application.InitPaymentRequest{
-		PaymentID:     uuid.New(),
+		PaymentID:     uuid.Must(uuid.NewV7()),
 		AmountKopecks: 100,
 		CustomerRef:   "ck",
 	})
@@ -299,7 +299,7 @@ func TestProviderInitPaymentMerchantInitiated(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	paymentID := uuid.New()
+	paymentID := uuid.Must(uuid.NewV7())
 	_, err := p.InitPayment(context.Background(), application.InitPaymentRequest{
 		PaymentID:     paymentID,
 		AmountKopecks: 100,
@@ -352,7 +352,7 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 		p := newTestProvider(server.URL)
 		due := time.Date(2026, 7, 13, 15, 0, 0, 0, time.FixedZone("MSK", 3*60*60))
 		_, err := p.InitPayment(context.Background(), application.InitPaymentRequest{
-			PaymentID:     uuid.New(),
+			PaymentID:     uuid.Must(uuid.NewV7()),
 			AmountKopecks: 100,
 			CustomerRef:   "ck",
 			Purpose:       testPurpose(),
@@ -379,7 +379,7 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 
 		p := newTestProvider(server.URL)
 		_, err := p.InitPayment(context.Background(), application.InitPaymentRequest{
-			PaymentID:     uuid.New(),
+			PaymentID:     uuid.Must(uuid.NewV7()),
 			AmountKopecks: 100,
 			CustomerRef:   "ck",
 			Purpose:       testPurpose(),
@@ -410,7 +410,7 @@ func TestProviderInitPaymentError(t *testing.T) {
 
 	p := newTestProvider(server.URL)
 	_, err := p.InitPayment(context.Background(), application.InitPaymentRequest{
-		PaymentID:     uuid.New(),
+		PaymentID:     uuid.Must(uuid.NewV7()),
 		AmountKopecks: 100,
 		CustomerRef:   "ck",
 		Purpose:       testPurpose(),
@@ -429,7 +429,7 @@ func TestProviderInitPaymentError(t *testing.T) {
 }
 
 func TestProviderChargePayment(t *testing.T) {
-	paymentID := uuid.New()
+	paymentID := uuid.Must(uuid.NewV7())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/Charge" {
@@ -488,7 +488,7 @@ func TestProviderChargePaymentRejectedCarriesErrorCode(t *testing.T) {
 
 	p := newTestProvider(server.URL)
 	result, err := p.ChargePayment(context.Background(), application.ChargeRequest{
-		PaymentID:         uuid.New(),
+		PaymentID:         uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "123",
 		AmountKopecks:     10000,
 		ChargeToken:       "rebill-token",
@@ -524,7 +524,7 @@ func TestProviderPaymentStatus(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	paymentID := uuid.New()
+	paymentID := uuid.Must(uuid.NewV7())
 	status, err := p.PaymentStatus(context.Background(), paymentID, "999")
 	if err != nil {
 		t.Fatalf("PaymentStatus failed: %v", err)
@@ -543,7 +543,7 @@ func TestProviderPaymentStatus(t *testing.T) {
 }
 
 func TestProviderRefundPayment(t *testing.T) {
-	paymentID := uuid.New()
+	paymentID := uuid.Must(uuid.NewV7())
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/Cancel" {
@@ -594,7 +594,7 @@ func TestProviderRefundPaymentReversedPending(t *testing.T) {
 
 	p := newTestProvider(server.URL)
 	result, err := p.RefundPayment(context.Background(), application.RefundRequest{
-		PaymentID:         uuid.New(),
+		PaymentID:         uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "778",
 		AmountKopecks:     5000,
 	})
@@ -623,7 +623,7 @@ func TestProviderRefundPaymentError(t *testing.T) {
 
 	p := newTestProvider(server.URL)
 	_, err := p.RefundPayment(context.Background(), application.RefundRequest{
-		PaymentID:         uuid.New(),
+		PaymentID:         uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "404",
 		AmountKopecks:     100,
 	})
@@ -986,7 +986,7 @@ func TestProviderHTTPErrorIncludesBody(t *testing.T) {
 
 	p := newTestProvider(server.URL)
 	_, err := p.ChargePayment(context.Background(), application.ChargeRequest{
-		PaymentID:         uuid.New(),
+		PaymentID:         uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "1",
 		AmountKopecks:     100,
 		ChargeToken:       "t",

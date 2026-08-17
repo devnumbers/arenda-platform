@@ -65,7 +65,7 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 		_, err = pool.Exec(ctx,
 			`INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_used_at)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			id, user.ID, "count-test-"+uuid.NewString(), expiresAt, createdAt, now)
+			id, user.ID, "count-test-"+uuid.Must(uuid.NewV7()).String(), expiresAt, createdAt, now)
 		if err != nil {
 			t.Fatalf("insert session (expires %v): %v", expiresAt, err)
 		}

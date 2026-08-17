@@ -51,7 +51,7 @@ func TestProviderInitPaymentContract(t *testing.T) {
 		{
 			name: "renewal",
 			req: application.InitPaymentRequest{
-				PaymentID:     uuid.New(),
+				PaymentID:     uuid.Must(uuid.NewV7()),
 				AmountKopecks: 500,
 				Period:        domain.PeriodMonth,
 				CustomerRef:   "customer-2",
@@ -221,7 +221,7 @@ func TestProviderInitPaymentContract(t *testing.T) {
 }
 
 func TestProviderChargePaymentContract(t *testing.T) {
-	paymentID := uuid.New()
+	paymentID := uuid.Must(uuid.NewV7())
 	var captured []byte
 	var capturedMap map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -318,7 +318,7 @@ func TestProviderGetStateContract(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	status, err := p.PaymentStatus(context.Background(), uuid.New(), "999")
+	status, err := p.PaymentStatus(context.Background(), uuid.Must(uuid.NewV7()), "999")
 	if err != nil {
 		t.Fatalf("PaymentStatus failed: %v", err)
 	}
@@ -346,7 +346,7 @@ func TestProviderGetStateContract(t *testing.T) {
 }
 
 func TestProviderCancelContract(t *testing.T) {
-	paymentID := uuid.New()
+	paymentID := uuid.Must(uuid.NewV7())
 	providerPaymentID := "cancel-contract-123"
 	var captured []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

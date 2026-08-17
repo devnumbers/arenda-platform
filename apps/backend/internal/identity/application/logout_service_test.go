@@ -38,7 +38,7 @@ func TestLogoutService_Logout_DeletesSessionByTokenHash(t *testing.T) {
 
 	rawToken := "plain-test-value"
 	tokenHash := fakeHasher{}.HashToken(rawToken)
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	stores.sessions.sessions[tokenHash] = domain.Session{UserID: userID, TokenHash: tokenHash}
 
 	if err := svc.Logout(context.Background(), rawToken, testLogoutActor); err != nil {
@@ -92,8 +92,8 @@ func TestLogoutService_Logout_WrapsDeleteError(t *testing.T) {
 func TestLogoutService_LogoutAll_DeletesSessionsByUserID(t *testing.T) {
 	svc, stores := newLogoutHarness()
 
-	userID := uuid.New()
-	otherUserID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
+	otherUserID := uuid.Must(uuid.NewV7())
 	stores.sessions.sessions["hash-a"] = domain.Session{UserID: userID, TokenHash: "hash-a"}
 	stores.sessions.sessions["hash-b"] = domain.Session{UserID: userID, TokenHash: "hash-b"}
 	stores.sessions.sessions["hash-c"] = domain.Session{UserID: otherUserID, TokenHash: "hash-c"}
@@ -164,7 +164,7 @@ func TestLogoutService_RecordsAuditInTx(t *testing.T) {
 		},
 	)
 
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
 
 	if err := svc.Logout(context.Background(), "token", actor); err != nil {
@@ -213,7 +213,7 @@ func TestLogoutService_LogoutAll_RecordsAuditInTx(t *testing.T) {
 		},
 	)
 
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
 
 	if err := svc.LogoutAll(context.Background(), userID, actor); err != nil {
@@ -247,7 +247,7 @@ func TestLogoutService_AuditFailOpen(t *testing.T) {
 		},
 	)
 
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
 
 	if err := svc.Logout(context.Background(), "token", actor); err != nil {

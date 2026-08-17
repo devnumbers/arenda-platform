@@ -84,7 +84,7 @@ func TestNewSessionLoader_NilServiceReturnsNil(t *testing.T) {
 func TestSessionLoader_Load_SuccessMapsSessionAndUser(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	wantSession := domain.Session{
 		TokenHash:  "raw-token", // passThroughHasher is pass-through
 		ExpiresAt:  now.Add(time.Hour),

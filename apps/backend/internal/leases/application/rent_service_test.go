@@ -28,7 +28,7 @@ func (r *fakeOperationRepo) Create(_ context.Context, op domain.Operation) (doma
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if op.ID == uuid.Nil {
-		id, _ := uuid.NewRandom()
+		id, _ := uuid.NewV7()
 		op.ID = id
 	}
 	r.ops = append(r.ops, op)
@@ -40,7 +40,7 @@ func (r *fakeOperationRepo) BulkCreate(_ context.Context, ops []domain.Operation
 	defer r.mu.Unlock()
 	for _, op := range ops {
 		if op.ID == uuid.Nil {
-			id, _ := uuid.NewRandom()
+			id, _ := uuid.NewV7()
 			op.ID = id
 		}
 		r.ops = append(r.ops, op)

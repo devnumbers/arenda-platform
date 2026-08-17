@@ -10,7 +10,7 @@ import (
 func TestSession_IsExpired(t *testing.T) {
 	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	s := Session{
-		ID:         uuid.New(),
+		ID:         uuid.Must(uuid.NewV7()),
 		ExpiresAt:  created.Add(SessionBaseTTL),
 		CreatedAt:  created,
 		LastUsedAt: created,
@@ -40,7 +40,7 @@ func TestSession_Refresh(t *testing.T) {
 
 	t.Run("extends expiration by SessionBaseTTL", func(t *testing.T) {
 		s := Session{
-			ID:         uuid.New(),
+			ID:         uuid.Must(uuid.NewV7()),
 			ExpiresAt:  created.Add(SessionBaseTTL),
 			CreatedAt:  created,
 			LastUsedAt: created,
@@ -66,7 +66,7 @@ func TestSession_Refresh(t *testing.T) {
 		// days before the cap (still active). Refresh must clamp to maxExpires.
 		now := maxExpires.Add(-6 * 24 * time.Hour)
 		s := Session{
-			ID:         uuid.New(),
+			ID:         uuid.Must(uuid.NewV7()),
 			ExpiresAt:  maxExpires.Add(-3 * 24 * time.Hour),
 			CreatedAt:  created,
 			LastUsedAt: created,
@@ -86,7 +86,7 @@ func TestSession_Refresh(t *testing.T) {
 	t.Run("expired session is never refreshed", func(t *testing.T) {
 		expires := created.Add(SessionBaseTTL)
 		s := Session{
-			ID:         uuid.New(),
+			ID:         uuid.Must(uuid.NewV7()),
 			ExpiresAt:  expires,
 			CreatedAt:  created,
 			LastUsedAt: created,
@@ -109,7 +109,7 @@ func TestSession_Refresh(t *testing.T) {
 		// so candidate.After(ExpiresAt) is false.
 		maxExpires := created.Add(SessionMaxTTL)
 		s := Session{
-			ID:         uuid.New(),
+			ID:         uuid.Must(uuid.NewV7()),
 			ExpiresAt:  maxExpires,
 			CreatedAt:  created,
 			LastUsedAt: created,
@@ -129,7 +129,7 @@ func TestSession_Refresh(t *testing.T) {
 
 	t.Run("updates LastUsedAt on every successful refresh", func(t *testing.T) {
 		s := Session{
-			ID:         uuid.New(),
+			ID:         uuid.Must(uuid.NewV7()),
 			ExpiresAt:  created.Add(SessionBaseTTL),
 			CreatedAt:  created,
 			LastUsedAt: created,
@@ -151,7 +151,7 @@ func TestSession_Refresh(t *testing.T) {
 func TestNewSession(t *testing.T) {
 	t.Parallel()
 
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	now := time.Date(2026, 1, 15, 8, 30, 0, 0, time.UTC)
 
 	raw, err := NewSession(userID, now)

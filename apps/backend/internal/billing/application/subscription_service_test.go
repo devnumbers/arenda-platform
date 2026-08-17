@@ -76,7 +76,7 @@ func (h *subscriptionHarness) tariffID(t *testing.T, name domain.TariffName) uui
 // month of paid validity and returns it.
 func (h *subscriptionHarness) seedPaidSubscription(t *testing.T, name domain.TariffName) domain.Subscription {
 	t.Helper()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	sub, err := domain.NewBasicSubscription(userID, h.tariffID(t, name))
 	if err != nil {
 		t.Fatalf("NewBasicSubscription() error = %v", err)
@@ -157,7 +157,7 @@ func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t 
 func TestSubscriptionService_CancelSubscription_NotFound(t *testing.T) {
 	h := newSubscriptionHarness(t)
 
-	if err := h.svc.CancelSubscription(t.Context(), uuid.New()); !errors.Is(err, ErrSubscriptionNotFound) {
+	if err := h.svc.CancelSubscription(t.Context(), uuid.Must(uuid.NewV7())); !errors.Is(err, ErrSubscriptionNotFound) {
 		t.Fatalf("err = %v, want ErrSubscriptionNotFound", err)
 	}
 }
@@ -280,7 +280,7 @@ func TestSubscriptionService_ToggleAutoRenew_CancelledRejected(t *testing.T) {
 
 func TestSubscriptionService_ToggleAutoRenew_EnableWithoutValidityRejected(t *testing.T) {
 	h := newSubscriptionHarness(t)
-	sub, err := domain.NewBasicSubscription(uuid.New(), h.tariffID(t, domain.TariffBasic))
+	sub, err := domain.NewBasicSubscription(uuid.Must(uuid.NewV7()), h.tariffID(t, domain.TariffBasic))
 	if err != nil {
 		t.Fatalf("NewBasicSubscription() error = %v", err)
 	}
@@ -303,7 +303,7 @@ func TestSubscriptionService_ToggleAutoRenew_EnableWithoutValidityRejected(t *te
 func TestSubscriptionService_ToggleAutoRenew_NotFound(t *testing.T) {
 	h := newSubscriptionHarness(t)
 
-	if err := h.svc.ToggleAutoRenew(t.Context(), uuid.New(), true); !errors.Is(err, ErrSubscriptionNotFound) {
+	if err := h.svc.ToggleAutoRenew(t.Context(), uuid.Must(uuid.NewV7()), true); !errors.Is(err, ErrSubscriptionNotFound) {
 		t.Fatalf("err = %v, want ErrSubscriptionNotFound", err)
 	}
 }
@@ -459,7 +459,7 @@ func TestSubscriptionService_ChangeTariff_CancelledSubscriptionRejected(t *testi
 func TestSubscriptionService_ChangeTariff_NoSubscription(t *testing.T) {
 	h := newSubscriptionHarness(t)
 
-	_, err := h.svc.ChangeTariff(t.Context(), uuid.New(), ChangeTariffRequest{
+	_, err := h.svc.ChangeTariff(t.Context(), uuid.Must(uuid.NewV7()), ChangeTariffRequest{
 		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})

@@ -156,7 +156,7 @@ func (h *paymentHarness) tariffID(t *testing.T, name domain.TariffName) uuid.UUI
 // it, applying mutate last.
 func (h *paymentHarness) seedSubscription(t *testing.T, mutate func(*domain.Subscription)) domain.Subscription {
 	t.Helper()
-	sub, err := domain.NewBasicSubscription(uuid.New(), h.tariffID(t, domain.TariffPro))
+	sub, err := domain.NewBasicSubscription(uuid.Must(uuid.NewV7()), h.tariffID(t, domain.TariffPro))
 	if err != nil {
 		t.Fatalf("NewBasicSubscription() error = %v", err)
 	}
@@ -1126,7 +1126,7 @@ func TestWebhook_Rejections(t *testing.T) {
 	h.provider.parseErr = nil
 
 	h.setNotification(&PaymentNotification{
-		InternalPaymentID: uuid.New(),
+		InternalPaymentID: uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "unknown",
 		Status:            domain.PaymentStatusSucceeded,
 	})
@@ -1245,7 +1245,7 @@ func TestListPayments_ReturnsPaymentsWithTariffs(t *testing.T) {
 		t.Errorf("oldest view status = %q, want succeeded", views[1].Payment.Status)
 	}
 
-	other, err := h.payments.ListPayments(t.Context(), uuid.New())
+	other, err := h.payments.ListPayments(t.Context(), uuid.Must(uuid.NewV7()))
 	if err != nil {
 		t.Fatalf("ListPayments(other) error = %v", err)
 	}

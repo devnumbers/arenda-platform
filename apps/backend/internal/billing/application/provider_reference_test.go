@@ -42,7 +42,7 @@ func (h *providerReferenceHarness) seedPendingPayment(t *testing.T, mutate func(
 			pro = tariff
 		}
 	}
-	payment, err := domain.NewSubscriptionPayment(uuid.New(), uuid.New(), pro.ID, domain.PeriodMonth, pro.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
+	payment, err := domain.NewSubscriptionPayment(uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), pro.ID, domain.PeriodMonth, pro.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment() error = %v", err)
 	}
@@ -183,7 +183,7 @@ func TestSaveProviderReference_FinalizedPaymentWins(t *testing.T) {
 func TestSaveProviderReference_MissingPaymentFails(t *testing.T) {
 	h := newProviderReferenceHarness(t)
 
-	_, err := h.save(t, uuid.New(), InitPaymentResult{ProviderPaymentID: "prov_x"}, h.now)
+	_, err := h.save(t, uuid.Must(uuid.NewV7()), InitPaymentResult{ProviderPaymentID: "prov_x"}, h.now)
 	if !errors.Is(err, ErrPaymentNotFound) {
 		t.Fatalf("saveProviderReference() error = %v, want ErrPaymentNotFound", err)
 	}

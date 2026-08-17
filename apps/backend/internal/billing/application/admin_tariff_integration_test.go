@@ -89,7 +89,7 @@ func TestTariffRepository_Integration_UpdateEditsAndMissNarrows(t *testing.T) {
 		t.Errorf("stored = %s/%d/%v, want pro/7/hidden", storedName, storedLimit, storedActive)
 	}
 
-	if _, err := h.tariffs.Update(h.ctx(), domain.Tariff{ID: uuid.New()}); !errors.Is(err, billingapp.ErrNotFound) {
+	if _, err := h.tariffs.Update(h.ctx(), domain.Tariff{ID: uuid.Must(uuid.NewV7())}); !errors.Is(err, billingapp.ErrNotFound) {
 		t.Fatalf("Update(missing) error = %v, want %v", err, billingapp.ErrNotFound)
 	}
 }

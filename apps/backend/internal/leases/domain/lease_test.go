@@ -8,8 +8,8 @@ import (
 )
 
 func TestNewLeaseEndDateBeforeStart(t *testing.T) {
-	ownerID := uuid.New()
-	propertyID := uuid.New()
+	ownerID := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
 	startDate := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 
@@ -25,8 +25,8 @@ func TestNewLeaseEndDateBeforeStart(t *testing.T) {
 }
 
 func TestLeaseCalculateStatus(t *testing.T) {
-	ownerID := uuid.New()
-	propertyID := uuid.New()
+	ownerID := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
 	startDate := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)
 

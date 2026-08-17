@@ -31,7 +31,7 @@ func (s stubSubscriber) GetSubscription(_ context.Context, _ uuid.UUID) (billing
 func TestBillingMeEnricher(t *testing.T) {
 	t.Parallel()
 
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 
 	t.Run("nil billing is a noop", func(t *testing.T) {
 		t.Parallel()
@@ -80,7 +80,7 @@ func TestBillingMeEnricher(t *testing.T) {
 		tariff := billingdomain.Tariff{Name: billingdomain.TariffPro, ActivePropertyLimit: 10}
 		view := billingapp.SubscriptionView{
 			Subscription: billingdomain.Subscription{
-				ID:     uuid.New(),
+				ID:     uuid.Must(uuid.NewV7()),
 				UserID: userID,
 				Status: billingdomain.SubscriptionStatusActive,
 			},

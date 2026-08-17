@@ -63,7 +63,7 @@ func (h *subscriptionHarness) auditEntries(action auditdomain.Action) []auditdom
 func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t *testing.T) {
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	req := AssignServiceSubscriptionRequest{
 		TariffName: domain.TariffBusiness,
@@ -130,7 +130,7 @@ func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t 
 // anything is written.
 func TestAdminAssignServiceSubscription_TermResolution(t *testing.T) {
 	h := newSubscriptionHarness(t)
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	cases := []struct {
 		name      string
@@ -211,7 +211,7 @@ func TestAdminAssignServiceSubscription_TariffNotFound(t *testing.T) {
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBasic)
 
-	err := h.svc.AssignServiceSubscription(t.Context(), uuid.New(), sub.UserID, AssignServiceSubscriptionRequest{
+	err := h.svc.AssignServiceSubscription(t.Context(), uuid.Must(uuid.NewV7()), sub.UserID, AssignServiceSubscriptionRequest{
 		TariffName: domain.TariffName("platinum"),
 		TermType:   ServiceTermMonth,
 	})
@@ -227,7 +227,7 @@ func TestAdminAssignServiceSubscription_TariffNotFound(t *testing.T) {
 func TestAdminForceChangeTariff_AppliesWithoutPayment(t *testing.T) {
 	h := newSubscriptionHarness(t)
 	sub := h.seedServiceSubscription(t, domain.TariffBusiness)
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	if err := h.svc.ForceChangeTariff(t.Context(), adminID, sub.UserID, ForceChangeTariffRequest{
 		TariffName: domain.TariffPro,
@@ -283,7 +283,7 @@ func TestAdminForceChangeTariff_AppliesWithoutPayment(t *testing.T) {
 // of scope.
 func TestAdminForceChangeTariff_Rejections(t *testing.T) {
 	h := newSubscriptionHarness(t)
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	if err := h.svc.ForceChangeTariff(t.Context(), adminID, sub.UserID, ForceChangeTariffRequest{
@@ -321,7 +321,7 @@ func TestAdminExtendGrace_LengthensWindowWithTransitionAudit(t *testing.T) {
 	if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
 		t.Fatalf("seed Update() error = %v", err)
 	}
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	if err := h.svc.ExtendGrace(t.Context(), adminID, sub.UserID, 3); err != nil {
 		t.Fatalf("ExtendGrace() error = %v", err)
@@ -360,7 +360,7 @@ func TestAdminExtendGrace_LengthensWindowWithTransitionAudit(t *testing.T) {
 // can be extended, and the day count stays within the operational cap.
 func TestAdminExtendGrace_Rejections(t *testing.T) {
 	h := newSubscriptionHarness(t)
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	if err := h.svc.ExtendGrace(t.Context(), adminID, sub.UserID, 3); !errors.Is(err, domain.ErrInvalidSubscriptionState) {
@@ -389,7 +389,7 @@ func TestAdminExtendGrace_Rejections(t *testing.T) {
 func TestAdminCancelSubscription_CancelsWithAdminAttribution(t *testing.T) {
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 
 	if err := h.svc.CancelSubscriptionAsAdmin(t.Context(), adminID, sub.UserID); err != nil {
 		t.Fatalf("CancelSubscriptionAsAdmin() error = %v", err)
@@ -438,7 +438,7 @@ func TestAdminCancelSubscription_CancelsWithAdminAttribution(t *testing.T) {
 func TestAdminListTransitions_ResolvesTariffNames(t *testing.T) {
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
-	if err := h.svc.CancelSubscriptionAsAdmin(t.Context(), uuid.New(), sub.UserID); err != nil {
+	if err := h.svc.CancelSubscriptionAsAdmin(t.Context(), uuid.Must(uuid.NewV7()), sub.UserID); err != nil {
 		t.Fatalf("CancelSubscriptionAsAdmin() error = %v", err)
 	}
 
@@ -460,7 +460,7 @@ func TestAdminListTransitions_ResolvesTariffNames(t *testing.T) {
 		t.Errorf("reason = %q, want cancelled", view.Transition.Reason)
 	}
 
-	other, err := h.svc.ListTransitions(t.Context(), uuid.New())
+	other, err := h.svc.ListTransitions(t.Context(), uuid.Must(uuid.NewV7()))
 	if !errors.Is(err, ErrSubscriptionNotFound) {
 		t.Fatalf("ListTransitions(unknown user) error = %v, want ErrSubscriptionNotFound", err)
 	}

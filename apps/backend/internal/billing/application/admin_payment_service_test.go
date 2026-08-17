@@ -227,7 +227,7 @@ func TestRefundPayment_RejectedBeforeProviderCall(t *testing.T) {
 	})
 
 	t.Run("unknown payment", func(t *testing.T) {
-		if err := h.payments.RefundPayment(t.Context(), h.adminID, uuid.New()); !errors.Is(err, ErrPaymentNotFound) {
+		if err := h.payments.RefundPayment(t.Context(), h.adminID, uuid.Must(uuid.NewV7())); !errors.Is(err, ErrPaymentNotFound) {
 			t.Errorf("err = %v, want ErrPaymentNotFound", err)
 		}
 	})
@@ -513,7 +513,7 @@ func TestSyncPayment(t *testing.T) {
 
 	t.Run("unknown payment", func(t *testing.T) {
 		h := newRefundHarness(t)
-		if err := h.payments.SyncPayment(t.Context(), h.adminID, uuid.New()); !errors.Is(err, ErrPaymentNotFound) {
+		if err := h.payments.SyncPayment(t.Context(), h.adminID, uuid.Must(uuid.NewV7())); !errors.Is(err, ErrPaymentNotFound) {
 			t.Errorf("err = %v, want ErrPaymentNotFound", err)
 		}
 	})

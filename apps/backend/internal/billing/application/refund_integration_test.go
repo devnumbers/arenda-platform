@@ -428,7 +428,7 @@ func TestAdminPayments_ListAndFilters(t *testing.T) {
 	}
 
 	// An unknown payment answers not found.
-	if _, err := h.paymentsSvc.GetAdminPayment(h.ctx(), uuid.New()); !errors.Is(err, billingapp.ErrPaymentNotFound) {
+	if _, err := h.paymentsSvc.GetAdminPayment(h.ctx(), uuid.Must(uuid.NewV7())); !errors.Is(err, billingapp.ErrPaymentNotFound) {
 		t.Fatalf("unknown payment err = %v, want ErrPaymentNotFound", err)
 	}
 }

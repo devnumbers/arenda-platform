@@ -31,8 +31,8 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	clk := fakeClock{now: now}
 
-	finiteTariff := domain.Tariff{ID: uuid.New(), Name: domain.TariffPro, ActivePropertyLimit: 5, IsActive: true}
-	unlimitedTariff := domain.Tariff{ID: uuid.New(), Name: domain.TariffBusiness, ActivePropertyLimit: domain.UnlimitedPropertyLimit, IsActive: true}
+	finiteTariff := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5, IsActive: true}
+	unlimitedTariff := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: domain.UnlimitedPropertyLimit, IsActive: true}
 
 	validUntilFuture := now.Add(time.Hour)
 	validUntilPast := now.Add(-time.Hour)
@@ -53,7 +53,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 		{
 			name: "cancelled without valid_until returns zero",
 			sub: &domain.Subscription{
-				UserID: uuid.New(), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusCancelled,
+				UserID: uuid.Must(uuid.NewV7()), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusCancelled,
 			},
 			tariffs:   []domain.Tariff{finiteTariff},
 			wantLimit: 0,
@@ -61,7 +61,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 		{
 			name: "cancelled with future valid_until returns limit",
 			sub: &domain.Subscription{
-				UserID: uuid.New(), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilFuture,
+				UserID: uuid.Must(uuid.NewV7()), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilFuture,
 			},
 			tariffs:   []domain.Tariff{finiteTariff},
 			wantLimit: 5,
@@ -69,7 +69,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 		{
 			name: "cancelled with expired valid_until returns zero",
 			sub: &domain.Subscription{
-				UserID: uuid.New(), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilPast,
+				UserID: uuid.Must(uuid.NewV7()), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilPast,
 			},
 			tariffs:   []domain.Tariff{finiteTariff},
 			wantLimit: 0,
@@ -77,7 +77,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 		{
 			name: "cancelled unlimited with future valid_until returns max int32",
 			sub: &domain.Subscription{
-				UserID: uuid.New(), TariffID: unlimitedTariff.ID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilFuture,
+				UserID: uuid.Must(uuid.NewV7()), TariffID: unlimitedTariff.ID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilFuture,
 			},
 			tariffs:   []domain.Tariff{unlimitedTariff},
 			wantLimit: math.MaxInt32,
@@ -85,7 +85,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 		{
 			name: "active with finite limit returns limit",
 			sub: &domain.Subscription{
-				UserID: uuid.New(), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusActive,
+				UserID: uuid.Must(uuid.NewV7()), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusActive,
 			},
 			tariffs:   []domain.Tariff{finiteTariff},
 			wantLimit: 5,
@@ -93,7 +93,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 		{
 			name: "active with finite limit via locked transaction returns limit",
 			sub: &domain.Subscription{
-				UserID: uuid.New(), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusActive,
+				UserID: uuid.Must(uuid.NewV7()), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusActive,
 			},
 			tariffs:   []domain.Tariff{finiteTariff},
 			viaTx:     true,
@@ -102,7 +102,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 		{
 			name: "active with unlimited limit returns max int32",
 			sub: &domain.Subscription{
-				UserID: uuid.New(), TariffID: unlimitedTariff.ID, Status: domain.SubscriptionStatusActive,
+				UserID: uuid.Must(uuid.NewV7()), TariffID: unlimitedTariff.ID, Status: domain.SubscriptionStatusActive,
 			},
 			tariffs:   []domain.Tariff{unlimitedTariff},
 			wantLimit: math.MaxInt32,
@@ -114,7 +114,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 			stores := newFakeStores(tt.tariffs...)
 			limiter := NewSubscriptionPropertyLimiter(stores.subscriptions, stores.tariffs, clk)
 
-			userID := uuid.New()
+			userID := uuid.Must(uuid.NewV7())
 			if tt.sub != nil {
 				userID = tt.sub.UserID
 				if _, err := stores.subscriptions.Create(context.Background(), *tt.sub); err != nil {
@@ -150,7 +150,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 func TestSubscriptionPropertyLimiter_TariffErrorIsWrapped(t *testing.T) {
 	errBoom := errors.New("tariff repo boom")
 	stores := newFakeStores()
-	sub := domain.Subscription{UserID: uuid.New(), TariffID: uuid.New(), Status: domain.SubscriptionStatusActive}
+	sub := domain.Subscription{UserID: uuid.Must(uuid.NewV7()), TariffID: uuid.Must(uuid.NewV7()), Status: domain.SubscriptionStatusActive}
 	if _, err := stores.subscriptions.Create(context.Background(), sub); err != nil {
 		t.Fatalf("seed Create() error: %v", err)
 	}

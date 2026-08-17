@@ -225,7 +225,7 @@ func TestLogoutAll_Success(t *testing.T) {
 		},
 	}
 	h := newHandlers(nil, logout, nil)
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 
 	r := authedRequest(t, http.MethodPost, "/auth/logout-all", "", userID)
 	rr := doHandler(t, h.LogoutAll, r)
@@ -245,7 +245,7 @@ func TestLogoutAll_ErrorReturns500(t *testing.T) {
 	}
 	h := newHandlers(nil, logout, nil)
 
-	r := authedRequest(t, http.MethodPost, "/auth/logout-all", "", uuid.New())
+	r := authedRequest(t, http.MethodPost, "/auth/logout-all", "", uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.LogoutAll, r)
 
 	if rr.Code != http.StatusInternalServerError {
@@ -270,7 +270,7 @@ func TestGetMe_NoUserIDReturns401(t *testing.T) {
 
 func TestGetMe_Success(t *testing.T) {
 	t.Parallel()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	phone := mustPhoneHandler(t, "+79160000800")
 	email := mustEmailHandler(t, "owner@example.com")
 	name := "Ivan"
@@ -315,7 +315,7 @@ func TestGetMe_NotFoundReturns401(t *testing.T) {
 	}
 	h := newHandlers(profile, nil, nil)
 
-	r := authedRequest(t, http.MethodGet, "/me", "", uuid.New())
+	r := authedRequest(t, http.MethodGet, "/me", "", uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.GetMe, r)
 
 	if rr.Code != http.StatusUnauthorized {
@@ -330,7 +330,7 @@ func TestGetMe_OtherErrorReturns500(t *testing.T) {
 	}
 	h := newHandlers(profile, nil, nil)
 
-	r := authedRequest(t, http.MethodGet, "/me", "", uuid.New())
+	r := authedRequest(t, http.MethodGet, "/me", "", uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.GetMe, r)
 
 	if rr.Code != http.StatusInternalServerError {
@@ -340,7 +340,7 @@ func TestGetMe_OtherErrorReturns500(t *testing.T) {
 
 func TestGetMe_EnricherSuccess(t *testing.T) {
 	t.Parallel()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	phone := mustPhoneHandler(t, "+79160000801")
 	profile := &fakeProfiler{
 		me: func(context.Context, uuid.UUID) (domain.User, error) {
@@ -366,7 +366,7 @@ func TestGetMe_EnricherSuccess(t *testing.T) {
 
 func TestGetMe_EnricherErrorReturns500(t *testing.T) {
 	t.Parallel()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	phone := mustPhoneHandler(t, "+79160000802")
 	profile := &fakeProfiler{
 		me: func(context.Context, uuid.UUID) (domain.User, error) {
@@ -405,7 +405,7 @@ func TestUpdateMe_BadBodyReturns400(t *testing.T) {
 	t.Parallel()
 	h := newHandlers(&fakeProfiler{}, nil, nil)
 
-	r := authedRequest(t, http.MethodPatch, "/me", "{invalid", uuid.New())
+	r := authedRequest(t, http.MethodPatch, "/me", "{invalid", uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.UpdateMe, r)
 
 	if rr.Code != http.StatusBadRequest {
@@ -415,7 +415,7 @@ func TestUpdateMe_BadBodyReturns400(t *testing.T) {
 
 func TestUpdateMe_Success(t *testing.T) {
 	t.Parallel()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	phone := mustPhoneHandler(t, "+79160000900")
 	var gotCmd application.UpdateProfileCommand
 	profile := &fakeProfiler{
@@ -449,7 +449,7 @@ func TestUpdateMe_InvalidEmailReturns400(t *testing.T) {
 	}
 	h := newHandlers(profile, nil, nil)
 
-	r := authedRequest(t, http.MethodPatch, "/me", `{"email":"bad"}`, uuid.New())
+	r := authedRequest(t, http.MethodPatch, "/me", `{"email":"bad"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.UpdateMe, r)
 
 	if rr.Code != http.StatusBadRequest {
@@ -466,7 +466,7 @@ func TestUpdateMe_InvalidTimezoneReturns400(t *testing.T) {
 	}
 	h := newHandlers(profile, nil, nil)
 
-	r := authedRequest(t, http.MethodPatch, "/me", `{"timezone":"bad"}`, uuid.New())
+	r := authedRequest(t, http.MethodPatch, "/me", `{"timezone":"bad"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.UpdateMe, r)
 
 	if rr.Code != http.StatusBadRequest {
@@ -483,7 +483,7 @@ func TestUpdateMe_NotFoundReturns401(t *testing.T) {
 	}
 	h := newHandlers(profile, nil, nil)
 
-	r := authedRequest(t, http.MethodPatch, "/me", `{"name":"Ivan"}`, uuid.New())
+	r := authedRequest(t, http.MethodPatch, "/me", `{"name":"Ivan"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.UpdateMe, r)
 
 	if rr.Code != http.StatusUnauthorized {
@@ -510,7 +510,7 @@ func TestSendPhoneChangeCode_BadPhoneReturns400(t *testing.T) {
 	t.Parallel()
 	h := newHandlers(nil, nil, &fakePhoneChanger{})
 
-	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"bad"}`, uuid.New())
+	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"bad"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.SendPhoneChangeCode, r)
 
 	if rr.Code != http.StatusBadRequest {
@@ -528,7 +528,7 @@ func TestSendPhoneChangeCode_SuccessReturns204(t *testing.T) {
 		},
 	}
 	h := newHandlers(nil, nil, pc)
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 
 	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"+79160001000"}`, userID)
 	rr := doHandler(t, h.SendPhoneChangeCode, r)
@@ -548,7 +548,7 @@ func TestSendPhoneChangeCode_UnchangedReturns400(t *testing.T) {
 	}
 	h := newHandlers(nil, nil, pc)
 
-	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"+79160001000"}`, uuid.New())
+	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"+79160001000"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.SendPhoneChangeCode, r)
 
 	if rr.Code != http.StatusBadRequest {
@@ -563,7 +563,7 @@ func TestSendPhoneChangeCode_TakenReturns409(t *testing.T) {
 	}
 	h := newHandlers(nil, nil, pc)
 
-	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"+79160001000"}`, uuid.New())
+	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"+79160001000"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.SendPhoneChangeCode, r)
 
 	if rr.Code != http.StatusConflict {
@@ -590,7 +590,7 @@ func TestChangePhone_NoTokenReturns401(t *testing.T) {
 	t.Parallel()
 	h := newHandlers(nil, nil, &fakePhoneChanger{})
 
-	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, uuid.New())
+	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.ChangePhone, r)
 
 	if rr.Code != http.StatusUnauthorized {
@@ -600,7 +600,7 @@ func TestChangePhone_NoTokenReturns401(t *testing.T) {
 
 func TestChangePhone_Success(t *testing.T) {
 	t.Parallel()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	phone := mustPhoneHandler(t, "+79160002000")
 	pc := &fakePhoneChanger{
 		changePhone: func(_ context.Context, _ uuid.UUID, _ domain.Phone, _, _ string) (domain.User, error) {
@@ -628,7 +628,7 @@ func TestChangePhone_InvalidCodeReturns401(t *testing.T) {
 	}
 	h := newHandlers(nil, nil, pc)
 
-	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"000000"}`, uuid.New())
+	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"000000"}`, uuid.Must(uuid.NewV7()))
 	r.AddCookie(sessionCookie("token"))
 	rr := doHandler(t, h.ChangePhone, r)
 
@@ -646,7 +646,7 @@ func TestChangePhone_UnchangedReturns400(t *testing.T) {
 	}
 	h := newHandlers(nil, nil, pc)
 
-	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, uuid.New())
+	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, uuid.Must(uuid.NewV7()))
 	r.AddCookie(sessionCookie("token"))
 	rr := doHandler(t, h.ChangePhone, r)
 
@@ -664,7 +664,7 @@ func TestChangePhone_TakenReturns409(t *testing.T) {
 	}
 	h := newHandlers(nil, nil, pc)
 
-	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, uuid.New())
+	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, uuid.Must(uuid.NewV7()))
 	r.AddCookie(sessionCookie("token"))
 	rr := doHandler(t, h.ChangePhone, r)
 
@@ -681,7 +681,7 @@ func TestMeResponse_NilEmail(t *testing.T) {
 	t.Parallel()
 	phone := mustPhoneHandler(t, "+79160003000")
 	user := domain.User{
-		ID:    uuid.New(),
+		ID:    uuid.Must(uuid.NewV7()),
 		Phone: phone,
 		Role:  domain.RoleOwner,
 		// Email intentionally nil
@@ -748,7 +748,7 @@ func TestActorFromContext(t *testing.T) {
 
 	t.Run("owner when actor is in context", func(t *testing.T) {
 		t.Parallel()
-		userID := uuid.New()
+		userID := uuid.Must(uuid.NewV7())
 		// The middleware sets both userID and actor identity in the context.
 		ctx := httpsupport.WithActor(t.Context(), userID, domain.RoleOwner)
 		ctx = httpsupport.WithUserID(ctx, userID)

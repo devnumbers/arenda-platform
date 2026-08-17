@@ -61,7 +61,7 @@ func (h *transitionHarness) tariffByName(t *testing.T, name domain.TariffName) d
 // mutate, and returns the stored aggregate.
 func (h *transitionHarness) seedSubscription(t *testing.T, name domain.TariffName, mutate func(*domain.Subscription)) domain.Subscription {
 	t.Helper()
-	sub, err := domain.NewBasicSubscription(uuid.New(), h.tariffID(t, name))
+	sub, err := domain.NewBasicSubscription(uuid.Must(uuid.NewV7()), h.tariffID(t, name))
 	if err != nil {
 		t.Fatalf("NewBasicSubscription() error = %v", err)
 	}
@@ -228,7 +228,7 @@ func TestApplyTransition_StatusAndTariffChange(t *testing.T) {
 		s.Status = domain.SubscriptionStatusGrace
 	})
 	businessID := h.tariffID(t, domain.TariffBusiness)
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 	until := h.now.AddDate(0, 1, 0)
 
 	applied, err := h.apply(t, &sub,
@@ -336,7 +336,7 @@ func TestApplyTransition_ValidityOnlyChange(t *testing.T) {
 		deadline := h.now.Add(24 * time.Hour)
 		s.ValidUntil = &deadline
 	})
-	adminID := uuid.New()
+	adminID := uuid.Must(uuid.NewV7())
 	extra := 48 * time.Hour
 	wantUntil := h.now.Add(24 * time.Hour).Add(extra)
 
@@ -423,7 +423,7 @@ func TestApplyTransition_PaymentTransitions(t *testing.T) {
 	t.Run("applied payment", func(t *testing.T) {
 		h := newTransitionHarness(t)
 		sub := h.seedSubscription(t, domain.TariffPro, nil)
-		paymentID := uuid.New()
+		paymentID := uuid.Must(uuid.NewV7())
 
 		applied, err := h.apply(t, &sub,
 			func(s *domain.Subscription) error { return s.ApplyRenewal(paymentID, domain.PeriodMonth, h.now) },
@@ -451,8 +451,8 @@ func TestApplyTransition_PaymentTransitions(t *testing.T) {
 		h := newTransitionHarness(t)
 		sub := h.seedSubscription(t, domain.TariffPro, nil)
 		basicID := h.tariffID(t, domain.TariffBasic)
-		adminID := uuid.New()
-		paymentID := uuid.New()
+		adminID := uuid.Must(uuid.NewV7())
+		paymentID := uuid.Must(uuid.NewV7())
 
 		applied, err := h.apply(t, &sub,
 			func(s *domain.Subscription) error { s.DowngradeToBasic(basicID); return nil },
@@ -483,8 +483,8 @@ func TestApplyTransition_PaymentTransitions(t *testing.T) {
 // without a from-side — the zero value a no-op returns — false, so an
 // idempotent no-op never triggers the limit enforcement.
 func TestTransitionChangedTariff(t *testing.T) {
-	from := uuid.New()
-	other := uuid.New()
+	from := uuid.Must(uuid.NewV7())
+	other := uuid.Must(uuid.NewV7())
 	cases := []struct {
 		name       string
 		transition domain.Transition
@@ -510,7 +510,7 @@ func TestTransitionChangedTariff(t *testing.T) {
 // system-initiated. A caller mix-up fails loudly instead of silently
 // flattening into a wrong log entry.
 func TestApplyTransition_RejectsMisusedPaymentSpec(t *testing.T) {
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	for _, tc := range []struct {
 		name string
 		spec transitionSpec
@@ -521,7 +521,7 @@ func TestApplyTransition_RejectsMisusedPaymentSpec(t *testing.T) {
 				reason:      domain.TransitionReasonCancelled,
 				initiator:   domain.InitiatorUser,
 				initiatorID: &userID,
-				paymentID:   new(uuid.New()),
+				paymentID:   new(uuid.Must(uuid.NewV7())),
 			},
 		},
 		{
@@ -530,7 +530,7 @@ func TestApplyTransition_RejectsMisusedPaymentSpec(t *testing.T) {
 				reason:      domain.TransitionReasonPaymentApplied,
 				initiator:   domain.InitiatorAdmin,
 				initiatorID: &userID,
-				paymentID:   new(uuid.New()),
+				paymentID:   new(uuid.Must(uuid.NewV7())),
 			},
 		},
 	} {

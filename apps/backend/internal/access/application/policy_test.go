@@ -116,12 +116,12 @@ var _ = time.Now
 func TestMembershipPolicy_RoleForProperty(t *testing.T) {
 	t.Parallel()
 
-	owner := uuid.New()
-	member := uuid.New()
-	suspended := uuid.New()
-	stranger := uuid.New()
-	property := uuid.New()
-	missingProperty := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	suspended := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+	missingProperty := uuid.Must(uuid.NewV7())
 
 	resolver := fakeOwnerResolver{property: owner}
 	repo := fakeMemberRepo{
@@ -171,9 +171,9 @@ func TestMembershipPolicy_RoleForProperty(t *testing.T) {
 func TestMembershipPolicy_ViewerMember(t *testing.T) {
 	t.Parallel()
 
-	owner := uuid.New()
-	viewer := uuid.New()
-	property := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	viewer := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	resolver := fakeOwnerResolver{property: owner}
 	repo := fakeMemberRepo{
@@ -200,10 +200,10 @@ func TestMembershipPolicy_ViewerMember(t *testing.T) {
 func TestMembershipPolicy_Role_DerivedOwnerWide(t *testing.T) {
 	t.Parallel()
 
-	owner := uuid.New()
-	fullMember := uuid.New()
-	viewer := uuid.New()
-	stranger := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	fullMember := uuid.Must(uuid.NewV7())
+	viewer := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
 
 	repo := fakeMemberRepo{
 		maxByOwner: map[[2]uuid.UUID]domain.Role{

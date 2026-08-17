@@ -151,7 +151,7 @@ func newMethodHarness(t *testing.T) *methodHarness {
 // completion has a renewal target to link.
 func (h *methodHarness) seedMethodSubscription(t *testing.T) (uuid.UUID, domain.Subscription) {
 	t.Helper()
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	sub, err := domain.NewBasicSubscription(userID, h.tariffs[0].ID)
 	if err != nil {
 		t.Fatalf("NewBasicSubscription() error = %v", err)
@@ -722,7 +722,7 @@ func TestActivatePaymentMethod_MissingOrForeignIsNotFound(t *testing.T) {
 		t.Fatalf("AddPaymentMethod(other) error = %v", err)
 	}
 
-	if err := h.methods.ActivatePaymentMethod(t.Context(), userID, uuid.New()); !errors.Is(err, ErrPaymentMethodNotFound) {
+	if err := h.methods.ActivatePaymentMethod(t.Context(), userID, uuid.Must(uuid.NewV7())); !errors.Is(err, ErrPaymentMethodNotFound) {
 		t.Errorf("activate missing: err = %v, want ErrPaymentMethodNotFound", err)
 	}
 	if err := h.methods.ActivatePaymentMethod(t.Context(), userID, owned.PaymentMethod.ID); !errors.Is(err, ErrPaymentMethodNotFound) {
@@ -813,7 +813,7 @@ func TestDeletePaymentMethod_NotFoundOrForeign(t *testing.T) {
 		t.Fatalf("AddPaymentMethod(other) error = %v", err)
 	}
 
-	if err := h.methods.DeletePaymentMethod(t.Context(), userID, uuid.New()); !errors.Is(err, ErrPaymentMethodNotFound) {
+	if err := h.methods.DeletePaymentMethod(t.Context(), userID, uuid.Must(uuid.NewV7())); !errors.Is(err, ErrPaymentMethodNotFound) {
 		t.Errorf("delete missing: err = %v, want ErrPaymentMethodNotFound", err)
 	}
 	if err := h.methods.DeletePaymentMethod(t.Context(), userID, owned.PaymentMethod.ID); !errors.Is(err, ErrPaymentMethodNotFound) {

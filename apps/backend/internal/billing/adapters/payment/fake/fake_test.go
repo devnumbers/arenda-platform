@@ -194,7 +194,7 @@ func TestProviderConfirmPaymentFailedFlow(t *testing.T) {
 
 func TestProviderConfirmPaymentUnknownID(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	_, err := p.ConfirmPayment(context.Background(), uuid.New().String())
+	_, err := p.ConfirmPayment(context.Background(), uuid.Must(uuid.NewV7()).String())
 	if err == nil {
 		t.Fatal("expected error for unknown payment")
 	}
@@ -218,7 +218,7 @@ func TestProviderChargePayment(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 
 	res, err := p.ChargePayment(context.Background(), application.ChargeRequest{
-		PaymentID:         uuid.New(),
+		PaymentID:         uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "fake_1",
 		AmountKopecks:     5000,
 		ChargeToken:       "fake_token_1",
@@ -232,7 +232,7 @@ func TestProviderChargePayment(t *testing.T) {
 
 	// A charge token with the fail prefix declines.
 	failRes, err := p.ChargePayment(context.Background(), application.ChargeRequest{
-		PaymentID:         uuid.New(),
+		PaymentID:         uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "fake_2",
 		AmountKopecks:     5000,
 		ChargeToken:       fakeFailTokenPrefix + "1",
@@ -252,7 +252,7 @@ func TestProviderRefundPayment(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 
 	res, err := p.RefundPayment(context.Background(), application.RefundRequest{
-		PaymentID:         uuid.New(),
+		PaymentID:         uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "fake_1",
 		AmountKopecks:     10000,
 	})
@@ -269,7 +269,7 @@ func TestProviderRefundPayment(t *testing.T) {
 
 func TestProviderParseWebhook(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	paymentID := uuid.New()
+	paymentID := uuid.Must(uuid.NewV7())
 	payload, err := json.Marshal(map[string]any{
 		"provider_payment_id": "fake_1",
 		"internal_payment_id": paymentID.String(),

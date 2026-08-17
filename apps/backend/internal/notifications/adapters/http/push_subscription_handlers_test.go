@@ -84,7 +84,7 @@ func newPushJSONRequest(t *testing.T, method, target string, userID *uuid.UUID, 
 
 func TestGetVapidPublicKey_ReturnsKey(t *testing.T) {
 	h, _ := newPushTestHandlers("BPubKeyXXX")
-	uid := uuid.New()
+	uid := uuid.Must(uuid.NewV7())
 	w := httptest.NewRecorder()
 	r := newPushJSONRequest(t, http.MethodGet, "/push/vapid-public-key", &uid, nil)
 
@@ -98,7 +98,7 @@ func TestGetVapidPublicKey_ReturnsKey(t *testing.T) {
 
 func TestGetVapidPublicKey_EmptyReturnsServiceUnavailable(t *testing.T) {
 	h, _ := newPushTestHandlers("")
-	uid := uuid.New()
+	uid := uuid.Must(uuid.NewV7())
 	w := httptest.NewRecorder()
 	r := newPushJSONRequest(t, http.MethodGet, "/push/vapid-public-key", &uid, nil)
 
@@ -109,7 +109,7 @@ func TestGetVapidPublicKey_EmptyReturnsServiceUnavailable(t *testing.T) {
 
 func TestCreatePushSubscription_StoresAndReturns201(t *testing.T) {
 	h, repo := newPushTestHandlers("BPubKeyXXX")
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	body := openapi.PushSubscriptionCreateRequest{
 		Endpoint: "https://fcm.googleapis.com/fcm/send/abc",
 		P256dh:   "p256dh-val",
@@ -131,7 +131,7 @@ func TestCreatePushSubscription_StoresAndReturns201(t *testing.T) {
 
 func TestCreatePushSubscription_IdempotentUpsertByEndpoint(t *testing.T) {
 	h, repo := newPushTestHandlers("BPubKeyXXX")
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	endpoint := "https://fcm.googleapis.com/fcm/send/idem"
 
 	w1 := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestCreatePushSubscription_IdempotentUpsertByEndpoint(t *testing.T) {
 
 func TestCreatePushSubscription_InvalidReturns400(t *testing.T) {
 	h, _ := newPushTestHandlers("BPubKeyXXX")
-	uid := uuid.New()
+	uid := uuid.Must(uuid.NewV7())
 	body := openapi.PushSubscriptionCreateRequest{
 		Endpoint: "not-a-url",
 		P256dh:   "p256dh-val",
@@ -168,9 +168,9 @@ func TestCreatePushSubscription_InvalidReturns400(t *testing.T) {
 
 func TestDeletePushSubscription_Returns204(t *testing.T) {
 	h, repo := newPushTestHandlers("BPubKeyXXX")
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	endpoint := "https://fcm.googleapis.com/fcm/send/del"
-	repo.subs = []domain.PushSubscription{{ID: uuid.New(), UserID: userID, Endpoint: endpoint, P256dh: "k", Auth: "a"}}
+	repo.subs = []domain.PushSubscription{{ID: uuid.Must(uuid.NewV7()), UserID: userID, Endpoint: endpoint, P256dh: "k", Auth: "a"}}
 
 	body := openapi.PushSubscriptionDeleteRequest{Endpoint: endpoint}
 	w := httptest.NewRecorder()
@@ -183,7 +183,7 @@ func TestDeletePushSubscription_Returns204(t *testing.T) {
 
 func TestDeletePushSubscription_MissingReturns404(t *testing.T) {
 	h, _ := newPushTestHandlers("BPubKeyXXX")
-	uid := uuid.New()
+	uid := uuid.Must(uuid.NewV7())
 	body := openapi.PushSubscriptionDeleteRequest{Endpoint: "https://fcm.googleapis.com/fcm/send/missing"}
 
 	w := httptest.NewRecorder()

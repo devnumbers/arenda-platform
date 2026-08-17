@@ -148,7 +148,7 @@ func (c clockOn) Now() time.Time { return time.Time(c) }
 // criterion of issue #245: the basic subscription created at onboarding allows
 // data mutations through the readonly gate.
 func TestMutationGate_BasicSubscriptionAllowsMutations(t *testing.T) {
-	sub, err := domain.NewBasicSubscription(uuid.New(), uuid.New())
+	sub, err := domain.NewBasicSubscription(uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
 	if err != nil {
 		t.Fatalf("NewBasicSubscription() error = %v", err)
 	}
@@ -168,7 +168,7 @@ func TestMutationGate_BasicSubscriptionAllowsMutations(t *testing.T) {
 func TestMutationGate_NoSubscriptionAllowsMutations(t *testing.T) {
 	gate := newGate(domain.Subscription{}, billingapp.ErrSubscriptionNotFound, time.Now())
 
-	ok, err := gate.CanMutateData(t.Context(), uuid.New())
+	ok, err := gate.CanMutateData(t.Context(), uuid.Must(uuid.NewV7()))
 	if err != nil {
 		t.Fatalf("CanMutateData() error = %v", err)
 	}
@@ -183,9 +183,9 @@ func TestMutationGate_ExpiredGraceBlocksMutations(t *testing.T) {
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	graceUntil := now.Add(-time.Hour)
 	sub := domain.Subscription{
-		ID:         uuid.New(),
-		UserID:     uuid.New(),
-		TariffID:   uuid.New(),
+		ID:         uuid.Must(uuid.NewV7()),
+		UserID:     uuid.Must(uuid.NewV7()),
+		TariffID:   uuid.Must(uuid.NewV7()),
 		Status:     domain.SubscriptionStatusGrace,
 		ValidUntil: &graceUntil,
 	}
@@ -206,7 +206,7 @@ func TestMutationGate_InfrastructureErrorPropagates(t *testing.T) {
 	boom := errors.New("connection reset")
 	gate := newGate(domain.Subscription{}, boom, time.Now())
 
-	if _, err := gate.CanMutateData(t.Context(), uuid.New()); !errors.Is(err, boom) {
+	if _, err := gate.CanMutateData(t.Context(), uuid.Must(uuid.NewV7())); !errors.Is(err, boom) {
 		t.Fatalf("CanMutateData() error = %v, want %v", err, boom)
 	}
 }

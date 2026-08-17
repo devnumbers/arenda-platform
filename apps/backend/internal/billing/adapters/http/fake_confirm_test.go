@@ -83,7 +83,7 @@ func postConfirm(t *testing.T, h http.Handler, path string) *httptest.ResponseRe
 func pendingPayment() domain.SubscriptionPayment {
 	providerPaymentID := "fake_123"
 	return domain.SubscriptionPayment{
-		ID:                uuid.New(),
+		ID:                uuid.Must(uuid.NewV7()),
 		Status:            domain.PaymentStatusPending,
 		ProviderPaymentID: &providerPaymentID,
 		AmountKopecks:     99000,
@@ -142,7 +142,7 @@ func TestFakeConfirmPayment_NotFoundMapsTo404(t *testing.T) {
 		}},
 	)
 
-	w := postConfirm(t, h, "/internal/fake-subscription-payment/"+uuid.New().String()+"/confirm")
+	w := postConfirm(t, h, "/internal/fake-subscription-payment/"+uuid.Must(uuid.NewV7()).String()+"/confirm")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body: %s", w.Code, w.Body.String())
 	}

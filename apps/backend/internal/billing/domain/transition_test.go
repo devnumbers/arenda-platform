@@ -58,11 +58,11 @@ func TestNewTransition_Registered(t *testing.T) {
 func TestNewTransition_RecordsAppliedState(t *testing.T) {
 	sub := validSubscription(t)
 	from := SubscriptionStatusActive
-	fromTariff := uuid.New()
+	fromTariff := uuid.Must(uuid.NewV7())
 	if err := sub.Cancel(); err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
-	actorID := uuid.New()
+	actorID := uuid.Must(uuid.NewV7())
 
 	transition, err := NewTransition(sub, &from, &fromTariff, "user_cancel", InitiatorUser, &actorID)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestNewTransition_RejectsInvalidInput(t *testing.T) {
 		{name: "empty reason", sub: sub, reason: "", initiator: InitiatorSystem},
 		{name: "unknown initiator", sub: sub, reason: TransitionReasonRegistered, initiator: "robot"},
 		{name: "missing subscription id", sub: Subscription{}, reason: TransitionReasonRegistered, initiator: InitiatorSystem},
-		{name: "system initiator with actor id", sub: sub, reason: TransitionReasonRegistered, initiator: InitiatorSystem, initiatorID: new(uuid.New())},
+		{name: "system initiator with actor id", sub: sub, reason: TransitionReasonRegistered, initiator: InitiatorSystem, initiatorID: new(uuid.Must(uuid.NewV7()))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -106,7 +106,7 @@ func TestNewTransition_RejectsInvalidInput(t *testing.T) {
 func TestNewScheduledTariffTransition_RecordsTargetTariff(t *testing.T) {
 	sub := validSubscription(t)
 	target := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
-	actorID := uuid.New()
+	actorID := uuid.Must(uuid.NewV7())
 
 	transition, err := NewScheduledTariffTransition(sub, target, TransitionReasonDowngradeScheduled, InitiatorUser, &actorID)
 	if err != nil {
@@ -140,9 +140,9 @@ func TestNewScheduledTariffTransition_RejectsInvalidInput(t *testing.T) {
 		initiatorID *uuid.UUID
 	}{
 		{name: "missing target tariff", reason: TransitionReasonDowngradeScheduled, initiator: InitiatorUser},
-		{name: "empty reason", target: uuid.New(), reason: "", initiator: InitiatorUser},
-		{name: "unknown initiator", target: uuid.New(), reason: TransitionReasonDowngradeScheduled, initiator: "robot"},
-		{name: "system initiator with actor id", target: uuid.New(), reason: TransitionReasonDowngradeScheduled, initiator: InitiatorSystem, initiatorID: new(uuid.New())},
+		{name: "empty reason", target: uuid.Must(uuid.NewV7()), reason: "", initiator: InitiatorUser},
+		{name: "unknown initiator", target: uuid.Must(uuid.NewV7()), reason: TransitionReasonDowngradeScheduled, initiator: "robot"},
+		{name: "system initiator with actor id", target: uuid.Must(uuid.NewV7()), reason: TransitionReasonDowngradeScheduled, initiator: InitiatorSystem, initiatorID: new(uuid.Must(uuid.NewV7()))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
