@@ -156,6 +156,25 @@ jobs:
         working-directory: apps/admin
         run: npm run build
 
+  tools:
+    name: Tools
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tools/hooks/package-lock.json
+
+      # Contract tests of the executable tool scripts (harness hooks);
+      # make tools-test self-installs node_modules when missing.
+      - name: Tools contract tests
+        run: make tools-test
+
   landing:
     name: Landing
     runs-on: ubuntu-latest

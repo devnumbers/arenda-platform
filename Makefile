@@ -10,7 +10,8 @@ LEFTHOOK_VERSION := v2.1.10
 # aquasec/trivy 0.74.0, multi-arch manifest digest
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
 TRIVY_CACHE_VOLUME := arenda-trivy-cache
-NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes
+NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks
+TOOLS_TEST_DIRS := tools/hooks
 TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
 
 .PHONY: local-infra-up local-infra-down local-infra-reset \
@@ -21,7 +22,7 @@ TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disa
         admin-install admin-dev admin-build admin-typecheck \
         landing-install landing-dev landing-build \
         attributes-install attributes-gen attributes-check \
-        hooks-install backend-vulncheck npm-audit trivy-fs
+        hooks-install backend-vulncheck npm-audit trivy-fs tools-test
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -95,7 +96,22 @@ test:
 	$(MAKE) backend-test; \
 	$(MAKE) backend-test-integration; \
 	$(MAKE) frontend-test; \
-	$(MAKE) admin-test
+	$(MAKE) admin-test; \
+	$(MAKE) tools-test
+
+# Contract tests of the executable tool scripts under tools/ (today: the
+# harness hooks in tools/hooks). Every tools/ package with tests carries its
+# own package.json with vitest in devDependencies — the tools/property-
+# attributes package pattern. Self-sufficient like attributes-check: installs
+# node_modules when missing. Every package runs even after a failure (the
+# npm-audit style), so one red report doesn't hide the rest.
+tools-test:
+	@set -e; status=0; for dir in $(TOOLS_TEST_DIRS); do \
+		echo "==> tools-test $$dir"; \
+		{ [ -d $$dir/node_modules ] || npm --prefix $$dir install; } && \
+		npm --prefix $$dir run test || status=1; \
+	done; \
+	if [ $$status -ne 0 ]; then echo "ERROR: tools contract tests failed (see above)"; exit 1; fi
 
 # Installs the pinned lefthook binary when missing, then wires the git hooks
 # (lefthook install rewrites .git/hooks entries managed by lefthook — idempotent,
@@ -116,10 +132,10 @@ hooks-install:
 backend-vulncheck:
 	cd $(BACKEND_DIR) && go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-# npm audit (--audit-level=high) across the four lockfile packages of
-# decision #294 (tools/screenshots, a local playwright utility, is the repo's
-# fifth lockfile and stays out of the gate). Every package runs even after a
-# failure, so one red report doesn't hide the rest.
+# npm audit (--audit-level=high) across the repo's lockfile packages
+# (tools/screenshots, a local playwright utility, stays out of the gate).
+# Every package runs even after a failure, so one red report doesn't hide the
+# rest.
 npm-audit:
 	@set -e; status=0; for dir in $(NPM_AUDIT_DIRS); do \
 		echo "==> npm audit $$dir"; \

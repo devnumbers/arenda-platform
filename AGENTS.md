@@ -32,7 +32,7 @@ All coding agents in this repo — Kimi Code, ZCode, or any other harness — wo
 - Keep high-risk actions behind explicit intent: destructive commands, credentials, migrations, external services, and dependency changes require normal repository safeguards, not broad wildcard trust such as `mcp__*`.
 - Keep context small: summarize decisions, touched files, commands, and unresolved risks; clear unrelated context between separate tasks.
 - Before claiming completion, run the relevant project checks and perform a fresh review of the diff for duplication, security regressions, and instruction conflicts.
-- Before claiming completion, run the test suite: `make test` (full — backend unit + integration via testcontainers + frontend + admin). Requires Docker. For a fast feedback loop during work, use the granular targets: `make backend-test` (unit only, no Docker needed), `make frontend-test`, `make admin-test`. See `docs/testing-strategy.md` for the full test contract.
+- Before claiming completion, run the test suite: `make test` (full — backend unit + integration via testcontainers + frontend + admin + tools scripts). Requires Docker. For a fast feedback loop during work, use the granular targets: `make backend-test` (unit only, no Docker needed), `make frontend-test`, `make admin-test`, `make tools-test`. See `docs/testing-strategy.md` for the full test contract.
 
 ## Workflow (Matt Pocock skills)
 
@@ -77,6 +77,7 @@ make backend-test
 make backend-test-integration
 make frontend-test
 make admin-test
+make tools-test
 make test
 make hooks-install
 make admin-install
