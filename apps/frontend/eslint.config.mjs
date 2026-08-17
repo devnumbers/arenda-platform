@@ -8,11 +8,14 @@ import boundaries from "eslint-plugin-boundaries";
 // slice folder it lives in, so same-slice imports stay internal while
 // cross-slice imports are banned at every layer above shared.
 const FSD_ELEMENTS = [
-  { type: "app", pattern: "app" },
-  { type: "widget", pattern: "widgets/*", capture: ["slice"] },
-  { type: "feature", pattern: "features/*", capture: ["slice"] },
-  { type: "entity", pattern: "entities/*", capture: ["slice"] },
-  { type: "shared", pattern: "shared" },
+  // partialMatch:false — паттерны матчатся от корня проекта, а не любым суффиксом
+  // пути (иначе будущий `features/x/shared/` или `shared/lib/app/` был бы
+  // переклассифицирован как элемент shared/app).
+  { type: "app", pattern: "app", partialMatch: false },
+  { type: "widget", pattern: "widgets/*", capture: ["slice"], partialMatch: false },
+  { type: "feature", pattern: "features/*", capture: ["slice"], partialMatch: false },
+  { type: "entity", pattern: "entities/*", capture: ["slice"], partialMatch: false },
+  { type: "shared", pattern: "shared", partialMatch: false },
 ];
 
 const LOWER_THAN = {
@@ -73,8 +76,12 @@ const eslintConfig = defineConfig([
       ],
       // Imports of local files matching no element pattern are reported, so a
       // new top-level directory can't silently escape the gate. Unresolvable
-      // alias imports are skipped by the plugin — tsc/CI build catch those.
+      // alias imports (typos) are reported by import/no-unresolved below.
       "boundaries/no-unknown-dependencies": "error",
+      // Нерезолвимый alias-импорт (`@/typo/...`) boundaries пропускает молча;
+      // это правило ловит такие value-импорты. Type-импорты (`import type`)
+      // плагин игнорирует by design — их ловит tsc (`npm run build` в CI).
+      "import/no-unresolved": "error",
     },
   },
   {
