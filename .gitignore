@@ -32,3 +32,6 @@ docs/reviews
 
 # Local agent tooling config
 .zcode/
+
+# Personal lefthook overrides (skip jobs etc.)
+lefthook-local.yml

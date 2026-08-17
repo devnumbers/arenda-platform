@@ -5,6 +5,12 @@ FRONTEND_DIR := apps/frontend
 ADMIN_DIR := apps/admin
 LANDING_DIR := apps/landing
 GOLANGCI_LINT_VERSION := v2.12.2
+GOVULNCHECK_VERSION := v1.7.0
+LEFTHOOK_VERSION := v2.1.10
+# aquasec/trivy 0.74.0, multi-arch manifest digest
+TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+TRIVY_CACHE_VOLUME := arenda-trivy-cache
+NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes
 TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
 
 .PHONY: local-infra-up local-infra-down local-infra-reset \
@@ -14,7 +20,8 @@ TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disa
         perf-db-up perf-db-down perf-db-reset perf-backend-run perf-seed perf-sustainable perf-breakdown \
         admin-install admin-dev admin-build admin-typecheck \
         landing-install landing-dev landing-build \
-        attributes-install attributes-gen attributes-check
+        attributes-install attributes-gen attributes-check \
+        hooks-install backend-vulncheck npm-audit trivy-fs
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -83,11 +90,59 @@ admin-test:
 # runs via TEST_DATABASE_URL + make backend-test-integration when testcontainers
 # is unavailable.
 test:
+	@docker info >/dev/null 2>&1 || { echo "ERROR: Docker is not available, but make test requires it: integration tests start PostgreSQL via testcontainers. Start Docker and retry; to push past the pre-push hook use: git push --no-verify"; exit 1; }
 	@set -e; \
 	$(MAKE) backend-test; \
 	$(MAKE) backend-test-integration; \
 	$(MAKE) frontend-test; \
 	$(MAKE) admin-test
+
+# Installs the pinned lefthook binary when missing, then wires the git hooks
+# (lefthook install rewrites .git/hooks entries managed by lefthook — idempotent,
+# safe to re-run after cloning or when lefthook.yml changes).
+hooks-install:
+	@gobin=$$(go env GOPATH)/bin; \
+	if ! command -v lefthook >/dev/null 2>&1 && [ ! -x "$$gobin/lefthook" ]; then \
+		echo "lefthook not found — installing pinned $(LEFTHOOK_VERSION) via go install"; \
+		go install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION) || exit 1; \
+	fi; \
+	if ! command -v lefthook >/dev/null 2>&1; then \
+		case ":$$PATH:" in *":$$gobin:"*) ;; *) echo "NOTE: $$gobin is not on PATH — add it to run lefthook commands directly; the git hooks work regardless (their shim falls back to the absolute binary path)";; esac; \
+	fi
+	@PATH="$$(go env GOPATH)/bin:$$PATH" lefthook install
+
+# govulncheck over the backend, pinned via go run (same pattern as
+# backend-lint). Pre-push security gate; CI runs govulncheck separately (ci.yml).
+backend-vulncheck:
+	cd $(BACKEND_DIR) && go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
+# npm audit (--audit-level=high) across the four lockfile packages of
+# decision #294 (tools/screenshots, a local playwright utility, is the repo's
+# fifth lockfile and stays out of the gate). Every package runs even after a
+# failure, so one red report doesn't hide the rest.
+npm-audit:
+	@set -e; status=0; for dir in $(NPM_AUDIT_DIRS); do \
+		echo "==> npm audit $$dir"; \
+		(cd $$dir && npm audit --audit-level=high) || status=1; \
+	done; \
+	if [ $$status -ne 0 ]; then echo "ERROR: npm audit found advisories (see above)"; exit 1; fi
+
+# Filesystem vuln scan over the repo root via the pinned trivy image — mirrors
+# the CI trivy-fs job (scanners: vuln, severity HIGH/CRITICAL, ignore-unfixed,
+# exit 1). node_modules and .git are skipped: they are never the shipped
+# dependency set and would dominate scan time. The vuln DB is cached in a named
+# docker volume so repeat runs don't re-download it.
+trivy-fs:
+	docker run --rm \
+		-v "$(CURDIR):/repo" \
+		-v $(TRIVY_CACHE_VOLUME):/root/.cache \
+		$(TRIVY_IMAGE) fs /repo \
+		--scanners vuln \
+		--severity HIGH,CRITICAL \
+		--ignore-unfixed \
+		--exit-code 1 \
+		--skip-dirs node_modules \
+		--skip-dirs .git
 
 # Regenerates the T-Kassa spec artifacts and fails if regenerating changed
 # them, so CI catches a vendored/patched spec whose generated files were not

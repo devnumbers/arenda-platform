@@ -91,13 +91,14 @@ Utilities:
 
 ## Quality gates
 
-Standing today (`in force`): gates run on discipline — "run the relevant checks before claiming completion" in the root AGENTS.md — with CI in `.github/workflows/` as the backstop. Everything below is `accepted` (decision [«Набор гейтов и хуков (harness + git pre-commit)»](https://github.com/devnumbers/arenda-platform/issues/294)), implementation pending.
+Standing today (`in force`): gates run on discipline — "run the relevant checks before claiming completion" in the root AGENTS.md — with git hooks (lefthook, below) and CI in `.github/workflows/` as the enforcement backstop. Everything below the git-hooks section is `accepted` (decision [«Набор гейтов и хуков (harness + git pre-commit)»](https://github.com/devnumbers/arenda-platform/issues/294)), implementation pending.
 
-### Git hooks — lefthook (accepted)
+### Git hooks — lefthook (in force since 2026-08-17)
 
-- lefthook pinned v2.1.10, single `lefthook.yml` at the repo root, direct make/npm calls (no wrapper scripts), bootstrap via a new `make hooks-install` target. Rejected managers: pre-commit framework (new Python dependency), husky (requires a root `package.json` the repo doesn't have).
-- pre-commit (checks only, no autofix; parallel, wall ≈ 7.5 s measured 2026-08-16): staged `*.go` → full `make backend-lint` (~4 s warm); staged `*.ts/tsx` in `apps/frontend` → `npm run lint` (~7.4 s); staged `*.ts/tsx` in `apps/admin` → `npm run typecheck` (~1.9 s). No tests on pre-commit — commits stay cheap.
-- pre-push ("verify everything + security; time not critical"): full `make test` (backend unit `-race` + integration via testcontainers + frontend + admin — **Docker required**, push blocks without it); `govulncheck` via a new pinned make target; `npm audit --audit-level=high` across the four lockfile packages (`apps/frontend`, `apps/admin`, `apps/landing`, `tools/property-attributes`); `trivy fs` over the repo root via docker (pinned image, `scanners: vuln`, `severity: HIGH,CRITICAL`, `ignore-unfixed`, `--exit-code 1` — mirrors CI; the existing CI image scan stays).
+- lefthook pinned v2.1.10, single `lefthook.yml` at the repo root, direct make/npm calls (no wrapper scripts), bootstrap via `make hooks-install` (installs the pinned binary when missing + `lefthook install`; idempotent, and the installed hook shims work even without GOPATH/bin on PATH via an absolute-path fallback). Rejected managers: pre-commit framework (new Python dependency), husky (requires a root `package.json` the repo doesn't have).
+- pre-commit (checks only, no autofix; parallel, wall ≈ 7.5 s): staged `*.go` → full `make backend-lint` (~4 s warm; the first ever run compiles golangci-lint, ~40 s once); staged `*.ts/tsx` in `apps/frontend` → `npm run lint` (~7 s); staged `*.ts/tsx` in `apps/admin` → `npm run typecheck` (~2 s). No tests on pre-commit — commits stay cheap. Re-measured on hook validation 2026-08-17: single-trigger runs 3.3 / 6.9 / 2.1 s, all-three parallel 7.45 s, empty staged skips everything in 0.03 s.
+- pre-push ("verify everything + security; time not critical", parallel): full `make test` (backend unit `-race` + integration via testcontainers + frontend + admin — **Docker required**, `make test` blocks with a clear message and a `--no-verify` hint without it); `make backend-vulncheck` (pinned govulncheck v1.7.0); `make npm-audit` (`--audit-level=high` across the four lockfile packages `apps/frontend`, `apps/admin`, `apps/landing`, `tools/property-attributes`); `make trivy-fs` (pinned aquasec/trivy 0.74.0 image via docker, `scanners: vuln`, `severity: HIGH,CRITICAL`, `ignore-unfixed`, `--exit-code 1` — mirrors CI; the vuln DB is cached in the `arenda-trivy-cache` docker volume). Full run measured 2026-08-17: `make test` 68 s, govulncheck 6 s, trivy 59 s in parallel.
+- **Known red state (2026-08-17):** `make npm-audit` and `make trivy-fs` fail on the current tree from pre-existing dependency advisories (frontend/admin/landing; the nightly CI trivy-fs has been failing on main for the same reason) — tracked in [#311](https://github.com/devnumbers/arenda-platform/issues/311). Until that debt is fixed, pushes need the documented bypass (`--no-verify`).
 - Bypass documented: `LEFTHOOK=0`, `--no-verify`, personal `lefthook-local.yml` (gitignored).
 
 ### Harness hooks — personal opt-in layer (accepted)
@@ -151,11 +152,11 @@ None of the map's decisions gets an ADR, by the "offer ADRs sparingly" rule (dom
 
 ## Reproduce on a new machine
 
-1. Base prerequisites: Go toolchain (provides the `gopls` binary), Node/npx, Docker (integration tests; pre-push hooks once lefthook lands).
+1. Base prerequisites: Go toolchain (provides the `gopls` binary), Node/npx, Docker (integration tests; the pre-push hook runs the full `make test` and blocks without it).
 2. Harness MCP config — Kimi Code: `~/.kimi-code/mcp.json`; ZCode: its MCP config. Servers per the table above; personal API keys (context7, figma) go into the user config only.
 3. Skills: nothing to install — `.agents/skills/` ships with the repo.
 4. Serena (in force since 2026-08-16): install `uv`, then `uv tool install -p 3.13 'serena-agent==1.7.0'` (uv provides the managed Python 3.13); `.serena/project.yml` comes from the repo; add the `serena` MCP entry (`serena start-mcp-server --context ide --project <abs repo root>`) to each harness config. ZCode note: headless CLI use needs a separate `zcode login` and an explicit `provider`+`model` section in `~/.zcode/cli/config.json`; the desktop app needs neither.
-5. Once lefthook lands: `make hooks-install` (installs the pinned lefthook binary if missing + `lefthook install`).
+5. Git hooks (in force since 2026-08-17): `make hooks-install` — installs the pinned lefthook binary (v2.1.10) when missing via `go install`, then `lefthook install`; idempotent, re-run after cloning.
 6. Harness hooks (opt-in): wire `tools/hooks/*.mjs` per the instructions that land with the implementation change.
 
 ## Source decisions

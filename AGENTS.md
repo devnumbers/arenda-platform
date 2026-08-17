@@ -78,6 +78,7 @@ make backend-test-integration
 make frontend-test
 make admin-test
 make test
+make hooks-install
 make admin-install
 make admin-dev
 make admin-build
