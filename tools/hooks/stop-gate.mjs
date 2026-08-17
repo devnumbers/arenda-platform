@@ -26,7 +26,8 @@ import { readFileSync } from "node:fs";
 const PACKAGE_GATES = [
   { name: "backend", prefix: "apps/backend/", command: ["make", "backend-lint"] },
   { name: "frontend", prefix: "apps/frontend/", command: ["npm", "--prefix", "apps/frontend", "run", "lint"] },
-  { name: "admin", prefix: "apps/admin/", command: ["make", "admin-typecheck"] },
+  { name: "admin typecheck", prefix: "apps/admin/", command: ["make", "admin-typecheck"] },
+  { name: "admin lint", prefix: "apps/admin/", command: ["npm", "--prefix", "apps/admin", "run", "lint"] },
 ];
 
 const OUTPUT_TAIL_LINES = 40;

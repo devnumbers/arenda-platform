@@ -11,27 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { formatPhoneInput, isValidPhone, normalizePhone } from './phone';
-
-const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api';
-
-interface ProblemDetails {
-  detail?: string;
-  title?: string;
-}
-
-const parseError = async (response: Response): Promise<string> => {
-  const contentType = response.headers.get('content-type') || '';
-  try {
-    if (contentType.includes('json')) {
-      const body = (await response.json()) as ProblemDetails;
-      return body.detail || body.title || `Ошибка ${response.status}`;
-    }
-    const text = await response.text();
-    return text || `Ошибка ${response.status}`;
-  } catch {
-    return `Ошибка ${response.status}`;
-  }
-};
+import { authProvider } from './authProvider';
 
 export const LoginPage = () => {
   const login = useLogin();
@@ -57,16 +37,7 @@ export const LoginPage = () => {
     setError(null);
 
     try {
-      const response = await fetch(`${API_PREFIX}/auth/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ phone: normalizedPhone, email }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await parseError(response));
-      }
+      await authProvider.sendLoginCode({ phone: normalizedPhone, email });
 
       setStep('verify');
       notify('Код подтверждения отправлен на email', { type: 'success' });

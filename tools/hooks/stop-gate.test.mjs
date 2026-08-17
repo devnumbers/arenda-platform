@@ -33,9 +33,15 @@ appendFileSync(path.join(root, "gates.log"), name + "\\n");
 if (existsSync(path.join(root, "fail-" + name))) process.exit(1);
 `;
 
-// npm --prefix apps/frontend runs the script with cwd = apps/frontend.
+// npm --prefix apps/<app> runs the script with cwd = apps/<app>.
 const FRONTEND_PACKAGE_JSON = JSON.stringify(
   { name: "fixture-frontend", private: true, scripts: { lint: "node ../../mark-gate.mjs frontend" } },
+  null,
+  2,
+);
+
+const ADMIN_PACKAGE_JSON = JSON.stringify(
+  { name: "fixture-admin", private: true, scripts: { lint: "node ../../mark-gate.mjs admin-lint" } },
   null,
   2,
 );
@@ -49,6 +55,7 @@ function makeFixture(name) {
   writeFileSync(path.join(dir, "Makefile"), MAKEFILE);
   writeFileSync(path.join(dir, "mark-gate.mjs"), MARK_GATE);
   writeFileSync(path.join(dir, "apps/frontend/package.json"), FRONTEND_PACKAGE_JSON);
+  writeFileSync(path.join(dir, "apps/admin/package.json"), ADMIN_PACKAGE_JSON);
   copyFileSync(sourceScript, path.join(dir, "stop-gate.mjs"));
   exec(dir, ["init", "-q", "-b", "main"]);
   exec(dir, ["config", "user.email", "test@test"]);
@@ -117,22 +124,22 @@ describe("stop-gate: gates by touched package", () => {
     expect(gatesRun(dir)).toEqual(["frontend"]);
   });
 
-  it("uncommitted admin change runs only the admin gate", () => {
+  it("uncommitted admin change runs only the admin gates", () => {
     const dir = fixture("admin");
     writeFileSync(path.join(dir, "apps/admin/App.tsx"), "export {};\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["admin"]);
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint"]);
   });
 
-  it("changes across all three packages run all three gates", () => {
+  it("changes across all three packages run all the gates", () => {
     const dir = fixture("mixed");
     writeFileSync(path.join(dir, "apps/backend/main.go"), "package main\n");
     writeFileSync(path.join(dir, "apps/frontend/page.tsx"), "export {};\n");
     writeFileSync(path.join(dir, "apps/admin/App.tsx"), "export {};\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["admin", "backend", "frontend"]);
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "backend", "frontend"]);
   });
 
   it("untracked files count as touched", () => {
@@ -149,7 +156,7 @@ describe("stop-gate: gates by touched package", () => {
     exec(dir, ["add", "apps/admin/App.tsx"]);
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["admin"]);
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint"]);
   });
 
   it("changes outside the three packages run nothing", () => {
@@ -177,6 +184,16 @@ describe("stop-gate: blocking and fail-open behavior", () => {
     expect(res.code).toBe(2);
     expect(res.stderr).toContain("backend-lint");
     expect(res.stderr).toContain("stop-gate");
+  });
+
+  it("a failing admin lint gate blocks the turn (exit 2)", () => {
+    const dir = fixture("failing-admin-lint");
+    writeFileSync(path.join(dir, "apps/admin/App.tsx"), "export {};\n");
+    writeFileSync(path.join(dir, "fail-admin-lint"), "");
+    const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
+    expect(res.code).toBe(2);
+    expect(res.stderr).toContain("npm --prefix apps/admin run lint");
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint"]);
   });
 
   it("invalid JSON on stdin fails open (exit 0)", () => {

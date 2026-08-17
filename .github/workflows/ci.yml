@@ -261,6 +261,12 @@ jobs:
         working-directory: apps/admin
         run: npm ci
 
+      # ESLint-гейт админки (волна 2C, #307): no-explicit-any + границы
+      # dataProvider/generated/URL-литералы (apps/admin/eslint.config.mjs).
+      - name: Lint
+        working-directory: apps/admin
+        run: npm run lint
+
       - name: Typecheck
         working-directory: apps/admin
         run: npm run typecheck

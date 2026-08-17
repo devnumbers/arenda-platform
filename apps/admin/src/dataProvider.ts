@@ -47,6 +47,9 @@ interface AdminDataProvider extends DataProvider {
   }) => Promise<{ data: unknown }>;
   extendSubscriptionGrace: (payload: { userId: string | number; days: number }) => Promise<{ data: unknown }>;
   cancelSubscription: (payload: { userId: string | number }) => Promise<{ data: unknown }>;
+  // Статистика дашборда (issue #307): обращения к backend — только через
+  // dataProvider, сырой fetch в компонентах запрещён ESLint-гейтом.
+  getStats: () => Promise<{ data: unknown }>;
 }
 
 const httpClient = async (url: string, options: RequestInit = {}): Promise<{ json: unknown; headers: Headers }> => {
@@ -385,6 +388,11 @@ export const dataProvider: AdminDataProvider = {
 
   cancelSubscription: async ({ userId }) => {
     const { json } = await httpClient(`${API_PREFIX}/admin/users/${userId}/subscription/cancel`, { method: 'POST' });
+    return { data: json };
+  },
+
+  getStats: async () => {
+    const { json } = await httpClient(`${API_PREFIX}/admin/stats`, { method: 'GET' });
     return { data: json };
   },
 };

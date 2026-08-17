@@ -28,17 +28,17 @@ Before adding resources, fields, inputs, helpers, or API wrappers, search existi
 ## Architecture
 
 - This is a standalone Vite SPA, not Next.js: no App Router, no Server Components, no file-based routing. Do not apply the Next.js rules from `apps/frontend/AGENTS.md` here.
-- Follow react-admin conventions: declare resources on the `<Admin>` component, keep list/edit/create/show views colocated per resource, and route all backend calls through `dataProvider` and all auth state through `authProvider`.
+- Follow react-admin conventions: declare resources on the `<Admin>` component, keep list/edit/create/show views colocated per resource, and route all backend calls through `dataProvider` and all auth state through `authProvider`. Enforced by ESLint `no-restricted-globals` on `fetch` (`apps/admin/eslint.config.mjs`): raw `fetch` is allowed only in the sanctioned HTTP boundary files — `src/dataProvider.ts`, `src/authProvider.ts`, `src/lib/report-error.ts` (client-error telemetry, fire-and-forget).
 - Keep components small and explicit; prefer react-admin and MUI building blocks over custom widgets.
 - Map backend DTOs at the `dataProvider` boundary; do not leak API response shapes into resource components.
 - Money values are integer kopecks; display them via `MoneyField` / `formatKopecks` from `src/fields.tsx` (ru-RU, RUB), never ad-hoc formatting.
-- The property attributes catalog (`src/lib/generated/`) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts. Do not hand-edit `generated/`.
-- Runtime configuration comes from Vite env vars (see `.env.example`); never hardcode backend URLs or secrets.
+- The property attributes catalog (`src/lib/generated/`) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts. Do not hand-edit `generated/`. Imports of `generated/` are enforced by ESLint `no-restricted-imports` (`apps/admin/eslint.config.mjs`): only the `src/lib/propertyAttributes.ts` seam may import them.
+- Runtime configuration comes from Vite env vars (see `.env.example`); never hardcode backend URLs or secrets. Hardcoded URL literals are enforced by ESLint `no-restricted-syntax` (`apps/admin/eslint.config.mjs`): no absolute `http(s)://` literals and no `/api/...` path literals — request URLs are built from `import.meta.env.VITE_API_PREFIX`.
 
 ## TypeScript
 
 - Keep `strict: true` and the existing strict compiler options in `tsconfig.json`; `npm run typecheck` (`tsc --noEmit`) must stay clean.
-- Avoid `any`; prefer `unknown` with narrowing.
+- Avoid `any`; prefer `unknown` with narrowing. Enforced by `@typescript-eslint/no-explicit-any: error` (`apps/admin/eslint.config.mjs`, `npm run lint`).
 
 ## Quality Gates
 
@@ -46,12 +46,14 @@ Before adding resources, fields, inputs, helpers, or API wrappers, search existi
 
 ```bash
 make admin-typecheck
+npm --prefix apps/admin run lint
 make admin-build
 make admin-test
 ```
 
-CI backstop: the `admin-test` job in `.github/workflows/ci.yml` runs this
-vitest suite on every PR.
+CI backstop: the `admin` job in `.github/workflows/ci.yml` runs lint
+(ESLint boundary gates), typecheck and build on every PR; the `admin-test`
+job runs this vitest suite.
 
 ## Commands
 
@@ -61,5 +63,6 @@ make admin-install
 make admin-dev
 make admin-build
 make admin-typecheck
+npm --prefix apps/admin run lint
 make admin-test
 ```

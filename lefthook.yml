@@ -20,6 +20,10 @@ pre-commit:
     - name: admin typecheck
       glob: "apps/admin/**/*.{ts,tsx}"
       run: make admin-typecheck
+    # Admin ESLint gate (wave 2C, #307): dataProvider/generated/URL boundaries.
+    - name: admin lint
+      glob: "apps/admin/**/*.{ts,tsx}"
+      run: npm --prefix apps/admin run lint
 
 pre-push:
   parallel: true

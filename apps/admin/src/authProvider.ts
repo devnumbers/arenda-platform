@@ -54,7 +54,25 @@ const fetchMe = async (): Promise<MeResponse> => {
   return json as MeResponse;
 };
 
-export const authProvider: AuthProvider = {
+// HTTP аутентификации живёт только в authProvider (ESLint no-restricted-globals
+// на fetch вне граничных файлов): LoginPage не ходит в сеть сам.
+interface AdminAuthProvider extends AuthProvider {
+  /** Шаг «отправить код подтверждения» экрана входа (POST /auth/send). */
+  sendLoginCode: (payload: { phone: string; email: string }) => Promise<void>;
+}
+
+export const authProvider: AdminAuthProvider = {
+  sendLoginCode: async ({ phone, email }) => {
+    try {
+      await httpClient(`${API_PREFIX}/auth/send`, {
+        method: 'POST',
+        body: JSON.stringify({ phone, email }),
+      });
+    } catch (error) {
+      throw new Error(messageOf(error, 'Не удалось отправить код'));
+    }
+  },
+
   login: async ({ phone, email, code }) => {
     const normalizedPhone = normalizePhone(String(phone ?? ''));
     try {
