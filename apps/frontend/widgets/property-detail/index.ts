@@ -5,7 +5,6 @@ export { PropertyDetailError } from './ui/PropertyDetailError';
 export { PropertyDetailHeader } from './ui/PropertyDetailHeader';
 export { PropertyGallery } from './ui/PropertyGallery';
 export { PropertyStatusSection } from './ui/PropertyStatusSection';
-export { PropertyDetailSection } from './ui/PropertyDetailSection';
 export { PropertyDetailStatusBadge } from './ui/PropertyDetailStatusBadge';
 export { PropertyLeaseCard } from './ui/PropertyLeaseCard';
 export { PropertyTenantCard } from './ui/PropertyTenantCard';

@@ -5,12 +5,12 @@ import NextLink from 'next/link';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
-import {LeaseInfo} from '@/widgets/lease-card/ui/LeaseInfo';
-import type {components} from '@/shared/api/generated';
+import {LeaseInfo} from '@/entities/lease/ui/LeaseInfo';
+import type {components} from '@/shared/api/dto';
 import type {PropertyPageStatus} from '../lib/get-property-page-status';
-import {PropertyDetailSection} from './PropertyDetailSection';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyLeaseCard.module.css';
-import {SectionHeader} from "@/widgets/dashboard/ui/SectionHeader";
+import {SectionHeader} from '@/shared/ui/section-header';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
 
@@ -50,7 +50,7 @@ export function PropertyLeaseCard({
         showUnavailableState;
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <SectionHeader title="Аренда" href={lease ? ROUTES.lease(lease.id) : ROUTES.propertyLeases(propertyId)}/>
 
             {lease ? (
@@ -124,6 +124,6 @@ export function PropertyLeaseCard({
                     )}
                 </div>
             )}
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }

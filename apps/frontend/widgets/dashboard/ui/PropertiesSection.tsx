@@ -6,7 +6,7 @@ import {Icon} from '@/shared/ui/icon';
 import {Home, Objects} from '@/shared/assets/icons';
 import {EmptyState} from '@/shared/ui/empty-state';
 import type {Property} from '@/entities/property/model/types';
-import {SectionHeader} from './SectionHeader';
+import {SectionHeader} from '@/shared/ui/section-header';
 import {EntityCard} from './EntityCard';
 import {IconActionCard} from './IconActionCard';
 import styles from './PropertiesSection.module.css';

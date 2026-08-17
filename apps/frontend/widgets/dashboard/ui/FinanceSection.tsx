@@ -10,7 +10,7 @@ import {useOperationsForProperties} from '../lib/use-operations-for-properties';
 import {aggregateOperations} from '../lib/finance-aggregator';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {EmptyState} from '@/shared/ui/empty-state';
-import {SectionHeader} from './SectionHeader';
+import {SectionHeader} from '@/shared/ui/section-header';
 import styles from './FinanceSection.module.css';
 
 type FinanceSectionProps = {

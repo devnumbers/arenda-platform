@@ -10,13 +10,13 @@ import {Button} from '@/shared/ui/button';
 import {ROUTES} from '@/shared/config/routes';
 import {type OperationsFilters, useInfiniteOperations,} from '@/features/operations/api/hooks';
 import {endOfMonth, formatDateForApi, startOfMonth,} from '@/entities/operation/lib/dates';
-import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
-import {FinanceEmptyState} from '@/widgets/finance/ui/FinanceEmptyState';
+import {FinanceErrorState} from '@/shared/ui/finance-error-state';
+import {FinanceEmptyState} from '@/shared/ui/finance-empty-state';
 import {useArchivedProperties, useProperties} from '@/features/properties/api';
 import {OperationFilters, type OperationFiltersState, type OperationPeriod,} from './OperationFilters';
-import {OperationsList} from './OperationsList';
+import {OperationsList} from '@/entities/operation/ui/OperationsList';
 import {OperationsListLoading} from './OperationsListLoading';
-import {SubscriptionReadonlyBanner} from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import {SubscriptionReadonlyBanner} from '@/features/subscription/ui/SubscriptionReadonlyBanner';
 import {useSubscription} from '@/features/subscription/api/hooks';
 import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
 import {

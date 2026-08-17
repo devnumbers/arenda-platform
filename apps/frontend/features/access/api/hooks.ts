@@ -11,8 +11,8 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { mapPropertyAccessMemberResponse } from '@/entities/access/model/mappers';
 import type { PropertyAccessMember } from '@/entities/access/model/types';
-import type { components } from '@/shared/api/generated';
-import { accessKeys } from './keys';
+import type { components } from '@/shared/api/dto';
+import { accessKeys } from '@/shared/api/query-keys';
 
 type PropertyAccessMembersResponse =
     components['schemas']['PropertyAccessMembersResponse'];

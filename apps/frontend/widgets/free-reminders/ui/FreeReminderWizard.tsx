@@ -22,7 +22,7 @@ import {
   PERIODICITY_OPTIONS,
   type FreeReminderPeriodicity,
 } from '@/features/free-reminders/model/types';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import styles from './FreeReminderWizard.module.css';
 
 type FreeReminderResponse = components['schemas']['FreeReminderResponse'];

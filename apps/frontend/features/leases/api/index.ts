@@ -1,4 +1,4 @@
-export { leaseKeys } from './keys';
+export { leaseKeys } from '@/shared/api/query-keys';
 export {
   useLeases,
   useLease,

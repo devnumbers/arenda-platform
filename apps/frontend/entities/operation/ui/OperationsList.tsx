@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX, ReactNode } from 'react';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import { OperationListItem } from './OperationListItem';
 import styles from './OperationsList.module.css';
 

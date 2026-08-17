@@ -14,18 +14,18 @@ import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscriptio
 import {Button} from '@/shared/ui/button';
 import {ConfirmModal} from '@/shared/ui/confirm-modal';
 import {PageHeader} from '@/shared/ui/page-header';
-import {PropertyDetailSection} from '@/widgets/property-detail';
-import {OperationListItem} from '@/widgets/operations/ui/OperationListItem';
-import {StatusBadge} from '@/widgets/dashboard/ui/StatusBadge';
-import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
-import {FinanceLoading} from '@/widgets/finance/ui/FinanceLoading';
-import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
+import { DetailSection } from '@/shared/ui/detail-section';
+import {OperationListItem} from '@/entities/operation/ui/OperationListItem';
+import {StatusBadge} from '@/entities/lease/ui/StatusBadge';
+import {SectionHeader} from '@/shared/ui/section-header';
+import {FinanceLoading} from '@/shared/ui/finance-loading';
+import {FinanceErrorState} from '@/shared/ui/finance-error-state';
 import {LeaseDetailLoading} from './LeaseDetailLoading';
 import {LeaseActionMenu} from './LeaseActionMenu';
-import {SubscriptionReadonlyBanner} from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import {SubscriptionReadonlyBanner} from '@/features/subscription/ui/SubscriptionReadonlyBanner';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {getTenantContactFullName} from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
-import type {components} from '@/shared/api/generated';
+import type {components} from '@/shared/api/dto';
 import styles from './LeaseDetailPage.module.css';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
@@ -50,19 +50,19 @@ function TenantCard({
 }): JSX.Element {
     if (!tenantContact) {
         return (
-            <PropertyDetailSection>
+            <DetailSection>
                 <SectionHeader title="Арендатор" href={ROUTES.tenants}/>
                 <div className={styles.card}>
                     <p className={styles.emptyText}>Арендатор не указан</p>
                 </div>
-            </PropertyDetailSection>
+            </DetailSection>
         );
     }
 
     const displayName = getTenantContactFullName(tenantContact) || tenantContact.name;
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <SectionHeader title="Арендатор" href={ROUTES.tenant(tenantContact.id)}/>
             <NextLink
                 href={ROUTES.tenant(tenantContact.id)}
@@ -79,7 +79,7 @@ function TenantCard({
                     <p className={styles.detailComment}>{tenantContact.comment}</p>
                 )}
             </NextLink>
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }
 
@@ -87,7 +87,7 @@ function TermsCard({lease}: { readonly lease: LeaseResponse }): JSX.Element {
     const endDate = lease.end_date ?? null;
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <SectionHeader title="Условия аренды"/>
             <div className={styles.card}>
                 <div className={styles.detailRow}>
@@ -125,7 +125,7 @@ function TermsCard({lease}: { readonly lease: LeaseResponse }): JSX.Element {
                     </div>
                 )}
             </div>
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }
 
@@ -152,18 +152,18 @@ function OperationsSection({
 }): JSX.Element {
     if (isLoading) {
         return (
-            <PropertyDetailSection>
+            <DetailSection>
                 <SectionHeader title="Арендная плата"/>
                 <div className={styles.card}>
                     <FinanceLoading/>
                 </div>
-            </PropertyDetailSection>
+            </DetailSection>
         );
     }
 
     if (isError) {
         return (
-            <PropertyDetailSection>
+            <DetailSection>
                 <SectionHeader title="Арендная плата"/>
                 <div className={styles.card}>
                     <p className={styles.emptyText}>
@@ -179,23 +179,23 @@ function OperationsSection({
                         Повторить
                     </Button>
                 </div>
-            </PropertyDetailSection>
+            </DetailSection>
         );
     }
 
     if (operations.length === 0) {
         return (
-            <PropertyDetailSection>
+            <DetailSection>
                 <SectionHeader title="Арендная плата"/>
                 <div className={styles.card}>
                     <p className={styles.emptyText}>Арендных операций пока нет</p>
                 </div>
-            </PropertyDetailSection>
+            </DetailSection>
         );
     }
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <SectionHeader title="Арендная плата"/>
             <ul className={styles.operationsList}>
                 {operations.map((operation) => (
@@ -221,7 +221,7 @@ function OperationsSection({
                     )}
                 </div>
             )}
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }
 

@@ -1,7 +1,7 @@
 import type { JSX, ReactNode } from 'react';
-import styles from './PropertyDetailSection.module.css';
+import styles from './DetailSection.module.css';
 
-export function PropertyDetailSection({
+export function DetailSection({
   children,
 }: {
   readonly children: ReactNode;

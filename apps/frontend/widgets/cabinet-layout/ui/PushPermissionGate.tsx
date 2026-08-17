@@ -6,8 +6,8 @@ import { useNotificationPreferences } from '@/features/notification-preferences/
 import {
   ensureActiveSubscription,
   useEnsureSubscriptionTools,
-} from '../lib/subscription-sync';
-import { readNotificationPermission } from '../lib/platform';
+} from '@/features/push-notifications/lib/subscription-sync';
+import { readNotificationPermission } from '@/features/push-notifications/lib/platform';
 
 /**
  * Invisible side-effect component: keeps the push subscription alive.

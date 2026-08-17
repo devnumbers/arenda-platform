@@ -1,5 +1,5 @@
-import { mapLeaseResponse } from '@/entities/lease/model/mappers';
-import type { components } from '@/shared/api/generated';
+import { mapLeaseResponse } from '@/shared/api/mappers/lease';
+import type { components } from '@/shared/api/dto';
 import type { Property } from './types';
 import { coerceAttributes } from './attributes';
 

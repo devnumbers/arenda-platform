@@ -5,7 +5,7 @@ import {Skeleton} from '@heroui/react/skeleton';
 import {Icon} from '@/shared/ui/icon';
 import {Arendator, Arendators} from '@/shared/assets/icons';
 import type {TenantContact} from '@/entities/tenant-contact/model/types';
-import {SectionHeader} from './SectionHeader';
+import {SectionHeader} from '@/shared/ui/section-header';
 import {EntityCard} from './EntityCard';
 import {IconActionCard} from './IconActionCard';
 import styles from './TenantsSection.module.css';

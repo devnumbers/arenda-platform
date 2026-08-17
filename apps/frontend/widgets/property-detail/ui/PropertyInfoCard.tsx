@@ -3,8 +3,8 @@
 import type {JSX} from 'react';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
-import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
-import {PropertyDetailSection} from './PropertyDetailSection';
+import {SectionHeader} from '@/shared/ui/section-header';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyInfoCard.module.css';
 
 export type PropertyInfoCardProps = {
@@ -19,7 +19,7 @@ export function PropertyInfoCard({
                                      isArchived = false,
                                  }: PropertyInfoCardProps): JSX.Element {
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <SectionHeader title="Информация об объекте"/>
 
             {description ? (
@@ -35,6 +35,6 @@ export function PropertyInfoCard({
                     Добавить описание
                 </LinkButton>
             )}
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }

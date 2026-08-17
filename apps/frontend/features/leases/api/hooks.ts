@@ -9,11 +9,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { leaseKeys } from './keys';
-import { financeKeys } from '@/features/finance/api/keys';
-import { operationKeys } from '@/features/operations/api/keys';
-import { propertyKeys } from '@/features/properties/api/keys';
-import type { components } from '@/shared/api/generated';
+import { financeKeys, leaseKeys, operationKeys, propertyKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
 type LeasesResponse = components['schemas']['LeasesResponse'];

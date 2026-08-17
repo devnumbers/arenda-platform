@@ -1,4 +1,4 @@
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import type { PropertyContact } from './types';
 
 type PropertyContactResponse = components['schemas']['PropertyContactResponse'];

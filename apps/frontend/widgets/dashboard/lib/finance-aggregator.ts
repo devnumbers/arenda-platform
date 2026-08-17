@@ -1,4 +1,4 @@
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import type { OperationStatus } from '@/entities/operation/model/types';
 
 type OperationsResponse = components['schemas']['OperationsResponse'];

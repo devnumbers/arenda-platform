@@ -11,8 +11,8 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { mapPropertyContactResponse } from '@/entities/property-contact/model/mappers';
 import type { PropertyContact } from '@/entities/property-contact/model/types';
-import { propertyContactKeys } from './keys';
-import type { components } from '@/shared/api/generated';
+import { propertyContactKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
 
 type PropertyContactResponse = components['schemas']['PropertyContactResponse'];
 type PropertyContactCreateRequest =

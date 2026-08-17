@@ -1,4 +1,4 @@
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import type { NotificationPreference, User } from './types';
 
 type MeResponse = components['schemas']['MeResponse'];

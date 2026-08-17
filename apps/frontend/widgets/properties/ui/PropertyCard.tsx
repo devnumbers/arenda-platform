@@ -4,12 +4,12 @@ import type {JSX} from 'react';
 import NextLink from 'next/link';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
-import {LeaseInfo} from '@/widgets/lease-card/ui/LeaseInfo';
+import {LeaseInfo} from '@/entities/lease/ui/LeaseInfo';
 import {getDisplayStatus} from '@/features/properties/lib/property-statuses';
 import {AccessRoleBadge} from '@/entities/access/ui/AccessRoleBadge';
 import type {PropertyWithLease} from '../lib/use-property-list-data';
-import {PropertyStatusBadge} from './PropertyStatusBadge';
-import {PropertyThumbnail} from './PropertyThumbnail';
+import {PropertyStatusBadge} from '@/features/properties/ui/PropertyStatusBadge';
+import {PropertyThumbnail} from '@/entities/property/ui/PropertyThumbnail';
 import styles from './PropertyCard.module.css';
 
 export type PropertyCardProps = {

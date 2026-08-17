@@ -31,7 +31,7 @@ export type ChangePhoneCommand = {
   code: string;
 };
 
-export type TariffName = 'basic' | 'pro' | 'business';
+export type { TariffName } from '@/shared/model/tariff';
 
 export type NotificationEventType =
   | 'operation_due'

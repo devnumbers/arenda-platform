@@ -1,5 +1,5 @@
 import type { Property } from '@/entities/property/model/types';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import {
   getEffectiveLeaseStatus,
   isOpenLeaseStatus,

@@ -14,8 +14,8 @@ import {LinkButton} from '@/shared/ui/link-button';
 import {PageHeader} from '@/shared/ui/page-header';
 import {IconButton} from '@/shared/ui/icon-button';
 import {Cancel} from '@/shared/assets/icons';
-import {PropertyDetailSection} from '@/widgets/property-detail';
-import type {components} from '@/shared/api/generated';
+import { DetailSection } from '@/shared/ui/detail-section';
+import type {components} from '@/shared/api/dto';
 import type {TenantContact} from '@/entities/tenant-contact/model/types';
 import {getTenantContactFullName} from '@/entities/tenant-contact/lib/get-tenant-contact-full-name';
 import {DateSelect} from '@/shared/ui/date-select';
@@ -332,7 +332,7 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
 
             {!leaseQuery.isPending && leaseQuery.data && (
                 <form className={styles.form} onSubmit={handleSubmit}>
-                    <PropertyDetailSection>
+                    <DetailSection>
                         <h2 className={styles.sectionTitle}>Условия аренды</h2>
                         <div className={styles.fields}>
                             <Select
@@ -418,7 +418,7 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
                                 onChange={handleTextChange('comment')}
                             />
                         </div>
-                    </PropertyDetailSection>
+                    </DetailSection>
 
                     <div className={styles.actions}>
                         <Button

@@ -3,7 +3,7 @@
 import {useParams, useRouter} from 'next/navigation';
 import {useState, type ComponentType, type JSX} from 'react';
 import {Modal} from '@heroui/react';
-import type {components} from '@/shared/api/generated';
+import type {components} from '@/shared/api/dto';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack} from '@/shared/lib/navigation';
 import {ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo} from '@/shared/assets/icons';
@@ -23,8 +23,8 @@ import {
 import {formatOperationDate} from '@/entities/operation/lib/dates';
 import {formatMoneyKopecks} from '@/entities/operation/lib/formatMoney';
 import {OperationDetailLoading} from './OperationDetailLoading';
-import {FinanceErrorState} from '@/widgets/finance/ui/FinanceErrorState';
-import {SubscriptionReadonlyBanner} from '@/widgets/finance/ui/SubscriptionReadonlyBanner';
+import {FinanceErrorState} from '@/shared/ui/finance-error-state';
+import {SubscriptionReadonlyBanner} from '@/features/subscription/ui/SubscriptionReadonlyBanner';
 import {useSubscription} from '@/features/subscription/api/hooks';
 import {isSubscriptionReadonly} from '@/features/subscription/lib/is-subscription-readonly';
 import {OperationActionButtons} from './OperationActionButtons';

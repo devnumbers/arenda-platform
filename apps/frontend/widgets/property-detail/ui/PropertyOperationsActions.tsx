@@ -3,7 +3,7 @@
 import type {JSX} from 'react';
 import {ROUTES} from '@/shared/config/routes';
 import {LinkButton} from '@/shared/ui/link-button';
-import {PropertyDetailSection} from './PropertyDetailSection';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyOperationsActions.module.css';
 
 export type PropertyOperationsActionsProps = {
@@ -16,7 +16,7 @@ export function PropertyOperationsActions({
                                               isArchived,
                                           }: PropertyOperationsActionsProps): JSX.Element {
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <div className={styles.actions}>
                 <LinkButton
                     href={`${ROUTES.financeCreateOperation}?propertyId=${propertyId}`}
@@ -35,6 +35,6 @@ export function PropertyOperationsActions({
                     Все операции
                 </LinkButton>
             </div>
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }

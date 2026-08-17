@@ -2,7 +2,7 @@
 
 import type { ComponentType, JSX, SVGProps } from 'react';
 import NextLink from 'next/link';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import { ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo, Home } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import type { OperationStatus } from '@/entities/operation/model/types';

@@ -1,6 +1,6 @@
 import type {JSX} from 'react';
 import {Skeleton} from '@heroui/react/skeleton';
-import {PropertyDetailSection} from '@/widgets/property-detail';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './LeaseEditFormLoading.module.css';
 
 export function LeaseEditFormLoading(): JSX.Element {
@@ -10,7 +10,7 @@ export function LeaseEditFormLoading(): JSX.Element {
             aria-busy="true"
             aria-label="Загрузка формы редактирования аренды"
         >
-            <PropertyDetailSection>
+            <DetailSection>
                 <Skeleton className={styles.sectionTitle}/>
                 <div className={styles.fields}>
                     <Skeleton className={styles.field}/>
@@ -23,7 +23,7 @@ export function LeaseEditFormLoading(): JSX.Element {
                     <Skeleton className={styles.field}/>
                     <Skeleton className={styles.multilineField}/>
                 </div>
-            </PropertyDetailSection>
+            </DetailSection>
 
             <div className={styles.actions}>
                 <Skeleton className={styles.submit}/>

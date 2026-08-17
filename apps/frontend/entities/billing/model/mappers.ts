@@ -1,5 +1,5 @@
-import type { components } from '@/shared/api/generated';
-import type { TariffName } from '@/entities/user/model/types';
+import type { components } from '@/shared/api/dto';
+import type { TariffName } from '@/shared/model/tariff';
 import type {
   AddPaymentMethodResult,
   ChangeTariffResult,

@@ -1,4 +1,4 @@
-export { tenantContactKeys } from './keys';
+export { tenantContactKeys } from '@/shared/api/query-keys';
 export {
   useTenantContacts,
   useTenantContact,

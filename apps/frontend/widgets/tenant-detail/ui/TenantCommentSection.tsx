@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { PropertyDetailSection } from '@/widgets/property-detail';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './TenantCommentSection.module.css';
 
 export type TenantCommentSectionProps = {
@@ -10,9 +10,9 @@ export type TenantCommentSectionProps = {
 
 export function TenantCommentSection({ comment }: TenantCommentSectionProps): JSX.Element {
   return (
-    <PropertyDetailSection>
+    <DetailSection>
       <h2 className={styles.title}>Комментарий</h2>
       <p className={styles.text}>{comment}</p>
-    </PropertyDetailSection>
+    </DetailSection>
   );
 }

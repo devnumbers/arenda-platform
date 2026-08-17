@@ -1,4 +1,4 @@
-export { propertyKeys } from './keys';
+export { propertyKeys } from '@/shared/api/query-keys';
 export {
   useProperties,
   useArchivedProperties,

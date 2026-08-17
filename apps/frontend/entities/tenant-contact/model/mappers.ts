@@ -1,5 +1,5 @@
-import type { components } from '@/shared/api/generated';
-import { mapLeaseResponse } from '@/entities/lease/model/mappers';
+import type { components } from '@/shared/api/dto';
+import { mapLeaseResponse } from '@/shared/api/mappers/lease';
 import type { TenantContact } from './types';
 
 type TenantContactResponse = components['schemas']['TenantContactResponse'];

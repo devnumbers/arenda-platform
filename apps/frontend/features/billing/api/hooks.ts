@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import { type TariffName } from '@/entities/user/model/types';
 import {
   mapAddPaymentMethodResponse,
@@ -27,7 +27,7 @@ import type {
   SubscriptionPayment,
   Tariff,
 } from '@/entities/billing/model/types';
-import { billingKeys } from './keys';
+import { billingKeys } from '@/shared/api/query-keys';
 
 type AutoRenewRequest = components['schemas']['AutoRenewRequest'];
 type ChangeTariffRequest = Omit<

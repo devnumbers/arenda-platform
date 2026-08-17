@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import clsx from 'clsx';
 import { Icon } from '@/shared/ui/icon';
 import { Good, BadgeInfo } from '@/shared/assets/icons';
-import type { components } from '@/shared/api/generated';
+import type { components } from '@/shared/api/dto';
 import styles from './StatusBadge.module.css';
 
 type LeaseStatus = components['schemas']['LeaseResponse']['status'];

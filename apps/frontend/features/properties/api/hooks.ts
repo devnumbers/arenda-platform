@@ -11,12 +11,8 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { mapPropertyResponse } from '@/entities/property/model/mappers';
 import type { Property } from '@/entities/property/model/types';
-import { propertyKeys } from './keys';
-import { operationKeys } from '@/features/operations/api/keys';
-import { leaseKeys } from '@/features/leases/api/keys';
-import { financeKeys } from '@/features/finance/api/keys';
-import { recurringOperationKeys } from '@/features/recurring-operations/api/keys';
-import type { components, operations } from '@/shared/api/generated';
+import { financeKeys, leaseKeys, operationKeys, propertyKeys, recurringOperationKeys } from '@/shared/api/query-keys';
+import type { components, operations } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];

@@ -1,2 +1,2 @@
-export { categoryKeys, type OperationCategoryType } from './keys';
+export { categoryKeys, type OperationCategoryType } from '@/shared/api/query-keys';
 export * from './hooks';

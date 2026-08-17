@@ -1,4 +1,4 @@
-export { accessKeys } from './keys';
+export { accessKeys } from '@/shared/api/query-keys';
 export {
     usePropertyAccessMembers,
     useInvitePropertyAccessMember,

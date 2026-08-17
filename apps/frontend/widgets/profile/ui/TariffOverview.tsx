@@ -15,7 +15,7 @@ import {
     usePendingPayment,
     useSubscription,
 } from '@/features/billing/api/hooks';
-import {billingKeys} from '@/features/billing/api/keys';
+import {billingKeys} from '@/shared/api/query-keys';
 import {ROUTES} from '@/shared/config/routes';
 import {getTariffLabel} from '@/entities/user/lib/get-tariff-label';
 import {isPaidTariff} from '@/entities/user/lib/is-paid-tariff';

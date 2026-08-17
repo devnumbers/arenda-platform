@@ -10,9 +10,9 @@ import {
 import { useFinanceReport } from '@/features/finance/api/hooks';
 import { useProperties } from '@/features/properties/api/hooks';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { FinanceLoading } from '@/widgets/finance/ui/FinanceLoading';
-import { FinanceErrorState } from '@/widgets/finance/ui/FinanceErrorState';
-import { FinanceEmptyState } from '@/widgets/finance/ui/FinanceEmptyState';
+import { FinanceLoading } from '@/shared/ui/finance-loading';
+import { FinanceErrorState } from '@/shared/ui/finance-error-state';
+import { FinanceEmptyState } from '@/shared/ui/finance-empty-state';
 import type { OperationType } from '@/entities/operation/model/types';
 import styles from './ProfitReport.module.css';
 

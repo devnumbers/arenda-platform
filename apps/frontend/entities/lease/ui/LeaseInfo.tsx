@@ -13,7 +13,7 @@ import {
     parseLocalDate,
     startOfDay,
 } from '@/shared/lib/lease-payment';
-import type {components} from '@/shared/api/generated';
+import type {components} from '@/shared/api/dto';
 import styles from './LeaseInfo.module.css';
 
 const SEGMENTS = 4;

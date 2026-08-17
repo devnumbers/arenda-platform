@@ -6,7 +6,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatLeaseRemainingDuration } from '@/shared/lib/format-lease-card-values';
 import { useProperty } from '@/features/properties/api';
-import { PropertyDetailSection } from '@/widgets/property-detail';
+import { DetailSection } from '@/shared/ui/detail-section';
 import { getLeaseStatusLabel } from '../lib/get-lease-status-label';
 import type { Lease } from '@/entities/lease/model/types';
 import styles from './TenantLeaseSection.module.css';
@@ -43,7 +43,7 @@ export function TenantLeaseSection({ lease }: TenantLeaseSectionProps): JSX.Elem
   );
 
   return (
-    <PropertyDetailSection>
+    <DetailSection>
       <div className={styles.header}>
         <h2 className={styles.title}>Текущая аренда</h2>
       </div>
@@ -55,6 +55,6 @@ export function TenantLeaseSection({ lease }: TenantLeaseSectionProps): JSX.Elem
       ) : (
         <div className={styles.card}>{card}</div>
       )}
-    </PropertyDetailSection>
+    </DetailSection>
   );
 }

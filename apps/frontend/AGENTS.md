@@ -8,7 +8,7 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 
 ## Stack & References
 
-- Next.js `16.2.9`, React `19.2.4`, TypeScript `^5`.
+- Next.js `16.2.11`, React `19.2.4`, TypeScript `^5`.
 - React Compiler enabled in `next.config.ts`.
 - Official Next.js docs (`https://nextjs.org/docs`) take precedence over training data.
 - For non-obvious third-party behavior, use `context7` for current docs.
@@ -24,7 +24,7 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 ## MCP Servers
 
 - `playwright` — use for browser automation and UI verification when the `mcp__playwright__*` tools are available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If they are unavailable, fall back to manual inspection, build logs, and native browser tools.
-- `heroui-react` — mandatory documentation source for HeroUI v3: `@heroui/react` v3 is beta and not covered by model training data. Before writing HeroUI code, verify the component with `list_components`, then read `get_component_docs`; never mix v2 APIs or BEM classes from `@heroui/styles` into React components.
+- `heroui-react` — mandatory documentation source for HeroUI v3: `@heroui/react` v3 is beta and not covered by model training data. Before writing HeroUI code, verify the component with `list_components`, then read `get_component_docs`; never mix v2 APIs or BEM classes from `@heroui/styles` into React components (enforced by `no-restricted-imports` in `eslint.config.mjs`).
 - `lean-ctx` — use for broad exploration, large generated files, repeated reads, and noisy build or lint output. Before editing exact TypeScript, component, route, or config code, read the target source in raw/full form.
 - If a TypeScript LSP or MCP server is added later, use it for semantic navigation, references, diagnostics, and impact checks. Do not use it as a replacement for `npm run lint`, `npm run build`, or direct code review.
 
@@ -45,15 +45,15 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 - `widgets/` — self-contained page blocks composed of features, entities, and shared UI.
 - `features/` — user scenarios and use cases (for example: "create operation", "pay subscription").
 - `entities/` — domain models mapped from the backend: owner, property, lease, operation, subscription.
-- `shared/` — reusable infrastructure: UI kit, API client, config, helpers, types, and hooks not tied to a specific feature.
-- Dependency direction is inward only: `app/widgets` → `features` → `entities` → `shared`. No imports upward or sideways between slices.
+- `shared/` — reusable infrastructure: UI kit, API client, config, helpers, types, and hooks not tied to a specific feature. Cross-entity model types referenced by several entity slices (`shared/model/`) and the react-query key registry (`shared/api/query-keys.ts`) live here because cross-slice imports are banned above `shared`.
+- Dependency direction is inward only: `app/widgets` → `features` → `entities` → `shared`. No imports upward or sideways between slices — cross-slice imports inside a layer are banned too (enforced by `boundaries/dependencies` in `eslint.config.mjs`, `eslint-plugin-boundaries`).
 - Keep UI dumb; business logic lives in `features/` and `entities/`. Server calls live in `shared/api` or Next.js route handlers.
 
 ## API & Data Flow
 
 - Use Next.js server-side data fetching (Server Components and route handlers) by default.
 - Browser-side state only when interactivity requires it.
-- Map backend DTOs to entity models at the API boundary; do not leak generated DTOs into widgets or features.
+- Map backend DTOs to entity models at the API boundary; do not leak generated DTOs into widgets or features. The generated client `shared/api/generated.ts` is imported only inside `shared/api` — everywhere else import DTO types from `shared/api/dto` (enforced by `no-restricted-imports` in `eslint.config.mjs`).
 - Money arrives from the API as integer kopecks (`number`, safe below 2^53); format for display only via `formatMoneyKopecks` from `shared/lib/format-money.ts` — never hand-roll `/100` formatting.
 - Reuse backend types from OpenAPI where possible; keep frontend entity types explicit and minimal.
 - Do not edit generated API client files by hand; update the backend OpenAPI contract and regenerate the frontend client (freshness enforced by `make frontend-api-check` in `.github/workflows/ci.yml`; regenerate with `cd apps/frontend && npm run generate:api`).

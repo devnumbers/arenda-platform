@@ -4,9 +4,9 @@ import type {JSX} from 'react';
 import Link from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
 import {LinkButton} from '@/shared/ui/link-button';
-import {SectionHeader} from '@/widgets/dashboard/ui/SectionHeader';
+import {SectionHeader} from '@/shared/ui/section-header';
 import {usePropertyContacts} from '@/features/property-contacts/api';
-import {PropertyDetailSection} from './PropertyDetailSection';
+import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyContactsSection.module.css';
 
 export type PropertyContactsSectionProps = {
@@ -21,7 +21,7 @@ export function PropertyContactsSection({
     const {data: contacts, isPending, isError} = usePropertyContacts(propertyId);
 
     return (
-        <PropertyDetailSection>
+        <DetailSection>
             <SectionHeader title="Контакты" count={contacts?.length}/>
 
             {isPending && (
@@ -72,6 +72,6 @@ export function PropertyContactsSection({
                     </div>
                 </>
             )}
-        </PropertyDetailSection>
+        </DetailSection>
     );
 }
