@@ -450,7 +450,8 @@ func (w *Workers) processSubscriptionBatch(
 		batchProcessed := 0
 		for _, sub := range subs {
 			if err := process(ctx, sub, now); err != nil {
-				w.log.ErrorContext(ctx, op+" subscription failed",
+				w.log.ErrorContext(ctx, "subscription processing failed",
+					slog.String("op", op),
 					slog.String("subscription_id", sub.ID.String()),
 					slog.String("user_id", sub.UserID.String()),
 					slog.String("error", sanitize.Error(err)))
@@ -1098,7 +1099,8 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, 
 			// there is nothing to query at the provider.
 			status, statusErr := w.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
 			if statusErr != nil {
-				w.log.WarnContext(ctx, "failed to query provider status for stale "+op,
+				w.log.WarnContext(ctx, "failed to query provider status for stale payments",
+					slog.String("selection", op),
 					slog.String("payment_id", payment.ID.String()),
 					slog.String("error", sanitize.Error(statusErr)))
 				continue
@@ -1106,7 +1108,8 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, 
 			switch status.Status {
 			case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed:
 				if err := w.finalizeFromProviderStatus(ctx, payment, status); err != nil {
-					w.log.ErrorContext(ctx, "failed to finalize stale "+op+" from provider status",
+					w.log.ErrorContext(ctx, "failed to finalize stale payment from provider status",
+						slog.String("selection", op),
 						slog.String("payment_id", payment.ID.String()),
 						slog.String("error", sanitize.Error(err)))
 					continue
@@ -1115,7 +1118,8 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, 
 			case domain.PaymentStatusPending:
 				// The provider has not settled the payment yet.
 			default:
-				w.log.WarnContext(ctx, "unexpected provider status for stale "+op,
+				w.log.WarnContext(ctx, "unexpected provider status for stale payment",
+					slog.String("selection", op),
 					slog.String("payment_id", payment.ID.String()),
 					slog.String("provider_status", string(status.Status)))
 			}

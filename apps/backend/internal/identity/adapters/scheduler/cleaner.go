@@ -16,15 +16,12 @@ import (
 // interfaces. The postgres repositories satisfy them through structural typing;
 // conformance is checked at the assignment site in wire/workers.go.
 
-// ExpiredSessionDeleter removes sessions whose expiry falls before the given
-// instant and reports the number of rows removed.
-type ExpiredSessionDeleter interface {
-	DeleteExpiredBefore(ctx context.Context, before time.Time) (int64, error)
-}
-
-// ExpiredLoginCodeDeleter removes login codes whose expiry falls before the
-// given instant and reports the number of rows removed.
-type ExpiredLoginCodeDeleter interface {
+// ExpiredDeleter removes rows whose expiry falls before the given instant and
+// reports the number of rows removed. One contract covers both consumers — the
+// expired-session and expired-login-code repositories speak the identical
+// "delete expired" intent, so separate identical interfaces would be a copy,
+// not a distinct port.
+type ExpiredDeleter interface {
 	DeleteExpiredBefore(ctx context.Context, before time.Time) (int64, error)
 }
 
@@ -36,8 +33,8 @@ type StaleAttemptDeleter interface {
 
 // Cleaner periodically removes expired identity data.
 type Cleaner struct {
-	sessions  ExpiredSessionDeleter
-	codes     ExpiredLoginCodeDeleter
+	sessions  ExpiredDeleter
+	codes     ExpiredDeleter
 	attempts  StaleAttemptDeleter
 	clock     clock.Clock
 	interval  time.Duration
@@ -47,10 +44,10 @@ type Cleaner struct {
 
 // NewCleaner creates a Cleaner with the given repositories and schedule.
 func NewCleaner(
-	sessions ExpiredSessionDeleter,
-	codes ExpiredLoginCodeDeleter,
+	sessions ExpiredDeleter,
+	codes ExpiredDeleter,
 	attempts StaleAttemptDeleter,
-	clock clock.Clock,
+	clk clock.Clock,
 	interval, retention time.Duration,
 	logger *slog.Logger,
 ) *Cleaner {
@@ -61,7 +58,7 @@ func NewCleaner(
 		sessions:  sessions,
 		codes:     codes,
 		attempts:  attempts,
-		clock:     clock,
+		clock:     clk,
 		interval:  interval,
 		retention: retention,
 		logger:    logger,
@@ -114,7 +111,8 @@ func (c *Cleaner) cleanExpired(
 ) int64 {
 	n, err := deleteBefore(ctx, before)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		c.logger.ErrorContext(ctx, "failed to clean expired "+name, slog.String("error", sanitize.Error(err)))
+		c.logger.ErrorContext(ctx, "failed to clean expired data",
+			slog.String("target", name), slog.String("error", sanitize.Error(err)))
 	}
 	return n
 }

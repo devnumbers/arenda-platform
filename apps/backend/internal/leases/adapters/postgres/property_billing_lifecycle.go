@@ -31,11 +31,11 @@ type PropertyBillingLifecycle struct {
 }
 
 // NewPropertyBillingLifecycle creates a new property billing lifecycle adapter.
-func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, leases *LeaseRepository, categories leasesapp.OperationCategoryRepository, scheduler leasesapp.ReminderScheduler, audit auditapp.Recorder, clock clock.Clock) *PropertyBillingLifecycle {
+func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, leases *LeaseRepository, categories leasesapp.OperationCategoryRepository, scheduler leasesapp.ReminderScheduler, audit auditapp.Recorder, clk clock.Clock) *PropertyBillingLifecycle {
 	if audit == nil {
 		audit = auditapp.Noop{}
 	}
-	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, leases: leases, categories: categories, scheduler: scheduler, audit: audit, clock: clock}
+	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, leases: leases, categories: categories, scheduler: scheduler, audit: audit, clock: clk}
 }
 
 // WithTx returns an instance bound to the provided transaction.
@@ -159,7 +159,7 @@ func (l *PropertyBillingLifecycle) Suspend(ctx context.Context, propertyID, scop
 // Resume activates all recurring operations for the property and generates
 // missing operation instances from asOf up to 100 years ahead (or end_date),
 // skipping dates that already have operations.
-func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID uuid.UUID, scope uuid.UUID, asOf time.Time) error {
+func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error {
 	recs, err := l.recurringOps.ListByProperty(ctx, scope, propertyID)
 	if err != nil {
 		return fmt.Errorf("list recurring operations: %w", err)

@@ -14,7 +14,7 @@ import (
 )
 
 // fakeDeleter is a function-field stub that satisfies all three deleter ports
-// (ExpiredSessionDeleter, ExpiredLoginCodeDeleter, StaleAttemptDeleter) via
+// (ExpiredDeleter, StaleAttemptDeleter) via
 // structural typing. DeleteExpiredBefore and DeleteStaleBefore both increment
 // the same counter and return the same configured count and error.
 type fakeDeleter struct {
@@ -264,8 +264,7 @@ func TestCleaner_Run_StopsOnContextCancel(t *testing.T) {
 
 // Compile-time guard that fakeDeleter satisfies both deleter ports.
 var (
-	_ ExpiredSessionDeleter   = (*fakeDeleter)(nil)
-	_ ExpiredLoginCodeDeleter = (*fakeDeleter)(nil)
-	_ StaleAttemptDeleter     = (*fakeDeleter)(nil)
-	_ clock.Clock             = (*fakeClock)(nil)
+	_ ExpiredDeleter      = (*fakeDeleter)(nil)
+	_ StaleAttemptDeleter = (*fakeDeleter)(nil)
+	_ clock.Clock         = (*fakeClock)(nil)
 )

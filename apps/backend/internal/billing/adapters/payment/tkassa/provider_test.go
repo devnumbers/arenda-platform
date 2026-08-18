@@ -55,7 +55,7 @@ func testPurpose() application.PaymentPurpose {
 // returns both the raw JSON and the decoded map. Fields in exclude are removed
 // before token verification to match the server-side schema (e.g. AddCard
 // ignores the URL extras the adapter appends outside the schema).
-func captureRequest(t *testing.T, r *http.Request, exclude ...string) ([]byte, map[string]any) {
+func captureRequest(t *testing.T, r *http.Request, exclude ...string) (body []byte, captured map[string]any) {
 	t.Helper()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

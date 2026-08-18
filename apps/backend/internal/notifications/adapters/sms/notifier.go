@@ -24,7 +24,7 @@ func NewNotifier(resolver application.ContactResolver, sender application.SMSSen
 }
 
 // Notify sends the notification via SMS using the resolved contact when provided.
-func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (string, string, error) {
+func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (providerResponse, renderedPlainBody string, err error) {
 	contact := notification.Contact
 	if contact == nil {
 		resolved, err := n.resolver.Resolve(ctx, notification.RecipientID)
@@ -37,7 +37,7 @@ func (n *Notifier) Notify(ctx context.Context, notification application.Notifica
 		return "", "", fmt.Errorf("unsupported channel: %s", contact.Channel)
 	}
 
-	providerResponse, err := n.sender.Send(ctx, contact.Phone, notification.Body)
+	providerResponse, err = n.sender.Send(ctx, contact.Phone, notification.Body)
 	if err != nil {
 		return providerResponse, "", fmt.Errorf("send sms: %w", err)
 	}

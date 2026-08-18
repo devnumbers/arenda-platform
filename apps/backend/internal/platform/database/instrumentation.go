@@ -336,13 +336,6 @@ func (i dbInstrumenter) logWithIDs(ctx context.Context, sql string, acquireDurat
 		return
 	}
 
-	level := slog.LevelWarn
-	message := "database query slow"
-	if isLoggableQueryError(err) {
-		level = slog.LevelError
-		message = "database query failed"
-	}
-
 	attrs := []slog.Attr{
 		slog.String("db_system", "postgresql"),
 		slog.String("db_operation", sqlOperation(sql)),
@@ -360,7 +353,13 @@ func (i dbInstrumenter) logWithIDs(ctx context.Context, sql string, acquireDurat
 		attrs = append(attrs, slog.String("error", sanitize.Error(err)))
 	}
 
-	i.logger.LogAttrs(ctx, level, message, attrs...)
+	// Static messages at the call sites (sloglint static-msg): the error/slow
+	// distinction lives in the level, not in an interpolated message.
+	if isLoggableQueryError(err) {
+		i.logger.LogAttrs(ctx, slog.LevelError, "database query failed", attrs...)
+		return
+	}
+	i.logger.LogAttrs(ctx, slog.LevelWarn, "database query slow", attrs...)
 }
 
 func (i dbInstrumenter) shouldLog(acquireDuration, queryDuration time.Duration, err error) bool {

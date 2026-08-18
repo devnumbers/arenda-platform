@@ -59,7 +59,7 @@ type canMutateDataKey struct{}
 
 // canMutateDataFromContext returns the cached per-request subscription mutation
 // flag, if any middleware or handler has already computed it.
-func canMutateDataFromContext(ctx context.Context) (bool, bool) {
+func canMutateDataFromContext(ctx context.Context) (canMutate, present bool) {
 	v, ok := ctx.Value(canMutateDataKey{}).(bool)
 	return v, ok
 }

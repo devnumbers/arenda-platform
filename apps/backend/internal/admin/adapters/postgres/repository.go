@@ -31,8 +31,8 @@ type AdminRepository struct {
 }
 
 // NewAdminRepository creates a new admin repository.
-func NewAdminRepository(db postgres.DBTX, enc encryption.Encryptor, clock clock.Clock, occupancy propertiesapp.OccupancyProvider) *AdminRepository {
-	return &AdminRepository{db: db, enc: enc, clock: clock, occupancy: occupancy}
+func NewAdminRepository(db postgres.DBTX, enc encryption.Encryptor, clk clock.Clock, occupancy propertiesapp.OccupancyProvider) *AdminRepository {
+	return &AdminRepository{db: db, enc: enc, clock: clk, occupancy: occupancy}
 }
 
 func (r *AdminRepository) q() *postgres.Queries {

@@ -22,13 +22,16 @@ import (
 // not know, or a spec field the adapter stopped sending where it must not —
 // fails here before it reaches the provider.
 
+// initContractCase is one row of the Init contract table.
+type initContractCase struct {
+	name                   string
+	req                    application.InitPaymentRequest
+	wantOperationInitiator spec.CommonOperationInitiatorType
+	wantRecurrent          bool
+}
+
 func TestProviderInitPaymentContract(t *testing.T) {
-	tests := []struct {
-		name                   string
-		req                    application.InitPaymentRequest
-		wantOperationInitiator spec.CommonOperationInitiatorType
-		wantRecurrent          bool
-	}{
+	tests := []initContractCase{
 		{
 			name: "first_payment_save_method",
 			req: application.InitPaymentRequest{
@@ -112,111 +115,132 @@ func TestProviderInitPaymentContract(t *testing.T) {
 				t.Fatalf("request was not captured")
 			}
 
-			// Map-level assertions on the raw body: Recurrent must be present
-			// only for the parent (save-method) payment.
-			if tt.wantRecurrent {
-				if got, want := capturedMap["Recurrent"], any(string(spec.Y)); got != want {
-					t.Errorf("Recurrent: got %v, want %q", got, want)
-				}
-			} else if _, ok := capturedMap["Recurrent"]; ok {
-				t.Errorf("Recurrent must be omitted for merchant-initiated Init, got %v", capturedMap["Recurrent"])
-			}
-			// RedirectDueDate rides along only when set: the user-facing parent
-			// payment carries the payment-form deadline, renewals (MIT) must not.
-			if !tt.req.FormDeadline.IsZero() {
-				raw, ok := capturedMap["RedirectDueDate"].(string)
-				if !ok {
-					t.Fatalf("RedirectDueDate missing or not a string")
-				}
-				if _, err := time.Parse(time.RFC3339, raw); err != nil {
-					t.Errorf("RedirectDueDate is not RFC3339: %q: %v", raw, err)
-				}
-				if want := tt.req.FormDeadline.UTC().Format(time.RFC3339); raw != want {
-					t.Errorf("RedirectDueDate: got %q, want %q", raw, want)
-				}
-			} else if _, ok := capturedMap["RedirectDueDate"]; ok {
-				t.Errorf("RedirectDueDate must be omitted for renewal Init, got %v", capturedMap["RedirectDueDate"])
-			}
-			dataObj, ok := capturedMap["DATA"].(map[string]any)
-			if !ok {
-				t.Fatalf("DATA missing or not an object")
-			}
-			if got, want := dataObj["OperationInitiatorType"], any(string(tt.wantOperationInitiator)); got != want {
-				t.Errorf("DATA.OperationInitiatorType: got %v, want %q", got, want)
-			}
+			assertInitMapBody(t, capturedMap, tt)
 
 			var reqBody spec.InitRequest
 			strictDecodeSpecRequest(t, captured, &reqBody)
-
-			if reqBody.TerminalKey != testTerminalKey {
-				t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
-			}
-			if reqBody.Token == "" {
-				t.Errorf("Token is empty")
-			}
-			if reqBody.OrderId != tt.req.PaymentID.String() {
-				t.Errorf("OrderId: got %q, want %q", reqBody.OrderId, tt.req.PaymentID.String())
-			}
-			if reqBody.Amount != tt.req.AmountKopecks {
-				t.Errorf("Amount: got %v, want %v", reqBody.Amount, tt.req.AmountKopecks)
-			}
-			if reqBody.PayType == nil || *reqBody.PayType != spec.O {
-				t.Errorf("PayType: got %v, want %v", reqBody.PayType, spec.O)
-			}
-			if reqBody.CustomerKey == nil || *reqBody.CustomerKey != tt.req.CustomerRef {
-				t.Errorf("CustomerKey: got %v, want %q", reqBody.CustomerKey, tt.req.CustomerRef)
-			}
-
-			if tt.wantRecurrent {
-				if reqBody.Recurrent == nil || *reqBody.Recurrent != spec.Y {
-					t.Errorf("Recurrent: got %v, want %v", reqBody.Recurrent, spec.Y)
-				}
-			} else {
-				if reqBody.Recurrent != nil {
-					t.Errorf("Recurrent should be omitted, got %v", *reqBody.Recurrent)
-				}
-			}
-			if !tt.req.FormDeadline.IsZero() {
-				if reqBody.RedirectDueDate == nil {
-					t.Fatalf("spec.InitRequest.RedirectDueDate missing")
-				}
-				if want := tt.req.FormDeadline.UTC(); !reqBody.RedirectDueDate.Equal(want) {
-					t.Errorf("spec.InitRequest.RedirectDueDate: got %v, want %v", reqBody.RedirectDueDate, want)
-				}
-			}
-
-			// The adapter builds every callback URL from the configured app
-			// base URL (issue #248) — the contract asserts the exact paths.
-			if reqBody.NotificationURL == nil || *reqBody.NotificationURL != testAppBaseURL+"/webhooks/payment/tkassa" {
-				t.Errorf("NotificationURL: got %v", reqBody.NotificationURL)
-			}
-			wantSuccess := testAppBaseURL + "/subscription/payments/" + tt.req.PaymentID.String() + "/success"
-			if reqBody.SuccessURL == nil || *reqBody.SuccessURL != wantSuccess {
-				t.Errorf("SuccessURL: got %v, want %q", reqBody.SuccessURL, wantSuccess)
-			}
-			wantFail := testAppBaseURL + "/subscription/payments/" + tt.req.PaymentID.String() + "/fail"
-			if reqBody.FailURL == nil || *reqBody.FailURL != wantFail {
-				t.Errorf("FailURL: got %v, want %q", reqBody.FailURL, wantFail)
-			}
-
-			// The description is rendered by the adapter from the structured
-			// purpose and truncated to the provider's rune limit.
-			wantDesc := truncateDescription(paymentDescription(tt.req.Purpose))
-			if reqBody.Description == nil || *reqBody.Description != wantDesc {
-				t.Errorf("Description: got %v, want %q", reqBody.Description, wantDesc)
-			}
-
-			if reqBody.DATA == nil {
-				t.Fatalf("DATA is required for T-Kassa Init")
-			}
-			common, err := reqBody.DATA.AsCommon()
-			if err != nil {
-				t.Fatalf("DATA as Common: %v", err)
-			}
-			if common.OperationInitiatorType == nil || *common.OperationInitiatorType != tt.wantOperationInitiator {
-				t.Errorf("DATA.OperationInitiatorType: got %v, want %v", common.OperationInitiatorType, tt.wantOperationInitiator)
-			}
+			assertInitSpecFields(t, reqBody, tt)
+			assertInitSpecCallbacksAndPurpose(t, reqBody, tt.req)
+			assertInitSpecData(t, reqBody, tt.wantOperationInitiator)
 		})
+	}
+}
+
+// assertInitMapBody checks the raw Init body at map level: Recurrent must be
+// present only for the parent (save-method) payment, RedirectDueDate rides
+// along only when set (the user-facing parent payment carries the payment-form
+// deadline, renewals must not), and DATA carries the initiator type.
+func assertInitMapBody(t *testing.T, capturedMap map[string]any, tt initContractCase) {
+	t.Helper()
+	if tt.wantRecurrent {
+		if got, want := capturedMap["Recurrent"], any(string(spec.Y)); got != want {
+			t.Errorf("Recurrent: got %v, want %q", got, want)
+		}
+	} else if _, ok := capturedMap["Recurrent"]; ok {
+		t.Errorf("Recurrent must be omitted for merchant-initiated Init, got %v", capturedMap["Recurrent"])
+	}
+	if !tt.req.FormDeadline.IsZero() {
+		raw, ok := capturedMap["RedirectDueDate"].(string)
+		if !ok {
+			t.Fatalf("RedirectDueDate missing or not a string")
+		}
+		if _, err := time.Parse(time.RFC3339, raw); err != nil {
+			t.Errorf("RedirectDueDate is not RFC3339: %q: %v", raw, err)
+		}
+		if want := tt.req.FormDeadline.UTC().Format(time.RFC3339); raw != want {
+			t.Errorf("RedirectDueDate: got %q, want %q", raw, want)
+		}
+	} else if _, ok := capturedMap["RedirectDueDate"]; ok {
+		t.Errorf("RedirectDueDate must be omitted for renewal Init, got %v", capturedMap["RedirectDueDate"])
+	}
+	dataObj, ok := capturedMap["DATA"].(map[string]any)
+	if !ok {
+		t.Fatalf("DATA missing or not an object")
+	}
+	if got, want := dataObj["OperationInitiatorType"], any(string(tt.wantOperationInitiator)); got != want {
+		t.Errorf("DATA.OperationInitiatorType: got %v, want %q", got, want)
+	}
+}
+
+// assertInitSpecFields checks the strict-decoded spec.InitRequest core fields:
+// terminal, token, order id, amount, pay type, customer key, and the spec-level
+// Recurrent/RedirectDueDate presence.
+func assertInitSpecFields(t *testing.T, reqBody spec.InitRequest, tt initContractCase) {
+	t.Helper()
+	if reqBody.TerminalKey != testTerminalKey {
+		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
+	}
+	if reqBody.Token == "" {
+		t.Errorf("Token is empty")
+	}
+	if reqBody.OrderId != tt.req.PaymentID.String() {
+		t.Errorf("OrderId: got %q, want %q", reqBody.OrderId, tt.req.PaymentID.String())
+	}
+	if reqBody.Amount != tt.req.AmountKopecks {
+		t.Errorf("Amount: got %v, want %v", reqBody.Amount, tt.req.AmountKopecks)
+	}
+	if reqBody.PayType == nil || *reqBody.PayType != spec.O {
+		t.Errorf("PayType: got %v, want %v", reqBody.PayType, spec.O)
+	}
+	if reqBody.CustomerKey == nil || *reqBody.CustomerKey != tt.req.CustomerRef {
+		t.Errorf("CustomerKey: got %v, want %q", reqBody.CustomerKey, tt.req.CustomerRef)
+	}
+
+	if tt.wantRecurrent {
+		if reqBody.Recurrent == nil || *reqBody.Recurrent != spec.Y {
+			t.Errorf("Recurrent: got %v, want %v", reqBody.Recurrent, spec.Y)
+		}
+	} else {
+		if reqBody.Recurrent != nil {
+			t.Errorf("Recurrent should be omitted, got %v", *reqBody.Recurrent)
+		}
+	}
+	if !tt.req.FormDeadline.IsZero() {
+		if reqBody.RedirectDueDate == nil {
+			t.Fatalf("spec.InitRequest.RedirectDueDate missing")
+		}
+		if want := tt.req.FormDeadline.UTC(); !reqBody.RedirectDueDate.Equal(want) {
+			t.Errorf("spec.InitRequest.RedirectDueDate: got %v, want %v", reqBody.RedirectDueDate, want)
+		}
+	}
+}
+
+// assertInitSpecCallbacksAndPurpose checks the callback URLs (built from the
+// configured app base URL, issue #248) and the rendered description truncated
+// to the provider's rune limit.
+func assertInitSpecCallbacksAndPurpose(t *testing.T, reqBody spec.InitRequest, req application.InitPaymentRequest) {
+	t.Helper()
+	if reqBody.NotificationURL == nil || *reqBody.NotificationURL != testAppBaseURL+"/webhooks/payment/tkassa" {
+		t.Errorf("NotificationURL: got %v", reqBody.NotificationURL)
+	}
+	wantSuccess := testAppBaseURL + "/subscription/payments/" + req.PaymentID.String() + "/success"
+	if reqBody.SuccessURL == nil || *reqBody.SuccessURL != wantSuccess {
+		t.Errorf("SuccessURL: got %v, want %q", reqBody.SuccessURL, wantSuccess)
+	}
+	wantFail := testAppBaseURL + "/subscription/payments/" + req.PaymentID.String() + "/fail"
+	if reqBody.FailURL == nil || *reqBody.FailURL != wantFail {
+		t.Errorf("FailURL: got %v, want %q", reqBody.FailURL, wantFail)
+	}
+
+	wantDesc := truncateDescription(paymentDescription(req.Purpose))
+	if reqBody.Description == nil || *reqBody.Description != wantDesc {
+		t.Errorf("Description: got %v, want %q", reqBody.Description, wantDesc)
+	}
+}
+
+// assertInitSpecData checks the strict-decoded DATA object carries the
+// expected operation initiator type.
+func assertInitSpecData(t *testing.T, reqBody spec.InitRequest, wantInitiator spec.CommonOperationInitiatorType) {
+	t.Helper()
+	if reqBody.DATA == nil {
+		t.Fatalf("DATA is required for T-Kassa Init")
+	}
+	common, err := reqBody.DATA.AsCommon()
+	if err != nil {
+		t.Fatalf("DATA as Common: %v", err)
+	}
+	if common.OperationInitiatorType == nil || *common.OperationInitiatorType != wantInitiator {
+		t.Errorf("DATA.OperationInitiatorType: got %v, want %v", common.OperationInitiatorType, wantInitiator)
 	}
 }
 

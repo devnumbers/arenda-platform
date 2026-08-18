@@ -198,7 +198,7 @@ type DirectEmailSender interface {
 
 // SMSSender sends an SMS message to a phone number.
 type SMSSender interface {
-	Send(ctx context.Context, phone string, message string) (providerResponse string, err error)
+	Send(ctx context.Context, phone, message string) (providerResponse string, err error)
 }
 
 // PushSender dispatches a single Web Push message to one browser subscription.

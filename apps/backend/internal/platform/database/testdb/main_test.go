@@ -9,11 +9,12 @@ import (
 
 // TestMain ensures the PostgreSQL container is terminated after the test binary
 // finishes. When TEST_DATABASE_URL is set, no container is started and
-// terminateContainer is a no-op.
+// terminateContainer is a no-op. Cleanup runs via defer: since Go 1.15 the test
+// wrapper exits with m.Run's result after TestMain returns, so no os.Exit here
+// (exit policy: os.Exit lives in cmd/ only).
 func TestMain(m *testing.M) {
-	code := m.Run()
-	terminateContainer()
-	os.Exit(code)
+	defer terminateContainer()
+	m.Run()
 }
 
 // TestSetup_Smoke verifies that Setup produces a pool connected to a migrated

@@ -112,7 +112,9 @@ func TestSubscriptionPayment_FinalizationTransitions(t *testing.T) {
 			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
 		}
 	})
+}
 
+func TestSubscriptionPayment_RefundTransitions(t *testing.T) {
 	t.Run("mark refunded records the full amount", func(t *testing.T) {
 		payment := newTestPayment(t)
 		if err := payment.MarkSucceeded(paymentNow); err != nil {

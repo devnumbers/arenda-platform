@@ -50,7 +50,7 @@ Follow the workflow from the root `AGENTS.md`. For backend tasks, additionally:
 
 ## Coding Standards
 
-Before implementing or reviewing backend code, read `CODING_STANDARDS.md` (same directory): architecture inside a bounded context, error and concurrency conventions, testing patterns, and the review rubric used by the Standards axis of `/code-review`.
+Before implementing or reviewing backend code, read `CODING_STANDARDS.md` (same directory): architecture inside a bounded context, error and concurrency conventions (handle an error once, exit-политика), domain constructor validation and static port assertions, testing patterns, and the review rubric used by the Standards axis of `/code-review`.
 
 ## Architecture Rules
 
@@ -78,6 +78,8 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1 -config a
 - The property attributes catalog (`internal/properties/domain` field maps, `ValidateAttributes`, `crossFieldErrors`, …) is generated from `tools/property-attributes/catalog.json`. Regenerate with `make attributes-gen` (or `cd tools/property-attributes && npm run generate`); the gate `make attributes-check` fails in CI if a `catalog.json` change was not committed with its regenerated artifacts.
 - Do not hand-edit generated files (`spec.gen.go`, sqlc output, `zz_catalog.gen.go`); change the OpenAPI contract, SQL, migrations, `catalog.json`, or generator configuration, then regenerate (freshness enforced by `make backend-tkassa-spec-check` / `make backend-openapi-check` / `make backend-sqlc-check` / `make attributes-check` in `.github/workflows/ci.yml`).
 - Use explicit PostgreSQL SQL with `sqlc`; do not introduce ORM models (enforced by depguard `no-orm` in `.golangci.yml`).
+- `os.Exit`/`log.Fatal*` only in `cmd/` — internal packages return errors upward (exit-политика, enforced by forbidigo in `.golangci.yml`; prose in `CODING_STANDARDS.md`, bar #323).
+- `github.com/stretchr/testify` is test-only: production code asserts with `errors.Is/As` and domain constructors (enforced by depguard `testify-test-only` in `.golangci.yml`).
 - Schema changes require versioned migrations in `db/migrations` and matching queries in `db/queries`. Migrations are linted for lock-safety and the domain rules above (enforced by `make migrations-lint` — pre-commit on staged migrations, pre-push and the CI `migrations-lint` job on the full pass; config: `.squawk.toml`).
 - Keep database invariants in PostgreSQL with `NOT NULL`, foreign keys, `CHECK` constraints, indexes, and triggers where they protect durable rules.
 - Authorization goes through the policy port (`internal/shared/policy.Policy`), the single point that maps an actor and a data owner (scope) to a role. Owner-scoped repository queries filter by the data owner (`scope`), not by the actor; membership is resolved by the policy port, not in SQL. See ADR 0028 (`docs/adr/0028-object-data-access-model.md`).

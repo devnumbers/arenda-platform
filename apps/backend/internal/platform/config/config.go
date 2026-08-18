@@ -100,6 +100,10 @@ type DBPoolConfig struct {
 	IdleInTransactionSessionTimeout time.Duration
 }
 
+// Load reads the environment and validates every section in a fixed order, so
+// the first failing section is deterministic. Each load* method owns one
+// section and mutates the config in place; section bodies were extracted
+// verbatim from the original monolithic Load (ticket #336, gocyclo gate).
 func Load() (Config, error) {
 	cfg := Config{
 		AppEnv:            os.Getenv("APP_ENV"),
@@ -136,88 +140,133 @@ func Load() (Config, error) {
 		VAPIDSubject:     os.Getenv("VAPID_SUBJECT"),
 	}
 
+	for _, load := range []func() error{
+		cfg.loadObservability,
+		cfg.loadAppEnv,
+		cfg.loadDaData,
+		cfg.loadHTTPAddr,
+		cfg.loadLogging,
+		cfg.loadServer,
+		cfg.loadRateLimit,
+		cfg.loadDatabase,
+		cfg.loadEmail,
+		cfg.loadPaymentProvider,
+		cfg.loadPhotoStorage,
+		cfg.loadSchedulerIntervals,
+		cfg.loadTrustedProxies,
+		cfg.loadTariffCacheTTL,
+	} {
+		if err := load(); err != nil {
+			return Config{}, err
+		}
+	}
+
+	// VAPID keys are optional: the public key is served to the frontend when
+	// set; the private key and subject are consumed by the Web Push sender
+	// (RFC 8292). When the public key is unset, push delivery is disabled and
+	// the reminder worker runs email-only.
+	return cfg, nil
+}
+
+func (c *Config) loadObservability() error {
 	sampler, err := parseFloatEnv("OTEL_TRACES_SAMPLER_ARG", 1.0)
 	if err != nil {
-		return Config{}, fmt.Errorf("invalid OTEL_TRACES_SAMPLER_ARG %q: %w", os.Getenv("OTEL_TRACES_SAMPLER_ARG"), err)
+		return fmt.Errorf("invalid OTEL_TRACES_SAMPLER_ARG %q: %w", os.Getenv("OTEL_TRACES_SAMPLER_ARG"), err)
 	}
-	cfg.OTelTraceSampler = sampler
+	c.OTelTraceSampler = sampler
 
-	if cfg.OTelEnabled && cfg.OTelOTLPEndpoint == "" {
-		return Config{}, errors.New("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or OTEL_METRICS_EXPORTER is set to a value other than 'none'")
+	if c.OTelEnabled && c.OTelOTLPEndpoint == "" {
+		return errors.New("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or OTEL_METRICS_EXPORTER is set to a value other than 'none'")
 	}
+	return nil
+}
 
-	if cfg.AppEnv == "" {
-		return Config{}, errors.New("APP_ENV is required")
+func (c *Config) loadAppEnv() error {
+	if c.AppEnv == "" {
+		return errors.New("APP_ENV is required")
 	}
 	allowedEnvs := map[string]bool{"local": true, "dev": true, "staging": true, "production": true}
-	if !allowedEnvs[cfg.AppEnv] {
-		return Config{}, fmt.Errorf("invalid APP_ENV %q: must be one of local, dev, staging, production", cfg.AppEnv)
+	if !allowedEnvs[c.AppEnv] {
+		return fmt.Errorf("invalid APP_ENV %q: must be one of local, dev, staging, production", c.AppEnv)
 	}
+	return nil
+}
 
-	if cfg.DaDataBaseURL == "" {
-		cfg.DaDataBaseURL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address"
+func (c *Config) loadDaData() error {
+	if c.DaDataBaseURL == "" {
+		c.DaDataBaseURL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address"
 	}
-	if dadataURL, err := url.Parse(cfg.DaDataBaseURL); err != nil {
-		return Config{}, fmt.Errorf("invalid DADATA_BASE_URL %q: %w", cfg.DaDataBaseURL, err)
+	if dadataURL, err := url.Parse(c.DaDataBaseURL); err != nil {
+		return fmt.Errorf("invalid DADATA_BASE_URL %q: %w", c.DaDataBaseURL, err)
 	} else if dadataURL.Scheme != "http" && dadataURL.Scheme != "https" {
-		return Config{}, fmt.Errorf("invalid DADATA_BASE_URL %q: scheme must be http or https", cfg.DaDataBaseURL)
+		return fmt.Errorf("invalid DADATA_BASE_URL %q: scheme must be http or https", c.DaDataBaseURL)
 	}
 
-	cfg.DaDataTimeout = 10 * time.Second
+	c.DaDataTimeout = 10 * time.Second
 	if v := os.Getenv("DADATA_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid DADATA_TIMEOUT %q: %w", v, err)
+			return fmt.Errorf("invalid DADATA_TIMEOUT %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, errors.New("DADATA_TIMEOUT must be positive")
+			return errors.New("DADATA_TIMEOUT must be positive")
 		}
-		cfg.DaDataTimeout = d
+		c.DaDataTimeout = d
 	}
 
-	if cfg.DaDataAPIKey == "" {
-		return Config{}, errors.New("DADATA_API_KEY is required")
+	if c.DaDataAPIKey == "" {
+		return errors.New("DADATA_API_KEY is required")
+	}
+	return nil
+}
+
+func (c *Config) loadHTTPAddr() error {
+	if c.HTTPAddr == "" {
+		c.HTTPAddr = ":8080"
+	}
+	return nil
+}
+
+func (c *Config) loadLogging() error {
+	if c.LogLevel == "" {
+		c.LogLevel = "info"
+	}
+	if err := c.LogLevelValue.UnmarshalText([]byte(c.LogLevel)); err != nil {
+		return fmt.Errorf("invalid LOG_LEVEL %q: %w", c.LogLevel, err)
 	}
 
-	if cfg.HTTPAddr == "" {
-		cfg.HTTPAddr = ":8080"
-	}
-	if cfg.LogLevel == "" {
-		cfg.LogLevel = "info"
-	}
-	if err := cfg.LogLevelValue.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
-		return Config{}, fmt.Errorf("invalid LOG_LEVEL %q: %w", cfg.LogLevel, err)
-	}
-
-	if cfg.LogFormat == "" {
-		switch cfg.AppEnv {
+	if c.LogFormat == "" {
+		switch c.AppEnv {
 		case "local", "dev":
-			cfg.LogFormat = "pretty"
+			c.LogFormat = "pretty"
 		default:
-			cfg.LogFormat = "json"
+			c.LogFormat = "json"
 		}
 	}
 	allowedFormats := map[string]bool{"json": true, "pretty": true}
-	if !allowedFormats[cfg.LogFormat] {
-		return Config{}, fmt.Errorf("invalid LOG_FORMAT %q: must be json or pretty", cfg.LogFormat)
+	if !allowedFormats[c.LogFormat] {
+		return fmt.Errorf("invalid LOG_FORMAT %q: must be json or pretty", c.LogFormat)
 	}
 
-	cfg.LogSuccessfulRequests = true
+	c.LogSuccessfulRequests = true
 	if v := os.Getenv("LOG_SUCCESSFUL_REQUESTS"); v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid LOG_SUCCESSFUL_REQUESTS %q: %w", v, err)
+			return fmt.Errorf("invalid LOG_SUCCESSFUL_REQUESTS %q: %w", v, err)
 		}
-		cfg.LogSuccessfulRequests = b
+		c.LogSuccessfulRequests = b
 	}
+	return nil
+}
 
-	cfg.AutoMigrate = true
+func (c *Config) loadServer() error {
+	c.AutoMigrate = true
 	if v := os.Getenv("AUTO_MIGRATE"); v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid AUTO_MIGRATE %q: %w", v, err)
+			return fmt.Errorf("invalid AUTO_MIGRATE %q: %w", v, err)
 		}
-		cfg.AutoMigrate = b
+		c.AutoMigrate = b
 	}
 
 	cookieSecure := os.Getenv("COOKIE_SECURE")
@@ -225,24 +274,27 @@ func Load() (Config, error) {
 	if cookieSecure != "" {
 		v, err := strconv.ParseBool(cookieSecure)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid COOKIE_SECURE %q: %w", cookieSecure, err)
+			return fmt.Errorf("invalid COOKIE_SECURE %q: %w", cookieSecure, err)
 		}
-		cfg.CookieSecure = v
+		c.CookieSecure = v
 		cookieSecureExplicit = true
 	}
 	if !cookieSecureExplicit {
-		switch cfg.AppEnv {
+		switch c.AppEnv {
 		case "local":
-			cfg.CookieSecure = false
+			c.CookieSecure = false
 		default:
-			cfg.CookieSecure = true
+			c.CookieSecure = true
 		}
 	}
-	if !cfg.CookieSecure && cfg.AppEnv != "local" && cookieSecureExplicit {
-		return Config{}, fmt.Errorf("COOKIE_SECURE=false is not allowed for APP_ENV=%s", cfg.AppEnv)
+	if !c.CookieSecure && c.AppEnv != "local" && cookieSecureExplicit {
+		return fmt.Errorf("COOKIE_SECURE=false is not allowed for APP_ENV=%s", c.AppEnv)
 	}
+	return nil
+}
 
-	cfg.RateLimit = RateLimit{
+func (c *Config) loadRateLimit() error {
+	c.RateLimit = RateLimit{
 		IPRPS:                     20,
 		IPBurst:                   40,
 		EmailSendPerHour:          60,
@@ -253,79 +305,82 @@ func Load() (Config, error) {
 	if v := os.Getenv("RATE_LIMIT_IP_RPS"); v != "" {
 		rps, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_IP_RPS %q: %w", v, err)
+			return fmt.Errorf("invalid RATE_LIMIT_IP_RPS %q: %w", v, err)
 		}
-		cfg.RateLimit.IPRPS = rps
+		c.RateLimit.IPRPS = rps
 	}
 	if v := os.Getenv("RATE_LIMIT_IP_BURST"); v != "" {
 		burst, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_IP_BURST %q: %w", v, err)
+			return fmt.Errorf("invalid RATE_LIMIT_IP_BURST %q: %w", v, err)
 		}
-		cfg.RateLimit.IPBurst = burst
+		c.RateLimit.IPBurst = burst
 	}
 	if v := os.Getenv("RATE_LIMIT_EMAIL_SEND_PER_HOUR"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_EMAIL_SEND_PER_HOUR %q: %w", v, err)
+			return fmt.Errorf("invalid RATE_LIMIT_EMAIL_SEND_PER_HOUR %q: %w", v, err)
 		}
-		cfg.RateLimit.EmailSendPerHour = n
+		c.RateLimit.EmailSendPerHour = n
 	}
 	if v := os.Getenv("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_EMAIL_VERIFY_PER_15MIN %q: %w", v, err)
+			return fmt.Errorf("invalid RATE_LIMIT_EMAIL_VERIFY_PER_15MIN %q: %w", v, err)
 		}
-		cfg.RateLimit.EmailVerifyPer15Min = n
+		c.RateLimit.EmailVerifyPer15Min = n
 	}
 	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR %q: %w", v, err)
+			return fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR %q: %w", v, err)
 		}
-		cfg.RateLimit.PhoneChangeSendPerHour = n
-	} else if cfg.RateLimit.PhoneChangeSendPerHour <= 0 {
-		cfg.RateLimit.PhoneChangeSendPerHour = 5
+		c.RateLimit.PhoneChangeSendPerHour = n
+	} else if c.RateLimit.PhoneChangeSendPerHour <= 0 {
+		c.RateLimit.PhoneChangeSendPerHour = 5
 	}
 	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN %q: %w", v, err)
+			return fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN %q: %w", v, err)
 		}
-		cfg.RateLimit.PhoneChangeVerifyPer15Min = n
-	} else if cfg.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
-		cfg.RateLimit.PhoneChangeVerifyPer15Min = 10
+		c.RateLimit.PhoneChangeVerifyPer15Min = n
+	} else if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
+		c.RateLimit.PhoneChangeVerifyPer15Min = 10
 	}
-	if cfg.RateLimit.IPRPS <= 0 {
-		return Config{}, errors.New("RATE_LIMIT_IP_RPS must be positive")
+	if c.RateLimit.IPRPS <= 0 {
+		return errors.New("RATE_LIMIT_IP_RPS must be positive")
 	}
-	if cfg.RateLimit.IPBurst <= 0 {
-		return Config{}, errors.New("RATE_LIMIT_IP_BURST must be positive")
+	if c.RateLimit.IPBurst <= 0 {
+		return errors.New("RATE_LIMIT_IP_BURST must be positive")
 	}
-	if cfg.RateLimit.EmailSendPerHour <= 0 {
-		return Config{}, errors.New("RATE_LIMIT_EMAIL_SEND_PER_HOUR must be positive")
+	if c.RateLimit.EmailSendPerHour <= 0 {
+		return errors.New("RATE_LIMIT_EMAIL_SEND_PER_HOUR must be positive")
 	}
-	if cfg.RateLimit.EmailVerifyPer15Min <= 0 {
-		return Config{}, errors.New("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN must be positive")
+	if c.RateLimit.EmailVerifyPer15Min <= 0 {
+		return errors.New("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN must be positive")
 	}
-	if cfg.RateLimit.PhoneChangeSendPerHour <= 0 {
-		return Config{}, errors.New("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR must be positive")
+	if c.RateLimit.PhoneChangeSendPerHour <= 0 {
+		return errors.New("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR must be positive")
 	}
-	if cfg.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
-		return Config{}, errors.New("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
+	if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
+		return errors.New("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
+	}
+	return nil
+}
+
+func (c *Config) loadDatabase() error {
+	if c.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required")
+	}
+	if !strings.HasPrefix(c.DatabaseURL, "postgres://") && !strings.HasPrefix(c.DatabaseURL, "postgresql://") {
+		return errors.New("invalid DATABASE_URL: must start with postgres:// or postgresql://")
+	}
+	if c.MigrationsDir == "" {
+		return errors.New("MIGRATIONS_DIR is required")
 	}
 
-	if cfg.DatabaseURL == "" {
-		return Config{}, errors.New("DATABASE_URL is required")
-	}
-	if !strings.HasPrefix(cfg.DatabaseURL, "postgres://") && !strings.HasPrefix(cfg.DatabaseURL, "postgresql://") {
-		return Config{}, errors.New("invalid DATABASE_URL: must start with postgres:// or postgresql://")
-	}
-	if cfg.MigrationsDir == "" {
-		return Config{}, errors.New("MIGRATIONS_DIR is required")
-	}
-
-	cfg.DBPool = DBPoolConfig{
+	c.DBPool = DBPoolConfig{
 		MaxConns:                        64,
 		MinConns:                        16,
 		MaxConnLifetime:                 30 * time.Minute,
@@ -337,324 +392,361 @@ func Load() (Config, error) {
 	if v := os.Getenv("DB_MAX_CONNS"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid DB_MAX_CONNS %q: %w", v, err)
+			return fmt.Errorf("invalid DB_MAX_CONNS %q: %w", v, err)
 		}
-		cfg.DBPool.MaxConns = int32(n)
+		c.DBPool.MaxConns = int32(n)
 	}
 	if v := os.Getenv("DB_MIN_CONNS"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid DB_MIN_CONNS %q: %w", v, err)
+			return fmt.Errorf("invalid DB_MIN_CONNS %q: %w", v, err)
 		}
-		cfg.DBPool.MinConns = int32(n)
+		c.DBPool.MinConns = int32(n)
 	}
 	if v := os.Getenv("DB_MAX_CONN_LIFETIME"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid DB_MAX_CONN_LIFETIME %q: %w", v, err)
+			return fmt.Errorf("invalid DB_MAX_CONN_LIFETIME %q: %w", v, err)
 		}
-		cfg.DBPool.MaxConnLifetime = d
+		c.DBPool.MaxConnLifetime = d
 	}
 	if v := os.Getenv("DB_MAX_CONN_IDLE_TIME"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid DB_MAX_CONN_IDLE_TIME %q: %w", v, err)
+			return fmt.Errorf("invalid DB_MAX_CONN_IDLE_TIME %q: %w", v, err)
 		}
-		cfg.DBPool.MaxConnIdleTime = d
+		c.DBPool.MaxConnIdleTime = d
 	}
 	if v := os.Getenv("DB_STATEMENT_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid DB_STATEMENT_TIMEOUT %q: %w", v, err)
+			return fmt.Errorf("invalid DB_STATEMENT_TIMEOUT %q: %w", v, err)
 		}
-		cfg.DBPool.StatementTimeout = d
+		c.DBPool.StatementTimeout = d
 	}
 	if v := os.Getenv("DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT %q: %w", v, err)
+			return fmt.Errorf("invalid DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT %q: %w", v, err)
 		}
-		cfg.DBPool.IdleInTransactionSessionTimeout = d
+		c.DBPool.IdleInTransactionSessionTimeout = d
 	}
 	if v := os.Getenv("DB_HEALTH_CHECK_PERIOD"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid DB_HEALTH_CHECK_PERIOD %q: %w", v, err)
+			return fmt.Errorf("invalid DB_HEALTH_CHECK_PERIOD %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, errors.New("DB_HEALTH_CHECK_PERIOD must be positive")
+			return errors.New("DB_HEALTH_CHECK_PERIOD must be positive")
 		}
-		cfg.DBPool.HealthCheckPeriod = d
+		c.DBPool.HealthCheckPeriod = d
 	}
-	if cfg.DBPool.MaxConns <= 0 {
-		return Config{}, errors.New("DB_MAX_CONNS must be positive")
+	if c.DBPool.MaxConns <= 0 {
+		return errors.New("DB_MAX_CONNS must be positive")
 	}
-	if cfg.DBPool.MinConns < 0 {
-		return Config{}, errors.New("DB_MIN_CONNS must be non-negative")
+	if c.DBPool.MinConns < 0 {
+		return errors.New("DB_MIN_CONNS must be non-negative")
 	}
-	if cfg.DBPool.MinConns > cfg.DBPool.MaxConns {
-		return Config{}, errors.New("DB_MIN_CONNS must not exceed DB_MAX_CONNS")
+	if c.DBPool.MinConns > c.DBPool.MaxConns {
+		return errors.New("DB_MIN_CONNS must not exceed DB_MAX_CONNS")
 	}
+	return nil
+}
 
+func (c *Config) loadEmail() error {
 	allowedEmailSenders := map[string]bool{"": true, "fake": true, "smtp": true}
-	if !allowedEmailSenders[cfg.EmailSender] {
-		return Config{}, fmt.Errorf("invalid EMAIL_SENDER %q: must be empty, fake, or smtp", cfg.EmailSender)
+	if !allowedEmailSenders[c.EmailSender] {
+		return fmt.Errorf("invalid EMAIL_SENDER %q: must be empty, fake, or smtp", c.EmailSender)
 	}
-	if cfg.EmailSender == "" {
-		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
-			return Config{}, fmt.Errorf("EMAIL_SENDER is required for APP_ENV=%s", cfg.AppEnv)
+	if c.EmailSender == "" {
+		if c.AppEnv != "local" && c.AppEnv != "dev" {
+			return fmt.Errorf("EMAIL_SENDER is required for APP_ENV=%s", c.AppEnv)
 		}
-		cfg.EmailSender = "fake"
+		c.EmailSender = "fake"
 	}
-	if cfg.EmailSender == "fake" && cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
-		return Config{}, fmt.Errorf("EMAIL_SENDER=fake is not allowed for APP_ENV=%s", cfg.AppEnv)
+	if c.EmailSender == "fake" && c.AppEnv != "local" && c.AppEnv != "dev" {
+		return fmt.Errorf("EMAIL_SENDER=fake is not allowed for APP_ENV=%s", c.AppEnv)
 	}
-	if cfg.EmailTemplatesDir == "" {
-		cfg.EmailTemplatesDir = "apps/backend/templates/email"
+	if c.EmailTemplatesDir == "" {
+		c.EmailTemplatesDir = "apps/backend/templates/email"
 	}
-	if cfg.EmailSender == "smtp" && cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
-		if !filepath.IsAbs(cfg.EmailTemplatesDir) {
-			return Config{}, fmt.Errorf("EMAIL_TEMPLATES_DIR must be an absolute path in %s environment", cfg.AppEnv)
+	if c.EmailSender == "smtp" && c.AppEnv != "local" && c.AppEnv != "dev" {
+		if !filepath.IsAbs(c.EmailTemplatesDir) {
+			return fmt.Errorf("EMAIL_TEMPLATES_DIR must be an absolute path in %s environment", c.AppEnv)
 		}
 	}
-	if cfg.EmailSender == "smtp" {
-		if cfg.SMTPHost == "" {
-			return Config{}, errors.New("SMTP_HOST is required when EMAIL_SENDER=smtp")
+	if c.EmailSender == "smtp" {
+		if c.SMTPHost == "" {
+			return errors.New("SMTP_HOST is required when EMAIL_SENDER=smtp")
 		}
-		if cfg.SMTPPort == "" {
-			return Config{}, errors.New("SMTP_PORT is required when EMAIL_SENDER=smtp")
+		if c.SMTPPort == "" {
+			return errors.New("SMTP_PORT is required when EMAIL_SENDER=smtp")
 		}
-		if cfg.SMTPFrom == "" {
-			return Config{}, errors.New("SMTP_FROM is required when EMAIL_SENDER=smtp")
+		if c.SMTPFrom == "" {
+			return errors.New("SMTP_FROM is required when EMAIL_SENDER=smtp")
 		}
 		if v := os.Getenv("SMTP_TIMEOUT"); v != "" {
 			d, err := time.ParseDuration(v)
 			if err != nil {
-				return Config{}, fmt.Errorf("invalid SMTP_TIMEOUT %q: %w", v, err)
+				return fmt.Errorf("invalid SMTP_TIMEOUT %q: %w", v, err)
 			}
 			if d <= 0 {
-				return Config{}, errors.New("SMTP_TIMEOUT must be positive")
+				return errors.New("SMTP_TIMEOUT must be positive")
 			}
-			cfg.SMTPTimeout = d
+			c.SMTPTimeout = d
 		}
 	}
+	return nil
+}
 
-	if cfg.PaymentProvider == "" {
-		if cfg.AppEnv != "local" {
-			return Config{}, fmt.Errorf("PAYMENT_PROVIDER is required for APP_ENV=%s", cfg.AppEnv)
+func (c *Config) loadPaymentProvider() error {
+	if c.PaymentProvider == "" {
+		if c.AppEnv != "local" {
+			return fmt.Errorf("PAYMENT_PROVIDER is required for APP_ENV=%s", c.AppEnv)
 		}
-		cfg.PaymentProvider = "fake"
+		c.PaymentProvider = "fake"
 	}
 	allowedPaymentProviders := map[string]bool{"fake": true, "tkassa": true}
-	if !allowedPaymentProviders[cfg.PaymentProvider] {
-		return Config{}, fmt.Errorf("invalid PAYMENT_PROVIDER %q: must be fake or tkassa", cfg.PaymentProvider)
+	if !allowedPaymentProviders[c.PaymentProvider] {
+		return fmt.Errorf("invalid PAYMENT_PROVIDER %q: must be fake or tkassa", c.PaymentProvider)
 	}
-	if cfg.AppEnv != "local" && cfg.AppEnv != "dev" && cfg.PaymentProvider == "fake" {
-		return Config{}, fmt.Errorf("PAYMENT_PROVIDER=fake is not allowed for APP_ENV=%s", cfg.AppEnv)
+	if c.AppEnv != "local" && c.AppEnv != "dev" && c.PaymentProvider == "fake" {
+		return fmt.Errorf("PAYMENT_PROVIDER=fake is not allowed for APP_ENV=%s", c.AppEnv)
 	}
-	if cfg.PaymentProvider == "fake" {
-		if cfg.AppBaseURL == "" {
-			return Config{}, errors.New("APP_BASE_URL is required when PAYMENT_PROVIDER=fake")
+	if c.PaymentProvider == "fake" {
+		if err := c.loadFakeProviderBaseURL(); err != nil {
+			return err
 		}
-		u, err := url.Parse(cfg.AppBaseURL)
+	}
+	if c.PaymentProvider == "tkassa" {
+		if err := c.loadTKassa(); err != nil {
+			return err
+		}
+	}
+
+	if c.AppEnv != "local" && c.EncryptionKey == "" {
+		return fmt.Errorf("ENCRYPTION_KEY is required for APP_ENV=%s", c.AppEnv)
+	}
+	return nil
+}
+
+func (c *Config) loadFakeProviderBaseURL() error {
+	if c.AppBaseURL == "" {
+		return errors.New("APP_BASE_URL is required when PAYMENT_PROVIDER=fake")
+	}
+	u, err := url.Parse(c.AppBaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid APP_BASE_URL %q: %w", c.AppBaseURL, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", c.AppBaseURL)
+	}
+	return nil
+}
+
+func (c *Config) loadTKassa() error {
+	if c.TKassaTerminalKey == "" {
+		return errors.New("T_KASSA_TERMINAL_KEY is required when PAYMENT_PROVIDER=tkassa")
+	}
+	if c.TKassaPassword == "" {
+		return errors.New("T_KASSA_PASSWORD is required when PAYMENT_PROVIDER=tkassa")
+	}
+	if c.AppBaseURL == "" {
+		return errors.New("APP_BASE_URL is required when PAYMENT_PROVIDER=tkassa")
+	}
+	u, err := url.Parse(c.AppBaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid APP_BASE_URL %q: %w", c.AppBaseURL, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", c.AppBaseURL)
+	}
+	if c.AppEnv != "local" && c.AppEnv != "dev" && u.Scheme != "https" {
+		return fmt.Errorf("invalid APP_BASE_URL %q: non-local/dev environments must use https", c.AppBaseURL)
+	}
+	if err := c.loadTKassaBaseURL(); err != nil {
+		return err
+	}
+
+	c.TKassaTimeout = 30 * time.Second
+	if v := os.Getenv("T_KASSA_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: %w", cfg.AppBaseURL, err)
+			return fmt.Errorf("invalid T_KASSA_TIMEOUT %q: %w", v, err)
 		}
-		if u.Scheme != "http" && u.Scheme != "https" {
-			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", cfg.AppBaseURL)
+		if d <= 0 {
+			return errors.New("T_KASSA_TIMEOUT must be positive")
 		}
+		c.TKassaTimeout = d
 	}
-	if cfg.PaymentProvider == "tkassa" {
-		if cfg.TKassaTerminalKey == "" {
-			return Config{}, errors.New("T_KASSA_TERMINAL_KEY is required when PAYMENT_PROVIDER=tkassa")
-		}
-		if cfg.TKassaPassword == "" {
-			return Config{}, errors.New("T_KASSA_PASSWORD is required when PAYMENT_PROVIDER=tkassa")
-		}
-		if cfg.AppBaseURL == "" {
-			return Config{}, errors.New("APP_BASE_URL is required when PAYMENT_PROVIDER=tkassa")
-		}
-		u, err := url.Parse(cfg.AppBaseURL)
+
+	c.TKassaMaxRetries = 3
+	if v := os.Getenv("T_KASSA_MAX_RETRIES"); v != "" {
+		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: %w", cfg.AppBaseURL, err)
+			return fmt.Errorf("invalid T_KASSA_MAX_RETRIES %q: %w", v, err)
 		}
-		if u.Scheme != "http" && u.Scheme != "https" {
-			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", cfg.AppBaseURL)
+		if n < 0 {
+			return errors.New("T_KASSA_MAX_RETRIES must be non-negative")
 		}
-		if cfg.AppEnv != "local" && cfg.AppEnv != "dev" && u.Scheme != "https" {
-			return Config{}, fmt.Errorf("invalid APP_BASE_URL %q: non-local/dev environments must use https", cfg.AppBaseURL)
-		}
-		if cfg.TKassaBaseURL == "" {
-			if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
-				return Config{}, fmt.Errorf("T_KASSA_BASE_URL is required when PAYMENT_PROVIDER=tkassa for APP_ENV=%s", cfg.AppEnv)
-			}
-		} else {
-			tku, err := url.Parse(cfg.TKassaBaseURL)
-			if err != nil {
-				return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: %w", cfg.TKassaBaseURL, err)
-			}
-			if tku.Scheme != "http" && tku.Scheme != "https" {
-				return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: scheme must be http or https", cfg.TKassaBaseURL)
-			}
-			if cfg.AppEnv != "local" && cfg.AppEnv != "dev" {
-				if tku.Scheme != "https" {
-					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: non-local/dev environments must use https", cfg.TKassaBaseURL)
-				}
-				host := strings.ToLower(tku.Hostname())
-				if host != "securepay.tinkoff.ru" && host != "rest-api-test.tinkoff.ru" {
-					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: production T-Kassa base URL must be https://securepay.tinkoff.ru/v2/ or https://rest-api-test.tinkoff.ru/v2/", cfg.TKassaBaseURL)
-				}
-				if strings.TrimSuffix(tku.Path, "/") != "/v2" {
-					return Config{}, fmt.Errorf("invalid T_KASSA_BASE_URL %q: path must be /v2/", cfg.TKassaBaseURL)
-				}
-			}
-		}
-		cfg.TKassaTimeout = 30 * time.Second
-		if v := os.Getenv("T_KASSA_TIMEOUT"); v != "" {
-			d, err := time.ParseDuration(v)
-			if err != nil {
-				return Config{}, fmt.Errorf("invalid T_KASSA_TIMEOUT %q: %w", v, err)
-			}
-			if d <= 0 {
-				return Config{}, errors.New("T_KASSA_TIMEOUT must be positive")
-			}
-			cfg.TKassaTimeout = d
-		}
-
-		cfg.TKassaMaxRetries = 3
-		if v := os.Getenv("T_KASSA_MAX_RETRIES"); v != "" {
-			n, err := strconv.Atoi(v)
-			if err != nil {
-				return Config{}, fmt.Errorf("invalid T_KASSA_MAX_RETRIES %q: %w", v, err)
-			}
-			if n < 0 {
-				return Config{}, errors.New("T_KASSA_MAX_RETRIES must be non-negative")
-			}
-			cfg.TKassaMaxRetries = n
-		}
-
-		cfg.TKassaRetryBaseDelay = 500 * time.Millisecond
-		if v := os.Getenv("T_KASSA_RETRY_BASE_DELAY"); v != "" {
-			d, err := time.ParseDuration(v)
-			if err != nil {
-				return Config{}, fmt.Errorf("invalid T_KASSA_RETRY_BASE_DELAY %q: %w", v, err)
-			}
-			if d <= 0 {
-				return Config{}, errors.New("T_KASSA_RETRY_BASE_DELAY must be positive")
-			}
-			cfg.TKassaRetryBaseDelay = d
-		}
-
-		cfg.TKassaRetryMaxDelay = 5 * time.Second
-		if v := os.Getenv("T_KASSA_RETRY_MAX_DELAY"); v != "" {
-			d, err := time.ParseDuration(v)
-			if err != nil {
-				return Config{}, fmt.Errorf("invalid T_KASSA_RETRY_MAX_DELAY %q: %w", v, err)
-			}
-			if d <= 0 {
-				return Config{}, errors.New("T_KASSA_RETRY_MAX_DELAY must be positive")
-			}
-			cfg.TKassaRetryMaxDelay = d
-		}
+		c.TKassaMaxRetries = n
 	}
 
-	if cfg.AppEnv != "local" && cfg.EncryptionKey == "" {
-		return Config{}, fmt.Errorf("ENCRYPTION_KEY is required for APP_ENV=%s", cfg.AppEnv)
+	c.TKassaRetryBaseDelay = 500 * time.Millisecond
+	if v := os.Getenv("T_KASSA_RETRY_BASE_DELAY"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("invalid T_KASSA_RETRY_BASE_DELAY %q: %w", v, err)
+		}
+		if d <= 0 {
+			return errors.New("T_KASSA_RETRY_BASE_DELAY must be positive")
+		}
+		c.TKassaRetryBaseDelay = d
 	}
 
-	cfg.PhotoStorageEndpoint = os.Getenv("REGRU_S3_ENDPOINT")
-	cfg.PhotoStorageRegion = os.Getenv("REGRU_S3_REGION")
-	cfg.PhotoStorageBucket = os.Getenv("REGRU_S3_BUCKET")
-	cfg.PhotoStorageAccessKey = os.Getenv("REGRU_S3_ACCESS_KEY")
-	cfg.PhotoStorageSecretKey = os.Getenv("REGRU_S3_SECRET_KEY")
-	cfg.PhotoStoragePublicBaseURL = os.Getenv("REGRU_S3_PUBLIC_BASE_URL")
-	cfg.PhotoStorageProvider = strings.ToLower(strings.TrimSpace(os.Getenv("PHOTO_STORAGE_PROVIDER")))
+	c.TKassaRetryMaxDelay = 5 * time.Second
+	if v := os.Getenv("T_KASSA_RETRY_MAX_DELAY"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("invalid T_KASSA_RETRY_MAX_DELAY %q: %w", v, err)
+		}
+		if d <= 0 {
+			return errors.New("T_KASSA_RETRY_MAX_DELAY must be positive")
+		}
+		c.TKassaRetryMaxDelay = d
+	}
+	return nil
+}
 
-	cfg.PhotoStoragePathStyle = true
+func (c *Config) loadTKassaBaseURL() error {
+	if c.TKassaBaseURL == "" {
+		if c.AppEnv != "local" && c.AppEnv != "dev" {
+			return fmt.Errorf("T_KASSA_BASE_URL is required when PAYMENT_PROVIDER=tkassa for APP_ENV=%s", c.AppEnv)
+		}
+		return nil
+	}
+	tku, err := url.Parse(c.TKassaBaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid T_KASSA_BASE_URL %q: %w", c.TKassaBaseURL, err)
+	}
+	if tku.Scheme != "http" && tku.Scheme != "https" {
+		return fmt.Errorf("invalid T_KASSA_BASE_URL %q: scheme must be http or https", c.TKassaBaseURL)
+	}
+	if c.AppEnv != "local" && c.AppEnv != "dev" {
+		if tku.Scheme != "https" {
+			return fmt.Errorf("invalid T_KASSA_BASE_URL %q: non-local/dev environments must use https", c.TKassaBaseURL)
+		}
+		host := strings.ToLower(tku.Hostname())
+		if host != "securepay.tinkoff.ru" && host != "rest-api-test.tinkoff.ru" {
+			return fmt.Errorf("invalid T_KASSA_BASE_URL %q: production T-Kassa base URL must be https://securepay.tinkoff.ru/v2/ or https://rest-api-test.tinkoff.ru/v2/", c.TKassaBaseURL)
+		}
+		if strings.TrimSuffix(tku.Path, "/") != "/v2" {
+			return fmt.Errorf("invalid T_KASSA_BASE_URL %q: path must be /v2/", c.TKassaBaseURL)
+		}
+	}
+	return nil
+}
+
+func (c *Config) loadPhotoStorage() error {
+	c.PhotoStorageEndpoint = os.Getenv("REGRU_S3_ENDPOINT")
+	c.PhotoStorageRegion = os.Getenv("REGRU_S3_REGION")
+	c.PhotoStorageBucket = os.Getenv("REGRU_S3_BUCKET")
+	c.PhotoStorageAccessKey = os.Getenv("REGRU_S3_ACCESS_KEY")
+	c.PhotoStorageSecretKey = os.Getenv("REGRU_S3_SECRET_KEY")
+	c.PhotoStoragePublicBaseURL = os.Getenv("REGRU_S3_PUBLIC_BASE_URL")
+	c.PhotoStorageProvider = strings.ToLower(strings.TrimSpace(os.Getenv("PHOTO_STORAGE_PROVIDER")))
+
+	c.PhotoStoragePathStyle = true
 	if v := os.Getenv("REGRU_S3_PATH_STYLE"); v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid REGRU_S3_PATH_STYLE %q: %w", v, err)
+			return fmt.Errorf("invalid REGRU_S3_PATH_STYLE %q: %w", v, err)
 		}
-		cfg.PhotoStoragePathStyle = b
+		c.PhotoStoragePathStyle = b
 	}
 
 	s3Fields := []string{
-		cfg.PhotoStorageEndpoint,
-		cfg.PhotoStorageBucket,
-		cfg.PhotoStorageAccessKey,
-		cfg.PhotoStorageSecretKey,
-		cfg.PhotoStoragePublicBaseURL,
+		c.PhotoStorageEndpoint,
+		c.PhotoStorageBucket,
+		c.PhotoStorageAccessKey,
+		c.PhotoStorageSecretKey,
+		c.PhotoStoragePublicBaseURL,
 	}
 	s3Complete := !slices.Contains(s3Fields, "")
-	if cfg.PhotoStorageProvider == "" {
-		if cfg.AppEnv == "local" && !s3Complete {
-			cfg.PhotoStorageProvider = "fake"
+	if c.PhotoStorageProvider == "" {
+		if c.AppEnv == "local" && !s3Complete {
+			c.PhotoStorageProvider = "fake"
 		} else {
-			cfg.PhotoStorageProvider = "s3"
+			c.PhotoStorageProvider = "s3"
 		}
 	}
-	switch cfg.PhotoStorageProvider {
+	switch c.PhotoStorageProvider {
 	case "fake":
-		cfg.PhotoStorageS3Enabled = false
-		cfg.PhotoStoragePublicBaseURL = strings.TrimRight(cfg.AppBaseURL, "/") + "/uploads"
+		c.PhotoStorageS3Enabled = false
+		c.PhotoStoragePublicBaseURL = strings.TrimRight(c.AppBaseURL, "/") + "/uploads"
 	case "s3":
 		if !s3Complete {
-			return Config{}, fmt.Errorf("REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY and REGRU_S3_PUBLIC_BASE_URL are required for PHOTO_STORAGE_PROVIDER=s3 and APP_ENV=%s; set PHOTO_STORAGE_PROVIDER=fake only for temporary launches without photo uploads", cfg.AppEnv)
+			return fmt.Errorf("REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY and REGRU_S3_PUBLIC_BASE_URL are required for PHOTO_STORAGE_PROVIDER=s3 and APP_ENV=%s; set PHOTO_STORAGE_PROVIDER=fake only for temporary launches without photo uploads", c.AppEnv)
 		}
-		cfg.PhotoStorageS3Enabled = true
+		c.PhotoStorageS3Enabled = true
 	default:
-		return Config{}, fmt.Errorf("invalid PHOTO_STORAGE_PROVIDER %q: must be fake or s3", cfg.PhotoStorageProvider)
+		return fmt.Errorf("invalid PHOTO_STORAGE_PROVIDER %q: must be fake or s3", c.PhotoStorageProvider)
 	}
+	return nil
+}
 
-	cfg.BillingWorkerInterval = time.Hour
+func (c *Config) loadSchedulerIntervals() error {
+	c.BillingWorkerInterval = time.Hour
 	if v := os.Getenv("BILLING_WORKER_INTERVAL"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid BILLING_WORKER_INTERVAL %q: %w", v, err)
+			return fmt.Errorf("invalid BILLING_WORKER_INTERVAL %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, errors.New("BILLING_WORKER_INTERVAL must be positive")
+			return errors.New("BILLING_WORKER_INTERVAL must be positive")
 		}
-		cfg.BillingWorkerInterval = d
+		c.BillingWorkerInterval = d
 	}
 
-	cfg.PaymentReconciliationWorkerInterval = 5 * time.Minute
+	c.PaymentReconciliationWorkerInterval = 5 * time.Minute
 	if v := os.Getenv("PAYMENT_RECONCILIATION_WORKER_INTERVAL"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid PAYMENT_RECONCILIATION_WORKER_INTERVAL %q: %w", v, err)
+			return fmt.Errorf("invalid PAYMENT_RECONCILIATION_WORKER_INTERVAL %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, errors.New("PAYMENT_RECONCILIATION_WORKER_INTERVAL must be positive")
+			return errors.New("PAYMENT_RECONCILIATION_WORKER_INTERVAL must be positive")
 		}
-		cfg.PaymentReconciliationWorkerInterval = d
+		c.PaymentReconciliationWorkerInterval = d
 	}
 
-	cfg.IdentityCleanerInterval = time.Hour
+	c.IdentityCleanerInterval = time.Hour
 	if v := os.Getenv("IDENTITY_CLEANER_INTERVAL"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid IDENTITY_CLEANER_INTERVAL %q: %w", v, err)
+			return fmt.Errorf("invalid IDENTITY_CLEANER_INTERVAL %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, errors.New("IDENTITY_CLEANER_INTERVAL must be positive")
+			return errors.New("IDENTITY_CLEANER_INTERVAL must be positive")
 		}
-		cfg.IdentityCleanerInterval = d
+		c.IdentityCleanerInterval = d
 	}
 
-	cfg.IdentityCleanerRetention = 7 * 24 * time.Hour
+	c.IdentityCleanerRetention = 7 * 24 * time.Hour
 	if v := os.Getenv("IDENTITY_CLEANER_RETENTION"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid IDENTITY_CLEANER_RETENTION %q: %w", v, err)
+			return fmt.Errorf("invalid IDENTITY_CLEANER_RETENTION %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, errors.New("IDENTITY_CLEANER_RETENTION must be positive")
+			return errors.New("IDENTITY_CLEANER_RETENTION must be positive")
 		}
-		cfg.IdentityCleanerRetention = d
+		c.IdentityCleanerRetention = d
 	}
+	return nil
+}
 
+func (c *Config) loadTrustedProxies() error {
 	if v := os.Getenv("TRUSTED_PROXIES"); v != "" {
 		for cidr := range strings.SplitSeq(v, ",") {
 			cidr = strings.TrimSpace(cidr)
@@ -662,29 +754,27 @@ func Load() (Config, error) {
 				continue
 			}
 			if _, _, err := net.ParseCIDR(cidr); err != nil {
-				return Config{}, fmt.Errorf("invalid TRUSTED_PROXIES entry %q: %w", cidr, err)
+				return fmt.Errorf("invalid TRUSTED_PROXIES entry %q: %w", cidr, err)
 			}
-			cfg.TrustedProxies = append(cfg.TrustedProxies, cidr)
+			c.TrustedProxies = append(c.TrustedProxies, cidr)
 		}
 	}
+	return nil
+}
 
-	cfg.TariffCacheTTL = 5 * time.Minute
+func (c *Config) loadTariffCacheTTL() error {
+	c.TariffCacheTTL = 5 * time.Minute
 	if v := os.Getenv("TARIFF_CACHE_TTL"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid TARIFF_CACHE_TTL %q: %w", v, err)
+			return fmt.Errorf("invalid TARIFF_CACHE_TTL %q: %w", v, err)
 		}
 		if d <= 0 {
-			return Config{}, errors.New("TARIFF_CACHE_TTL must be positive")
+			return errors.New("TARIFF_CACHE_TTL must be positive")
 		}
-		cfg.TariffCacheTTL = d
+		c.TariffCacheTTL = d
 	}
-
-	// VAPID keys are optional: the public key is served to the frontend when
-	// set; the private key and subject are consumed by the Web Push sender
-	// (RFC 8292). When the public key is unset, push delivery is disabled and
-	// the reminder worker runs email-only.
-	return cfg, nil
+	return nil
 }
 
 func parseFloatEnv(key string, defaultValue float64) (float64, error) {

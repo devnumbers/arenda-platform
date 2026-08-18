@@ -796,26 +796,42 @@ func TestGetAdminSubscriptionPayment_AnswersView(t *testing.T) {
 func TestRefundSubscriptionPayment_AttributesAdmin(t *testing.T) {
 	adminID := uuid.Must(uuid.NewV7())
 	paymentID := uuid.Must(uuid.NewV7())
-	called := false
+	check, called := requireAdminAttribution(t, "RefundPayment", adminID, paymentID)
 	h := newTestHandlers(nil, nil, nil)
-	h.adminPayments = &fakeAdminPaymentManager{refund: func(_ context.Context, gotAdmin, gotPayment uuid.UUID) error {
-		called = true
-		if gotAdmin != adminID {
-			t.Errorf("RefundPayment admin = %v, want %v", gotAdmin, adminID)
-		}
-		if gotPayment != paymentID {
-			t.Errorf("RefundPayment payment = %v, want %v", gotPayment, paymentID)
-		}
-		return nil
-	}}
+	h.adminPayments = &fakeAdminPaymentManager{refund: check}
 
 	w := httptest.NewRecorder()
 	h.RefundSubscriptionPayment(w, adminRequest(t, http.MethodPost, "/admin/subscription/payments/"+paymentID.String()+"/refund", adminID), paymentID)
 
+	requireNoContentAndCalled(t, w, called)
+}
+
+// requireAdminAttribution builds a manager callback for the *AttributesAdmin
+// tests: it records the call and asserts the acting admin and the target entity
+// were forwarded unchanged (issues #254, #255).
+func requireAdminAttribution(t *testing.T, what string, wantAdmin, wantEntity uuid.UUID) (check func(context.Context, uuid.UUID, uuid.UUID) error, called *bool) {
+	t.Helper()
+	called = new(bool)
+	return func(_ context.Context, gotAdmin, gotEntity uuid.UUID) error {
+		*called = true
+		if gotAdmin != wantAdmin {
+			t.Errorf("%s admin = %v, want %v", what, gotAdmin, wantAdmin)
+		}
+		if gotEntity != wantEntity {
+			t.Errorf("%s entity = %v, want %v", what, gotEntity, wantEntity)
+		}
+		return nil
+	}, called
+}
+
+// requireNoContentAndCalled asserts an admin action answered 204 and actually
+// reached the manager callback.
+func requireNoContentAndCalled(t *testing.T, w *httptest.ResponseRecorder, called *bool) {
+	t.Helper()
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
 	}
-	if !called {
+	if !*called {
 		t.Error("service was not called")
 	}
 }
@@ -1743,28 +1759,14 @@ func TestExtendAdminSubscriptionGrace_MapsBodyAndAttributesAdmin(t *testing.T) {
 func TestCancelAdminSubscription_AttributesAdmin(t *testing.T) {
 	adminID := uuid.Must(uuid.NewV7())
 	userID := uuid.Must(uuid.NewV7())
-	called := false
+	check, called := requireAdminAttribution(t, "CancelSubscriptionAsAdmin", adminID, userID)
 	h := newTestHandlers(nil, nil, nil)
-	h.adminSubscriptions = &fakeAdminSubscriptionManager{cancel: func(_ context.Context, gotAdmin, gotUser uuid.UUID) error {
-		called = true
-		if gotAdmin != adminID {
-			t.Errorf("CancelSubscriptionAsAdmin admin = %v, want %v", gotAdmin, adminID)
-		}
-		if gotUser != userID {
-			t.Errorf("CancelSubscriptionAsAdmin user = %v, want %v", gotUser, userID)
-		}
-		return nil
-	}}
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{cancel: check}
 
 	w := httptest.NewRecorder()
 	h.CancelAdminSubscription(w, adminRequest(t, http.MethodPost, "/admin/users/"+userID.String()+"/subscription/cancel", adminID), userID)
 
-	if w.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
-	}
-	if !called {
-		t.Error("service was not called")
-	}
+	requireNoContentAndCalled(t, w, called)
 }
 
 // TestListAdminSubscriptionTransitions_MapsView proves GET

@@ -20,7 +20,7 @@ type RentService struct {
 	tzResolver   sharedtz.OwnerTimezoneResolver
 }
 
-func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepository, categories OperationCategoryRepository, clock clock.Clock, tzResolver sharedtz.OwnerTimezoneResolver) *RentService {
+func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepository, categories OperationCategoryRepository, clk clock.Clock, tzResolver sharedtz.OwnerTimezoneResolver) *RentService {
 	if categories == nil {
 		panic("categories repository is required")
 	}
@@ -28,7 +28,7 @@ func NewRentService(ops OperationRepository, recurringOps RecurringOperationRepo
 		ops:          ops,
 		recurringOps: recurringOps,
 		categories:   categories,
-		clock:        clock,
+		clock:        clk,
 		tzResolver:   tzResolver,
 	}
 }

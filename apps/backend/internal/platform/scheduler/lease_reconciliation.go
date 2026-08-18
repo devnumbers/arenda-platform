@@ -41,7 +41,7 @@ type LeaseReconciliationWorker struct {
 // NewLeaseReconciliationWorker creates a new lease reconciliation worker.
 func NewLeaseReconciliationWorker(
 	leaseService *leasesapp.LeaseService,
-	clock clock.Clock,
+	clk clock.Clock,
 	interval time.Duration,
 	batchSize int,
 	logger *slog.Logger,
@@ -52,7 +52,7 @@ func NewLeaseReconciliationWorker(
 	}
 	return &LeaseReconciliationWorker{
 		leaseService: leaseService,
-		clock:        clock,
+		clock:        clk,
 		interval:     interval,
 		batchSize:    batchSize,
 		logger:       logger,

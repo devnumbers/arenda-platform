@@ -56,98 +56,71 @@ func InternalError(ctx context.Context, err error) openapi.Problem {
 	return Problem(ctx, "Internal Server Error", "Произошла внутренняя ошибка. Попробуйте позже.")
 }
 
+// userFacingDetails maps known domain errors to fixed, non-sensitive messages
+// for RFC 7807 problem details. Entries are checked in order, so the table
+// preserves the previous switch's precedence exactly.
+var userFacingDetails = []struct {
+	err    error
+	detail string
+}{
+	// Properties.
+	{propertiesapp.ErrInvalidInput, "Некорректные данные объекта"},
+	{propertiesapp.ErrInvalidTransition, "Некорректный переход статуса объекта"},
+	{propertiesapp.ErrNotFound, "Не найдено"},
+	{propertiesapp.ErrLimitExceeded, "Превышен лимит активных объектов"},
+	{propertiesapp.ErrArchivedProperty, "Нельзя изменить архивный объект"},
+	{propertiesapp.ErrAlreadyArchived, "Объект уже в архиве"},
+	{propertiesapp.ErrNotArchived, "Объект не в архиве"},
+	{propertiesapp.ErrPropertyHasOpenLease, "У объекта есть открытая аренда"},
+
+	// Leases.
+	{leasesapp.ErrInvalidInput, "Некорректные данные"},
+	{leasesapp.ErrInvalidTransition, "Некорректный переход статуса аренды"},
+	{leasesapp.ErrNotFound, "Не найдено"},
+	{leasesapp.ErrPropertyNotAvailable, "Объект недоступен для аренды"},
+	{leasesapp.ErrOpenLeaseExists, "У объекта уже есть открытая аренда"},
+	{leasesapp.ErrAlreadyCompleted, "Аренда уже завершена"},
+	{leasesapp.ErrOperationAlreadyCompleted, "Операция уже завершена"},
+	{leasesapp.ErrRecurringOperationLeaseCreated, "Серию, созданную договором аренды, нельзя удалить"},
+	{leasesapp.ErrArchivedLease, "Нельзя изменить архивную аренду"},
+	{leasesapp.ErrArchivedProperty, "Объект в архиве"},
+	{leasesapp.ErrTenantContactNotFound, "Арендатор не найден"},
+	{leasesapp.ErrDuplicatePhone, "Арендатор с таким телефоном уже существует"},
+
+	// Billing / subscriptions.
+	{billingdomain.ErrInvalidPeriod, "Период должен быть месяц или год"},
+	{billingdomain.ErrInvalidTariff, "Некорректное название тарифа"},
+	{billingdomain.ErrAlreadyOnTariff, "Вы уже на выбранном тарифе"},
+	{billingdomain.ErrInvalidTariffChange, "Некорректная смена тарифа"},
+	{billingdomain.ErrInvalidSubscriptionState, "Некорректное состояние подписки"},
+	{billingdomain.ErrCannotEnableAutoRenew, "Нельзя включить автопродление без срока действия"},
+	{billingdomain.ErrInvalidAmount, "Некорректная сумма платежа"},
+	{billingdomain.ErrInvalidPayment, "Некорректный платёж"},
+	{billingdomain.ErrInvalidPaymentStatus, "Некорректный статус платежа для этой операции"},
+	{billingdomain.ErrInvalidTerm, "Некорректный срок служебной подписки"},
+	{billingdomain.ErrInvalidGraceExtension, "Некорректное продление льготного периода"},
+	{billingdomain.ErrInvalidTariffPricing, "Некорректные цены или лимит тарифа"},
+
+	// Admin.
+	{adminapp.ErrInvalidFilter, "Некорректный параметр фильтра или сортировки"},
+
+	// Notifications / reminders.
+	{notificationsapp.ErrInvalidReminderDate, "Некорректная дата напоминания"},
+	{notificationsapp.ErrReminderNotPending, "Напоминание не в статусе ожидания"},
+	{notificationsapp.ErrConcurrentUpdate, "Напоминание изменено одновременно"},
+	{notificationsapp.ErrDuplicateSMSReminder, "SMS-напоминание уже отправлено"},
+	{notificationsapp.ErrNotFound, "Не найдено"},
+}
+
 // UserFacingDetail maps known domain errors to fixed, non-sensitive messages
 // suitable for RFC 7807 problem details. The second result is false when err
 // is not a recognized domain error.
 func UserFacingDetail(err error) (string, bool) {
-	switch {
-	// Properties.
-	case errors.Is(err, propertiesapp.ErrInvalidInput):
-		return "Некорректные данные объекта", true
-	case errors.Is(err, propertiesapp.ErrInvalidTransition):
-		return "Некорректный переход статуса объекта", true
-	case errors.Is(err, propertiesapp.ErrNotFound):
-		return "Не найдено", true
-	case errors.Is(err, propertiesapp.ErrLimitExceeded):
-		return "Превышен лимит активных объектов", true
-	case errors.Is(err, propertiesapp.ErrArchivedProperty):
-		return "Нельзя изменить архивный объект", true
-	case errors.Is(err, propertiesapp.ErrAlreadyArchived):
-		return "Объект уже в архиве", true
-	case errors.Is(err, propertiesapp.ErrNotArchived):
-		return "Объект не в архиве", true
-	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
-		return "У объекта есть открытая аренда", true
-
-	// Leases.
-	case errors.Is(err, leasesapp.ErrInvalidInput):
-		return "Некорректные данные", true
-	case errors.Is(err, leasesapp.ErrInvalidTransition):
-		return "Некорректный переход статуса аренды", true
-	case errors.Is(err, leasesapp.ErrNotFound):
-		return "Не найдено", true
-	case errors.Is(err, leasesapp.ErrPropertyNotAvailable):
-		return "Объект недоступен для аренды", true
-	case errors.Is(err, leasesapp.ErrOpenLeaseExists):
-		return "У объекта уже есть открытая аренда", true
-	case errors.Is(err, leasesapp.ErrAlreadyCompleted):
-		return "Аренда уже завершена", true
-	case errors.Is(err, leasesapp.ErrOperationAlreadyCompleted):
-		return "Операция уже завершена", true
-	case errors.Is(err, leasesapp.ErrRecurringOperationLeaseCreated):
-		return "Серию, созданную договором аренды, нельзя удалить", true
-	case errors.Is(err, leasesapp.ErrArchivedLease):
-		return "Нельзя изменить архивную аренду", true
-	case errors.Is(err, leasesapp.ErrArchivedProperty):
-		return "Объект в архиве", true
-	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
-		return "Арендатор не найден", true
-	case errors.Is(err, leasesapp.ErrDuplicatePhone):
-		return "Арендатор с таким телефоном уже существует", true
-
-	// Billing / subscriptions.
-	case errors.Is(err, billingdomain.ErrInvalidPeriod):
-		return "Период должен быть месяц или год", true
-	case errors.Is(err, billingdomain.ErrInvalidTariff):
-		return "Некорректное название тарифа", true
-	case errors.Is(err, billingdomain.ErrAlreadyOnTariff):
-		return "Вы уже на выбранном тарифе", true
-	case errors.Is(err, billingdomain.ErrInvalidTariffChange):
-		return "Некорректная смена тарифа", true
-	case errors.Is(err, billingdomain.ErrInvalidSubscriptionState):
-		return "Некорректное состояние подписки", true
-	case errors.Is(err, billingdomain.ErrCannotEnableAutoRenew):
-		return "Нельзя включить автопродление без срока действия", true
-	case errors.Is(err, billingdomain.ErrInvalidAmount):
-		return "Некорректная сумма платежа", true
-	case errors.Is(err, billingdomain.ErrInvalidPayment):
-		return "Некорректный платёж", true
-	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
-		return "Некорректный статус платежа для этой операции", true
-	case errors.Is(err, billingdomain.ErrInvalidTerm):
-		return "Некорректный срок служебной подписки", true
-	case errors.Is(err, billingdomain.ErrInvalidGraceExtension):
-		return "Некорректное продление льготного периода", true
-	case errors.Is(err, billingdomain.ErrInvalidTariffPricing):
-		return "Некорректные цены или лимит тарифа", true
-
-	// Admin.
-	case errors.Is(err, adminapp.ErrInvalidFilter):
-		return "Некорректный параметр фильтра или сортировки", true
-
-	// Notifications / reminders.
-	case errors.Is(err, notificationsapp.ErrInvalidReminderDate):
-		return "Некорректная дата напоминания", true
-	case errors.Is(err, notificationsapp.ErrReminderNotPending):
-		return "Напоминание не в статусе ожидания", true
-	case errors.Is(err, notificationsapp.ErrConcurrentUpdate):
-		return "Напоминание изменено одновременно", true
-	case errors.Is(err, notificationsapp.ErrDuplicateSMSReminder):
-		return "SMS-напоминание уже отправлено", true
-	case errors.Is(err, notificationsapp.ErrNotFound):
-		return "Не найдено", true
+	for _, m := range userFacingDetails {
+		if errors.Is(err, m.err) {
+			return m.detail, true
+		}
 	}
-
 	return "", false
 }
 

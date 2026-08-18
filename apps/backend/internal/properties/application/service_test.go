@@ -182,19 +182,19 @@ func (r *lockingFakePropertyRepo) CountActiveByOwner(_ context.Context, _ uuid.U
 	return count, nil
 }
 
-func (r *lockingFakePropertyRepo) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (r *lockingFakePropertyRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 	return errors.New("not implemented")
 }
 
-func (r *lockingFakePropertyRepo) DeleteOperationsByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (r *lockingFakePropertyRepo) DeleteOperationsByProperty(_ context.Context, _, _ uuid.UUID) error {
 	return errors.New("not implemented")
 }
 
-func (r *lockingFakePropertyRepo) DeleteRecurringOperationsByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (r *lockingFakePropertyRepo) DeleteRecurringOperationsByProperty(_ context.Context, _, _ uuid.UUID) error {
 	return errors.New("not implemented")
 }
 
-func (r *lockingFakePropertyRepo) DeleteLeasesByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (r *lockingFakePropertyRepo) DeleteLeasesByProperty(_ context.Context, _, _ uuid.UUID) error {
 	return errors.New("not implemented")
 }
 
@@ -811,15 +811,15 @@ func (r *fakePropertyRepo) Delete(_ context.Context, id, _ uuid.UUID) error {
 	return nil
 }
 
-func (r *fakePropertyRepo) DeleteOperationsByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (r *fakePropertyRepo) DeleteOperationsByProperty(_ context.Context, _, _ uuid.UUID) error {
 	return nil
 }
 
-func (r *fakePropertyRepo) DeleteRecurringOperationsByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (r *fakePropertyRepo) DeleteRecurringOperationsByProperty(_ context.Context, _, _ uuid.UUID) error {
 	return nil
 }
 
-func (r *fakePropertyRepo) DeleteLeasesByProperty(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (r *fakePropertyRepo) DeleteLeasesByProperty(_ context.Context, _, _ uuid.UUID) error {
 	return nil
 }
 

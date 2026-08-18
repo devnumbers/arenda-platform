@@ -57,7 +57,7 @@ func NewReminderWorker(
 	pushSender application.PushSender,
 	pushSubRepo application.PushSubscriptionRepository,
 	db transaction.Beginner,
-	clock clock.Clock,
+	clk clock.Clock,
 	backoff Backoff,
 	maxAttempts int,
 	interval time.Duration,
@@ -76,7 +76,7 @@ func NewReminderWorker(
 		pushSender:      pushSender,
 		pushSubRepo:     pushSubRepo,
 		db:              db,
-		clock:           clock,
+		clock:           clk,
 		backoff:         backoff,
 		maxAttempts:     maxAttempts,
 		interval:        interval,
@@ -232,7 +232,7 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 			continue
 		}
 
-		// TODO: re-add SMS dispatch here when ContactResolver supports ChannelSMS.
+		// SMS dispatch returns when ContactResolver supports ChannelSMS (#379).
 		outcome, response := w.dispatchEmailReminder(dispatchCtx, r, now, recipientID, contact, notifier)
 		switch outcome {
 		case emailDispatchSent:
@@ -279,7 +279,7 @@ const (
 // dispatchEmailReminder delivers the reminder to a single recipient. It does
 // not finalize the reminder: the caller aggregates per-recipient outcomes and
 // finalizes once after the fan-out loop.
-func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Reminder, now time.Time, recipientID uuid.UUID, contact application.Contact, notifier application.Notifier) (emailDispatchOutcome, string) {
+func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Reminder, now time.Time, recipientID uuid.UUID, contact application.Contact, notifier application.Notifier) (outcome emailDispatchOutcome, providerResponse string) {
 	// Defensive check: the worker-level sending status already ensures a single
 	// processing attempt, but this guards against duplicate sends after
 	// stale-sending recovery, failed-run retries or concurrent dispatch races.
@@ -325,7 +325,7 @@ func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Rem
 		return emailDispatchFailed, ""
 	}
 
-	providerResponse, _, err := notifier.Notify(ctx, application.Notification{
+	providerResponse, _, err = notifier.Notify(ctx, application.Notification{
 		RecipientID: recipientID,
 		ReminderID:  r.ID,
 		EventType:   r.EventType,

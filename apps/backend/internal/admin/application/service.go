@@ -43,7 +43,7 @@ func NewAdminService(
 	subscriptions SubscriptionProvider,
 	auditLogs AuditLogRepository,
 	propertyContacts PropertyContactRepository,
-	clock clock.Clock,
+	clk clock.Clock,
 ) *AdminService {
 	return &AdminService{
 		users:            users,
@@ -55,11 +55,11 @@ func NewAdminService(
 		subscriptions:    subscriptions,
 		auditLogs:        auditLogs,
 		propertyContacts: propertyContacts,
-		clock:            clock,
+		clock:            clk,
 	}
 }
 
-func normalizePagination(limit, offset int) (int, int) {
+func normalizePagination(limit, offset int) (normLimit, normOffset int) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -88,7 +88,7 @@ var (
 // normalizeSort validates the requested sort field and order against the
 // endpoint whitelist. An empty sort selects the endpoint's default ordering.
 // An empty order defaults to desc, matching all existing default orderings.
-func normalizeSort(sort, order string, allowed []string) (string, string, error) {
+func normalizeSort(sort, order string, allowed []string) (normSort, normOrder string, err error) {
 	sort = strings.TrimSpace(sort)
 	if sort == "" {
 		return "", "", nil

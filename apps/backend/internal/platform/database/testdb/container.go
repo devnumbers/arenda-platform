@@ -74,7 +74,7 @@ func terminateContainer() {
 	if err := testcontainers.TerminateContainer(ctr); err != nil {
 		// A teardown error is non-fatal: the container will be reaped by
 		// Ryuk (testcontainers' cleanup sidecar) or Docker garbage collection.
-		fmt.Fprintf(os.Stderr, "testdb: terminate container: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "testdb: terminate container: %v\n", err)
 	}
 }
 

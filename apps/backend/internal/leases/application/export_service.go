@@ -208,87 +208,8 @@ func buildExportWorkbook(propRow ExportPropertyRow, summary OperationsSummary, m
 	if _, err := f.NewSheet(exportSheetName); err != nil {
 		return nil, fmt.Errorf("new sheet: %w", err)
 	}
-
-	for i, header := range exportHeaders {
-		cell, err := excelize.CoordinatesToCellName(i+1, 1)
-		if err != nil {
-			return nil, fmt.Errorf("header cell: %w", err)
-		}
-		if err := f.SetCellStr(exportSheetName, cell, header); err != nil {
-			return nil, fmt.Errorf("set header: %w", err)
-		}
-	}
-	if err := f.SetCellStyle(exportSheetName, "A1", "G1", headerStyle); err != nil {
-		return nil, fmt.Errorf("style header: %w", err)
-	}
-
-	for i, row := range rows {
-		rowNum := i + 2
-		dateCell, err := excelize.CoordinatesToCellName(1, rowNum)
-		if err != nil {
-			return nil, fmt.Errorf("date cell: %w", err)
-		}
-		if err := f.SetCellStr(exportSheetName, dateCell, row.OperationDate.Format("02.01.2006")); err != nil {
-			return nil, fmt.Errorf("set date: %w", err)
-		}
-
-		opType := "Расход"
-		if row.Type == domain.OperationTypeIncome {
-			opType = "Доход"
-		}
-		if err := f.SetCellStr(exportSheetName, "B"+strconv.Itoa(rowNum), opType); err != nil {
-			return nil, fmt.Errorf("set type: %w", err)
-		}
-		if err := f.SetCellStr(exportSheetName, "C"+strconv.Itoa(rowNum), row.CategoryName); err != nil {
-			return nil, fmt.Errorf("set category: %w", err)
-		}
-		if err := f.SetCellStr(exportSheetName, "D"+strconv.Itoa(rowNum), row.Name); err != nil {
-			return nil, fmt.Errorf("set name: %w", err)
-		}
-
-		amountCell := "E" + strconv.Itoa(rowNum)
-		if err := f.SetCellFloat(exportSheetName, amountCell, float64(row.AmountKopecks)/100, 2, 64); err != nil {
-			return nil, fmt.Errorf("set amount: %w", err)
-		}
-		if err := f.SetCellStyle(exportSheetName, amountCell, amountCell, moneyStyle); err != nil {
-			return nil, fmt.Errorf("style amount: %w", err)
-		}
-
-		if err := f.SetCellStr(exportSheetName, "F"+strconv.Itoa(rowNum), exportTenantName(row)); err != nil {
-			return nil, fmt.Errorf("set tenant: %w", err)
-		}
-		comment := ""
-		if row.Comment != nil {
-			comment = *row.Comment
-		}
-		if err := f.SetCellStr(exportSheetName, "G"+strconv.Itoa(rowNum), comment); err != nil {
-			return nil, fmt.Errorf("set comment: %w", err)
-		}
-	}
-
-	lastRow := len(rows) + 1
-	if err := f.AutoFilter(exportSheetName, fmt.Sprintf("A1:G%d", lastRow), nil); err != nil {
-		return nil, fmt.Errorf("auto filter: %w", err)
-	}
-	if err := f.SetPanes(exportSheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
-		return nil, fmt.Errorf("freeze panes: %w", err)
-	}
-	colWidths := []struct {
-		col   string
-		width float64
-	}{
-		{"A", 12},
-		{"B", 10},
-		{"C", 22},
-		{"D", 34},
-		{"E", 16},
-		{"F", 30},
-		{"G", 40},
-	}
-	for _, cw := range colWidths {
-		if err := f.SetColWidth(exportSheetName, cw.col, cw.col, cw.width); err != nil {
-			return nil, fmt.Errorf("column %s width: %w", cw.col, err)
-		}
+	if err := renderOperationsSheet(f, rows, headerStyle, moneyStyle); err != nil {
+		return nil, fmt.Errorf("operations sheet: %w", err)
 	}
 
 	if _, err := f.NewSheet(monthlySheetName); err != nil {
@@ -322,6 +243,94 @@ func buildExportWorkbook(propRow ExportPropertyRow, summary OperationsSummary, m
 		return nil, fmt.Errorf("write workbook: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+// renderOperationsSheet fills the "Операции" sheet: the header row with filter
+// and frozen panes, one row per operation (date, type, category, name, amount
+// in rubles, tenant, comment), and per-column widths.
+func renderOperationsSheet(f *excelize.File, rows []ExportOperationRow, headerStyle, moneyStyle int) error {
+	for i, header := range exportHeaders {
+		cell, err := excelize.CoordinatesToCellName(i+1, 1)
+		if err != nil {
+			return fmt.Errorf("header cell: %w", err)
+		}
+		if err := f.SetCellStr(exportSheetName, cell, header); err != nil {
+			return fmt.Errorf("set header: %w", err)
+		}
+	}
+	if err := f.SetCellStyle(exportSheetName, "A1", "G1", headerStyle); err != nil {
+		return fmt.Errorf("style header: %w", err)
+	}
+
+	for i, row := range rows {
+		rowNum := i + 2
+		dateCell, err := excelize.CoordinatesToCellName(1, rowNum)
+		if err != nil {
+			return fmt.Errorf("date cell: %w", err)
+		}
+		if err := f.SetCellStr(exportSheetName, dateCell, row.OperationDate.Format("02.01.2006")); err != nil {
+			return fmt.Errorf("set date: %w", err)
+		}
+
+		opType := "Расход"
+		if row.Type == domain.OperationTypeIncome {
+			opType = "Доход"
+		}
+		if err := f.SetCellStr(exportSheetName, "B"+strconv.Itoa(rowNum), opType); err != nil {
+			return fmt.Errorf("set type: %w", err)
+		}
+		if err := f.SetCellStr(exportSheetName, "C"+strconv.Itoa(rowNum), row.CategoryName); err != nil {
+			return fmt.Errorf("set category: %w", err)
+		}
+		if err := f.SetCellStr(exportSheetName, "D"+strconv.Itoa(rowNum), row.Name); err != nil {
+			return fmt.Errorf("set name: %w", err)
+		}
+
+		amountCell := "E" + strconv.Itoa(rowNum)
+		if err := f.SetCellFloat(exportSheetName, amountCell, float64(row.AmountKopecks)/100, 2, 64); err != nil {
+			return fmt.Errorf("set amount: %w", err)
+		}
+		if err := f.SetCellStyle(exportSheetName, amountCell, amountCell, moneyStyle); err != nil {
+			return fmt.Errorf("style amount: %w", err)
+		}
+
+		if err := f.SetCellStr(exportSheetName, "F"+strconv.Itoa(rowNum), exportTenantName(row)); err != nil {
+			return fmt.Errorf("set tenant: %w", err)
+		}
+		comment := ""
+		if row.Comment != nil {
+			comment = *row.Comment
+		}
+		if err := f.SetCellStr(exportSheetName, "G"+strconv.Itoa(rowNum), comment); err != nil {
+			return fmt.Errorf("set comment: %w", err)
+		}
+	}
+
+	lastRow := len(rows) + 1
+	if err := f.AutoFilter(exportSheetName, fmt.Sprintf("A1:G%d", lastRow), nil); err != nil {
+		return fmt.Errorf("auto filter: %w", err)
+	}
+	if err := f.SetPanes(exportSheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
+		return fmt.Errorf("freeze panes: %w", err)
+	}
+	colWidths := []struct {
+		col   string
+		width float64
+	}{
+		{"A", 12},
+		{"B", 10},
+		{"C", 22},
+		{"D", 34},
+		{"E", 16},
+		{"F", 30},
+		{"G", 40},
+	}
+	for _, cw := range colWidths {
+		if err := f.SetColWidth(exportSheetName, cw.col, cw.col, cw.width); err != nil {
+			return fmt.Errorf("column %s width: %w", cw.col, err)
+		}
+	}
+	return nil
 }
 
 // renderObjectSheet fills the "Объект" sheet with a property card: the basic

@@ -46,7 +46,7 @@ type fakeRenderer struct {
 	gotData any
 }
 
-func (r *fakeRenderer) Render(name string, data any) (string, string, error) {
+func (r *fakeRenderer) Render(name string, data any) (plain, html string, err error) {
 	r.gotName = name
 	r.gotData = data
 	return r.plain, r.html, r.err

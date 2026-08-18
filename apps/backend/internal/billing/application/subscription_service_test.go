@@ -470,13 +470,13 @@ func TestSubscriptionService_ChangeTariff_NoSubscription(t *testing.T) {
 
 // sideEffects reports whether the subscription carries a pending change and
 // how many transitions and audit entries exist for it.
-func (h *subscriptionHarness) sideEffects(t *testing.T, subscriptionID uuid.UUID) (bool, int, int) {
+func (h *subscriptionHarness) sideEffects(t *testing.T, subscriptionID uuid.UUID) (pending bool, transitions, auditEntries int) {
 	t.Helper()
-	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), subscriptionID)
+	rows, err := h.stores.transitions.ListBySubscriptionID(t.Context(), subscriptionID)
 	if err != nil {
 		t.Fatalf("ListBySubscriptionID() error = %v", err)
 	}
-	return h.hasPending(subscriptionID), len(transitions), len(h.audit.recorded())
+	return h.hasPending(subscriptionID), len(rows), len(h.audit.recorded())
 }
 
 func (h *subscriptionHarness) hasPending(subscriptionID uuid.UUID) bool {

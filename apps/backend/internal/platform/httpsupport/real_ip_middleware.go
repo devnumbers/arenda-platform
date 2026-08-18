@@ -68,7 +68,7 @@ func extractClientIP(r *http.Request, trustedNets []*net.IPNet) string {
 	return chosenIP.String()
 }
 
-func parseRemoteAddr(addr string) (net.IP, string) {
+func parseRemoteAddr(addr string) (ip net.IP, port string) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		// Try parsing as a bare IP.

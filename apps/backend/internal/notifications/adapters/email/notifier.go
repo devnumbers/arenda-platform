@@ -45,7 +45,7 @@ func (n *Notifier) SendDirect(ctx context.Context, to, subject, template string,
 }
 
 // Notify sends a reminder email.
-func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (string, string, error) {
+func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (providerResponse, renderedPlainBody string, err error) {
 	if notification.Contact == nil || notification.Contact.Email == "" {
 		return "", "", errors.New("notification contact missing email")
 	}

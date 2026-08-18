@@ -1,8 +1,14 @@
-# Конфигурация golangci-lint v2. Версия линтера пинится в Makefile (GOLANGCI_LINT_VERSION).
-# Принцип: курируемый строгий набор — баг-класс + дешёвая гигиена под стек проекта
+# Конфигурация golangci-lint v2. Версия пинится в Makefile (GOLANGCI_LINT_VERSION).
+# Принцип: курируемый строгий набор — баг-класс + гигиена под стек проекта
 # (Go 1.26, chi, sqlc/pgx, oapi-codegen, slog, OTel). Шумные/opinionated линтеры
 # осознанно не включены (список с причинами — в конце файла). Не добавляй линтеры
 # из «не включаем» без причины в комментарии.
+#
+# Двухэтапный режим (бар качества #323, тикет #336): этап 1 приземлён
+# 2026-08-18 (research #321, docs/research/2026-08-18-golangci-lint-catalog.md).
+# Блоки с "# REMEDIATION:" — этап 2, включаются волнами сетки #325 по флип-конвенции
+# (docs/research/2026-08-18-remediation-grid-counters.md): настройка переносится
+# в действующий конфиг тикетом, закрывшим последнюю ненулевую ячейку волны.
 version: "2"
 
 run:
@@ -70,7 +76,7 @@ linters:
     # --- архитектура и процесс ---
     - depguard             # правила domain/application-clean, см. settings
     - dupl                 # дубли кода; threshold под sqlc-boilerplate в settings
-    - forbidigo            # запрет fmt.Print*/stdlib log — см. settings
+    - forbidigo            # запрет fmt.Print*/stdlib log/os.Exit — см. settings
     - gochecknoinits       # без init()-функций
     - nolintlint           # строгий режим, см. settings
     - predeclared
@@ -78,6 +84,20 @@ linters:
     - revive
     - sloglint
     - testifylint        # testify в go.mod (v1.11.1); включён по результату прогона 2026-08-17 — 0 нарушений (#302)
+    # --- ЭТАП 1 (бар #323, тикет #336; research #321) ---
+    - dogsled              # 3+ подчёркивания в присваивании — скрытые результаты
+    - gochecksumtype       # 0 нарушений; страховка sealed-интерфейсов (Go sum types)
+    - godox                 # TODO/FIXME в комментариях → issue tracker
+    - gocyclo              # цикломатическая сложность, порог 30 (settings)
+    - iface                # идентичные интерфейсы — случайный дубль контракта
+    - intrange             # for i := range n — modernize этот случай не ловит
+    - testableexamples     # 0; Example-функции обязаны быть runnable
+    # REMEDIATION (этап 2, волны сетки #325):
+    # - goconst          # 314 (56 прод): вынос констант
+    # - cyclop           # 57 при max-complexity 15
+    # - gocognit         # 64 при min-complexity 25
+    # - lll              # 605 при line-length 140
+    # - paralleltest     # 994: t.Parallel() поэтапно с юнит-пакетов
   settings:
     depguard:
       rules:
@@ -194,14 +214,39 @@ linters:
           deny:
             - pkg: github.com/minio
               desc: S3-compatible storage access goes through the storage port; MinIO is not a dependency
+        # Бар #323 (тикет #336): testify — тестовая библиотека. Ассерты в прод-коде
+        # маскируют обработку ошибок и подменяют доменные проверки; прод-путь —
+        # errors.Is/As и конструкторы валидации домена (CODING_STANDARDS.md).
+        testify-test-only:
+          list-mode: lax
+          files:
+            - "!**/*_test.go"
+          deny:
+            - pkg: github.com/stretchr/testify
+              desc: testify is test-only; production code uses errors.Is/As and domain validation constructors
+    errcheck:
+      exclude-functions:
+        # Документированный always-nil error (go.dev/ref/spec: «Write can never
+        # return a non-nil error») — исключён здесь и в revive unhandled-error.
+        - strings.Builder.WriteString
+        - strings.Builder.WriteByte
+        - strings.Builder.WriteRune
+      # REMEDIATION (этап 2, волны errcheck #353–#359): 248 нарушений
+      # (tx.Rollback, Body.Close, w.Write, blank uuid.NewV7).
+      # check-blank: true
+      # check-type-assertions: true
+      # disable-default-exclusions: true
     govet:
       enable:
         - nilness          # SSA-анализ nil-дерефов; shadow НЕ включать (139 шумовых срабатываний)
+        - stdversion       # ЭТАП 1: вызовы стандартной библиотеки младше go.mod-версии
     exhaustive:
       default-signifies-exhaustive: true
     staticcheck:
-      checks: ["all", "-ST1000", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
-      # = прежний дефолт + ST1003 (initialisms: Id→ID)
+      # ЭТАП 1 (тикет #336): ST1016/ST1020-ST1022 возвращены — 0 нарушений
+      # (research #321, блок 2.1).
+      # REMEDIATION (этап 2, волна #368): снять -ST1000 (200 package comments).
+      checks: ["all", "-ST1000"]
     spancheck:
       # "all" парсером go-spancheck не принимается (тихо отключит все проверки) — перечисляем явно.
       checks: ["end", "set-status", "record-error"]   # все три проверки; дефолт — только end
@@ -210,6 +255,13 @@ linters:
       no-printf-like: true
     sloglint:
       context: all           # кодирует правило AGENTS.md: InfoContext/WarnContext/ErrorContext
+      no-global: "all"       # ЭТАП 1: никаких глобальных логгеров, только из ctx
+      msg-style: "lowercased" # ЭТАП 1: сообщения с маленькой буквы
+      static-msg: true       # ЭТАП 1: сообщения — константы, не интерполяция переменных
+    errchkjson:
+      check-error-free-encoding: true   # ЭТАП 1: Marshal в error-free контекстах без проверки
+    gocyclo:
+      min-complexity: 30     # ЭТАП 1: только аномалии; планка 15 — этап 2 (cyclop, #369)
     gocritic:
       # Теги НЕ включать: прогоны style/performance/opinionated/experimental дали 50/367/48/18 шумовых.
       enabled-checks:
@@ -234,8 +286,15 @@ linters:
         - truncateCmp          # сравнение int разной ширины
         - weakCond
         - sprintfQuotedString
+        # ЭТАП 1 (research #321, пересмотр раунда 2): курируемые чеки из style-тега
+        - importShadow         # затенение имён пакетов локальными переменными
+        - paramTypeCombine     # func(_ uuid.UUID, _ uuid.UUID) → (_, _ uuid.UUID)
+        - unnamedResult        # именовать результаты при одинаковых/неочевидных типах
     dupl:
       threshold: 200         # дефолт 150 тонет в sqlc-boilerplate; 200 = единичные реальные кластеры
+      # REMEDIATION (этап 2, dupl-кластеры #337–#340): опустить до 150 после
+      # закрытия продовых кластеров (scheduler-воркеры, HTTP-хендлеры); тестовые
+      # пары закрыты в тикете #336.
     forbidigo:
       analyze-types: true    # привязка паттерна к пакету (нужна для stdlib log)
       forbid:
@@ -265,6 +324,14 @@ linters:
         # (github.com/google/uuid.New).
         - pattern: '^(github\.com/google/)?uuid\.New(|V4|String|Random|RandomFromReader)$'
           msg: "identifiers are UUIDv7 only (ADR 0019): use uuid.NewV7() or uuid.Must(uuid.NewV7())"
+        # Exit-политика (бар #323, тикет #336): процесс завершает только
+        # композиционный корень cmd/. Внутренние пакеты возвращают ошибку
+        # наверх; os.Exit в недрах делает недоступными defer-очистку и
+        # корректный shutdown. Разрешение для cmd/ — exclusions.rules ниже.
+        - pattern: '^os\.Exit$'
+          msg: "exit policy (bar #323): os.Exit only in cmd/ - return the error upward instead"
+        - pattern: '^log\.Fatal(|f|ln)$'
+          msg: "exit policy (bar #323): log.Fatal* only in cmd/ - return the error upward instead"
     modernize:
       disable:
         - forvar           # дублирует copyloopvar
@@ -281,6 +348,17 @@ linters:
           disabled: true
         - name: use-any            # interface{} → any (код уже чист — профилактика)
         - name: early-return       # guard clauses вместо вложенных if
+        # ЭТАП 1 (тикет #336): необработанные ошибки вызовов. arguments —
+        # regexp-список revive (exclude-functions в golangci v2 для revive-правил
+        # не существует — ключ молча игнорируется); матч полный, на имя функции.
+        # strings.Builder исключён — документированный always-nil error
+        # (как в errcheck.exclude-functions выше).
+        - name: unhandled-error
+          arguments:
+            - strings\.Builder\.Write(String|Byte|Rune)
+    godot:
+      scope: declarations
+      # REMEDIATION (этап 2, волны механики #360–#367): scope all + capital — 393.
     nolintlint:
       allow-unused: false
       require-explanation: true
@@ -313,38 +391,49 @@ linters:
       - linters: [forbidigo]
         path: internal/billing/application/.*_test\.go
         text: 'use runInTx/UoW instead of manual Begin'
+      # Exit-политика (бар #323, тикет #336): os.Exit/log.Fatal* легитимны только
+      # в композиционном корне cmd/ (завершение при фатальных startup-ошибках и
+      # по сигналам ОС). Путь issues отсчитывается от каталога конфига (корень
+      # репо), поэтому паттерн заякорен полным префиксом apps/backend/cmd/ —
+      # случайные «cmd/» внутри путей его не проходят; везде остальное
+      # forbidigo-паттерны выше поднимают нарушение.
+      - linters: [forbidigo]
+        path: ^apps/backend/cmd/
+        text: 'exit policy \(bar #323\)'
 
 formatters:
   enable:
     - gofumpt              # надмножество gofmt -s
     - gci                  # секции по умолчанию (standard, default) = текущая конвенция импортов
+  settings:
+    gofumpt:
+      extra-rules: true   # ЭТАП 1 (тикет #336): 0 diff на момент включения — бесплатно
 
 issues:
   max-issues-per-linter: 0   # не обрезать отчёт
   max-same-issues: 0
 
-# Осознанно НЕ включаем (проверено прогонами / нерелевантно стеку):
-# - goconst (140 шумовых: тест-фикстуры, config fake/dev), govet shadow (139, идиома if err :=),
-#   staticcheck ST1000 (package comments — 148 шумовых),
-#   intrange (дубль modernize.rangeint).
-# - wsl_v5, nlreturn, noinlineerr, lll, funlen, varnamelen, mnd, tagliatelle, ireturn,
-#   gochecknoglobals, exhaustruct, godox, testpackage, nonamedreturns,
-#   interfacebloat, wrapcheck, err113, paralleltest, grouper, decorder, goheader,
-#   nestif, tagalign, dogsled, funcorder — opinionated/стилевые, борются с идиомами проекта.
-# - cyclop, gocyclo, gocognit, maintidx — метрики сложности, шумны как CI-гейт.
-# - ginkgolinter (нет ginkgo), protogetter (нет .pb.go в модуле),
-#   promlinter (нет prometheus client), zerologlint (стек на slog), arangolint, clickhouselint,
-#   unqueryvet (нет SELECT * в Go-коде), importas (нет алиасов для enforce).
-# - exptostd: включить, если в go.mod появится golang.org/x/exp.
-
-# Раунд 2 (проверено прогонами v2.12.2):
-# - errcheck check-blank (212 шумовых на идиому `_ = tx.Rollback`), check-type-assertions (forcetypeassert покрывает),
-#   govet stdversion (0 сигнала при go 1.26), sloglint no-global (1 прагматичная находка) и static-msg (3, одна нефиксибельна).
-# - gocritic теги style/performance/opinionated/experimental (50/367/48/18 шумовых; hugeParam/rangeValCopy — sqlc-структуры).
-# - tagliatelle (36 — openapi-контракт смешанный snake/camel, внешний API T-Bank требует PascalCase),
-#   interfacebloat (7 — осознанные порты 12-31 метод), nonamedreturns (25 — ломает defer-идиому метрик tkassa),
-#   iface (13 false positive на DDD-портах), embeddedstructfieldcheck (14 — чистый стиль),
-#   testableexamples (в проекте нет Example-функций).
-# - cyclop/gocognit/nestif/funlen — 15-150 срабатываний на известном техдолге (Load, HandleWebhook, UpdateLease);
-#   это тема планового рефакторинга, не CI-гейта.
-# - perfsprint fiximports в v2.12.2 недоступен (захардкожен false): --fix не добавляет import "errors" — добавлять руками.
+# Осознанно НЕ включаем (пересмотрено research #321, 2026-08-18; счётчики измерены
+# v2.12.2 прогонах по всему модулю; полная аргументация — docs/research/2026-08-18-golangci-lint-catalog.md):
+# - Стиль без баг-класса: wsl_v5 (5448), nlreturn (2486), varnamelen (1044),
+#   funcorder (85), embeddedstructfieldcheck (49), mnd (131).
+# - Против идиом Go/проекта: noinlineerr (1426 — запрет if err :=), exhaustruct
+#   (1705 — частичная инициализация composite literals — sqlc-параметры, домены),
+#   err113 (282 — доменные errors.New с динамическими сообщениями), testpackage
+#   (143 — white-box доменные тесты), gochecknoglobals (67 — package-level
+#   таблицы, tracer, regexp.Must), ireturn (142 — FP на DDD-портах: возврат
+#   интерфейсов — суть hexagonal), interfacebloat (9 — осознанные порты 12-31
+#   метода), nonamedreturns (11 — named return в defer-идиоме метрик tkassa).
+# - Внешний контракт: tagliatelle (50 — T-Bank PascalCase + openapi смешанный).
+# - Метрики: funlen 37 / nestif 19 — тема рефакторинга #369; cyclop/gocognit/
+#   lll/paralleltest — этап 2 (REMEDIATION-блок в enable).
+# - govet shadow (341 — идиома if err :=) и fieldalignment (269 — переупаковка
+#   полей против читаемости DDD-доменов); gocritic performance-тег
+#   (hugeParam 381 + rangeValCopy 221 — осознанная семантика передачи
+#   sqlc-структур/доменов по значению); style-тег целиком — курируемые чеки
+#   точечнее (см. gocritic.enabled-checks).
+# - Стек-нерелевантные (0 на модуле): arangolint, clickhouselint, ginkgolinter,
+#   promlinter, protogetter, zerologlint, unqueryvet; exptostd — при появлении
+#   golang.org/x/exp в go.mod; gomodguard_v2 (0 — дублирует depguard no-orm).
+# - perfsprint fiximports в v2.12.2 недоступен (захардкожен false): --fix не
+#   добавляет import "errors" — добавлять руками.

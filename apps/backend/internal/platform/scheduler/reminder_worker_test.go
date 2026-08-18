@@ -213,7 +213,7 @@ type fakeNotifier struct {
 	calls     []uuid.UUID
 }
 
-func (n *fakeNotifier) Notify(_ context.Context, notif application.Notification) (string, string, error) {
+func (n *fakeNotifier) Notify(_ context.Context, notif application.Notification) (providerResponse, renderedPlainBody string, err error) {
 	n.calls = append(n.calls, notif.RecipientID)
 	if n.notifyErr == nil {
 		return "", "", nil
@@ -398,18 +398,19 @@ func TestReminderWorker_DispatchReminder_FansOutToActiveMembers(t *testing.T) {
 	}
 }
 
-// Per-recipient preferences: an opted-out member is skipped, the owner still
-// receives the reminder and it is finalized as sent (issue #159).
-func TestReminderWorker_DispatchReminder_MemberOptOut(t *testing.T) {
-	t.Parallel()
-
+// runOptOutDispatch dispatches one property reminder where optedOut holds the
+// per-recipient channel preference (false = opted out) and asserts exactly the
+// wantNotified recipient was notified and the reminder finalized as sent.
+// Shared by the per-recipient preferences tests (issue #159).
+func runOptOutDispatch(t *testing.T, optedOut, wantNotified uuid.UUID) {
+	t.Helper()
 	reminderID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	ownerID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	memberID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	propertyID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	repo := &fakeReminderRepoForWorker{
-		channelAllowed: map[uuid.UUID]bool{memberID: false},
+		channelAllowed: map[uuid.UUID]bool{optedOut: false},
 	}
 	notifier := &fakeNotifier{}
 	recipients := fakePropertyRecipientLister{members: map[uuid.UUID][]uuid.UUID{
@@ -423,45 +424,30 @@ func TestReminderWorker_DispatchReminder_MemberOptOut(t *testing.T) {
 		t.Fatalf("dispatchReminder unexpected error: %v", err)
 	}
 
-	if len(notifier.calls) != 1 || notifier.calls[0] != ownerID {
-		t.Errorf("notify calls = %v, want [owner]", notifier.calls)
+	if len(notifier.calls) != 1 || notifier.calls[0] != wantNotified {
+		t.Errorf("notify calls = %v, want [%s]", notifier.calls, wantNotified)
 	}
 	if repo.markSentCalls != 1 {
 		t.Errorf("markSent calls = %d, want 1", repo.markSentCalls)
 	}
 }
 
+// Per-recipient preferences: an opted-out member is skipped, the owner still
+// receives the reminder and it is finalized as sent (issue #159).
+func TestReminderWorker_DispatchReminder_MemberOptOut(t *testing.T) {
+	t.Parallel()
+	runOptOutDispatch(t,
+		uuid.MustParse("33333333-3333-3333-3333-333333333333"), // member opted out
+		uuid.MustParse("22222222-2222-2222-2222-222222222222")) // owner notified
+}
+
 // Per-recipient preferences: an opted-out owner is skipped while an active
 // member who allows the event type still receives the reminder (issue #159).
 func TestReminderWorker_DispatchReminder_OwnerOptOutMemberAllowed(t *testing.T) {
 	t.Parallel()
-
-	reminderID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	ownerID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	memberID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	propertyID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-
-	repo := &fakeReminderRepoForWorker{
-		channelAllowed: map[uuid.UUID]bool{ownerID: false},
-	}
-	notifier := &fakeNotifier{}
-	recipients := fakePropertyRecipientLister{members: map[uuid.UUID][]uuid.UUID{
-		propertyID: {memberID},
-	}}
-
-	w := newWorkerForTest(t, repo, notifier, fakeContactResolver{}, recipients, nil)
-
-	r := newPropertyReminder(reminderID, ownerID, &propertyID)
-	if err := w.dispatchReminder(context.Background(), r, workerTestNow); err != nil {
-		t.Fatalf("dispatchReminder unexpected error: %v", err)
-	}
-
-	if len(notifier.calls) != 1 || notifier.calls[0] != memberID {
-		t.Errorf("notify calls = %v, want [member]", notifier.calls)
-	}
-	if repo.markSentCalls != 1 {
-		t.Errorf("markSent calls = %d, want 1", repo.markSentCalls)
-	}
+	runOptOutDispatch(t,
+		uuid.MustParse("22222222-2222-2222-2222-222222222222"), // owner opted out
+		uuid.MustParse("33333333-3333-3333-3333-333333333333")) // member notified
 }
 
 // When every recipient opted out of the event type, the reminder is finalized

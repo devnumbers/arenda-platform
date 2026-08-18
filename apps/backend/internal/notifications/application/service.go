@@ -45,8 +45,8 @@ func (s *ReminderService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
 }
 
 // NewReminderService creates a new reminder service.
-func NewReminderService(repo ReminderRepository, clock clock.Clock, tzResolver tzresolver.OwnerTimezoneResolver, policy sharedpolicy.Policy) *ReminderService {
-	return &ReminderService{repo: repo, clock: clock, tzResolver: tzResolver, policy: policy}
+func NewReminderService(repo ReminderRepository, clk clock.Clock, tzResolver tzresolver.OwnerTimezoneResolver, policy sharedpolicy.Policy) *ReminderService {
+	return &ReminderService{repo: repo, clock: clk, tzResolver: tzResolver, policy: policy}
 }
 
 // WithTx returns a service bound to the provided transaction.
@@ -283,13 +283,13 @@ func (s *ReminderService) Cancel(ctx context.Context, actor, id uuid.UUID) error
 	return nil
 }
 
-func buildOperationReminder(op OperationInfo, reminderDate time.Time, now time.Time, loc *time.Location) (domain.Reminder, error) {
+func buildOperationReminder(op OperationInfo, reminderDate, now time.Time, loc *time.Location) (domain.Reminder, error) {
 	title := "Напоминание об операции"
 	body := formatOperationAmountAndDate(op)
 	return domain.NewOperationReminder(op.OwnerID, op.ID, op.PropertyID, reminderDate, title, body, now, loc, dispatchHour)
 }
 
-func buildOverdueReminder(op OperationInfo, reminderDate time.Time, now time.Time, loc *time.Location) (domain.Reminder, error) {
+func buildOverdueReminder(op OperationInfo, reminderDate, now time.Time, loc *time.Location) (domain.Reminder, error) {
 	title := "Операция просрочена"
 	body := fmt.Sprintf("Операция %s просрочена. %s", formatOperationAmountAndDate(op), overdueCTA(op.Type))
 	return domain.NewOperationOverdueReminder(op.OwnerID, op.ID, op.PropertyID, reminderDate, title, body, now, loc, dispatchHour)
@@ -403,8 +403,8 @@ type scheduler struct {
 }
 
 // NewReminderScheduler creates a transactional reminder scheduler.
-func NewReminderScheduler(repo ReminderRepository, clock clock.Clock, tzResolver tzresolver.OwnerTimezoneResolver) ReminderScheduler {
-	return &scheduler{repo: repo, clock: clock, tzResolver: tzResolver}
+func NewReminderScheduler(repo ReminderRepository, clk clock.Clock, tzResolver tzresolver.OwnerTimezoneResolver) ReminderScheduler {
+	return &scheduler{repo: repo, clock: clk, tzResolver: tzResolver}
 }
 
 // WithTx returns a scheduler bound to the provided transaction.

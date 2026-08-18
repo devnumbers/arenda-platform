@@ -116,7 +116,7 @@ func readRootFile(root *os.Root, name string) ([]byte, error) {
 
 // Render executes the named template and returns the plain text and HTML bodies.
 // If only one variant exists, the missing one is returned as an empty string.
-func (r *Renderer) Render(name string, data any) (plain string, html string, err error) {
+func (r *Renderer) Render(name string, data any) (plain, html string, err error) {
 	if r == nil {
 		return "", "", errors.New("nil renderer")
 	}

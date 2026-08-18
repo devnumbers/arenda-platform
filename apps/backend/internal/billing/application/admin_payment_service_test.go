@@ -83,6 +83,18 @@ func TestRefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
 		t.Fatalf("RefundPayment() error = %v", err)
 	}
 
+	h.assertProviderRefund(t, payment)
+	h.assertPaymentRefunded(t, payment)
+	subStored := h.assertSubscriptionDowngraded(t, sub)
+	h.assertRefundTransition(t, subStored.ID, payment)
+	h.assertRefundAudit(t)
+	h.assertDowngradeSideEffects(t)
+}
+
+// assertProviderRefund checks the provider was asked exactly once for a full
+// refund of the given payment with both identifiers.
+func (h *refundHarness) assertProviderRefund(t *testing.T, payment domain.SubscriptionPayment) {
+	t.Helper()
 	if h.provider.refundCalls != 1 {
 		t.Fatalf("provider refund calls = %d, want exactly one", h.provider.refundCalls)
 	}
@@ -93,7 +105,12 @@ func TestRefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if req.AmountKopecks != payment.AmountKopecks {
 		t.Errorf("refund amount = %d, want the full %d", req.AmountKopecks, payment.AmountKopecks)
 	}
+}
 
+// assertPaymentRefunded checks the stored payment is refunded with the full
+// amount recorded.
+func (h *refundHarness) assertPaymentRefunded(t *testing.T, payment domain.SubscriptionPayment) {
+	t.Helper()
 	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
 	if err != nil {
 		t.Fatalf("GetByID(refunded) error = %v", err)
@@ -104,7 +121,12 @@ func TestRefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if stored.RefundedAmountKopecks == nil || *stored.RefundedAmountKopecks != payment.AmountKopecks {
 		t.Errorf("refunded amount = %v, want the full %d", stored.RefundedAmountKopecks, payment.AmountKopecks)
 	}
+}
 
+// assertSubscriptionDowngraded checks the subscription is back on basic with
+// no validity window and no auto-renew, and returns the stored subscription.
+func (h *refundHarness) assertSubscriptionDowngraded(t *testing.T, sub domain.Subscription) domain.Subscription {
+	t.Helper()
 	subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID() error = %v", err)
@@ -115,10 +137,14 @@ func TestRefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if subStored.ValidUntil != nil || subStored.AutoRenewEnabled {
 		t.Errorf("subscription = valid_until %v, auto-renew %t; want both cleared", subStored.ValidUntil, subStored.AutoRenewEnabled)
 	}
+	return subStored
+}
 
-	// The transition log attributes the downgrade to the acting admin and the
-	// refunded payment.
-	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), subStored.ID)
+// assertRefundTransition checks the transition log attributes the downgrade to
+// the acting admin and the refunded payment.
+func (h *refundHarness) assertRefundTransition(t *testing.T, subscriptionID uuid.UUID, payment domain.SubscriptionPayment) {
+	t.Helper()
+	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), subscriptionID)
 	if err != nil {
 		t.Fatalf("ListBySubscriptionID() error = %v", err)
 	}
@@ -137,8 +163,11 @@ func TestRefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if refundTransition.PaymentID == nil || *refundTransition.PaymentID != payment.ID {
 		t.Errorf("refund transition payment = %v, want %v", refundTransition.PaymentID, payment.ID)
 	}
+}
 
-	// The audit entry attributes the refund to the admin.
+// assertRefundAudit checks the audit entry attributes the refund to the admin.
+func (h *refundHarness) assertRefundAudit(t *testing.T) {
+	t.Helper()
 	var refundAudit *auditdomain.Entry
 	for _, entry := range h.audit.recorded() {
 		if entry.Action == auditdomain.ActionSubscriptionPaymentRefunded {
@@ -151,10 +180,13 @@ func TestRefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if refundAudit.ActorRole != auditdomain.ActorRoleAdmin || refundAudit.ActorID == nil || *refundAudit.ActorID != h.adminID {
 		t.Errorf("refund audit actor = %q/%v, want the acting admin", refundAudit.ActorRole, refundAudit.ActorID)
 	}
+}
 
-	// The lifecycle bridges ran inside the finalizing transaction: the excess
-	// properties beyond the basic limit were archived and the recipient slots
-	// enforced with the refund trigger.
+// assertDowngradeSideEffects checks the lifecycle bridges ran inside the
+// finalizing transaction: the excess properties beyond the basic limit were
+// archived and the recipient slots enforced with the refund trigger.
+func (h *refundHarness) assertDowngradeSideEffects(t *testing.T) {
+	t.Helper()
 	calls := h.archiver.recorded()
 	if len(calls) != 1 || calls[0].limit != 1 {
 		t.Errorf("archiver calls = %v, want one call with the basic limit 1", calls)

@@ -65,7 +65,7 @@ func (h *OperationHandlers) handleOperationError(w http.ResponseWriter, r *http.
 // handleLeaseOperationError maps the leases domain errors shared by the
 // operation and recurring operation endpoints to problem details. conflictErr
 // is the endpoint-specific conflict sentinel, notFoundDetail the 404 detail.
-func handleLeaseOperationError(w http.ResponseWriter, r *http.Request, err error, conflictErr error, notFoundDetail string) {
+func handleLeaseOperationError(w http.ResponseWriter, r *http.Request, err, conflictErr error, notFoundDetail string) {
 	switch {
 	case errors.Is(err, leasesapp.ErrInvalidInput), errors.Is(err, domain.ErrInvalidOperationType):
 		detail, ok := httpsupport.UserFacingDetail(err)
@@ -90,7 +90,7 @@ func handleLeaseOperationError(w http.ResponseWriter, r *http.Request, err error
 	}
 }
 
-func normalizeOperationsPagination(limitParam, offsetParam *int) (limit int, offset int, fetchLimit int) {
+func normalizeOperationsPagination(limitParam, offsetParam *int) (limit, offset, fetchLimit int) {
 	limit = operationsPaginationDefaultLimit
 	if limitParam != nil {
 		limit = *limitParam
@@ -536,7 +536,7 @@ func operationResponse(op domain.Operation, categoryNames map[uuid.UUID]string, 
 	return resp
 }
 
-func operationsResponse(ops []domain.Operation, categoryNames map[uuid.UUID]string, propertyStatuses map[uuid.UUID]propertiesdomain.PropertyStatus, limit int, offset int) openapi.OperationsResponse {
+func operationsResponse(ops []domain.Operation, categoryNames map[uuid.UUID]string, propertyStatuses map[uuid.UUID]propertiesdomain.PropertyStatus, limit, offset int) openapi.OperationsResponse {
 	hasMore := len(ops) > limit
 	if hasMore {
 		ops = ops[:limit]

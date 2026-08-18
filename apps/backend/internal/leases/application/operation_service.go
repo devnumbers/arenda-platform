@@ -16,6 +16,7 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // CreateOperationCommand carries the data needed to create a manual operation.
@@ -90,7 +91,7 @@ func NewOperationService(
 	scheduler ReminderScheduler,
 	db txBeginner,
 	audit auditapp.Recorder,
-	clock clock.Clock,
+	clk clock.Clock,
 	tzResolver sharedtz.OwnerTimezoneResolver,
 	policy sharedpolicy.Policy,
 	logger *slog.Logger,
@@ -98,8 +99,8 @@ func NewOperationService(
 	if db == nil {
 		panic("db beginner is required")
 	}
-	if clock == nil {
-		panic("clock is required")
+	if clk == nil {
+		panic("clk is required")
 	}
 	if categories == nil {
 		panic("categories repository is required")
@@ -119,7 +120,7 @@ func NewOperationService(
 		scheduler:    scheduler,
 		db:           db,
 		audit:        audit,
-		clock:        clock,
+		clock:        clk,
 		tzResolver:   tzResolver,
 		policy:       policy,
 		logger:       logger,
@@ -421,82 +422,10 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 	originalOffset := op.ReminderOffsetDays
 	originalOperationDate := op.OperationDate
 
-	opType := op.Type
-	categoryID := op.CategoryID
-	if cmd.Type != nil {
-		parsedType, err := domain.ParseOperationType(*cmd.Type)
-		if err != nil {
-			return domain.Operation{}, err
-		}
-		opType = parsedType
-	}
-	if cmd.CategoryID != nil {
-		categoryID = *cmd.CategoryID
-	}
-	if cmd.Type != nil || cmd.CategoryID != nil {
-		if err := validateCategory(ctx, txCategories, scope, opType, categoryID); err != nil {
-			return domain.Operation{}, err
-		}
-	}
-	op.Type = opType
-	op.CategoryID = categoryID
-
-	if cmd.Name != nil {
-		name := strings.TrimSpace(*cmd.Name)
-		if name == "" {
-			return domain.Operation{}, newInvalidInputError("name is required")
-		}
-		if len([]rune(name)) > 50 {
-			return domain.Operation{}, newInvalidInputError("name must be at most 50 characters")
-		}
-		op.Name = name
-	}
-
-	if cmd.AmountKopecks != nil {
-		op.AmountKopecks = *cmd.AmountKopecks
-	}
-	if cmd.OperationDate != nil {
-		op.OperationDate = *cmd.OperationDate
-	}
-	if err := s.validateAmountAndDate(op.AmountKopecks, op.OperationDate); err != nil {
+	op, today, err := s.applyOperationUpdate(ctx, txCategories, op, cmd, scope)
+	if err != nil {
 		return domain.Operation{}, err
 	}
-
-	if cmd.Comment != nil {
-		op.Comment = *cmd.Comment
-	}
-
-	if cmd.LeaseID != nil {
-		leaseID, err := s.resolveLeaseID(ctx, scope, op.PropertyID, cmd.LeaseID)
-		if err != nil {
-			return domain.Operation{}, err
-		}
-		op.LeaseID = leaseID
-	}
-
-	if cmd.ReminderOffsetDays != nil {
-		if err := validateReminderOffsetDays(cmd.ReminderOffsetDays); err != nil {
-			return domain.Operation{}, err
-		}
-		op.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
-	}
-
-	op.IsException = true
-	loc, err := s.tzResolver.Resolve(ctx, scope)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
-	}
-	now := s.clock.Now()
-	today := timeutil.DateIn(now, loc)
-	if cmd.OperationDate != nil {
-		switch {
-		case op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(today):
-			op.Status = domain.OperationStatusPending
-		case op.Status == domain.OperationStatusPending && op.OperationDate.Before(today):
-			op.Status = domain.OperationStatusOverdue
-		}
-	}
-	op.UpdatedAt = now
 
 	updated, err := txOps.Update(ctx, op)
 	if err != nil {
@@ -509,26 +438,8 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 	offsetChanged := !reminderOffsetDaysEqual(originalOffset, updated.ReminderOffsetDays)
 	dateChanged := !originalOperationDate.Equal(updated.OperationDate)
 	if s.scheduler != nil && (offsetChanged || dateChanged) {
-		txScheduler := s.scheduler.WithTx(tx)
-		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
-		if err != nil {
-			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
-		}
-
-		if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
-		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
-		}
-
-		if updated.ReminderOffsetDays != nil {
-			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
-			if !reminderDate.Before(today) {
-				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
-					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
-				}
-			}
+		if err := s.rescheduleOperationReminders(ctx, tx, txCategories, updated, scope, today); err != nil {
+			return domain.Operation{}, err
 		}
 	}
 
@@ -548,6 +459,133 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 	}
 
 	return updated, nil
+}
+
+// applyOperationUpdate applies an update command's patch fields to the
+// operation with validation (type, category, name, amount, date, comment,
+// lease, reminder offset), recomputes the pending/overdue status when the
+// operation date moved, and stamps UpdatedAt. It returns the patched operation
+// and the owner-local "today" used for the status recompute — the reminder
+// rescheduler must compare against the same instant.
+func (s *OperationService) applyOperationUpdate(
+	ctx context.Context,
+	txCategories OperationCategoryRepository,
+	op domain.Operation,
+	cmd UpdateOperationCommand,
+	scope uuid.UUID,
+) (domain.Operation, time.Time, error) {
+	opType := op.Type
+	categoryID := op.CategoryID
+	if cmd.Type != nil {
+		parsedType, err := domain.ParseOperationType(*cmd.Type)
+		if err != nil {
+			return domain.Operation{}, time.Time{}, err
+		}
+		opType = parsedType
+	}
+	if cmd.CategoryID != nil {
+		categoryID = *cmd.CategoryID
+	}
+	if cmd.Type != nil || cmd.CategoryID != nil {
+		if err := validateCategory(ctx, txCategories, scope, opType, categoryID); err != nil {
+			return domain.Operation{}, time.Time{}, err
+		}
+	}
+	op.Type = opType
+	op.CategoryID = categoryID
+
+	if cmd.Name != nil {
+		name := strings.TrimSpace(*cmd.Name)
+		if name == "" {
+			return domain.Operation{}, time.Time{}, newInvalidInputError("name is required")
+		}
+		if len([]rune(name)) > 50 {
+			return domain.Operation{}, time.Time{}, newInvalidInputError("name must be at most 50 characters")
+		}
+		op.Name = name
+	}
+
+	if cmd.AmountKopecks != nil {
+		op.AmountKopecks = *cmd.AmountKopecks
+	}
+	if cmd.OperationDate != nil {
+		op.OperationDate = *cmd.OperationDate
+	}
+	if err := s.validateAmountAndDate(op.AmountKopecks, op.OperationDate); err != nil {
+		return domain.Operation{}, time.Time{}, err
+	}
+
+	if cmd.Comment != nil {
+		op.Comment = *cmd.Comment
+	}
+
+	if cmd.LeaseID != nil {
+		leaseID, err := s.resolveLeaseID(ctx, scope, op.PropertyID, cmd.LeaseID)
+		if err != nil {
+			return domain.Operation{}, time.Time{}, err
+		}
+		op.LeaseID = leaseID
+	}
+
+	if cmd.ReminderOffsetDays != nil {
+		if err := validateReminderOffsetDays(cmd.ReminderOffsetDays); err != nil {
+			return domain.Operation{}, time.Time{}, err
+		}
+		op.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
+	}
+
+	op.IsException = true
+	loc, err := s.tzResolver.Resolve(ctx, scope)
+	if err != nil {
+		return domain.Operation{}, time.Time{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	now := s.clock.Now()
+	today := timeutil.DateIn(now, loc)
+	if cmd.OperationDate != nil {
+		switch {
+		case op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(today):
+			op.Status = domain.OperationStatusPending
+		case op.Status == domain.OperationStatusPending && op.OperationDate.Before(today):
+			op.Status = domain.OperationStatusOverdue
+		}
+	}
+	op.UpdatedAt = now
+	return op, today, nil
+}
+
+// rescheduleOperationReminders cancels the operation's pending and overdue
+// reminders and re-schedules the operation reminder from the updated offset,
+// keeping only reminders that still fall on today or later.
+func (s *OperationService) rescheduleOperationReminders(
+	ctx context.Context,
+	tx transaction.Tx,
+	txCategories OperationCategoryRepository,
+	updated domain.Operation,
+	scope uuid.UUID,
+	today time.Time,
+) error {
+	txScheduler := s.scheduler.WithTx(tx)
+	cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
+	if err != nil {
+		return fmt.Errorf("get category for reminder: %w", err)
+	}
+
+	if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
+		return fmt.Errorf("cancel reminders: %w", err)
+	}
+	if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
+		return fmt.Errorf("cancel overdue reminders: %w", err)
+	}
+
+	if updated.ReminderOffsetDays != nil {
+		reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
+		if !reminderDate.Before(today) {
+			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
+				return fmt.Errorf("schedule operation reminder: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 // CompleteOperation marks a pending, overdue, or unconfirmed operation as completed.
@@ -778,7 +816,7 @@ func (s *OperationService) ListAllOverdueCandidates(ctx context.Context, asOf ti
 
 // MarkOverdue transitions a pending operation to overdue idempotently. The returned
 // bool is true when the operation was actually changed from pending to overdue.
-func (s *OperationService) MarkOverdue(ctx context.Context, actor uuid.UUID, operationID uuid.UUID) (domain.Operation, bool, error) {
+func (s *OperationService) MarkOverdue(ctx context.Context, actor, operationID uuid.UUID) (domain.Operation, bool, error) {
 	op, changed, err := s.operations.MarkOverdue(ctx, actor, operationID, s.clock.Now())
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {

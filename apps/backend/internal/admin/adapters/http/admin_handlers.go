@@ -585,7 +585,7 @@ func (h *AdminHandlers) ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Re
 // filter bounds. date_from is inclusive (00:00:00 UTC); date_to is converted
 // to an exclusive upper bound by adding 24 hours. Absent params yield zero
 // times, which disable the filter.
-func auditLogDateRange(from, to *openapi_types.Date) (time.Time, time.Time) {
+func auditLogDateRange(from, to *openapi_types.Date) (start, end time.Time) {
 	var dateFrom, dateTo time.Time
 	if from != nil {
 		dateFrom = time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)

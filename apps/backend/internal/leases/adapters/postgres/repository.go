@@ -1623,7 +1623,7 @@ func toOperation(row any) postgres.Operation {
 	rv := reflect.ValueOf(row)
 	ov := reflect.ValueOf(&op).Elem()
 	rt := rv.Type()
-	for i := 0; i < rt.NumField(); i++ {
+	for i := range rt.NumField() {
 		fieldName := rt.Field(i).Name
 		src := rv.Field(i)
 		dst := ov.FieldByName(fieldName)

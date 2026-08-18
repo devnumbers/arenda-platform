@@ -310,8 +310,8 @@ func userEmail(user domain.User) (domain.Email, error) {
 
 // checkNotBlocked reports whether the phone is currently blocked by the attempt
 // window. A blocked phone yields ErrUserBlocked before any code work begins.
-func checkNotBlocked(ctx context.Context, attempts AttemptRepository, clock clock.Clock, phone domain.Phone) error {
-	now := clock.Now()
+func checkNotBlocked(ctx context.Context, attempts AttemptRepository, clk clock.Clock, phone domain.Phone) error {
+	now := clk.Now()
 
 	window, err := attempts.GetByPhone(ctx, phone)
 	if err != nil && !errors.Is(err, ErrNotFound) {

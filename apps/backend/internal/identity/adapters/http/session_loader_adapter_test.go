@@ -124,9 +124,12 @@ func TestSessionLoader_Load_NotFoundMapsToSessionNotFound(t *testing.T) {
 	repo := &fakeSessionRepoForLoader{} // default returns ErrNotFound
 	loader := NewSessionLoader(newSessionSvcForLoader(t, repo))
 
-	_, _, _, err := loader.Load(t.Context(), "dead-token", time.Now())
+	session, userID, role, err := loader.Load(t.Context(), "dead-token", time.Now())
 	if !httpsupport.IsSessionNotFound(err) {
 		t.Fatalf("Load error = %v, want SessionNotFound sentinel", err)
+	}
+	if session.TokenHash != "" || userID != uuid.Nil || role != "" {
+		t.Fatalf("Load returned non-zero results on error: session=%v userID=%s role=%q", session, userID, role)
 	}
 }
 
@@ -140,12 +143,15 @@ func TestSessionLoader_Load_OtherErrorPropagated(t *testing.T) {
 	}
 	loader := NewSessionLoader(newSessionSvcForLoader(t, repo))
 
-	_, _, _, err := loader.Load(t.Context(), "token", time.Now())
+	session, userID, role, err := loader.Load(t.Context(), "token", time.Now())
 	if !errors.Is(err, dbErr) {
 		t.Fatalf("Load error = %v, want wrap of dbErr", err)
 	}
 	if httpsupport.IsSessionNotFound(err) {
 		t.Fatal("non-ErrNotFound error was mapped to SessionNotFound")
+	}
+	if session.TokenHash != "" || userID != uuid.Nil || role != "" {
+		t.Fatalf("Load returned non-zero results on error: session=%v userID=%s role=%q", session, userID, role)
 	}
 }
 

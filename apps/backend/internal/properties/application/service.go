@@ -143,7 +143,7 @@ func NewPropertyService(
 	leaseRepo LeaseRepository,
 	db txBeginner,
 	audit auditapp.Recorder,
-	clock clock.Clock,
+	clk clock.Clock,
 	tzResolver sharedtz.OwnerTimezoneResolver,
 	policy sharedpolicy.Policy,
 	logger *slog.Logger,
@@ -164,7 +164,7 @@ func NewPropertyService(
 		leaseRepo:         leaseRepo,
 		db:                db,
 		audit:             audit,
-		clock:             clock,
+		clock:             clk,
 		tzResolver:        tzResolver,
 		policy:            policy,
 		logger:            logger,
@@ -726,30 +726,8 @@ func (s *PropertyService) DeleteProperty(
 		return fmt.Errorf("list photos: %w", err)
 	}
 
-	if mode == domain.DeletePropertyModeCascade {
-		if err := repo.DeleteOperationsByProperty(ctx, actor, id); err != nil {
-			return fmt.Errorf("delete operations: %w", err)
-		}
-		if err := repo.DeleteRecurringOperationsByProperty(ctx, actor, id); err != nil {
-			return fmt.Errorf("delete recurring operations: %w", err)
-		}
-		if err := repo.DeleteLeasesByProperty(ctx, actor, id); err != nil {
-			return fmt.Errorf("delete leases: %w", err)
-		}
-	}
-
-	if mode == domain.DeletePropertyModeDetach {
-		// Detach keeps leases and operations with property_id set to NULL by
-		// the FK; pause recurring operations and drop their future unedited
-		// operations and reminders, same as archiving does.
-		loc, err := s.tzResolver.Resolve(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("resolve owner timezone: %w", err)
-		}
-		asOf := timeutil.DateIn(s.clock.Now(), loc)
-		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, actor, asOf); err != nil {
-			return fmt.Errorf("suspend billing: %w", err)
-		}
+	if err := s.applyDeleteMode(ctx, tx, repo, actor, id, mode); err != nil {
+		return err
 	}
 
 	// Former shared members are collected before the slot policy drops their
@@ -799,18 +777,66 @@ func (s *PropertyService) DeleteProperty(
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	// Post-commit: notify the former shared members (active+suspended) that the
-	// object was deleted (issue #162, T6). A send failure is logged and does
-	// not affect the delete.
+	// Post-commit cleanup and notifications never fail the delete itself.
+	s.notifyPropertyDeleted(ctx, id, property.Name, formerMemberEmails)
+	s.cleanupPropertyPhotos(ctx, id, photos)
+
+	return nil
+}
+
+// applyDeleteMode performs the mode-specific pre-delete side effects inside
+// the delete transaction. Cascade removes the property's operations, recurring
+// operations, and leases; detach keeps them (property_id becomes NULL via the
+// FK) but pauses the billing lifecycle, same as archiving does.
+func (s *PropertyService) applyDeleteMode(
+	ctx context.Context,
+	tx transaction.Tx,
+	repo PropertyRepository,
+	actor, id uuid.UUID,
+	mode domain.DeletePropertyMode,
+) error {
+	if mode == domain.DeletePropertyModeCascade {
+		if err := repo.DeleteOperationsByProperty(ctx, actor, id); err != nil {
+			return fmt.Errorf("delete operations: %w", err)
+		}
+		if err := repo.DeleteRecurringOperationsByProperty(ctx, actor, id); err != nil {
+			return fmt.Errorf("delete recurring operations: %w", err)
+		}
+		if err := repo.DeleteLeasesByProperty(ctx, actor, id); err != nil {
+			return fmt.Errorf("delete leases: %w", err)
+		}
+	}
+
+	if mode == domain.DeletePropertyModeDetach {
+		loc, err := s.tzResolver.Resolve(ctx, actor)
+		if err != nil {
+			return fmt.Errorf("resolve owner timezone: %w", err)
+		}
+		asOf := timeutil.DateIn(s.clock.Now(), loc)
+		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, actor, asOf); err != nil {
+			return fmt.Errorf("suspend billing: %w", err)
+		}
+	}
+	return nil
+}
+
+// notifyPropertyDeleted emails the former shared members (active+suspended)
+// after the delete has committed (issue #162, T6). A send failure is logged
+// and does not affect the delete.
+func (s *PropertyService) notifyPropertyDeleted(ctx context.Context, id uuid.UUID, name string, formerMemberEmails []string) {
 	for _, to := range formerMemberEmails {
-		if err := s.sharedDeleteMailer.SendPropertyDeleted(ctx, to, property.Name); err != nil {
+		if err := s.sharedDeleteMailer.SendPropertyDeleted(ctx, to, name); err != nil {
 			s.logger.ErrorContext(ctx, "failed to send property deleted email to former member",
 				slog.String("property_id", id.String()),
 				slog.String("error", sanitizeError(err)),
 			)
 		}
 	}
+}
 
+// cleanupPropertyPhotos removes the deleted property's photo objects from
+// storage after the commit; failures are logged, never propagated.
+func (s *PropertyService) cleanupPropertyPhotos(ctx context.Context, id uuid.UUID, photos []domain.Photo) {
 	for _, photo := range photos {
 		key, err := photoStorageKey(id, photo.ID, photo.URL)
 		if err != nil {
@@ -827,8 +853,6 @@ func (s *PropertyService) DeleteProperty(
 			)
 		}
 	}
-
-	return nil
 }
 
 // archivePropertyInTx performs the core archive logic inside an existing
@@ -1074,7 +1098,7 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 }
 
 // AddPropertyPhoto validates and uploads a photo for the given property.
-func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyID uuid.UUID, file io.Reader, filename string, contentType string, size int64) (domain.Property, error) {
+func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyID uuid.UUID, file io.Reader, filename, contentType string, size int64) (domain.Property, error) {
 	if _, ok := allowedPhotoContentTypes[contentType]; !ok {
 		return domain.Property{}, fmt.Errorf("%w: unsupported content type %q", ErrInvalidInput, contentType)
 	}
@@ -1130,12 +1154,12 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyI
 	ext := allowedPhotoContentTypes[contentType]
 	key := fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext)
 
-	url, err := s.photoStorage.Upload(ctx, key, contentType, size, file)
+	photoURL, err := s.photoStorage.Upload(ctx, key, contentType, size, file)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("upload photo: %w", err)
 	}
 
-	if _, err := txPhotoRepo.Create(ctx, photoID, propertyID, url); err != nil {
+	if _, err := txPhotoRepo.Create(ctx, photoID, propertyID, photoURL); err != nil {
 		return domain.Property{}, fmt.Errorf("create photo record: %w", err)
 	}
 

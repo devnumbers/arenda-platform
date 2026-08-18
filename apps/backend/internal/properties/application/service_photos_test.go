@@ -44,7 +44,7 @@ type fakePhotoRepo struct {
 	getByIDsErr error
 }
 
-func (r *fakePhotoRepo) Create(_ context.Context, _ uuid.UUID, propertyID uuid.UUID, url string) (domain.Photo, error) {
+func (r *fakePhotoRepo) Create(_ context.Context, _, propertyID uuid.UUID, url string) (domain.Photo, error) {
 	if r.createErr != nil {
 		return domain.Photo{}, r.createErr
 	}

@@ -44,7 +44,7 @@ type OperationOverdueWorker struct {
 // schedule is owned by nextDailyRun — daily at 00:00 UTC — not by the caller.
 func NewOperationOverdueWorker(
 	operationService *leasesapp.OperationService,
-	clock clock.Clock,
+	clk clock.Clock,
 	batchSize int,
 	logger *slog.Logger,
 	tzResolver sharedtz.OwnerTimezoneResolver,
@@ -57,7 +57,7 @@ func NewOperationOverdueWorker(
 	}
 	return &OperationOverdueWorker{
 		operationService: operationService,
-		clock:            clock,
+		clock:            clk,
 		batchSize:        batchSize,
 		logger:           logger,
 		tzResolver:       tzResolver,

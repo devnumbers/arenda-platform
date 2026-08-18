@@ -344,7 +344,7 @@ func (s *SubscriptionService) planPayment(
 	sub domain.Subscription,
 	currentTariff, newTariff domain.Tariff,
 	period domain.SubscriptionPeriod,
-) (created *domain.SubscriptionPayment, existing *domain.SubscriptionPayment, err error) {
+) (created, existing *domain.SubscriptionPayment, err error) {
 	if existing := findPendingPayment(stores, ctx, sub.UserID, newTariff.ID, period); existing != nil {
 		return nil, existing, nil
 	}

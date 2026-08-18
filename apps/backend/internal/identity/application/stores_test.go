@@ -102,21 +102,35 @@ func (r *countingRecorder) WithTx(transaction.Tx) auditapp.Recorder {
 	return r
 }
 
+// countingFactory bundles a txStoreFactory wired to counting fakes and a
+// fakeUoW with every counting fake, so the test can assert call counts.
+type countingFactory struct {
+	f        *txStoreFactory
+	b        *fakeBeginner
+	users    *countingUserRepo
+	codes    *countingCodeRepo
+	attempts *countingAttemptRepo
+	sessions *countingSessionRepo
+	audit    *countingRecorder
+}
+
 // newCountingFactory builds a txStoreFactory wired to counting fakes and a
 // fakeUoW, returning every piece so the test can assert call counts.
-func newCountingFactory(t *testing.T) (*txStoreFactory, *fakeBeginner, *countingUserRepo, *countingCodeRepo, *countingAttemptRepo, *countingSessionRepo, *countingRecorder) {
+func newCountingFactory(t *testing.T) countingFactory {
 	t.Helper()
-	b := &fakeBeginner{}
-	users := &countingUserRepo{fakeUserRepo: newFakeUserRepo()}
-	codes := &countingCodeRepo{fakeCodeRepo: newFakeCodeRepo()}
-	attempts := &countingAttemptRepo{fakeAttemptRepo: newFakeAttemptRepo()}
-	sessions := &countingSessionRepo{fakeSessionRepo: newFakeSessionRepo()}
-	audit := &countingRecorder{}
-	f := &txStoreFactory{
-		users: users, codes: codes, attempts: attempts,
-		sessions: sessions, audit: audit, uow: &fakeUoW{beginner: b},
+	cf := countingFactory{
+		b:        &fakeBeginner{},
+		users:    &countingUserRepo{fakeUserRepo: newFakeUserRepo()},
+		codes:    &countingCodeRepo{fakeCodeRepo: newFakeCodeRepo()},
+		attempts: &countingAttemptRepo{fakeAttemptRepo: newFakeAttemptRepo()},
+		sessions: &countingSessionRepo{fakeSessionRepo: newFakeSessionRepo()},
+		audit:    &countingRecorder{},
 	}
-	return f, b, users, codes, attempts, sessions, audit
+	cf.f = &txStoreFactory{
+		users: cf.users, codes: cf.codes, attempts: cf.attempts,
+		sessions: cf.sessions, audit: cf.audit, uow: &fakeUoW{beginner: cf.b},
+	}
+	return cf
 }
 
 // fakeStores bundles the shared identity fake repositories and a fakeBeginner so
@@ -153,11 +167,11 @@ func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
 // repository and the audit recorder to the same transaction, runs work, and the
 // UoW commits on a nil error.
 func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
-	f, b, users, codes, attempts, sessions, audit := newCountingFactory(t)
+	cf := newCountingFactory(t)
 
 	workCalled := false
 	var got txStores
-	err := f.runInTx(t.Context(), func(s *txStores) error {
+	err := cf.f.runInTx(t.Context(), func(s *txStores) error {
 		workCalled = true
 		got = *s
 		return nil
@@ -170,44 +184,44 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 	}
 
 	// Each repository is bound to the transaction exactly once.
-	if users.withTxCalls != 1 {
-		t.Errorf("users.WithTx calls = %d, want 1", users.withTxCalls)
+	if cf.users.withTxCalls != 1 {
+		t.Errorf("users.WithTx calls = %d, want 1", cf.users.withTxCalls)
 	}
-	if codes.withTxCalls != 1 {
-		t.Errorf("codes.WithTx calls = %d, want 1", codes.withTxCalls)
+	if cf.codes.withTxCalls != 1 {
+		t.Errorf("codes.WithTx calls = %d, want 1", cf.codes.withTxCalls)
 	}
-	if attempts.withTxCalls != 1 {
-		t.Errorf("attempts.WithTx calls = %d, want 1", attempts.withTxCalls)
+	if cf.attempts.withTxCalls != 1 {
+		t.Errorf("attempts.WithTx calls = %d, want 1", cf.attempts.withTxCalls)
 	}
-	if sessions.withTxCalls != 1 {
-		t.Errorf("sessions.WithTx calls = %d, want 1", sessions.withTxCalls)
+	if cf.sessions.withTxCalls != 1 {
+		t.Errorf("sessions.WithTx calls = %d, want 1", cf.sessions.withTxCalls)
 	}
-	if audit.withTxCalls != 1 {
-		t.Errorf("audit.WithTx calls = %d, want 1", audit.withTxCalls)
+	if cf.audit.withTxCalls != 1 {
+		t.Errorf("audit.WithTx calls = %d, want 1", cf.audit.withTxCalls)
 	}
 
 	// The same transactional instances are handed to work.
-	if got.users != users || got.codes != codes || got.attempts != attempts ||
-		got.sessions != sessions {
+	if got.users != cf.users || got.codes != cf.codes || got.attempts != cf.attempts ||
+		got.sessions != cf.sessions {
 		t.Error("work received stores that do not match the bound repositories")
 	}
 
 	// UoW commits on nil error and leaves no transaction open.
-	if b.committed != 1 {
-		t.Errorf("committed = %d, want 1", b.committed)
+	if cf.b.committed != 1 {
+		t.Errorf("committed = %d, want 1", cf.b.committed)
 	}
-	if b.rolledBack != 0 {
-		t.Errorf("rolledBack = %d, want 0", b.rolledBack)
+	if cf.b.rolledBack != 0 {
+		t.Errorf("rolledBack = %d, want 0", cf.b.rolledBack)
 	}
-	if b.open != 0 {
-		t.Errorf("open = %d, want 0 (transaction left open)", b.open)
+	if cf.b.open != 0 {
+		t.Errorf("open = %d, want 0 (transaction left open)", cf.b.open)
 	}
 }
 
 // TestRunInTx_PanicRollsBackAndRepanics proves a panic inside work rolls the
 // transaction back and re-panics, so a panicking use case never leaks a tx.
 func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
-	f, b, _, _, _, _, _ := newCountingFactory(t)
+	cf := newCountingFactory(t)
 
 	panicVal := storesSentinelError{"kaboom"}
 	defer func() {
@@ -219,18 +233,18 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 		if !ok || got.msg != panicVal.msg {
 			t.Fatalf("recovered %v, want %v", r, panicVal)
 		}
-		if b.committed != 0 {
-			t.Errorf("committed = %d, want 0 on panic", b.committed)
+		if cf.b.committed != 0 {
+			t.Errorf("committed = %d, want 0 on panic", cf.b.committed)
 		}
-		if b.rolledBack != 1 {
-			t.Errorf("rolledBack = %d, want 1 on panic", b.rolledBack)
+		if cf.b.rolledBack != 1 {
+			t.Errorf("rolledBack = %d, want 1", cf.b.rolledBack)
 		}
-		if b.open != 0 {
-			t.Errorf("open = %d, want 0 (transaction left open)", b.open)
+		if cf.b.open != 0 {
+			t.Errorf("open = %d, want 0 (transaction left open)", cf.b.open)
 		}
 	}()
 
-	_ = f.runInTx(t.Context(), func(*txStores) error {
+	_ = cf.f.runInTx(t.Context(), func(*txStores) error {
 		panic(panicVal)
 	})
 	t.Fatal("expected runInTx to re-panic")
@@ -239,24 +253,24 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 // TestRunInTx_RollsBackOnWorkError proves a non-nil work error rolls the
 // transaction back and is returned to the caller.
 func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
-	f, b, _, _, _, _, _ := newCountingFactory(t)
+	cf := newCountingFactory(t)
 
 	workErr := errors.New("business rule violated")
-	err := f.runInTx(t.Context(), func(*txStores) error {
+	err := cf.f.runInTx(t.Context(), func(*txStores) error {
 		return workErr
 	})
 
 	if !errors.Is(err, workErr) {
 		t.Fatalf("runInTx returned %v, want %v", err, workErr)
 	}
-	if b.committed != 0 {
-		t.Errorf("committed = %d, want 0 on work error", b.committed)
+	if cf.b.committed != 0 {
+		t.Errorf("committed = %d, want 0 on work error", cf.b.committed)
 	}
-	if b.rolledBack != 1 {
-		t.Errorf("rolledBack = %d, want 1 on work error", b.rolledBack)
+	if cf.b.rolledBack != 1 {
+		t.Errorf("rolledBack = %d, want 1 on work error", cf.b.rolledBack)
 	}
-	if b.open != 0 {
-		t.Errorf("open = %d, want 0 (transaction left open)", b.open)
+	if cf.b.open != 0 {
+		t.Errorf("open = %d, want 0 (transaction left open)", cf.b.open)
 	}
 }
 

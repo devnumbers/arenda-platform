@@ -292,6 +292,40 @@ func TestSyncPayment_AppliesProviderRefund(t *testing.T) {
 	}
 }
 
+// seedPendingPayment seeds a pending upgrade payment of a payer still on a
+// paid tariff and returns it.
+func (h *refundIntegrationHarness) seedPendingPayment(t *testing.T) domain.SubscriptionPayment {
+	t.Helper()
+	pendingSub := h.seedPaidSubscription(t, domain.TariffPro)
+	pendingResult, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), pendingSub.UserID, billingapp.ChangeTariffRequest{
+		TariffName: domain.TariffBusiness,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff(upgrade): %v", err)
+	}
+	pendingPayment, err := h.payments.GetByID(h.ctx(), pendingResult.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	return pendingPayment
+}
+
+// refundedPayment seeds an upgraded payment, finalizes it through the webhook,
+// refunds it, and returns the stored payment.
+func (h *refundIntegrationHarness) refundedPayment(t *testing.T) domain.SubscriptionPayment {
+	t.Helper()
+	payment := h.succeededUpgradePayment(t)
+	if err := h.paymentsSvc.RefundPayment(h.ctx(), h.adminID, payment.ID); err != nil {
+		t.Fatalf("RefundPayment: %v", err)
+	}
+	stored, err := h.payments.GetByID(h.ctx(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID(refunded): %v", err)
+	}
+	return stored
+}
+
 // TestAdminPayments_ListAndFilters proves the admin payment views (issue
 // #254): the listing resolves the payer's phone (plaintext and encrypted),
 // the subscription-status filter narrows by the payer's current subscription,
@@ -305,18 +339,7 @@ func TestAdminPayments_ListAndFilters(t *testing.T) {
 		t.Fatalf("RefundPayment: %v", err)
 	}
 	// A pending payment of another payer still on the paid tariff.
-	pendingSub := h.seedPaidSubscription(t, domain.TariffPro)
-	pendingResult, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), pendingSub.UserID, billingapp.ChangeTariffRequest{
-		TariffName: domain.TariffBusiness,
-		Period:     domain.PeriodMonth,
-	})
-	if err != nil {
-		t.Fatalf("ChangeTariff(upgrade): %v", err)
-	}
-	pendingPayment, err := h.payments.GetByID(h.ctx(), pendingResult.PaymentID)
-	if err != nil {
-		t.Fatalf("GetByID: %v", err)
-	}
+	pendingPayment := h.seedPendingPayment(t)
 
 	// The full listing carries both payments with their tariffs resolved.
 	views, total, err := h.paymentsSvc.ListAdminPayments(h.ctx(), billingapp.AdminPaymentFilters{})
@@ -374,8 +397,17 @@ func TestAdminPayments_ListAndFilters(t *testing.T) {
 		t.Fatalf("user filter = %d/%v, want exactly the pending payment", userTotal, userViews)
 	}
 
-	// A payer with an encrypted phone is found by the phone filter and the
-	// phone is decrypted in the views.
+	// The single-payment view and the filter whitelist are covered by
+	// TestAdminPayments_GetAdminPaymentAndInvalidFilters.
+}
+
+// TestAdminPayments_PhoneFilterDecryptsEncryptedPhone proves a payer with an
+// encrypted phone is found by the phone filter and the phone is decrypted in
+// the views (issue #254).
+func TestAdminPayments_PhoneFilterDecryptsEncryptedPhone(t *testing.T) {
+	h := newRefundIntegrationHarness(t)
+
+	pendingPayment := h.seedPendingPayment(t)
 	encryptedUser := h.seedUser()
 	encryptedPhone, err := h.encryptor.DeterministicEncrypt(h.ctx(), "+79990001111")
 	if err != nil {
@@ -409,8 +441,16 @@ func TestAdminPayments_ListAndFilters(t *testing.T) {
 	if phoneViews[0].UserPhone != "+79990001111" {
 		t.Fatalf("decrypted phone = %q, want +79990001111", phoneViews[0].UserPhone)
 	}
+}
 
-	// The single-payment view resolves the same shape.
+// TestAdminPayments_GetAdminPaymentAndInvalidFilters proves the single-payment
+// view resolves the same shape as the listing, filters outside the whitelist
+// answer ErrInvalidFilter, and an unknown payment answers not found.
+func TestAdminPayments_GetAdminPaymentAndInvalidFilters(t *testing.T) {
+	h := newRefundIntegrationHarness(t)
+
+	refundedPayment := h.refundedPayment(t)
+
 	got, err := h.paymentsSvc.GetAdminPayment(h.ctx(), refundedPayment.ID)
 	if err != nil {
 		t.Fatalf("GetAdminPayment: %v", err)

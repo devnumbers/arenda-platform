@@ -28,10 +28,10 @@ func NewFreeReminderHandlers(
 	svc *notificationsapp.FreeReminderService,
 	reminders *notificationsapp.ReminderService,
 	properties *propertiesapp.PropertyService,
-	clock clock.Clock,
+	clk clock.Clock,
 	logger *slog.Logger,
 ) *FreeReminderHandlers {
-	return &FreeReminderHandlers{svc: svc, reminders: reminders, properties: properties, clock: clock, logger: logger}
+	return &FreeReminderHandlers{svc: svc, reminders: reminders, properties: properties, clock: clk, logger: logger}
 }
 
 func (h *FreeReminderHandlers) handleFreeReminderError(w http.ResponseWriter, r *http.Request, err error, resource string) {

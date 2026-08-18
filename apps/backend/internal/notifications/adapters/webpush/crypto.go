@@ -203,7 +203,9 @@ func (m *encryptedMessage) Bytes() []byte {
 // hmacSHA256 returns HMAC-SHA256(key, data).
 func hmacSHA256(key, data []byte) []byte {
 	h := hmac.New(sha256.New, key)
-	h.Write(data)
+	// hash.Hash documents that Write never returns an error; the discard is
+	// explicit rather than silent.
+	_, _ = h.Write(data)
 	return h.Sum(nil)
 }
 

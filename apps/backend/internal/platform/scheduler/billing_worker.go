@@ -50,7 +50,7 @@ type BillingWorker struct {
 }
 
 // NewBillingWorker creates a new billing lifecycle worker.
-func NewBillingWorker(renewals RenewalProcessor, scheduled ScheduledChangeProcessor, pool *pgxpool.Pool, clock clock.Clock, interval time.Duration, logger *slog.Logger) *BillingWorker {
+func NewBillingWorker(renewals RenewalProcessor, scheduled ScheduledChangeProcessor, pool *pgxpool.Pool, clk clock.Clock, interval time.Duration, logger *slog.Logger) *BillingWorker {
 	if interval <= 0 {
 		interval = time.Hour
 	}
@@ -61,7 +61,7 @@ func NewBillingWorker(renewals RenewalProcessor, scheduled ScheduledChangeProces
 		renewals:  renewals,
 		scheduled: scheduled,
 		pool:      pool,
-		clock:     clock,
+		clock:     clk,
 		interval:  interval,
 		logger:    logger,
 	}
@@ -173,20 +173,19 @@ func (w *BillingWorker) tick(ctx context.Context) error {
 // advisory lock. The returned release function releases the lock and returns
 // the dedicated connection to the pool; it must be called exactly once when the
 // caller no longer needs the lock.
-func (w *BillingWorker) acquireTickLock(ctx context.Context) (bool, func(context.Context), error) {
+func (w *BillingWorker) acquireTickLock(ctx context.Context) (acquired bool, release func(context.Context), err error) {
 	conn, err := w.pool.Acquire(ctx)
 	if err != nil {
 		return false, nil, fmt.Errorf("acquire db connection for lock: %w", err)
 	}
 
-	release := func(releaseCtx context.Context) {
+	release = func(releaseCtx context.Context) {
 		if _, unlockErr := conn.Exec(releaseCtx, "SELECT pg_advisory_unlock($1)", billingWorkerLockKey); unlockErr != nil {
 			w.logger.ErrorContext(releaseCtx, "billing worker failed to release advisory lock", "error", sanitize.Error(unlockErr))
 		}
 		conn.Release()
 	}
 
-	var acquired bool
 	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", billingWorkerLockKey).Scan(&acquired); err != nil {
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()

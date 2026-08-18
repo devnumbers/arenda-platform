@@ -35,6 +35,16 @@ Adding a new bounded context — checklist:
 - Return sentinels **unwrapped** from domain and application code. Wrap with `%w` only when adding information a caller needs (which operation, which id) — never re-wrap a sentinel into an opaque error on a path where the caller must match it.
 - Matching happens with `errors.Is` **at the transport edge only** — `writeBillingError` in `billing/adapters/http` and `httpsupport.UserFacingDetail` are the patterns: one place per edge maps application errors to problem details and to the user-facing Russian message. Layer-to-layer `errors.Is` switching in the middle of the stack is a smell.
 - Error text is a lowercase, unpunctuated continuation of the context (`staticcheck` ST1005 enforces form; the policy here is content: what failed + the identifying value).
+- **Handle an error once.** One error, one handler: log it, map it to a response, or wrap-and-return it — never two on the same path. A returned error is the caller's to handle; logging it locally and returning it too produces double reporting and log spam (`revive unhandled-error` catches the statement-position calls; the "once" discipline above it is review's to check). The sanctioned discards are explicit: `_, _ = fmt.Fprintf(os.Stderr, ...)` in test teardown and `hash.Hash.Write` (documented never-fail) — an intentional discard says so with a comment.
+
+## Process lifetime
+
+- **Exit-политика: the process exits only in `cmd/`.** `os.Exit`/`log.Fatal*` live in the composition root (startup failures, signal-driven shutdown); everything under `internal/` returns errors upward so deferred cleanup and graceful shutdown stay possible (enforced by forbidigo in `.golangci.yml`, bar #323). The one adjacent idiom: `TestMain` relies on the Go 1.15+ test wrapper exiting with `m.Run`'s result — use `defer` for teardown, not `os.Exit(code)`.
+
+## Domain constructors and validation
+
+- **Domain constructors validate at creation.** `domain.NewX(...)` either returns a valid aggregate/value or an error — an invalid domain value is unrepresentable. Do not add a `Validate()` method that a caller might forget; when a constructor grows past a field check, decompose it (the `Load` config precedent: per-section loaders), don't grow a branch monster. Mapping of constructor errors to user-facing text still happens at the transport edge only.
+- **Ports get static conformance assertions.** Every consumer-declared port gets a compile-time check at the adapter side: `var _ ExpiredDeleter = (*fakeDeleter)(nil)` (see `identity/adapters/scheduler/cleaner_test.go`) — the wiring survives renames without a runtime surprise. One assertion per adapter at the assignment or test site; do not collect them in a central file.
 
 ## Concurrency and workers
 

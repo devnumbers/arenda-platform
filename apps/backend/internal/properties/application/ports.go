@@ -103,7 +103,7 @@ type OccupancyProvider interface {
 // unarchiving a property.
 type PropertyBillingLifecycle interface {
 	Suspend(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error
-	Resume(ctx context.Context, propertyID uuid.UUID, scope uuid.UUID, asOf time.Time) error
+	Resume(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error
 	// CompleteOpenLeases force-completes all open leases of the property,
 	// applying the same side effects as a user-initiated lease completion.
 	CompleteOpenLeases(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) error
@@ -142,7 +142,7 @@ type LeaseRepository interface {
 
 // PhotoStorage persists uploaded property photos and returns their public URL.
 type PhotoStorage interface {
-	Upload(ctx context.Context, key string, contentType string, size int64, data io.Reader) (string, error)
+	Upload(ctx context.Context, key, contentType string, size int64, data io.Reader) (string, error)
 	Delete(ctx context.Context, key string) error
 	HeadBucket(ctx context.Context) error
 }

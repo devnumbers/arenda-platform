@@ -305,7 +305,7 @@ func TestProviderParseWebhook(t *testing.T) {
 	}
 }
 
-func TestProviderBindingAPIs(t *testing.T) {
+func TestProviderAddPaymentMethodFromToken(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	ctx := context.Background()
 
@@ -326,9 +326,15 @@ func TestProviderBindingAPIs(t *testing.T) {
 	if _, err := p.AddPaymentMethodFromToken(ctx, "c1", ""); err == nil {
 		t.Error("expected AddPaymentMethodFromToken to require a token")
 	}
+}
 
-	// A started binding is pending until confirmed and its form URL points at
-	// the local confirmation endpoint (issue #251).
+// TestProviderBindingAPIs drives the binding lifecycle: a started binding is
+// pending until confirmed, its form URL points at the local confirmation
+// endpoint (issue #251), and confirming completes it idempotently.
+func TestProviderBindingAPIs(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	ctx := context.Background()
+
 	bind, err := p.BindPaymentMethod(ctx, application.BindMethodRequest{CustomerRef: "c1"})
 	if err != nil {
 		t.Fatalf("BindPaymentMethod error: %v", err)
@@ -378,6 +384,14 @@ func TestProviderBindingAPIs(t *testing.T) {
 		t.Fatalf("repeat confirm changed the charge token: %q vs %q",
 			again.MethodBound.Method.ChargeToken, event.MethodBound.Method.ChargeToken)
 	}
+}
+
+// TestProviderProgrammedBindingStateAndRemoval proves programmed states take
+// precedence over real entries (tests can force outcomes the local flow cannot
+// produce), and that removing a method empties the listing.
+func TestProviderProgrammedBindingStateAndRemoval(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	ctx := context.Background()
 
 	// An unknown request key is a forgotten binding, not a hard failure.
 	if _, err := p.PaymentMethodBinding(ctx, "unknown"); !errors.Is(err, application.ErrProviderBindingNotFound) {
@@ -387,14 +401,12 @@ func TestProviderBindingAPIs(t *testing.T) {
 		t.Errorf("ConfirmCardBinding(unknown) error = %v, want ErrProviderBindingNotFound", err)
 	}
 
-	// Programmed states still take precedence over real entries, so tests can
-	// force outcomes the local flow cannot produce.
 	method := application.SavedMethod{ProviderMethodID: "card-1", ChargeToken: "t"}
 	p.SetBindingState("binding-1", application.MethodBindingState{
 		Status: application.MethodBindingCompleted,
 		Method: &method,
 	})
-	state, err = p.PaymentMethodBinding(ctx, "binding-1")
+	state, err := p.PaymentMethodBinding(ctx, "binding-1")
 	if err != nil {
 		t.Fatalf("PaymentMethodBinding(programmed) error: %v", err)
 	}

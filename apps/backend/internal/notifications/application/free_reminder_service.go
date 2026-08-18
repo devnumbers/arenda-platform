@@ -87,11 +87,11 @@ func (s *FreeReminderService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
 func NewFreeReminderService(
 	repo FreeReminderRepository,
 	db transaction.Beginner,
-	clock clock.Clock,
+	clk clock.Clock,
 	tzResolver tzresolver.OwnerTimezoneResolver,
 	policy sharedpolicy.Policy,
 ) *FreeReminderService {
-	return &FreeReminderService{repo: repo, db: db, clock: clock, tzResolver: tzResolver, policy: policy}
+	return &FreeReminderService{repo: repo, db: db, clock: clk, tzResolver: tzResolver, policy: policy}
 }
 
 // WithTx returns a service bound to the provided transaction. The transaction-

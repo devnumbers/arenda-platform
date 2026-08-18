@@ -1,7 +1,6 @@
 package smtp
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -170,6 +169,15 @@ func messageIDDomain(from, fallback string) string {
 	return fallback
 }
 
+// writeMIMEPart appends one multipart/alternative part to the message.
+// strings.Builder writes never fail, so no error handling is needed.
+func writeMIMEPart(b *strings.Builder, boundary, contentType, body string) {
+	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("Content-Type: " + contentType + "\r\n")
+	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+	b.WriteString(body + "\r\n\r\n")
+}
+
 func (s *Sender) buildMessage(msg mailer.Message) []byte {
 	boundary := uuid.Must(uuid.NewV7()).String()
 	messageID := fmt.Sprintf("<%s@%s>", uuid.Must(uuid.NewV7()).String(), messageIDDomain(s.cfg.From, s.cfg.Host))
@@ -185,7 +193,7 @@ func (s *Sender) buildMessage(msg mailer.Message) []byte {
 	// ourselves; RFC 2047 encoded-words must not be wrapped in quotes.
 	fromHeader := fmt.Sprintf("%s <%s>", quoteDisplayName(encodedName), s.cfg.From)
 
-	var buf bytes.Buffer
+	var buf strings.Builder
 	headers := []string{
 		"From: " + fromHeader,
 		"To: " + strings.Join(msg.To, ", "),
@@ -197,25 +205,20 @@ func (s *Sender) buildMessage(msg mailer.Message) []byte {
 		"Reply-To: " + s.cfg.From,
 	}
 	for _, h := range headers {
-		fmt.Fprintf(&buf, "%s\r\n", h)
+		buf.WriteString(h)
+		buf.WriteString("\r\n")
 	}
-	fmt.Fprint(&buf, "\r\n")
+	buf.WriteString("\r\n")
 
 	if msg.TextBody != "" {
-		fmt.Fprintf(&buf, "--%s\r\n", boundary)
-		fmt.Fprintf(&buf, "Content-Type: text/plain; charset=UTF-8\r\n")
-		fmt.Fprintf(&buf, "Content-Transfer-Encoding: 8bit\r\n\r\n")
-		fmt.Fprintf(&buf, "%s\r\n\r\n", msg.TextBody)
+		writeMIMEPart(&buf, boundary, "text/plain; charset=UTF-8", msg.TextBody)
 	}
 
 	if msg.HTMLBody != "" {
-		fmt.Fprintf(&buf, "--%s\r\n", boundary)
-		fmt.Fprintf(&buf, "Content-Type: text/html; charset=UTF-8\r\n")
-		fmt.Fprintf(&buf, "Content-Transfer-Encoding: 8bit\r\n\r\n")
-		fmt.Fprintf(&buf, "%s\r\n\r\n", msg.HTMLBody)
+		writeMIMEPart(&buf, boundary, "text/html; charset=UTF-8", msg.HTMLBody)
 	}
 
-	fmt.Fprintf(&buf, "--%s--\r\n", boundary)
+	buf.WriteString("--" + boundary + "--\r\n")
 
-	return buf.Bytes()
+	return []byte(buf.String())
 }

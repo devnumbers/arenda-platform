@@ -21,8 +21,8 @@ type PushSubscriptionService struct {
 }
 
 // NewPushSubscriptionService creates a new push subscription service.
-func NewPushSubscriptionService(repo PushSubscriptionRepository, clock clock.Clock) *PushSubscriptionService {
-	return &PushSubscriptionService{repo: repo, clock: clock}
+func NewPushSubscriptionService(repo PushSubscriptionRepository, clk clock.Clock) *PushSubscriptionService {
+	return &PushSubscriptionService{repo: repo, clock: clk}
 }
 
 // UpsertPushSubscriptionInput is the user-supplied data for registering a push

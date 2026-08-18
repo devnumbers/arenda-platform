@@ -36,7 +36,7 @@ func formatLoginCodeTTL(d time.Duration) string {
 // *mailer.Renderer or a test stub — without the platform/mailer package knowing
 // about identity. Only the Render method is needed here.
 type renderer interface {
-	Render(name string, data any) (plain string, html string, err error)
+	Render(name string, data any) (plain, html string, err error)
 }
 
 // Sender renders and sends login code emails through the shared mailer.

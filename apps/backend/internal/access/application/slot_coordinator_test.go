@@ -539,6 +539,34 @@ func TestSlotCoordinator_RecoverSuspended_BatchTieBreakOpenLeaseFirst(t *testing
 	f.assertStatus(t, mNo, pNoLease, domain.MemberStatusSuspended, "no-lease suspended should stay suspended")
 }
 
+// enforceRecipientLimitPool is one seeded membership pool of an
+// EnforceRecipientLimit scenario: the active member, its owner and recipient,
+// the recipient's property limit, and the expected outcome.
+type enforceRecipientLimitPool struct {
+	member, property, owner, recipient uuid.UUID
+	activeAt                           time.Time
+	recipientLimit                     int
+	want                               domain.MemberStatus
+	wantMsg                            string
+}
+
+// runEnforceRecipientLimit seeds the pools, runs EnforceRecipientLimit for the
+// actor, and asserts every pool's outcome — the shared body of the scenario
+// tests that differ only in the pools they seed.
+func (f *coordinatorFixture) runEnforceRecipientLimit(t *testing.T, actor uuid.UUID, pools []enforceRecipientLimitPool) {
+	t.Helper()
+	for _, p := range pools {
+		f.addActiveMember(t, p.member, p.property, p.owner, p.recipient, p.activeAt)
+		f.limiter.set(p.recipient, p.recipientLimit)
+	}
+	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, actor, "downgrade"); err != nil {
+		t.Fatalf("EnforceRecipientLimit: %v", err)
+	}
+	for _, p := range pools {
+		f.assertStatus(t, p.member, p.property, p.want, p.wantMsg)
+	}
+}
+
 // Scenario J: EnforceRecipientLimit — multiple recipients of the same owner are
 // each evaluated against their own limit.
 func TestSlotCoordinator_EnforceRecipientLimit_MultipleRecipients(t *testing.T) {
@@ -546,24 +574,13 @@ func TestSlotCoordinator_EnforceRecipientLimit_MultipleRecipients(t *testing.T) 
 	f := newCoordinatorFixture()
 
 	owner := uuid.Must(uuid.NewV7())
-	p1 := uuid.Must(uuid.NewV7())
-	p2 := uuid.Must(uuid.NewV7())
 	r1 := uuid.Must(uuid.NewV7()) // limit 0 → suspended
 	r2 := uuid.Must(uuid.NewV7()) // limit 1 → stays active
-	m1 := uuid.Must(uuid.NewV7())
-	m2 := uuid.Must(uuid.NewV7())
 
-	f.addActiveMember(t, m1, p1, owner, r1, t1Old)
-	f.addActiveMember(t, m2, p2, owner, r2, t2New)
-	f.limiter.set(r1, 0)
-	f.limiter.set(r2, 1)
-
-	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, owner, "downgrade"); err != nil {
-		t.Fatalf("EnforceRecipientLimit: %v", err)
-	}
-
-	f.assertStatus(t, m1, p1, domain.MemberStatusSuspended, "r1 (limit 0) suspended")
-	f.assertStatus(t, m2, p2, domain.MemberStatusActive, "r2 (limit 1) stays active")
+	f.runEnforceRecipientLimit(t, owner, []enforceRecipientLimitPool{
+		{member: uuid.Must(uuid.NewV7()), property: uuid.Must(uuid.NewV7()), owner: owner, recipient: r1, activeAt: t1Old, recipientLimit: 0, want: domain.MemberStatusSuspended, wantMsg: "r1 (limit 0) suspended"},
+		{member: uuid.Must(uuid.NewV7()), property: uuid.Must(uuid.NewV7()), owner: owner, recipient: r2, activeAt: t2New, recipientLimit: 1, want: domain.MemberStatusActive, wantMsg: "r2 (limit 1) stays active"},
+	})
 }
 
 // Scenario N: EnforceRecipientLimit — the argument is the downgrading user
@@ -604,23 +621,15 @@ func TestSlotCoordinator_EnforceRecipientLimit_OwnerAndRecipientInOneCall(t *tes
 
 	user := uuid.Must(uuid.NewV7())
 	ownProp := uuid.Must(uuid.NewV7())
-	foreignOwner := uuid.Must(uuid.NewV7())
 	foreignProp := uuid.Must(uuid.NewV7())
-	member := uuid.Must(uuid.NewV7())   // member of the user's own property
-	mOwn := uuid.Must(uuid.NewV7())     // the member's membership on the user's property
-	mForeign := uuid.Must(uuid.NewV7()) // the user's membership on the foreign property
+	member := uuid.Must(uuid.NewV7()) // member of the user's own property
 
-	f.addActiveMember(t, mOwn, ownProp, user, member, t1Old)
-	f.addActiveMember(t, mForeign, foreignProp, foreignOwner, user, t2New)
-	f.limiter.set(member, 0) // the member's pool (1 shared) exceeds → suspended
-	f.limiter.set(user, 0)   // the user's own pool (1 shared) exceeds → suspended
-
-	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, user, "downgrade"); err != nil {
-		t.Fatalf("EnforceRecipientLimit: %v", err)
-	}
-
-	f.assertStatus(t, mOwn, ownProp, domain.MemberStatusSuspended, "member of the user's property suspended")
-	f.assertStatus(t, mForeign, foreignProp, domain.MemberStatusSuspended, "user's own foreign membership suspended")
+	// The member's pool (1 shared) and the user's own pool (1 shared) both
+	// exceed their limits and are suspended in one call.
+	f.runEnforceRecipientLimit(t, user, []enforceRecipientLimitPool{
+		{member: uuid.Must(uuid.NewV7()), property: ownProp, owner: user, recipient: member, activeAt: t1Old, recipientLimit: 0, want: domain.MemberStatusSuspended, wantMsg: "member of the user's property suspended"},
+		{member: uuid.Must(uuid.NewV7()), property: foreignProp, owner: uuid.Must(uuid.NewV7()), recipient: user, activeAt: t2New, recipientLimit: 0, want: domain.MemberStatusSuspended, wantMsg: "user's own foreign membership suspended"},
+	})
 }
 
 // Scenario K: RecoverSuspendedForProperty — archiving a shared object frees a
