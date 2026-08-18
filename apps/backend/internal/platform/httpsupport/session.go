@@ -23,7 +23,6 @@ func SessionCookieName(secure bool) string {
 
 func SetSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, secure bool) {
 	maxAge := max(1, int(time.Until(expiresAt).Seconds()))
-	//nolint:gosec // Secure is configured dynamically based on APP_ENV; SameSite is fixed to Lax (ADR 0018).
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName(secure),
 		Value:    token,
@@ -37,7 +36,6 @@ func SetSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time, 
 }
 
 func ClearSessionCookie(w http.ResponseWriter, secure bool) {
-	//nolint:gosec // Secure is configured dynamically based on APP_ENV; SameSite is fixed to Lax (ADR 0018).
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName(secure),
 		Value:    "",

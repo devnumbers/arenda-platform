@@ -242,6 +242,13 @@ linters:
         - stdversion       # ЭТАП 1: вызовы стандартной библиотеки младше go.mod-версии
     exhaustive:
       default-signifies-exhaustive: true
+    gosec:
+      # G124 (cookie SameSite): правило требует Strict, а ADR 0041 фиксирует
+      # Lax как продуктовое решение (ADR 0018) — HttpOnly всегда, Secure по
+      # APP_ENV. Сигнал правила в этих условиях нулевой; исключение живёт,
+      # пока стоит ADR 0018 (бар #323, сетка #325, тикет #343).
+      excludes:
+        - G124
     staticcheck:
       # ЭТАП 1 (тикет #336): ST1016/ST1020-ST1022 возвращены — 0 нарушений
       # (research #321, блок 2.1).
@@ -400,6 +407,15 @@ linters:
       - linters: [forbidigo]
         path: ^apps/backend/cmd/
         text: 'exit policy \(bar #323\)'
+      # ADR 0042 (тикет #343, сетка #325): ScalarBaseMult в webpush/vapid.go —
+      # единственный stdlib-путь P-256 scalar→point для восстановления
+      # ecdsa.PrivateKey под ES256-подпись VAPID JWT (RFC 8292); crypto/ecdh
+      # обратного преобразования не даёт. Правило точечное (lint+path+text),
+      # поэтому не маскирует другие SA1019 в модуле. Удаляется тикетом
+      # ecdh-перехода #345 — warn-unused выше подсветит его, если забыть.
+      - linters: [staticcheck]
+        path: internal/notifications/adapters/webpush/vapid\.go
+        text: ScalarBaseMult
 
 formatters:
   enable:

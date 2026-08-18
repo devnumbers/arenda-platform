@@ -98,7 +98,7 @@ func newVAPIDSigner(subject, publicKeyB64, privateKeyB64 string) (*vapidSigner, 
 	// crypto/elliptic scalar-base multiplication is the only stdlib route from a
 	// raw P-256 scalar to the ecdsa.PrivateKey needed for ES256 signing.
 	curve := elliptic.P256()
-	x, y := curve.ScalarBaseMult(dBytes) //nolint:staticcheck // no ecdsa alternative for scalar→point on P-256
+	x, y := curve.ScalarBaseMult(dBytes)
 	priv := &ecdsa.PrivateKey{
 		PublicKey: ecdsa.PublicKey{Curve: curve, X: x, Y: y},
 		D:         new(big.Int).SetBytes(dBytes),
