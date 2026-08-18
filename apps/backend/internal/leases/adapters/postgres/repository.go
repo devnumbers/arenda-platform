@@ -19,6 +19,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	propdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -56,9 +57,8 @@ func (r *LeaseRepository) Create(ctx context.Context, scope uuid.UUID, lease dom
 		EndDate:              pgconv.DatePtrToPgtype(lease.EndDate),
 		RentAmountKopecks:    lease.RentAmountKopecks,
 		DepositAmountKopecks: lease.DepositAmountKopecks,
-		//nolint:gosec // PaymentDay is validated to be 1-31 in domain.
-		PaymentDay: int32(lease.PaymentDay),
-		Comment:    pgtype.Text{String: lease.Comment, Valid: true},
+		PaymentDay:           shared.ToInt32Clamped(lease.PaymentDay),
+		Comment:              pgtype.Text{String: lease.Comment, Valid: true},
 	})
 	if err != nil {
 		if isOpenLeaseUniqueViolation(err) {
@@ -200,9 +200,8 @@ func (r *LeaseRepository) Update(ctx context.Context, scope uuid.UUID, lease dom
 		EndDate:              pgconv.DatePtrToPgtype(lease.EndDate),
 		RentAmountKopecks:    lease.RentAmountKopecks,
 		DepositAmountKopecks: lease.DepositAmountKopecks,
-		//nolint:gosec // PaymentDay is validated to be 1-31 in domain.
-		PaymentDay: int32(lease.PaymentDay),
-		Comment:    pgtype.Text{String: lease.Comment, Valid: true},
+		PaymentDay:           shared.ToInt32Clamped(lease.PaymentDay),
+		Comment:              pgtype.Text{String: lease.Comment, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -251,9 +250,8 @@ func (r *LeaseRepository) GetOpenLeaseByProperty(ctx context.Context, scope, pro
 
 func (r *LeaseRepository) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Lease, error) {
 	rows, err := r.q().ListOpenLeasesWithPastEndDate(ctx, postgres.ListOpenLeasesWithPastEndDateParams{
-		AsOf: pgconv.DateToPgtype(asOf),
-		//nolint:gosec // Reconciliation batch size is configured and bounded.
-		Limit: int32(limit),
+		AsOf:  pgconv.DateToPgtype(asOf),
+		Limit: shared.ToInt32Clamped(limit),
 	})
 	if err != nil {
 		return nil, err
@@ -567,16 +565,14 @@ func (r *RecurringOperationRepository) Create(ctx context.Context, op domain.Rec
 		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
-		//nolint:gosec // PaymentDay is validated to be 1-31 in domain.
-		PaymentDay:  int32(op.PaymentDay),
-		EndDate:     pgconv.DatePtrToPgtype(op.EndDate),
-		Periodicity: string(op.Periodicity),
-		Status:      string(op.Status),
-		Comment:     pgtype.Text{String: op.Comment, Valid: true},
+		PaymentDay:    shared.ToInt32Clamped(op.PaymentDay),
+		EndDate:       pgconv.DatePtrToPgtype(op.EndDate),
+		Periodicity:   string(op.Periodicity),
+		Status:        string(op.Status),
+		Comment:       pgtype.Text{String: op.Comment, Valid: true},
 	}
 	if op.ReminderOffsetDays != nil {
-		//nolint:gosec // Reminder offset is bounded by application validation.
-		params.ReminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+		params.ReminderOffsetDays = pgtype.Int4{Int32: shared.ToInt32Clamped(*op.ReminderOffsetDays), Valid: true}
 	}
 	row, err := r.q().CreateRecurringOperation(ctx, params)
 	if err != nil {
@@ -679,16 +675,14 @@ func (r *RecurringOperationRepository) Update(ctx context.Context, op domain.Rec
 		Name:          op.Name,
 		AmountKopecks: op.AmountKopecks,
 		StartDate:     pgconv.DateToPgtype(op.StartDate),
-		//nolint:gosec // PaymentDay is validated to be 1-31 in domain.
-		PaymentDay:  int32(op.PaymentDay),
-		EndDate:     pgconv.DatePtrToPgtype(op.EndDate),
-		Periodicity: string(op.Periodicity),
-		Comment:     pgtype.Text{String: op.Comment, Valid: true},
-		OwnerID:     pgconv.UUIDToPgtype(op.OwnerID),
+		PaymentDay:    shared.ToInt32Clamped(op.PaymentDay),
+		EndDate:       pgconv.DatePtrToPgtype(op.EndDate),
+		Periodicity:   string(op.Periodicity),
+		Comment:       pgtype.Text{String: op.Comment, Valid: true},
+		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
 	}
 	if op.ReminderOffsetDays != nil {
-		//nolint:gosec // Reminder offset is bounded by application validation.
-		params.ReminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+		params.ReminderOffsetDays = pgtype.Int4{Int32: shared.ToInt32Clamped(*op.ReminderOffsetDays), Valid: true}
 	}
 	row, err := r.q().UpdateRecurringOperation(ctx, params)
 	if err != nil {
@@ -760,8 +754,7 @@ func (r *RecurringOperationRepository) ListByPropertyID(ctx context.Context, pro
 func (r *RecurringOperationRepository) SetReminderOffset(ctx context.Context, scope, recID uuid.UUID, offsetDays *int) error {
 	var reminderOffsetDays pgtype.Int4
 	if offsetDays != nil {
-		//nolint:gosec // Reminder offset is bounded by application validation.
-		reminderOffsetDays = pgtype.Int4{Int32: int32(*offsetDays), Valid: true}
+		reminderOffsetDays = pgtype.Int4{Int32: shared.ToInt32Clamped(*offsetDays), Valid: true}
 	}
 	_, err := r.q().UpdateRecurringOperationReminderOffset(ctx, postgres.UpdateRecurringOperationReminderOffsetParams{
 		ReminderOffsetDays: reminderOffsetDays,
@@ -870,8 +863,7 @@ func (r *OperationRepository) Create(ctx context.Context, op domain.Operation) (
 		Status:               string(op.Status),
 	}
 	if op.ReminderOffsetDays != nil {
-		//nolint:gosec // Reminder offset is bounded by application validation.
-		params.ReminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+		params.ReminderOffsetDays = pgtype.Int4{Int32: shared.ToInt32Clamped(*op.ReminderOffsetDays), Valid: true}
 	}
 	row, err := r.q().CreateOperation(ctx, params)
 	if err != nil {
@@ -889,8 +881,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, ops []domain.Opera
 	for i, op := range ops {
 		var reminderOffsetDays pgtype.Int4
 		if op.ReminderOffsetDays != nil {
-			//nolint:gosec // Reminder offset is bounded by application validation.
-			reminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+			reminderOffsetDays = pgtype.Int4{Int32: shared.ToInt32Clamped(*op.ReminderOffsetDays), Valid: true}
 		}
 		rows[i] = []any{
 			pgconv.UUIDToPgtype(op.ID),
@@ -948,8 +939,7 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, 
 	fromDate := pgconv.DatePtrToPgtype(filter.FromDate)
 	toDate := pgconv.DatePtrToPgtype(filter.ToDate)
 
-	//nolint:gosec // Pagination limit is bounded by the API layer.
-	limit := int32(filter.Limit)
+	limit := shared.ToInt32Clamped(filter.Limit)
 	if limit <= 0 {
 		limit = 100
 	}
@@ -974,8 +964,7 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, 
 			RecurringOperationID:      pgconv.UUIDToPgtype(filter.RecurringOperationID),
 			ExcludeArchivedProperties: filter.ExcludeArchivedProperties,
 			Limit:                     limit,
-			//nolint:gosec // Pagination offset is bounded by the API layer.
-			Offset: int32(filter.Offset),
+			Offset:                    shared.ToInt32Clamped(filter.Offset),
 		})
 		if err != nil {
 			return nil, err
@@ -995,8 +984,7 @@ func (r *OperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, 
 			RecurringOperationID:      pgconv.UUIDToPgtype(filter.RecurringOperationID),
 			ExcludeArchivedProperties: filter.ExcludeArchivedProperties,
 			Limit:                     limit,
-			//nolint:gosec // Pagination offset is bounded by the API layer.
-			Offset: int32(filter.Offset),
+			Offset:                    shared.ToInt32Clamped(filter.Offset),
 		})
 		if err != nil {
 			return nil, err
@@ -1074,8 +1062,7 @@ func (r *OperationRepository) ListOperationDatesByRecurringOperation(ctx context
 func (r *OperationRepository) UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, scope, recurringOperationID uuid.UUID, offsetDays *int, from time.Time) error {
 	var reminderOffsetDays pgtype.Int4
 	if offsetDays != nil {
-		//nolint:gosec // Reminder offset is bounded by application validation.
-		reminderOffsetDays = pgtype.Int4{Int32: int32(*offsetDays), Valid: true}
+		reminderOffsetDays = pgtype.Int4{Int32: shared.ToInt32Clamped(*offsetDays), Valid: true}
 	}
 	_, err := r.q().UpdateFutureGeneratedOperationReminderOffsets(ctx, postgres.UpdateFutureGeneratedOperationReminderOffsetsParams{
 		ReminderOffsetDays:   reminderOffsetDays,
@@ -1295,8 +1282,7 @@ func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (
 		Status:        string(op.Status),
 	}
 	if op.ReminderOffsetDays != nil {
-		//nolint:gosec // Reminder offset is bounded by application validation.
-		params.ReminderOffsetDays = pgtype.Int4{Int32: int32(*op.ReminderOffsetDays), Valid: true}
+		params.ReminderOffsetDays = pgtype.Int4{Int32: shared.ToInt32Clamped(*op.ReminderOffsetDays), Valid: true}
 	}
 	row, err := r.q().UpdateOperation(ctx, params)
 	if err != nil {
@@ -1342,8 +1328,7 @@ func (r *OperationRepository) ListPendingOperationsWithPastDate(ctx context.Cont
 	rows, err := r.q().ListPendingOperationsWithPastDate(ctx, postgres.ListPendingOperationsWithPastDateParams{
 		OwnerID: pgconv.UUIDToPgtype(scope),
 		AsOf:    pgconv.DateToPgtype(asOf),
-		//nolint:gosec // Batch size is configured and bounded by caller.
-		Limit: int32(limit),
+		Limit:   shared.ToInt32Clamped(limit),
 	})
 	if err != nil {
 		return nil, err
@@ -1362,9 +1347,8 @@ func (r *OperationRepository) ListPendingOperationsWithPastDate(ctx context.Cont
 
 func (r *OperationRepository) ListAllPendingOperationsWithPastDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Operation, error) {
 	rows, err := r.q().ListAllPendingOperationsWithPastDate(ctx, postgres.ListAllPendingOperationsWithPastDateParams{
-		AsOf: pgconv.DateToPgtype(asOf),
-		//nolint:gosec // Batch size is configured and bounded by caller.
-		Limit: int32(limit),
+		AsOf:  pgconv.DateToPgtype(asOf),
+		Limit: shared.ToInt32Clamped(limit),
 	})
 	if err != nil {
 		return nil, err

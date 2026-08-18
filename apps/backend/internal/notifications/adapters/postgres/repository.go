@@ -15,6 +15,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -172,10 +173,8 @@ func (r *ReminderRepository) ListByOwner(ctx context.Context, scope uuid.UUID, f
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
 		FilterByStatus:        filter.Status != nil,
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Offset: int32(filter.Offset),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Limit: int32(filter.Limit),
+		Offset:                shared.ToInt32Clamped(filter.Offset),
+		Limit:                 shared.ToInt32Clamped(filter.Limit),
 	}
 	if filter.Status != nil {
 		params.Status = string(postgres.NotificationStatus(*filter.Status))
@@ -197,10 +196,8 @@ func (r *ReminderRepository) ListByOperation(ctx context.Context, scope, operati
 	rows, err := r.q().ListRemindersByOperation(ctx, postgres.ListRemindersByOperationParams{
 		OwnerID:     pgconv.UUIDToPgtype(scope),
 		OperationID: pgconv.UUIDToPgtype(operationID),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Limit: int32(filter.Limit),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Offset: int32(filter.Offset),
+		Limit:       shared.ToInt32Clamped(filter.Limit),
+		Offset:      shared.ToInt32Clamped(filter.Offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
@@ -217,10 +214,8 @@ func (r *ReminderRepository) ListByLease(ctx context.Context, scope, leaseID uui
 	rows, err := r.q().ListRemindersByLease(ctx, postgres.ListRemindersByLeaseParams{
 		OwnerID: pgconv.UUIDToPgtype(scope),
 		LeaseID: pgconv.UUIDToPgtype(leaseID),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Limit: int32(filter.Limit),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Offset: int32(filter.Offset),
+		Limit:   shared.ToInt32Clamped(filter.Limit),
+		Offset:  shared.ToInt32Clamped(filter.Offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
@@ -238,10 +233,8 @@ func (r *ReminderRepository) ListByRecurringOperation(ctx context.Context, scope
 	rows, err := r.q().ListRemindersByRecurringOperation(ctx, postgres.ListRemindersByRecurringOperationParams{
 		OwnerID:              pgconv.UUIDToPgtype(scope),
 		RecurringOperationID: pgconv.UUIDToPgtype(recurringOpID),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Limit: int32(filter.Limit),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Offset: int32(filter.Offset),
+		Limit:                shared.ToInt32Clamped(filter.Limit),
+		Offset:               shared.ToInt32Clamped(filter.Offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
@@ -257,8 +250,7 @@ func (r *ReminderRepository) ListByRecurringOperation(ctx context.Context, scope
 func (r *ReminderRepository) ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error) {
 	rows, err := r.q().ListDueReminders(ctx, postgres.ListDueRemindersParams{
 		ScheduledAt: pgtype.Timestamptz{Time: before, Valid: true},
-		//nolint:gosec // Worker batch size is configured and bounded.
-		Limit: int32(limit),
+		Limit:       shared.ToInt32Clamped(limit),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list due reminders: %w", err)
@@ -278,8 +270,7 @@ func (r *ReminderRepository) ListUpcomingFreeRemindersByProperty(ctx context.Con
 		OwnerID:     pgconv.UUIDToPgtype(scope),
 		PropertyID:  pgconv.UUIDToPgtype(propertyID),
 		ScheduledAt: pgtype.Timestamptz{Time: from, Valid: true},
-		//nolint:gosec // Limit is bounded by the transport layer (max 100).
-		Limit: int32(limit),
+		Limit:       shared.ToInt32Clamped(limit),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list upcoming free reminders by property: %w", err)
@@ -344,8 +335,7 @@ func (r *ReminderRepository) MarkReminderSending(ctx context.Context, id uuid.UU
 func (r *ReminderRepository) ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error) {
 	rows, err := r.q().ListStaleSendingReminders(ctx, postgres.ListStaleSendingRemindersParams{
 		UpdatedAt: pgtype.Timestamptz{Time: staleBefore, Valid: true},
-		//nolint:gosec // Worker batch size is configured and bounded.
-		Limit: int32(limit),
+		Limit:     shared.ToInt32Clamped(limit),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list stale sending reminders: %w", err)

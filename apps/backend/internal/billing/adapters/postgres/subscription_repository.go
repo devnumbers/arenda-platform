@@ -12,6 +12,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -98,7 +99,7 @@ func subscriptionSelectionParams(sel application.SubscriptionSelection) postgres
 // type. The value is a small operational constant from the billing config
 // (default 100), never near the int32 bounds.
 func batchLimit(limit int) int32 {
-	return int32(limit) //nolint:gosec // bounded config constant, never overflows int32
+	return shared.ToInt32Clamped(limit)
 }
 
 // mapSubscriptions converts mapped rows, preserving the query order.

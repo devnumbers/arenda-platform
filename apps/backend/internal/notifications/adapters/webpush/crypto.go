@@ -184,9 +184,9 @@ func buildMessage(salt, asPublic, ciphertext []byte) *encryptedMessage {
 	var m encryptedMessage
 	copy(m.header[0:16], salt)
 	binary.BigEndian.PutUint32(m.header[16:20], recordSize)
-	// asPublic is always an uncompressed P-256 key (65 bytes, p256UncompressedSize),
-	// so the idlen octet fits in a byte by construction.
-	m.header[20] = byte(len(asPublic)) //nolint:gosec // G115: len is 65 by P-256 invariant
+	// asPublic is always an uncompressed P-256 key, so the idlen octet is the
+	// key size constant by construction.
+	m.header[20] = p256UncompressedSize
 	copy(m.header[21:21+len(asPublic)], asPublic)
 	m.ciphertext = ciphertext
 	return &m

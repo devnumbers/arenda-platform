@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -142,7 +142,7 @@ func (r *TariffRepository) ListAll(ctx context.Context) ([]domain.Tariff, error)
 // The domain bound is ≥ -1; anything above the column range is clamped — a
 // limit past two billion properties is unlimited in practice.
 func tariffLimitForColumn(limit int) int32 {
-	return int32(min(limit, math.MaxInt32)) //nolint:gosec // clamped to math.MaxInt32 by min above
+	return shared.ToInt32Clamped(limit)
 }
 
 // Create inserts a new tariff (issue #256). A unique violation on the name is

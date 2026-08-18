@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +12,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -102,14 +102,14 @@ func (r *AttemptRepository) Save(ctx context.Context, phone domain.Phone, userID
 		PhoneEncrypted: phoneEncrypted,
 	}
 	if delta <= 0 {
-		params.Failures = int32(min(window.Failures, math.MaxInt32)) //nolint:gosec // clamped to math.MaxInt32 by min above
+		params.Failures = shared.ToInt32Clamped(window.Failures)
 		if err := r.q().ResetLoginAttempt(ctx, params); err != nil {
 			return fmt.Errorf("reset login attempt: %w", err)
 		}
 		return nil
 	}
 	// Increment path: failures carries the delta, not the absolute value.
-	params.Failures = int32(min(delta, math.MaxInt32)) //nolint:gosec // clamped to math.MaxInt32 by min above
+	params.Failures = shared.ToInt32Clamped(delta)
 	if err := r.q().IncrementLoginAttempt(ctx, pgen.IncrementLoginAttemptParams(params)); err != nil {
 		return fmt.Errorf("increment login attempt: %w", err)
 	}

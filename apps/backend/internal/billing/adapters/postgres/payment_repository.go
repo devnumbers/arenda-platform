@@ -13,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -132,8 +133,8 @@ func (r *SubscriptionPaymentRepository) adminPaymentQueryParams(ctx context.Cont
 		SubscriptionStatus: filters.SubscriptionStatus,
 		Sort:               filters.Sort,
 		Order:              filters.Order,
-		Offset:             int32(filters.Offset), //nolint:gosec // bounded by the service normalization (<= 2^31)
-		Limit:              int32(filters.Limit),  //nolint:gosec // bounded by the service normalization (1..100)
+		Offset:             shared.ToInt32Clamped(filters.Offset),
+		Limit:              shared.ToInt32Clamped(filters.Limit),
 	}
 	if filters.UserID != nil {
 		params.UserID = pgtype.UUID{Bytes: *filters.UserID, Valid: true}
@@ -305,7 +306,7 @@ func mapCreatePaymentParams(p domain.SubscriptionPayment) postgres.CreateSubscri
 		Status:                string(p.Status),
 		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(p.RefundedAmountKopecks),
 		// charge_attempts is a bounded retry counter (config limit is 3).
-		ChargeAttempts: int32(p.ChargeAttempts), //nolint:gosec // small bounded counter, never overflows int32
+		ChargeAttempts: shared.ToInt32Clamped(p.ChargeAttempts),
 		ErrorCode:      pgconv.StringPtrToPgtype(p.ErrorCode),
 		SucceededAt:    pgconv.TimePtrToPgtype(p.SucceededAt),
 	}
@@ -320,7 +321,7 @@ func mapUpdatePaymentParams(p domain.SubscriptionPayment) postgres.UpdateSubscri
 		Status:                string(p.Status),
 		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(p.RefundedAmountKopecks),
 		// charge_attempts is a bounded retry counter (config limit is 3).
-		ChargeAttempts: int32(p.ChargeAttempts), //nolint:gosec // small bounded counter, never overflows int32
+		ChargeAttempts: shared.ToInt32Clamped(p.ChargeAttempts),
 		ErrorCode:      pgconv.StringPtrToPgtype(p.ErrorCode),
 		SucceededAt:    pgconv.TimePtrToPgtype(p.SucceededAt),
 	}

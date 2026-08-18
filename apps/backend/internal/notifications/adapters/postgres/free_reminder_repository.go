@@ -12,6 +12,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -126,10 +127,8 @@ func (r *FreeReminderRepository) ListByOwner(ctx context.Context, scope uuid.UUI
 	rows, err := r.q().ListFreeRemindersByOwner(ctx, postgres.ListFreeRemindersByOwnerParams{
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Limit: int32(limit),
-		//nolint:gosec // Pagination values are bounded by the transport layer.
-		Offset: int32(offset),
+		Limit:                 shared.ToInt32Clamped(limit),
+		Offset:                shared.ToInt32Clamped(offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list free reminders: %w", err)
@@ -146,8 +145,7 @@ func (r *FreeReminderRepository) ListByProperty(ctx context.Context, scope, prop
 	rows, err := r.q().ListFreeRemindersByProperty(ctx, postgres.ListFreeRemindersByPropertyParams{
 		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
-		//nolint:gosec // Limit is bounded by the caller.
-		Limit: int32(limit),
+		Limit:      shared.ToInt32Clamped(limit),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list free reminders by property: %w", err)
