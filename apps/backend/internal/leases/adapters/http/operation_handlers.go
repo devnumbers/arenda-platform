@@ -70,23 +70,23 @@ func handleLeaseOperationError(w http.ResponseWriter, r *http.Request, err, conf
 	case errors.Is(err, leasesapp.ErrInvalidInput), errors.Is(err, domain.ErrInvalidOperationType):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, leasesapp.ErrNotFound):
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", notFoundDetail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", notFoundDetail))
 	case errors.Is(err, leasesapp.ErrForbidden):
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, conflictErr), errors.Is(err, leasesapp.ErrArchivedProperty):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
 	default:
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }
 
@@ -126,14 +126,14 @@ func operationSortFromQuery(sort *openapi.OperationListSort) leasesapp.Operation
 func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.OperationCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create operation request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.ListOperationsByPropertyParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Request, params openapi.ListOperationsParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -269,7 +269,7 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -286,14 +286,14 @@ func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request,
 func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.OperationUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update operation request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -328,7 +328,7 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -344,7 +344,7 @@ func (h *OperationHandlers) DeleteOperation(w http.ResponseWriter, r *http.Reque
 func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -364,7 +364,7 @@ func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Req
 func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -384,14 +384,14 @@ func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *ht
 func (h *OperationHandlers) MoveOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.OperationMoveRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode move operation request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 

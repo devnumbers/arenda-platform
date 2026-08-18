@@ -29,8 +29,10 @@ type txBeginner interface {
 }
 
 const (
-	maxPhotoCount  = 10
-	maxPhotoSize   = 5 * 1024 * 1024 // 5 MiB
+	maxPhotoCount = 10
+	// MaxPhotoSize caps a single property photo upload; the HTTP adapter
+	// enforces the same bound while buffering a streamed multipart upload.
+	MaxPhotoSize   = 5 * 1024 * 1024 // 5 MiB
 	photoKeyPrefix = "properties"
 )
 
@@ -1097,13 +1099,20 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 	return properties[0], nil
 }
 
+// NewPhotoTooLargeError reports a photo upload whose byte size exceeds
+// MaxPhotoSize. The service size validation and the HTTP adapter's streaming
+// bound share it so the message is identical wherever the check fires.
+func NewPhotoTooLargeError(size int64) error {
+	return fmt.Errorf("%w: file size %d exceeds %d bytes", ErrInvalidInput, size, MaxPhotoSize)
+}
+
 // AddPropertyPhoto validates and uploads a photo for the given property.
 func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyID uuid.UUID, file io.Reader, filename, contentType string, size int64) (domain.Property, error) {
 	if _, ok := allowedPhotoContentTypes[contentType]; !ok {
 		return domain.Property{}, fmt.Errorf("%w: unsupported content type %q", ErrInvalidInput, contentType)
 	}
-	if size > maxPhotoSize {
-		return domain.Property{}, fmt.Errorf("%w: file size %d exceeds %d bytes", ErrInvalidInput, size, maxPhotoSize)
+	if size > MaxPhotoSize {
+		return domain.Property{}, NewPhotoTooLargeError(size)
 	}
 
 	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)

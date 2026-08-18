@@ -33,7 +33,7 @@ func WriteJSON(ctx context.Context, w http.ResponseWriter, status int, v any) {
 // Retry-After header so clients can back off before retrying.
 func WriteTooManyRequests(w http.ResponseWriter, r *http.Request, detail string) {
 	w.Header().Set("Retry-After", strconv.Itoa(RetryAfterSeconds))
-	WriteProblem(w, http.StatusTooManyRequests, Problem(r.Context(), "Too many requests", detail))
+	WriteProblem(r.Context(), w, http.StatusTooManyRequests, Problem(r.Context(), "Too many requests", detail))
 }
 
 // UserFacingDetailOrDefault returns a user-facing message for err if one is

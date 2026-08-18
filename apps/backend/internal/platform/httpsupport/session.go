@@ -174,7 +174,7 @@ func SessionMiddleware(logger *slog.Logger, loader SessionLoader, secure bool, c
 				if logger != nil {
 					logger.ErrorContext(r.Context(), "session lookup failed", slog.String("error", SanitizeError(err)))
 				}
-				WriteProblem(w, http.StatusInternalServerError, InternalError(r.Context(), err))
+				WriteProblem(r.Context(), w, http.StatusInternalServerError, InternalError(r.Context(), err))
 				return
 			}
 			if session.IsExpired(now) {

@@ -26,13 +26,13 @@ func NewPopupHandlers(svc *popupsapp.PopupService, logger *slog.Logger) *PopupHa
 func (h *PopupHandlers) GetPendingPopups(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	pending, err := h.svc.ListPending(r.Context(), ownerID)
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, pendingPopupsResponse(pending))
@@ -42,16 +42,16 @@ func (h *PopupHandlers) GetPendingPopups(w http.ResponseWriter, r *http.Request)
 func (h *PopupHandlers) MarkPopupSeen(w http.ResponseWriter, r *http.Request, popupKey string) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	if err := h.svc.MarkSeen(r.Context(), ownerID, popupsdomain.PopupKey(popupKey)); err != nil {
 		if errors.Is(err, popupsapp.ErrUnknownPopupKey) {
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Неизвестный попап"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Неизвестный попап"))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

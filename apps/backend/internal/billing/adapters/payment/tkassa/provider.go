@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"strings"
 	"time"
@@ -139,9 +138,7 @@ func NewProvider(cfg Config, log *slog.Logger, metrics *payment.Metrics) (*Provi
 		// Full-jitter: the actual sleep is drawn uniformly from [0, d], where d
 		// is the deterministic exponential-backoff delay. This desynchronizes
 		// concurrent retries and avoids thundering-herd spikes against T-Kassa.
-		rt.jitter = func(d time.Duration) time.Duration {
-			return time.Duration(rand.Float64() * float64(d)) //nolint:gosec // full-jitter only desynchronizes retry timing; it is not used for security.
-		}
+		rt.jitter = cryptoJitter
 		base = rt
 	}
 	instrumentedTransport := otelhttp.NewTransport(base,

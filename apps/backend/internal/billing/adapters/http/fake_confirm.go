@@ -173,5 +173,5 @@ func (h *FakeConfirmHandlers) confirmCardBinding(ctx context.Context, requestKey
 // badRequest answers a malformed path parameter with a 400 problem.
 func (h *FakeConfirmHandlers) badRequest(w http.ResponseWriter, r *http.Request, detail string) {
 	h.logger.WarnContext(r.Context(), "fake confirm request rejected", slog.String("detail", detail))
-	httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+	httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 }

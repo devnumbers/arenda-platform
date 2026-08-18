@@ -22,7 +22,7 @@ func TestS3Storage_Upload_RequestShape(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	storage, err := NewS3Storage(srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
+	storage, err := NewS3Storage(t.Context(), srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
 	if err != nil {
 		t.Fatalf("create storage: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestS3Storage_Upload_Error(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	storage, err := NewS3Storage(srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
+	storage, err := NewS3Storage(t.Context(), srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
 	if err != nil {
 		t.Fatalf("create storage: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestS3Storage_Upload_SetsContentLength(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	storage, err := NewS3Storage(srv.URL+"/", "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
+	storage, err := NewS3Storage(t.Context(), srv.URL+"/", "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
 	if err != nil {
 		t.Fatalf("create storage: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestS3Storage_HeadBucket(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		storage, err := NewS3Storage(srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
+		storage, err := NewS3Storage(t.Context(), srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
 		if err != nil {
 			t.Fatalf("create storage: %v", err)
 		}
@@ -131,7 +131,7 @@ func TestS3Storage_HeadBucket(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		storage, err := NewS3Storage(srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
+		storage, err := NewS3Storage(t.Context(), srv.URL, "us-east-1", "test-bucket", "access", "secret", "https://cdn.example.com", true)
 		if err != nil {
 			t.Fatalf("create storage: %v", err)
 		}

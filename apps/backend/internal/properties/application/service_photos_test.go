@@ -135,7 +135,7 @@ func TestAddPropertyPhoto_FileTooLarge(t *testing.T) {
 	repo := newLockingFakePropertyRepo(domain.Property{ID: propertyID, OwnerID: ownerID})
 	svc := newPhotoService(t, repo, &fakePhotoRepo{}, &fakePhotoStorage{})
 
-	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.jpg", "image/jpeg", maxPhotoSize+1)
+	_, err := svc.AddPropertyPhoto(ctx, ownerID, propertyID, bytes.NewReader([]byte("x")), "file.jpg", "image/jpeg", MaxPhotoSize+1)
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got %v", err)
 	}

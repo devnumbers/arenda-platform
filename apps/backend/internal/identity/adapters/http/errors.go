@@ -35,10 +35,10 @@ func writeSharedIdentityError(w http.ResponseWriter, r *http.Request, err error,
 		return true
 	case errors.Is(err, application.ErrEmailAlreadyTaken),
 		errors.Is(err, application.ErrEmailDoesNotMatch):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Некорректные учётные данные")))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Некорректные учётные данные")))
 		return true
 	case errors.Is(err, application.ErrNotFound):
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", notFoundDetail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", notFoundDetail))
 		return true
 	}
 	return false

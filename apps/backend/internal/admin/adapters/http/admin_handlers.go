@@ -28,16 +28,16 @@ func NewAdminHandlers(adminService *adminapp.AdminService, logger *slog.Logger) 
 func (h *AdminHandlers) handleAdminError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, adminapp.ErrNotFound):
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Ресурс не найден"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Ресурс не найден"))
 	case errors.Is(err, adminapp.ErrInvalidFilter):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	default:
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }
 

@@ -99,7 +99,7 @@ func ReadonlyMiddleware(billing SubscriptionMutationChecker, logger *slog.Logger
 				var err error
 				canMutate, err = billing.CanMutateData(r.Context(), userID)
 				if err != nil {
-					WriteProblem(w, http.StatusInternalServerError, InternalError(r.Context(), err))
+					WriteProblem(r.Context(), w, http.StatusInternalServerError, InternalError(r.Context(), err))
 					return
 				}
 				r = r.WithContext(withCanMutateData(r.Context(), canMutate))
@@ -109,7 +109,7 @@ func ReadonlyMiddleware(billing SubscriptionMutationChecker, logger *slog.Logger
 					slog.String("user_id", userID.String()),
 					slog.String("method", r.Method),
 					slog.String("path", path))
-				WriteProblem(w, http.StatusForbidden, Problem(r.Context(), "Subscription blocked", "Подписка заблокирована. Продлите её, чтобы продолжить"))
+				WriteProblem(r.Context(), w, http.StatusForbidden, Problem(r.Context(), "Subscription blocked", "Подписка заблокирована. Продлите её, чтобы продолжить"))
 				return
 			}
 

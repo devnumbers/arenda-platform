@@ -81,7 +81,10 @@ func TestDeriveKeys_RFC8291IntermediateValues(t *testing.T) {
 	// RFC 8291 Appendix A intermediate values (hex), used to pin each step of
 	// the derivation independently so a regression is easy to localise.
 	const (
-		rfc8291ECDHSecret = "932acbd63208387133837b0cd995911c3441eb66000998614a592727aef6912b" //nolint:gosec // G101: RFC 8291 test vector, not a credential
+		// rfc8291ECDHOutput is the hex of the ECDH shared secret from the RFC
+		// appendix; named without "Secret" so gosec G101 does not misread the
+		// published test vector as a hardcoded credential.
+		rfc8291ECDHOutput = "932acbd63208387133837b0cd995911c3441eb66000998614a592727aef6912b"
 		rfc8291IKM        = "4b895831bfcbd05c427aad16843c7cd772a0498a94dba90ecb359476c5d8cab8"
 		rfc8291CEK        = "a088555b4e0c45dcb65cdf4288a2f14e"
 		rfc8291Nonce      = "e21ffde6495727913faa7a0d"
@@ -109,8 +112,8 @@ func TestDeriveKeys_RFC8291IntermediateValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ecdh: %v", err)
 	}
-	if hexEncode(shared) != rfc8291ECDHSecret {
-		t.Errorf("ECDH shared secret\n got %s\nwant %s", hexEncode(shared), rfc8291ECDHSecret)
+	if hexEncode(shared) != rfc8291ECDHOutput {
+		t.Errorf("ECDH shared secret\n got %s\nwant %s", hexEncode(shared), rfc8291ECDHOutput)
 	}
 
 	// IKM = HMAC(PRK_key, key_info || 0x01).

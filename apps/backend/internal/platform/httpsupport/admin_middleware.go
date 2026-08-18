@@ -11,11 +11,11 @@ func AdminOnlyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, role, ok := ActorFromContext(r.Context())
 		if !ok {
-			WriteProblem(w, http.StatusUnauthorized, Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+			WriteProblem(r.Context(), w, http.StatusUnauthorized, Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 			return
 		}
 		if role != actor.RoleAdmin {
-			WriteProblem(w, http.StatusForbidden, Problem(r.Context(), "Forbidden", "Требуются права администратора"))
+			WriteProblem(r.Context(), w, http.StatusForbidden, Problem(r.Context(), "Forbidden", "Требуются права администратора"))
 			return
 		}
 		next.ServeHTTP(w, r)

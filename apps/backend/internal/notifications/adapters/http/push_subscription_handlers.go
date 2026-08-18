@@ -30,14 +30,14 @@ func NewPushSubscriptionHandlers(svc *notificationsapp.PushSubscriptionService, 
 // GetVapidPublicKey implements GET /push/vapid-public-key.
 func (h *PushSubscriptionHandlers) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
 	if _, ok := httpsupport.UserIDFromContext(r.Context()); !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	if h.vapidPubKey == "" {
 		// VAPID is not configured on the server. The frontend treats this as
 		// "push unavailable" rather than retrying.
-		httpsupport.WriteProblem(w, http.StatusServiceUnavailable, httpsupport.Problem(r.Context(), "Service Unavailable", "Web Push не настроен"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusServiceUnavailable, httpsupport.Problem(r.Context(), "Service Unavailable", "Web Push не настроен"))
 		return
 	}
 
@@ -48,14 +48,14 @@ func (h *PushSubscriptionHandlers) GetVapidPublicKey(w http.ResponseWriter, r *h
 func (h *PushSubscriptionHandlers) CreatePushSubscription(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PushSubscriptionCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create push subscription request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -67,10 +67,10 @@ func (h *PushSubscriptionHandlers) CreatePushSubscription(w http.ResponseWriter,
 	})
 	if err != nil {
 		if errors.Is(err, notificationsapp.ErrInvalidPushSubscription) {
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 
@@ -81,27 +81,27 @@ func (h *PushSubscriptionHandlers) CreatePushSubscription(w http.ResponseWriter,
 func (h *PushSubscriptionHandlers) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PushSubscriptionDeleteRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode delete push subscription request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	if err := h.svc.Delete(r.Context(), actor, body.Endpoint); err != nil {
 		if errors.Is(err, notificationsapp.ErrNotFound) {
-			httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Push-подписка не найдена"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Push-подписка не найдена"))
 			return
 		}
 		if errors.Is(err, notificationsapp.ErrInvalidPushSubscription) {
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 

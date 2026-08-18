@@ -61,31 +61,41 @@ type platformDeps struct {
 }
 
 // Platform is the result of WirePlatform. It exposes the shared platform
-// resources plus the cancellation context that main.go selects on for shutdown.
+// resources and the cleanup function; the lifecycle context is returned
+// separately because a context never lives in a struct field.
 type Platform struct {
-	Deps   platformDeps
-	Ctx    context.Context //nolint:containedctx // transient wiring result consumed immediately by main.go's run()
-	Cancel context.CancelFunc
+	Deps platformDeps
 	// Cleanup releases platform resources (db pool, otel sdk, signal ctx) in
 	// reverse-ish order. It must be called when the process exits.
 	Cleanup func()
 }
 
-// WirePlatform builds the platform foundation: config, logger, signal context,
-// OpenTelemetry SDK, email renderer, encryptor, auto-migration, database pool,
-// instrumented pool, audit writer/recorder and the shared timezone resolver.
-// It returns the shared platformDeps plus a cleanup function.
-func WirePlatform() (*Platform, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-
+// NewAppLogger builds the process logger from the app config (format and
+// level). WirePlatform and the migrate step share it so both emit records of
+// the same shape.
+func NewAppLogger(cfg *config.Config) (*slog.Logger, error) {
 	logHandler, err := logger.NewHandler(cfg.LogFormat, cfg.LogLevelValue, os.Stdout)
 	if err != nil {
 		return nil, err
 	}
-	appLogger := slog.New(logHandler)
+	return slog.New(logHandler), nil
+}
+
+// WirePlatform builds the platform foundation: config, logger, signal context,
+// OpenTelemetry SDK, email renderer, encryptor, auto-migration, database pool,
+// instrumented pool, audit writer/recorder and the shared timezone resolver.
+// It returns the platform bundle plus the signal-scoped lifecycle context that
+// main.go selects on for shutdown.
+func WirePlatform() (*Platform, context.Context, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	appLogger, err := NewAppLogger(&cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 	slog.SetDefault(appLogger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -98,24 +108,24 @@ func WirePlatform() (*Platform, error) {
 	})
 	if err != nil {
 		stop()
-		return nil, fmt.Errorf("observability: %w", err)
+		return nil, nil, fmt.Errorf("observability: %w", err)
 	}
 
 	renderer, err := mailer.NewRenderer(cfg.EmailTemplatesDir)
 	if err != nil {
 		stop()
-		return nil, fmt.Errorf("failed to load email templates: %w", err)
+		return nil, nil, fmt.Errorf("failed to load email templates: %w", err)
 	}
 
 	encryptor, err := encryption.NewEncryptor(cfg.EncryptionKey)
 	if err != nil {
 		stop()
-		return nil, fmt.Errorf("encryption: %w", err)
+		return nil, nil, fmt.Errorf("encryption: %w", err)
 	}
 	if cfg.EncryptionKey == "" {
 		if cfg.PaymentProvider != "fake" {
 			stop()
-			return nil, errors.New("ENCRYPTION_KEY is required when using a real payment provider")
+			return nil, nil, errors.New("ENCRYPTION_KEY is required when using a real payment provider")
 		}
 		appLogger.WarnContext(ctx, "ENCRYPTION_KEY is empty; provider tokens will be stored without encryption (local dev only)")
 	}
@@ -123,7 +133,7 @@ func WirePlatform() (*Platform, error) {
 	if cfg.AutoMigrate {
 		if err := database.MigrateUp(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
 			stop()
-			return nil, fmt.Errorf("migrate: %w", err)
+			return nil, nil, fmt.Errorf("migrate: %w", err)
 		}
 	}
 
@@ -139,7 +149,7 @@ func WirePlatform() (*Platform, error) {
 	pool, err := database.NewPoolWithConfig(ctx, cfg.DatabaseURL, poolConfig)
 	if err != nil {
 		stop()
-		return nil, fmt.Errorf("database pool: %w", err)
+		return nil, nil, fmt.Errorf("database pool: %w", err)
 	}
 	db := database.NewInstrumentedPool(pool, appLogger)
 	auditWriter := auditpg.NewWriter(db)
@@ -184,7 +194,7 @@ func WirePlatform() (*Platform, error) {
 		stop()
 	}
 
-	return &Platform{Deps: deps, Ctx: ctx, Cancel: stop, Cleanup: cleanup}, nil
+	return &Platform{Deps: deps, Cleanup: cleanup}, ctx, nil
 }
 
 // DBPoolStats returns a snapshot provider for the httpserver's local pool

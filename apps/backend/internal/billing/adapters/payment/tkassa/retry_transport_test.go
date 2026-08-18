@@ -241,6 +241,30 @@ func TestRetryTransportBackoffOverflowCap(t *testing.T) {
 	}
 }
 
+func TestCryptoJitter_DrawsWithinHalfOpenInterval(t *testing.T) {
+	t.Parallel()
+	// Full-jitter draws sleep uniformly from [0, d); crypto/rand.Int is
+	// exclusive of d, so a draw equal to d would be a contract break.
+	const d = 10 * time.Second
+	for range 64 {
+		if got := cryptoJitter(d); got < 0 || got >= d {
+			t.Fatalf("cryptoJitter(%v) = %v, want a value in [0, %v)", d, got, d)
+		}
+	}
+}
+
+func TestCryptoJitter_NonPositiveMaxIsZero(t *testing.T) {
+	t.Parallel()
+	// crypto/rand.Int panics for max <= 0; a zero-configured delay must
+	// degrade to "no sleep" instead of panicking inside the transport.
+	if got := cryptoJitter(0); got != 0 {
+		t.Fatalf("cryptoJitter(0) = %v, want 0", got)
+	}
+	if got := cryptoJitter(-time.Second); got != 0 {
+		t.Fatalf("cryptoJitter(-1s) = %v, want 0", got)
+	}
+}
+
 func TestRetryTransportCanRetry(t *testing.T) {
 	timeout := &timeoutNetError{errorString: "timeout"}
 	cases := []struct {

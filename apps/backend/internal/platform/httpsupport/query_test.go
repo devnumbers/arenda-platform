@@ -160,7 +160,7 @@ func TestRespondAdminListDelegatesErrors(t *testing.T) {
 		func(context.Context) ([]view, int64, error) { return nil, 0, errors.New("boom") },
 		func(w http.ResponseWriter, r *http.Request, _ error) {
 			problemWritten = true
-			WriteProblem(w, http.StatusNotFound, Problem(r.Context(), "Not found", "test"))
+			WriteProblem(r.Context(), w, http.StatusNotFound, Problem(r.Context(), "Not found", "test"))
 		},
 		func(view) openapi.AdminUser { return openapi.AdminUser{} },
 	)

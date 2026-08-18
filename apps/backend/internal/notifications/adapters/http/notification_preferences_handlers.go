@@ -28,13 +28,13 @@ func NewNotificationPreferenceHandlers(svc *notificationsapp.PreferenceService, 
 func (h *NotificationPreferenceHandlers) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	channelPrefs, err := h.svc.ListChannelPreferences(r.Context(), actor)
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, notificationChannelPreferencesResponse(channelPrefs))
@@ -44,14 +44,14 @@ func (h *NotificationPreferenceHandlers) GetNotificationPreferences(w http.Respo
 func (h *NotificationPreferenceHandlers) UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.NotificationPreferencesUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update notification preferences request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -60,10 +60,10 @@ func (h *NotificationPreferenceHandlers) UpdateNotificationPreferences(w http.Re
 	updated, err := h.svc.ReplaceChannelPreferences(r.Context(), actor, prefs)
 	if err != nil {
 		if errors.Is(err, notificationsapp.ErrInvalidPreferences) {
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректные настройки уведомлений"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректные настройки уведомлений"))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, notificationChannelPreferencesResponse(updated))

@@ -40,7 +40,8 @@ func WireProperties(
 	var photoStorage propertiesapp.PhotoStorage
 	if p.Cfg.PhotoStorageS3Enabled {
 		var err error
-		photoStorage, err = storage.NewS3Storage( //nolint:contextcheck // constructor uses context.Background internally; signature unchanged from original
+		photoStorage, err = storage.NewS3Storage(
+			ctx,
 			p.Cfg.PhotoStorageEndpoint,
 			p.Cfg.PhotoStorageRegion,
 			p.Cfg.PhotoStorageBucket,

@@ -32,20 +32,20 @@ func NewMemberHandlers(svc *accessapp.AccessService, logger *slog.Logger) *Membe
 func (h *MemberHandlers) CreatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyAccessMemberCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "access: decode create member request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	role, err := domain.ParseRole(string(body.Role))
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 		return
 	}
 
@@ -64,20 +64,20 @@ func (h *MemberHandlers) CreatePropertyAccessMember(w http.ResponseWriter, r *ht
 func (h *MemberHandlers) UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId, memberID openapi_types.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyAccessMemberUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "access: decode update member request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	role, err := domain.ParseRole(string(body.Role))
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *MemberHandlers) UpdatePropertyAccessMember(w http.ResponseWriter, r *ht
 func (h *MemberHandlers) DeletePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId, memberID openapi_types.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -108,7 +108,7 @@ func (h *MemberHandlers) DeletePropertyAccessMember(w http.ResponseWriter, r *ht
 func (h *MemberHandlers) LeaveProperty(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -123,24 +123,24 @@ func (h *MemberHandlers) handleError(w http.ResponseWriter, r *http.Request, err
 	switch {
 	case errors.Is(err, domain.ErrMemberNotFound):
 		// Privacy: not-found covers both "object does not exist" and "no access".
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
 	case errors.Is(err, domain.ErrMemberAlreadyExists):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже является участником"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже является участником"))
 	case errors.Is(err, domain.ErrPropertyArchived):
 		// Same 409 shape as the properties ErrArchivedProperty mapping (issue #163).
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Нельзя добавить участника в архивный объект"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Нельзя добавить участника в архивный объект"))
 	case errors.Is(err, domain.ErrCannotAddOwner):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить владельца объекта"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить владельца объекта"))
 	case errors.Is(err, domain.ErrCannotAddSelf):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить себя участником"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить себя участником"))
 	case errors.Is(err, domain.ErrCannotRevokeOwner):
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Нельзя отозвать доступ владельца"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Нельзя отозвать доступ владельца"))
 	case errors.Is(err, domain.ErrCannotLeaveOwnProperty):
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Владелец не может покинуть свой объект"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Владелец не может покинуть свой объект"))
 	case errors.Is(err, domain.ErrInvalidRole):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 	default:
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }
 

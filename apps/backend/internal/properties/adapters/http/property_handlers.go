@@ -1,9 +1,11 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -52,51 +54,51 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 			for _, e := range attrErrs.Errors {
 				fieldErrors = append(fieldErrors, openapi.ProblemError{Field: e.Field, Detail: e.Reason})
 			}
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.ProblemWithFieldErrors(r.Context(), "Bad request", "Некорректные характеристики объекта", fieldErrors))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.ProblemWithFieldErrors(r.Context(), "Bad request", "Некорректные характеристики объекта", fieldErrors))
 			return
 		}
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, propertiesapp.ErrNotFound), errors.Is(err, leasesapp.ErrNotFound):
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
 	case errors.Is(err, propertiesapp.ErrForbidden):
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, propertiesapp.ErrAccessSuspended):
 		// The suspended recipient gets a distinguishable 403 so the frontend
 		// can show the honest "tariff limit exceeded" screen (T9, issue #158).
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.ProblemWithCode(r.Context(), "Forbidden", "Доступ к объекту приостановлен: превышен лимит объектов по тарифу", "membership_suspended"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.ProblemWithCode(r.Context(), "Forbidden", "Доступ к объекту приостановлен: превышен лимит объектов по тарифу", "membership_suspended"))
 	case errors.Is(err, propertiesapp.ErrLimitExceeded):
-		httpsupport.WriteProblem(w, http.StatusPaymentRequired, httpsupport.Problem(r.Context(), "Limit exceeded", "Превышен лимит активных объектов"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusPaymentRequired, httpsupport.Problem(r.Context(), "Limit exceeded", "Превышен лимит активных объектов"))
 	case errors.Is(err, propertiesapp.ErrArchivedProperty):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Нельзя изменить архивный объект"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Нельзя изменить архивный объект"))
 	case errors.Is(err, propertiesapp.ErrAlreadyArchived):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Объект уже в архиве"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Объект уже в архиве"))
 	case errors.Is(err, propertiesapp.ErrNotArchived):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Объект не в архиве"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Объект не в архиве"))
 	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "У объекта есть открытая аренда"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "У объекта есть открытая аренда"))
 	case errors.Is(err, propertiesapp.ErrPhotoLimitReached):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Достигнут лимит фотографий объекта"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Достигнут лимит фотографий объекта"))
 	case isInvalidStatusTransition(err), errors.Is(err, propertiesapp.ErrInvalidTransition):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	default:
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }
 
@@ -104,14 +106,14 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create property request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -146,7 +148,7 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -161,7 +163,7 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 		resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
 		if err != nil {
 			h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
 		items = append(items, resp)
@@ -173,7 +175,7 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 	hidden, err := h.svc.HiddenSharedCount(r.Context(), actor)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to count hidden shared properties", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 	hiddenSharedCount := hidden
@@ -188,7 +190,7 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -203,7 +205,7 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 		resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
 		if err != nil {
 			h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
 		items = append(items, resp)
@@ -216,7 +218,7 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -233,14 +235,14 @@ func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, i
 func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update property request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -266,13 +268,13 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 func (h *PropertyHandlers) DeleteProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params openapi.DeletePropertyParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	mode, err := domain.ParseDeletePropertyMode(string(params.Mode))
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректный режим удаления"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректный режим удаления"))
 		return
 	}
 
@@ -288,7 +290,7 @@ func (h *PropertyHandlers) DeleteProperty(w http.ResponseWriter, r *http.Request
 func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -305,7 +307,7 @@ func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Reques
 func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -322,7 +324,7 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -368,7 +370,7 @@ func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Req
 func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -393,7 +395,7 @@ func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r
 func (h *PropertyHandlers) ExportPropertyData(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -423,34 +425,24 @@ func exportASCIIFilename(name string) string {
 func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
-	//nolint:gosec // 6 MiB memory bound for multipart form parsing; file size validated by the service.
-	if err := r.ParseMultipartForm(6 << 20); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to parse multipart form", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная форма загрузки файла"))
-		return
-	}
-	defer func() { _ = r.MultipartForm.RemoveAll() }()
-
-	file, header, err := r.FormFile("file")
+	filename, contentType, data, err := readPhotoUpload(r)
 	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to get file from form", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Требуется файл"))
+		h.rejectPhotoUpload(w, r, err)
 		return
 	}
-	defer func() { _ = file.Close() }()
 
-	property, err := h.svc.AddPropertyPhoto(r.Context(), actor, propertyID, file, header.Filename, header.Header.Get("Content-Type"), header.Size)
+	property, err := h.svc.AddPropertyPhoto(r.Context(), actor, propertyID, bytes.NewReader(data), filename, contentType, int64(len(data)))
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
 	if len(property.Photos) == 0 {
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), errors.New("uploaded photo not found")))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), errors.New("uploaded photo not found")))
 		return
 	}
 
@@ -458,11 +450,70 @@ func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Re
 	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, openapi.PropertyPhoto{Id: uploaded.ID, Url: uploaded.URL})
 }
 
+// rejectPhotoUpload maps readPhotoUpload failures onto the same wire contract
+// the previous ParseMultipartForm/FormFile parsing produced.
+func (h *PropertyHandlers) rejectPhotoUpload(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, propertiesapp.ErrInvalidInput):
+		// An oversized file takes the service's own invalid-input mapping so
+		// the response body is identical wherever the size check fires.
+		h.handlePropertyError(w, r, err)
+	case errors.Is(err, errPhotoUploadMissing):
+		h.logger.ErrorContext(r.Context(), "failed to get file from form", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Требуется файл"))
+	default:
+		h.logger.ErrorContext(r.Context(), "failed to parse multipart form", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная форма загрузки файла"))
+	}
+}
+
+var (
+	// errPhotoUploadForm marks a body that is not a well-formed multipart
+	// form: wrong content type, broken framing or an aborted read.
+	errPhotoUploadForm = errors.New("malformed photo upload form")
+	// errPhotoUploadMissing marks a multipart form without a "file" part.
+	errPhotoUploadMissing = errors.New("photo upload form has no file field")
+)
+
+// photoUploadFieldName is the multipart form field carrying the photo bytes.
+const photoUploadFieldName = "file"
+
+// readPhotoUpload streams the "file" part of a multipart/form-data body into
+// memory, bounded by the application's photo size limit. MultipartReader is
+// used instead of ParseMultipartForm (gosec G120): the memory bound stays
+// explicit and nothing ever spills to temporary files.
+func readPhotoUpload(r *http.Request) (filename, contentType string, data []byte, err error) {
+	reader, err := r.MultipartReader()
+	if err != nil {
+		return "", "", nil, fmt.Errorf("%w: %w", errPhotoUploadForm, err)
+	}
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			return "", "", nil, errPhotoUploadMissing
+		}
+		if err != nil {
+			return "", "", nil, fmt.Errorf("%w: %w", errPhotoUploadForm, err)
+		}
+		if part.FormName() != photoUploadFieldName {
+			continue
+		}
+		data, readErr := io.ReadAll(io.LimitReader(part, propertiesapp.MaxPhotoSize+1))
+		if readErr != nil {
+			return "", "", nil, fmt.Errorf("%w: %w", errPhotoUploadForm, readErr)
+		}
+		if int64(len(data)) > propertiesapp.MaxPhotoSize {
+			return "", "", nil, propertiesapp.NewPhotoTooLargeError(int64(len(data)))
+		}
+		return part.FileName(), part.Header.Get("Content-Type"), data, nil
+	}
+}
+
 // DeletePropertyPhoto implements DELETE /properties/{propertyId}/photos/{photoId}.
 func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID, photoID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -478,14 +529,14 @@ func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Re
 func (h *PropertyHandlers) CreatePropertyContact(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyContactCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create property contact request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -505,7 +556,7 @@ func (h *PropertyHandlers) CreatePropertyContact(w http.ResponseWriter, r *http.
 func (h *PropertyHandlers) ListPropertyContacts(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -526,7 +577,7 @@ func (h *PropertyHandlers) ListPropertyContacts(w http.ResponseWriter, r *http.R
 func (h *PropertyHandlers) GetPropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -543,14 +594,14 @@ func (h *PropertyHandlers) GetPropertyContact(w http.ResponseWriter, r *http.Req
 func (h *PropertyHandlers) UpdatePropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyContactUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update property contact request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -570,7 +621,7 @@ func (h *PropertyHandlers) UpdatePropertyContact(w http.ResponseWriter, r *http.
 func (h *PropertyHandlers) DeletePropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -597,17 +648,17 @@ func (h *PropertyHandlers) propertyContactResponse(c domain.PropertyContact) ope
 func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params openapi.GetAddressSuggestionsParams) {
 	_, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	suggestions, err := h.addressSuggester.SuggestAddresses(r.Context(), params.Query)
 	if err != nil {
 		if errors.Is(err, propertiesapp.ErrInvalidInput) {
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректный запрос адреса"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректный запрос адреса"))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 
@@ -669,7 +720,7 @@ func (h *PropertyHandlers) respondWithProperty(w http.ResponseWriter, r *http.Re
 	resp, err := h.propertyResponse(r.Context(), actor, property, activeLease)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 	httpsupport.WriteJSON(r.Context(), w, status, resp)

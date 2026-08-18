@@ -275,7 +275,7 @@ func rateLimitMiddleware(limiter *httpsupport.RateLimiter) func(http.Handler) ht
 			}
 			if !limiter.Allow(ip) {
 				w.Header().Set("Retry-After", "60")
-				httpsupport.WriteProblem(w, http.StatusTooManyRequests, httpsupport.Problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
+				httpsupport.WriteProblem(r.Context(), w, http.StatusTooManyRequests, httpsupport.Problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -38,23 +38,23 @@ func (h *FreeReminderHandlers) handleFreeReminderError(w http.ResponseWriter, r 
 	switch {
 	case errors.Is(err, notificationsapp.ErrNotFound),
 		errors.Is(err, propertiesapp.ErrNotFound):
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", freeReminderNotFoundMessage(resource)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", freeReminderNotFoundMessage(resource)))
 	case errors.Is(err, notificationsapp.ErrForbidden):
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, propertiesapp.ErrAccessSuspended):
 		// The suspended recipient gets a distinguishable 403 so the frontend
 		// can show the honest "tariff limit exceeded" screen (T9, issue #158).
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.ProblemWithCode(r.Context(), "Forbidden", "Доступ к объекту приостановлен: превышен лимит объектов по тарифу", "membership_suspended"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.ProblemWithCode(r.Context(), "Forbidden", "Доступ к объекту приостановлен: превышен лимит объектов по тарифу", "membership_suspended"))
 	case errors.Is(err, notificationsapp.ErrInvalidFreeReminderInput),
 		errors.Is(err, notificationsapp.ErrInvalidReminderDate):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	default:
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }
 
@@ -73,7 +73,7 @@ func freeReminderNotFoundMessage(resource string) string {
 func (h *FreeReminderHandlers) CreateFreeReminder(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -86,7 +86,7 @@ func (h *FreeReminderHandlers) CreateFreeReminder(w http.ResponseWriter, r *http
 	var body openapi.FreeReminderCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create free reminder request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *FreeReminderHandlers) CreateFreeReminder(w http.ResponseWriter, r *http
 func (h *FreeReminderHandlers) ListPropertyFreeReminders(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.ListPropertyFreeRemindersParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *FreeReminderHandlers) ListPropertyFreeReminders(w http.ResponseWriter, 
 func (h *FreeReminderHandlers) ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.ListUpcomingFreeRemindersParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -181,7 +181,7 @@ func (h *FreeReminderHandlers) ListUpcomingFreeReminders(w http.ResponseWriter, 
 func (h *FreeReminderHandlers) ListFreeReminders(w http.ResponseWriter, r *http.Request, params openapi.ListFreeRemindersParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -214,7 +214,7 @@ func (h *FreeReminderHandlers) ListFreeReminders(w http.ResponseWriter, r *http.
 func (h *FreeReminderHandlers) GetFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -231,14 +231,14 @@ func (h *FreeReminderHandlers) GetFreeReminder(w http.ResponseWriter, r *http.Re
 func (h *FreeReminderHandlers) UpdateFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.FreeReminderUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update free reminder request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -267,7 +267,7 @@ func (h *FreeReminderHandlers) UpdateFreeReminder(w http.ResponseWriter, r *http
 func (h *FreeReminderHandlers) DeleteFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

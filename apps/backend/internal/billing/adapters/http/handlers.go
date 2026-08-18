@@ -168,7 +168,7 @@ func NewBillingHandlers(
 // ListTariffs implements GET /tariffs.
 func (h *BillingHandlers) ListTariffs(w http.ResponseWriter, r *http.Request) {
 	if _, ok := httpsupport.OwnerIDFromContext(r); !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -215,7 +215,7 @@ func (h *BillingHandlers) CreateAdminTariff(w http.ResponseWriter, r *http.Reque
 	var body openapi.AdminCreateTariffRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create tariff request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 	tariffName, err := domain.ParseTariffName(string(body.Name))
@@ -249,7 +249,7 @@ func (h *BillingHandlers) UpdateAdminTariff(w http.ResponseWriter, r *http.Reque
 	var body openapi.AdminUpdateTariffRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update tariff request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -270,7 +270,7 @@ func (h *BillingHandlers) UpdateAdminTariff(w http.ResponseWriter, r *http.Reque
 func (h *BillingHandlers) GetSubscription(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -287,14 +287,14 @@ func (h *BillingHandlers) GetSubscription(w http.ResponseWriter, r *http.Request
 func (h *BillingHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.AutoRenewRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode auto-renew request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -310,7 +310,7 @@ func (h *BillingHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Request
 func (h *BillingHandlers) CancelSubscription(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -328,14 +328,14 @@ func (h *BillingHandlers) CancelSubscription(w http.ResponseWriter, r *http.Requ
 func (h *BillingHandlers) ChangeTariff(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.ChangeTariffRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode change tariff request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -375,7 +375,7 @@ func (h *BillingHandlers) ChangeTariff(w http.ResponseWriter, r *http.Request) {
 func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -410,7 +410,7 @@ func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *htt
 func (h *BillingHandlers) ListPaymentMethods(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -430,14 +430,14 @@ func (h *BillingHandlers) ListPaymentMethods(w http.ResponseWriter, r *http.Requ
 func (h *BillingHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.AddPaymentMethodRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode add payment method request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -468,7 +468,7 @@ func (h *BillingHandlers) AddPaymentMethod(w http.ResponseWriter, r *http.Reques
 func (h *BillingHandlers) DeletePaymentMethod(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -485,7 +485,7 @@ func (h *BillingHandlers) DeletePaymentMethod(w http.ResponseWriter, r *http.Req
 func (h *BillingHandlers) ActivatePaymentMethod(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -503,7 +503,7 @@ func (h *BillingHandlers) ActivatePaymentMethod(w http.ResponseWriter, r *http.R
 func (h *BillingHandlers) SyncPaymentMethods(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -541,14 +541,14 @@ func (h *BillingHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Re
 		h.logger.ErrorContext(r.Context(), "failed to read webhook body",
 			slog.String("provider", provider),
 			slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 	if len(payload) > maxWebhookBody {
 		h.logger.ErrorContext(r.Context(), "webhook body exceeds size limit",
 			slog.String("provider", provider),
 			slog.Int("size", len(payload)))
-		httpsupport.WriteProblem(w, http.StatusRequestEntityTooLarge, httpsupport.Problem(r.Context(), "Payload too large", "Тело запроса слишком большое"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusRequestEntityTooLarge, httpsupport.Problem(r.Context(), "Payload too large", "Тело запроса слишком большое"))
 		return
 	}
 
@@ -572,7 +572,7 @@ func (h *BillingHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Re
 		case errors.Is(err, billingapp.ErrPaymentNotFound):
 			status = http.StatusNotFound
 		}
-		httpsupport.WriteProblem(w, status, httpsupport.Problem(r.Context(), "Webhook not processed", "Уведомление не обработано"))
+		httpsupport.WriteProblem(r.Context(), w, status, httpsupport.Problem(r.Context(), "Webhook not processed", "Уведомление не обработано"))
 		return
 	}
 
@@ -678,7 +678,7 @@ func (h *BillingHandlers) ListAdminSubscriptionPayments(w http.ResponseWriter, r
 func (h *BillingHandlers) adminActor(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	adminID, _, ok := httpsupport.ActorFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return uuid.Nil, false
 	}
 	return adminID, true
@@ -698,7 +698,7 @@ func (h *BillingHandlers) AssignAdminServiceSubscription(w http.ResponseWriter, 
 	var body openapi.AdminAssignServiceSubscriptionRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode service assignment request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 	tariffName, err := domain.ParseTariffName(string(body.TariffName))
@@ -732,7 +732,7 @@ func (h *BillingHandlers) ForceChangeAdminSubscriptionTariff(w http.ResponseWrit
 	var body openapi.AdminForceChangeTariffRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode force tariff change request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 	tariffName, err := domain.ParseTariffName(string(body.TariffName))
@@ -766,7 +766,7 @@ func (h *BillingHandlers) ExtendAdminSubscriptionGrace(w http.ResponseWriter, r 
 	var body openapi.AdminExtendGraceRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode grace extension request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 	if err := h.adminSubscriptions.ExtendGrace(r.Context(), adminID, userID, body.Days); err != nil {
@@ -877,19 +877,19 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, billingapp.ErrPaymentNotFound),
 		errors.Is(err, billingapp.ErrPaymentMethodNotFound),
 		errors.Is(err, billingapp.ErrTariffInactive):
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Ресурс не найден"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Ресурс не найден"))
 	case errors.Is(err, billingapp.ErrTariffAlreadyExists):
 		// The closed tariff-name vocabulary is backed by a unique constraint:
 		// creating a name that exists is a request defect, not a server
 		// failure (issue #256).
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Тариф с таким названием уже существует"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Тариф с таким названием уже существует"))
 	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Активный способ оплаты нельзя удалить, пока не выбран другой"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Активный способ оплаты нельзя удалить, пока не выбран другой"))
 	case errors.Is(err, billingapp.ErrPaymentUnavailable):
 		// Temporary answer for the flows that need a payment until #250 lands;
 		// deliberately outside the frozen contract's response list because it
 		// disappears with the payment flow.
-		httpsupport.WriteProblem(w, http.StatusServiceUnavailable, httpsupport.Problem(r.Context(), "Payment unavailable", "Оплата временно недоступна, попробуйте позже"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusServiceUnavailable, httpsupport.Problem(r.Context(), "Payment unavailable", "Оплата временно недоступна, попробуйте позже"))
 	case errors.Is(err, domain.ErrAlreadyOnTariff),
 		errors.Is(err, domain.ErrInvalidTariffChange),
 		errors.Is(err, domain.ErrInvalidSubscriptionState),
@@ -897,14 +897,14 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, domain.ErrInvalidPaymentStatus):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
 	case errors.Is(err, billingapp.ErrInvalidFilter):
 		// An admin listing filter outside its whitelist — a request defect,
 		// not a server failure (issue #254).
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректные параметры фильтра"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректные параметры фильтра"))
 	case errors.Is(err, domain.ErrInvalidPeriod),
 		errors.Is(err, domain.ErrInvalidTariff),
 		errors.Is(err, domain.ErrInvalidAmount),
@@ -914,11 +914,11 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, domain.ErrInvalidTariffPricing):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	default:
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }

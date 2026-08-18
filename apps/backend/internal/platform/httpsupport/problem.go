@@ -126,7 +126,7 @@ func UserFacingDetail(err error) (string, bool) {
 
 // WriteProblem writes an RFC 7807 problem response and records the problem title
 // on the response writer so that the logging middleware can include it.
-func WriteProblem(w http.ResponseWriter, status int, p openapi.Problem) {
+func WriteProblem(ctx context.Context, w http.ResponseWriter, status int, p openapi.Problem) {
 	if setter, ok := w.(problemTitleSetter); ok {
 		setter.SetProblemTitle(p.Title)
 	}
@@ -134,7 +134,7 @@ func WriteProblem(w http.ResponseWriter, status int, p openapi.Problem) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(p); err != nil {
-		slog.Error("failed to encode problem response", slog.String("error", SanitizeError(err))) //nolint:sloglint // WriteProblem has no request context in its signature; last-resort encoder fallback
+		LoggerFromContext(ctx).ErrorContext(ctx, "failed to encode problem response", slog.String("error", SanitizeError(err)))
 	}
 }
 
@@ -153,5 +153,5 @@ func StringPtr(s string) *string {
 
 // OpenAPIErrorHandler converts OpenAPI path/header/param errors into RFC 7807 problems.
 func OpenAPIErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	WriteProblem(w, http.StatusBadRequest, Problem(r.Context(), "Bad request", "Некорректный параметр запроса"))
+	WriteProblem(r.Context(), w, http.StatusBadRequest, Problem(r.Context(), "Bad request", "Некорректный параметр запроса"))
 }

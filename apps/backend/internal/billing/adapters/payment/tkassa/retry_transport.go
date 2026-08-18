@@ -3,8 +3,10 @@ package tkassa
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -117,6 +119,22 @@ func (t *retryTransport) backoff(attempt int) time.Duration {
 		d = t.maxDelay
 	}
 	return d
+}
+
+// cryptoJitter draws the full-jitter sleep uniformly from [0, d) using
+// crypto/rand. The cryptographic source is not about secrecy — gosec G404
+// rejects math/rand for this outright — and retry sleeps are rare, so its
+// cost is irrelevant. A non-positive delay or a read failure degrades to no
+// sleep instead of panicking or failing the retry loop.
+func cryptoJitter(d time.Duration) time.Duration {
+	if d <= 0 {
+		return 0
+	}
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(d)))
+	if err != nil {
+		return 0
+	}
+	return time.Duration(n.Int64())
 }
 
 // sleepContext waits for d or until ctx is done, whichever happens first, so

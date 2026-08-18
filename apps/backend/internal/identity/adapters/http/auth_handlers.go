@@ -153,14 +153,14 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.SendCodeRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
@@ -181,7 +181,7 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 		sent, err := h.auth.SendCodeByPhone(r.Context(), phone)
 		if err != nil {
 			if !writeSharedIdentityError(w, r, err, "") {
-				httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+				httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			}
 			return
 		}
@@ -195,7 +195,7 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.auth.SendCode(r.Context(), phone, *email, domain.LoginCodePurposeLogin); err != nil {
 		if !writeSharedIdentityError(w, r, err, "") {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
 		return
 	}
@@ -208,14 +208,14 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 	var body openapi.VerifyCodeRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
@@ -238,9 +238,9 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case errors.Is(err, domain.ErrLoginCodeInvalid):
-			httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
 		default:
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
 		return
 	}
@@ -253,7 +253,7 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 	token := httpsupport.SessionTokenFromRequest(r, h.cookieSecure)
 	if token == "" {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -261,7 +261,7 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 		if !errors.Is(err, application.ErrNotFound) {
 			h.logger.ErrorContext(r.Context(), "logout failed", slog.String("error", httpsupport.SanitizeError(err)))
 			httpsupport.ClearSessionCookie(w, h.cookieSecure)
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
 	}
@@ -274,14 +274,14 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	if err := h.logout.LogoutAll(r.Context(), userID, actorFromContext(r.Context())); err != nil {
 		h.logger.ErrorContext(r.Context(), "logout all failed", slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.ClearSessionCookie(w, h.cookieSecure)
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 
@@ -307,7 +307,7 @@ func actorFromContext(ctx context.Context) auditdomain.Actor {
 func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -319,17 +319,17 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 	user, err := h.profile.Me(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, application.ErrNotFound) {
-			httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Сессия недействительна"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Сессия недействительна"))
 			return
 		}
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		return
 	}
 
 	resp := meResponse(user)
 	if h.meEnricher != nil {
 		if err := h.meEnricher(r.Context(), userID, &resp); err != nil {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
 	}
@@ -341,14 +341,14 @@ func (h *AuthHandlers) GetMe(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.UserUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -367,11 +367,11 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case errors.Is(err, domain.ErrInvalidEmail):
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid email", "Некорректный формат email"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid email", "Некорректный формат email"))
 		case errors.Is(err, domain.ErrInvalidTimezone):
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid timezone", "Некорректный часовой пояс"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid timezone", "Некорректный часовой пояс"))
 		default:
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
 		return
 	}
@@ -379,7 +379,7 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	resp := meResponse(user)
 	if h.meEnricher != nil {
 		if err := h.meEnricher(r.Context(), userID, &resp); err != nil {
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 			return
 		}
 	}
@@ -391,21 +391,21 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.SendPhoneChangeCodeRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
@@ -420,11 +420,11 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 		}
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(err, "Новый номер должен отличаться от текущего")))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(err, "Новый номер должен отличаться от текущего")))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот номер телефона уже используется")))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот номер телефона уже используется")))
 		default:
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
 		return
 	}
@@ -436,27 +436,27 @@ func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	token := httpsupport.SessionTokenFromRequest(r, h.cookieSecure)
 	if token == "" {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.ChangePhoneRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	phone, err := domain.NewPhone(body.Phone)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
 		return
 	}
 
@@ -472,13 +472,13 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case errors.Is(err, application.ErrPhoneUnchanged):
-			httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(err, "Новый номер должен отличаться от текущего")))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid phone", userFacingDetailOrDefault(err, "Новый номер должен отличаться от текущего")))
 		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот номер телефона уже используется")))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Этот номер телефона уже используется")))
 		case errors.Is(err, domain.ErrLoginCodeInvalid):
-			httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Неверный код"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Неверный код"))
 		default:
-			httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
 		return
 	}

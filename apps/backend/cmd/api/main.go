@@ -27,7 +27,9 @@ import (
 func main() {
 	fallback := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	if err := run(); err != nil {
-		fallback.Error("backend stopped", "error", err) //nolint:sloglint // fallback logger before any context exists in main
+		// The fallback logger exists before any context does, so the record is
+		// anchored to context.Background() — the only ctx available in main.
+		fallback.ErrorContext(context.Background(), "backend stopped", "error", err)
 		os.Exit(1)
 	}
 }
@@ -45,12 +47,11 @@ func run() error {
 
 	// 1. Platform: config, logger, signal ctx, OTel, renderer, encryptor,
 	//    auto-migrate, db pool, audit recorder, tz resolver.
-	platform, err := wire.WirePlatform()
+	platform, ctx, err := wire.WirePlatform()
 	if err != nil {
 		return err
 	}
 	defer platform.Cleanup()
-	ctx := platform.Ctx
 	p := platform.Deps
 
 	// 2. Event dispatcher (shared by identity publisher and subscribers).
@@ -384,9 +385,16 @@ func runMigrate() error {
 	if err != nil {
 		return err
 	}
+	// The migrate step runs without the full platform wiring, but the log
+	// format and level still follow the app config; the record is anchored to
+	// context.Background() because no request or signal ctx exists here.
+	appLogger, err := wire.NewAppLogger(&cfg)
+	if err != nil {
+		return err
+	}
 	if err := database.MigrateUp(cfg.DatabaseURL, cfg.MigrationsDir); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	slog.Info("migrations applied") //nolint:sloglint // migrate step runs before the app logger is configured
+	appLogger.InfoContext(context.Background(), "migrations applied")
 	return nil
 }
