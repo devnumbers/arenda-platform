@@ -88,6 +88,25 @@ jobs:
       - name: Migrate up again
         run: go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 -database "$DATABASE_URL" -path "$MIGRATIONS_DIR" up
 
+  # Линт миграций (волна 3, #309): Squawk (lock-safety, .squawk.toml) +
+  # доменные правила (деньги-BIGINT, запрет DEFAULT на id) полным прогоном —
+  # CI-backstop для pre-push. make migrations-lint сам скачивает pinned-бинарь
+  # squawk в .tmp; Node нужен только для tools/migration-lint/domain-rules.mjs.
+  migrations-lint:
+    name: Migrations lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Squawk + domain rules
+        run: make migrations-lint
+
   # Интеграционные тесты бэкенда (волна 1B, #304) — закрывают CI-гэп: локальный
   # `make backend-test-integration` теперь подстрахован CI. Toolchain та же, что у
   # unit-степа джобы backend: контейнер golang:1.26-bookworm (образ прода),
@@ -311,10 +330,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: tools/hooks/package-lock.json
+          cache-dependency-path: |
+            tools/hooks/package-lock.json
+            tools/migration-lint/package-lock.json
 
-      # Contract tests of the executable tool scripts (harness hooks);
-      # make tools-test self-installs node_modules when missing.
+      # Contract tests of the executable tool scripts (harness hooks,
+      # migration domain rules); make tools-test self-installs node_modules
+      # when missing.
       - name: Tools contract tests
         run: make tools-test
 
@@ -340,6 +362,7 @@ jobs:
             apps/admin/package-lock.json
             tools/property-attributes/package-lock.json
             tools/hooks/package-lock.json
+            tools/migration-lint/package-lock.json
 
       - name: knip report
         run: make knip

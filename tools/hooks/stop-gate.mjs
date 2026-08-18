@@ -28,6 +28,9 @@ const PACKAGE_GATES = [
   { name: "frontend", prefix: "apps/frontend/", command: ["npm", "--prefix", "apps/frontend", "run", "lint"] },
   { name: "admin typecheck", prefix: "apps/admin/", command: ["make", "admin-typecheck"] },
   { name: "admin lint", prefix: "apps/admin/", command: ["npm", "--prefix", "apps/admin", "run", "lint"] },
+  // Coarser than lefthook's *.sql glob by design (prefix matching): a
+  // migration-only change also trips the backend prefix above — accepted.
+  { name: "migrations lint", prefix: "apps/backend/db/migrations/", command: ["make", "migrations-lint"] },
 ];
 
 const OUTPUT_TAIL_LINES = 40;

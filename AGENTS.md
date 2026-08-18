@@ -71,6 +71,7 @@ make local-infra-up
 make local-infra-down
 make backend-run
 make backend-lint
+make migrations-lint
 make backend-test
 make backend-test-integration
 make frontend-test
@@ -95,7 +96,7 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 
 - Do not create or switch to a git worktree by default. Work in the current checkout and current branch unless the user explicitly asks for a worktree or branch isolation.
 - If a generic skill recommends a worktree, this repository rule overrides it.
-- Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`.
+- Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`. On the schema side this is enforced by `make migrations-lint` (`tools/migration-lint/domain-rules.mjs`, config `.squawk.toml`).
 - All amounts are in RUB; there is no multi-currency support (`docs/adr/0036-fintech-domain-language.md`).
 - Format money for display only at the UI layer: frontend — `formatMoneyKopecks` (`apps/frontend/shared/lib/format-money.ts`); admin — `formatKopecks` / `MoneyField` (`apps/admin/src/fields.tsx`).
 - Two money vocabularies (`docs/adr/0036-fintech-domain-language.md`): rental money records are Операции — «платёж»/«транзакция» belong to Billing (T-Kassa processing) only. Canonical terms and `_Avoid_` lists live in `CONTEXT-MAP.md` and the per-context `CONTEXT.md` files.

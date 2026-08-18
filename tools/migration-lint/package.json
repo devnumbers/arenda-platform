@@ -1,0 +1,13 @@
+{
+  "name": "migration-lint",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Domain rules for db migrations (money is BIGINT kopecks; no DEFAULT on id) with contract tests. Invoked by make migrations-lint.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

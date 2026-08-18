@@ -22,6 +22,9 @@ const MAKEFILE = `backend-lint:
 
 admin-typecheck:
 \t@node mark-gate.mjs admin
+
+migrations-lint:
+\t@node mark-gate.mjs migrations
 `;
 
 const MARK_GATE = `import { appendFileSync, existsSync } from "node:fs";
@@ -48,7 +51,7 @@ const ADMIN_PACKAGE_JSON = JSON.stringify(
 
 function makeFixture(name) {
   const dir = path.join(tmpdir(), `stop-gate-${name}-${process.pid}-${Date.now()}`);
-  mkdirSync(path.join(dir, "apps/backend"), { recursive: true });
+  mkdirSync(path.join(dir, "apps/backend/db/migrations"), { recursive: true });
   mkdirSync(path.join(dir, "apps/frontend"), { recursive: true });
   mkdirSync(path.join(dir, "apps/admin"), { recursive: true });
   mkdirSync(path.join(dir, "docs"), { recursive: true });
@@ -56,6 +59,10 @@ function makeFixture(name) {
   writeFileSync(path.join(dir, "mark-gate.mjs"), MARK_GATE);
   writeFileSync(path.join(dir, "apps/frontend/package.json"), FRONTEND_PACKAGE_JSON);
   writeFileSync(path.join(dir, "apps/admin/package.json"), ADMIN_PACKAGE_JSON);
+  // Tracked baseline so a new migration file shows as its full path in
+  // `git status --porcelain` (an untracked directory would collapse to
+  // "?? apps/backend/", exactly like in the real repo).
+  writeFileSync(path.join(dir, "apps/backend/db/migrations/000000_baseline.up.sql"), "-- baseline\n");
   copyFileSync(sourceScript, path.join(dir, "stop-gate.mjs"));
   exec(dir, ["init", "-q", "-b", "main"]);
   exec(dir, ["config", "user.email", "test@test"]);
@@ -157,6 +164,14 @@ describe("stop-gate: gates by touched package", () => {
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
     expect(gatesRun(dir)).toEqual(["admin", "admin-lint"]);
+  });
+
+  it("uncommitted migration change runs the migrations gate (and the backend gate)", () => {
+    const dir = fixture("migrations");
+    writeFileSync(path.join(dir, "apps/backend/db/migrations/000200_x.up.sql"), "ALTER TABLE t ADD COLUMN c BIGINT;\n");
+    const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
+    expect(res.code).toBe(0);
+    expect(gatesRun(dir)).toEqual(["backend", "migrations"]);
   });
 
   it("changes outside the three packages run nothing", () => {

@@ -24,6 +24,11 @@ pre-commit:
     - name: admin lint
       glob: "apps/admin/**/*.{ts,tsx}"
       run: npm --prefix apps/admin run lint
+    # Migration lint (wave 3, #309): squawk (.squawk.toml) + domain rules
+    # (money BIGINT kopecks, no DEFAULT on id) over the staged migrations only.
+    - name: migrations lint
+      glob: "apps/backend/db/migrations/*.sql"
+      run: make migrations-lint FILES="{staged_files}"
 
 pre-push:
   parallel: true
@@ -32,6 +37,8 @@ pre-push:
     # requires Docker and blocks the push with a clear message without it).
     - name: full test suite
       run: make test
+    - name: migrations lint
+      run: make migrations-lint
     - name: govulncheck
       run: make backend-vulncheck
     - name: npm audit

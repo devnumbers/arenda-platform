@@ -12,11 +12,26 @@ SQLC_VERSION := v1.31.1
 # aquasec/trivy 0.74.0, multi-arch manifest digest
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
 TRIVY_CACHE_VOLUME := arenda-trivy-cache
-NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks
-TOOLS_TEST_DIRS := tools/hooks
+NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks tools/migration-lint
+TOOLS_TEST_DIRS := tools/hooks tools/migration-lint
 KNIP_VERSION := 6.32.2
-KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks
+KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks tools/migration-lint
 TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
+# Named LINT_MIGRATIONS_DIR to stay distinct from the MIGRATIONS_DIR env
+# contract checked in check-backend-env / check-migrate-env (.env.example).
+LINT_MIGRATIONS_DIR := apps/backend/db/migrations
+# Squawk (migration linter, wave 3 / #309): pinned binary from GitHub Releases.
+# Squawk publishes no checksums file, so the release-asset sha256 of each
+# supported platform is pinned by hand.
+SQUAWK_VERSION := v2.62.0
+SQUAWK_SHA256_DARWIN_ARM64 := 699d5a2cc6ed622f1469caf4db2faf047d89049b09d89b91d8307238e002d1ac
+SQUAWK_SHA256_DARWIN_X64 := df7c9dfae0acd65c694ac50754cb356ced172d8b118a46261ce14fb70de5136f
+SQUAWK_SHA256_LINUX_ARM64 := 561a1ea458082970f485017561d986a930d3863ef7d348d47af6473a0c82bb9a
+SQUAWK_SHA256_LINUX_X64 := 54bd3e7bf2101502317c3400d1043202c51414a646a10f92f56f7b3032630758
+SQUAWK_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+SQUAWK_ARCH := $(subst x86_64,x64,$(subst aarch64,arm64,$(shell uname -m)))
+SQUAWK_ASSET := squawk-$(SQUAWK_OS)-$(SQUAWK_ARCH)
+SQUAWK_BIN := .tmp/squawk/$(SQUAWK_VERSION)/$(SQUAWK_ASSET)
 
 .PHONY: local-infra-up local-infra-down local-infra-reset \
         test-infra-up test-infra-down \
@@ -27,7 +42,8 @@ TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disa
         admin-install admin-dev admin-build admin-typecheck \
         landing-install landing-dev landing-build \
         attributes-install attributes-gen attributes-check \
-        hooks-install backend-vulncheck npm-audit trivy-fs tools-test knip
+        hooks-install backend-vulncheck npm-audit trivy-fs tools-test knip \
+        squawk-install migrations-lint
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -164,6 +180,39 @@ trivy-fs:
 		--exit-code 1 \
 		--skip-dirs node_modules \
 		--skip-dirs .git
+
+# Installs the pinned squawk binary (migration linter, wave 3 / #309) from
+# GitHub Releases into .tmp (gitignored) when missing, verifying the pinned
+# sha256 of the release asset. Idempotent; called automatically by
+# migrations-lint.
+squawk-install:
+	@if [ -x "$(SQUAWK_BIN)" ]; then exit 0; fi; \
+	expected="$(SQUAWK_SHA256_$(SQUAWK_OS)_$(SQUAWK_ARCH))"; \
+	if [ -z "$$expected" ]; then echo "ERROR: no pinned squawk sha256 for $(SQUAWK_OS)-$(SQUAWK_ARCH)"; exit 1; fi; \
+	mkdir -p .tmp/squawk/$(SQUAWK_VERSION); \
+	echo "==> downloading squawk $(SQUAWK_VERSION) ($(SQUAWK_OS)-$(SQUAWK_ARCH))"; \
+	curl -fsSL -o $(SQUAWK_BIN) https://github.com/sbdchd/squawk/releases/download/$(SQUAWK_VERSION)/$(SQUAWK_ASSET) || exit 1; \
+	actual=$$({ sha256sum $(SQUAWK_BIN) 2>/dev/null || shasum -a 256 $(SQUAWK_BIN); } | cut -d' ' -f1); \
+	if [ "$$actual" != "$$expected" ]; then \
+		echo "ERROR: squawk checksum mismatch (expected $$expected, got $$actual)"; \
+		rm -f $(SQUAWK_BIN); \
+		exit 1; \
+	fi; \
+	chmod +x $(SQUAWK_BIN)
+
+# Migration lint (wave 3 / #309): squawk (lock-safety, config .squawk.toml at
+# the repo root) + the domain rules in tools/migration-lint/domain-rules.mjs
+# (money is BIGINT kopecks; no DEFAULT on id). Without FILES lints every
+# migration under $(LINT_MIGRATIONS_DIR) (pre-push, CI); with FILES lints only
+# the listed files (pre-commit: make migrations-lint FILES="{staged_files}").
+migrations-lint: squawk-install
+	@if [ -n "$(FILES)" ]; then files="$(FILES)"; else files="$(LINT_MIGRATIONS_DIR)/*.sql"; fi; \
+	status=0; \
+	echo "==> squawk $$files"; \
+	$(SQUAWK_BIN) $$files || status=1; \
+	echo "==> migration domain rules $$files"; \
+	node tools/migration-lint/domain-rules.mjs $$files || status=1; \
+	if [ $$status -ne 0 ]; then echo "ERROR: migration lint failed (see above)"; exit 1; fi
 
 # Advisory dead-code/unused-exports/unused-dependencies report (knip, decision
 # #295 / issue #305). NOT a gate: --no-exit-code keeps the run green on

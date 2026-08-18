@@ -1,0 +1,65 @@
+# Squawk — линтер lock-safety PostgreSQL-миграций (волна 3, #309; решение #295;
+# registry: docs/agents/tooling.md). Запуск: make migrations-lint — pre-commit
+# по staged-миграциям, pre-push и CI полным прогоном.
+# Доменные правила, которых у Squawk нет (деньги-BIGINT, запрет DEFAULT на id), —
+# рядом, в tools/migration-lint/domain-rules.mjs.
+
+# golang-migrate выполняет файл миграции одной транзакцией (pgx): CREATE/DROP
+# INDEX CONCURRENTLY невозможны, а неудачный файл откатывается целиком и
+# переисполняется с чистого листа (правило prefer-robust-stmts гасится этим
+# же флагом автоматически).
+assume_in_transaction = true
+
+# Миграции исполняются на PostgreSQL 18 (docker-compose, testcontainers, прод).
+pg_version = "18"
+
+excluded_paths = [
+  # Down-миграции — намеренные инверсии уже проверенных up-файлов (drop, откат
+  # типа, возврат DEFAULT); линтится только прямая эволюция схемы.
+  "*.down.sql",
+  # Исторические up-миграции, применённые до введения линта (осознанные решения
+  # своего времени): точечные исключения с причинами, baseline-файл не вводится.
+  "*000007_user_recurring_operations.up.sql",        # ban-drop-not-null
+  "*000011_add_sending_status.up.sql",               # require-enum-value-ordering: значение вставлено не в конец
+  "*000012_sent_sms_reminder_unique.up.sql",         # disallowed-unique-constraint: partial unique с NULL-семантикой
+  "*000016_drop_reminders_event_date.up.sql",        # ban-drop-column: осознанный drop
+  "*000022_tariff_prices_kopecks.up.sql",            # renaming-column + changing-column-type: миграция копеек (ADR 0008), NUMERIC → BIGINT
+  "*000023_subscription_lifecycle.up.sql",           # adding-foreign-key-constraint + changing-column-type (ADR 0008)
+  "*000024_payment_methods.up.sql",                  # adding-foreign-key-constraint: FK без NOT VALID
+  "*000035_session_sliding_expiration.up.sql",       # adding-not-nullable-field: бэкфилл в той же транзакции
+  "*000037_add_operation_overdue_event.up.sql",      # require-enum-value-ordering
+  "*000045_add_sms_code_purpose.up.sql",             # prefer-text-field: VARCHAR-код
+  "*000046_add_login_attempts_user_id.up.sql",       # adding-foreign-key-constraint: FK без NOT VALID
+  "*000055_login_codes.up.sql",                      # prefer-text-field: VARCHAR-код
+  "*000064_drop_sms_codes.up.sql",                   # ban-drop-table: осознанный drop
+  "*000077_migrate_operation_category.up.sql",       # FK + not-null-бэкфилл + drop колонок: дата-миграция
+  "*000081_notification_status_skipped.up.sql",      # require-enum-value-ordering
+  "*000086_property_deletion_detach.up.sql",         # FK + ban-drop-not-null: семантика удаления свойства
+  "*000089_free_reminder_enums.up.sql",              # require-enum-value-ordering
+  "*000091_reminders_free_reminder_fk.up.sql",       # adding-foreign-key-constraint
+  "*000096_sent_email_reminders_per_recipient.up.sql", # disallowed-unique-constraint
+  "*000102_drop_legacy_notification_preferences.up.sql", # ban-drop-table: осознанный drop
+  "*000104_billing_core_rewrite.up.sql",             # ban-drop-table ×4: переписывание billing (ADR 0037)
+  "*000105_grace_notifications.up.sql",              # require-enum-value-ordering
+]
+
+excluded_rules = [
+  # Решение #295: конфликт с uuid-v7-app-side (ADR 0019) — id генерирует
+  # приложение, а не база.
+  "prefer-identity",
+  "adding-serial-primary-key-field",
+  "prefer-bigint-over-int",
+  # CONCURRENTLY не исполняется внутри транзакции golang-migrate (см.
+  # assume_in_transaction выше).
+  "require-concurrent-index-creation",
+  "require-concurrent-index-deletion",
+  # Репо не открывает миграции SET lock_timeout/statement_timeout: весь
+  # исторический корпус (каждый файл) этой конвенции предшествует, ретрофит =
+  # правка применённых миграций. Ввести конвенцию для новых миграций —
+  # отдельное решение (trigger-based gate review, docs/agents/tooling.md).
+  "require-lock-timeout",
+  "require-statement-timeout",
+  # NOT VALID-констрейнты: таблицы малы, миграция исполняется одной транзакцией
+  # вместе с бэкфиллом — двухшаговый NOT VALID + VALIDATE не применяется.
+  "constraint-missing-not-valid",
+]
