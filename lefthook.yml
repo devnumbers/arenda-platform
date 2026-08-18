@@ -12,6 +12,12 @@ pre-commit:
     - name: backend lint
       glob: "**/*.go"
       run: make backend-lint
+    # Nolint gate (remediation grid #325, #344): zero //nolint directives in
+    # the backend, no whitelist (target state #323) — staged files only; the
+    # full pass runs in CI and the Stop-gate.
+    - name: backend nolint gate
+      glob: "apps/backend/**/*.go"
+      run: make backend-nolint FILES="{staged_files}"
     # The repo's lint script as-is (same invocation as CI): staged files act
     # only as the trigger.
     - name: frontend lint

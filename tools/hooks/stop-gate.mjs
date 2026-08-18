@@ -25,6 +25,9 @@ import { readFileSync } from "node:fs";
 // Mirrors the pre-commit gates in lefthook.yml; keep the two in sync.
 const PACKAGE_GATES = [
   { name: "backend", prefix: "apps/backend/", command: ["make", "backend-lint"] },
+  // Same prefix as the backend gate — both run in parallel on any backend
+  // change (nolint gate #344: zero //nolint directives, full pass).
+  { name: "backend nolint", prefix: "apps/backend/", command: ["make", "backend-nolint"] },
   { name: "frontend", prefix: "apps/frontend/", command: ["npm", "--prefix", "apps/frontend", "run", "lint"] },
   { name: "admin typecheck", prefix: "apps/admin/", command: ["make", "admin-typecheck"] },
   { name: "admin lint", prefix: "apps/admin/", command: ["npm", "--prefix", "apps/admin", "run", "lint"] },

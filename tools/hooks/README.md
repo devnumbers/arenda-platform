@@ -47,10 +47,10 @@ untracked) перед завершением хода агента — «зая�
 
 | Затронутые файлы | Гейт |
 | --- | --- |
-| `apps/backend/**` | `make backend-lint` |
+| `apps/backend/**` | `make backend-lint` и `make backend-nolint` (гейт «0 nolint», #344; параллельно) |
 | `apps/frontend/**` | `npm --prefix apps/frontend run lint` |
 | `apps/admin/**` | `make admin-typecheck` и `npm --prefix apps/admin run lint` (параллельно) |
-| `apps/backend/db/migrations/**` | `make migrations-lint` (полный прогон; правка миграции задевает и более грубый префикс `apps/backend/` — параллельно стартует backend-lint, это принято) |
+| `apps/backend/db/migrations/**` | `make migrations-lint` (полный прогон; правка миграции задевает и более грубый префикс `apps/backend/` — параллельно стартуют backend-lint и backend-nolint, это принято) |
 
 Правки вне `apps/**` (docs, tools, корень) гейтов не запускают.
 Гейты идут параллельно; вывод упавшего гейта (последние 40 строк) уходит в

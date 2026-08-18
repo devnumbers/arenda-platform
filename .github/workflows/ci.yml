@@ -107,6 +107,25 @@ jobs:
       - name: Squawk + domain rules
         run: make migrations-lint
 
+  # Гейт «0 nolint» (сетка ремедиации #325, гейт #344; целевое состояние #323):
+  # любое `nolint` в Go-комментарии бекенда — находка, белого списка нет —
+  # CI-backstop для pre-commit-проводки; Node нужен только для
+  # tools/nolint-gate/nolint-gate.mjs.
+  backend-nolint:
+    name: Backend nolint gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Nolint gate
+        run: make backend-nolint
+
   # Интеграционные тесты бэкенда (волна 1B, #304) — закрывают CI-гэп: локальный
   # `make backend-test-integration` теперь подстрахован CI. Toolchain та же, что у
   # unit-степа джобы backend: контейнер golang:1.26-bookworm (образ прода),
@@ -333,10 +352,11 @@ jobs:
           cache-dependency-path: |
             tools/hooks/package-lock.json
             tools/migration-lint/package-lock.json
+            tools/nolint-gate/package-lock.json
 
       # Contract tests of the executable tool scripts (harness hooks,
-      # migration domain rules); make tools-test self-installs node_modules
-      # when missing.
+      # migration domain rules, nolint gate); make tools-test self-installs
+      # node_modules when missing.
       - name: Tools contract tests
         run: make tools-test
 

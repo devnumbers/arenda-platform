@@ -1,0 +1,13 @@
+{
+  "name": "nolint-gate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Zero-nolint gate for the Go backend: any `nolint` in a Go comment is a finding, no whitelist. Invoked by make backend-nolint.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

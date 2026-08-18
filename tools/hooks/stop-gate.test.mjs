@@ -20,6 +20,9 @@ function exec(dir, args, opts = {}) {
 const MAKEFILE = `backend-lint:
 \t@node mark-gate.mjs backend
 
+backend-nolint:
+\t@node mark-gate.mjs backend-nolint
+
 admin-typecheck:
 \t@node mark-gate.mjs admin
 
@@ -115,12 +118,12 @@ describe("stop-gate: gates by touched package", () => {
     expect(gatesRun(dir)).toEqual([]);
   });
 
-  it("uncommitted backend change runs only the backend gate", () => {
+  it("uncommitted backend change runs only the backend gates", () => {
     const dir = fixture("backend");
     writeFileSync(path.join(dir, "apps/backend/main.go"), "package main\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["backend"]);
+    expect(gatesRun(dir)).toEqual(["backend", "backend-nolint"]);
   });
 
   it("uncommitted frontend change runs only the frontend gate", () => {
@@ -146,7 +149,7 @@ describe("stop-gate: gates by touched package", () => {
     writeFileSync(path.join(dir, "apps/admin/App.tsx"), "export {};\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "backend", "frontend"]);
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "backend", "backend-nolint", "frontend"]);
   });
 
   it("untracked files count as touched", () => {
@@ -154,7 +157,7 @@ describe("stop-gate: gates by touched package", () => {
     writeFileSync(path.join(dir, "apps/backend/new_file.go"), "package main\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["backend"]);
+    expect(gatesRun(dir)).toEqual(["backend", "backend-nolint"]);
   });
 
   it("staged files count as touched", () => {
@@ -166,12 +169,12 @@ describe("stop-gate: gates by touched package", () => {
     expect(gatesRun(dir)).toEqual(["admin", "admin-lint"]);
   });
 
-  it("uncommitted migration change runs the migrations gate (and the backend gate)", () => {
+  it("uncommitted migration change runs the migrations gate (and the backend gates)", () => {
     const dir = fixture("migrations");
     writeFileSync(path.join(dir, "apps/backend/db/migrations/000200_x.up.sql"), "ALTER TABLE t ADD COLUMN c BIGINT;\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["backend", "migrations"]);
+    expect(gatesRun(dir)).toEqual(["backend", "backend-nolint", "migrations"]);
   });
 
   it("changes outside the three packages run nothing", () => {
@@ -233,7 +236,7 @@ describe("stop-gate: blocking and fail-open behavior", () => {
     writeFileSync(path.join(dir, "apps/backend/main.go"), "package main\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), tmpdir(), { cwd: dir });
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["backend"]);
+    expect(gatesRun(dir)).toEqual(["backend", "backend-nolint"]);
   });
 
   it("allows when payload cwd is outside any git repository", () => {

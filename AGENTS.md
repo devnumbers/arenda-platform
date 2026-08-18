@@ -71,6 +71,7 @@ make local-infra-up
 make local-infra-down
 make backend-run
 make backend-lint
+make backend-nolint
 make migrations-lint
 make backend-test
 make backend-test-integration

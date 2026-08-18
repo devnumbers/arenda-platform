@@ -12,10 +12,10 @@ SQLC_VERSION := v1.31.1
 # aquasec/trivy 0.74.0, multi-arch manifest digest
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
 TRIVY_CACHE_VOLUME := arenda-trivy-cache
-NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks tools/migration-lint
-TOOLS_TEST_DIRS := tools/hooks tools/migration-lint
+NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate
+TOOLS_TEST_DIRS := tools/hooks tools/migration-lint tools/nolint-gate
 KNIP_VERSION := 6.32.2
-KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks tools/migration-lint
+KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate
 TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
 # Named LINT_MIGRATIONS_DIR to stay distinct from the MIGRATIONS_DIR env
 # contract checked in check-backend-env / check-migrate-env (.env.example).
@@ -43,7 +43,7 @@ SQUAWK_BIN := .tmp/squawk/$(SQUAWK_VERSION)/$(SQUAWK_ASSET)
         landing-install landing-dev landing-build \
         attributes-install attributes-gen attributes-check \
         hooks-install backend-vulncheck npm-audit trivy-fs tools-test knip \
-        squawk-install migrations-lint
+        squawk-install migrations-lint backend-nolint
 
 local-infra-up:
 	$(COMPOSE_LOCAL) up -d
@@ -243,6 +243,30 @@ migrations-lint: squawk-install
 		node tools/migration-lint/domain-rules.mjs $(LINT_MIGRATIONS_DIR)/*.sql || status=1; \
 	fi; \
 	if [ $$status -ne 0 ]; then echo "ERROR: migration lint failed (see above)"; exit 1; fi
+
+# Nolint gate (remediation grid #325, gate #344; target state #323): any
+# `nolint` in a Go comment under the backend is a finding — zero suppression
+# directives, no whitelist (golangci's nolintlint only validates the form of
+# directives that exist). Without FILES checks every *.go under $(BACKEND_DIR)
+# (CI, Stop-gate); with FILES checks only the listed files (pre-commit:
+# make backend-nolint FILES="{staged_files}"); non-.go entries and staged
+# deletions are skipped by the filter/the script itself.
+backend-nolint:
+	@set +e; status=0; \
+	if [ -n "$(FILES)" ]; then \
+		files=`echo "$(FILES)" | tr ' ' '\n' | grep '\.go$$' | tr '\n' ' '`; \
+		if [ -n "$${files// /}" ]; then \
+			echo "==> nolint gate $$files"; \
+			node tools/nolint-gate/nolint-gate.mjs $$files || status=1; \
+		else \
+			echo "==> nolint gate (skip: no .go files in FILES)"; \
+		fi; \
+	else \
+		echo "==> nolint gate $(BACKEND_DIR)/**/*.go"; \
+		files=`find $(BACKEND_DIR) -name '*.go' -type f`; \
+		node tools/nolint-gate/nolint-gate.mjs $$files || status=1; \
+	fi; \
+	if [ $$status -ne 0 ]; then echo "ERROR: nolint gate failed (see above)"; exit 1; fi
 
 # Advisory dead-code/unused-exports/unused-dependencies report (knip, decision
 # #295 / issue #305). NOT a gate: --no-exit-code keeps the run green on
