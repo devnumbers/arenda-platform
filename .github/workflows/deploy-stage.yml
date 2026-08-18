@@ -160,7 +160,13 @@ jobs:
     needs: collect
     if: github.event_name == 'workflow_dispatch' || needs.collect.result == 'success'
     uses: ./.github/workflows/_deploy.yml
-    secrets: inherit
+    # Deliberate `secrets: inherit` (triaged in #318): the reusable workflow
+    # resolves environment-scoped secrets (ENV_FILE, SSH_*, GHCR_*) itself via
+    # `environment:` on its deploy job. Passing them explicitly from this call
+    # site would evaluate them OUTSIDE any environment context and hand the
+    # callee empty strings (ADR 0024: environment values live in GitHub
+    # Environments, one ENV_FILE per stage/production).
+    secrets: inherit # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
     with:
       environment: stage
       compose_env: stage

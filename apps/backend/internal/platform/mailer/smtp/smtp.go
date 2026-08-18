@@ -71,8 +71,7 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	var err error
 	switch s.cfg.Port {
 	case "465":
-		tlsConfig := &tls.Config{ServerName: s.cfg.Host}
-		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: tlsConfig}
+		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: tlsConfig(s.cfg.Host)}
 		conn, err = tlsDialer.DialContext(ctx, "tcp", addr)
 	default:
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
@@ -93,8 +92,7 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	defer func() { _ = client.Close() }()
 
 	if s.cfg.Port == "587" {
-		tlsConfig := &tls.Config{ServerName: s.cfg.Host}
-		if err := client.StartTLS(tlsConfig); err != nil {
+		if err := client.StartTLS(tlsConfig(s.cfg.Host)); err != nil {
 			return fmt.Errorf("start tls: %w", err)
 		}
 	}
@@ -138,6 +136,18 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 
 func encodeHeader(s string) string {
 	return mime.QEncoding.Encode("UTF-8", s)
+}
+
+// tlsConfig is the TLS configuration for both implicit TLS (port 465) and
+// STARTTLS (port 587): the server name for certificate validation and an
+// explicit TLS 1.2 floor (semgrep p/ci missing-ssl-minversion, #318). Go's
+// client-side default floor is TLS 1.2 already; the pin keeps it from silently
+// dropping if that default ever changes.
+func tlsConfig(host string) *tls.Config {
+	return &tls.Config{
+		ServerName: host,
+		MinVersion: tls.VersionTLS12,
+	}
 }
 
 // quoteDisplayName quotes a display name per RFC 5322.

@@ -2,6 +2,9 @@
 # updates targeting dev (PR flow: dev → main). Replaces the osv-scanner job
 # formerly in security.yml; Go vulns are additionally covered by govulncheck
 # in ci.yml.
+# cooldown (7 days on every entry, semgrep p/ci dependabot-missing-cooldown,
+# #318): a freshly published release sits out a week before Dependabot can
+# propose it, so a malicious pull-the-package attack has time to be caught.
 version: 2
 updates:
   - package-ecosystem: gomod
@@ -11,6 +14,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: npm
     directory: /apps/frontend
@@ -19,6 +24,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
     groups:
       minor-patch:
         update-types:
@@ -32,6 +39,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
     groups:
       minor-patch:
         update-types:
@@ -45,6 +54,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
     groups:
       minor-patch:
         update-types:
@@ -58,6 +69,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directory: /apps/frontend
@@ -66,6 +79,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directory: /apps/admin
@@ -74,6 +89,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directory: /apps/landing
@@ -82,6 +99,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: github-actions
     directory: /
@@ -90,3 +109,5 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
