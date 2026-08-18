@@ -291,10 +291,10 @@ linters:
         - paramTypeCombine     # func(_ uuid.UUID, _ uuid.UUID) → (_, _ uuid.UUID)
         - unnamedResult        # именовать результаты при одинаковых/неочевидных типах
     dupl:
-      threshold: 200         # дефолт 150 тонет в sqlc-boilerplate; 200 = единичные реальные кластеры
-      # REMEDIATION (этап 2, dupl-кластеры #337–#340): опустить до 150 после
-      # закрытия продовых кластеров (scheduler-воркеры, HTTP-хендлеры); тестовые
-      # пары закрыты в тикете #336.
+      threshold: 150         # дефолт; продовые dupl-кластеры сетки закрыты —
+      # scheduler-воркеры #337, admin List-хендлеры #338, operations-хвост #339,
+      # property_handlers #340; тестовые пары — в #336; generated не
+      # анализируется (exclusions.generated: strict).
     forbidigo:
       analyze-types: true    # привязка паттерна к пакету (нужна для stdlib log)
       forbid:

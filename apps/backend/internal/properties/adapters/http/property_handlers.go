@@ -139,13 +139,7 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
-	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
-	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, resp)
+	h.respondWithProperty(w, r, actor, property, leasesdomain.Lease{}, http.StatusCreated)
 }
 
 // ListProperties implements GET /properties.
@@ -232,13 +226,7 @@ func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), actor, property, activeLease)
-	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
-	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
+	h.respondWithProperty(w, r, actor, property, activeLease, http.StatusOK)
 }
 
 // UpdateProperty implements PATCH /properties/{id}.
@@ -271,13 +259,7 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
-	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
-	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
+	h.respondWithProperty(w, r, actor, property, leasesdomain.Lease{}, http.StatusOK)
 }
 
 // DeleteProperty implements DELETE /properties/{id}.
@@ -316,13 +298,7 @@ func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
-	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
-	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
+	h.respondWithProperty(w, r, actor, property, leasesdomain.Lease{}, http.StatusOK)
 }
 
 // UnarchiveProperty implements POST /properties/{id}/unarchive.
@@ -339,13 +315,7 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
-	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
-	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
+	h.respondWithProperty(w, r, actor, property, leasesdomain.Lease{}, http.StatusOK)
 }
 
 // ListPropertyLeases implements GET /properties/{id}/leases.
@@ -690,6 +660,19 @@ func (h *PropertyHandlers) propertyResponse(ctx context.Context, actor uuid.UUID
 		resp.ActiveLease = &leaseResp
 	}
 	return resp, nil
+}
+
+// respondWithProperty maps the property through the presenter and writes the
+// response with the given status code — 201 from CreateProperty, 200 from the
+// other property endpoints.
+func (h *PropertyHandlers) respondWithProperty(w http.ResponseWriter, r *http.Request, actor uuid.UUID, property domain.Property, activeLease leasesdomain.Lease, status int) {
+	resp, err := h.propertyResponse(r.Context(), actor, property, activeLease)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, status, resp)
 }
 
 // propertyAttributesPtr converts an optional generated PropertyAttributes value
