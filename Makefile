@@ -206,13 +206,42 @@ squawk-install:
 # (money is BIGINT kopecks; no DEFAULT on id). Without FILES lints every
 # migration under $(LINT_MIGRATIONS_DIR) (pre-push, CI); with FILES lints only
 # the listed files (pre-commit: make migrations-lint FILES="{staged_files}").
+#
+# FILES-mode squawk quirks handled here (both make squawk exit 1 with
+# "Failed to find files", breaking the commit): *.down.sql files are filtered
+# out (repo-level exemption, see .squawk.toml excluded_paths), and a list whose
+# up files are ALL individually exempt in .squawk.toml is a skip, not a
+# failure. A listed path that does not exist is still a hard error. The
+# domain-rules pass handles down files itself (skips them with a note).
 migrations-lint: squawk-install
-	@if [ -n "$(FILES)" ]; then files="$(FILES)"; else files="$(LINT_MIGRATIONS_DIR)/*.sql"; fi; \
-	status=0; \
-	echo "==> squawk $$files"; \
-	$(SQUAWK_BIN) $$files || status=1; \
-	echo "==> migration domain rules $$files"; \
-	node tools/migration-lint/domain-rules.mjs $$files || status=1; \
+	@set +e; status=0; \
+	if [ -n "$(FILES)" ]; then \
+		files="$(FILES)"; \
+		up_files=`echo $$files | tr ' ' '\n' | grep -v '\.down\.sql$$' | tr '\n' ' '`; \
+		if [ -n "$${up_files// /}" ]; then \
+			for f in $$up_files; do \
+				[ -f "$$f" ] || { echo "ERROR: migration file not found: $$f"; exit 1; }; \
+			done; \
+			echo "==> squawk $$up_files"; \
+			out=`$(SQUAWK_BIN) $$up_files 2>&1`; \
+			if [ $$? -eq 0 ]; then \
+				echo "$$out"; \
+			elif echo "$$out" | grep -q "Failed to find files"; then \
+				echo "==> squawk (skip: every listed up migration is exempt in .squawk.toml)"; \
+			else \
+				echo "$$out"; status=1; \
+			fi; \
+		else \
+			echo "==> squawk (skip: only down migrations, which .squawk.toml exempts)"; \
+		fi; \
+		echo "==> migration domain rules $$files"; \
+		node tools/migration-lint/domain-rules.mjs $$files || status=1; \
+	else \
+		echo "==> squawk $(LINT_MIGRATIONS_DIR)/*.sql"; \
+		$(SQUAWK_BIN) $(LINT_MIGRATIONS_DIR)/*.sql || status=1; \
+		echo "==> migration domain rules $(LINT_MIGRATIONS_DIR)/*.sql"; \
+		node tools/migration-lint/domain-rules.mjs $(LINT_MIGRATIONS_DIR)/*.sql || status=1; \
+	fi; \
 	if [ $$status -ne 0 ]; then echo "ERROR: migration lint failed (see above)"; exit 1; fi
 
 # Advisory dead-code/unused-exports/unused-dependencies report (knip, decision
