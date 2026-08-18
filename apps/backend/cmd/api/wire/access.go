@@ -80,6 +80,12 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 
 	policy := accessapp.NewMembershipPolicy(ownerResolver, memberRepo)
 
+	// factory is the single canonical txStoreFactory bundling the access
+	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
+	// passed to every access service so adding an Nth repository is a change
+	// here, not in several constructors.
+	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, p.AuditRecorder, p.UoW)
+
 	// Slot coordinator bridges (issue #158, T4). The billing limiter wraps the
 	// billing application SubscriptionPropertyLimiter; the occupancy and
 	// owned-property ports wrap the properties postgres adapters, rebuilt from
@@ -114,8 +120,7 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		policy,
 		slotCoordinator,
 		lifecycleMailer,
-		p.Beginner,
-		p.AuditRecorder,
+		factory,
 		p.Logger,
 	)
 
@@ -131,8 +136,7 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		accessMailer,
 		lifecycleMailer,
 		ownerResolver,
-		p.Beginner,
-		p.AuditRecorder,
+		factory,
 		p.Clock,
 		p.Logger,
 	)

@@ -46,6 +46,28 @@ func (b lifecycleBeginner) Begin(context.Context) (transaction.Tx, error) {
 	return lifecycleNoCommitTx{b.tx}, nil
 }
 
+// lifecycleUoW adapts lifecycleBeginner to the transaction.UoW port so the
+// services under test open their transactions through runInTx (ADR 0033); the
+// no-commit tx keeps the outer test transaction in charge of cleanup.
+type lifecycleUoW struct{ beginner lifecycleBeginner }
+
+func (u lifecycleUoW) Do(ctx context.Context, work func(tx transaction.Tx) error) (err error) {
+	tx, err := u.beginner.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+		if r := recover(); r != nil {
+			panic(r)
+		}
+	}()
+	if err := work(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // lifecycleCapturingSender is a platform mailer.Sender recording the messages.
 type lifecycleCapturingSender struct {
 	messages []mailer.Message
@@ -181,8 +203,9 @@ func newLifecycleMailFixture(t *testing.T) *lifecycleMailFixture {
 	beginner := lifecycleBeginner{tx: tx}
 
 	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter, lifecycleNoOccupancy{}, lifecycleNoOwnedProps{}, lifecycle, auditapp.Noop{}, beginner)
-	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, lifecycle, beginner, auditapp.Noop{}, nil)
-	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver, userLookup, policy, slots, accessMailer, lifecycle, ownerResolver, beginner, auditapp.Noop{}, nil, nil)
+	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, lifecycleUoW{beginner})
+	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, lifecycle, factory, nil)
+	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver, userLookup, policy, slots, accessMailer, lifecycle, ownerResolver, factory, nil, nil)
 	deleter := accessapp.NewPropertyDeleteMailer(memberRepo, emailResolver, accessMailer, nil)
 
 	return &lifecycleMailFixture{

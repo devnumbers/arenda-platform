@@ -190,8 +190,8 @@ func newInvitationFixture() *invitationFixture {
 	// sent from these paths.
 	lifecycle := NewLifecycleMailer(mailer, fakeEmailResolver{}, fakeTitles("Квартира на Невском"), nil)
 	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOccupancy(), newFakeOwnedProps(), lifecycle, auditapp.Noop{}, noopBeginner{})
-	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, lifecycle, noopBeginner{}, auditapp.Noop{}, nil)
-	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy, coordinator, mailer, lifecycle, fakeTitles("Квартира на Невском"), noopBeginner{}, auditapp.Noop{}, clk, nil)
+	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, lifecycle, newTestFactory(repo, invitations, auditapp.Noop{}), nil)
+	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy, coordinator, mailer, lifecycle, fakeTitles("Квартира на Невском"), newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil)
 	return &invitationFixture{
 		repo:        repo,
 		invitations: invitations,

@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -31,9 +30,10 @@ type InviteOutcome struct {
 // email sent by this service itself; the lifecycle emails (activation notice to
 // the owner, the "waiting for a slot" email on a suspended activation) go
 // through the LifecycleMailer (issue #162, T6). Persistence and audit share
-// the same transaction; the invitee email is PII and never appears in audit
-// context (ADR 0020).
+// the same transaction through the embedded txStoreFactory (ADR 0033); the
+// invitee email is PII and never appears in audit context (ADR 0020).
 type InvitationService struct {
+	txStoreFactory
 	access      *AccessService
 	members     MembershipRepository
 	invitations InvitationRepository
@@ -45,8 +45,6 @@ type InvitationService struct {
 	mailer      AccessMailer
 	lifecycle   *LifecycleMailer
 	titles      PropertyTitleResolver
-	db          txBeginner
-	audit       auditapp.Recorder
 	clock       clock.Clock
 	logger      *slog.Logger
 }
@@ -58,6 +56,8 @@ type InvitationService struct {
 // lifecycle is the sharing lifecycle mailer (issue #162, T6) and may be nil to
 // disable the lifecycle emails. statuses reports the archived flag of a
 // property (issue #163); it may be nil to skip the archived-property checks.
+// factory bundles the repositories, the audit recorder, and the Unit-of-Work
+// every mutating use case runs through (ADR 0033 γ-factory).
 func NewInvitationService(
 	access *AccessService,
 	members MembershipRepository,
@@ -70,36 +70,31 @@ func NewInvitationService(
 	mailer AccessMailer,
 	lifecycle *LifecycleMailer,
 	titles PropertyTitleResolver,
-	db txBeginner,
-	audit auditapp.Recorder,
+	factory txStoreFactory,
 	clk clock.Clock,
 	logger *slog.Logger,
 ) *InvitationService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	if clk == nil {
 		clk = clock.Real{}
 	}
 	return &InvitationService{
-		access:      access,
-		members:     members,
-		invitations: invitations,
-		owners:      owners,
-		statuses:    statuses,
-		users:       users,
-		policy:      policy,
-		slots:       slots,
-		mailer:      mailer,
-		lifecycle:   lifecycle,
-		titles:      titles,
-		db:          db,
-		audit:       audit,
-		clock:       clk,
-		logger:      logger,
+		txStoreFactory: factory,
+		access:         access,
+		members:        members,
+		invitations:    invitations,
+		owners:         owners,
+		statuses:       statuses,
+		users:          users,
+		policy:         policy,
+		slots:          slots,
+		mailer:         mailer,
+		lifecycle:      lifecycle,
+		titles:         titles,
+		clock:          clk,
+		logger:         logger,
 	}
 }
 
@@ -162,42 +157,39 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 		LastSentAt: s.clock.Now(),
 	}
 
-	tx, err := s.db.Begin(ctx)
+	var created domain.Invitation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		if _, err := stores.invitations.GetByPropertyAndEmail(ctx, propertyID, email); err == nil {
+			return domain.ErrInvitationAlreadyExists
+		} else if !errors.Is(err, domain.ErrInvitationNotFound) {
+			return fmt.Errorf("check existing invitation: %w", err)
+		}
+
+		var err error
+		created, err = stores.invitations.Create(ctx, invitation)
+		if err != nil {
+			return fmt.Errorf("create invitation: %w", err)
+		}
+
+		// Audit in the same transaction. Only ids and the role are recorded; the
+		// invitee email is PII and must never appear in context (ADR 0020).
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberInvitationInvited,
+			EntityType: auditdomain.EntityPropertyMemberInvitation,
+			EntityID:   &created.ID,
+			Context: map[string]any{
+				"property_id": propertyID,
+				"role":        string(role),
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return InviteOutcome{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txInvitations := s.invitations.WithTx(tx)
-	if _, err := txInvitations.GetByPropertyAndEmail(ctx, propertyID, email); err == nil {
-		return InviteOutcome{}, domain.ErrInvitationAlreadyExists
-	} else if !errors.Is(err, domain.ErrInvitationNotFound) {
-		return InviteOutcome{}, fmt.Errorf("check existing invitation: %w", err)
-	}
-
-	created, err := txInvitations.Create(ctx, invitation)
-	if err != nil {
-		return InviteOutcome{}, fmt.Errorf("create invitation: %w", err)
-	}
-
-	// Audit in the same transaction. Only ids and the role are recorded; the
-	// invitee email is PII and must never appear in context (ADR 0020).
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationInvited,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &created.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"role":        string(role),
-		},
-	}); err != nil {
-		return InviteOutcome{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return InviteOutcome{}, fmt.Errorf("commit tx: %w", err)
+		return InviteOutcome{}, err
 	}
 
 	// The invite email goes out after the commit; a send failure does not roll
@@ -235,33 +227,25 @@ func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propert
 		return fmt.Errorf("send invite email: %w", err)
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		if err := stores.invitations.UpdateLastSentAt(ctx, invitationID, propertyID, now); err != nil {
+			return fmt.Errorf("update invitation last_sent_at: %w", err)
+		}
 
-	if err := s.invitations.WithTx(tx).UpdateLastSentAt(ctx, invitationID, propertyID, now); err != nil {
-		return fmt.Errorf("update invitation last_sent_at: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationResent,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &invitation.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberInvitationResent,
+			EntityType: auditdomain.EntityPropertyMemberInvitation,
+			EntityID:   &invitation.ID,
+			Context: map[string]any{
+				"property_id": propertyID,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // ChangeInvitationRole changes the role of a pending invitation. No new email
@@ -272,40 +256,37 @@ func (s *InvitationService) ChangeInvitationRole(ctx context.Context, actor, pro
 		return domain.Invitation{}, err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Invitation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var updated domain.Invitation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		// Confirm the invitation exists and belongs to this property before
+		// updating; a missing row is a not-found outcome rather than a silent no-op.
+		if _, err := stores.invitations.GetByID(ctx, invitationID, propertyID); err != nil {
+			return err
+		}
 
-	txInvitations := s.invitations.WithTx(tx)
-	// Confirm the invitation exists and belongs to this property before
-	// updating; a missing row is a not-found outcome rather than a silent no-op.
-	if _, err := txInvitations.GetByID(ctx, invitationID, propertyID); err != nil {
+		var err error
+		updated, err = stores.invitations.UpdateRole(ctx, invitationID, propertyID, role)
+		if err != nil {
+			return fmt.Errorf("update invitation role: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberInvitationRoleChanged,
+			EntityType: auditdomain.EntityPropertyMemberInvitation,
+			EntityID:   &updated.ID,
+			Context: map[string]any{
+				"property_id": propertyID,
+				"role":        string(role),
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
 		return domain.Invitation{}, err
-	}
-
-	updated, err := txInvitations.UpdateRole(ctx, invitationID, propertyID, role)
-	if err != nil {
-		return domain.Invitation{}, fmt.Errorf("update invitation role: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationRoleChanged,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &updated.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"role":        string(role),
-		},
-	}); err != nil {
-		return domain.Invitation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Invitation{}, fmt.Errorf("commit tx: %w", err)
 	}
 	return updated, nil
 }
@@ -318,38 +299,29 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 		return err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		if _, err := stores.invitations.GetByID(ctx, invitationID, propertyID); err != nil {
+			return err
+		}
 
-	txInvitations := s.invitations.WithTx(tx)
-	if _, err := txInvitations.GetByID(ctx, invitationID, propertyID); err != nil {
-		return err
-	}
+		if err := stores.invitations.Delete(ctx, invitationID, propertyID); err != nil {
+			return fmt.Errorf("delete invitation: %w", err)
+		}
 
-	if err := txInvitations.Delete(ctx, invitationID, propertyID); err != nil {
-		return fmt.Errorf("delete invitation: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationCancelled,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &invitationID,
-		Context: map[string]any{
-			"property_id": propertyID,
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberInvitationCancelled,
+			EntityType: auditdomain.EntityPropertyMemberInvitation,
+			EntityID:   &invitationID,
+			Context: map[string]any{
+				"property_id": propertyID,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // ActivatePendingInvitations turns every pending invitation for the email into
@@ -390,100 +362,92 @@ func (s *InvitationService) ActivatePendingInvitations(ctx context.Context, user
 // activateInvitation activates a single pending invitation in its own
 // transaction.
 func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.UUID, invitation domain.Invitation) error {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	suspend := false
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		if _, err := stores.members.GetByPropertyAndUser(ctx, invitation.PropertyID, userID); err == nil {
+			// Already a member on this property (any status): drop the invitation
+			// silently and commit (return nil).
+			if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
+				return fmt.Errorf("delete invitation: %w", err)
+			}
+			return nil
+		} else if !errors.Is(err, domain.ErrMemberNotFound) {
+			return fmt.Errorf("check existing membership: %w", err)
+		}
 
-	txMembers := s.members.WithTx(tx)
-	txInvitations := s.invitations.WithTx(tx)
+		// Enforce the recipient tariff slot invariant (issue #158, T4): without a
+		// free slot the membership is created suspended until one frees up. An
+		// archived property does not occupy a recipient slot (issue #163), so the
+		// slot check is skipped and the membership activates read-only in the
+		// active status — with the archived object excluded from slot accounting it
+		// occupies nothing.
+		archived := false
+		if s.statuses != nil {
+			var err error
+			archived, err = s.statuses.IsArchived(ctx, invitation.PropertyID)
+			if err != nil {
+				return fmt.Errorf("check property archived: %w", err)
+			}
+		}
+		if !archived && s.slots != nil {
+			var err error
+			suspend, err = s.slots.EnforceOnActivation(ctx, stores.tx, userID)
+			if err != nil {
+				return fmt.Errorf("check recipient slot: %w", err)
+			}
+		}
 
-	if _, err := txMembers.GetByPropertyAndUser(ctx, invitation.PropertyID, userID); err == nil {
-		// Already a member on this property (any status): drop the invitation
-		// silently.
-		if err := txInvitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate membership id: %w", err)
+		}
+		membership := domain.Membership{
+			ID:         id,
+			PropertyID: invitation.PropertyID,
+			UserID:     userID,
+			Role:       invitation.Role, // the role current at activation time
+			GrantedBy:  invitation.InvitedBy,
+		}
+
+		var created domain.Membership
+		if suspend {
+			membership.Status = domain.MemberStatusSuspended
+			created, err = stores.members.CreateWithStatus(ctx, membership)
+		} else {
+			created, err = stores.members.Create(ctx, membership)
+		}
+		if err != nil {
+			return fmt.Errorf("create membership: %w", err)
+		}
+
+		if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
 			return fmt.Errorf("delete invitation: %w", err)
 		}
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit tx: %w", err)
+
+		// Audit in the same transaction; the invitee email is PII and must never
+		// appear in context (ADR 0020).
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			// System action at registration: actor_id is NULL (ADR 0020); the
+			// activated user is carried in context, not as the actor.
+			ActorRole:  auditdomain.ActorRoleSystem,
+			Action:     auditdomain.ActionPropertyMemberInvitationActivated,
+			EntityType: auditdomain.EntityPropertyMemberInvitation,
+			EntityID:   &invitation.ID,
+			Context: map[string]any{
+				"trigger":       "registration",
+				"property_id":   invitation.PropertyID,
+				"user_id":       userID,
+				"membership_id": created.ID,
+				"role":          string(created.Role),
+				"status":        string(created.Status),
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
 		}
 		return nil
-	} else if !errors.Is(err, domain.ErrMemberNotFound) {
-		return fmt.Errorf("check existing membership: %w", err)
-	}
-
-	// Enforce the recipient tariff slot invariant (issue #158, T4): without a
-	// free slot the membership is created suspended until one frees up. An
-	// archived property does not occupy a recipient slot (issue #163), so the
-	// slot check is skipped and the membership activates read-only in the
-	// active status — with the archived object excluded from slot accounting it
-	// occupies nothing.
-	suspend := false
-	archived := false
-	if s.statuses != nil {
-		archived, err = s.statuses.IsArchived(ctx, invitation.PropertyID)
-		if err != nil {
-			return fmt.Errorf("check property archived: %w", err)
-		}
-	}
-	if !archived && s.slots != nil {
-		suspend, err = s.slots.EnforceOnActivation(ctx, tx, userID)
-		if err != nil {
-			return fmt.Errorf("check recipient slot: %w", err)
-		}
-	}
-
-	id, err := uuid.NewV7()
+	})
 	if err != nil {
-		return fmt.Errorf("generate membership id: %w", err)
-	}
-	membership := domain.Membership{
-		ID:         id,
-		PropertyID: invitation.PropertyID,
-		UserID:     userID,
-		Role:       invitation.Role, // the role current at activation time
-		GrantedBy:  invitation.InvitedBy,
-	}
-
-	var created domain.Membership
-	if suspend {
-		membership.Status = domain.MemberStatusSuspended
-		created, err = txMembers.CreateWithStatus(ctx, membership)
-	} else {
-		created, err = txMembers.Create(ctx, membership)
-	}
-	if err != nil {
-		return fmt.Errorf("create membership: %w", err)
-	}
-
-	if err := txInvitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
-		return fmt.Errorf("delete invitation: %w", err)
-	}
-
-	// Audit in the same transaction; the invitee email is PII and must never
-	// appear in context (ADR 0020).
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		// System action at registration: actor_id is NULL (ADR 0020); the
-		// activated user is carried in context, not as the actor.
-		ActorRole:  auditdomain.ActorRoleSystem,
-		Action:     auditdomain.ActionPropertyMemberInvitationActivated,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &invitation.ID,
-		Context: map[string]any{
-			"trigger":       "registration",
-			"property_id":   invitation.PropertyID,
-			"user_id":       userID,
-			"membership_id": created.ID,
-			"role":          string(created.Role),
-			"status":        string(created.Status),
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
+		return err
 	}
 
 	// Lifecycle emails post-commit (issue #162, T6): the owner is notified

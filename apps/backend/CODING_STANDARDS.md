@@ -20,7 +20,7 @@ Rules that no linter can check:
 
 - **Ports are declared by consumers, not providers.** The application package declares the interface it needs (repository, storage, clock); the adapter implements it. Do not declare an interface next to an implementation "just in case" — grow ports from a real second implementation or test fake.
 - **Time arrives through the `clock.Clock` port** (`internal/shared/clock`), injected into services. Domain and application code never call `time.Now()` themselves; they receive the instant. Tests fake the clock (`fakeClock` precedent in identity).
-- **Transactions go through `internal/transaction`** — `UoW.Do(ctx, work)` or `runInTx` (ADR 0033). In contexts already migrated (identity, billing) manual `Begin` is blocked by forbidigo; a context finishing its migration narrows the `path-except` in `.golangci.yml`. Audit records join the business operation's transaction (ADR 0020).
+- **Transactions go through `internal/transaction`** — `UoW.Do(ctx, work)` or `runInTx` (ADR 0033). In contexts already migrated (identity, billing, access) manual `Begin` is blocked by forbidigo; a context finishing its migration narrows the `path-except` in `.golangci.yml`. Audit records join the business operation's transaction (ADR 0020).
 - **Shared kernel before new packages**: `internal/shared/` already carries `actor`, `clock`, `policy`, `pgerr`, `sanitize`, `timeutil`, `tzresolver`. Check these before inventing a parallel helper.
 
 Adding a new bounded context — checklist:

@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
@@ -40,8 +39,10 @@ type Member struct {
 
 // AccessService implements the property membership use cases (issue #156, T3):
 // adding, listing, changing roles, revoking and self-exit. Authorization goes
-// through the policy port; persistence and audit share the same transaction.
+// through the policy port; persistence and audit share the same transaction
+// through the embedded txStoreFactory (ADR 0033).
 type AccessService struct {
+	txStoreFactory
 	members   MembershipRepository
 	owners    PropertyOwnerResolver
 	statuses  PropertyStatusResolver
@@ -49,8 +50,6 @@ type AccessService struct {
 	policy    sharedpolicy.Policy
 	slots     *SlotCoordinator
 	lifecycle *LifecycleMailer
-	db        txBeginner
-	audit     auditapp.Recorder
 	logger    *slog.Logger
 }
 
@@ -59,7 +58,9 @@ type AccessService struct {
 // (pre-T4 behaviour, e.g. in tests that don't exercise the limit). lifecycle is
 // the sharing lifecycle mailer (issue #162, T6); it may be nil to disable the
 // lifecycle emails. statuses reports the archived flag of a property (issue
-// #163); it may be nil to skip the archived-property checks.
+// #163); it may be nil to skip the archived-property checks. factory bundles
+// the membership repository, the audit recorder, and the Unit-of-Work every
+// mutating use case runs through (ADR 0033 γ-factory).
 func NewAccessService(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
@@ -68,27 +69,22 @@ func NewAccessService(
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
 	lifecycle *LifecycleMailer,
-	db txBeginner,
-	audit auditapp.Recorder,
+	factory txStoreFactory,
 	logger *slog.Logger,
 ) *AccessService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &AccessService{
-		members:   members,
-		owners:    owners,
-		statuses:  statuses,
-		users:     users,
-		policy:    policy,
-		slots:     slots,
-		lifecycle: lifecycle,
-		db:        db,
-		audit:     audit,
-		logger:    logger,
+		txStoreFactory: factory,
+		members:        members,
+		owners:         owners,
+		statuses:       statuses,
+		users:          users,
+		policy:         policy,
+		slots:          slots,
+		lifecycle:      lifecycle,
+		logger:         logger,
 	}
 }
 
@@ -125,64 +121,60 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 		GrantedBy:  actor,
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Membership{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txMembers := s.members.WithTx(tx)
-	if _, err := txMembers.GetByPropertyAndUser(ctx, propertyID, userID); err == nil {
-		return domain.Membership{}, domain.ErrMemberAlreadyExists
-	} else if !errors.Is(err, domain.ErrMemberNotFound) {
-		return domain.Membership{}, fmt.Errorf("check existing membership: %w", err)
-	}
-
-	// Enforce the recipient tariff slot invariant (issue #158, T4): when the
-	// recipient has no free slot, the membership is created suspended so it does
-	// not occupy a slot until one frees up and is recovered FIFO.
-	suspend := false
-	if s.slots != nil {
-		var err2 error
-		suspend, err2 = s.slots.EnforceOnActivation(ctx, tx, userID)
-		if err2 != nil {
-			return domain.Membership{}, fmt.Errorf("check recipient slot: %w", err2)
-		}
-	}
-	if suspend {
-		membership.Status = domain.MemberStatusSuspended
-	}
-
 	var created domain.Membership
-	if suspend {
-		created, err = txMembers.CreateWithStatus(ctx, membership)
-	} else {
-		created, err = txMembers.Create(ctx, membership)
-	}
+	suspend := false
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		if _, err := stores.members.GetByPropertyAndUser(ctx, propertyID, userID); err == nil {
+			return domain.ErrMemberAlreadyExists
+		} else if !errors.Is(err, domain.ErrMemberNotFound) {
+			return fmt.Errorf("check existing membership: %w", err)
+		}
+
+		// Enforce the recipient tariff slot invariant (issue #158, T4): when the
+		// recipient has no free slot, the membership is created suspended so it does
+		// not occupy a slot until one frees up and is recovered FIFO.
+		if s.slots != nil {
+			var err2 error
+			suspend, err2 = s.slots.EnforceOnActivation(ctx, stores.tx, userID)
+			if err2 != nil {
+				return fmt.Errorf("check recipient slot: %w", err2)
+			}
+		}
+		if suspend {
+			membership.Status = domain.MemberStatusSuspended
+		}
+
+		var err error
+		if suspend {
+			created, err = stores.members.CreateWithStatus(ctx, membership)
+		} else {
+			created, err = stores.members.Create(ctx, membership)
+		}
+		if err != nil {
+			return fmt.Errorf("create membership: %w", err)
+		}
+
+		// Audit in the same transaction. Only ids and the role are recorded; the
+		// member's email/phone are PII and must never appear in context (ADR 0020).
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberAdded,
+			EntityType: auditdomain.EntityPropertyMember,
+			EntityID:   &created.ID,
+			Context: map[string]any{
+				"property_id": propertyID,
+				"user_id":     userID,
+				"role":        string(role),
+				"status":      string(created.Status),
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return domain.Membership{}, fmt.Errorf("create membership: %w", err)
-	}
-
-	// Audit in the same transaction. Only ids and the role are recorded; the
-	// member's email/phone are PII and must never appear in context (ADR 0020).
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberAdded,
-		EntityType: auditdomain.EntityPropertyMember,
-		EntityID:   &created.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"user_id":     userID,
-			"role":        string(role),
-			"status":      string(created.Status),
-		},
-	}); err != nil {
-		return domain.Membership{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Membership{}, fmt.Errorf("commit tx: %w", err)
+		return domain.Membership{}, err
 	}
 
 	// A grant created without a free tariff slot sends the "access waits for a
@@ -203,41 +195,38 @@ func (s *AccessService) ChangeMemberRole(ctx context.Context, actor, propertyID,
 		return domain.Membership{}, err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Membership{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var updated domain.Membership
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		// Confirm the membership exists and belongs to this property before
+		// updating; a missing row is a not-found outcome rather than a silent no-op.
+		if _, err := stores.members.GetByID(ctx, memberID, propertyID); err != nil {
+			return err
+		}
 
-	txMembers := s.members.WithTx(tx)
-	// Confirm the membership exists and belongs to this property before
-	// updating; a missing row is a not-found outcome rather than a silent no-op.
-	if _, err := txMembers.GetByID(ctx, memberID, propertyID); err != nil {
+		var err error
+		updated, err = stores.members.UpdateRole(ctx, memberID, propertyID, role)
+		if err != nil {
+			return fmt.Errorf("update membership role: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberUpdated,
+			EntityType: auditdomain.EntityPropertyMember,
+			EntityID:   &updated.ID,
+			Context: map[string]any{
+				"property_id": propertyID,
+				"user_id":     updated.UserID,
+				"role":        string(role),
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
 		return domain.Membership{}, err
-	}
-
-	updated, err := txMembers.UpdateRole(ctx, memberID, propertyID, role)
-	if err != nil {
-		return domain.Membership{}, fmt.Errorf("update membership role: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberUpdated,
-		EntityType: auditdomain.EntityPropertyMember,
-		EntityID:   &updated.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"user_id":     updated.UserID,
-			"role":        string(role),
-		},
-	}); err != nil {
-		return domain.Membership{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Membership{}, fmt.Errorf("commit tx: %w", err)
 	}
 	return updated, nil
 }
@@ -250,49 +239,46 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		return err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var membership domain.Membership
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		membership, err = stores.members.GetByID(ctx, memberID, propertyID)
+		if err != nil {
+			return err
+		}
+		if membership.UserID == owner {
+			return domain.ErrCannotRevokeOwner
+		}
 
-	txMembers := s.members.WithTx(tx)
-	membership, err := txMembers.GetByID(ctx, memberID, propertyID)
+		if err := stores.members.Delete(ctx, memberID, propertyID); err != nil {
+			return fmt.Errorf("delete membership: %w", err)
+		}
+
+		// Revoking the recipient freed one of their tariff slots: try to recover the
+		// oldest suspended membership FIFO (issue #158, T4).
+		if s.slots != nil {
+			if err := s.slots.RecoverSuspended(ctx, stores.tx, membership.UserID); err != nil {
+				return fmt.Errorf("recover suspended after revoke: %w", err)
+			}
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberRemoved,
+			EntityType: auditdomain.EntityPropertyMember,
+			EntityID:   &membership.ID,
+			Context: map[string]any{
+				"property_id": propertyID,
+				"user_id":     membership.UserID,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
-	}
-	if membership.UserID == owner {
-		return domain.ErrCannotRevokeOwner
-	}
-
-	if err := txMembers.Delete(ctx, memberID, propertyID); err != nil {
-		return fmt.Errorf("delete membership: %w", err)
-	}
-
-	// Revoking the recipient freed one of their tariff slots: try to recover the
-	// oldest suspended membership FIFO (issue #158, T4).
-	if s.slots != nil {
-		if err := s.slots.RecoverSuspended(ctx, tx, membership.UserID); err != nil {
-			return fmt.Errorf("recover suspended after revoke: %w", err)
-		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberRemoved,
-		EntityType: auditdomain.EntityPropertyMember,
-		EntityID:   &membership.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"user_id":     membership.UserID,
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
 	}
 
 	// Revoking an active membership notifies the former member post-commit
@@ -323,52 +309,49 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 		return domain.ErrCannotLeaveOwnProperty
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var membership domain.Membership
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		membership, err = stores.members.GetByPropertyAndUser(ctx, propertyID, actor)
+		if err != nil {
+			return err
+		}
 
-	txMembers := s.members.WithTx(tx)
-	membership, err := txMembers.GetByPropertyAndUser(ctx, propertyID, actor)
+		// A suspended membership is already hidden from the recipient (no slot, no
+		// access), so self-exit is not available: the object is invisible to them
+		// (issue #158, T4 AC).
+		if membership.IsSuspended() {
+			return domain.ErrCannotLeaveSuspended
+		}
+
+		if err := stores.members.Delete(ctx, membership.ID, propertyID); err != nil {
+			return fmt.Errorf("delete membership: %w", err)
+		}
+
+		// Self-exit freed one of the actor's tariff slots: try to recover the oldest
+		// suspended membership FIFO (issue #158, T4).
+		if s.slots != nil {
+			if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
+				return fmt.Errorf("recover suspended after leave: %w", err)
+			}
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionPropertyMemberLeft,
+			EntityType: auditdomain.EntityPropertyMember,
+			EntityID:   &membership.ID,
+			Context: map[string]any{
+				"property_id": propertyID,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
-	}
-
-	// A suspended membership is already hidden from the recipient (no slot, no
-	// access), so self-exit is not available: the object is invisible to them
-	// (issue #158, T4 AC).
-	if membership.IsSuspended() {
-		return domain.ErrCannotLeaveSuspended
-	}
-
-	if err := txMembers.Delete(ctx, membership.ID, propertyID); err != nil {
-		return fmt.Errorf("delete membership: %w", err)
-	}
-
-	// Self-exit freed one of the actor's tariff slots: try to recover the oldest
-	// suspended membership FIFO (issue #158, T4).
-	if s.slots != nil {
-		if err := s.slots.RecoverSuspended(ctx, tx, actor); err != nil {
-			return fmt.Errorf("recover suspended after leave: %w", err)
-		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionPropertyMemberLeft,
-		EntityType: auditdomain.EntityPropertyMember,
-		EntityID:   &membership.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
 	}
 
 	// Self-exit notifies the owner post-commit (issue #162, T6); the leaving

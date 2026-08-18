@@ -37,7 +37,7 @@ func TestAccessService_ArchivedPropertyRejectsNewMembers(t *testing.T) {
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
 	statuses := fakeStatuses{property: true}
-	svc := NewAccessService(repo, resolver, statuses, stubLookup{}, policy, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(repo, resolver, statuses, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	if _, err := svc.AddMember(t.Context(), owner, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrPropertyArchived) {
 		t.Fatalf("AddMember on archived: expected ErrPropertyArchived, got %v", err)
@@ -59,7 +59,7 @@ func TestAccessService_ArchivedPropertyKeepsExistingMembersManageable(t *testing
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
 	statuses := fakeStatuses{}
-	svc := NewAccessService(repo, resolver, statuses, stubLookup{}, policy, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(repo, resolver, statuses, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	// The member is added while the property is active; the archive happens
 	// afterwards.
@@ -116,7 +116,7 @@ func TestAccessService_DisplayName(t *testing.T) {
 		namedID:     {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789", HasEmail: true},
 		phoneOnlyID: {ID: phoneOnlyID, Phone: "+79123456789"},
 	}
-	svc := NewAccessService(newMemRepo(), staticResolver{}, nil, lookup, nil, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(newMemRepo(), staticResolver{}, nil, lookup, nil, nil, nil, newTestFactory(newMemRepo(), &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	if got, err := svc.DisplayName(t.Context(), namedID); err != nil || got != "Ivan Petrov" {
 		t.Errorf("named user: got %q, %v; want %q, nil", got, err, "Ivan Petrov")
@@ -166,7 +166,7 @@ func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
 			resolver := staticResolver{property: owner}
 			policy := NewMembershipPolicy(resolver, repo)
 			audit := &fakeAuditRecorder{}
-			svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, noopBeginner{}, audit, nil)
+			svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, audit), nil)
 
 			if _, err := svc.AddMember(t.Context(), owner, property, member, tc.role); err != nil {
 				t.Fatalf("AddMember: %v", err)
@@ -205,7 +205,7 @@ func TestAccessService_ManageAuditActorRole(t *testing.T) {
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
 	audit := &fakeAuditRecorder{}
-	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, noopBeginner{}, audit, nil)
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, audit), nil)
 
 	// The owner grants full access; this entry must stay owner-attributed.
 	if _, err := svc.AddMember(t.Context(), owner, property, full, domain.RoleFullAccess); err != nil {
