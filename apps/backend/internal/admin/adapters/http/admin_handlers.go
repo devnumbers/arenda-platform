@@ -44,46 +44,22 @@ func (h *AdminHandlers) handleAdminError(w http.ResponseWriter, r *http.Request,
 // ListAdminUsers implements GET /admin/users.
 func (h *AdminHandlers) ListAdminUsers(w http.ResponseWriter, r *http.Request, params openapi.ListAdminUsersParams) {
 	filters := adminapp.AdminUserFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Phone != nil {
-		filters.Phone = *params.Phone
-	}
-	if params.Email != nil {
-		filters.Email = *params.Email
-	}
-	if params.Role != nil {
-		filters.Role = string(*params.Role)
-	}
-	if params.SubscriptionStatus != nil {
-		filters.SubscriptionStatus = string(*params.SubscriptionStatus)
-	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
+	httpsupport.OptString(&filters.Phone, params.Phone)
+	httpsupport.OptString(&filters.Email, params.Email)
+	httpsupport.OptString(&filters.Role, params.Role)
+	httpsupport.OptString(&filters.SubscriptionStatus, params.SubscriptionStatus)
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListUsers(r.Context(), filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminUser, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminUserResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminUsersResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminUserView, int64, error) {
+			return h.adminService.ListUsers(ctx, filters)
+		},
+		h.handleAdminError,
+		adminUserResponse,
+	)
 }
 
 // GetAdminUser implements GET /admin/users/{id}.
@@ -100,37 +76,19 @@ func (h *AdminHandlers) GetAdminUser(w http.ResponseWriter, r *http.Request, id 
 // ListAdminUserProperties implements GET /admin/users/{id}/properties.
 func (h *AdminHandlers) ListAdminUserProperties(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserPropertiesParams) {
 	filters := adminapp.AdminPropertyFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Status != nil {
-		filters.Status = string(*params.Status)
-	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
+	httpsupport.OptString(&filters.Status, params.Status)
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListUserProperties(r.Context(), id, filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminProperty, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminPropertyResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminPropertiesResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminPropertyView, int64, error) {
+			return h.adminService.ListUserProperties(ctx, id, filters)
+		},
+		h.handleAdminError,
+		adminPropertyResponse,
+	)
 }
 
 // ListAdminProperties implements GET /admin/properties.
@@ -146,21 +104,13 @@ func (h *AdminHandlers) ListAdminProperties(w http.ResponseWriter, r *http.Reque
 	httpsupport.OptString(&filters.Sort, params.Sort)
 	httpsupport.OptString(&filters.Order, params.Order)
 
-	items, total, ok := httpsupport.ListAdminItems(w, r,
+	httpsupport.RespondAdminList(w, r,
 		func(ctx context.Context) ([]adminapp.AdminPropertyView, int64, error) {
 			return h.adminService.ListProperties(ctx, filters)
 		},
 		h.handleAdminError,
 		adminPropertyResponse,
 	)
-	if !ok {
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminPropertiesResponse{
-		Items: items,
-		Total: total,
-	})
 }
 
 // GetAdminProperty implements GET /admin/properties/{id}.
@@ -179,34 +129,18 @@ func (h *AdminHandlers) GetAdminProperty(w http.ResponseWriter, r *http.Request,
 // ListAdminUserLeases implements GET /admin/users/{id}/leases.
 func (h *AdminHandlers) ListAdminUserLeases(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserLeasesParams) {
 	filters := adminapp.AdminLeaseFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListUserLeases(r.Context(), id, filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminLease, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminLeaseResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminLeasesResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminLeaseView, int64, error) {
+			return h.adminService.ListUserLeases(ctx, id, filters)
+		},
+		h.handleAdminError,
+		adminLeaseResponse,
+	)
 }
 
 // ListAdminLeases implements GET /admin/leases.
@@ -224,21 +158,13 @@ func (h *AdminHandlers) ListAdminLeases(w http.ResponseWriter, r *http.Request, 
 	httpsupport.OptString(&filters.Sort, params.Sort)
 	httpsupport.OptString(&filters.Order, params.Order)
 
-	items, total, ok := httpsupport.ListAdminItems(w, r,
+	httpsupport.RespondAdminList(w, r,
 		func(ctx context.Context) ([]adminapp.AdminLeaseView, int64, error) {
 			return h.adminService.ListLeases(ctx, filters)
 		},
 		h.handleAdminError,
 		adminLeaseResponse,
 	)
-	if !ok {
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminLeasesResponse{
-		Items: items,
-		Total: total,
-	})
 }
 
 // GetAdminLease implements GET /admin/leases/{id}.
@@ -257,73 +183,39 @@ func (h *AdminHandlers) GetAdminLease(w http.ResponseWriter, r *http.Request, id
 // ListAdminUserTenantContacts implements GET /admin/users/{id}/tenant-contacts.
 func (h *AdminHandlers) ListAdminUserTenantContacts(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserTenantContactsParams) {
 	filters := adminapp.AdminTenantContactFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListUserTenantContacts(r.Context(), id, filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminTenantContact, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminTenantContactResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminTenantContactsResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminTenantContactView, int64, error) {
+			return h.adminService.ListUserTenantContacts(ctx, id, filters)
+		},
+		h.handleAdminError,
+		adminTenantContactResponse,
+	)
 }
 
 // ListAdminTenantContacts implements GET /admin/tenant-contacts.
 func (h *AdminHandlers) ListAdminTenantContacts(w http.ResponseWriter, r *http.Request, params openapi.ListAdminTenantContactsParams) {
 	filters := adminapp.AdminTenantContactFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Q != nil {
-		filters.Q = *params.Q
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
+	httpsupport.OptString(&filters.Q, params.Q)
 	if params.OwnerId != nil {
 		filters.OwnerID = *params.OwnerId
 	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListTenantContacts(r.Context(), filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminTenantContact, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminTenantContactResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminTenantContactsResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminTenantContactView, int64, error) {
+			return h.adminService.ListTenantContacts(ctx, filters)
+		},
+		h.handleAdminError,
+		adminTenantContactResponse,
+	)
 }
 
 // ListAdminPropertyContacts implements GET /admin/property-contacts.
@@ -335,21 +227,13 @@ func (h *AdminHandlers) ListAdminPropertyContacts(w http.ResponseWriter, r *http
 		filters.PropertyID = *params.PropertyId
 	}
 
-	views, total, err := h.adminService.ListPropertyContacts(r.Context(), filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminPropertyContact, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminPropertyContactResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminPropertyContactsResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminPropertyContactView, int64, error) {
+			return h.adminService.ListPropertyContacts(ctx, filters)
+		},
+		h.handleAdminError,
+		adminPropertyContactResponse,
+	)
 }
 
 // GetAdminTenantContact implements GET /admin/tenant-contacts/{id}.
@@ -368,63 +252,35 @@ func (h *AdminHandlers) GetAdminTenantContact(w http.ResponseWriter, r *http.Req
 // ListAdminUserOperations implements GET /admin/users/{id}/operations.
 func (h *AdminHandlers) ListAdminUserOperations(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserOperationsParams) {
 	filters := adminapp.AdminOperationFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Status != nil {
-		filters.Status = string(*params.Status)
-	}
-	if params.Type != nil {
-		filters.Type = string(*params.Type)
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
+	httpsupport.OptString(&filters.Status, params.Status)
+	httpsupport.OptString(&filters.Type, params.Type)
 	if params.PropertyId != nil {
 		filters.PropertyID = *params.PropertyId
 	}
 	if params.LeaseId != nil {
 		filters.LeaseID = *params.LeaseId
 	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListUserOperations(r.Context(), id, filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminOperation, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminOperationResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminOperationsResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminOperationView, int64, error) {
+			return h.adminService.ListUserOperations(ctx, id, filters)
+		},
+		h.handleAdminError,
+		adminOperationResponse,
+	)
 }
 
 // ListAdminOperations implements GET /admin/operations.
 func (h *AdminHandlers) ListAdminOperations(w http.ResponseWriter, r *http.Request, params openapi.ListAdminOperationsParams) {
 	filters := adminapp.AdminOperationFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Status != nil {
-		filters.Status = string(*params.Status)
-	}
-	if params.Type != nil {
-		filters.Type = string(*params.Type)
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
+	httpsupport.OptString(&filters.Status, params.Status)
+	httpsupport.OptString(&filters.Type, params.Type)
 	if params.PropertyId != nil {
 		filters.PropertyID = *params.PropertyId
 	}
@@ -434,31 +290,17 @@ func (h *AdminHandlers) ListAdminOperations(w http.ResponseWriter, r *http.Reque
 	if params.OwnerId != nil {
 		filters.OwnerID = *params.OwnerId
 	}
-	if params.Q != nil {
-		filters.Q = *params.Q
-	}
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptString(&filters.Q, params.Q)
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListOperations(r.Context(), filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminOperation, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminOperationResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminOperationsResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminOperationView, int64, error) {
+			return h.adminService.ListOperations(ctx, filters)
+		},
+		h.handleAdminError,
+		adminOperationResponse,
+	)
 }
 
 // GetAdminOperation implements GET /admin/operations/{id}.
@@ -488,44 +330,24 @@ func (h *AdminHandlers) GetAdminStats(w http.ResponseWriter, r *http.Request) {
 // ListAdminAuditLogs implements GET /admin/audit-logs.
 func (h *AdminHandlers) ListAdminAuditLogs(w http.ResponseWriter, r *http.Request, params openapi.ListAdminAuditLogsParams) {
 	filters := adminapp.AdminAuditLogFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
 	if params.ActorId != nil {
 		filters.ActorID = *params.ActorId
 	}
-	if params.Action != nil {
-		filters.Action = *params.Action
-	}
-	if params.EntityType != nil {
-		filters.EntityType = *params.EntityType
-	}
+	httpsupport.OptString(&filters.Action, params.Action)
+	httpsupport.OptString(&filters.EntityType, params.EntityType)
 	filters.DateFrom, filters.DateTo = auditLogDateRange(params.DateFrom, params.DateTo)
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListAuditLogs(r.Context(), filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminAuditLog, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminAuditLogResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminAuditLogsResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminAuditLogView, int64, error) {
+			return h.adminService.ListAuditLogs(ctx, filters)
+		},
+		h.handleAdminError,
+		adminAuditLogResponse,
+	)
 }
 
 // GetAdminAuditLog implements GET /admin/audit-logs/{id}.
@@ -544,41 +366,21 @@ func (h *AdminHandlers) GetAdminAuditLog(w http.ResponseWriter, r *http.Request,
 // ListAdminUserAuditLogs implements GET /admin/users/{id}/audit-logs.
 func (h *AdminHandlers) ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserAuditLogsParams) {
 	filters := adminapp.AdminAuditLogFilters{Limit: 20, Offset: 0}
-	if params.Limit != nil {
-		filters.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		filters.Offset = *params.Offset
-	}
-	if params.Action != nil {
-		filters.Action = *params.Action
-	}
-	if params.EntityType != nil {
-		filters.EntityType = *params.EntityType
-	}
+	httpsupport.OptInt(&filters.Limit, params.Limit)
+	httpsupport.OptInt(&filters.Offset, params.Offset)
+	httpsupport.OptString(&filters.Action, params.Action)
+	httpsupport.OptString(&filters.EntityType, params.EntityType)
 	filters.DateFrom, filters.DateTo = auditLogDateRange(params.DateFrom, params.DateTo)
-	if params.Sort != nil {
-		filters.Sort = *params.Sort
-	}
-	if params.Order != nil {
-		filters.Order = string(*params.Order)
-	}
+	httpsupport.OptString(&filters.Sort, params.Sort)
+	httpsupport.OptString(&filters.Order, params.Order)
 
-	views, total, err := h.adminService.ListUserAuditLogs(r.Context(), id, filters)
-	if err != nil {
-		h.handleAdminError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.AdminAuditLog, 0, len(views))
-	for _, v := range views {
-		items = append(items, adminAuditLogResponse(v))
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AdminAuditLogsResponse{
-		Items: items,
-		Total: int(total),
-	})
+	httpsupport.RespondAdminList(w, r,
+		func(ctx context.Context) ([]adminapp.AdminAuditLogView, int64, error) {
+			return h.adminService.ListUserAuditLogs(ctx, id, filters)
+		},
+		h.handleAdminError,
+		adminAuditLogResponse,
+	)
 }
 
 // auditLogDateRange converts the date_from/date_to query params to timestamptz
