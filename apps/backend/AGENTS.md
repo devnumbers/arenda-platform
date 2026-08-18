@@ -49,6 +49,10 @@ Follow the workflow from the root `AGENTS.md`. For backend tasks, additionally:
 3. **During implementation** — apply modern idioms from `use-modern-go` to every new or changed Go file.
 4. **Before final verification** — run `serena` diagnostics (`get_diagnostics_for_file`) on changed files and fix reported issues before running `make backend-lint`, `go test`, or `go vet`.
 
+## Coding Standards
+
+Before implementing or reviewing backend code, read `CODING_STANDARDS.md` (same directory): architecture inside a bounded context, error and concurrency conventions, testing patterns, and the review rubric used by the Standards axis of `/code-review`.
+
 ## Architecture Rules
 
 - Use DDD, Clean Architecture, layered architecture, clean code, and idiomatic Go.
