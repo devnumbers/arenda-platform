@@ -38,6 +38,10 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 - Use explicit return types for functions exported from `shared/`, `entities/`, `features/`, and `widgets/`.
 - Prefer `readonly`, `ReadonlyArray`, and `as const` for immutable data.
 
+## Coding Standards
+
+Before implementing or reviewing frontend code, read `CODING_STANDARDS.md` (same directory): FSD slice anatomy, the DTO/command mapping patterns, react-query conventions, forms, styling and React Compiler rules, navigation flow rules, testing patterns, and the review rubric used by the Standards axis of `/code-review`.
+
 ## Architecture (FSD)
 
 - `app/` — Next.js App Router pages, layouts, loading/error boundaries, and route handlers.
@@ -54,7 +58,7 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 
 - Use Next.js server-side data fetching (Server Components and route handlers) by default.
 - Browser-side state only when interactivity requires it.
-- Map backend DTOs to entity models at the API boundary; do not leak generated DTOs into widgets or features. The generated client `shared/api/generated.ts` is imported only inside `shared/api` — everywhere else import DTO types from `shared/api/dto` (enforced by `no-restricted-imports` in `eslint.config.mjs`). `widgets/**` and `app/**` must not import `@/shared/api/dto` at all: widgets consume camelCase entity models (`entities/operation`, `entities/lease`, …) returned by feature hooks and pass camelCase request commands (`LeaseUpdateRequest`, `OperationCreateRequest`, … — the `UserUpdateCommand` pattern); the snake_case wire format is serialized inside feature modules (also enforced by `no-restricted-imports` in `eslint.config.mjs`).
+- Map backend DTOs to entity models at the API boundary; do not leak generated DTOs into widgets or features. The generated client `shared/api/generated.ts` is imported only inside `shared/api` — everywhere else import DTO types from `shared/api/dto` (enforced by `no-restricted-imports` in `eslint.config.mjs`). `widgets/**` and `app/**` must not import `@/shared/api/dto` at all: widgets consume camelCase entity models and pass camelCase request commands; the mapping and wire-serialization patterns live in `CODING_STANDARDS.md`.
 - Money arrives from the API as integer kopecks (`number`, safe below 2^53); format for display only via `formatMoneyKopecks` from `shared/lib/format-money.ts` — never hand-roll `/100` formatting.
 - Reuse backend types from OpenAPI where possible; keep frontend entity types explicit and minimal.
 - Do not edit generated API client files by hand; update the backend OpenAPI contract and regenerate the frontend client (freshness enforced by `make frontend-api-check` in `.github/workflows/ci.yml`; regenerate with `cd apps/frontend && npm run generate:api`).
@@ -67,14 +71,6 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 - Avoid prop drilling; prefer composition and, when necessary, feature-scoped context.
 - Do not use global state for local UI state. Use URL state for shareable page state.
 - Prefer explicit event handlers and reducers over implicit side effects.
-
-## Навигация и история браузера
-
-- Завершение или отмена флоу с возвратом на страницу-источник (сохранение формы редактирования, кнопка «Отмена», «Добавить позже» на success-шаге визарда, удаление сущности) — `goBack(router, fallbackHref)` из `shared/lib/navigation`: форма выталкивается из истории, открывается лежащая ниже страница-источник; при пустой истории выполняется `router.replace(fallbackHref)`.
-- Завершение флоу с переходом на новую страницу (созданная сущность, другой раздел) — `router.replace`: целевая страница подменяет транзиентную запись в истории.
-- `router.replace` на страницу-источник запрещён: он создаёт дубль этой страницы в истории, и первое нажатие «Назад» ведёт на тот же URL («мёртвый» назад).
-- Вход в флоу (кнопки «Создать», `handleEdit`) и обычная контентная навигация — `router.push`.
-- Кнопка «Назад» ходит по истории (`goBack` из `shared/lib/navigation`), поэтому завершённые страницы флоу не должны оставаться в истории: иначе «Назад» вернёт пользователя на уже завершённую форму.
 
 ## Quality Gates
 
