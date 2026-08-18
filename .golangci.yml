@@ -407,15 +407,6 @@ linters:
       - linters: [forbidigo]
         path: ^apps/backend/cmd/
         text: 'exit policy \(bar #323\)'
-      # ADR 0042 (тикет #343, сетка #325): ScalarBaseMult в webpush/vapid.go —
-      # единственный stdlib-путь P-256 scalar→point для восстановления
-      # ecdsa.PrivateKey под ES256-подпись VAPID JWT (RFC 8292); crypto/ecdh
-      # обратного преобразования не даёт. Правило точечное (lint+path+text),
-      # поэтому не маскирует другие SA1019 в модуле. Удаляется тикетом
-      # ecdh-перехода #345 — warn-unused выше подсветит его, если забыть.
-      - linters: [staticcheck]
-        path: internal/notifications/adapters/webpush/vapid\.go
-        text: ScalarBaseMult
 
 formatters:
   enable:
