@@ -15,9 +15,7 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 
 ## Required Skills
 
-- For all frontend work, invoke `next-best-practices` and `vercel-react-best-practices`.
-- For component composition and design patterns, invoke `vercel-composition-patterns`.
-- For view transitions, invoke `vercel-react-view-transitions`.
+- For all frontend work, invoke `frontend` — this repository's FSD architecture, slice boundaries, and data-flow rules, with pointers to primary sources (Next.js 16, React, FSD, Vercel conventions).
 - For TypeScript questions and type design, invoke `typescript`.
 - For current library docs before relying on non-obvious APIs, use `context7`.
 

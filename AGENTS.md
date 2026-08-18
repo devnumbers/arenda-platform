@@ -114,3 +114,7 @@ Default five canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, 
 ### Domain docs
 
 Multi-context: root `CONTEXT-MAP.md` (context index + shared kernel) + per-context `CONTEXT.md` co-located under `apps/backend/internal/<context>/` + `docs/adr/`. See `docs/agents/domain.md`.
+
+### Skills ownership
+
+Every skill that any `AGENTS.md` in this repo names for invocation lives in the project `.agents/skills/` and is versioned with the code. Do not reference user-level or community skills from repo docs — a mandate that depends on a machine-local skill is unenforceable. Project-level skills shadow same-named user-level ones; when a skill is vendored or replaced here, delete the user-level copy so nobody edits the wrong file.

@@ -14,7 +14,6 @@ Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root 
 
 ## Required Skills
 
-- For all admin UI work, invoke `vercel-react-best-practices`.
 - For TypeScript questions and type design, invoke `typescript`.
 - For current library docs before relying on non-obvious APIs, use `context7`.
 

@@ -31,7 +31,6 @@ Invoke skills by their exact name through the harness's native skill mechanism.
 - For all Go backend work, invoke `go`. Use it for idiomatic Go, clean architecture, context propagation, error handling, and review of package boundaries.
 - Before writing or reviewing any Go code, invoke `use-modern-go` to detect the target Go version from `go.mod` and apply modern idioms up to that version.
 - For database schema, migrations, SQL, sqlc queries, indexes, transactions, locks, or financial invariants, invoke `postgresql-best-practices`.
-- For deployment, CI/CD, runtime configuration, infrastructure, observability rollout, production operations, or Docker Compose changes, invoke `devops-engineer`.
 - For Dockerfiles, Docker Compose, image security, container health checks, or container build/runtime behavior, invoke `docker`.
 - These skills support the repository rules; official Go/PostgreSQL/Docker/vendor documentation and project ADRs remain authoritative when there is a conflict.
 
