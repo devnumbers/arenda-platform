@@ -21,7 +21,8 @@ Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root 
 ## MCP Servers
 
 - `playwright` — use for browser automation and UI verification when the `mcp__playwright__*` tools are available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If unavailable, fall back to manual inspection and build logs.
-- `lean-ctx` — use for broad exploration, large generated files, repeated reads, and noisy build or typecheck output. Before editing exact TypeScript, component, or config code, read the target source in raw/full form.
+- `lean-ctx` — use for broad exploration, large generated files, repeated reads, and noisy build or typecheck output. Code semantics (symbols, references, rename, diagnostics) is Serena's, not lean-ctx's. Before editing exact TypeScript, component, or config code, read the target source in raw/full form.
+- `serena` — mandatory for TypeScript semantic work: symbol navigation, references, rename, diagnostics, and symbol-level editing (one root project covers `apps/admin`, `apps/frontend`, and the Go backend — `.serena/project.yml`). If the `mcp__serena__*` tools are not available, stop and tell the user (they can inspect `/mcp`) — no silent substitution with text search. Serena is not a replacement for `npm run lint`, `npm run typecheck`, or direct code review.
 
 Before adding resources, fields, inputs, helpers, or API wrappers, search existing resources and call sites with `Grep`/`lean-ctx` to avoid duplicate patterns.
 

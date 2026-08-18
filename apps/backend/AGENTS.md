@@ -9,12 +9,12 @@ Rules for the Go backend in `apps/backend`. Also follow the root `AGENTS.md`, th
 Verify the following skill and MCP server before any backend work.
 
 - **`use-modern-go` skill** — must be invoked before any backend planning or implementation. It detects the project's Go version from `go.mod` and instructs to use modern Go idioms up to and including that version. Do not write Go code without first invoking this skill.
-- **`gopls` MCP server** — must be active, with its `mcp__gopls__*` tools present in the agent tool set, before any backend implementation or verification. It provides semantic navigation, diagnostics, definitions, references, and workspace analysis.
+- **`serena` MCP server** — must be active, with its `mcp__serena__*` tools present in the agent tool set, before any backend implementation or verification. It provides semantic navigation, symbol references, rename, diagnostics, and symbol-level editing for Go through one project at the repo root (`.serena/project.yml`).
 
-If the `mcp__gopls__*` tools are not available:
+If the `mcp__serena__*` tools are not available:
 - Stop backend work immediately.
-- Tell the user that `gopls` is required and unavailable (the user can check server status with `/mcp`).
-- Do not continue with implementation, lint, or test commands until `gopls` is running.
+- Tell the user that `serena` is required and unavailable (the user can check server status with `/mcp`).
+- Do not continue with implementation, lint, or test commands until `serena` is running.
 
 ## Stack & References
 
@@ -37,17 +37,17 @@ Invoke skills by their exact name through the harness's native skill mechanism.
 
 ## MCP Servers
 
-- `gopls` — mandatory for every backend task (see stop-procedure in Mandatory Backend Tools above). Treat it as navigation and diagnostics, not as the source of truth — the source of truth is the repository code plus `go test`, `go vet`, `make backend-lint`, and relevant official docs. Use `gopls` diagnostics as a required quality gate before claiming backend work complete.
-- `lean-ctx` — use for broad package exploration, generated code maps, large SQL/OpenAPI files, and noisy command output. Before editing exact Go code, migrations, SQL, or OpenAPI, read the target ranges in raw/full form.
+- `serena` — mandatory for every backend task (see stop-procedure in Mandatory Backend Tools above). Treat it as navigation and diagnostics, not as the source of truth — the source of truth is the repository code plus `go test`, `go vet`, `make backend-lint`, and relevant official docs. Use `get_diagnostics_for_file` as a required quality gate before claiming backend work complete. Go contract note: a symbol's body excludes the leading doc comment — retrieve with `find_symbol` + `include_body` before `replace_symbol_body`, or the comment gets duplicated.
+- `lean-ctx` — read/output compression, semantic search, dependency graph, session intelligence: broad package exploration, generated code maps, large SQL/OpenAPI files, and noisy command output. Code semantics (symbols, references, rename, diagnostics) is Serena's, not lean-ctx's. Before editing exact Go code, migrations, SQL, or OpenAPI, read the target ranges in raw/full form.
 
 ## Backend Workflow
 
 Follow the workflow from the root `AGENTS.md`. For backend tasks, additionally:
 
 1. **Before exploration** — invoke `use-modern-go` so the target Go version and modern idioms are known.
-2. **Before implementation** — verify the `mcp__gopls__*` tools are available (see Mandatory Backend Tools for the stop-procedure).
+2. **Before implementation** — verify the `mcp__serena__*` tools are available (see Mandatory Backend Tools for the stop-procedure).
 3. **During implementation** — apply modern idioms from `use-modern-go` to every new or changed Go file.
-4. **Before final verification** — run `gopls` diagnostics on changed packages and fix reported issues before running `make backend-lint`, `go test`, or `go vet`.
+4. **Before final verification** — run `serena` diagnostics (`get_diagnostics_for_file`) on changed files and fix reported issues before running `make backend-lint`, `go test`, or `go vet`.
 
 ## Architecture Rules
 
@@ -92,8 +92,7 @@ Backend observability code conventions (slog, OpenTelemetry, request IDs, span n
 ## Quality Gates
 
 - Code must be gofumpt-clean with gci import order (enforced by `make backend-lint`); autofix with `cd apps/backend && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 fmt --config ../../.golangci.yml`.
-- Before claiming backend work is complete, run `gopls` diagnostics on changed packages and resolve reported issues.
-- If the `mcp__jetbrains__*` tools are available (GoLand's built-in MCP server, IDE running with this project open), run `get_file_problems` on every changed Go file before reporting completion: errors must be 0; warnings must be fixed or explicitly justified in the report. If the server is unavailable (IDE closed), note that the JetBrains inspection gate was skipped.
+- Before claiming backend work is complete, run `serena` diagnostics (`get_diagnostics_for_file`) on changed files and resolve reported issues.
 - Then run the relevant checks, including existing tests:
 
 ```bash

@@ -55,14 +55,12 @@ Reference layer other skills invoke: `/domain-modeling` (domain language in per-
 
 The following MCP servers are configured in the harness MCP config (`~/.kimi-code/mcp.json` for Kimi Code, the ZCode MCP config for ZCode):
 
-- `lean-ctx` — broad repository exploration, compressed reads, semantic search, file trees, shell compression, and session intelligence. Fallback when unavailable: native `Read`, `Grep`, `Glob`, `Bash`.
-- `gopls` — Go semantic navigation, definitions, references, diagnostics, package APIs, and impact checks. Mandatory for backend work; if unavailable, follow the stop procedure in `apps/backend/AGENTS.md` rather than substituting other tools.
+- `lean-ctx` — compressed reads and noisy-output compression (incl. file trees and shell output), semantic search by meaning, dependency/diff-impact graph, session intelligence. Code semantics is not its job (boundary rule under `serena` below). Fallback when unavailable: native `Read`, `Grep`, `Glob`, `Bash`.
 - `context7` — official library and framework documentation. Fallback when unavailable: official docs via `FetchURL` or `WebSearch`.
 - `playwright` — browser automation and UI verification. Used by frontend work. Fallback when unavailable: manual inspection, build logs, or native browser tools.
 - `figma` — Figma design data and image exports. Fallback when unavailable: manual design references.
 - `heroui-react` — HeroUI v3 component docs, source, and theme tokens for the Next.js frontend. HeroUI v3 is beta and not covered by model training data, so verify components through this server before writing HeroUI code. Fallback when unavailable: official docs at https://v3.heroui.com via `FetchURL` or `WebSearch`.
-- `jetbrains` — GoLand's built-in MCP server (IDE 2025.2+). Runs IDE inspections (`get_file_problems`) on files as a quality gate for agent work. Requires GoLand running with this project open. Fallback when unavailable: note the skipped gate in the final report.
-- `serena` — code semantics for the whole stack (TS + Go): symbol navigation, references, rename, diagnostics, symbol-level editing. Pinned `serena-agent` 1.7.0 (`uv` + managed Python 3.13); committed project config `.serena/project.yml`, one project at the repo root. Boundary rule: code semantics (symbols, references, rename, diagnostics, symbol editing) → `serena`; read/output compression, semantic search, dependency graph, session intelligence → `lean-ctx`. If the `mcp__serena__*` tools are unavailable, stop and tell the user (same stop-procedure model as `gopls`) — no silent substitution.
+- `serena` — code semantics for the whole stack (TS + Go): symbol navigation, references, rename, diagnostics, symbol-level editing. Pinned `serena-agent` 1.7.0 (`uv` + managed Python 3.13); committed project config `.serena/project.yml`, one project at the repo root. Boundary rule: code semantics (symbols, references, rename, diagnostics, symbol editing) → `serena`; read/output compression, semantic search, dependency graph, session intelligence → `lean-ctx`. If the `mcp__serena__*` tools are unavailable, stop and tell the user (they can inspect `/mcp`) — no silent substitution with text search or other tools.
 
 ## Commands
 
