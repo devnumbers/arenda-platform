@@ -160,19 +160,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, operationResponse(op, names, statuses))
+	h.respondWithOperation(w, r, actor, op, http.StatusCreated)
 }
 
 // ListOperationsByProperty implements GET /properties/{propertyId}/operations.
@@ -217,19 +205,7 @@ func (h *OperationHandlers) ListOperationsByProperty(w http.ResponseWriter, r *h
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, names, statuses, limit, offset))
+	h.respondWithOperations(w, r, actor, ops, limit, offset)
 }
 
 // ListOperations implements GET /operations.
@@ -286,19 +262,7 @@ func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, names, statuses, limit, offset))
+	h.respondWithOperations(w, r, actor, ops, limit, offset)
 }
 
 // GetOperation implements GET /operations/{id}.
@@ -315,19 +279,7 @@ func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(op, names, statuses))
+	h.respondWithOperation(w, r, actor, op, http.StatusOK)
 }
 
 // UpdateOperation implements PATCH /operations/{id}.
@@ -369,19 +321,7 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(op, names, statuses))
+	h.respondWithOperation(w, r, actor, op, http.StatusOK)
 }
 
 // DeleteOperation implements DELETE /operations/{id}.
@@ -417,19 +357,7 @@ func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(op, names, statuses))
+	h.respondWithOperation(w, r, actor, op, http.StatusOK)
 }
 
 // MarkOperationIncomplete implements POST /operations/{id}/mark-incomplete.
@@ -449,19 +377,7 @@ func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *ht
 		return
 	}
 
-	names, err := categoryNamesByID(r.Context(), h.categories, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(op, names, statuses))
+	h.respondWithOperation(w, r, actor, op, http.StatusOK)
 }
 
 // MoveOperation implements POST /operations/{id}/move.
@@ -485,6 +401,13 @@ func (h *OperationHandlers) MoveOperation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	h.respondWithOperation(w, r, actor, op, http.StatusOK)
+}
+
+// respondWithOperation enriches op with category names and property statuses
+// and writes it with the given status code; enrichment errors map through the
+// shared operation error handler.
+func (h *OperationHandlers) respondWithOperation(w http.ResponseWriter, r *http.Request, actor uuid.UUID, op domain.Operation, status int) {
 	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
@@ -497,7 +420,25 @@ func (h *OperationHandlers) MoveOperation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(op, names, statuses))
+	httpsupport.WriteJSON(r.Context(), w, status, operationResponse(op, names, statuses))
+}
+
+// respondWithOperations enriches a fetched page of operations and writes the
+// operations response envelope with pagination metadata.
+func (h *OperationHandlers) respondWithOperations(w http.ResponseWriter, r *http.Request, actor uuid.UUID, ops []domain.Operation, limit, offset int) {
+	names, err := categoryNamesByID(r.Context(), h.categories, actor)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	statuses, err := propertyStatusesByID(r.Context(), h.properties, actor)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationsResponse(ops, names, statuses, limit, offset))
 }
 
 func operationResponse(op domain.Operation, categoryNames map[uuid.UUID]string, propertyStatuses map[uuid.UUID]propertiesdomain.PropertyStatus) openapi.OperationResponse {
