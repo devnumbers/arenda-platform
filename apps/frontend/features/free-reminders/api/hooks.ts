@@ -11,35 +11,69 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { freeReminderKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
+import { mapFreeReminderResponse, mapUpcomingFreeReminderResponse } from '../model/mappers';
+import type {
+  FreeReminder,
+  FreeReminderCreateRequest,
+  FreeReminderUpdateRequest,
+  UpcomingFreeReminder,
+} from '../model/types';
 
 type FreeReminderResponse = components['schemas']['FreeReminderResponse'];
-type FreeReminderCreateRequest = components['schemas']['FreeReminderCreateRequest'];
-type FreeReminderUpdateRequest = components['schemas']['FreeReminderUpdateRequest'];
+type FreeReminderCreateWireRequest = components['schemas']['FreeReminderCreateRequest'];
+type FreeReminderUpdateWireRequest = components['schemas']['FreeReminderUpdateRequest'];
 type UpcomingFreeRemindersResponse = components['schemas']['UpcomingFreeRemindersResponse'];
 
-export function useFreeReminder(id: string): UseQueryResult<FreeReminderResponse, ApiError> {
+// Команды приходят из виджетов в camelCase; wire-формат (snake_case) живёт
+// только внутри этого модуля.
+export function toCreateWireRequest(
+  data: FreeReminderCreateRequest,
+): FreeReminderCreateWireRequest {
+  return {
+    title: data.title,
+    trigger_at: data.triggerAt,
+    periodicity: data.periodicity,
+  };
+}
+
+export function toUpdateWireRequest(
+  data: FreeReminderUpdateRequest,
+): FreeReminderUpdateWireRequest {
+  return {
+    title: data.title,
+    trigger_at: data.triggerAt,
+    periodicity: data.periodicity,
+  };
+}
+
+export function useFreeReminder(id: string): UseQueryResult<FreeReminder, ApiError> {
   return useQuery({
     queryKey: freeReminderKeys.detail(id),
-    queryFn: () => apiClient<FreeReminderResponse>(`/free-reminders/${id}`),
+    queryFn: () =>
+      apiClient<FreeReminderResponse>(`/free-reminders/${id}`).then(
+        mapFreeReminderResponse,
+      ),
     enabled: Boolean(id),
   });
 }
 
 export function useUpcomingFreeReminders(
   propertyId: string,
-): UseQueryResult<UpcomingFreeRemindersResponse, ApiError> {
+): UseQueryResult<UpcomingFreeReminder[], ApiError> {
   return useQuery({
     queryKey: freeReminderKeys.upcoming(propertyId),
-    queryFn: () =>
-      apiClient<UpcomingFreeRemindersResponse>(
+    queryFn: async () => {
+      const response = await apiClient<UpcomingFreeRemindersResponse>(
         `/properties/${propertyId}/free-reminders/upcoming?limit=3`,
-      ),
+      );
+      return response.items.map(mapUpcomingFreeReminderResponse);
+    },
     enabled: Boolean(propertyId),
   });
 }
 
 export function useCreateFreeReminder(): UseMutationResult<
-  FreeReminderResponse,
+  FreeReminder,
   ApiError,
   { propertyId: string; data: FreeReminderCreateRequest }
 > {
@@ -48,8 +82,8 @@ export function useCreateFreeReminder(): UseMutationResult<
     mutationFn: ({ propertyId, data }) =>
       apiClient<FreeReminderResponse>(`/properties/${propertyId}/free-reminders`, {
         method: 'POST',
-        body: JSON.stringify(data),
-      }),
+        body: JSON.stringify(toCreateWireRequest(data)),
+      }).then(mapFreeReminderResponse),
     onSuccess: (_, { propertyId }) => {
       queryClient.invalidateQueries({ queryKey: freeReminderKeys.all });
       queryClient.invalidateQueries({ queryKey: freeReminderKeys.byProperty(propertyId) });
@@ -59,7 +93,7 @@ export function useCreateFreeReminder(): UseMutationResult<
 }
 
 export function useUpdateFreeReminder(): UseMutationResult<
-  FreeReminderResponse,
+  FreeReminder,
   ApiError,
   { id: string; data: FreeReminderUpdateRequest }
 > {
@@ -68,8 +102,8 @@ export function useUpdateFreeReminder(): UseMutationResult<
     mutationFn: ({ id, data }) =>
       apiClient<FreeReminderResponse>(`/free-reminders/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+        body: JSON.stringify(toUpdateWireRequest(data)),
+      }).then(mapFreeReminderResponse),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: freeReminderKeys.all });
       queryClient.invalidateQueries({ queryKey: freeReminderKeys.detail(data.id) });

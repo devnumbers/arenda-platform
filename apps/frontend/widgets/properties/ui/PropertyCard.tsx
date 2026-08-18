@@ -119,15 +119,15 @@ export function PropertyCard({property}: PropertyCardProps): JSX.Element {
             {showLeaseInfo && (
                 <LeaseInfo
                     lease={{
-                        start_date: lease.startDate,
-                        payment_day: lease.paymentDay,
-                        rent_amount_kopecks: lease.rentKopecks,
-                        current_period_overdue: lease.currentPeriodOverdue,
-                        has_overdue: lease.hasOverdue,
-                        overdue_since: lease.overdueSince ?? null,
-                        next_payment_date: lease.nextPaymentDate ?? null,
+                        startDate: lease.startDate,
+                        paymentDay: lease.paymentDay,
+                        rentKopecks: lease.rentKopecks,
+                        currentPeriodOverdue: lease.currentPeriodOverdue,
+                        hasOverdue: lease.hasOverdue,
+                        overdueSince: lease.overdueSince,
+                        nextPaymentDate: lease.nextPaymentDate,
                         status: lease.status,
-                        tenant_contact: lease.tenantContact ?? null,
+                        tenantContact: lease.tenantContact ?? null,
                     }}
                 />
             )}

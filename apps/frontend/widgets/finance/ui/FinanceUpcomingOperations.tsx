@@ -2,19 +2,17 @@
 
 import {type JSX, useMemo} from 'react';
 import {Skeleton} from '@heroui/react/skeleton';
-import type {components} from '@/shared/api/dto';
 import {ROUTES} from '@/shared/config/routes';
 import {SectionHeader} from '@/shared/ui/section-header';
 import {OperationListItem} from '@/entities/operation';
+import type {Operation} from '@/entities/operation';
 import {FinanceErrorState} from '@/shared/ui/finance-error-state';
 import sectionStyles from './FinanceSection.module.css';
 import styles from './FinanceUpcomingOperations.module.css';
 
-type OperationResponse = components['schemas']['OperationResponse'];
-
 interface FinanceOperationsPreviewProps {
     readonly title: string;
-    readonly operations: OperationResponse[];
+    readonly operations: ReadonlyArray<Operation>;
     readonly emptyText: string;
     readonly isLoading: boolean;
     readonly isFetching: boolean;
@@ -35,7 +33,7 @@ export function FinanceOperationsPreview({
                                          }: FinanceOperationsPreviewProps): JSX.Element {
     const operations = useMemo(() => {
         return [...rawOperations].sort(
-            (a, b) => new Date(a.operation_date).getTime() - new Date(b.operation_date).getTime(),
+            (a, b) => new Date(a.operationDate).getTime() - new Date(b.operationDate).getTime(),
         );
     }, [rawOperations]);
 

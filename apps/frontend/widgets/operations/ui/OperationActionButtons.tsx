@@ -1,12 +1,9 @@
 'use client';
 
 import type {JSX} from 'react';
-import type {components} from '@/shared/api/dto';
-import type {OperationStatus} from '@/entities/operation';
+import type {OperationStatus, OperationType} from '@/entities/operation';
 import {Button} from '@/shared/ui/button';
 import styles from './OperationActionButtons.module.css';
-
-type OperationType = components['schemas']['OperationType'];
 
 export type OperationActionButtonsProps = {
     readonly type?: OperationType;

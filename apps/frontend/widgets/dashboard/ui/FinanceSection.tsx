@@ -28,7 +28,7 @@ export function FinanceSection({properties, isLoading}: FinanceSectionProps): JS
     const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const monthOperationsList = operationsList.map((response) => ({
         ...response,
-        items: response.items.filter((op) => op.operation_date.slice(0, 7) === currentYM),
+        items: response.items.filter((op) => op.operationDate.slice(0, 7) === currentYM),
     }));
     const {actual} = aggregateOperations(monthOperationsList);
     const {incomeKopecks, expenseKopecks, profitKopecks} = actual;

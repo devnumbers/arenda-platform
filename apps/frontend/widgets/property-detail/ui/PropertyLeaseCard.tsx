@@ -6,16 +6,14 @@ import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
 import {ROUTES} from '@/shared/config/routes';
 import {LeaseInfo} from '@/entities/lease';
-import type {components} from '@/shared/api/dto';
+import type {Lease} from '@/entities/lease';
 import type {PropertyPageStatus} from '../lib/get-property-page-status';
 import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyLeaseCard.module.css';
 import {SectionHeader} from '@/shared/ui/section-header';
 
-type LeaseResponse = components['schemas']['LeaseResponse'];
-
 export type PropertyLeaseCardProps = {
-    readonly lease: LeaseResponse | undefined;
+    readonly lease: Lease | undefined;
     readonly status: PropertyPageStatus;
     readonly propertyId: string;
     readonly onPayRent?: () => void;
@@ -32,8 +30,8 @@ export function PropertyLeaseCard({
                                       isPayRentLoading = false,
                                   }: PropertyLeaseCardProps): JSX.Element {
     const leaseNewHref = `${ROUTES.leaseNew}?propertyId=${propertyId}`;
-    const operationsHref = lease?.property_id
-        ? `${ROUTES.financeOperations}?property_id=${lease.property_id}`
+    const operationsHref = lease?.propertyId
+        ? `${ROUTES.financeOperations}?property_id=${lease.propertyId}`
         : ROUTES.financeOperations;
     const showRentActions = status === 'rented';
     const showResolveActions = status === 'requires_action' && lease;

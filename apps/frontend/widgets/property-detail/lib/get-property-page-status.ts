@@ -1,12 +1,11 @@
 import type { Property } from '@/entities/property';
-import type { components } from '@/shared/api/dto';
+import type { Lease } from '@/entities/lease';
 import {
   getEffectiveLeaseStatus,
   isOpenLeaseStatus,
 } from '@/entities/lease';
 
 type PropertyStatus = Property['status'];
-type Lease = components['schemas']['LeaseResponse'];
 
 export type PropertyPageStatus =
   | 'rented'
@@ -27,8 +26,8 @@ export function getPropertyPageStatus(
   if (openLease) {
     const effectiveStatus = getEffectiveLeaseStatus({
       status: openLease.status,
-      startDate: openLease.start_date,
-      endDate: openLease.end_date ?? undefined,
+      startDate: openLease.startDate,
+      endDate: openLease.endDate,
     });
     if (effectiveStatus === 'requires_action') return 'requires_action';
     if (effectiveStatus === 'awaiting_start') return 'awaiting_start';

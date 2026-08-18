@@ -20,19 +20,17 @@ import {
 } from '@/features/free-reminders';
 import {
   PERIODICITY_OPTIONS,
+  type FreeReminder,
   type FreeReminderPeriodicity,
 } from '@/features/free-reminders';
-import type { components } from '@/shared/api/dto';
 import styles from './FreeReminderWizard.module.css';
-
-type FreeReminderResponse = components['schemas']['FreeReminderResponse'];
 
 type WizardStep = 1 | 2;
 
 export type FreeReminderWizardProps = {
   readonly mode: 'create' | 'edit';
   readonly propertyId?: string;
-  readonly reminder?: FreeReminderResponse;
+  readonly reminder?: FreeReminder;
   readonly onDone?: () => void;
 };
 
@@ -54,14 +52,14 @@ type Errors = {
 function buildInitialDraft(
   mode: 'create' | 'edit',
   propertyId: string | undefined,
-  reminder: FreeReminderResponse | undefined,
+  reminder: FreeReminder | undefined,
 ): Draft {
   if (mode === 'edit' && reminder) {
     return {
       title: reminder.title,
-      propertyId: reminder.property_id,
-      date: extractLocalDate(reminder.trigger_at),
-      time: extractLocalTime(reminder.trigger_at),
+      propertyId: reminder.propertyId,
+      date: extractLocalDate(reminder.triggerAt),
+      time: extractLocalTime(reminder.triggerAt),
       periodicity: reminder.periodicity,
     };
   }
@@ -176,7 +174,7 @@ export function FreeReminderWizard({
           id: reminder.id,
           data: {
             title: draft.title.trim(),
-            trigger_at: triggerAt,
+            triggerAt,
             periodicity: draft.periodicity,
           },
         });
@@ -186,7 +184,7 @@ export function FreeReminderWizard({
           propertyId: draft.propertyId!,
           data: {
             title: draft.title.trim(),
-            trigger_at: triggerAt,
+            triggerAt,
             periodicity: draft.periodicity,
           },
         });

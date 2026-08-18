@@ -15,3 +15,29 @@ export type TenantContact = {
   readonly createdAt: string;
   readonly updatedAt: string;
 };
+
+/**
+ * Команда создания контакта арендатора (camelCase; wire-формат сериализуется
+ * в features/tenant-contacts). Опциональные поля передаются пустой строкой,
+ * чтобы очистить их на бэкенде; отсутствующие поля не меняются.
+ */
+export type TenantContactCreateRequest = {
+  readonly name: string;
+  readonly surname?: string;
+  readonly patronymic?: string;
+  readonly phone?: string;
+  readonly email?: string;
+  readonly comment?: string;
+  /** Контекст объекта: контакт создаётся в аккаунте владельца объекта (shared access). */
+  readonly propertyId?: string;
+};
+
+/** Команда обновления контакта арендатора (camelCase; wire-формат сериализуется в features/tenant-contacts). */
+export type TenantContactUpdateRequest = {
+  readonly name?: string;
+  readonly surname?: string;
+  readonly patronymic?: string;
+  readonly phone?: string;
+  readonly email?: string;
+  readonly comment?: string;
+};

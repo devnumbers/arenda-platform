@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/shared/api/dto';
-import { mapPropertyResponse } from './mappers';
+import {
+  mapPropertyOperationsSummaryResponse,
+  mapPropertyResponse,
+} from './mappers';
 
 function makeDto(
   overrides: Partial<components['schemas']['PropertyResponse']> = {},
@@ -41,5 +44,42 @@ describe('mapPropertyResponse access', () => {
     const property = mapPropertyResponse(makeDto());
 
     expect(property.access).toBeUndefined();
+  });
+});
+
+describe('mapPropertyOperationsSummaryResponse', () => {
+  it('maps snake_case summary DTO to camelCase entity', () => {
+    const summary = mapPropertyOperationsSummaryResponse({
+      monthly_profit_kopecks: 120000,
+      all_time_profit_kopecks: 1440000,
+      all_time_income_kopecks: 2440000,
+      all_time_expense_kopecks: 1000000,
+      overdue_rent_count: 1,
+      overdue_total_count: 2,
+      next_payment_date: '2026-09-10',
+    });
+
+    expect(summary).toEqual({
+      monthlyProfitKopecks: 120000,
+      allTimeProfitKopecks: 1440000,
+      allTimeIncomeKopecks: 2440000,
+      allTimeExpenseKopecks: 1000000,
+      overdueRentCount: 1,
+      overdueTotalCount: 2,
+      nextPaymentDate: '2026-09-10',
+    });
+  });
+
+  it('maps a summary without next payment date', () => {
+    const summary = mapPropertyOperationsSummaryResponse({
+      monthly_profit_kopecks: 0,
+      all_time_profit_kopecks: 0,
+      all_time_income_kopecks: 0,
+      all_time_expense_kopecks: 0,
+      overdue_rent_count: 0,
+      overdue_total_count: 0,
+    });
+
+    expect(summary.nextPaymentDate).toBeNull();
   });
 });

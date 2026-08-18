@@ -12,15 +12,64 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { financeKeys, operationKeys, recurringOperationKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
+import { mapRecurringOperationResponse } from '@/entities/operation';
+import type {
+  RecurringOperation,
+  RecurringOperationCreateRequest,
+  RecurringOperationUpdateRequest,
+} from '@/entities/operation';
 
 type RecurringOperationResponse =
   components['schemas']['RecurringOperationResponse'];
-type RecurringOperationCreateRequest =
+type RecurringOperationCreateWireRequest =
   components['schemas']['RecurringOperationCreateRequest'];
-type RecurringOperationUpdateRequest =
+type RecurringOperationUpdateWireRequest =
   components['schemas']['RecurringOperationUpdateRequest'];
 type RecurringOperationsResponse =
   components['schemas']['RecurringOperationsResponse'];
+
+// Команды приходят из виджетов в camelCase; wire-формат (snake_case) живёт
+// только внутри этого модуля.
+export function toCreateWireRequest(
+  data: RecurringOperationCreateRequest,
+): RecurringOperationCreateWireRequest {
+  return {
+    type: data.type,
+    category_id: data.categoryId,
+    name: data.name,
+    amount_kopecks: data.amountKopecks,
+    start_date: data.startDate,
+    payment_day: data.paymentDay,
+    end_date: data.endDate,
+    comment: data.comment,
+    periodicity: data.periodicity,
+    reminder_offset_days: data.reminderOffsetDays,
+  };
+}
+
+export function toUpdateWireRequest(
+  data: RecurringOperationUpdateRequest,
+): RecurringOperationUpdateWireRequest {
+  return {
+    type: data.type,
+    category_id: data.categoryId,
+    name: data.name,
+    amount_kopecks: data.amountKopecks,
+    start_date: data.startDate,
+    payment_day: data.paymentDay,
+    end_date: data.endDate,
+    comment: data.comment,
+    periodicity: data.periodicity,
+    apply_from_date: data.applyFromDate,
+    reminder_offset_days: data.reminderOffsetDays,
+  };
+}
+
+function fetchRecurringOperation(id: string): Promise<RecurringOperation> {
+  return apiClient<RecurringOperationResponse>(`/recurring-operations/${id}`).then(
+    mapRecurringOperationResponse,
+  );
+}
 
 function invalidateOperationLists(queryClient: QueryClient): void {
   queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
@@ -32,53 +81,59 @@ function invalidateRecurringOperationLists(queryClient: QueryClient): void {
 }
 
 export function useRecurringOperations(): UseQueryResult<
-  RecurringOperationsResponse,
+  RecurringOperation[],
   ApiError
 > {
   return useQuery({
     queryKey: recurringOperationKeys.recurringOperations(),
-    queryFn: () => apiClient<RecurringOperationsResponse>('/recurring-operations'),
+    queryFn: async () => {
+      const response = await apiClient<RecurringOperationsResponse>('/recurring-operations');
+      return response.items.map(mapRecurringOperationResponse);
+    },
   });
 }
 
 export function useRecurringOperationsByProperty(
   propertyId: string,
-): UseQueryResult<RecurringOperationsResponse, ApiError> {
+): UseQueryResult<RecurringOperation[], ApiError> {
   return useQuery({
     queryKey: recurringOperationKeys.byProperty(propertyId),
-    queryFn: () =>
-      apiClient<RecurringOperationsResponse>(
+    queryFn: async () => {
+      const response = await apiClient<RecurringOperationsResponse>(
         `/properties/${propertyId}/recurring-operations`,
-      ),
+      );
+      return response.items.map(mapRecurringOperationResponse);
+    },
     enabled: Boolean(propertyId),
   });
 }
 
 export function useRecurringOperation(
   id: string,
-): UseQueryResult<RecurringOperationResponse, ApiError> {
+): UseQueryResult<RecurringOperation, ApiError> {
   return useQuery({
     queryKey: recurringOperationKeys.detail(id),
-    queryFn: () =>
-      apiClient<RecurringOperationResponse>(`/recurring-operations/${id}`),
+    queryFn: () => fetchRecurringOperation(id),
     enabled: Boolean(id),
   });
 }
 
 export function useCreateRecurringOperation(): UseMutationResult<
-  RecurringOperationResponse,
+  RecurringOperation,
   ApiError,
   { propertyId: string; data: RecurringOperationCreateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ propertyId, data }) =>
-      apiClient<RecurringOperationResponse>(
-        `/properties/${propertyId}/recurring-operations`,
-        {
-          method: 'POST',
-          body: JSON.stringify(data),
-        },
+    mutationFn: async ({ propertyId, data }) =>
+      mapRecurringOperationResponse(
+        await apiClient<RecurringOperationResponse>(
+          `/properties/${propertyId}/recurring-operations`,
+          {
+            method: 'POST',
+            body: JSON.stringify(toCreateWireRequest(data)),
+          },
+        ),
       ),
     onSuccess: (_, { propertyId }) => {
       invalidateRecurringOperationLists(queryClient);
@@ -90,17 +145,19 @@ export function useCreateRecurringOperation(): UseMutationResult<
 }
 
 export function useUpdateRecurringOperation(): UseMutationResult<
-  RecurringOperationResponse,
+  RecurringOperation,
   ApiError,
   { id: string; propertyId?: string; data: RecurringOperationUpdateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }) =>
-      apiClient<RecurringOperationResponse>(`/recurring-operations/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async ({ id, data }) =>
+      mapRecurringOperationResponse(
+        await apiClient<RecurringOperationResponse>(`/recurring-operations/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(toUpdateWireRequest(data)),
+        }),
+      ),
     onSuccess: (_, { id, propertyId }) => {
       invalidateRecurringOperationLists(queryClient);
       invalidateOperationLists(queryClient);
@@ -124,7 +181,7 @@ export function useUpdateRecurringOperation(): UseMutationResult<
 }
 
 export function usePauseRecurringOperation(): UseMutationResult<
-  RecurringOperationResponse,
+  RecurringOperation,
   ApiError,
   { id: string; propertyId: string }
 > {
@@ -135,7 +192,7 @@ export function usePauseRecurringOperation(): UseMutationResult<
         {
           method: 'POST',
         },
-      ),
+      ).then(mapRecurringOperationResponse),
     onSuccess: (_, { id, propertyId }) => {
       invalidateRecurringOperationLists(queryClient);
       queryClient.invalidateQueries({
@@ -149,7 +206,7 @@ export function usePauseRecurringOperation(): UseMutationResult<
 }
 
 export function useResumeRecurringOperation(): UseMutationResult<
-  RecurringOperationResponse,
+  RecurringOperation,
   ApiError,
   { id: string; propertyId: string }
 > {
@@ -161,7 +218,7 @@ export function useResumeRecurringOperation(): UseMutationResult<
         {
           method: 'POST',
         },
-      ),
+      ).then(mapRecurringOperationResponse),
     onSuccess: (_, { id, propertyId }) => {
       invalidateRecurringOperationLists(queryClient);
       queryClient.invalidateQueries({

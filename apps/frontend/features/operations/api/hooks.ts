@@ -16,12 +16,20 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { categoryKeys, financeKeys, leaseKeys, operationKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
+import { mapOperationResponse, mapOperationsResponse } from '@/entities/operation';
+import type {
+  Operation,
+  OperationCreateRequest,
+  OperationUpdateRequest,
+  OperationsPage,
+} from '@/entities/operation';
+import { mapPropertyOperationsSummaryResponse } from '@/entities/property';
+import type { PropertyOperationsSummary } from '@/entities/property';
 
 type OperationResponse = components['schemas']['OperationResponse'];
-type OperationCategory = components['schemas']['OperationCategory'];
-type OperationCreateRequest = components['schemas']['OperationCreateRequest'];
-type OperationUpdateRequest = components['schemas']['OperationUpdateRequest'];
-type OperationListSort = components['schemas']['OperationListSort'];
+type OperationCreateWireRequest = components['schemas']['OperationCreateRequest'];
+type OperationUpdateWireRequest = components['schemas']['OperationUpdateRequest'];
+export type OperationListSort = 'operation_date_desc' | 'operation_date_asc';
 type OperationsResponse = components['schemas']['OperationsResponse'];
 type PropertyOperationsSummaryResponse =
   components['schemas']['PropertyOperationsSummaryResponse'];
@@ -47,12 +55,12 @@ export type OperationsFilters = {
 // keys for any lease-linked operation change (safe over-invalidation).
 function shouldInvalidateLeaseKeys(
   queryClient: QueryClient,
-  operation: OperationResponse,
+  operation: Pick<Operation, 'leaseId' | 'categoryId'>,
 ): boolean {
-  if (!operation.lease_id) {
+  if (!operation.leaseId) {
     return false;
   }
-  const incomeCategories = queryClient.getQueryData<OperationCategory[]>(
+  const incomeCategories = queryClient.getQueryData<components['schemas']['OperationCategory'][]>(
     categoryKeys.list('income'),
   );
   if (!incomeCategories) {
@@ -67,7 +75,7 @@ function shouldInvalidateLeaseKeys(
     .map((category) => category.id);
   return (
     rentCategoryIds.length > 0 &&
-    rentCategoryIds.includes(operation.category_id)
+    rentCategoryIds.includes(operation.categoryId)
   );
 }
 
@@ -113,10 +121,42 @@ function invalidateOperationLists(queryClient: QueryClient): void {
   queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
 }
 
+// Команды приходят из виджетов в camelCase; wire-формат (snake_case) живёт
+// только внутри этого модуля.
+export function toCreateWireRequest(
+  data: OperationCreateRequest,
+): OperationCreateWireRequest {
+  return {
+    type: data.type,
+    category_id: data.categoryId,
+    name: data.name,
+    amount_kopecks: data.amountKopecks,
+    operation_date: data.operationDate,
+    comment: data.comment,
+    lease_id: data.leaseId,
+    reminder_offset_days: data.reminderOffsetDays,
+  };
+}
+
+export function toUpdateWireRequest(
+  data: OperationUpdateRequest,
+): OperationUpdateWireRequest {
+  return {
+    type: data.type,
+    category_id: data.categoryId,
+    name: data.name,
+    amount_kopecks: data.amountKopecks,
+    operation_date: data.operationDate,
+    comment: data.comment,
+    lease_id: data.leaseId,
+    reminder_offset_days: data.reminderOffsetDays,
+  };
+}
+
 export function useOperations(
   filters: OperationsFilters = {},
   options: { enabled?: boolean } = {},
-): UseQueryResult<OperationsResponse, ApiError> {
+): UseQueryResult<OperationsPage, ApiError> {
   const normalized = useMemo(() => normalizeOperationsFilters(filters), [filters]);
 
   const queryString = useMemo(() => {
@@ -125,8 +165,12 @@ export function useOperations(
 
   return useQuery({
     queryKey: operationKeys.operations(normalized),
-    queryFn: () =>
-      apiClient<OperationsResponse>(`/operations${queryString ? `?${queryString}` : ''}`),
+    queryFn: async () =>
+      mapOperationsResponse(
+        await apiClient<OperationsResponse>(
+          `/operations${queryString ? `?${queryString}` : ''}`,
+        ),
+      ),
     enabled: options.enabled,
   });
 }
@@ -134,7 +178,7 @@ export function useOperations(
 export function useOperationsByProperty(
   propertyId: string,
   filters?: Omit<OperationsFilters, 'property_id'>,
-): UseQueryResult<OperationsResponse, ApiError> {
+): UseQueryResult<OperationsPage, ApiError> {
   const normalized = useMemo(() => {
     return filters ? normalizeOperationsFilters(filters) : {};
   }, [filters]);
@@ -145,9 +189,11 @@ export function useOperationsByProperty(
 
   return useQuery({
     queryKey: operationKeys.byProperty(propertyId, normalized),
-    queryFn: () =>
-      apiClient<OperationsResponse>(
-        `/properties/${propertyId}/operations${queryString ? `?${queryString}` : ''}`,
+    queryFn: async () =>
+      mapOperationsResponse(
+        await apiClient<OperationsResponse>(
+          `/properties/${propertyId}/operations${queryString ? `?${queryString}` : ''}`,
+        ),
       ),
     enabled: Boolean(propertyId),
   });
@@ -156,64 +202,110 @@ export function useOperationsByProperty(
 export function useInfiniteOperations(
   filters: Omit<OperationsFilters, 'offset'> = {},
   options: { enabled?: boolean } = {},
-): UseInfiniteQueryResult<InfiniteData<OperationsResponse>, ApiError> {
+): UseInfiniteQueryResult<InfiniteData<OperationsPage>, ApiError> {
   const normalized = useMemo(() => normalizeOperationsFilters(filters), [filters]);
 
   return useInfiniteQuery<
-    OperationsResponse,
+    OperationsPage,
     ApiError,
-    InfiniteData<OperationsResponse>,
+    InfiniteData<OperationsPage>,
     ReturnType<typeof operationKeys.infiniteOperations>,
     number
   >({
     queryKey: operationKeys.infiniteOperations(normalized),
     initialPageParam: 0,
-    queryFn: ({ pageParam }) => {
+    queryFn: async ({ pageParam }) => {
       const queryString = operationsQueryString({
         ...normalized,
         offset: String(pageParam),
       });
-      return apiClient<OperationsResponse>(
-        `/operations${queryString ? `?${queryString}` : ''}`,
+      return mapOperationsResponse(
+        await apiClient<OperationsResponse>(
+          `/operations${queryString ? `?${queryString}` : ''}`,
+        ),
       );
     },
-    getNextPageParam: (lastPage) => lastPage.next_offset ?? undefined,
+    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
     enabled: options.enabled,
   });
 }
 
 export function useOperation(
   id: string,
-): UseQueryResult<OperationResponse, ApiError> {
+): UseQueryResult<Operation, ApiError> {
   return useQuery({
     queryKey: operationKeys.detail(id),
-    queryFn: () => apiClient<OperationResponse>(`/operations/${id}`),
+    queryFn: async () =>
+      mapOperationResponse(await apiClient<OperationResponse>(`/operations/${id}`)),
     enabled: Boolean(id),
   });
 }
 
 export function usePropertyOperationsSummary(
   propertyId: string,
-): UseQueryResult<PropertyOperationsSummaryResponse, ApiError> {
+): UseQueryResult<PropertyOperationsSummary, ApiError> {
   return useQuery({
     queryKey: operationKeys.summary(propertyId),
-    queryFn: () =>
-      apiClient<PropertyOperationsSummaryResponse>(
-        `/properties/${propertyId}/operations/summary`,
+    queryFn: async () =>
+      mapPropertyOperationsSummaryResponse(
+        await apiClient<PropertyOperationsSummaryResponse>(
+          `/properties/${propertyId}/operations/summary`,
+        ),
       ),
     enabled: Boolean(propertyId),
   });
 }
 
+const PROPERTY_OPERATIONS_PAGE_LIMIT = 100;
+
+/**
+ * Вытягивает все постраничные операции объекта агрегированной entity-страницей
+ * (wire-формат не покидает этот модуль).
+ */
+export async function fetchAllPropertyOperations(
+  propertyId: string,
+): Promise<OperationsPage> {
+  const items: Operation[] = [];
+  let offset = 0;
+
+  for (;;) {
+    const params = new URLSearchParams({
+      limit: String(PROPERTY_OPERATIONS_PAGE_LIMIT),
+      offset: String(offset),
+    });
+    const page = mapOperationsResponse(
+      await apiClient<OperationsResponse>(
+        `/properties/${propertyId}/operations?${params.toString()}`,
+      ),
+    );
+    items.push(...page.items);
+
+    if (!page.hasMore || page.nextOffset === undefined) {
+      break;
+    }
+    offset = page.nextOffset;
+  }
+
+  return {
+    items,
+    limit: PROPERTY_OPERATIONS_PAGE_LIMIT,
+    offset: 0,
+    hasMore: false,
+    nextOffset: undefined,
+  };
+}
+
 export function useCompleteOperation(): UseMutationResult<
-  OperationResponse,
+  Operation,
   ApiError,
   { id: string; propertyId?: string }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }) =>
-      apiClient<OperationResponse>(`/operations/${id}/complete`, { method: 'POST' }),
+    mutationFn: async ({ id }) =>
+      mapOperationResponse(
+        await apiClient<OperationResponse>(`/operations/${id}/complete`, { method: 'POST' }),
+      ),
     onSuccess: (operation, { id, propertyId }) => {
       queryClient.setQueryData(operationKeys.detail(id), operation);
       queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
@@ -230,16 +322,18 @@ export function useCompleteOperation(): UseMutationResult<
 }
 
 export function useMarkOperationIncomplete(): UseMutationResult<
-  OperationResponse,
+  Operation,
   ApiError,
   { id: string; propertyId?: string }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }) =>
-      apiClient<OperationResponse>(`/operations/${id}/mark-incomplete`, {
-        method: 'POST',
-      }),
+    mutationFn: async ({ id }) =>
+      mapOperationResponse(
+        await apiClient<OperationResponse>(`/operations/${id}/mark-incomplete`, {
+          method: 'POST',
+        }),
+      ),
     onSuccess: (operation, { id, propertyId }) => {
       queryClient.setQueryData(operationKeys.detail(id), operation);
       queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
@@ -256,17 +350,19 @@ export function useMarkOperationIncomplete(): UseMutationResult<
 }
 
 export function useCreateOperation(): UseMutationResult<
-  OperationResponse,
+  Operation,
   ApiError,
   { propertyId: string; data: OperationCreateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ propertyId, data }) =>
-      apiClient<OperationResponse>(`/properties/${propertyId}/operations`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async ({ propertyId, data }) =>
+      mapOperationResponse(
+        await apiClient<OperationResponse>(`/properties/${propertyId}/operations`, {
+          method: 'POST',
+          body: JSON.stringify(toCreateWireRequest(data)),
+        }),
+      ),
     onSuccess: (_, { propertyId }) => {
       invalidateOperationLists(queryClient);
       queryClient.invalidateQueries({
@@ -280,17 +376,19 @@ export function useCreateOperation(): UseMutationResult<
 }
 
 export function useUpdateOperation(): UseMutationResult<
-  OperationResponse,
+  Operation,
   ApiError,
   { id: string; propertyId?: string; data: OperationUpdateRequest }
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }) =>
-      apiClient<OperationResponse>(`/operations/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async ({ id, data }) =>
+      mapOperationResponse(
+        await apiClient<OperationResponse>(`/operations/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(toUpdateWireRequest(data)),
+        }),
+      ),
     onSuccess: (operation, { id, propertyId }) => {
       queryClient.setQueryData(operationKeys.detail(id), operation);
       invalidateOperationLists(queryClient);

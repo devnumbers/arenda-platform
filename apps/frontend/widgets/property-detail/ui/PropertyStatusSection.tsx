@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
-import type { Property } from '@/entities/property';
-import type { components } from '@/shared/api/dto';
+import type { Property, PropertyOperationsSummary } from '@/entities/property';
+import type { Lease } from '@/entities/lease';
 import {
   getPropertyPageStatus,
   type PropertyPageStatus,
@@ -10,14 +10,10 @@ import { formatOverdueCount } from '../lib/format-overdue-count';
 import { PropertyDetailStatusBadge } from './PropertyDetailStatusBadge';
 import styles from './PropertyStatusSection.module.css';
 
-type LeaseResponse = components['schemas']['LeaseResponse'];
-type PropertyOperationsSummaryResponse =
-  components['schemas']['PropertyOperationsSummaryResponse'];
-
 export type PropertyStatusSectionProps = {
   readonly property: Property;
-  readonly leases: LeaseResponse[];
-  readonly summary: PropertyOperationsSummaryResponse | undefined;
+  readonly leases: Lease[];
+  readonly summary: PropertyOperationsSummary | undefined;
 };
 
 export function PropertyStatusSection({
@@ -41,16 +37,16 @@ export function PropertyStatusSection({
 
 function getSubLabel(
   status: PropertyPageStatus,
-  leases: LeaseResponse[],
-  summary: PropertyOperationsSummaryResponse | undefined,
+  leases: Lease[],
+  summary: PropertyOperationsSummary | undefined,
 ): string | null {
   if (status === 'awaiting_start') {
     const lease = leases.find((l) => l.status === 'awaiting_start');
-    return lease ? formatAwaitingStart(lease.start_date) : null;
+    return lease ? formatAwaitingStart(lease.startDate) : null;
   }
 
   if (status === 'requires_action') {
-    const overdue = summary?.overdue_total_count ?? 0;
+    const overdue = summary?.overdueTotalCount ?? 0;
     if (overdue <= 0) return null;
     return formatOverdueCount(overdue);
   }

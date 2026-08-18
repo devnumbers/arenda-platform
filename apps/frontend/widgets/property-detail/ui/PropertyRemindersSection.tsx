@@ -23,8 +23,8 @@ export function PropertyRemindersSection({
                                             propertyId,
                                             isArchived = false,
                                         }: PropertyRemindersSectionProps): JSX.Element {
-    const {data, isPending, isError} = useUpcomingFreeReminders(propertyId);
-    const items = data?.items;
+    const {data: reminders, isPending, isError} = useUpcomingFreeReminders(propertyId);
+    const items = reminders;
 
     return (
         <DetailSection>
@@ -53,11 +53,11 @@ export function PropertyRemindersSection({
                 <>
                     <ul className={styles.list}>
                         {items.map((reminder) => {
-                            const {date, time} = formatReminderDateTime(reminder.trigger_at);
+                            const {date, time} = formatReminderDateTime(reminder.triggerAt);
                             return (
-                                <li key={`${reminder.free_reminder_id}__${reminder.trigger_at}`}>
+                                <li key={`${reminder.freeReminderId}__${reminder.triggerAt}`}>
                                     <Link
-                                        href={ROUTES.freeReminder(reminder.free_reminder_id)}
+                                        href={ROUTES.freeReminder(reminder.freeReminderId)}
                                         className={styles.row}
                                     >
                                         <span className={styles.rowMain}>

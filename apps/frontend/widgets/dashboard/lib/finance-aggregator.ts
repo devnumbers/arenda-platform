@@ -1,8 +1,4 @@
-import type { components } from '@/shared/api/dto';
-import type { OperationStatus } from '@/entities/operation';
-
-type OperationsResponse = components['schemas']['OperationsResponse'];
-type OperationResponse = components['schemas']['OperationResponse'];
+import type { Operation, OperationStatus, OperationsPage } from '@/entities/operation';
 
 type IncomeExpense = {
   readonly incomeKopecks: number;
@@ -24,14 +20,10 @@ export type AggregateResult = {
 /**
  * Returns the bucket an operation belongs to.
  *
- * Backward compatibility: older responses may not contain `status`.
- * Such operations are treated as actual (paid/received) so the dashboard
- * keeps showing already-completed amounts instead of silently dropping them.
- *
  * `unconfirmed` operations (created retroactively, awaiting user confirmation)
  * do not participate in financial totals and are skipped entirely.
  */
-function getOperationBucket(status: OperationStatus | undefined): 'actual' | 'pending' | null {
+function getOperationBucket(status: OperationStatus): 'actual' | 'pending' | null {
   if (status === 'unconfirmed') {
     return null;
   }
@@ -40,26 +32,26 @@ function getOperationBucket(status: OperationStatus | undefined): 'actual' | 'pe
     return 'pending';
   }
 
-  // `paid`, `received`, or a missing/unknown status are treated as actual.
+  // `paid` and `received` are treated as actual.
   return 'actual';
 }
 
-function addOperationToBucket(bucket: MutableIncomeExpense, operation: OperationResponse): void {
+function addOperationToBucket(bucket: MutableIncomeExpense, operation: Pick<Operation, 'type' | 'amountKopecks'>): void {
   if (operation.type === 'income') {
-    bucket.incomeKopecks += operation.amount_kopecks;
+    bucket.incomeKopecks += operation.amountKopecks;
   } else {
-    bucket.expenseKopecks += operation.amount_kopecks;
+    bucket.expenseKopecks += operation.amountKopecks;
   }
 }
 
 export function aggregateOperations(
-  operationsList: ReadonlyArray<OperationsResponse>,
+  operationsList: ReadonlyArray<OperationsPage>,
 ): AggregateResult {
   const actual: MutableIncomeExpense = { incomeKopecks: 0, expenseKopecks: 0 };
   const pending: MutableIncomeExpense = { incomeKopecks: 0, expenseKopecks: 0 };
 
-  for (const response of operationsList) {
-    for (const operation of response.items) {
+  for (const page of operationsList) {
+    for (const operation of page.items) {
       const bucket = getOperationBucket(operation.status);
       if (bucket === null) continue;
       addOperationToBucket(bucket === 'actual' ? actual : pending, operation);

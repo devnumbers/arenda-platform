@@ -43,3 +43,14 @@ export type Property = {
   readonly overdue_rent_count: number;
   readonly members_count: number;
 };
+
+/** Сводка операций объекта (entity-модель, camelCase; деньги — копейки). */
+export type PropertyOperationsSummary = {
+  readonly monthlyProfitKopecks: number;
+  readonly allTimeProfitKopecks: number;
+  readonly allTimeIncomeKopecks: number;
+  readonly allTimeExpenseKopecks: number;
+  readonly overdueRentCount: number;
+  readonly overdueTotalCount: number;
+  readonly nextPaymentDate?: string | null;
+};

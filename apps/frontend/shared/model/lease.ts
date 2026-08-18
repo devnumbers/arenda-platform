@@ -19,6 +19,7 @@ export type TenantContact = {
   readonly patronymic?: string | null;
   readonly phone?: string | null;
   readonly email?: string | null;
+  readonly comment?: string | null;
 };
 
 export type Lease = {
@@ -28,6 +29,7 @@ export type Lease = {
   readonly tenantName: string;
   readonly tenantContact?: TenantContact | null;
   readonly rentKopecks: number;
+  readonly depositKopecks: number;
   readonly startDate: string;
   readonly endDate?: string;
   readonly paymentDay: number;
@@ -36,4 +38,29 @@ export type Lease = {
   readonly overdueSince?: string;
   readonly nextPaymentDate?: string;
   readonly status: LeaseStatus;
+  readonly comment?: string | null;
+};
+
+/** Команда создания аренды (camelCase; wire-формат сериализуется в features/leases). */
+export type LeaseCreateRequest = {
+  readonly propertyId: string;
+  readonly tenantContactId?: string;
+  readonly startDate: string;
+  readonly endDate?: string;
+  readonly rentKopecks: number;
+  readonly depositKopecks: number;
+  readonly paymentDay: number;
+  readonly comment?: string;
+};
+
+/** Команда обновления аренды (camelCase; wire-формат сериализуется в features/leases). */
+export type LeaseUpdateRequest = {
+  readonly tenantContactId?: string;
+  readonly clearTenantContact: boolean;
+  readonly startDate?: string;
+  readonly endDate?: string;
+  readonly rentKopecks?: number;
+  readonly depositKopecks?: number;
+  readonly paymentDay?: number;
+  readonly comment?: string;
 };

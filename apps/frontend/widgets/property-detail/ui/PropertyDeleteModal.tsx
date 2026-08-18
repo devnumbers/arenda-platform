@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Modal } from '@heroui/react';
 import { Button } from '@/shared/ui/button';
 import { pluralize } from '@/shared/lib/pluralize';
-import type { components } from '@/shared/api/dto';
+import type { Lease } from '@/entities/lease';
 import type { DeletePropertyMode } from '@/features/properties';
 import styles from './PropertyDeleteModal.module.css';
 
@@ -14,7 +14,7 @@ export type PropertyDeleteModalProps = {
     readonly onClose: () => void;
     readonly onDelete: (mode: DeletePropertyMode) => void;
     readonly onEndLease: () => void;
-    readonly currentLease: components['schemas']['LeaseResponse'] | null | undefined;
+    readonly currentLease: Lease | null | undefined;
     readonly membersCount?: number;
     readonly deletingMode?: DeletePropertyMode | null;
     readonly isCompletingLease?: boolean;

@@ -3,7 +3,6 @@
 import { useMemo, type JSX } from 'react';
 import { useTenantContact } from '@/features/tenant-contacts';
 import { useLeases } from '@/features/leases';
-import { mapLeaseResponse } from '@/entities/lease';
 import type { Lease } from '@/entities/lease';
 import { TenantDetailHeader } from './TenantDetailHeader';
 import { TenantInfoSection } from './TenantInfoSection';
@@ -36,8 +35,7 @@ export function TenantDetailPage({ id }: TenantDetailPageProps): JSX.Element {
   const leasesQuery = useLeases();
 
   const currentLease = useMemo(() => {
-    const leases = (leasesQuery.data ?? []).map(mapLeaseResponse);
-    return findCurrentLeaseByTenant(leases, id);
+    return findCurrentLeaseByTenant(leasesQuery.data ?? [], id);
   }, [leasesQuery.data, id]);
 
   const isLoading = tenantQuery.isPending || leasesQuery.isPending;

@@ -1,14 +1,12 @@
 'use client';
 
 import type { JSX, ReactNode } from 'react';
-import type { components } from '@/shared/api/dto';
+import type { Operation } from '../model/types';
 import { OperationListItem } from './OperationListItem';
 import styles from './OperationsList.module.css';
 
-type OperationResponse = components['schemas']['OperationResponse'];
-
 export type OperationsListProps = {
-  readonly operations: ReadonlyArray<OperationResponse>;
+  readonly operations: ReadonlyArray<Operation>;
   readonly emptyState?: ReactNode;
 };
 

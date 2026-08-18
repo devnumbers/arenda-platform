@@ -152,19 +152,19 @@ export function PropertyOperationsPage(): JSX.Element {
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>Прибыль за месяц</span>
               <span className={styles.summaryValue}>
-                {formatMoneyKopecks(summaryQuery.data?.monthly_profit_kopecks ?? 0)}
+                {formatMoneyKopecks(summaryQuery.data?.monthlyProfitKopecks ?? 0)}
               </span>
             </div>
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>Прибыль за всё время</span>
               <span className={styles.summaryValue}>
-                {formatMoneyKopecks(summaryQuery.data?.all_time_profit_kopecks ?? 0)}
+                {formatMoneyKopecks(summaryQuery.data?.allTimeProfitKopecks ?? 0)}
               </span>
             </div>
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>Просрочено</span>
               <span className={styles.summaryValue}>
-                {summaryQuery.data?.overdue_total_count ?? 0}
+                {summaryQuery.data?.overdueTotalCount ?? 0}
               </span>
             </div>
           </section>

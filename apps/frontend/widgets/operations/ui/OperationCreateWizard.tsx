@@ -221,12 +221,12 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
           propertyId: selectedPropertyId,
           data: {
             type: operationType,
-            category_id: category,
+            categoryId: category,
             name: basicInfo.name.trim(),
-            amount_kopecks: amountKopecks,
-            operation_date: operationDate,
+            amountKopecks,
+            operationDate,
             comment,
-            reminder_offset_days: reminderOffsetDays,
+            reminderOffsetDays,
           },
         });
       } else {
@@ -234,14 +234,14 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
           propertyId: selectedPropertyId,
           data: {
             type: operationType,
-            category_id: category,
+            categoryId: category,
             name: basicInfo.name.trim(),
-            amount_kopecks: amountKopecks,
-            start_date: operationDate,
-            end_date: schedule.endDate || undefined,
+            amountKopecks,
+            startDate: operationDate,
+            endDate: schedule.endDate || undefined,
             comment,
             periodicity: schedule.frequency,
-            reminder_offset_days: reminderOffsetDays,
+            reminderOffsetDays,
           },
         });
       }

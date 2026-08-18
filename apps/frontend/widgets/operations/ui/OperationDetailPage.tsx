@@ -3,7 +3,6 @@
 import {useParams, useRouter} from 'next/navigation';
 import {useState, type ComponentType, type JSX} from 'react';
 import {Modal} from '@heroui/react';
-import type {components} from '@/shared/api/dto';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack} from '@/shared/lib/navigation';
 import {ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo} from '@/shared/assets/icons';
@@ -16,6 +15,7 @@ import {
     useOperation,
 } from '@/features/operations';
 import {useProperty} from '@/features/properties';
+import type {Operation, OperationStatus} from '@/entities/operation';
 import {
     getOperationStatusLabel,
     operationStatusOptions,
@@ -29,9 +29,6 @@ import {useSubscription} from '@/features/subscription';
 import {isSubscriptionReadonly} from '@/features/subscription';
 import {OperationActionButtons} from './OperationActionButtons';
 import styles from './OperationDetailPage.module.css';
-
-type OperationResponse = components['schemas']['OperationResponse'];
-type OperationStatus = components['schemas']['OperationStatus'];
 
 const STATUS_VARIANT_CLASS: Record<
     NonNullable<ReturnType<typeof getStatusVariant>>,
@@ -125,7 +122,7 @@ function OperationDetailCard({
                                  propertyName,
                                  isArchived,
                              }: {
-    readonly operation: OperationResponse;
+    readonly operation: Operation;
     readonly propertyName?: string;
     readonly isArchived: boolean;
 }): JSX.Element {
@@ -157,7 +154,7 @@ function OperationDetailCard({
             <div className={styles.amountRow}>
         <span className={`${styles.amount} ${amountClass}`}>
           {sign}
-            {formatMoneyKopecks(operation.amount_kopecks, {round: true})}
+            {formatMoneyKopecks(operation.amountKopecks, {round: true})}
         </span>
             </div>
 
@@ -165,23 +162,23 @@ function OperationDetailCard({
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Дата</dt>
                     <dd className={styles.detailValue}>
-                        {formatOperationDate(operation.operation_date)}
+                        {formatOperationDate(operation.operationDate)}
                     </dd>
                 </div>
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Категория</dt>
                     <dd className={styles.detailValue}>
-                        {operation.category_name}
+                        {operation.categoryName}
                     </dd>
                 </div>
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Объект</dt>
-                    <dd className={styles.detailValue}>{propertyName ?? operation.property_id ?? 'Без объекта'}</dd>
+                    <dd className={styles.detailValue}>{propertyName ?? operation.propertyId ?? 'Без объекта'}</dd>
                 </div>
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Напоминание</dt>
                     <dd className={styles.detailValue}>
-                        {formatReminderLabel(operation.reminder_offset_days)}
+                        {formatReminderLabel(operation.reminderOffsetDays)}
                     </dd>
                 </div>
                 {operation.comment && (
@@ -206,12 +203,12 @@ export function OperationDetailPage(): JSX.Element {
     const markIncompleteMutation = useMarkOperationIncomplete();
     const deleteMutation = useDeleteOperation();
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const propertyQuery = useProperty(data?.property_id ?? '');
+    const propertyQuery = useProperty(data?.propertyId ?? '');
     const property = propertyQuery.data;
 
     const isLoading =
         operationIsPending
-        || (Boolean(data?.property_id) && propertyQuery.isPending)
+        || (Boolean(data?.propertyId) && propertyQuery.isPending)
         || isSubscriptionPending;
 
     const propertyName = property?.name;
@@ -220,12 +217,12 @@ export function OperationDetailPage(): JSX.Element {
 
     const handleComplete = () => {
         if (!data) return;
-        completeMutation.mutate({id: data.id, propertyId: data.property_id ?? undefined});
+        completeMutation.mutate({id: data.id, propertyId: data.propertyId ?? undefined});
     };
 
     const handleMarkIncomplete = () => {
         if (!data) return;
-        markIncompleteMutation.mutate({id: data.id, propertyId: data.property_id ?? undefined});
+        markIncompleteMutation.mutate({id: data.id, propertyId: data.propertyId ?? undefined});
     };
 
     const handleEdit = () => {
@@ -238,7 +235,7 @@ export function OperationDetailPage(): JSX.Element {
     const handleConfirmDelete = () => {
         if (!data) return;
         deleteMutation.mutate(
-            {id: data.id, propertyId: data.property_id ?? undefined},
+            {id: data.id, propertyId: data.propertyId ?? undefined},
             {
                 onSuccess: () => {
                     setIsDeleteModalOpen(false);

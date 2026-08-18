@@ -25,11 +25,9 @@ import {LeaseActionMenu} from './LeaseActionMenu';
 import {SubscriptionReadonlyBanner} from '@/features/subscription';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {getTenantContactFullName} from '@/entities/tenant-contact';
-import type {components} from '@/shared/api/dto';
+import type {Lease} from '@/entities/lease';
+import type {Operation} from '@/entities/operation';
 import styles from './LeaseDetailPage.module.css';
-
-type LeaseResponse = components['schemas']['LeaseResponse'];
-type OperationResponse = components['schemas']['OperationResponse'];
 
 function formatDateLabel(iso: string): string {
     const date = new Date(iso);
@@ -46,7 +44,7 @@ export type LeaseDetailPageProps = {
 function TenantCard({
                         tenantContact,
                     }: {
-    readonly tenantContact: LeaseResponse['tenant_contact'];
+    readonly tenantContact: Lease['tenantContact'];
 }): JSX.Element {
     if (!tenantContact) {
         return (
@@ -83,8 +81,8 @@ function TenantCard({
     );
 }
 
-function TermsCard({lease}: { readonly lease: LeaseResponse }): JSX.Element {
-    const endDate = lease.end_date ?? null;
+function TermsCard({lease}: { readonly lease: Lease }): JSX.Element {
+    const endDate = lease.endDate ?? null;
 
     return (
         <DetailSection>
@@ -93,7 +91,7 @@ function TermsCard({lease}: { readonly lease: LeaseResponse }): JSX.Element {
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Начало аренды</dt>
                     <dd className={styles.detailValue}>
-                        {formatDateLabel(lease.start_date)}
+                        {formatDateLabel(lease.startDate)}
                     </dd>
                 </div>
                 <div className={styles.detailRow}>
@@ -105,17 +103,17 @@ function TermsCard({lease}: { readonly lease: LeaseResponse }): JSX.Element {
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Арендная плата</dt>
                     <dd className={styles.detailValue}>
-                        {formatMoneyKopecks(lease.rent_amount_kopecks)}
+                        {formatMoneyKopecks(lease.rentKopecks)}
                     </dd>
                 </div>
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>День оплаты</dt>
-                    <dd className={styles.detailValue}>{lease.payment_day}-е число</dd>
+                    <dd className={styles.detailValue}>{lease.paymentDay}-е число</dd>
                 </div>
                 <div className={styles.detailRow}>
                     <dt className={styles.detailLabel}>Залог</dt>
                     <dd className={styles.detailValue}>
-                        {formatMoneyKopecks(lease.deposit_amount_kopecks)}
+                        {formatMoneyKopecks(lease.depositKopecks)}
                     </dd>
                 </div>
                 {lease.comment && (
@@ -140,7 +138,7 @@ function OperationsSection({
                                onRetry,
                                onLoadMore,
                            }: {
-    readonly operations: ReadonlyArray<OperationResponse>;
+    readonly operations: ReadonlyArray<Operation>;
     readonly isLoading: boolean;
     readonly isError: boolean;
     readonly isFetching: boolean;
@@ -255,8 +253,8 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     const [isCompleteModalOpen, setCompleteModalOpen] = useState(false);
 
     const lease = leaseQuery.data;
-    const propertyQuery = useProperty(lease?.property_id ?? '');
-    const propertyName = lease && !lease.property_id
+    const propertyQuery = useProperty(lease?.propertyId ?? '');
+    const propertyName = lease && !lease.propertyId
         ? 'Без объекта'
         : (propertyQuery.data?.name ?? 'Объект');
     const rentOperations = useMemo(
@@ -303,9 +301,9 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
     }
 
     const title = lease ? (
-        lease.property_id ? (
+        lease.propertyId ? (
             <NextLink
-                href={ROUTES.property(lease.property_id)}
+                href={ROUTES.property(lease.propertyId)}
                 className={styles.titleLink}
             >
                 <span className={styles.title}>{propertyName}</span>
@@ -327,7 +325,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
 
             <PageHeader
                 title={title}
-                backHref={lease?.property_id ? ROUTES.property(lease.property_id) : ROUTES.properties}
+                backHref={lease?.propertyId ? ROUTES.property(lease.propertyId) : ROUTES.properties}
                 actions={
                     <LeaseActionMenu
                         leaseId={id}
@@ -346,7 +344,7 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
 
             {!isLoading && !isError && lease && (
                 <>
-                    <TenantCard tenantContact={lease.tenant_contact}/>
+                    <TenantCard tenantContact={lease.tenantContact}/>
                     <TermsCard lease={lease}/>
 
                     <OperationsSection

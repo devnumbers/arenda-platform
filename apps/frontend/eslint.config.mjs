@@ -125,6 +125,37 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Виджеты и страницы не знают о DTO: данные приходят им маплеными в
+  // entity-модели из entities/features. Files-scoped правило перекрывает
+  // базовое no-restricted-imports для этих слоёв, поэтому паттерны
+  // generated/@heroui продублированы здесь.
+  {
+    files: ["widgets/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}", "app/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/shared/api/dto", "@/shared/api/dto.*", "**/shared/api/dto*", "@/shared/api/dto/**"],
+              message:
+                "DTO must not leak into widgets/app — consume entity models from entities/features; DTO mapping lives in their hooks and mappers.",
+            },
+            {
+              group: ["@/shared/api/generated", "@/shared/api/generated.*", "**/shared/api/generated*"],
+              message:
+                "The generated API client is imported only inside shared/api — import DTO types from @/shared/api/dto instead.",
+            },
+            {
+              group: ["@heroui/styles", "@heroui/styles/*"],
+              message:
+                "@heroui/styles (BEM classes) must not be imported in React components — use @heroui/react components (HeroUI v3 boundary).",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

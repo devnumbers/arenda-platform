@@ -17,8 +17,7 @@ import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import type { components } from '@/shared/api/dto';
-import { type OperationType } from '@/entities/operation';
+import { type Operation, type OperationType } from '@/entities/operation';
 import {
   useOperation,
   useUpdateOperation,
@@ -33,14 +32,12 @@ import { TypeSelect } from './TypeSelect';
 import { ReminderSection } from './ReminderSection';
 import styles from './OperationEditForm.module.css';
 
-type OperationResponse = components['schemas']['OperationResponse'];
-
 type FormData = {
   name: string;
   type: OperationType;
-  category: string | undefined;
+  categoryId: string | undefined;
   amount: string;
-  operation_date: string;
+  operationDate: string;
   comment: string;
   reminderEnabled: boolean;
   reminderOffsetDays: 1 | 3 | 7;
@@ -49,8 +46,8 @@ type FormData = {
 type FormErrors = {
   name?: string;
   amount?: string;
-  category?: string;
-  operation_date?: string;
+  categoryId?: string;
+  operationDate?: string;
 };
 
 function formatAmountFromKopecks(kopecks: number): string {
@@ -80,7 +77,7 @@ function OperationEditFormContent({
   readonly,
 }: {
   readonly id: string;
-  readonly operation: OperationResponse;
+  readonly operation: Operation;
   readonly readonly: boolean;
 }): JSX.Element {
   const router = useRouter();
@@ -89,35 +86,35 @@ function OperationEditFormContent({
   const [form, setForm] = useState<FormData>({
     name: operation.name,
     type: operation.type,
-    category: operation.category_id,
-    amount: formatAmountFromKopecks(operation.amount_kopecks),
-    operation_date: operation.operation_date,
+    categoryId: operation.categoryId,
+    amount: formatAmountFromKopecks(operation.amountKopecks),
+    operationDate: operation.operationDate,
     comment: operation.comment ?? '',
-    reminderEnabled: operation.reminder_offset_days !== null && operation.reminder_offset_days !== undefined,
-    reminderOffsetDays: operation.reminder_offset_days ?? 1,
+    reminderEnabled: operation.reminderOffsetDays !== null && operation.reminderOffsetDays !== undefined,
+    reminderOffsetDays: operation.reminderOffsetDays ?? 1,
   });
   const [errors, setErrors] = useState<FormErrors>({});
 
   const hasChanges = useMemo(() => {
     const amountKopecks = parseAmountToKopecks(form.amount);
     const currentReminder = form.reminderEnabled ? form.reminderOffsetDays : null;
-    const originalReminder = operation.reminder_offset_days ?? null;
+    const originalReminder = operation.reminderOffsetDays ?? null;
 
     return (
       form.name.trim() !== operation.name ||
       form.type !== operation.type ||
-      form.category !== operation.category_id ||
-      amountKopecks !== operation.amount_kopecks ||
-      form.operation_date !== operation.operation_date ||
+      form.categoryId !== operation.categoryId ||
+      amountKopecks !== operation.amountKopecks ||
+      form.operationDate !== operation.operationDate ||
       (form.comment.trim() || undefined) !== (operation.comment ?? undefined) ||
       currentReminder !== originalReminder
     );
   }, [
     form.name,
     form.type,
-    form.category,
+    form.categoryId,
     form.amount,
-    form.operation_date,
+    form.operationDate,
     form.comment,
     form.reminderEnabled,
     form.reminderOffsetDays,
@@ -125,7 +122,7 @@ function OperationEditFormContent({
   ]);
 
   const handleTypeChange = (type: OperationType) => {
-    setForm((prev) => ({ ...prev, type, category: undefined }));
+    setForm((prev) => ({ ...prev, type, categoryId: undefined }));
   };
 
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -139,7 +136,7 @@ function OperationEditFormContent({
   };
 
   const handleDateChange = (value: string | undefined) => {
-    setForm((prev) => ({ ...prev, operation_date: value ?? '' }));
+    setForm((prev) => ({ ...prev, operationDate: value ?? '' }));
   };
 
   const handleCommentChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -166,12 +163,12 @@ function OperationEditFormContent({
       next.amount = 'Введите сумму больше 0';
     }
 
-    if (!form.category) {
-      next.category = 'Выберите категорию';
+    if (!form.categoryId) {
+      next.categoryId = 'Выберите категорию';
     }
 
-    if (!form.operation_date) {
-      next.operation_date = 'Выберите дату';
+    if (!form.operationDate) {
+      next.operationDate = 'Выберите дату';
     }
 
     setErrors(next);
@@ -186,22 +183,22 @@ function OperationEditFormContent({
     }
 
     const amountKopecks = parseAmountToKopecks(form.amount);
-    if (amountKopecks === undefined || !form.category) {
+    if (amountKopecks === undefined || !form.categoryId) {
       return;
     }
 
     updateOperation.mutate(
       {
         id,
-        propertyId: operation.property_id ?? undefined,
+        propertyId: operation.propertyId ?? undefined,
         data: {
           name: form.name.trim(),
           type: form.type,
-          category_id: form.category,
-          amount_kopecks: amountKopecks,
-          operation_date: form.operation_date,
+          categoryId: form.categoryId,
+          amountKopecks,
+          operationDate: form.operationDate,
           comment: form.comment.trim() || undefined,
-          reminder_offset_days: form.reminderEnabled ? form.reminderOffsetDays : 0,
+          reminderOffsetDays: form.reminderEnabled ? form.reminderOffsetDays : 0,
         },
       },
       {
@@ -221,10 +218,10 @@ function OperationEditFormContent({
         <TypeSelect value={form.type} onChange={handleTypeChange} />
         <CategorySelect
           type={form.type}
-          value={form.category}
-          onChange={(category) => setForm((prev) => ({ ...prev, category }))}
-          error={errors.category}
-          propertyId={operation.property_id ?? undefined}
+          value={form.categoryId}
+          onChange={(categoryId) => setForm((prev) => ({ ...prev, categoryId }))}
+          error={errors.categoryId}
+          propertyId={operation.propertyId ?? undefined}
         />
         <TextField
           label="Название операции"
@@ -251,10 +248,10 @@ function OperationEditFormContent({
         />
         <DateSelect
           label="Дата операции"
-          value={form.operation_date}
+          value={form.operationDate}
           onChange={handleDateChange}
           required
-          error={errors.operation_date}
+          error={errors.operationDate}
         />
         <TextField
           label="Комментарий"

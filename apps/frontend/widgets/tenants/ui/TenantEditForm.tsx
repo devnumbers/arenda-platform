@@ -7,19 +7,17 @@ import {
   useTenantContact,
   useUpdateTenantContact,
 } from '@/features/tenant-contacts';
+import type { TenantContactUpdateRequest } from '@/entities/tenant-contact';
 import { Skeleton } from '@heroui/react/skeleton';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
 import { PageHeader } from '@/shared/ui/page-header';
-import type { components } from '@/shared/api/dto';
 import { TenantForm, type TenantContactFormData } from './TenantForm';
 import styles from './TenantEditForm.module.css';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-type TenantContactUpdateRequest = components['schemas']['TenantContactUpdateRequest'];
 
 export type TenantEditFormProps = {
   readonly tenantId: string;
@@ -122,37 +120,21 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
         return;
       }
 
-      const payload: TenantContactUpdateRequest = {};
-
       const normalizedName = data.name.trim();
-      if (normalizedName !== tenant.name.trim()) {
-        payload.name = normalizedName;
-      }
-
       const surnameChange = getOptionalFieldChange(data.surname, tenant.surname);
-      if (surnameChange !== undefined) {
-        payload.surname = surnameChange;
-      }
-
       const patronymicChange = getOptionalFieldChange(data.patronymic, tenant.patronymic);
-      if (patronymicChange !== undefined) {
-        payload.patronymic = patronymicChange;
-      }
-
       const phoneChange = getOptionalFieldChange(data.phone.trim(), tenant.phone);
-      if (phoneChange !== undefined) {
-        payload.phone = phoneChange;
-      }
-
       const emailChange = getOptionalFieldChange(data.email, tenant.email);
-      if (emailChange !== undefined) {
-        payload.email = emailChange;
-      }
-
       const commentChange = getOptionalFieldChange(data.comment, tenant.comment);
-      if (commentChange !== undefined) {
-        payload.comment = commentChange;
-      }
+
+      const payload: TenantContactUpdateRequest = {
+        ...(normalizedName !== tenant.name.trim() ? { name: normalizedName } : {}),
+        ...(surnameChange !== undefined ? { surname: surnameChange } : {}),
+        ...(patronymicChange !== undefined ? { patronymic: patronymicChange } : {}),
+        ...(phoneChange !== undefined ? { phone: phoneChange } : {}),
+        ...(emailChange !== undefined ? { email: emailChange } : {}),
+        ...(commentChange !== undefined ? { comment: commentChange } : {}),
+      };
 
       try {
         // Optional fields are sent as empty strings to request clearing them on the backend.

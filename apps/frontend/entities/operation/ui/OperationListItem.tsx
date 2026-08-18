@@ -2,15 +2,12 @@
 
 import type { ComponentType, JSX, SVGProps } from 'react';
 import NextLink from 'next/link';
-import type { components } from '@/shared/api/dto';
 import { ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo, Home } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import type { OperationStatus } from '@/entities/operation/model/types';
+import type { Operation, OperationStatus } from '@/entities/operation/model/types';
 import { getOperationTrailing } from '@/entities/operation/lib/dates';
 import { formatMoneyKopecks } from '@/entities/operation/lib/formatMoney';
 import styles from './OperationListItem.module.css';
-
-type OperationResponse = components['schemas']['OperationResponse'];
 
 const STATUS_BADGE_ICON: Record<OperationStatus, ComponentType<SVGProps<SVGSVGElement>>> = {
   pending: BadgeInfo,
@@ -21,7 +18,7 @@ const STATUS_BADGE_ICON: Record<OperationStatus, ComponentType<SVGProps<SVGSVGEl
 };
 
 export type OperationListItemProps = {
-  readonly operation: OperationResponse;
+  readonly operation: Operation;
 };
 
 export function OperationListItem({ operation }: OperationListItemProps): JSX.Element {
@@ -35,7 +32,7 @@ export function OperationListItem({ operation }: OperationListItemProps): JSX.El
     <NextLink href={ROUTES.financeOperation(operation.id)} className={styles.root}>
       <span className={styles.iconCircle}>
         <Home />
-        {operation.property_status === 'archived' && (
+        {operation.propertyStatus === 'archived' && (
           <span className={styles.archiveBadge} aria-hidden="true">
             <ArchiveBold />
           </span>
@@ -48,7 +45,7 @@ export function OperationListItem({ operation }: OperationListItemProps): JSX.El
       <span className={styles.right}>
         <span className={`${styles.amount} ${amountClass}`}>
           {sign}
-          {formatMoneyKopecks(operation.amount_kopecks, { round: true })}
+          {formatMoneyKopecks(operation.amountKopecks, { round: true })}
         </span>
         <span className={styles.trailing}>{trailing}</span>
       </span>

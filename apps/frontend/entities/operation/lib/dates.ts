@@ -1,8 +1,6 @@
-import type { components } from '@/shared/api/dto';
+import type { Operation } from '../model/types';
 import { formatCountdownLabel } from '@/shared/lib/format-countdown';
 import { diffDays, parseLocalDate } from '@/shared/lib/lease-payment';
-
-type OperationResponse = components['schemas']['OperationResponse'];
 
 export function formatOperationDate(dateString: string): string {
   const date = new Date(dateString);
@@ -116,22 +114,22 @@ export function formatOperationDateShort(dateString: string): string {
 }
 
 export function getOperationTrailing(
-  operation: Pick<OperationResponse, 'status' | 'operation_date'>,
+  operation: Pick<Operation, 'status' | 'operationDate'>,
 ): string {
   if (operation.status === 'overdue') {
-    const dueDate = parseLocalDate(operation.operation_date);
+    const dueDate = parseLocalDate(operation.operationDate);
     const today = new Date();
     if (dueDate > today) return 'Сегодня';
     return `на ${formatCalendarDuration(dueDate, today)}`;
   }
 
   if (operation.status === 'pending') {
-    const dueDate = parseLocalDate(operation.operation_date);
+    const dueDate = parseLocalDate(operation.operationDate);
     const today = new Date();
     const diff = diffDays(today, dueDate);
-    if (diff < 0) return formatOperationDateShort(operation.operation_date);
+    if (diff < 0) return formatOperationDateShort(operation.operationDate);
     return formatCountdownLabel(diff);
   }
 
-  return formatOperationDateShort(operation.operation_date);
+  return formatOperationDateShort(operation.operationDate);
 }

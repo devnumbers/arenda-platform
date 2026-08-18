@@ -4,7 +4,7 @@ import type {JSX} from 'react';
 import {useMemo} from 'react';
 import NextLink from 'next/link';
 import {useParams} from 'next/navigation';
-import type {components} from '@/shared/api/dto';
+import type {Lease, LeaseStatus} from '@/entities/lease';
 import {Plus} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
@@ -16,9 +16,6 @@ import {usePropertyLeases} from '@/features/leases';
 import {FinanceLoading} from '@/shared/ui/finance-loading';
 import {FinanceErrorState} from '@/shared/ui/finance-error-state';
 import styles from './PropertyLeasesPage.module.css';
-
-type LeaseResponse = components['schemas']['LeaseResponse'];
-type LeaseStatus = LeaseResponse['status'];
 
 const OPEN_STATUSES = new Set<LeaseStatus>([
     'awaiting_start',
@@ -38,7 +35,7 @@ function isOpenLease(status: LeaseStatus): boolean {
     return OPEN_STATUSES.has(status);
 }
 
-function sortLeases(leases: ReadonlyArray<LeaseResponse>): LeaseResponse[] {
+function sortLeases(leases: ReadonlyArray<Lease>): Lease[] {
     return [...leases].sort((a, b) => {
         const aOpen = isOpenLease(a.status);
         const bOpen = isOpenLease(b.status);
@@ -47,7 +44,7 @@ function sortLeases(leases: ReadonlyArray<LeaseResponse>): LeaseResponse[] {
             return aOpen ? -1 : 1;
         }
 
-        return b.start_date.localeCompare(a.start_date);
+        return b.startDate.localeCompare(a.startDate);
     });
 }
 
@@ -61,14 +58,14 @@ function formatDateLabel(iso: string): string {
     return `${day}.${month}.${year}`;
 }
 
-function formatPeriod(lease: LeaseResponse): string {
-    const start = formatDateLabel(lease.start_date);
-    const end = lease.end_date ? formatDateLabel(lease.end_date) : 'бессрочно';
+function formatPeriod(lease: Lease): string {
+    const start = formatDateLabel(lease.startDate);
+    const end = lease.endDate ? formatDateLabel(lease.endDate) : 'бессрочно';
     return `${start} - ${end}`;
 }
 
-function formatTenantName(lease: LeaseResponse): string {
-    const tenant = lease.tenant_contact;
+function formatTenantName(lease: Lease): string {
+    const tenant = lease.tenantContact;
     if (!tenant) {
         return 'Арендатор не указан';
     }
@@ -78,7 +75,7 @@ function formatTenantName(lease: LeaseResponse): string {
         .join(' ') || tenant.name;
 }
 
-function LeaseHistoryCard({lease}: { readonly lease: LeaseResponse }): JSX.Element {
+function LeaseHistoryCard({lease}: { readonly lease: Lease }): JSX.Element {
     return (
         <NextLink href={ROUTES.lease(lease.id)} className={styles.card}>
             <div className={styles.cardHeader}>
@@ -92,15 +89,15 @@ function LeaseHistoryCard({lease}: { readonly lease: LeaseResponse }): JSX.Eleme
             <dl className={styles.details}>
                 <div className={styles.detailItem}>
                     <dt>Арендная плата</dt>
-                    <dd>{formatMoneyKopecks(lease.rent_amount_kopecks)}</dd>
+                    <dd>{formatMoneyKopecks(lease.rentKopecks)}</dd>
                 </div>
                 <div className={styles.detailItem}>
                     <dt>День оплаты</dt>
-                    <dd>{lease.payment_day}-е число</dd>
+                    <dd>{lease.paymentDay}-е число</dd>
                 </div>
                 <div className={styles.detailItem}>
                     <dt>Залог</dt>
-                    <dd>{formatMoneyKopecks(lease.deposit_amount_kopecks)}</dd>
+                    <dd>{formatMoneyKopecks(lease.depositKopecks)}</dd>
                 </div>
             </dl>
         </NextLink>
@@ -114,7 +111,7 @@ export function PropertyLeasesPage(): JSX.Element {
     const propertyQuery = useProperty(id);
     const leasesQuery = usePropertyLeases(id);
     const leases = useMemo(
-        () => sortLeases(leasesQuery.data?.items ?? []),
+        () => sortLeases(leasesQuery.data ?? []),
         [leasesQuery.data],
     );
 

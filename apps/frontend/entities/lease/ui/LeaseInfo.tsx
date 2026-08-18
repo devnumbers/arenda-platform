@@ -13,7 +13,7 @@ import {
     parseLocalDate,
     startOfDay,
 } from '@/shared/lib/lease-payment';
-import type {components} from '@/shared/api/dto';
+import type {Lease} from '@/shared/model/lease';
 import styles from './LeaseInfo.module.css';
 
 const SEGMENTS = 4;
@@ -24,20 +24,18 @@ const toneStyles = {
     success: {fill: styles.fillSuccess, marker: styles.markerSuccess},
 } as const;
 
-type LeaseResponse = components['schemas']['LeaseResponse'];
-
 export type LeaseInfoLease = Pick<
-    LeaseResponse,
-    | 'start_date'
-    | 'payment_day'
-    | 'rent_amount_kopecks'
-    | 'current_period_overdue'
-    | 'has_overdue'
-    | 'overdue_since'
-    | 'next_payment_date'
+    Lease,
+    | 'startDate'
+    | 'paymentDay'
+    | 'rentKopecks'
+    | 'currentPeriodOverdue'
+    | 'hasOverdue'
+    | 'overdueSince'
+    | 'nextPaymentDate'
     | 'status'
 > & {
-    readonly tenant_contact?: {readonly name: string} | null;
+    readonly tenantContact?: {readonly name: string} | null;
 };
 
 export type LeaseInfoProps = {
@@ -49,7 +47,7 @@ export function LeaseInfo({
                               lease,
                               className,
                           }: LeaseInfoProps): JSX.Element {
-    const input = {start_date: lease.start_date, payment_day: lease.payment_day};
+    const input = {startDate: lease.startDate, paymentDay: lease.paymentDay};
     const now = new Date();
     const today = startOfDay(now);
 
@@ -57,12 +55,12 @@ export function LeaseInfo({
     let progressRatio: number;
     let progressTone: 'primary' | 'danger' | 'success' = 'primary';
 
-    if (lease.has_overdue && lease.overdue_since) {
-        paymentLabel = formatOverdue(diffDays(parseLocalDate(lease.overdue_since), today));
+    if (lease.hasOverdue && lease.overdueSince) {
+        paymentLabel = formatOverdue(diffDays(parseLocalDate(lease.overdueSince), today));
         progressRatio = 1;
         progressTone = 'danger';
-    } else if (lease.next_payment_date) {
-        const days = diffDays(today, parseLocalDate(lease.next_payment_date));
+    } else if (lease.nextPaymentDate) {
+        const days = diffDays(today, parseLocalDate(lease.nextPaymentDate));
         const label = days === 0 ? 'Сегодня' : formatCountdownLabel(days);
         if (lease.status === 'awaiting_start') {
             paymentLabel = `Начнётся ${label.toLowerCase()}`;
@@ -85,7 +83,7 @@ export function LeaseInfo({
         <div className={clsx(styles.root, className)}>
             <div className={styles.row}>
                 <span className={styles.amount}>
-                    {formatMoneyKopecks(lease.rent_amount_kopecks)}
+                    {formatMoneyKopecks(lease.rentKopecks)}
                 </span>
                 <span className={styles.muted}>{paymentLabel}</span>
             </div>
@@ -112,7 +110,7 @@ export function LeaseInfo({
 
             <div className={styles.row}>
                 <span className={styles.tenant}>
-                    {lease.tenant_contact?.name ?? 'Арендатор не указан'}
+                    {lease.tenantContact?.name ?? 'Арендатор не указан'}
                 </span>
                 <span className={styles.muted}>
                     {formatLeaseMonthOrdinal(currentMonthIndex(input, now))}

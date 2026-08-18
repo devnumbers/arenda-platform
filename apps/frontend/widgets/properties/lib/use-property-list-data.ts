@@ -5,7 +5,6 @@ import {useArchivedProperties, useProperties} from '@/features/properties';
 import { useLeases } from '@/features/leases';
 import type {PropertiesViewMode} from './apply-filters';
 import { ApiError } from '@/shared/api/errors';
-import { mapLeaseResponse } from '@/entities/lease';
 import type { Property } from '@/entities/property';
 import type { Lease } from '@/entities/lease';
 import { getEffectiveLeaseStatus, isOpenLease } from '@/entities/lease';
@@ -73,15 +72,14 @@ export function usePropertyListData(mode: PropertiesViewMode): UsePropertyListDa
     const openLeaseByProperty = new Map<string, Lease>();
 
     for (const lease of leasesQuery.data ?? []) {
-      const mappedLease = mapLeaseResponse(lease);
-      const propertyId = mappedLease.propertyId;
-      if (!isOpenLease(mappedLease) || !propertyId) {
+      const propertyId = lease.propertyId;
+      if (!isOpenLease(lease) || !propertyId) {
         continue;
       }
 
       const effectiveLease = {
-        ...mappedLease,
-        status: getEffectiveLeaseStatus(mappedLease),
+        ...lease,
+        status: getEffectiveLeaseStatus(lease),
       };
       const current = openLeaseByProperty.get(propertyId);
 

@@ -6,10 +6,10 @@ import {Card} from '@heroui/react/card';
 import {Skeleton} from '@heroui/react/skeleton';
 import {Icon} from '@/shared/ui/icon';
 import {BoldWallet, Key} from '@/shared/assets/icons';
-import type {components} from '@/shared/api/dto';
 import type {Property} from '@/entities/property';
 import {ROUTES} from '@/shared/config/routes';
 import {LeaseInfo} from '@/entities/lease';
+import type {Lease} from '@/entities/lease';
 import {EmptyState} from '@/shared/ui/empty-state';
 import {getEffectiveLeaseStatus, isOpenLeaseStatus,} from '@/entities/lease';
 import {PropertyThumbnail} from '@/entities/property';
@@ -19,15 +19,13 @@ import {StatusBadge} from '@/entities/lease';
 import {IconActionCard} from './IconActionCard';
 import styles from './NearestLease.module.css';
 
-type LeaseResponse = components['schemas']['LeaseResponse'];
-
 type NearestLeaseProps = {
-    readonly leases: LeaseResponse[] | undefined;
+    readonly leases: Lease[] | undefined;
     readonly properties: Property[] | undefined;
     readonly isLoading: boolean;
 };
 
-function getNearestLease(leases: LeaseResponse[] | undefined): LeaseResponse | undefined {
+function getNearestLease(leases: Lease[] | undefined): Lease | undefined {
     if (!leases || leases.length === 0) {
         return undefined;
     }
@@ -37,12 +35,12 @@ function getNearestLease(leases: LeaseResponse[] | undefined): LeaseResponse | u
             ...lease,
             status: getEffectiveLeaseStatus({
                 status: lease.status,
-                startDate: lease.start_date,
-                endDate: lease.end_date ?? undefined,
+                startDate: lease.startDate,
+                endDate: lease.endDate,
             }),
         }))
         .filter((lease) => isOpenLeaseStatus(lease.status))
-        .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+        .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
     return active[0];
 }
@@ -112,8 +110,8 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
         );
     }
 
-    const propertyName = getPropertyName(lease.property_id, properties);
-    const property = properties?.find((p) => p.id === lease.property_id);
+    const propertyName = getPropertyName(lease.propertyId, properties);
+    const property = properties?.find((p) => p.id === lease.propertyId);
     const overdueRentCount = property?.overdue_rent_count ?? 0;
     const leaseHref = lease.id ? ROUTES.lease(lease.id) : ROUTES.properties;
 
@@ -138,7 +136,7 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
             </NextLink>
             <div className={styles.actions}>
                 <IconActionCard
-                    href={lease.property_id ? ROUTES.propertyLeases(lease.property_id) : ROUTES.properties}
+                    href={lease.propertyId ? ROUTES.propertyLeases(lease.propertyId) : ROUTES.properties}
                     icon={
                         <Icon size="l">
                             <Key/>
@@ -149,8 +147,8 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
                 />
                 <IconActionCard
                     href={
-                        lease.property_id
-                            ? `${ROUTES.financeOperations}?property_id=${lease.property_id}`
+                        lease.propertyId
+                            ? `${ROUTES.financeOperations}?property_id=${lease.propertyId}`
                             : ROUTES.financeOperations
                     }
                     icon={

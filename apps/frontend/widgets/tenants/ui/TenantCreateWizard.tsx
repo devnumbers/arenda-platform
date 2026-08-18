@@ -70,7 +70,7 @@ export function TenantCreateWizard({returnTo}: TenantCreateWizardProps): JSX.Ele
                 phone: data.phone.trim() || undefined,
                 email: data.email.trim() || undefined,
                 comment: data.comment.trim() || undefined,
-                ...(propertyId ? { property_id: propertyId } : {}),
+                ...(propertyId ? { propertyId } : {}),
             });
 
             if (returnTo) {

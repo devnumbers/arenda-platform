@@ -60,7 +60,7 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
         : ROUTES.leaseNew;
     const createTenantHref = `${ROUTES.tenantNew}?${RETURN_TO_PARAM}=${encodeURIComponent(currentUrl)}`;
 
-    const openLease = propertyLeasesQuery.data?.items.find((lease) =>
+    const openLease = propertyLeasesQuery.data?.find((lease) =>
         isOpenLeaseStatus(lease.status),
     );
     const isPropertyBlocked =
@@ -91,13 +91,13 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
 
         try {
             const lease = await createLease.mutateAsync({
-                property_id: propertyId,
-                rent_amount_kopecks: Math.round(Number(draft.rentAmount) * 100),
-                deposit_amount_kopecks: Math.round(Number(draft.depositAmount || '0') * 100),
-                payment_day: draft.paymentDay,
-                start_date: draft.startDate,
-                end_date: draft.endDate || undefined,
-                tenant_contact_id: draft.tenantContactId || undefined,
+                propertyId,
+                rentKopecks: Math.round(Number(draft.rentAmount) * 100),
+                depositKopecks: Math.round(Number(draft.depositAmount || '0') * 100),
+                paymentDay: draft.paymentDay,
+                startDate: draft.startDate,
+                endDate: draft.endDate || undefined,
+                tenantContactId: draft.tenantContactId || undefined,
             });
 
             setCreatedLeaseId(lease.id);

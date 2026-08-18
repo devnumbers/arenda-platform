@@ -1,8 +1,8 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type LeasePaymentInput = {
-  start_date: string;
-  payment_day: number;
+  startDate: string;
+  paymentDay: number;
 };
 
 /** Количество дней в месяце (monthIndex0: 0..11). */
@@ -41,7 +41,7 @@ export function nextPaymentDate(
   input: LeasePaymentInput,
   now: Date = new Date(),
 ): Date {
-  const start = parseLocalDate(input.start_date);
+  const start = parseLocalDate(input.startDate);
   const today = startOfDay(now);
 
   if (start.getTime() > today.getTime()) {
@@ -50,7 +50,7 @@ export function nextPaymentDate(
 
   const year = today.getFullYear();
   const month = today.getMonth();
-  const cand = makeDate(year, month, input.payment_day);
+  const cand = makeDate(year, month, input.paymentDay);
 
   if (cand.getTime() >= today.getTime()) {
     return cand;
@@ -58,7 +58,7 @@ export function nextPaymentDate(
 
   const nextYear = month === 11 ? year + 1 : year;
   const nextMonth = month === 11 ? 0 : month + 1;
-  return makeDate(nextYear, nextMonth, input.payment_day);
+  return makeDate(nextYear, nextMonth, input.paymentDay);
 }
 
 /** Последняя плановая оплата <= today; null, если аренда ещё не началась. */
@@ -66,7 +66,7 @@ export function currentDueDate(
   input: LeasePaymentInput,
   now: Date = new Date(),
 ): Date | null {
-  const start = parseLocalDate(input.start_date);
+  const start = parseLocalDate(input.startDate);
   const today = startOfDay(now);
 
   if (start.getTime() > today.getTime()) {
@@ -75,7 +75,7 @@ export function currentDueDate(
 
   const year = today.getFullYear();
   const month = today.getMonth();
-  const cand = makeDate(year, month, input.payment_day);
+  const cand = makeDate(year, month, input.paymentDay);
 
   if (cand.getTime() <= today.getTime()) {
     return cand;
@@ -83,7 +83,7 @@ export function currentDueDate(
 
   const prevYear = month === 0 ? year - 1 : year;
   const prevMonth = month === 0 ? 11 : month - 1;
-  return makeDate(prevYear, prevMonth, input.payment_day);
+  return makeDate(prevYear, prevMonth, input.paymentDay);
 }
 
 /** Порядковый номер текущего месяца аренды (>= 1). */
@@ -91,7 +91,7 @@ export function currentMonthIndex(
   input: LeasePaymentInput,
   now: Date = new Date(),
 ): number {
-  const start = parseLocalDate(input.start_date);
+  const start = parseLocalDate(input.startDate);
   const today = startOfDay(now);
 
   if (start.getTime() > today.getTime()) {
@@ -110,7 +110,7 @@ export function monthPeriodProgress(
   input: LeasePaymentInput,
   now: Date = new Date(),
 ): number {
-  const start = parseLocalDate(input.start_date);
+  const start = parseLocalDate(input.startDate);
   const today = startOfDay(now);
 
   if (start.getTime() > today.getTime()) {

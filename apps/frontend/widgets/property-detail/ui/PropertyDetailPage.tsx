@@ -92,7 +92,7 @@ export function PropertyDetailPage(): JSX.Element {
     const [selectedLeaseId, setSelectedLeaseId] = useState<string>('');
 
     const property = propertyQuery.data;
-    const leases = useMemo(() => leasesQuery.data?.items ?? [], [leasesQuery.data]);
+    const leases = useMemo(() => leasesQuery.data ?? [], [leasesQuery.data]);
 
     const pageStatus = useMemo(
         () => (property ? getPropertyPageStatus(property.status, leases) : 'free'),
@@ -142,7 +142,7 @@ export function PropertyDetailPage(): JSX.Element {
         [],
     );
 
-    const overdueCount = summaryQuery.data?.overdue_total_count ?? 0;
+    const overdueCount = summaryQuery.data?.overdueTotalCount ?? 0;
 
     const handleToggleMaintenance = useCallback(() => {
         if (!property) return;

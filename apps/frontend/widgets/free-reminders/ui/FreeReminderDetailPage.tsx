@@ -25,7 +25,7 @@ export function FreeReminderDetailPage(): JSX.Element {
   const id = params?.id;
 
   const { data: reminder, isLoading, isError } = useFreeReminder(id ?? '');
-  const { data: property } = useProperty(reminder?.property_id ?? '');
+  const { data: property } = useProperty(reminder?.propertyId ?? '');
 
   const deleteMutation = useDeleteFreeReminder();
   const [isEditing, setIsEditing] = useState(false);
@@ -67,11 +67,11 @@ export function FreeReminderDetailPage(): JSX.Element {
         <>
           <section className={styles.hero}>
             <p className={styles.heroCountdown}>
-              {formatCountdownFromNow(reminder.trigger_at)}
+              {formatCountdownFromNow(reminder.triggerAt)}
             </p>
             <p className={styles.heroWhen}>
               {(() => {
-                const { date, time } = formatReminderDateTime(reminder.trigger_at);
+                const { date, time } = formatReminderDateTime(reminder.triggerAt);
                 return `${date} в ${time}`;
               })()}
             </p>

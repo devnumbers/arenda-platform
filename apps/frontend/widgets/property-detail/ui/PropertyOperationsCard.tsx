@@ -4,25 +4,22 @@ import type {JSX} from 'react';
 import {Card} from '@heroui/react/card';
 import {formatMoneyKopecks} from '@/shared/lib/format-money';
 import {ROUTES} from '@/shared/config/routes';
-import type {components} from '@/shared/api/dto';
+import type {PropertyOperationsSummary} from '@/entities/property';
 import {SectionHeader} from '@/shared/ui/section-header';
 import { DetailSection } from '@/shared/ui/detail-section';
 import styles from './PropertyOperationsCard.module.css';
 
-type PropertyOperationsSummaryResponse =
-    components['schemas']['PropertyOperationsSummaryResponse'];
-
 export type PropertyOperationsCardProps = {
     readonly propertyId: string;
-    readonly summary: PropertyOperationsSummaryResponse | undefined;
+    readonly summary: PropertyOperationsSummary | undefined;
 };
 
 export function PropertyOperationsCard({
                                            propertyId,
                                            summary,
                                        }: PropertyOperationsCardProps): JSX.Element {
-    const income = summary?.all_time_income_kopecks ?? 0;
-    const expense = summary?.all_time_expense_kopecks ?? 0;
+    const income = summary?.allTimeIncomeKopecks ?? 0;
+    const expense = summary?.allTimeExpenseKopecks ?? 0;
     const isEmpty = !summary || (income === 0 && expense === 0);
 
     return (
@@ -42,7 +39,7 @@ export function PropertyOperationsCard({
                     <div className={styles.top}>
                         <div className={styles.profit}>
               <span className={styles.profitValue}>
-                {formatMoneyKopecks(summary.all_time_profit_kopecks, {round: true})}
+                {formatMoneyKopecks(summary.allTimeProfitKopecks, {round: true})}
               </span>
                             <span className={styles.profitLabel}>Прибыль за всё время</span>
                         </div>

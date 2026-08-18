@@ -20,3 +20,38 @@ export const PERIODICITY_LABELS: Readonly<Record<FreeReminderPeriodicity, string
   monthly: 'Каждый месяц',
   yearly: 'Каждый год',
 };
+
+/** Свободное напоминание (entity-модель, camelCase). */
+export type FreeReminder = {
+  readonly id: string;
+  readonly ownerId: string;
+  readonly propertyId: string;
+  readonly title: string;
+  readonly triggerAt: string;
+  readonly periodicity: FreeReminderPeriodicity;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
+/** Ближайшее срабатывание периодического напоминания (entity-модель, camelCase). */
+export type UpcomingFreeReminder = {
+  readonly freeReminderId: string;
+  readonly title: string;
+  readonly propertyId: string;
+  readonly triggerAt: string;
+  readonly periodicity: FreeReminderPeriodicity;
+};
+
+/** Команда создания напоминания (camelCase; wire-формат сериализуется в api/hooks). */
+export type FreeReminderCreateRequest = {
+  readonly title: string;
+  readonly triggerAt: string;
+  readonly periodicity: FreeReminderPeriodicity;
+};
+
+/** Команда обновления напоминания (camelCase; wire-формат сериализуется в api/hooks). */
+export type FreeReminderUpdateRequest = {
+  readonly title?: string;
+  readonly triggerAt?: string;
+  readonly periodicity?: FreeReminderPeriodicity;
+};

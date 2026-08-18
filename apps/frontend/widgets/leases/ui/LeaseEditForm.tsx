@@ -15,7 +15,7 @@ import {PageHeader} from '@/shared/ui/page-header';
 import {IconButton} from '@/shared/ui/icon-button';
 import {Cancel} from '@/shared/assets/icons';
 import { DetailSection } from '@/shared/ui/detail-section';
-import type {components} from '@/shared/api/dto';
+import type {Lease, LeaseUpdateRequest} from '@/entities/lease';
 import type {TenantContact} from '@/entities/tenant-contact';
 import {getTenantContactFullName} from '@/entities/tenant-contact';
 import {DateSelect} from '@/shared/ui/date-select';
@@ -23,9 +23,6 @@ import {useLeaseEditDraft} from '../lib/use-lease-edit-draft';
 import {PaymentDayPicker} from './PaymentDayPicker';
 import {LeaseEditFormLoading} from './LeaseEditFormLoading';
 import styles from './LeaseEditForm.module.css';
-
-type LeaseResponse = components['schemas']['LeaseResponse'];
-type LeaseUpdateRequest = components['schemas']['LeaseUpdateRequest'];
 
 type FormData = {
     tenantContactId: string;
@@ -65,14 +62,14 @@ function getTenantContactOptionLabel(contact: TenantContact): string {
     return getTenantContactFullName(contact) || contact.name;
 }
 
-function initializeForm(lease: LeaseResponse): FormData {
+function initializeForm(lease: Lease): FormData {
     return {
-        tenantContactId: lease.tenant_contact?.id ?? '',
-        startDate: lease.start_date,
-        endDate: lease.end_date ?? '',
-        rentAmount: kopecksToRubles(lease.rent_amount_kopecks),
-        depositAmount: kopecksToRubles(lease.deposit_amount_kopecks),
-        paymentDay: String(lease.payment_day),
+        tenantContactId: lease.tenantContact?.id ?? '',
+        startDate: lease.startDate,
+        endDate: lease.endDate ?? '',
+        rentAmount: kopecksToRubles(lease.rentKopecks),
+        depositAmount: kopecksToRubles(lease.depositKopecks),
+        paymentDay: String(lease.paymentDay),
         comment: lease.comment ?? '',
     };
 }
@@ -234,12 +231,12 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
         }
 
         return (
-            form.tenantContactId !== (lease.tenant_contact?.id ?? '') ||
-            form.startDate !== lease.start_date ||
-            form.endDate !== (lease.end_date ?? '') ||
-            parseRublesToKopecks(form.rentAmount) !== lease.rent_amount_kopecks ||
-            parseRublesToKopecks(form.depositAmount) !== lease.deposit_amount_kopecks ||
-            form.paymentDay !== String(lease.payment_day) ||
+            form.tenantContactId !== (lease.tenantContact?.id ?? '') ||
+            form.startDate !== lease.startDate ||
+            form.endDate !== (lease.endDate ?? '') ||
+            parseRublesToKopecks(form.rentAmount) !== lease.rentKopecks ||
+            parseRublesToKopecks(form.depositAmount) !== lease.depositKopecks ||
+            form.paymentDay !== String(lease.paymentDay) ||
             form.comment.trim() !== (lease.comment ?? '').trim()
         );
     }, [
@@ -278,13 +275,13 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
         }
 
         const data: LeaseUpdateRequest = {
-            tenant_contact_id: form.tenantContactId || undefined,
-            clear_tenant_contact: !form.tenantContactId,
-            start_date: form.startDate,
-            ...(form.endDate ? {end_date: form.endDate} : {}),
-            rent_amount_kopecks: rentKopecks,
-            deposit_amount_kopecks: depositKopecks ?? 0,
-            payment_day: paymentDay,
+            tenantContactId: form.tenantContactId || undefined,
+            clearTenantContact: !form.tenantContactId,
+            startDate: form.startDate,
+            ...(form.endDate ? {endDate: form.endDate} : {}),
+            rentKopecks,
+            depositKopecks: depositKopecks ?? 0,
+            paymentDay,
             ...(form.comment.trim() ? {comment: form.comment.trim()} : {}),
         };
 

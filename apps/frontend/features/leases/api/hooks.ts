@@ -10,81 +10,129 @@ import {
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { financeKeys, leaseKeys, operationKeys, propertyKeys } from '@/shared/api/query-keys';
+import { mapLeaseResponse } from '@/entities/lease';
+import type { Lease, LeaseCreateRequest, LeaseUpdateRequest } from '@/entities/lease';
 import type { components } from '@/shared/api/dto';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
 type LeasesResponse = components['schemas']['LeasesResponse'];
 type PropertyLeasesResponse = components['schemas']['PropertyLeasesResponse'];
-type LeaseCreateRequest = components['schemas']['LeaseCreateRequest'];
-type LeaseUpdateRequest = components['schemas']['LeaseUpdateRequest'];
+type LeaseCreateWireRequest = components['schemas']['LeaseCreateRequest'];
+type LeaseUpdateWireRequest = components['schemas']['LeaseUpdateRequest'];
 type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
 type ReminderResponse = components['schemas']['ReminderResponse'];
 type RemindersResponse = components['schemas']['RemindersResponse'];
 
-export function useLeases(): UseQueryResult<LeaseResponse[], ApiError> {
+// Команды приходят из виджетов в camelCase; wire-формат (snake_case) живёт
+// только внутри этого модуля.
+export function toCreateWireRequest(data: LeaseCreateRequest): LeaseCreateWireRequest {
+  return {
+    property_id: data.propertyId,
+    tenant_contact_id: data.tenantContactId,
+    start_date: data.startDate,
+    end_date: data.endDate,
+    rent_amount_kopecks: data.rentKopecks,
+    deposit_amount_kopecks: data.depositKopecks,
+    payment_day: data.paymentDay,
+    comment: data.comment,
+  };
+}
+
+export function toUpdateWireRequest(data: LeaseUpdateRequest): LeaseUpdateWireRequest {
+  return {
+    tenant_contact_id: data.tenantContactId,
+    clear_tenant_contact: data.clearTenantContact,
+    start_date: data.startDate,
+    end_date: data.endDate,
+    rent_amount_kopecks: data.rentKopecks,
+    deposit_amount_kopecks: data.depositKopecks,
+    payment_day: data.paymentDay,
+    comment: data.comment,
+  };
+}
+
+function fetchLease(id: string): Promise<Lease> {
+  return apiClient<LeaseResponse>(`/leases/${id}`).then(mapLeaseResponse);
+}
+
+function invalidateLeaseScope(
+  queryClient: ReturnType<typeof useQueryClient>,
+  lease: Pick<Lease, 'id' | 'propertyId'>,
+): void {
+  queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+  queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
+  queryClient.invalidateQueries({
+    queryKey: operationKeys.operations({ lease_id: lease.id }),
+  });
+  queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+  queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+  queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
+  if (lease.propertyId) {
+    queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+    queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.propertyId) });
+    queryClient.invalidateQueries({
+      queryKey: leaseKeys.byProperty(lease.propertyId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: operationKeys.byProperty(lease.propertyId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: operationKeys.summary(lease.propertyId),
+    });
+  }
+}
+
+export function useLeases(): UseQueryResult<Lease[], ApiError> {
   return useQuery({
     queryKey: leaseKeys.all,
     queryFn: async () => {
       const response = await apiClient<LeasesResponse>('/leases');
-      return response.items;
+      return response.items.map(mapLeaseResponse);
     },
   });
 }
 
-export function useLease(id: string): UseQueryResult<LeaseResponse, ApiError> {
+export function useLease(id: string): UseQueryResult<Lease, ApiError> {
   return useQuery({
     queryKey: leaseKeys.detail(id),
-    queryFn: () => apiClient<LeaseResponse>(`/leases/${id}`),
+    queryFn: () => fetchLease(id),
     enabled: Boolean(id),
   });
 }
 
 export function usePropertyLeases(
   propertyId: string,
-): UseQueryResult<PropertyLeasesResponse, ApiError> {
+): UseQueryResult<Lease[], ApiError> {
   return useQuery({
     queryKey: leaseKeys.byProperty(propertyId),
-    queryFn: () => apiClient<PropertyLeasesResponse>(`/properties/${propertyId}/leases`),
+    queryFn: async () => {
+      const response = await apiClient<PropertyLeasesResponse>(`/properties/${propertyId}/leases`);
+      return response.items.map(mapLeaseResponse);
+    },
     enabled: Boolean(propertyId),
   });
 }
 
 export function useCreateLease(): UseMutationResult<
-  LeaseResponse,
+  Lease,
   ApiError,
   LeaseCreateRequest
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: LeaseCreateRequest) =>
+    mutationFn: (data) =>
       apiClient<LeaseResponse>('/leases', {
         method: 'POST',
-        body: JSON.stringify(data),
-      }),
+        body: JSON.stringify(toCreateWireRequest(data)),
+      }).then(mapLeaseResponse),
     onSuccess: (lease) => {
-      queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
-      if (lease.property_id) {
-        queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-        queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
-        queryClient.invalidateQueries({
-          queryKey: leaseKeys.byProperty(lease.property_id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: operationKeys.byProperty(lease.property_id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: operationKeys.summary(lease.property_id),
-        });
-      }
+      invalidateLeaseScope(queryClient, lease);
     },
   });
 }
 
 export function useUpdateLease(): UseMutationResult<
-  LeaseResponse,
+  Lease,
   ApiError,
   { id: string; data: LeaseUpdateRequest }
 > {
@@ -93,36 +141,16 @@ export function useUpdateLease(): UseMutationResult<
     mutationFn: ({ id, data }) =>
       apiClient<LeaseResponse>(`/leases/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
-    onSuccess: (lease, { id }) => {
-      queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-      queryClient.invalidateQueries({ queryKey: leaseKeys.detail(id) });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.operations({ lease_id: id }),
-      });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
-      if (lease.property_id) {
-        queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-        queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
-        queryClient.invalidateQueries({
-          queryKey: leaseKeys.byProperty(lease.property_id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: operationKeys.byProperty(lease.property_id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: operationKeys.summary(lease.property_id),
-        });
-      }
+        body: JSON.stringify(toUpdateWireRequest(data)),
+      }).then(mapLeaseResponse),
+    onSuccess: (lease) => {
+      invalidateLeaseScope(queryClient, lease);
     },
   });
 }
 
 export function useCompleteLease(): UseMutationResult<
-  LeaseResponse,
+  Lease,
   ApiError,
   string
 > {
@@ -131,29 +159,9 @@ export function useCompleteLease(): UseMutationResult<
     mutationFn: (id) =>
       apiClient<LeaseResponse>(`/leases/${id}/complete`, {
         method: 'POST',
-      }),
+      }).then(mapLeaseResponse),
     onSuccess: (lease) => {
-      queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-      queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
-      queryClient.invalidateQueries({
-        queryKey: operationKeys.operations({ lease_id: lease.id }),
-      });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
-      if (lease.property_id) {
-        queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-        queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.property_id) });
-        queryClient.invalidateQueries({
-          queryKey: leaseKeys.byProperty(lease.property_id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: operationKeys.byProperty(lease.property_id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: operationKeys.summary(lease.property_id),
-        });
-      }
+      invalidateLeaseScope(queryClient, lease);
     },
   });
 }

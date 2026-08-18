@@ -28,9 +28,11 @@ export function mapLeaseResponse(
           patronymic: dto.tenant_contact.patronymic,
           phone: dto.tenant_contact.phone,
           email: dto.tenant_contact.email,
+          comment: dto.tenant_contact.comment,
         }
       : null,
     rentKopecks: dto.rent_amount_kopecks,
+    depositKopecks: dto.deposit_amount_kopecks,
     startDate: dto.start_date,
     endDate: dto.end_date ?? undefined,
     paymentDay: dto.payment_day,
@@ -39,5 +41,6 @@ export function mapLeaseResponse(
     overdueSince: dto.overdue_since ?? undefined,
     nextPaymentDate: dto.next_payment_date ?? undefined,
     status: leaseStatusMap[dto.status],
+    comment: dto.comment ?? null,
   };
 }
