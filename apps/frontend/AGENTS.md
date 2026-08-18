@@ -8,7 +8,7 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 
 ## Stack & References
 
-- Next.js `16.2.11`, React `19.2.4`, TypeScript `^5`.
+- Next.js `16.3.1`, React `19.2.4`, TypeScript `^5`.
 - React Compiler enabled in `next.config.ts`.
 - Official Next.js docs (`https://nextjs.org/docs`) take precedence over training data.
 - For non-obvious third-party behavior, use `context7` for current docs.

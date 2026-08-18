@@ -166,7 +166,7 @@ npm-audit:
 
 # Filesystem vuln scan over the repo root via the pinned trivy image — mirrors
 # the CI trivy-fs job (scanners: vuln, severity HIGH/CRITICAL, ignore-unfixed,
-# exit 1). node_modules and .git are skipped: they are never the shipped
+# exit 1). node_modules, .git, and .tmp are skipped: they are never the shipped
 # dependency set and would dominate scan time. The vuln DB is cached in a named
 # docker volume so repeat runs don't re-download it.
 trivy-fs:
@@ -179,7 +179,8 @@ trivy-fs:
 		--ignore-unfixed \
 		--exit-code 1 \
 		--skip-dirs node_modules \
-		--skip-dirs .git
+		--skip-dirs .git \
+		--skip-dirs .tmp
 
 # Installs the pinned squawk binary (migration linter, wave 3 / #309) from
 # GitHub Releases into .tmp (gitignored) when missing, verifying the pinned
