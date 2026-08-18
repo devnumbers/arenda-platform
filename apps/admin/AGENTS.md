@@ -26,6 +26,10 @@ Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root 
 
 Before adding resources, fields, inputs, helpers, or API wrappers, search existing resources and call sites with `Grep`/`lean-ctx` to avoid duplicate patterns.
 
+## Coding Standards
+
+Before implementing or reviewing admin code, read `CODING_STANDARDS.md` (same directory): resource file anatomy, the read-only design and its dataProvider conventions, `fields.tsx` choice-catalog sync rules, i18n practice, testing patterns, and the review rubric used by the Standards axis of `/code-review`.
+
 ## Architecture
 
 - This is a standalone Vite SPA, not Next.js: no App Router, no Server Components, no file-based routing. Do not apply the Next.js rules from `apps/frontend/AGENTS.md` here.
