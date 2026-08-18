@@ -28,7 +28,7 @@ Schema invariants are carried over from the evolved pre-rewrite schema where the
 
 - (+) The new module starts from a schema that matches its domain language 1:1; no legacy branches (`partial_refunded`, `addcard:` tokens) reach the new code.
 - (+) The transition log is immutable against rewriting at the database level (UPDATE rejected by trigger). DELETE is deliberately not guarded: cascading user erasure fires row-level triggers and must be able to remove the log together with its subscription; TRUNCATE-based test isolation keeps working.
-- (-) Stage/prod billing history is lost (accepted by the owner); the down migration cannot restore it.
+- (-) Stage/prod billing history is lost (accepted by the owner); the down migration cannot restore it — but it does restore the pre-rewrite *schema shape* (the four tables exactly as they stood at migration 000103, empty, without seed rows), because the historical down chain below 104 still issues ALTER/UPDATE against those tables and `migrate down -all` must stay executable (issues #313, #316; verified by the up/down/up cycle test mirroring the CI job).
 - (-) Between #245 and the flow tickets (#249–#255) the corresponding HTTP endpoints answer 501 and the worker shells tick as no-ops — a deliberate, visible transitional state.
 - The vendored T-Kassa OpenAPI spec (`internal/billing/adapters/payment/tkassa/spec/`) stays in place: it is provider contract data, not module code, and the provider-port ticket (#248) rebuilds the adapter on top of it.
 

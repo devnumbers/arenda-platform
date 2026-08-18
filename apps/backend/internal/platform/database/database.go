@@ -76,9 +76,36 @@ func NewPoolWithConfig(ctx context.Context, databaseURL string, poolConfig PoolC
 }
 
 func MigrateUp(databaseURL, migrationsDir string) error {
+	m, err := newMigrate(databaseURL, migrationsDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _, _ = m.Close() }()
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migrate up: %w", err)
+	}
+	return nil
+}
+
+// MigrateDownAll rolls the schema back to zero by applying every down
+// migration, newest first. It mirrors the CI "Backend migrations" job contract:
+// the full chain must stay executable in both directions.
+func MigrateDownAll(databaseURL, migrationsDir string) error {
+	m, err := newMigrate(databaseURL, migrationsDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _, _ = m.Close() }()
+	if err := m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migrate down all: %w", err)
+	}
+	return nil
+}
+
+func newMigrate(databaseURL, migrationsDir string) (*migrate.Migrate, error) {
 	absDir, err := filepath.Abs(migrationsDir)
 	if err != nil {
-		return fmt.Errorf("resolve migrations dir: %w", err)
+		return nil, fmt.Errorf("resolve migrations dir: %w", err)
 	}
 	// pgx/v5 driver registers itself as "pgx5", so we rewrite the scheme
 	// while keeping the rest of the URL intact.
@@ -93,11 +120,7 @@ func MigrateUp(databaseURL, migrationsDir string) error {
 		migrateURL,
 	)
 	if err != nil {
-		return fmt.Errorf("create migrate: %w", err)
+		return nil, fmt.Errorf("create migrate: %w", err)
 	}
-	defer func() { _, _ = m.Close() }()
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("migrate up: %w", err)
-	}
-	return nil
+	return m, nil
 }
