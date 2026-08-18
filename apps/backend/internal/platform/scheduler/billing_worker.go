@@ -47,6 +47,11 @@ type BillingWorker struct {
 	clock     clock.Clock
 	interval  time.Duration
 	logger    *slog.Logger
+	// lockKey elects the tick leader through a PostgreSQL advisory lock; the
+	// production default is billingWorkerLockKey, tests override it so parallel
+	// DB-backed tick tests do not elect each other's leader (same pattern as
+	// OperationOverdueWorker.nextRun).
+	lockKey int64
 }
 
 // NewBillingWorker creates a new billing lifecycle worker.
@@ -64,49 +69,25 @@ func NewBillingWorker(renewals RenewalProcessor, scheduled ScheduledChangeProces
 		clock:     clk,
 		interval:  interval,
 		logger:    logger,
+		lockKey:   billingWorkerLockKey,
 	}
 }
 
 // Run starts the worker loop. It stops when the provided context is cancelled.
 func (w *BillingWorker) Run(ctx context.Context) {
-	w.logger.InfoContext(ctx, "billing worker started", "interval", w.interval.String())
-
-	ticker := time.NewTicker(w.interval)
-	defer ticker.Stop()
-
-	if err := w.tick(ctx); err != nil {
-		w.logger.ErrorContext(ctx, "billing worker tick failed", "error", sanitize.Error(err))
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := w.tick(ctx); err != nil {
-				w.logger.ErrorContext(ctx, "billing worker tick failed", "error", sanitize.Error(err))
-			}
-		}
-	}
+	runTickerLoop(ctx, "billing", w.interval, w.logger, w.tick)
 }
 
 func (w *BillingWorker) tick(ctx context.Context) error {
 	if w.pool == nil {
 		return errors.New("billing worker requires a database pool")
 	}
+	return withAdvisoryTickLock(ctx, w.pool, w.lockKey, "billing", w.logger, w.processTick)
+}
 
-	acquired, release, err := w.acquireTickLock(ctx)
-	if err != nil {
-		return err
-	}
-	if !acquired {
-		w.logger.InfoContext(ctx, "billing worker tick skipped, another instance holds the lock")
-		return nil
-	}
-	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer cancel()
-	defer release(releaseCtx)
-
+// processTick is one leader-elected pass of the subscription lifecycle; the
+// advisory lock is held by tick for its whole duration.
+func (w *BillingWorker) processTick(ctx context.Context) error {
 	now := w.clock.Now().UTC()
 
 	scheduled, scheduledErr := w.scheduled.ProcessScheduledChanges(ctx, now)
@@ -167,36 +148,4 @@ func (w *BillingWorker) tick(ctx context.Context) error {
 		return errors.Join(errs...)
 	}
 	return nil
-}
-
-// acquireTickLock elects a single leader for the current tick using a PostgreSQL
-// advisory lock. The returned release function releases the lock and returns
-// the dedicated connection to the pool; it must be called exactly once when the
-// caller no longer needs the lock.
-func (w *BillingWorker) acquireTickLock(ctx context.Context) (acquired bool, release func(context.Context), err error) {
-	conn, err := w.pool.Acquire(ctx)
-	if err != nil {
-		return false, nil, fmt.Errorf("acquire db connection for lock: %w", err)
-	}
-
-	release = func(releaseCtx context.Context) {
-		if _, unlockErr := conn.Exec(releaseCtx, "SELECT pg_advisory_unlock($1)", billingWorkerLockKey); unlockErr != nil {
-			w.logger.ErrorContext(releaseCtx, "billing worker failed to release advisory lock", "error", sanitize.Error(unlockErr))
-		}
-		conn.Release()
-	}
-
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", billingWorkerLockKey).Scan(&acquired); err != nil {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		release(releaseCtx)
-		return false, nil, fmt.Errorf("acquire advisory lock: %w", err)
-	}
-	if !acquired {
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		release(releaseCtx)
-		return false, nil, nil
-	}
-	return true, release, nil
 }

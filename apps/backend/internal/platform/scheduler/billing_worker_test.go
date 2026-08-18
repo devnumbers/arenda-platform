@@ -13,6 +13,15 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 )
 
+// Distinct advisory-lock keys for the parallel DB-backed tick tests: they
+// share one test database, and leader election would make concurrent ticks
+// skip each other's work (a pre-existing flake surfaced by issue #337 runs).
+const (
+	billingSanitizeTestLockKey int64 = 0x7E59
+	billingUpgradeTestLockKey  int64 = 0x7E60
+	billingHoldTestLockKey     int64 = 0x7E61
+)
+
 type fakeBillingRunner struct {
 	scheduledErr        error
 	renewalErr          error
@@ -88,6 +97,7 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 	w.renewals = svc
 	w.scheduled = svc
+	w.lockKey = billingSanitizeTestLockKey
 
 	if err := w.tick(context.Background()); err == nil {
 		t.Fatal("expected tick to return errors")
@@ -137,6 +147,7 @@ func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 	w.renewals = svc
 	w.scheduled = svc
+	w.lockKey = billingUpgradeTestLockKey
 
 	if err := w.tick(context.Background()); err != nil {
 		t.Fatalf("tick error: %v", err)
@@ -187,6 +198,7 @@ func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
 	w.renewals = svc
 	w.scheduled = svc
+	w.lockKey = billingHoldTestLockKey
 
 	tickDone := make(chan error, 1)
 	go func() {
@@ -206,7 +218,7 @@ func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 	defer testConn.Release()
 
 	var acquired bool
-	if err := testConn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", billingWorkerLockKey).Scan(&acquired); err != nil {
+	if err := testConn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", w.lockKey).Scan(&acquired); err != nil {
 		t.Fatalf("try advisory lock during work: %v", err)
 	}
 	if acquired {
@@ -224,11 +236,11 @@ func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 		t.Fatal("timed out waiting for tick to complete")
 	}
 
-	if err := testConn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", billingWorkerLockKey).Scan(&acquired); err != nil {
+	if err := testConn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", w.lockKey).Scan(&acquired); err != nil {
 		t.Fatalf("try advisory lock after tick: %v", err)
 	}
 	if !acquired {
 		t.Fatal("advisory lock should be released after tick completes")
 	}
-	_, _ = testConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", billingWorkerLockKey)
+	_, _ = testConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", w.lockKey)
 }
