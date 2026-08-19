@@ -39,7 +39,7 @@ type SlotCoordinator struct {
 
 // NewSlotCoordinator creates a SlotCoordinator. The recorder and limiter are
 // expected to be transaction-aware (the coordinator binds them to the caller's
-// tx per operation). lifecycle is the sharing lifecycle mailer (issue #162,
+// tx per operation). Lifecycle is the sharing lifecycle mailer (issue #162,
 // T6); it may be nil to disable the lifecycle emails. The coordinator runs
 // inside the caller's transaction, so its emails are sent in-transaction: a
 // send failure is logged and never rolls the operation back.
@@ -84,7 +84,7 @@ func NewSlotCoordinator(
 // suspends the excess shared memberships. Own objects are skipped here: they
 // are archived by the PropertyArchiver in the same transaction.
 //
-// trigger is a low-cardinality label recorded in the audit context (e.g.
+// Trigger is a low-cardinality label recorded in the audit context (e.g.
 // "downgrade", "grace_expired", "subscription_cancelled").
 func (c *SlotCoordinator) EnforceRecipientLimit(ctx context.Context, tx transaction.Tx, userID uuid.UUID, trigger string) error {
 	txMembers := c.members.WithTx(tx)
@@ -160,9 +160,9 @@ func (c *SlotCoordinator) enforceRecipient(
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &cand.MemberID,
 			Context: map[string]any{
-				"trigger":     trigger,
-				"property_id": propertyID,
-				"user_id":     recipientID,
+				auditKeyTrigger:    trigger,
+				auditKeyPropertyID: propertyID,
+				auditKeyUserID:     recipientID,
 			},
 		}); err != nil {
 			return fmt.Errorf("record suspend audit: %w", err)
@@ -200,7 +200,7 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 	if err != nil {
 		return false, err
 	}
-	// used >= limit means there is no free slot for the new membership.
+	// Used >= limit means there is no free slot for the new membership.
 	return used >= limit, nil
 }
 
@@ -208,7 +208,12 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 // properties plus active shared memberships) strictly exceeds the tariff
 // limit. Unlike EnforceOnActivation, the object under evaluation is already
 // part of the pool, so a pool exactly at the limit is not over.
-func (c *SlotCoordinator) poolOverLimit(ctx context.Context, tx transaction.Tx, txMembers MembershipRepository, recipientID uuid.UUID) (bool, error) {
+func (c *SlotCoordinator) poolOverLimit(
+	ctx context.Context,
+	tx transaction.Tx,
+	txMembers MembershipRepository,
+	recipientID uuid.UUID,
+) (bool, error) {
 	txLimiter, err := c.limiter.WithTx(tx)
 	if err != nil {
 		return false, fmt.Errorf("bind limiter tx: %w", err)
@@ -305,8 +310,8 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &cand.MemberID,
 			Context: map[string]any{
-				"property_id": cand.PropertyID,
-				"user_id":     recipientID,
+				auditKeyPropertyID: cand.PropertyID,
+				auditKeyUserID:     recipientID,
 			},
 		}); err != nil {
 			return fmt.Errorf("record reactivate audit: %w", err)
@@ -417,9 +422,9 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &m.ID,
 			Context: map[string]any{
-				"trigger":     "unarchive",
-				"property_id": propertyID,
-				"user_id":     m.UserID,
+				auditKeyTrigger:    "unarchive",
+				auditKeyPropertyID: propertyID,
+				auditKeyUserID:     m.UserID,
 			},
 		}); err != nil {
 			return fmt.Errorf("record suspend audit on unarchive: %w", err)
@@ -435,7 +440,12 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 // properties (IsShared=false) plus all active shared memberships (IsShared=true)
 // across every owner, each annotated with whether it has an open lease. The pool
 // is the input to SelectForEviction.
-func (c *SlotCoordinator) buildRecipientPool(ctx context.Context, txOwned OwnedActivePropertiesPort, txMembers MembershipRepository, recipientID uuid.UUID) ([]SlotCandidate, error) {
+func (c *SlotCoordinator) buildRecipientPool(
+	ctx context.Context,
+	txOwned OwnedActivePropertiesPort,
+	txMembers MembershipRepository,
+	recipientID uuid.UUID,
+) ([]SlotCandidate, error) {
 	// Own active properties.
 	owned, err := txOwned.ListActiveWithMeta(ctx, recipientID)
 	if err != nil {
@@ -480,7 +490,12 @@ func (c *SlotCoordinator) buildRecipientPool(ctx context.Context, txOwned OwnedA
 
 // usedSlots returns the number of tariff slots the recipient currently occupies:
 // own active properties plus active shared memberships.
-func (c *SlotCoordinator) usedSlots(ctx context.Context, txOwned OwnedActivePropertiesPort, txMembers MembershipRepository, recipientID uuid.UUID) (int, error) {
+func (c *SlotCoordinator) usedSlots(
+	ctx context.Context,
+	txOwned OwnedActivePropertiesPort,
+	txMembers MembershipRepository,
+	recipientID uuid.UUID,
+) (int, error) {
 	owned, err := txOwned.ListActiveWithMeta(ctx, recipientID)
 	if err != nil {
 		return 0, fmt.Errorf("list owned active properties: %w", err)

@@ -15,6 +15,9 @@ import (
 // unset, same convention as member_repository_integration_test.go (whose
 // fixtures this file reuses).
 
+// inviteeEmail is the canonical invitee address of the invitation fixtures.
+const inviteeEmail = "invitee@example.com"
+
 func TestInvitationRepository_CreateGetList(t *testing.T) {
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
@@ -32,7 +35,7 @@ func TestInvitationRepository_CreateGetList(t *testing.T) {
 	created, err := repo.Create(ctx, domain.Invitation{
 		ID:         invID,
 		PropertyID: property,
-		Email:      "invitee@example.com",
+		Email:      inviteeEmail,
 		Role:       domain.RoleViewer,
 		InvitedBy:  owner,
 		LastSentAt: time.Now().UTC(),
@@ -40,7 +43,7 @@ func TestInvitationRepository_CreateGetList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if created.Role != domain.RoleViewer || created.Email != "invitee@example.com" {
+	if created.Role != domain.RoleViewer || created.Email != inviteeEmail {
 		t.Errorf("created = %+v", created)
 	}
 	if created.CreatedAt.IsZero() || created.LastSentAt.IsZero() {
@@ -109,7 +112,7 @@ func TestInvitationRepository_UniquePropertyEmail(t *testing.T) {
 		}
 	}
 
-	mustCreate("invitee@example.com")
+	mustCreate(inviteeEmail)
 
 	// A duplicate (property, email) — even in a different casing — violates the
 	// unique index on (property_id, lower(email)).
@@ -231,7 +234,7 @@ func TestInvitationRepository_UpdateRoleLastSentDelete(t *testing.T) {
 	if _, err := repo.Create(ctx, domain.Invitation{
 		ID:         invID,
 		PropertyID: property,
-		Email:      "invitee@example.com",
+		Email:      inviteeEmail,
 		Role:       domain.RoleViewer,
 		InvitedBy:  owner,
 		LastSentAt: time.Now().UTC().Add(-48 * time.Hour),

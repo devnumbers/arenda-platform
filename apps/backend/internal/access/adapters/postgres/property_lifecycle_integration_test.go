@@ -91,7 +91,10 @@ func addMembership(t *testing.T, repo *MembershipRepository, propertyID, userID,
 
 // addSuspendedMembership creates a suspended membership with an explicit
 // suspended_at timestamp (see pinSuspendedAt).
-func addSuspendedMembership(t *testing.T, repo *MembershipRepository, tx pgx.Tx, propertyID, userID, grantedBy uuid.UUID, suspendedAt time.Time) {
+func addSuspendedMembership(
+	t *testing.T, repo *MembershipRepository, tx pgx.Tx,
+	propertyID, userID, grantedBy uuid.UUID, suspendedAt time.Time,
+) {
 	t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -309,11 +312,13 @@ func TestPropertyLifecycle_InvitationActivationOnArchivedProperty(t *testing.T) 
 // suspends the membership when the recipient has no free slot and keeps it
 // active when a slot exists.
 func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
-	// setup builds one recipient holding an active membership on an archived
+	// Setup builds one recipient holding an active membership on an archived
 	// property (plus an active membership on a second, occupied property when
 	// withOccupied is set), then unarchives the archived one and runs the
 	// enforcement.
-	setup := func(t *testing.T, f *lifecycleMailFixture, limit int, withOccupied bool) (repo *MembershipRepository, recipient, target uuid.UUID) {
+	setup := func(t *testing.T, f *lifecycleMailFixture, limit int, withOccupied bool) (
+		repo *MembershipRepository, recipient, target uuid.UUID,
+	) {
 		t.Helper()
 		repo = NewMembershipRepository(f.tx)
 		owner := f.addUserWithEmail(t, "owner@example.com")
@@ -488,7 +493,7 @@ func TestPropertyLifecycle_OpenLeaseOccupancyIgnoresLeaseAuthor(t *testing.T) {
 		OwnerID:           pgUUID(owner),
 		PropertyID:        pgUUID(property),
 		TenantContactID:   pgtype.UUID{},
-		Status:            "active",
+		Status:            statusActive,
 		StartDate:         pgtype.Date{Time: time.Now(), Valid: true},
 		EndDate:           pgtype.Date{},
 		RentAmountKopecks: 100000,

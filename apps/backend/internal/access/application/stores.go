@@ -13,7 +13,7 @@ import (
 // so it is impossible to forget WithTx or to record audit outside the
 // transaction (ADR 0033, ADR 0020).
 //
-// tx additionally exposes the raw transaction handle: the SlotCoordinator port
+// Tx additionally exposes the raw transaction handle: the SlotCoordinator port
 // takes a transaction.Tx because properties and billing call it inside their
 // own transactions, so an access use case passes stores.tx through when it
 // needs slot enforcement or recovery in its transaction.
@@ -69,7 +69,7 @@ func NewTxStoreFactory(
 // Both repository WithTx methods are infallible, so unlike identity there are
 // no bind errors to wrap here.
 //
-// runInTx returns an error if the factory's UoW was not configured — a service
+// RunInTx returns an error if the factory's UoW was not configured — a service
 // without a UoW has no business calling it. This keeps the call sites free of
 // nil checks while making a wiring mistake loud and immediate.
 func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error) error {

@@ -48,7 +48,7 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 	// --- Setup (committed): recipient owns one active property and holds one
 	// suspended shared membership on another owner's object. Tariff limit is 1,
 	// so the recipient's pool (1 own) is full and the shared membership stays
-	// suspended until a slot frees. ---
+	// suspended until a slot frees.
 	setupTx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin setup tx: %v", err)
@@ -84,7 +84,7 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 
 	// --- Test transaction: archive own property, then recover (like
 	// ArchiveProperty calling RecoverSuspended(actor) after archivePropertyInTx
-	// in the same tx). ---
+	// in the same tx).
 	testTx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin test tx: %v", err)
@@ -98,7 +98,7 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 	}()
 	testQ := genpostgres.New(testTx)
 
-	// own-properties port over the POOL (production wiring: injected once at
+	// Own-properties port over the POOL (production wiring: injected once at
 	// startup over the pool, bound to the caller's tx only via WithTx).
 	ownedProps := NewOwnedActivePropertiesAdapter(propertiespg.NewPropertyRepository(pool))
 	limiter := &lifecycleFakeLimiter{limits: map[uuid.UUID]int{recipient: 1}}
@@ -136,7 +136,8 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 		}
 	}
 	if !found {
-		t.Errorf("expected shared property %s to be active after own-object archive (tx-bound own-properties), active = %v", sharedProperty, active)
+		t.Errorf("expected shared property %s to be active after own-object archive (tx-bound own-properties), active = %v",
+			sharedProperty, active)
 	}
 }
 
@@ -148,8 +149,8 @@ func createActiveProperty(t *testing.T, ctx context.Context, q *genpostgres.Quer
 		t.Fatalf("new uuid: %v", err)
 	}
 	if _, err := q.CreateProperty(ctx, genpostgres.CreatePropertyParams{
-		ID: pgUUID(id), OwnerID: pgUUID(owner), Name: name, Type: "apartment",
-		Address: "", Description: pgtype.Text{}, Attributes: []byte("{}"), Status: "active",
+		ID: pgUUID(id), OwnerID: pgUUID(owner), Name: name, Type: propertyTypeApartment,
+		Address: "", Description: pgtype.Text{}, Attributes: []byte("{}"), Status: statusActive,
 	}); err != nil {
 		t.Fatalf("create property: %v", err)
 	}

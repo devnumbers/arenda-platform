@@ -21,7 +21,7 @@ import (
 type memRepo struct {
 	rows      []domain.Membership
 	byPropUsr map[[2]uuid.UUID]int
-	// owners maps property_id → owner_id, mirroring the properties table join
+	// Owners maps property_id → owner_id, mirroring the properties table join
 	// used by the SQL implementation of ListActiveByPropertyOwner. It is
 	// populated by SetOwner in tests that exercise owner-wide queries.
 	owners map[uuid.UUID]uuid.UUID
@@ -311,7 +311,8 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil,
+		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	// Owner adds a full member.
 	m, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleFullAccess)
@@ -337,7 +338,8 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 	}
 
 	// Duplicate add is rejected.
-	if _, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrMemberAlreadyExists) {
+	if _, err := svc.AddMember(context.Background(), owner, property, member,
+		domain.RoleViewer); !errors.Is(err, domain.ErrMemberAlreadyExists) {
 		t.Errorf("duplicate AddMember: expected ErrMemberAlreadyExists, got %v", err)
 	}
 
@@ -378,7 +380,8 @@ func TestAccessService_LeaveProperty(t *testing.T) {
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil,
+		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	if _, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember: %v", err)

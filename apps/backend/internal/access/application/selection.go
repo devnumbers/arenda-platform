@@ -29,12 +29,12 @@ import (
 // shared candidates identically.
 type SlotCandidate struct {
 	PropertyID   uuid.UUID
-	IsShared     bool // false = own property; true = recipient's membership
+	IsShared     bool // Own property when false; recipient's membership when true.
 	MemberID     uuid.UUID
-	RecipientID  uuid.UUID // IsShared=true only
-	HasOpenLease bool      // whether an open lease exists on the object
+	RecipientID  uuid.UUID // IsShared=true only.
+	HasOpenLease bool      // Whether an open lease exists on the object.
 	UpdatedAt    time.Time // own: property.UpdatedAt; shared: membership.UpdatedAt
-	SuspendedAt  time.Time // recovery only: the moment of suspension
+	SuspendedAt  time.Time // Recovery only: the moment of suspension.
 }
 
 // SelectForEviction returns the candidates that do NOT fit into limit — i.e. the

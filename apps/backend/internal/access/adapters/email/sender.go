@@ -23,6 +23,9 @@ const (
 	accessRestoredSubject      = "Доступ к объекту в Рентли восстановлен"
 	invitationActivatedSubject = "Приглашение к совместному доступу в Рентли принято"
 	memberLeftSubject          = "Участник вышел из объекта в Рентли"
+	// PropertyTitleKey is the template data key carrying the display title of
+	// the shared object.
+	propertyTitleKey = "PropertyTitle"
 )
 
 // Sender renders and sends the access lifecycle emails through the shared
@@ -34,7 +37,7 @@ type Sender struct {
 }
 
 // NewSender creates an access email sender backed by the shared mailer.
-// appBaseURL is the public web app URL the emails point the recipient at.
+// AppBaseURL is the public web app URL the emails point the recipient at.
 func NewSender(sender mailer.Sender, renderer *mailer.Renderer, appBaseURL string) *Sender {
 	return &Sender{sender: sender, renderer: renderer, appBaseURL: appBaseURL}
 }
@@ -45,23 +48,23 @@ var _ application.AccessMailer = (*Sender)(nil)
 // degrades to a generic text (the template handles it).
 func (s *Sender) SendInvite(ctx context.Context, to, propertyTitle string, role domain.Role) error {
 	return s.send(ctx, to, inviteSubject, "property_invite", map[string]any{
-		"PropertyTitle": propertyTitle,
-		"Role":          roleLabel(role),
-		"AppURL":        s.appBaseURL,
+		propertyTitleKey: propertyTitle,
+		"Role":           roleLabel(role),
+		"AppURL":         s.appBaseURL,
 	})
 }
 
 // SendAccessRevoked emails the former member that their access was revoked.
 func (s *Sender) SendAccessRevoked(ctx context.Context, to, propertyTitle string) error {
 	return s.send(ctx, to, accessRevokedSubject, "access_revoked", map[string]any{
-		"PropertyTitle": propertyTitle,
+		propertyTitleKey: propertyTitle,
 	})
 }
 
 // SendPropertyDeleted emails a former member that the owner deleted the object.
 func (s *Sender) SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error {
 	return s.send(ctx, to, propertyDeletedSubject, "property_deleted", map[string]any{
-		"PropertyTitle": propertyTitle,
+		propertyTitleKey: propertyTitle,
 	})
 }
 
@@ -69,7 +72,7 @@ func (s *Sender) SendPropertyDeleted(ctx context.Context, to, propertyTitle stri
 // tariff slot.
 func (s *Sender) SendAccessSuspended(ctx context.Context, to, propertyTitle string) error {
 	return s.send(ctx, to, accessSuspendedSubject, "access_suspended", map[string]any{
-		"PropertyTitle": propertyTitle,
+		propertyTitleKey: propertyTitle,
 	})
 }
 
@@ -85,8 +88,8 @@ func (s *Sender) SendDowngradeSummary(ctx context.Context, to string, propertyTi
 // active again.
 func (s *Sender) SendAccessRestored(ctx context.Context, to, propertyTitle string) error {
 	return s.send(ctx, to, accessRestoredSubject, "access_restored", map[string]any{
-		"PropertyTitle": propertyTitle,
-		"AppURL":        s.appBaseURL,
+		propertyTitleKey: propertyTitle,
+		"AppURL":         s.appBaseURL,
 	})
 }
 
@@ -94,16 +97,16 @@ func (s *Sender) SendAccessRestored(ctx context.Context, to, propertyTitle strin
 // activated their access at registration.
 func (s *Sender) SendInvitationActivated(ctx context.Context, to, propertyTitle, memberEmail string) error {
 	return s.send(ctx, to, invitationActivatedSubject, "invitation_activated", map[string]any{
-		"PropertyTitle": propertyTitle,
-		"MemberEmail":   memberEmail,
+		propertyTitleKey: propertyTitle,
+		"MemberEmail":    memberEmail,
 	})
 }
 
 // SendMemberLeft emails the property owner that a member left the object.
 func (s *Sender) SendMemberLeft(ctx context.Context, to, propertyTitle, memberName string) error {
 	return s.send(ctx, to, memberLeftSubject, "member_left", map[string]any{
-		"PropertyTitle": propertyTitle,
-		"MemberName":    memberName,
+		propertyTitleKey: propertyTitle,
+		"MemberName":     memberName,
 	})
 }
 

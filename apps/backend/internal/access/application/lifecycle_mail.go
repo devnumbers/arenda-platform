@@ -80,7 +80,7 @@ func (m *LifecycleMailer) SendDowngradeSummary(ctx context.Context, userID uuid.
 }
 
 // SendInvitationActivated emails the property owner that an invited member
-// activated their access at registration. memberEmail is the activated
+// activated their access at registration. MemberEmail is the activated
 // invitation's address — the owner already sees it in the member list while
 // the invitation is pending.
 func (m *LifecycleMailer) SendInvitationActivated(ctx context.Context, ownerID, propertyID uuid.UUID, memberEmail string) {
@@ -143,7 +143,7 @@ func (m *LifecycleMailer) userEmail(ctx context.Context, userID uuid.UUID, kind 
 	if err != nil {
 		m.logger.WarnContext(ctx, "access: user email lookup for lifecycle email failed",
 			slog.String("kind", kind),
-			slog.String("user_id", userID.String()),
+			slog.String(auditKeyUserID, userID.String()),
 			slog.String("error", err.Error()))
 		return ""
 	}
@@ -160,7 +160,7 @@ func (m *LifecycleMailer) propertyTitle(ctx context.Context, propertyID uuid.UUI
 	if err != nil {
 		m.logger.WarnContext(ctx, "access: property title lookup for lifecycle email failed",
 			slog.String("kind", kind),
-			slog.String("property_id", propertyID.String()),
+			slog.String(auditKeyPropertyID, propertyID.String()),
 			slog.String("error", err.Error()))
 		return ""
 	}
@@ -170,11 +170,11 @@ func (m *LifecycleMailer) propertyTitle(ctx context.Context, propertyID uuid.UUI
 func (m *LifecycleMailer) logSendFailure(ctx context.Context, kind string, userID, propertyID uuid.UUID, err error) {
 	attrs := []any{
 		slog.String("kind", kind),
-		slog.String("user_id", userID.String()),
+		slog.String(auditKeyUserID, userID.String()),
 		slog.String("error", err.Error()),
 	}
 	if propertyID != uuid.Nil {
-		attrs = append(attrs, slog.String("property_id", propertyID.String()))
+		attrs = append(attrs, slog.String(auditKeyPropertyID, propertyID.String()))
 	}
 	m.logger.ErrorContext(ctx, "access: lifecycle email send failed", attrs...)
 }
@@ -193,7 +193,12 @@ type PropertyDeleteMailer struct {
 }
 
 // NewPropertyDeleteMailer creates a PropertyDeleteMailer.
-func NewPropertyDeleteMailer(members MembershipRepository, emails UserEmailResolver, mailer AccessMailer, logger *slog.Logger) *PropertyDeleteMailer {
+func NewPropertyDeleteMailer(
+	members MembershipRepository,
+	emails UserEmailResolver,
+	mailer AccessMailer,
+	logger *slog.Logger,
+) *PropertyDeleteMailer {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -214,8 +219,8 @@ func (m *PropertyDeleteMailer) CollectFormerMemberEmails(ctx context.Context, tx
 		email, err := m.emails.GetEmail(ctx, membership.UserID)
 		if err != nil {
 			m.logger.WarnContext(ctx, "access: member email lookup for property deleted email failed",
-				slog.String("user_id", membership.UserID.String()),
-				slog.String("property_id", propertyID.String()),
+				slog.String(auditKeyUserID, membership.UserID.String()),
+				slog.String(auditKeyPropertyID, propertyID.String()),
 				slog.String("error", err.Error()))
 			continue
 		}

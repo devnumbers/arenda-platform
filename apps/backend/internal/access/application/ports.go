@@ -169,7 +169,7 @@ type AccessMailer interface {
 	SendAccessSuspended(ctx context.Context, to, propertyTitle string) error
 	// SendDowngradeSummary sends the single summary email listing the
 	// memberships suspended by one enforcement call (a tariff downgrade /
-	// grace expiry). propertyTitles are the display titles of the suspended
+	// grace expiry). PropertyTitles are the display titles of the suspended
 	// objects.
 	SendDowngradeSummary(ctx context.Context, to string, propertyTitles []string) error
 	SendAccessRestored(ctx context.Context, to, propertyTitle string) error

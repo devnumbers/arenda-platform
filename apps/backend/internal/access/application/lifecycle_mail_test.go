@@ -18,11 +18,9 @@ import (
 // with a recording fake at the AccessMailer port. The emails are post-commit
 // fire-and-forget: a send failure is logged and never fails the operation.
 
-// ---------------------------------------------------------------------------
 // Fakes for the lifecycle mail dependencies.
-// ---------------------------------------------------------------------------
 
-// sentMail records one email passed through the AccessMailer port. kind is the
+// sentMail records one email passed through the AccessMailer port. Kind is the
 // template name (invite, access_revoked, property_deleted, access_suspended,
 // downgrade_summary, access_restored, invitation_activated, member_left).
 type sentMail struct {
@@ -133,9 +131,7 @@ var (
 	_ PropertyTitleResolver = fakePropertyTitles(nil)
 )
 
-// ---------------------------------------------------------------------------
 // Fixture.
-// ---------------------------------------------------------------------------
 
 // lifecycleFixture bundles the access, invitation and slot coordinator services
 // wired with the recording mailer, the email resolver and per-property titles.
@@ -166,7 +162,8 @@ func newLifecycleFixture() *lifecycleFixture {
 	lifecycle := NewLifecycleMailer(mailer, emails, titles, nil)
 	slots := NewSlotCoordinator(repo, owners, limiter, newFakeOccupancy(), newFakeOwnedProps(), lifecycle, auditapp.Noop{}, noopBeginner{})
 	access := NewAccessService(repo, owners, nil, lookup, policy, slots, lifecycle, newTestFactory(repo, invitations, auditapp.Noop{}), nil)
-	invites := NewInvitationService(access, repo, invitations, owners, nil, lookup, policy, slots, mailer, lifecycle, titles, newTestFactory(repo, invitations, auditapp.Noop{}), nil, nil)
+	invites := NewInvitationService(access, repo, invitations, owners, nil, lookup, policy,
+		slots, mailer, lifecycle, titles, newTestFactory(repo, invitations, auditapp.Noop{}), nil, nil)
 	return &lifecycleFixture{
 		repo:        repo,
 		invitations: invitations,
@@ -218,17 +215,15 @@ func (f *lifecycleFixture) addMember(t *testing.T, propertyID, ownerID, userID u
 	f.repo.setUpdatedAt(memberID, propertyID, updatedAt)
 }
 
-// ---------------------------------------------------------------------------
 // Revoke: an active member gets the "access revoked" email; a suspended one
 // does not.
-// ---------------------------------------------------------------------------
 
 func TestAccessService_RevokeActiveMemberSendsRevokedEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира на Невском")
+	property := f.addProperty(owner, testNevskyTitle)
 	member := uuid.Must(uuid.NewV7())
-	f.emails[member] = "member@example.com"
+	f.emails[member] = testMemberEmail
 	f.limiter.set(member, 10)
 
 	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
@@ -245,10 +240,10 @@ func TestAccessService_RevokeActiveMemberSendsRevokedEmail(t *testing.T) {
 	}
 
 	mail := f.mailer.only(t, "access_revoked")
-	if mail.to != "member@example.com" {
+	if mail.to != testMemberEmail {
 		t.Errorf("revoked mail to = %q, want member@example.com", mail.to)
 	}
-	if mail.title != "Квартира на Невском" {
+	if mail.title != testNevskyTitle {
 		t.Errorf("revoked mail title = %q", mail.title)
 	}
 }
@@ -256,10 +251,10 @@ func TestAccessService_RevokeActiveMemberSendsRevokedEmail(t *testing.T) {
 func TestAccessService_RevokeSuspendedMemberSendsNoEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира на Невском")
+	property := f.addProperty(owner, testNevskyTitle)
 	member := uuid.Must(uuid.NewV7())
-	f.emails[member] = "member@example.com"
-	f.limiter.set(member, 0) // no free slot: the grant is created suspended
+	f.emails[member] = testMemberEmail
+	f.limiter.set(member, 0) // No free slot: the grant is created suspended.
 
 	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
 	if err != nil {
@@ -281,9 +276,9 @@ func TestAccessService_RevokeSuspendedMemberSendsNoEmail(t *testing.T) {
 func TestAccessService_RevokeMailFailureDoesNotFailRevoke(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира на Невском")
+	property := f.addProperty(owner, testNevskyTitle)
 	member := uuid.Must(uuid.NewV7())
-	f.emails[member] = "member@example.com"
+	f.emails[member] = testMemberEmail
 	f.limiter.set(member, 10)
 
 	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
@@ -300,24 +295,22 @@ func TestAccessService_RevokeMailFailureDoesNotFailRevoke(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // AddMember / activation without a free slot: the "waiting for a slot" email.
-// ---------------------------------------------------------------------------
 
 func TestAccessService_AddMemberWithoutSlotSendsWaitingEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира на Невском")
+	property := f.addProperty(owner, testNevskyTitle)
 
 	member := uuid.Must(uuid.NewV7())
-	f.emails[member] = "member@example.com"
-	f.limiter.set(member, 0) // pool full: suspended grant
+	f.emails[member] = testMemberEmail
+	f.limiter.set(member, 0) // Pool full: suspended grant.
 
 	if _, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
 	mail := f.mailer.only(t, "access_suspended")
-	if mail.to != "member@example.com" || mail.title != "Квартира на Невском" {
+	if mail.to != testMemberEmail || mail.title != testNevskyTitle {
 		t.Errorf("waiting mail = %+v", mail)
 	}
 
@@ -333,17 +326,15 @@ func TestAccessService_AddMemberWithoutSlotSendsWaitingEmail(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Self-exit: the owner is notified; the leaving member gets nothing.
-// ---------------------------------------------------------------------------
 
 func TestAccessService_LeavePropertyNotifiesOwner(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира на Невском")
-	f.emails[owner] = "owner@example.com"
+	property := f.addProperty(owner, testNevskyTitle)
+	f.emails[owner] = testOwnerEmail
 	member := uuid.Must(uuid.NewV7())
-	f.emails[member] = "member@example.com"
+	f.emails[member] = testMemberEmail
 	f.limiter.set(member, 10)
 
 	if _, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer); err != nil {
@@ -356,55 +347,53 @@ func TestAccessService_LeavePropertyNotifiesOwner(t *testing.T) {
 	}
 
 	mail := f.mailer.only(t, "member_left")
-	if mail.to != "owner@example.com" {
+	if mail.to != testOwnerEmail {
 		t.Errorf("member_left mail to = %q, want the owner", mail.to)
 	}
-	if mail.title != "Квартира на Невском" {
+	if mail.title != testNevskyTitle {
 		t.Errorf("member_left mail title = %q", mail.title)
 	}
 	if mail.memberName == "" {
 		t.Error("member_left mail must carry the member display name")
 	}
 	for _, m := range f.mailer.sent {
-		if m.to == "member@example.com" {
+		if m.to == testMemberEmail {
 			t.Errorf("the leaving member must not receive any email, got %+v", m)
 		}
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Activation at registration: the owner is notified; a suspended activation
 // additionally sends the "waiting for a slot" email to the new member.
-// ---------------------------------------------------------------------------
 
 func TestInvitationService_ActivationAtRegistrationNotifiesOwner(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира на Невском")
-	f.emails[owner] = "owner@example.com"
+	property := f.addProperty(owner, testNevskyTitle)
+	f.emails[owner] = testOwnerEmail
 
 	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
-		ID: uuid.Must(uuid.NewV7()), PropertyID: property, Email: "new@example.com",
+		ID: uuid.Must(uuid.NewV7()), PropertyID: property, Email: testNewUserEmail,
 		Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now(),
 	}); err != nil {
 		t.Fatalf("create invitation: %v", err)
 	}
 
 	user := uuid.Must(uuid.NewV7())
-	f.emails[user] = "new@example.com"
+	f.emails[user] = testNewUserEmail
 	f.limiter.set(user, 10)
-	if err := f.invites.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+	if err := f.invites.ActivatePendingInvitations(t.Context(), user, testNewUserEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 
 	mail := f.mailer.only(t, "invitation_activated")
-	if mail.to != "owner@example.com" {
+	if mail.to != testOwnerEmail {
 		t.Errorf("invitation_activated mail to = %q, want the owner", mail.to)
 	}
-	if mail.memberEmail != "new@example.com" {
+	if mail.memberEmail != testNewUserEmail {
 		t.Errorf("invitation_activated memberEmail = %q", mail.memberEmail)
 	}
-	if mail.title != "Квартира на Невском" {
+	if mail.title != testNevskyTitle {
 		t.Errorf("invitation_activated title = %q", mail.title)
 	}
 	if got := f.mailer.count("access_suspended"); got != 0 {
@@ -415,25 +404,25 @@ func TestInvitationService_ActivationAtRegistrationNotifiesOwner(t *testing.T) {
 func TestInvitationService_ActivationWithoutSlotSendsWaitingEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира на Невском")
-	f.emails[owner] = "owner@example.com"
+	property := f.addProperty(owner, testNevskyTitle)
+	f.emails[owner] = testOwnerEmail
 
 	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
-		ID: uuid.Must(uuid.NewV7()), PropertyID: property, Email: "new@example.com",
+		ID: uuid.Must(uuid.NewV7()), PropertyID: property, Email: testNewUserEmail,
 		Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now(),
 	}); err != nil {
 		t.Fatalf("create invitation: %v", err)
 	}
 
 	user := uuid.Must(uuid.NewV7())
-	f.emails[user] = "new@example.com"
-	f.limiter.set(user, 0) // no free slot: the membership is created suspended
-	if err := f.invites.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+	f.emails[user] = testNewUserEmail
+	f.limiter.set(user, 0) // No free slot: the membership is created suspended.
+	if err := f.invites.ActivatePendingInvitations(t.Context(), user, testNewUserEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 
 	mail := f.mailer.only(t, "access_suspended")
-	if mail.to != "new@example.com" || mail.title != "Квартира на Невском" {
+	if mail.to != testNewUserEmail || mail.title != testNevskyTitle {
 		t.Errorf("waiting mail = %+v", mail)
 	}
 	// The owner is still notified about the activation.
@@ -442,20 +431,18 @@ func TestInvitationService_ActivationWithoutSlotSendsWaitingEmail(t *testing.T) 
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Downgrade: one summary email per recipient with the titles suspended in
 // this enforcement call.
-// ---------------------------------------------------------------------------
 
 func TestSlotCoordinator_DowngradeSendsSingleSummaryEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	p1 := f.addProperty(owner, "Квартира")
+	p1 := f.addProperty(owner, testApartmentTitle)
 	p2 := f.addProperty(owner, "Дача")
 	recipient := uuid.Must(uuid.NewV7())
-	f.emails[recipient] = "recipient@example.com"
+	f.emails[recipient] = testRecipientEmail
 
-	// m1 is the earlier-updated membership — the eviction candidate.
+	// M1 is the earlier-updated membership — the eviction candidate.
 	f.addMember(t, p1, owner, recipient, domain.MemberStatusActive, t1Old)
 	f.addMember(t, p2, owner, recipient, domain.MemberStatusActive, t2New)
 	f.limiter.set(recipient, 1)
@@ -465,10 +452,10 @@ func TestSlotCoordinator_DowngradeSendsSingleSummaryEmail(t *testing.T) {
 	}
 
 	mail := f.mailer.only(t, "downgrade_summary")
-	if mail.to != "recipient@example.com" {
+	if mail.to != testRecipientEmail {
 		t.Errorf("summary mail to = %q", mail.to)
 	}
-	if !slices.Equal(mail.titles, []string{"Квартира"}) {
+	if !slices.Equal(mail.titles, []string{testApartmentTitle}) {
 		t.Errorf("summary titles = %v, want [Квартира]", mail.titles)
 	}
 	// The per-membership waiting email is NOT sent on a downgrade: the summary
@@ -481,12 +468,12 @@ func TestSlotCoordinator_DowngradeSendsSingleSummaryEmail(t *testing.T) {
 func TestSlotCoordinator_DowngradeWithoutExcessSendsNoEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	p1 := f.addProperty(owner, "Квартира")
+	p1 := f.addProperty(owner, testApartmentTitle)
 	recipient := uuid.Must(uuid.NewV7())
-	f.emails[recipient] = "recipient@example.com"
+	f.emails[recipient] = testRecipientEmail
 
 	f.addMember(t, p1, owner, recipient, domain.MemberStatusActive, t1Old)
-	f.limiter.set(recipient, 10) // within the limit
+	f.limiter.set(recipient, 10) // Within the limit.
 
 	if err := f.slots.EnforceRecipientLimit(t.Context(), noopTx{}, owner, "downgrade"); err != nil {
 		t.Fatalf("EnforceRecipientLimit: %v", err)
@@ -501,12 +488,12 @@ func TestSlotCoordinator_DowngradeWithoutExcessSendsNoEmail(t *testing.T) {
 func TestSlotCoordinator_DowngradingRecipientGetsSummaryEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	foreignOwner := uuid.Must(uuid.NewV7())
-	p1 := f.addProperty(foreignOwner, "Квартира")
+	p1 := f.addProperty(foreignOwner, testApartmentTitle)
 	p2 := f.addProperty(foreignOwner, "Дача")
 	recipient := uuid.Must(uuid.NewV7())
-	f.emails[recipient] = "recipient@example.com"
+	f.emails[recipient] = testRecipientEmail
 
-	// p1 is the earlier-updated membership — the eviction candidate.
+	// P1 is the earlier-updated membership — the eviction candidate.
 	f.addMember(t, p1, foreignOwner, recipient, domain.MemberStatusActive, t1Old)
 	f.addMember(t, p2, foreignOwner, recipient, domain.MemberStatusActive, t2New)
 	f.limiter.set(recipient, 1)
@@ -517,10 +504,10 @@ func TestSlotCoordinator_DowngradingRecipientGetsSummaryEmail(t *testing.T) {
 	}
 
 	mail := f.mailer.only(t, "downgrade_summary")
-	if mail.to != "recipient@example.com" {
+	if mail.to != testRecipientEmail {
 		t.Errorf("summary mail to = %q", mail.to)
 	}
-	if !slices.Equal(mail.titles, []string{"Квартира"}) {
+	if !slices.Equal(mail.titles, []string{testApartmentTitle}) {
 		t.Errorf("summary titles = %v, want [Квартира]", mail.titles)
 	}
 }
@@ -536,12 +523,12 @@ func TestSlotCoordinator_DowngradeOwnerAndRecipientNoDuplicateSummary(t *testing
 	foreignOwner := uuid.Must(uuid.NewV7())
 	foreignProp := f.addProperty(foreignOwner, "Чужая дача")
 	member := uuid.Must(uuid.NewV7())
-	f.emails[member] = "member@example.com"
+	f.emails[member] = testMemberEmail
 
 	f.addMember(t, ownProp, user, member, domain.MemberStatusActive, t1Old)
 	f.addMember(t, foreignProp, foreignOwner, user, domain.MemberStatusActive, t2New)
-	f.limiter.set(member, 0) // the member's pool exceeds
-	f.limiter.set(user, 0)   // the user's own pool (1 shared) exceeds
+	f.limiter.set(member, 0) // The member's pool exceeds.
+	f.limiter.set(user, 0)   // The user's own pool (1 shared) exceeds.
 
 	if err := f.slots.EnforceRecipientLimit(t.Context(), noopTx{}, user, "downgrade"); err != nil {
 		t.Fatalf("EnforceRecipientLimit: %v", err)
@@ -564,64 +551,58 @@ func TestSlotCoordinator_DowngradeOwnerAndRecipientNoDuplicateSummary(t *testing
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Recovery: the "access restored" email per reactivated membership.
-// ---------------------------------------------------------------------------
 
 func TestSlotCoordinator_RecoverSendsRestoredEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	p1 := f.addProperty(owner, "Квартира")
+	p1 := f.addProperty(owner, testApartmentTitle)
 	recipient := uuid.Must(uuid.NewV7())
-	f.emails[recipient] = "recipient@example.com"
+	f.emails[recipient] = testRecipientEmail
 
 	f.addMember(t, p1, owner, recipient, domain.MemberStatusSuspended, t1Old)
-	f.limiter.set(recipient, 1) // one free slot (pool empty)
+	f.limiter.set(recipient, 1) // One free slot (pool empty).
 
 	if err := f.slots.RecoverSuspended(t.Context(), noopTx{}, recipient); err != nil {
 		t.Fatalf("RecoverSuspended: %v", err)
 	}
 
 	mail := f.mailer.only(t, "access_restored")
-	if mail.to != "recipient@example.com" || mail.title != "Квартира" {
+	if mail.to != testRecipientEmail || mail.title != testApartmentTitle {
 		t.Errorf("restored mail = %+v", mail)
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Unarchive without a free slot: the "waiting for a slot" email.
-// ---------------------------------------------------------------------------
 
 func TestSlotCoordinator_UnarchiveWithoutSlotSendsWaitingEmail(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира")
+	property := f.addProperty(owner, testApartmentTitle)
 	recipient := uuid.Must(uuid.NewV7())
-	f.emails[recipient] = "recipient@example.com"
+	f.emails[recipient] = testRecipientEmail
 
 	f.addMember(t, property, owner, recipient, domain.MemberStatusActive, t1Old)
-	f.limiter.set(recipient, 0) // the re-entering object exceeds the pool
+	f.limiter.set(recipient, 0) // The re-entering object exceeds the pool.
 
 	if err := f.slots.EnforceOnUnarchiveForProperty(t.Context(), noopTx{}, property); err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
 	}
 
 	mail := f.mailer.only(t, "access_suspended")
-	if mail.to != "recipient@example.com" || mail.title != "Квартира" {
+	if mail.to != testRecipientEmail || mail.title != testApartmentTitle {
 		t.Errorf("waiting mail = %+v", mail)
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Property deletion: former members (active + suspended) are collected inside
 // the delete transaction and notified after commit; members without an email
 // are skipped.
-// ---------------------------------------------------------------------------
 
 func TestPropertyDeleteMailer_CollectsFormerMembersAndSends(t *testing.T) {
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
-	property := f.addProperty(owner, "Квартира")
+	property := f.addProperty(owner, testApartmentTitle)
 
 	active := uuid.Must(uuid.NewV7())
 	suspended := uuid.Must(uuid.NewV7())
@@ -643,7 +624,7 @@ func TestPropertyDeleteMailer_CollectsFormerMembersAndSends(t *testing.T) {
 	}
 
 	for _, to := range emails {
-		if err := deleter.SendPropertyDeleted(t.Context(), to, "Квартира"); err != nil {
+		if err := deleter.SendPropertyDeleted(t.Context(), to, testApartmentTitle); err != nil {
 			t.Fatalf("SendPropertyDeleted: %v", err)
 		}
 	}
@@ -651,7 +632,7 @@ func TestPropertyDeleteMailer_CollectsFormerMembersAndSends(t *testing.T) {
 		t.Fatalf("expected 2 property_deleted emails, got %d", got)
 	}
 	for _, m := range f.mailer.sent {
-		if m.title != "Квартира" {
+		if m.title != testApartmentTitle {
 			t.Errorf("property_deleted title = %q", m.title)
 		}
 	}

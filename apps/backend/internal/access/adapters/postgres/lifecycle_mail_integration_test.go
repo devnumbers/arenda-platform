@@ -211,10 +211,12 @@ func newLifecycleMailFixture(t *testing.T) *lifecycleMailFixture {
 	limiter := &lifecycleFakeLimiter{limits: map[uuid.UUID]int{}}
 	beginner := lifecycleBeginner{tx: tx}
 
-	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter, lifecycleNoOccupancy{}, lifecycleNoOwnedProps{}, lifecycle, auditapp.Noop{}, beginner)
+	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter,
+		lifecycleNoOccupancy{}, lifecycleNoOwnedProps{}, lifecycle, auditapp.Noop{}, beginner)
 	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, lifecycleUoW{beginner})
 	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, lifecycle, factory, nil)
-	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver, userLookup, policy, slots, accessMailer, lifecycle, ownerResolver, factory, nil, nil)
+	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver,
+		userLookup, policy, slots, accessMailer, lifecycle, ownerResolver, factory, nil, nil)
 	deleter := accessapp.NewPropertyDeleteMailer(memberRepo, emailResolver, accessMailer, nil)
 
 	return &lifecycleMailFixture{
@@ -249,11 +251,11 @@ func (f *lifecycleMailFixture) addProperty(t *testing.T, owner uuid.UUID, name s
 		ID:          pgUUID(id),
 		OwnerID:     pgUUID(owner),
 		Name:        name,
-		Type:        "apartment",
+		Type:        propertyTypeApartment,
 		Address:     "",
 		Description: pgtype.Text{},
 		Attributes:  []byte("{}"),
-		Status:      "active",
+		Status:      statusActive,
 	})
 	if err != nil {
 		t.Fatalf("create property: %v", err)

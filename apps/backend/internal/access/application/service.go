@@ -14,6 +14,15 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
+// Audit and log context keys shared by the access use cases: the same keys
+// appear in audit Entry.Context maps and in slog attribute lists.
+const (
+	auditKeyPropertyID = "property_id"
+	auditKeyRole       = "role"
+	auditKeyTrigger    = "trigger"
+	auditKeyUserID     = "user_id"
+)
+
 // Member is the application-level projection of a property participant used by
 // ListMembers. The owner is synthesized from properties.owner_id and never
 // stored as a membership row, so it carries IsOwner = true and no membership id.
@@ -21,20 +30,20 @@ import (
 // Pending = true, the invitation id in ID, a zero UserID, and Email/LastSentAt
 // filled.
 type Member struct {
-	ID          uuid.UUID // membership id; invitation id when Pending (zero uuid for the owner)
+	ID          uuid.UUID // Membership id; invitation id when Pending (zero uuid for the owner).
 	UserID      uuid.UUID
-	Role        sharedpolicy.Role // owner | full_access | viewer
+	Role        sharedpolicy.Role // Owner | full_access | viewer.
 	IsOwner     bool
 	DisplayName string
 	HasEmail    bool
-	Status      domain.MemberStatus // active | suspended (always active for the owner; meaningless when Pending)
-	SuspendedAt *time.Time          // when the membership was suspended; nil when active
+	Status      domain.MemberStatus // Active | suspended (always active for the owner; meaningless when Pending).
+	SuspendedAt *time.Time          // When the membership was suspended; nil when active.
 	// Pending marks a pending email invitation row: the invitee is not
 	// registered yet, so UserID is zero and Email carries the invitee address
 	// (visible to managers only).
 	Pending    bool
-	Email      *string    // invitee email; set only when Pending
-	LastSentAt *time.Time // when the invite email was last sent; set only when Pending
+	Email      *string    // Invitee email; set only when Pending.
+	LastSentAt *time.Time // When the invite email was last sent; set only when Pending.
 }
 
 // AccessService implements the property membership use cases (issue #156, T3):
@@ -53,12 +62,12 @@ type AccessService struct {
 	logger    *slog.Logger
 }
 
-// NewAccessService creates an AccessService. slots is the recipient tariff slot
+// NewAccessService creates an AccessService. Slots is the recipient tariff slot
 // coordinator (issue #158, T4); it may be nil to disable slot enforcement
-// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). lifecycle is
+// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). Lifecycle is
 // the sharing lifecycle mailer (issue #162, T6); it may be nil to disable the
-// lifecycle emails. statuses reports the archived flag of a property (issue
-// #163); it may be nil to skip the archived-property checks. factory bundles
+// lifecycle emails. Statuses reports the archived flag of a property (issue
+// #163); it may be nil to skip the archived-property checks. Factory bundles
 // the membership repository, the audit recorder, and the Unit-of-Work every
 // mutating use case runs through (ADR 0033 γ-factory).
 func NewAccessService(
@@ -163,10 +172,10 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &created.ID,
 			Context: map[string]any{
-				"property_id": propertyID,
-				"user_id":     userID,
-				"role":        string(role),
-				"status":      string(created.Status),
+				auditKeyPropertyID: propertyID,
+				auditKeyUserID:     userID,
+				auditKeyRole:       string(role),
+				"status":           string(created.Status),
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -189,7 +198,11 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 // ChangeMemberRole changes the role of an existing member. The owner is never a
 // membership row, so it cannot be targeted here; the membership id must belong
 // to the given property.
-func (s *AccessService) ChangeMemberRole(ctx context.Context, actor, propertyID, memberID uuid.UUID, role domain.Role) (domain.Membership, error) {
+func (s *AccessService) ChangeMemberRole(
+	ctx context.Context,
+	actor, propertyID, memberID uuid.UUID,
+	role domain.Role,
+) (domain.Membership, error) {
 	_, actorRole, err := s.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		return domain.Membership{}, err
@@ -216,9 +229,9 @@ func (s *AccessService) ChangeMemberRole(ctx context.Context, actor, propertyID,
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &updated.ID,
 			Context: map[string]any{
-				"property_id": propertyID,
-				"user_id":     updated.UserID,
-				"role":        string(role),
+				auditKeyPropertyID: propertyID,
+				auditKeyUserID:     updated.UserID,
+				auditKeyRole:       string(role),
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -269,8 +282,8 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &membership.ID,
 			Context: map[string]any{
-				"property_id": propertyID,
-				"user_id":     membership.UserID,
+				auditKeyPropertyID: propertyID,
+				auditKeyUserID:     membership.UserID,
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -343,7 +356,7 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &membership.ID,
 			Context: map[string]any{
-				"property_id": propertyID,
+				auditKeyPropertyID: propertyID,
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -359,14 +372,14 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 	owner, err := s.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "access: owner lookup for member left email failed",
-			slog.String("property_id", propertyID.String()),
+			slog.String(auditKeyPropertyID, propertyID.String()),
 			slog.String("error", err.Error()))
 		return nil
 	}
 	memberName := ""
 	if u, err := s.users.GetByID(ctx, actor); err != nil {
 		s.logger.WarnContext(ctx, "access: member lookup for member left email failed",
-			slog.String("user_id", actor.String()),
+			slog.String(auditKeyUserID, actor.String()),
 			slog.String("error", err.Error()))
 	} else {
 		memberName = displayName(u)
@@ -416,7 +429,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 		u, err := s.users.GetByID(ctx, m.UserID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "access: member user lookup failed",
-				slog.String("user_id", m.UserID.String()),
+				slog.String(auditKeyUserID, m.UserID.String()),
 				slog.String("error", err.Error()))
 			continue
 		}
@@ -447,7 +460,12 @@ func (s *AccessService) requireManage(ctx context.Context, actor, propertyID uui
 // requireManageAccess is the shared manage-members gate used by both the
 // membership and the invitation services (issue #161, T5). It returns the
 // property owner id (scope) and the actor's resolved role.
-func requireManageAccess(ctx context.Context, policy sharedpolicy.Policy, owners PropertyOwnerResolver, actor, propertyID uuid.UUID) (uuid.UUID, sharedpolicy.Role, error) {
+func requireManageAccess(
+	ctx context.Context,
+	policy sharedpolicy.Policy,
+	owners PropertyOwnerResolver,
+	actor, propertyID uuid.UUID,
+) (uuid.UUID, sharedpolicy.Role, error) {
 	role, err := policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
 		return uuid.UUID{}, "", fmt.Errorf("resolve role: %w", err)

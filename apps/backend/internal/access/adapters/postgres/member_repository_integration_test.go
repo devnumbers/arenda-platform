@@ -78,6 +78,13 @@ func createAccessTestUser(t *testing.T, ctx context.Context, q *genpostgres.Quer
 	return id
 }
 
+// propertyTypeApartment and statusActive are the column fixture values used by
+// createAccessTestProperty, its inline copies, and the lease fixtures.
+const (
+	propertyTypeApartment = "apartment"
+	statusActive          = "active"
+)
+
 func createAccessTestProperty(t *testing.T, ctx context.Context, q *genpostgres.Queries, owner uuid.UUID) uuid.UUID {
 	t.Helper()
 	id, err := uuid.NewV7()
@@ -88,11 +95,11 @@ func createAccessTestProperty(t *testing.T, ctx context.Context, q *genpostgres.
 		ID:          pgUUID(id),
 		OwnerID:     pgUUID(owner),
 		Name:        "Test Property",
-		Type:        "apartment",
+		Type:        propertyTypeApartment,
 		Address:     "",
 		Description: pgtype.Text{},
 		Attributes:  []byte("{}"),
-		Status:      "active",
+		Status:      statusActive,
 	})
 	if err != nil {
 		t.Fatalf("create property: %v", err)

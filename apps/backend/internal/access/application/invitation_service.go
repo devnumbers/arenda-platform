@@ -49,14 +49,14 @@ type InvitationService struct {
 	logger      *slog.Logger
 }
 
-// NewInvitationService creates an InvitationService. access is the membership
+// NewInvitationService creates an InvitationService. Access is the membership
 // service used to delegate instant activation for registered emails; slots may
 // be nil to disable slot enforcement (mirrors NewAccessService); mailer may be
 // nil to skip sending (e.g. in tests that do not exercise the mail path);
 // lifecycle is the sharing lifecycle mailer (issue #162, T6) and may be nil to
-// disable the lifecycle emails. statuses reports the archived flag of a
+// disable the lifecycle emails. Statuses reports the archived flag of a
 // property (issue #163); it may be nil to skip the archived-property checks.
-// factory bundles the repositories, the audit recorder, and the Unit-of-Work
+// Factory bundles the repositories, the audit recorder, and the Unit-of-Work
 // every mutating use case runs through (ADR 0033 γ-factory).
 func NewInvitationService(
 	access *AccessService,
@@ -107,7 +107,12 @@ func NewInvitationService(
 // is ErrCannotAddSelf, and a duplicate pending invitation is
 // ErrInvitationAlreadyExists. An archived property is ErrPropertyArchived for
 // both paths (issue #163).
-func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID uuid.UUID, rawEmail string, role domain.Role) (InviteOutcome, error) {
+func (s *InvitationService) InviteByEmail(
+	ctx context.Context,
+	actor, propertyID uuid.UUID,
+	rawEmail string,
+	role domain.Role,
+) (InviteOutcome, error) {
 	email, err := domain.NormalizeEmail(rawEmail)
 	if err != nil {
 		return InviteOutcome{}, err
@@ -180,8 +185,8 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &created.ID,
 			Context: map[string]any{
-				"property_id": propertyID,
-				"role":        string(role),
+				auditKeyPropertyID: propertyID,
+				auditKeyRole:       string(role),
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -239,7 +244,7 @@ func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propert
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &invitation.ID,
 			Context: map[string]any{
-				"property_id": propertyID,
+				auditKeyPropertyID: propertyID,
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -250,7 +255,11 @@ func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propert
 
 // ChangeInvitationRole changes the role of a pending invitation. No new email
 // is sent; the role current at registration time is applied on activation.
-func (s *InvitationService) ChangeInvitationRole(ctx context.Context, actor, propertyID, invitationID uuid.UUID, role domain.Role) (domain.Invitation, error) {
+func (s *InvitationService) ChangeInvitationRole(
+	ctx context.Context,
+	actor, propertyID, invitationID uuid.UUID,
+	role domain.Role,
+) (domain.Invitation, error) {
 	_, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
 	if err != nil {
 		return domain.Invitation{}, err
@@ -277,8 +286,8 @@ func (s *InvitationService) ChangeInvitationRole(ctx context.Context, actor, pro
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &updated.ID,
 			Context: map[string]any{
-				"property_id": propertyID,
-				"role":        string(role),
+				auditKeyPropertyID: propertyID,
+				auditKeyRole:       string(role),
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -315,7 +324,7 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &invitationID,
 			Context: map[string]any{
-				"property_id": propertyID,
+				auditKeyPropertyID: propertyID,
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -351,8 +360,8 @@ func (s *InvitationService) ActivatePendingInvitations(ctx context.Context, user
 		if err := s.activateInvitation(ctx, userID, invitation); err != nil {
 			s.logger.ErrorContext(ctx, "access: invitation activation failed",
 				slog.String("invitation_id", invitation.ID.String()),
-				slog.String("property_id", invitation.PropertyID.String()),
-				slog.String("user_id", userID.String()),
+				slog.String(auditKeyPropertyID, invitation.PropertyID.String()),
+				slog.String(auditKeyUserID, userID.String()),
 				slog.String("error", err.Error()))
 		}
 	}
@@ -405,7 +414,7 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 			ID:         id,
 			PropertyID: invitation.PropertyID,
 			UserID:     userID,
-			Role:       invitation.Role, // the role current at activation time
+			Role:       invitation.Role, // The role current at activation time.
 			GrantedBy:  invitation.InvitedBy,
 		}
 
@@ -434,12 +443,12 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &invitation.ID,
 			Context: map[string]any{
-				"trigger":       "registration",
-				"property_id":   invitation.PropertyID,
-				"user_id":       userID,
-				"membership_id": created.ID,
-				"role":          string(created.Role),
-				"status":        string(created.Status),
+				auditKeyTrigger:    "registration",
+				auditKeyPropertyID: invitation.PropertyID,
+				auditKeyUserID:     userID,
+				"membership_id":    created.ID,
+				auditKeyRole:       string(created.Role),
+				"status":           string(created.Status),
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -458,7 +467,7 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 	owner, err := s.owners.GetOwnerID(ctx, invitation.PropertyID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "access: owner lookup for invitation activated email failed",
-			slog.String("property_id", invitation.PropertyID.String()),
+			slog.String(auditKeyPropertyID, invitation.PropertyID.String()),
 			slog.String("error", err.Error()))
 	} else {
 		s.lifecycle.SendInvitationActivated(ctx, owner, invitation.PropertyID, invitation.Email)
@@ -517,7 +526,7 @@ func (s *InvitationService) sendInviteEmail(ctx context.Context, email string, p
 		resolved, err := s.titles.GetTitle(ctx, propertyID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "access: property title lookup for invite email failed",
-				slog.String("property_id", propertyID.String()),
+				slog.String(auditKeyPropertyID, propertyID.String()),
 				slog.String("error", err.Error()))
 		} else {
 			title = resolved

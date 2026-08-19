@@ -64,7 +64,7 @@ func TestSelectForEviction(t *testing.T) {
 		name       string
 		candidates []SlotCandidate
 		limit      int
-		want       []uuid.UUID // evicted PropertyIDs, order-independent
+		want       []uuid.UUID // Evicted PropertyIDs, order-independent.
 	}{
 		{
 			name:       "unlimited tariff (limit<0) evicts nobody",
@@ -104,10 +104,10 @@ func TestSelectForEviction(t *testing.T) {
 			// regardless of UpdatedAt; the 2 without are evicted.
 			name: "open lease protects even if less recently updated",
 			candidates: []SlotCandidate{
-				own(p4, false, t400), // open=false
-				own(p3, false, t300), // open=false
-				own(p2, true, t200),  // open=true
-				own(p1, true, t100),  // open=true
+				own(p4, false, t400), // Open=false.
+				own(p3, false, t300), // Open=false.
+				own(p2, true, t200),  // Open=true.
+				own(p1, true, t100),  // Open=true.
 			},
 			limit: 2,
 			want:  []uuid.UUID{p3, p4},
@@ -131,7 +131,7 @@ func TestSelectForEviction(t *testing.T) {
 			// Mix of own and shared: selection does not distinguish them; IsShared
 			// is preserved on the returned candidates. Limit 2 keeps the 2 open
 			// (p1 own-open, p2 shared-open); evicts p3 and p4. We also assert that
-			// the shared flag survives on p2... no, p2 stays; we assert p3/p4 keep
+			// The shared flag survives on p2... No, p2 stays; we assert p3/p4 keep
 			// their flags in a dedicated check below.
 			name: "own and shared treated equally by selection",
 			candidates: []SlotCandidate{
@@ -202,8 +202,8 @@ func TestSelectForEviction_PreservesSharedFlag(t *testing.T) {
 	now := time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
 
 	candidates := []SlotCandidate{
-		own(p2, true, now),                        // stays (open lease)
-		shared(p1, member, recipient, false, now), // evicted (no open lease)
+		own(p2, true, now),                        // Stays (open lease).
+		shared(p1, member, recipient, false, now), // Evicted (no open lease).
 	}
 
 	got := SelectForEviction(candidates, 1)
@@ -243,7 +243,7 @@ func TestSelectForRecovery(t *testing.T) {
 	p3 := mustUUID(t, "00000000-0000-0000-0000-000000000003")
 	p4 := mustUUID(t, "00000000-0000-0000-0000-000000000004")
 
-	// suspendedCand marks SuspendedAt on a SlotCandidate for recovery tests.
+	// SuspendedCand marks SuspendedAt on a SlotCandidate for recovery tests.
 	suspendedCand := func(id uuid.UUID, suspendedAt time.Time, open bool, updatedAt time.Time) SlotCandidate {
 		c := own(id, open, updatedAt)
 		c.SuspendedAt = suspendedAt
@@ -254,7 +254,7 @@ func TestSelectForRecovery(t *testing.T) {
 		name      string
 		suspended []SlotCandidate
 		freeSlots int
-		want      []uuid.UUID // recovered PropertyIDs in recovery order
+		want      []uuid.UUID // Recovered PropertyIDs in recovery order.
 	}{
 		{
 			name:      "no free slots recovers nobody",
@@ -269,7 +269,7 @@ func TestSelectForRecovery(t *testing.T) {
 			want:      nil,
 		},
 		{
-			// freeSlots >= len(queue): all returned in FIFO order (SuspendedAt ASC).
+			// FreeSlots >= len(queue): all returned in FIFO order (SuspendedAt ASC).
 			// Input is deliberately shuffled to prove the sort, not the input order.
 			name: "all recovered in FIFO order",
 			suspended: []SlotCandidate{
@@ -281,7 +281,7 @@ func TestSelectForRecovery(t *testing.T) {
 			want:      []uuid.UUID{p1, p2, p3},
 		},
 		{
-			// freeSlots < len(queue): only the earliest are recovered.
+			// FreeSlots < len(queue): only the earliest are recovered.
 			name: "partial recovery keeps the earliest",
 			suspended: []SlotCandidate{
 				suspendedCand(p3, s3, false, u100),
@@ -298,13 +298,13 @@ func TestSelectForRecovery(t *testing.T) {
 			//   p2: open=true,  u200
 			//   p1: open=true,  u100
 			// Expected order: p2 (open, u200) > p1 (open, u100) > p3 (no open).
-			// p4 has a later SuspendedAt (s2) so it goes after the whole batch.
+			// P4 has a later SuspendedAt (s2) so it goes after the whole batch.
 			name: "downgrade batch tie-break: open lease then recency",
 			suspended: []SlotCandidate{
-				suspendedCand(p4, s2, false, u100), // later batch
-				suspendedCand(p1, s1, true, u100),  // batch s1, open, u100
-				suspendedCand(p3, s1, false, u300), // batch s1, no open, u300
-				suspendedCand(p2, s1, true, u200),  // batch s1, open, u200
+				suspendedCand(p4, s2, false, u100), // Later batch.
+				suspendedCand(p1, s1, true, u100),  // Batch s1, open, u100.
+				suspendedCand(p3, s1, false, u300), // Batch s1, no open, u300.
+				suspendedCand(p2, s1, true, u200),  // Batch s1, open, u200.
 			},
 			freeSlots: 4,
 			want:      []uuid.UUID{p2, p1, p3, p4},
@@ -323,7 +323,7 @@ func TestSelectForRecovery(t *testing.T) {
 			want:      []uuid.UUID{p2, p1},
 		},
 		{
-			// freeSlots greater than queue length returns everything (still ordered).
+			// FreeSlots greater than queue length returns everything (still ordered).
 			name: "freeSlots exceeds queue length",
 			suspended: []SlotCandidate{
 				suspendedCand(p2, s2, false, u100),
