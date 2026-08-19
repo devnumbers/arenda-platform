@@ -121,12 +121,18 @@ func TestDeriveKeys_RFC8291IntermediateValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode auth: %v", err)
 	}
-	prkKey := hmacSHA256(auth, shared)
+	prkKey, err := hmacSHA256(auth, shared)
+	if err != nil {
+		t.Fatalf("hmac prf key: %v", err)
+	}
 	keyInfo := buildKeyInfo(uaPrivate.PublicKey().Bytes(), asPrivate.PublicKey().Bytes())
 	ikmInput := make([]byte, 0, len(keyInfo)+1)
 	ikmInput = append(ikmInput, keyInfo...)
 	ikmInput = append(ikmInput, 0x01)
-	ikm := hmacSHA256(prkKey, ikmInput)
+	ikm, err := hmacSHA256(prkKey, ikmInput)
+	if err != nil {
+		t.Fatalf("hmac ikm: %v", err)
+	}
 	if hexEncode(ikm) != rfc8291IKM {
 		t.Errorf("IKM\n got %s\nwant %s", hexEncode(ikm), rfc8291IKM)
 	}

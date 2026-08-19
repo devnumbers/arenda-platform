@@ -114,7 +114,15 @@ func (s *Sender) Send(ctx context.Context, sub domain.PushSubscription, payload 
 		}
 		return fmt.Errorf("webpush: post to push service: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		// The response status is already mapped, so a close failure cannot
+		// fail the dispatch — but it does break connection reuse, which is
+		// worth a warning.
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			s.logger.WarnContext(ctx, "webpush: close response body",
+				"error", sanitize.Error(closeErr))
+		}
+	}()
 
 	return s.mapResponse(ctx, resp)
 }
@@ -150,7 +158,11 @@ func (s *Sender) mapResponse(ctx context.Context, resp *http.Response) error {
 		return application.ErrRateLimited
 	default:
 		s.metrics.RecordDispatch(ctx, outcomeFailed)
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseRead))
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseRead))
+		if readErr != nil {
+			return fmt.Errorf("webpush: push service returned status %d (response body read failed: %w)",
+				resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("webpush: push service returned status %d: %s",
 			resp.StatusCode, sanitize.String(string(body)))
 	}

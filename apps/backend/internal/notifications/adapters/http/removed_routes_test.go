@@ -45,7 +45,11 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 			if err != nil {
 				t.Fatalf("do request: %v", err)
 			}
-			defer func() { _ = httpResp.Body.Close() }()
+			defer func() {
+				if err := httpResp.Body.Close(); err != nil {
+					t.Errorf("close response body: %v", err)
+				}
+			}()
 			if httpResp.StatusCode != http.StatusNotFound {
 				t.Errorf("%s %s: status = %d, want 404", tc.method, tc.path, httpResp.StatusCode)
 			}
@@ -62,7 +66,11 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("do request: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusNotImplemented {
 		t.Errorf("GET /reminders: status = %d, want 501 (route registered, stub answer)", resp.StatusCode)
 	}

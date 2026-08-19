@@ -47,9 +47,10 @@ func newTestSubscription(t *testing.T, endpoint string) domain.PushSubscription 
 func TestSend_Success(t *testing.T) {
 	var gotHeaders http.Header
 	var gotBody []byte
+	var readErr error
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotHeaders = r.Header.Clone()
-		gotBody, _ = io.ReadAll(r.Body)
+		gotBody, readErr = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusCreated)
 	}))
 	defer srv.Close()
@@ -60,6 +61,9 @@ func TestSend_Success(t *testing.T) {
 
 	if err := sender.Send(t.Context(), sub, payload); err != nil {
 		t.Fatalf("Send returned error: %v", err)
+	}
+	if readErr != nil {
+		t.Fatalf("read request body: %v", readErr)
 	}
 
 	// Verify required headers are present.
@@ -114,7 +118,9 @@ func TestSend_ResponseCodeMapping(t *testing.T) {
 					w.Header().Set("Retry-After", "60")
 				}
 				w.WriteHeader(tc.status)
-				_, _ = w.Write([]byte("error details"))
+				if _, err := w.Write([]byte("error details")); err != nil {
+					t.Errorf("write error-details body: %v", err)
+				}
 			}))
 			defer srv.Close()
 

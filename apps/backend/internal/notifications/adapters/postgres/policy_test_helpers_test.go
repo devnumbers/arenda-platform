@@ -60,7 +60,14 @@ func beginPolicyTx(t *testing.T, pool *pgxpool.Pool) (context.Context, pgx.Tx, f
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	return ctx, tx, func() { _ = tx.Rollback(ctx) }
+	return ctx, tx, func() {
+		// The rollback failure is surfaced as a test error rather than
+		// discarded: these tests share the integration database, so a leaked
+		// transaction would poison sibling tests.
+		if err := tx.Rollback(ctx); err != nil {
+			t.Errorf("rollback policy tx: %v", err)
+		}
+	}
 }
 
 func createPolicyTestUser(t *testing.T, ctx context.Context, q *genpostgres.Queries) uuid.UUID {

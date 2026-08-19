@@ -115,12 +115,18 @@ func encryptPayloadWithKey(sub domain.PushSubscription, plaintext []byte, asPriv
 func deriveKeys(ecdhSecret, authSecret, uaPublic, asPublic, salt []byte) (cek, nonce []byte, err error) {
 	// Step 1: IKM = HMAC(PRK_key, key_info || 0x01), PRK_key = HMAC(auth, secret).
 	// key_info = "WebPush: info" || 0x00 || ua_public || as_public.
-	prkKey := hmacSHA256(authSecret, ecdhSecret)
+	prkKey, err := hmacSHA256(authSecret, ecdhSecret)
+	if err != nil {
+		return nil, nil, fmt.Errorf("hmac prf key: %w", err)
+	}
 	keyInfo := buildKeyInfo(uaPublic, asPublic)
 	ikmInput := make([]byte, 0, len(keyInfo)+1)
 	ikmInput = append(ikmInput, keyInfo...)
 	ikmInput = append(ikmInput, 0x01)
-	ikm := hmacSHA256(prkKey, ikmInput)
+	ikm, err := hmacSHA256(prkKey, ikmInput)
+	if err != nil {
+		return nil, nil, fmt.Errorf("hmac ikm: %w", err)
+	}
 
 	// Step 2: PRK = HKDF-Extract(salt, IKM).
 	prk, err := hkdf.Extract(sha256.New, ikm, salt)
@@ -201,12 +207,14 @@ func (m *encryptedMessage) Bytes() []byte {
 }
 
 // hmacSHA256 returns HMAC-SHA256(key, data).
-func hmacSHA256(key, data []byte) []byte {
+func hmacSHA256(key, data []byte) ([]byte, error) {
 	h := hmac.New(sha256.New, key)
-	// hash.Hash documents that Write never returns an error; the discard is
-	// explicit rather than silent.
-	_, _ = h.Write(data)
-	return h.Sum(nil)
+	// hash.Hash documents that Write never returns an error; the check keeps
+	// the contract explicit instead of silently discarding it.
+	if _, err := h.Write(data); err != nil {
+		return nil, fmt.Errorf("hash write: %w", err)
+	}
+	return h.Sum(nil), nil
 }
 
 // decodeP256PublicKey decodes a base64url-encoded uncompressed P-256 public key
