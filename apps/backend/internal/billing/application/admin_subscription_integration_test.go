@@ -121,7 +121,8 @@ func TestAdminSubscription_AssignServiceOverwritesAndExpiresToBasic(t *testing.T
 	if views[1].Transition.Reason != domain.TransitionReasonServiceAssigned {
 		t.Errorf("second transition reason = %q, want service_assigned", views[1].Transition.Reason)
 	}
-	if views[1].Transition.Initiator != domain.InitiatorAdmin || views[1].Transition.InitiatorID == nil || *views[1].Transition.InitiatorID != h.adminID {
+	if views[1].Transition.Initiator != domain.InitiatorAdmin || views[1].Transition.InitiatorID == nil ||
+		*views[1].Transition.InitiatorID != h.adminID {
 		t.Errorf("assignment initiator = %q/%v, want the acting admin", views[1].Transition.Initiator, views[1].Transition.InitiatorID)
 	}
 	if views[1].ToTariffName != string(domain.TariffBusiness) {
@@ -129,7 +130,9 @@ func TestAdminSubscription_AssignServiceOverwritesAndExpiresToBasic(t *testing.T
 	}
 
 	// The audit log attributes the assignment to the acting admin.
-	assigned := h.countRows("SELECT COUNT(*) FROM audit_log WHERE action = 'subscription.service_assigned' AND actor_id = $1 AND entity_id = $2", h.adminID, sub.ID)
+	assigned := h.countRows(
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'subscription.service_assigned' AND actor_id = $1 AND entity_id = $2",
+		h.adminID, sub.ID)
 	if assigned != 1 {
 		t.Fatalf("service_assigned audit entries = %d, want 1", assigned)
 	}
@@ -231,10 +234,13 @@ func TestAdminSubscription_ForceChangeAppliesWithoutPayment(t *testing.T) {
 	if len(views) == 0 || views[0].Transition.Reason != domain.TransitionReasonForcedChange {
 		t.Fatalf("latest transition reason = %v, want forced_change", views[0].Transition.Reason)
 	}
-	if views[0].Transition.Initiator != domain.InitiatorAdmin || views[0].Transition.InitiatorID == nil || *views[0].Transition.InitiatorID != h.adminID {
+	if views[0].Transition.Initiator != domain.InitiatorAdmin || views[0].Transition.InitiatorID == nil ||
+		*views[0].Transition.InitiatorID != h.adminID {
 		t.Errorf("forced-change initiator = %q/%v, want the acting admin", views[0].Transition.Initiator, views[0].Transition.InitiatorID)
 	}
-	forced := h.countRows("SELECT COUNT(*) FROM audit_log WHERE action = 'subscription.tariff_forced' AND actor_id = $1 AND entity_id = $2", h.adminID, sub.ID)
+	forced := h.countRows(
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'subscription.tariff_forced' AND actor_id = $1 AND entity_id = $2",
+		h.adminID, sub.ID)
 	if forced != 1 {
 		t.Fatalf("tariff_forced audit entries = %d, want 1", forced)
 	}
@@ -300,7 +306,8 @@ func TestAdminSubscription_ExtendGraceKeepsWindowAlive(t *testing.T) {
 	for _, view := range views {
 		if view.Transition.Reason == domain.TransitionReasonGraceExtended {
 			found = true
-			if view.Transition.Initiator != domain.InitiatorAdmin || view.Transition.InitiatorID == nil || *view.Transition.InitiatorID != h.adminID {
+			if view.Transition.Initiator != domain.InitiatorAdmin || view.Transition.InitiatorID == nil ||
+				*view.Transition.InitiatorID != h.adminID {
 				t.Errorf("grace-extension initiator = %q/%v, want the acting admin", view.Transition.Initiator, view.Transition.InitiatorID)
 			}
 		}
@@ -308,7 +315,9 @@ func TestAdminSubscription_ExtendGraceKeepsWindowAlive(t *testing.T) {
 	if !found {
 		t.Error("no grace_extended transition recorded")
 	}
-	if extended := h.countRows("SELECT COUNT(*) FROM audit_log WHERE action = 'subscription.grace_extended' AND actor_id = $1 AND entity_id = $2", h.adminID, sub.ID); extended != 1 {
+	if extended := h.countRows(
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'subscription.grace_extended' AND actor_id = $1 AND entity_id = $2",
+		h.adminID, sub.ID); extended != 1 {
 		t.Fatalf("grace_extended audit entries = %d, want 1", extended)
 	}
 }
@@ -343,10 +352,13 @@ func TestAdminSubscription_AdminCancelRunsOutPaidPeriod(t *testing.T) {
 	if len(views) == 0 || views[0].Transition.Reason != domain.TransitionReasonCancelled {
 		t.Fatalf("latest transition reason = %v, want cancelled", views[0].Transition.Reason)
 	}
-	if views[0].Transition.Initiator != domain.InitiatorAdmin || views[0].Transition.InitiatorID == nil || *views[0].Transition.InitiatorID != h.adminID {
+	if views[0].Transition.Initiator != domain.InitiatorAdmin || views[0].Transition.InitiatorID == nil ||
+		*views[0].Transition.InitiatorID != h.adminID {
 		t.Errorf("cancellation initiator = %q/%v, want the acting admin", views[0].Transition.Initiator, views[0].Transition.InitiatorID)
 	}
-	if n := h.countRows("SELECT COUNT(*) FROM audit_log WHERE action = 'subscription.cancelled' AND actor_id = $1 AND entity_id = $2", h.adminID, sub.ID); n != 1 {
+	if n := h.countRows(
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'subscription.cancelled' AND actor_id = $1 AND entity_id = $2",
+		h.adminID, sub.ID); n != 1 {
 		t.Fatalf("cancelled audit entries = %d, want 1", n)
 	}
 

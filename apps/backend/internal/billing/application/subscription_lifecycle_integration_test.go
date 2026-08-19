@@ -86,7 +86,7 @@ func TestSubscriptionLifecycle_Integration_Cancel(t *testing.T) {
 	if len(transitions) != 3 {
 		t.Fatalf("transitions = %d, want 3 (registered + downgrade_scheduled + cancelled)", len(transitions))
 	}
-	tr := transitions[0] // newest first
+	tr := transitions[0] // Newest first.
 	if tr.Reason != domain.TransitionReasonCancelled {
 		t.Errorf("Reason = %q, want %q", tr.Reason, domain.TransitionReasonCancelled)
 	}
@@ -94,7 +94,9 @@ func TestSubscriptionLifecycle_Integration_Cancel(t *testing.T) {
 		t.Errorf("initiator = %q/%v, want user/%v", tr.Initiator, tr.InitiatorID, userID)
 	}
 
-	if got := h.countRows(`SELECT count(*) FROM audit_log WHERE action = 'subscription.cancelled' AND entity_id = $1 AND actor_id = $2`, sub.ID, userID); got != 1 {
+	if got := h.countRows(
+		`SELECT count(*) FROM audit_log WHERE action = 'subscription.cancelled' AND entity_id = $1 AND actor_id = $2`,
+		sub.ID, userID); got != 1 {
 		t.Errorf("audit rows = %d, want 1", got)
 	}
 }
@@ -116,7 +118,9 @@ func TestSubscriptionLifecycle_Integration_ToggleAutoRenew(t *testing.T) {
 	if stored.AutoRenewEnabled {
 		t.Error("AutoRenewEnabled = true after disable, want false")
 	}
-	if got := h.countRows(`SELECT count(*) FROM audit_log WHERE action = 'subscription.auto_renew_toggled' AND entity_id = $1`, sub.ID); got != 1 {
+	if got := h.countRows(
+		`SELECT count(*) FROM audit_log WHERE action = 'subscription.auto_renew_toggled' AND entity_id = $1`,
+		sub.ID); got != 1 {
 		t.Errorf("audit rows = %d, want 1", got)
 	}
 
@@ -185,7 +189,7 @@ func TestSubscriptionLifecycle_Integration_DowngradeScheduling(t *testing.T) {
 	if len(transitions) != 2 {
 		t.Fatalf("transitions = %d, want 2 (registered + downgrade_scheduled)", len(transitions))
 	}
-	tr := transitions[0] // newest first
+	tr := transitions[0] // Newest first.
 	if tr.Reason != domain.TransitionReasonDowngradeScheduled {
 		t.Errorf("Reason = %q, want %q", tr.Reason, domain.TransitionReasonDowngradeScheduled)
 	}
@@ -196,7 +200,9 @@ func TestSubscriptionLifecycle_Integration_DowngradeScheduling(t *testing.T) {
 		t.Errorf("Initiator = %q, want user", tr.Initiator)
 	}
 
-	if got := h.countRows(`SELECT count(*) FROM audit_log WHERE action = 'subscription.tariff_changed' AND entity_id = $1 AND actor_id = $2`, sub.ID, userID); got != 1 {
+	if got := h.countRows(
+		`SELECT count(*) FROM audit_log WHERE action = 'subscription.tariff_changed' AND entity_id = $1 AND actor_id = $2`,
+		sub.ID, userID); got != 1 {
 		t.Errorf("audit rows = %d, want 1", got)
 	}
 }

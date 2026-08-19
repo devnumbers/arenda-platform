@@ -47,8 +47,15 @@ func NewMetrics() (*Metrics, error) {
 	}, nil
 }
 
-// RecordRequest records a provider operation attempt. status should be one of
-// "ok" or "error".
+// Status label values of the RED convention shared by every provider adapter
+// (see RecordRequest).
+const (
+	StatusOK    = "ok"
+	StatusError = "error"
+)
+
+// RecordRequest records a provider operation attempt. Status should be one
+// of StatusOK or StatusError.
 func (m *Metrics) RecordRequest(ctx context.Context, provider, operation, status string, duration time.Duration) {
 	if m == nil {
 		return

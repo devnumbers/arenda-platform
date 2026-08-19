@@ -32,7 +32,10 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 	clk := fakeClock{now: now}
 
 	finiteTariff := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5, IsActive: true}
-	unlimitedTariff := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: domain.UnlimitedPropertyLimit, IsActive: true}
+	unlimitedTariff := domain.Tariff{
+		ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness,
+		ActivePropertyLimit: domain.UnlimitedPropertyLimit, IsActive: true,
+	}
 
 	validUntilFuture := now.Add(time.Hour)
 	validUntilPast := now.Add(-time.Hour)
@@ -77,7 +80,8 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 		{
 			name: "cancelled unlimited with future valid_until returns max int32",
 			sub: &domain.Subscription{
-				UserID: uuid.Must(uuid.NewV7()), TariffID: unlimitedTariff.ID, Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilFuture,
+				UserID: uuid.Must(uuid.NewV7()), TariffID: unlimitedTariff.ID,
+				Status: domain.SubscriptionStatusCancelled, ValidUntil: &validUntilFuture,
 			},
 			tariffs:   []domain.Tariff{unlimitedTariff},
 			wantLimit: math.MaxInt32,

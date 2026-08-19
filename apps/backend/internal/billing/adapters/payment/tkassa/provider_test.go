@@ -23,6 +23,20 @@ const (
 	testTerminalKey = "testTerminalKey"
 	testPassword    = "testPassword"
 	testAppBaseURL  = "https://app.example"
+	testAPIBaseURL  = "https://api.example/v2/"
+	// Shared wire fixtures: every provider test talks to the same customer,
+	// card, and payment-form shapes.
+	testCustomerRef = "customer-1"
+	testCardID      = "card-1"
+	testRebillID    = "rebill-1"
+	testChargeToken = "rebill-token"
+	testRequestKey  = "request-key-1"
+	testMaskedPan   = "4300********1234"
+	testPaymentURL  = "https://securepayments.tinkoff.ru/rest/show/123456"
+	testAddCardURL  = "https://securepayments.tinkoff.ru/rest/addcard/abc"
+	testPaymentUUID = "11111111-1111-1111-1111-111111111111"
+	// Shared expected description for a Pro monthly subscription payment.
+	testProMonthDescription = "Оплата подписки Pro (месяц)"
 )
 
 func discardLogger() *slog.Logger {
@@ -133,8 +147,8 @@ func strictDecodeSpecRequest(t *testing.T, body []byte, dst any) {
 // before the strict spec-schema decode instead of weakening strictness for
 // everything.
 var addCardExtraFieldsAllowlist = []string{
-	"RedirectUrl", "FailRedirectUrl",
-	"SuccessAddCardURL", "FailAddCardURL", "NotificationURL",
+	fieldRedirectURL, fieldFailRedirectURL,
+	fieldSuccessAddCardURL, fieldFailAddCardURL, fieldNotificationURL,
 }
 
 func TestNewProviderRequiresBaseURL(t *testing.T) {
@@ -157,9 +171,9 @@ func TestNewProviderRequiresCredentialsAndAppBaseURL(t *testing.T) {
 		cfg  Config
 		want string
 	}{
-		{"terminal key", Config{BaseURL: "https://api.example/v2/", Password: "p", AppBaseURL: testAppBaseURL}, "terminal key is required"},
-		{"password", Config{BaseURL: "https://api.example/v2/", TerminalKey: "t", AppBaseURL: testAppBaseURL}, "password is required"},
-		{"app base url", Config{BaseURL: "https://api.example/v2/", TerminalKey: "t", Password: "p"}, "app base URL is required"},
+		{"terminal key", Config{BaseURL: testAPIBaseURL, Password: "p", AppBaseURL: testAppBaseURL}, "terminal key is required"},
+		{"password", Config{BaseURL: testAPIBaseURL, TerminalKey: "t", AppBaseURL: testAppBaseURL}, "password is required"},
+		{"app base url", Config{BaseURL: testAPIBaseURL, TerminalKey: "t", Password: "p"}, "app base URL is required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -187,27 +201,27 @@ func TestNewProviderTrimsTrailingSlash(t *testing.T) {
 	}
 	// A base URL without the trailing slash must be normalized to exactly one,
 	// so method paths concatenate cleanly.
-	if got, want := p.baseURL, "https://api.example/v2/"; got != want {
+	if got, want := p.baseURL, testAPIBaseURL; got != want {
 		t.Fatalf("baseURL: got %q, want %q", got, want)
 	}
 }
 
 func TestProviderInitPayment(t *testing.T) {
-	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	paymentID := uuid.MustParse(testPaymentUUID)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/Init" {
+		if r.URL.Path != "/v2/"+methodInit {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		data := verifyRequestToken(t, r)
 
-		if got, want := data["TerminalKey"], any(testTerminalKey); got != want {
+		if got, want := data[fieldTerminalKey], any(testTerminalKey); got != want {
 			t.Fatalf("TerminalKey: got %v, want %v", got, want)
 		}
-		if got, want := data["OrderId"], any(paymentID.String()); got != want {
+		if got, want := data[fieldOrderID], any(paymentID.String()); got != want {
 			t.Fatalf("OrderId: got %v, want %v", got, want)
 		}
-		if got, want := data["Amount"], any(float64(10000)); got != want {
+		if got, want := data[fieldAmount], any(float64(10000)); got != want {
 			t.Fatalf("Amount: got %v, want %v", got, want)
 		}
 		if got, want := data["Recurrent"], any("Y"); got != want {
@@ -216,7 +230,7 @@ func TestProviderInitPayment(t *testing.T) {
 		if got, want := data["PayType"], any("O"); got != want {
 			t.Fatalf("PayType: got %v, want %v", got, want)
 		}
-		if got, want := data["CustomerKey"], any("customer-1"); got != want {
+		if got, want := data["CustomerKey"], any(testCustomerRef); got != want {
 			t.Fatalf("CustomerKey: got %v, want %v", got, want)
 		}
 		// The adapter builds every callback URL from the configured app base
@@ -230,7 +244,7 @@ func TestProviderInitPayment(t *testing.T) {
 		if got, want := data["FailURL"], any(testAppBaseURL+"/subscription/payments/"+paymentID.String()+"/fail"); got != want {
 			t.Fatalf("FailURL: got %v, want %v", got, want)
 		}
-		if got, want := data["Description"], any("Оплата подписки Pro (месяц)"); got != want {
+		if got, want := data["Description"], any(testProMonthDescription); got != want {
 			t.Fatalf("Description: got %v, want %v", got, want)
 		}
 		dataObj, ok := data["DATA"].(map[string]any)
@@ -245,9 +259,9 @@ func TestProviderInitPayment(t *testing.T) {
 		}
 
 		writeJSON(t, w, initResponse{
-			baseResponse: baseResponse{Success: true, Status: "NEW"},
+			baseResponse: baseResponse{Success: true, Status: statusNew},
 			PaymentID:    "123456",
-			PaymentURL:   "https://securepayments.tinkoff.ru/rest/show/123456",
+			PaymentURL:   testPaymentURL,
 			OrderID:      paymentID.String(),
 		})
 	}))
@@ -258,7 +272,7 @@ func TestProviderInitPayment(t *testing.T) {
 		PaymentID:     paymentID,
 		AmountKopecks: 10000,
 		Period:        domain.PeriodMonth,
-		CustomerRef:   "customer-1",
+		CustomerRef:   testCustomerRef,
 		Purpose:       testPurpose(),
 		SaveMethod:    true,
 		Initiator:     application.InitiatorCustomer,
@@ -269,7 +283,7 @@ func TestProviderInitPayment(t *testing.T) {
 	if result.ProviderPaymentID != "123456" {
 		t.Fatalf("ProviderPaymentID: got %q, want %q", result.ProviderPaymentID, "123456")
 	}
-	if result.PaymentURL != "https://securepayments.tinkoff.ru/rest/show/123456" {
+	if result.PaymentURL != testPaymentURL {
 		t.Fatalf("PaymentURL: got %q", result.PaymentURL)
 	}
 	if result.Status != domain.PaymentStatusPending {
@@ -287,7 +301,7 @@ func TestProviderInitPaymentInitiatorRequired(t *testing.T) {
 	var requests int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests++
-		writeJSON(t, w, initResponse{baseResponse: baseResponse{Success: true, Status: "NEW"}, PaymentID: "1"})
+		writeJSON(t, w, initResponse{baseResponse: baseResponse{Success: true, Status: statusNew}, PaymentID: "1"})
 	}))
 	defer server.Close()
 
@@ -313,7 +327,7 @@ func TestProviderInitPaymentMerchantInitiated(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = verifyRequestToken(t, r)
 		writeJSON(t, w, initResponse{
-			baseResponse: baseResponse{Success: true, Status: "NEW"},
+			baseResponse: baseResponse{Success: true, Status: statusNew},
 			PaymentID:    "123",
 			PaymentURL:   "https://pay.example.com/123",
 		})
@@ -359,7 +373,7 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			*captured = verifyRequestToken(t, r)
 			writeJSON(t, w, initResponse{
-				baseResponse: baseResponse{Success: true, Status: "NEW"},
+				baseResponse: baseResponse{Success: true, Status: statusNew},
 				PaymentID:    "1",
 				PaymentURL:   "https://pay",
 			})
@@ -454,24 +468,24 @@ func TestProviderChargePayment(t *testing.T) {
 	paymentID := uuid.Must(uuid.NewV7())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/Charge" {
+		if r.URL.Path != "/v2/"+methodCharge {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		data := verifyRequestToken(t, r)
-		if got, want := data["PaymentId"], any("123"); got != want {
+		if got, want := data[fieldPaymentID], any("123"); got != want {
 			t.Fatalf("PaymentId: got %v, want %v", got, want)
 		}
-		if got, want := data["RebillId"], any("rebill-token"); got != want {
+		if got, want := data[fieldRebillID], any(testChargeToken); got != want {
 			t.Fatalf("RebillId: got %v, want %v", got, want)
 		}
 		// The charge amount comes from the original Init call; the Charge body
 		// must not carry Amount.
-		if _, ok := data["Amount"]; ok {
-			t.Fatalf("Charge body must not contain Amount, got %v", data["Amount"])
+		if _, ok := data[fieldAmount]; ok {
+			t.Fatalf("Charge body must not contain Amount, got %v", data[fieldAmount])
 		}
 
 		writeJSON(t, w, chargeResponse{
-			baseResponse: baseResponse{Success: true, Status: "CONFIRMED", ErrorCode: "0"},
+			baseResponse: baseResponse{Success: true, Status: statusConfirmed, ErrorCode: "0"},
 			PaymentID:    "123",
 			OrderID:      paymentID.String(),
 			Amount:       10000,
@@ -484,7 +498,7 @@ func TestProviderChargePayment(t *testing.T) {
 		PaymentID:         paymentID,
 		ProviderPaymentID: "123",
 		AmountKopecks:     10000,
-		ChargeToken:       "rebill-token",
+		ChargeToken:       testChargeToken,
 	})
 	if err != nil {
 		t.Fatalf("ChargePayment failed: %v", err)
@@ -503,7 +517,7 @@ func TestProviderChargePayment(t *testing.T) {
 func TestProviderChargePaymentRejectedCarriesErrorCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, chargeResponse{
-			baseResponse: baseResponse{Success: true, Status: "REJECTED", ErrorCode: "103"},
+			baseResponse: baseResponse{Success: true, Status: statusRejected, ErrorCode: "103"},
 		})
 	}))
 	defer server.Close()
@@ -513,7 +527,7 @@ func TestProviderChargePaymentRejectedCarriesErrorCode(t *testing.T) {
 		PaymentID:         uuid.Must(uuid.NewV7()),
 		ProviderPaymentID: "123",
 		AmountKopecks:     10000,
-		ChargeToken:       "rebill-token",
+		ChargeToken:       testChargeToken,
 	})
 	if err != nil {
 		t.Fatalf("ChargePayment failed: %v", err)
@@ -528,16 +542,16 @@ func TestProviderChargePaymentRejectedCarriesErrorCode(t *testing.T) {
 
 func TestProviderPaymentStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/GetState" {
+		if r.URL.Path != "/v2/"+methodGetState {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		data := verifyRequestToken(t, r)
-		if got, want := data["PaymentId"], any("999"); got != want {
+		if got, want := data[fieldPaymentID], any("999"); got != want {
 			t.Fatalf("PaymentId: got %v, want %v", got, want)
 		}
 
 		writeJSON(t, w, getStateResponse{
-			baseResponse: baseResponse{Success: true, Status: "AUTHORIZED", ErrorCode: "0"},
+			baseResponse: baseResponse{Success: true, Status: statusAuthorized, ErrorCode: "0"},
 			PaymentID:    "999",
 			Amount:       1230,
 			RebillID:     "rebill-42",
@@ -568,12 +582,12 @@ func TestProviderRefundPayment(t *testing.T) {
 	paymentID := uuid.Must(uuid.NewV7())
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/Cancel" {
+		if r.URL.Path != "/v2/"+methodCancel {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		captured = verifyRequestToken(t, r)
 		writeJSON(t, w, cancelResponse{
-			baseResponse:   baseResponse{Success: true, Status: "REFUNDED", ErrorCode: "0"},
+			baseResponse:   baseResponse{Success: true, Status: statusRefunded, ErrorCode: "0"},
 			OrderID:        paymentID.String(),
 			PaymentID:      "777",
 			OriginalAmount: 10000,
@@ -607,7 +621,7 @@ func TestProviderRefundPayment(t *testing.T) {
 func TestProviderRefundPaymentReversedPending(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, cancelResponse{
-			baseResponse:   baseResponse{Success: true, Status: "REVERSED", ErrorCode: "0"},
+			baseResponse:   baseResponse{Success: true, Status: statusReversed, ErrorCode: "0"},
 			OriginalAmount: 5000,
 			NewAmount:      0,
 		})
@@ -659,11 +673,11 @@ func TestProviderRefundPaymentError(t *testing.T) {
 }
 
 func TestProviderBindPaymentMethod(t *testing.T) {
-	customerRef := "customer-1"
+	customerRef := testCustomerRef
 	var addCardCaptured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v2/AddCustomer":
+		case "/v2/" + methodAddCustomer:
 			data := verifyRequestToken(t, r)
 			if got, want := data["CustomerKey"], any(customerRef); got != want {
 				t.Fatalf("AddCustomer CustomerKey: got %v, want %v", got, want)
@@ -672,14 +686,14 @@ func TestProviderBindPaymentMethod(t *testing.T) {
 				baseResponse: baseResponse{Success: true, ErrorCode: "0"},
 				CustomerKey:  customerRef,
 			})
-		case "/v2/AddCard":
+		case "/v2/" + methodAddCard:
 			// The extras sit outside the schema and outside the token: verify
 			// the token over the schema fields only, then assert the extras.
 			addCardCaptured = verifyRequestTokenExcluding(t, r, addCardExtraFieldsAllowlist...)
 			writeJSON(t, w, addCardResponse{
 				baseResponse: baseResponse{Success: true, ErrorCode: "0"},
-				PaymentURL:   "https://securepayments.tinkoff.ru/rest/addcard/abc",
-				RequestKey:   "request-key-1",
+				PaymentURL:   testAddCardURL,
+				RequestKey:   testRequestKey,
 			})
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -694,22 +708,22 @@ func TestProviderBindPaymentMethod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BindPaymentMethod failed: %v", err)
 	}
-	if result.FormURL != "https://securepayments.tinkoff.ru/rest/addcard/abc" {
+	if result.FormURL != testAddCardURL {
 		t.Fatalf("FormURL: got %q", result.FormURL)
 	}
-	if result.BindingID != "request-key-1" {
-		t.Fatalf("BindingID: got %q, want %q", result.BindingID, "request-key-1")
+	if result.BindingID != testRequestKey {
+		t.Fatalf("BindingID: got %q, want %q", result.BindingID, testRequestKey)
 	}
 
 	if got, want := addCardCaptured["CheckType"], any("3DSHOLD"); got != want {
 		t.Fatalf("CheckType: got %v, want %v", got, want)
 	}
 	wantExtras := map[string]string{
-		"RedirectUrl":       testAppBaseURL + bindingReturnSuccessPath,
-		"FailRedirectUrl":   testAppBaseURL + bindingReturnFailPath,
-		"SuccessAddCardURL": testAppBaseURL + bindingReturnSuccessPath,
-		"FailAddCardURL":    testAppBaseURL + bindingReturnFailPath,
-		"NotificationURL":   testAppBaseURL + notificationPath,
+		fieldRedirectURL:       testAppBaseURL + bindingReturnSuccessPath,
+		fieldFailRedirectURL:   testAppBaseURL + bindingReturnFailPath,
+		fieldSuccessAddCardURL: testAppBaseURL + bindingReturnSuccessPath,
+		fieldFailAddCardURL:    testAppBaseURL + bindingReturnFailPath,
+		fieldNotificationURL:   testAppBaseURL + notificationPath,
 	}
 	for field, want := range wantExtras {
 		if got := addCardCaptured[field]; got != want {
@@ -732,12 +746,12 @@ func verifyRequestTokenExcluding(t *testing.T, r *http.Request, exclude ...strin
 func TestProviderBindPaymentMethodCustomerAlreadyExistsProceeds(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v2/AddCustomer":
+		case "/v2/" + methodAddCustomer:
 			_ = verifyRequestToken(t, r)
 			writeJSON(t, w, addCustomerResponse{
 				baseResponse: baseResponse{Success: false, ErrorCode: "7", Message: "Покупатель уже существует"},
 			})
-		case "/v2/AddCard":
+		case "/v2/" + methodAddCard:
 			_ = verifyRequestTokenExcluding(t, r, addCardExtraFieldsAllowlist...)
 			writeJSON(t, w, addCardResponse{
 				baseResponse: baseResponse{Success: true, ErrorCode: "0"},
@@ -751,7 +765,7 @@ func TestProviderBindPaymentMethodCustomerAlreadyExistsProceeds(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	result, err := p.BindPaymentMethod(context.Background(), application.BindMethodRequest{CustomerRef: "customer-1"})
+	result, err := p.BindPaymentMethod(context.Background(), application.BindMethodRequest{CustomerRef: testCustomerRef})
 	if err != nil {
 		t.Fatalf("BindPaymentMethod should proceed after customer-exists, got %v", err)
 	}
@@ -762,7 +776,7 @@ func TestProviderBindPaymentMethodCustomerAlreadyExistsProceeds(t *testing.T) {
 
 func TestProviderBindPaymentMethodOtherAPIErrorPropagated(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/AddCustomer" {
+		if r.URL.Path != "/v2/"+methodAddCustomer {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		_ = verifyRequestToken(t, r)
@@ -773,7 +787,7 @@ func TestProviderBindPaymentMethodOtherAPIErrorPropagated(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	_, err := p.BindPaymentMethod(context.Background(), application.BindMethodRequest{CustomerRef: "customer-1"})
+	_, err := p.BindPaymentMethod(context.Background(), application.BindMethodRequest{CustomerRef: testCustomerRef})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -789,14 +803,14 @@ func TestProviderPaymentMethodBinding(t *testing.T) {
 				t.Fatalf("unexpected path: %s", r.URL.Path)
 			}
 			data := verifyRequestToken(t, r)
-			if got, want := data["RequestKey"], any("rk-1"); got != want {
+			if got, want := data[fieldRequestKey], any("rk-1"); got != want {
 				t.Fatalf("RequestKey: got %v, want %v", got, want)
 			}
 			writeJSON(t, w, getAddCardStateResponse{
-				baseResponse: baseResponse{Success: true, ErrorCode: "0", Status: "COMPLETED"},
-				CardID:       "card-1",
-				RebillID:     "rebill-1",
-				CustomerKey:  "customer-1",
+				baseResponse: baseResponse{Success: true, ErrorCode: "0", Status: statusCompleted},
+				CardID:       testCardID,
+				RebillID:     testRebillID,
+				CustomerKey:  testCustomerRef,
 				RequestKey:   "rk-1",
 			})
 		}))
@@ -813,13 +827,15 @@ func TestProviderPaymentMethodBinding(t *testing.T) {
 		if state.Method == nil {
 			t.Fatal("Method must be set on completed binding")
 		}
-		if state.Method.ProviderMethodID != "card-1" || state.Method.ChargeToken != "rebill-1" {
+		if state.Method.ProviderMethodID != testCardID || state.Method.ChargeToken != testRebillID {
 			t.Fatalf("Method: got %+v", *state.Method)
 		}
 	})
 
 	t.Run("intermediate states are pending", func(t *testing.T) {
-		for _, status := range []string{"NEW", "FORM_SHOWED", "3DS_CHECKING", "3DS_CHECKED", "AUTHORIZING", "AUTHORIZED"} {
+		for _, status := range []string{
+			statusNew, statusFormShowed, status3DSChecking, status3DSChecked, statusAuthorizing, statusAuthorized,
+		} {
 			t.Run(status, func(t *testing.T) {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					writeJSON(t, w, getAddCardStateResponse{
@@ -847,7 +863,7 @@ func TestProviderPaymentMethodBinding(t *testing.T) {
 	t.Run("rejected is failed with error code", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(t, w, getAddCardStateResponse{
-				baseResponse: baseResponse{Success: true, ErrorCode: "7", Status: "REJECTED"},
+				baseResponse: baseResponse{Success: true, ErrorCode: "7", Status: statusRejected},
 				RequestKey:   "rk-3",
 			})
 		}))
@@ -892,18 +908,18 @@ func TestProviderRemovePaymentMethod(t *testing.T) {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		data := verifyRequestToken(t, r)
-		if got, want := data["CardId"], any("card-1"); got != want {
+		if got, want := data[fieldCardID], any(testCardID); got != want {
 			t.Fatalf("CardId: got %v, want %v", got, want)
 		}
 		writeJSON(t, w, removeCardResponse{
 			baseResponse: baseResponse{Success: true, ErrorCode: "0"},
-			CardID:       "card-1",
+			CardID:       testCardID,
 		})
 	}))
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	if err := p.RemovePaymentMethod(context.Background(), "customer-1", "card-1"); err != nil {
+	if err := p.RemovePaymentMethod(context.Background(), testCustomerRef, testCardID); err != nil {
 		t.Fatalf("RemovePaymentMethod failed: %v", err)
 	}
 }
@@ -917,7 +933,7 @@ func TestProviderRemovePaymentMethodNotFound(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	err := p.RemovePaymentMethod(context.Background(), "customer-1", "card-1")
+	err := p.RemovePaymentMethod(context.Background(), testCustomerRef, testCardID)
 	if !errors.Is(err, application.ErrProviderMethodNotFound) {
 		t.Fatalf("expected ErrProviderMethodNotFound, got %v", err)
 	}
@@ -929,11 +945,11 @@ func TestProviderListPaymentMethods(t *testing.T) {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		data := verifyRequestToken(t, r)
-		if got, want := data["CustomerKey"], any("customer-1"); got != want {
+		if got, want := data["CustomerKey"], any(testCustomerRef); got != want {
 			t.Fatalf("CustomerKey: got %v, want %v", got, want)
 		}
 		writeJSON(t, w, []cardListItem{
-			{CardID: "card-a", Pan: "4300********1234", ExpDate: "1230", Status: "A", RebillID: "rebill-a"},
+			{CardID: "card-a", Pan: testMaskedPan, ExpDate: "1230", Status: "A", RebillID: "rebill-a"},
 			{CardID: "card-d", Pan: "5500********5678", ExpDate: "1130", Status: "D", RebillID: "rebill-d"},
 			{CardID: "card-i", Pan: "2200********9012", ExpDate: "1029", Status: "I", RebillID: "rebill-i"},
 		})
@@ -941,7 +957,7 @@ func TestProviderListPaymentMethods(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	methods, err := p.ListPaymentMethods(context.Background(), "customer-1")
+	methods, err := p.ListPaymentMethods(context.Background(), testCustomerRef)
 	if err != nil {
 		t.Fatalf("ListPaymentMethods failed: %v", err)
 	}
@@ -950,7 +966,8 @@ func TestProviderListPaymentMethods(t *testing.T) {
 		t.Fatalf("methods: got %d, want 1 (only active cards)", len(methods))
 	}
 	got := methods[0]
-	if got.ProviderMethodID != "card-a" || got.ChargeToken != "rebill-a" || got.MaskedPan != "4300********1234" || got.ExpDate != "1230" || got.CustomerRef != "customer-1" {
+	if got.ProviderMethodID != "card-a" || got.ChargeToken != "rebill-a" || got.MaskedPan != testMaskedPan ||
+		got.ExpDate != "1230" || got.CustomerRef != testCustomerRef {
 		t.Fatalf("method: got %+v", got)
 	}
 }
@@ -966,7 +983,7 @@ func TestProviderListPaymentMethodsCustomerNotFound(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	_, err := p.ListPaymentMethods(context.Background(), "customer-1")
+	_, err := p.ListPaymentMethods(context.Background(), testCustomerRef)
 	if !errors.Is(err, application.ErrProviderCustomerNotFound) {
 		t.Fatalf("expected ErrProviderCustomerNotFound, got %v", err)
 	}
@@ -983,7 +1000,7 @@ func TestProviderListPaymentMethodsEmpty(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	methods, err := p.ListPaymentMethods(context.Background(), "customer-1")
+	methods, err := p.ListPaymentMethods(context.Background(), testCustomerRef)
 	if err != nil {
 		t.Fatalf("ListPaymentMethods failed: %v", err)
 	}

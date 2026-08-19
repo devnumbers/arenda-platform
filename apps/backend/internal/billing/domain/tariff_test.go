@@ -7,6 +7,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// Wire spellings of the subscription periods: ParseSubscriptionPeriod tests
+// must pin the raw wire values, not the constants they map to.
+const (
+	wirePeriodMonth = "month"
+	wirePeriodYear  = "year"
+)
+
 func TestClassifyTariffChange(t *testing.T) {
 	basic := Tariff{
 		ID:                  uuid.MustParse("11111111-1111-1111-1111-111111111111"),
@@ -114,8 +121,8 @@ func TestParseSubscriptionPeriod(t *testing.T) {
 		want    SubscriptionPeriod
 		wantErr error
 	}{
-		{"month", "month", PeriodMonth, nil},
-		{"year", "year", PeriodYear, nil},
+		{"month", wirePeriodMonth, PeriodMonth, nil},
+		{"year", wirePeriodYear, PeriodYear, nil},
 		{"empty", "", "", ErrInvalidPeriod},
 		{"invalid", "weekly", "", ErrInvalidPeriod},
 	}
@@ -179,12 +186,35 @@ func TestTariffValidate(t *testing.T) {
 		tariff  Tariff
 		wantErr error
 	}{
-		{"free plan", Tariff{Name: TariffBasic, ActivePropertyLimit: 1, MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0}, nil},
-		{"unlimited limit", Tariff{Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000}, nil},
+		{
+			"free plan",
+			Tariff{Name: TariffBasic, ActivePropertyLimit: 1, MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0},
+			nil,
+		},
+		{
+			"unlimited limit",
+			Tariff{
+				Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit,
+				MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000,
+			},
+			nil,
+		},
 		{"zero limit", Tariff{Name: TariffBasic, ActivePropertyLimit: 0}, nil},
-		{"negative monthly price", Tariff{Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: -1, YearlyPriceKopecks: 440000}, ErrInvalidTariffPricing},
-		{"negative yearly price", Tariff{Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: -1}, ErrInvalidTariffPricing},
-		{"limit below unlimited", Tariff{Name: TariffPro, ActivePropertyLimit: -2, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000}, ErrInvalidTariffPricing},
+		{
+			"negative monthly price",
+			Tariff{Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: -1, YearlyPriceKopecks: 440000},
+			ErrInvalidTariffPricing,
+		},
+		{
+			"negative yearly price",
+			Tariff{Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: -1},
+			ErrInvalidTariffPricing,
+		},
+		{
+			"limit below unlimited",
+			Tariff{Name: TariffPro, ActivePropertyLimit: -2, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000},
+			ErrInvalidTariffPricing,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

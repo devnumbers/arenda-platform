@@ -17,7 +17,38 @@ import (
 
 const (
 	defaultTimeout   = 30 * time.Second
-	maxResponseBytes = 1 << 20 // 1 MiB
+	maxResponseBytes = 1 << 20 // 1 MiB.
+)
+
+// Wire field names used outside generated spec types: sign() key exclusions,
+// webhook map access, and the AddCard URL extras appended after signing
+// (ADR 0017). Request and response structs pin the same names in their json
+// tags; these constants serve the map-level access only.
+const (
+	fieldToken             = "Token"
+	fieldTerminalKey       = "TerminalKey"
+	fieldAmount            = "Amount"
+	fieldOrderID           = "OrderId"
+	fieldSuccess           = "Success"
+	fieldPaymentID         = "PaymentId"
+	fieldErrorCode         = "ErrorCode"
+	fieldKey               = "Key"
+	fieldValue             = "Value"
+	fieldStatus            = "Status"
+	fieldPan               = "Pan"
+	fieldExpDate           = "ExpDate"
+	fieldCardID            = "CardId"
+	fieldRebillID          = "RebillId"
+	fieldRequestKey        = "RequestKey"
+	fieldNotificationType  = "NotificationType"
+	fieldDATA              = "DATA"
+	fieldData              = "Data"
+	fieldReceipt           = "Receipt"
+	fieldRedirectURL       = "RedirectUrl"
+	fieldFailRedirectURL   = "FailRedirectUrl"
+	fieldSuccessAddCardURL = "SuccessAddCardURL"
+	fieldFailAddCardURL    = "FailAddCardURL"
+	fieldNotificationURL   = "NotificationURL"
 )
 
 // baseResponse is embedded in all T-Kassa API responses.
@@ -125,7 +156,7 @@ func bodyFromStruct(v any) (map[string]any, error) {
 // post signs body and sends it as a JSON POST request to a T-Kassa method.
 func (p *Provider) post(ctx context.Context, method string, body map[string]any, out any) error {
 	reqBody := maps.Clone(body)
-	reqBody["Token"] = sign(body, p.password)
+	reqBody[fieldToken] = sign(body, p.password)
 	return p.send(ctx, method, reqBody, out)
 }
 

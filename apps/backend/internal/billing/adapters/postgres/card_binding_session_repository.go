@@ -64,7 +64,9 @@ func (r *CardBindingSessionRepository) Create(ctx context.Context, session domai
 // GetByRequestKeyForUpdate returns the provider's binding session by its
 // request key, locking the row for update. Must only be called inside a
 // transaction.
-func (r *CardBindingSessionRepository) GetByRequestKeyForUpdate(ctx context.Context, provider domain.PaymentProvider, requestKey string) (domain.CardBindingSession, error) {
+func (r *CardBindingSessionRepository) GetByRequestKeyForUpdate(
+	ctx context.Context, provider domain.PaymentProvider, requestKey string,
+) (domain.CardBindingSession, error) {
 	row, err := r.q().GetCardBindingSessionByRequestKeyForUpdate(ctx, postgres.GetCardBindingSessionByRequestKeyForUpdateParams{
 		Provider:   string(provider),
 		RequestKey: requestKey,

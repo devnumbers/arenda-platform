@@ -322,7 +322,7 @@ func TestWorkers_NoChargeableMethodPublishesGraceEntered(t *testing.T) {
 	pub := &capturePublisher{}
 	h.workers.publisher = pub
 
-	sub := h.seedSubscription(t, nil) // no method linked
+	sub := h.seedSubscription(t, nil) // No method linked.
 
 	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
 		t.Fatalf("ProcessRenewals() error = %v", err)
@@ -358,7 +358,7 @@ func TestWorkers_FailedChargePublishesGraceEntered(t *testing.T) {
 		return ChargeResult{Status: domain.PaymentStatusFailed, ErrorCode: "declined"}, nil
 	}
 	sub := h.seedSubscription(t, nil)
-	h.seedActiveMethod(t, sub, "fake", "token_bad")
+	h.seedActiveMethod(t, sub, testProviderFake, "token_bad")
 
 	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
 		t.Fatalf("ProcessRenewals() error = %v", err)
@@ -384,7 +384,7 @@ func TestWorkers_GraceEnteredNotRepublishedInsideWindow(t *testing.T) {
 		return ChargeResult{Status: domain.PaymentStatusFailed, ErrorCode: "declined"}, nil
 	}
 	sub := h.seedSubscription(t, nil)
-	h.seedActiveMethod(t, sub, "fake", "token_bad")
+	h.seedActiveMethod(t, sub, testProviderFake, "token_bad")
 
 	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
 		t.Fatalf("first ProcessRenewals() error = %v", err)
@@ -434,7 +434,7 @@ func TestWebhook_FailedRenewalChargePublishesGraceEntered(t *testing.T) {
 	h := newPaymentHarness(t)
 	pub := &capturePublisher{}
 	h.payments.publisher = pub
-	method, err := domain.NewPaymentMethod(uuid.Must(uuid.NewV7()), "fake", "token_bad", h.now)
+	method, err := domain.NewPaymentMethod(uuid.Must(uuid.NewV7()), testProviderFake, "token_bad", h.now)
 	if err != nil {
 		t.Fatalf("new method: %v", err)
 	}
@@ -444,7 +444,9 @@ func TestWebhook_FailedRenewalChargePublishesGraceEntered(t *testing.T) {
 	}
 
 	sub := h.seedSubscription(t, nil)
-	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffPro), domain.PeriodMonth, 49000, "fake", h.now)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffPro),
+		domain.PeriodMonth, 49000, testProviderFake, h.now)
 	if err != nil {
 		t.Fatalf("new payment: %v", err)
 	}
@@ -463,7 +465,7 @@ func TestWebhook_FailedRenewalChargePublishesGraceEntered(t *testing.T) {
 		Status:            domain.PaymentStatusFailed,
 		AmountKopecks:     payment.AmountKopecks,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v", err)
 	}
 
@@ -548,7 +550,7 @@ func TestWorkers_GraceExpiryReminderFreshWindow(t *testing.T) {
 	h := newWorkersHarness(t, graceTestConfig(lead))
 	pub := &capturePublisher{}
 	h.workers.publisher = pub
-	firstUntil := h.now.Add(30 * time.Hour) // window [now-18h, now+30h) is already open
+	firstUntil := h.now.Add(30 * time.Hour) // Window [now-18h, now+30h) is already open.
 	sub := h.seedGraceSubscription(t, firstUntil)
 	remindedAt := h.now.Add(time.Hour)
 

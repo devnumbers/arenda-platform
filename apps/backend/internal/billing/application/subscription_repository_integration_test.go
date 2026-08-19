@@ -305,7 +305,10 @@ func TestSubscriptionRepository_Integration_ListSelection(t *testing.T) {
 		sel  billingapp.SubscriptionSelection
 		want []uuid.UUID
 	}{
-		{name: "up for renewal, oldest window first", sel: renewSel, want: []uuid.UUID{renewOlder.UserID, pendingDue.UserID, renewExpired.UserID}},
+		{
+			name: "up for renewal, oldest window first", sel: renewSel,
+			want: []uuid.UUID{renewOlder.UserID, pendingDue.UserID, renewExpired.UserID},
+		},
 		{name: "expired grace", sel: graceSel, want: []uuid.UUID{graceExpired.UserID}},
 		{name: "grace reminder window", sel: reminderSel, want: []uuid.UUID{graceInWindow.UserID}},
 		{name: "expired non-renewing", sel: nonRenewingSel, want: []uuid.UUID{nonRenewing.UserID}},

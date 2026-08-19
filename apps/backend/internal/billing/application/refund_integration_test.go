@@ -122,7 +122,8 @@ func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if refundTransition.Reason != domain.TransitionReasonRefunded {
 		t.Fatalf("latest transition reason = %q, want refunded", refundTransition.Reason)
 	}
-	if refundTransition.Initiator != domain.InitiatorAdmin || refundTransition.InitiatorID == nil || *refundTransition.InitiatorID != h.adminID {
+	if refundTransition.Initiator != domain.InitiatorAdmin || refundTransition.InitiatorID == nil ||
+		*refundTransition.InitiatorID != h.adminID {
 		t.Fatalf("refund transition initiator = %q/%v, want the acting admin", refundTransition.Initiator, refundTransition.InitiatorID)
 	}
 	if refundTransition.PaymentID == nil || *refundTransition.PaymentID != payment.ID {
@@ -130,7 +131,9 @@ func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
 	}
 
 	// The audit log records the refund attributed to the admin.
-	refundAudit := h.countRows("SELECT COUNT(*) FROM audit_log WHERE action = 'subscription_payment.refunded' AND actor_id = $1 AND entity_id = $2", h.adminID, payment.ID)
+	refundAudit := h.countRows(
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'subscription_payment.refunded' AND actor_id = $1 AND entity_id = $2",
+		h.adminID, payment.ID)
 	if refundAudit != 1 {
 		t.Fatalf("refund audit entries = %d, want 1", refundAudit)
 	}
@@ -229,7 +232,8 @@ func TestRefundFlow_StuckReservationReconciledByWorker(t *testing.T) {
 	// The reconciled refund is attributed to the system — no admin request
 	// was in flight when the worker resolved the reservation.
 	transitions := h.transitionsOf(t, subStored.ID)
-	if len(transitions) == 0 || transitions[0].Reason != domain.TransitionReasonRefunded || transitions[0].Initiator != domain.InitiatorSystem {
+	if len(transitions) == 0 || transitions[0].Reason != domain.TransitionReasonRefunded ||
+		transitions[0].Initiator != domain.InitiatorSystem {
 		t.Fatalf("latest transition = %+v, want a system-initiated refund entry", transitions[0])
 	}
 }
@@ -286,7 +290,9 @@ func TestSyncPayment_AppliesProviderRefund(t *testing.T) {
 	if subStored.TariffID != h.tariffIDByName(t, domain.TariffBasic) {
 		t.Fatalf("tariff = %v, want basic after the synced refund", subStored.TariffID)
 	}
-	synced := h.countRows("SELECT COUNT(*) FROM audit_log WHERE action = 'subscription_payment.synced' AND actor_id = $1 AND entity_id = $2", h.adminID, payment.ID)
+	synced := h.countRows(
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'subscription_payment.synced' AND actor_id = $1 AND entity_id = $2",
+		h.adminID, payment.ID)
 	if synced != 1 {
 		t.Fatalf("synced audit entries = %d, want 1", synced)
 	}
@@ -413,14 +419,18 @@ func TestAdminPayments_PhoneFilterDecryptsEncryptedPhone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeterministicEncrypt: %v", err)
 	}
-	if _, err := h.pool.Exec(h.ctx(), "UPDATE users SET phone = $1, phone_encrypted = true WHERE id = $2", encryptedPhone, encryptedUser); err != nil {
+	if _, err := h.pool.Exec(
+		h.ctx(), "UPDATE users SET phone = $1, phone_encrypted = true WHERE id = $2",
+		encryptedPhone, encryptedUser); err != nil {
 		t.Fatalf("encrypt user phone: %v", err)
 	}
 	pendingSub2, err := h.subscriptions.GetByUserID(h.ctx(), pendingPayment.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID: %v", err)
 	}
-	encryptedPayment, err := domain.NewSubscriptionPayment(encryptedUser, pendingSub2.ID, pendingSub2.TariffID, domain.PeriodMonth, 49000, "fake", time.Now().UTC())
+	encryptedPayment, err := domain.NewSubscriptionPayment(
+		encryptedUser, pendingSub2.ID, pendingSub2.TariffID,
+		domain.PeriodMonth, 49000, testProviderFake, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment: %v", err)
 	}
@@ -460,10 +470,12 @@ func TestAdminPayments_GetAdminPaymentAndInvalidFilters(t *testing.T) {
 	}
 
 	// A filter outside the whitelist answers ErrInvalidFilter.
-	if _, _, err := h.paymentsSvc.ListAdminPayments(h.ctx(), billingapp.AdminPaymentFilters{Sort: "phone"}); !errors.Is(err, billingapp.ErrInvalidFilter) {
+	if _, _, err := h.paymentsSvc.ListAdminPayments(h.ctx(),
+		billingapp.AdminPaymentFilters{Sort: "phone"}); !errors.Is(err, billingapp.ErrInvalidFilter) {
 		t.Fatalf("bad sort err = %v, want ErrInvalidFilter", err)
 	}
-	if _, _, err := h.paymentsSvc.ListAdminPayments(h.ctx(), billingapp.AdminPaymentFilters{SubscriptionStatus: "blocked"}); !errors.Is(err, billingapp.ErrInvalidFilter) {
+	if _, _, err := h.paymentsSvc.ListAdminPayments(h.ctx(),
+		billingapp.AdminPaymentFilters{SubscriptionStatus: "blocked"}); !errors.Is(err, billingapp.ErrInvalidFilter) {
 		t.Fatalf("bad subscription status err = %v, want ErrInvalidFilter", err)
 	}
 

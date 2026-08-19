@@ -56,7 +56,7 @@ type integrationHarness struct {
 	methods       *billingpg.PaymentMethodRepository
 	bindings      *billingpg.CardBindingSessionRepository
 	encryptor     encryption.Encryptor
-	// provider is the fake adapter itself (not just the port) so integration
+	// Provider is the fake adapter itself (not just the port) so integration
 	// tests can drive provider-side state the flows cannot (issue #251
 	// binding polling).
 	provider *paymentfake.Provider
@@ -68,7 +68,7 @@ type integrationHarness struct {
 	tariffsSvc        *billingapp.TariffService
 	onboarding        *billingapp.OnboardingService
 	limiter           *billingapp.SubscriptionPropertyLimiter
-	// fakeConfirms mounts the local confirmation endpoints the way the wiring
+	// FakeConfirms mounts the local confirmation endpoints the way the wiring
 	// does under the fake provider (issue #287): the fake adapter reports the
 	// completed entry, the confirmed event runs through the production
 	// webhook path.
@@ -85,7 +85,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	t.Helper()
 
 	pool := testdb.Setup(t)
-	// testdb truncates every table between tests, including the migration's
+	// The testdb helper truncates every table between tests, including the migration's
 	// tariff seed; re-seed it so each harness starts from the canonical plans.
 	seedTariffs(t, pool)
 	clk := &mutableClock{now: integrationBaseTime}

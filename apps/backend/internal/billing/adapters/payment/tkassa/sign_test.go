@@ -11,13 +11,13 @@ import (
 
 func TestSign(t *testing.T) {
 	data := map[string]any{
-		"TerminalKey": "TinkoffBankTest",
-		"Amount":      int64(1000),
-		"OrderId":     "order-123",
-		"DATA": map[string]string{
+		fieldTerminalKey: "TinkoffBankTest",
+		fieldAmount:      int64(1000),
+		fieldOrderID:     "order-123",
+		fieldDATA: map[string]string{
 			"OperationInitiatorType": string(spec.CommonOperationInitiatorTypeN1),
 		},
-		"Receipt": map[string]any{
+		fieldReceipt: map[string]any{
 			"Items": []any{"item1"},
 		},
 		"Description": nil,
@@ -37,13 +37,13 @@ func TestSign(t *testing.T) {
 
 func TestSignSkipsNullBlankAndNested(t *testing.T) {
 	data := map[string]any{
-		"TerminalKey": "Term",
-		"Amount":      int64(1),
-		"OrderId":     "o",
-		"NullValue":   nil,
-		"Blank":       "",
-		"DATA":        map[string]string{"k": "v"},
-		"Receipt":     []any{1, 2},
+		fieldTerminalKey: "Term",
+		fieldAmount:      int64(1),
+		fieldOrderID:     "o",
+		"NullValue":      nil,
+		"Blank":          "",
+		fieldDATA:        map[string]string{"k": "v"},
+		fieldReceipt:     []any{1, 2},
 	}
 
 	got := sign(data, testPassword)
@@ -61,15 +61,15 @@ func TestSignSkipsNullBlankAndNested(t *testing.T) {
 // regression in sorting, concatenation or hashing is caught byte-exactly.
 func TestSignFixedVector(t *testing.T) {
 	data := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"OrderId":     "11111111-1111-1111-1111-111111111111",
-		"Amount":      json.Number("10000"),
-		"Success":     true,
+		fieldTerminalKey: testTerminalKey,
+		fieldOrderID:     testPaymentUUID,
+		fieldAmount:      json.Number("10000"),
+		fieldSuccess:     true,
 	}
 	got := sign(data, testPassword)
 
 	// Sorted keys: Amount, OrderId, Password, Success, TerminalKey.
-	wantConcat := "10000" + "11111111-1111-1111-1111-111111111111" + testPassword + "true" + testTerminalKey
+	wantConcat := "10000" + testPaymentUUID + testPassword + "true" + testTerminalKey
 	hash := sha256.Sum256([]byte(wantConcat))
 	want := hex.EncodeToString(hash[:])
 	if got != want {
@@ -79,8 +79,8 @@ func TestSignFixedVector(t *testing.T) {
 
 func TestSignDoesNotMutateInput(t *testing.T) {
 	data := map[string]any{
-		"TerminalKey": "Term",
-		"Amount":      json.Number("1"),
+		fieldTerminalKey: "Term",
+		fieldAmount:      json.Number("1"),
 	}
 	before := mustMarshal(t, data)
 	_ = sign(data, testPassword)

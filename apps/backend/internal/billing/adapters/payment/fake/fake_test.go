@@ -14,6 +14,9 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
+// testProviderPaymentID is the shared fake provider payment id fixture.
+const testProviderPaymentID = "fake_1"
+
 type testClock struct {
 	t time.Time
 }
@@ -219,7 +222,7 @@ func TestProviderChargePayment(t *testing.T) {
 
 	res, err := p.ChargePayment(context.Background(), application.ChargeRequest{
 		PaymentID:         uuid.Must(uuid.NewV7()),
-		ProviderPaymentID: "fake_1",
+		ProviderPaymentID: testProviderPaymentID,
 		AmountKopecks:     5000,
 		ChargeToken:       "fake_token_1",
 	})
@@ -253,7 +256,7 @@ func TestProviderRefundPayment(t *testing.T) {
 
 	res, err := p.RefundPayment(context.Background(), application.RefundRequest{
 		PaymentID:         uuid.Must(uuid.NewV7()),
-		ProviderPaymentID: "fake_1",
+		ProviderPaymentID: testProviderPaymentID,
 		AmountKopecks:     10000,
 	})
 	if err != nil {
@@ -271,7 +274,7 @@ func TestProviderParseWebhook(t *testing.T) {
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.Must(uuid.NewV7())
 	payload, err := json.Marshal(map[string]any{
-		"provider_payment_id": "fake_1",
+		"provider_payment_id": testProviderPaymentID,
 		"internal_payment_id": paymentID.String(),
 		"status":              "succeeded",
 	})

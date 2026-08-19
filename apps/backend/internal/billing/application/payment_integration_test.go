@@ -166,14 +166,14 @@ func TestPaymentFlow_WebhookDuplicateIsIdempotent(t *testing.T) {
 
 	payload := []byte(`{"provider_payment_id":"` + *payment.ProviderPaymentID +
 		`","internal_payment_id":"` + payment.ID.String() + `","status":"succeeded"}`)
-	if err := h.paymentsSvc.HandleWebhook(h.ctx(), "fake", payload); err != nil {
+	if err := h.paymentsSvc.HandleWebhook(h.ctx(), testProviderFake, payload); err != nil {
 		t.Fatalf("first HandleWebhook: %v", err)
 	}
 	first, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID: %v", err)
 	}
-	if err := h.paymentsSvc.HandleWebhook(h.ctx(), "fake", payload); err != nil {
+	if err := h.paymentsSvc.HandleWebhook(h.ctx(), testProviderFake, payload); err != nil {
 		t.Fatalf("duplicate HandleWebhook: %v (a redelivery is a no-op success)", err)
 	}
 	second, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)

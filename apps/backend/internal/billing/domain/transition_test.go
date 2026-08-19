@@ -7,6 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// unknownInitiator is a non-initiator string shared by the validation tables.
+const unknownInitiator = "robot"
+
 func validSubscription(t *testing.T) Subscription {
 	t.Helper()
 	sub, err := NewBasicSubscription(
@@ -90,9 +93,12 @@ func TestNewTransition_RejectsInvalidInput(t *testing.T) {
 		initiatorID *uuid.UUID
 	}{
 		{name: "empty reason", sub: sub, reason: "", initiator: InitiatorSystem},
-		{name: "unknown initiator", sub: sub, reason: TransitionReasonRegistered, initiator: "robot"},
+		{name: "unknown initiator", sub: sub, reason: TransitionReasonRegistered, initiator: unknownInitiator},
 		{name: "missing subscription id", sub: Subscription{}, reason: TransitionReasonRegistered, initiator: InitiatorSystem},
-		{name: "system initiator with actor id", sub: sub, reason: TransitionReasonRegistered, initiator: InitiatorSystem, initiatorID: new(uuid.Must(uuid.NewV7()))},
+		{
+			name: "system initiator with actor id", sub: sub, reason: TransitionReasonRegistered,
+			initiator: InitiatorSystem, initiatorID: new(uuid.Must(uuid.NewV7())),
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -141,8 +147,12 @@ func TestNewScheduledTariffTransition_RejectsInvalidInput(t *testing.T) {
 	}{
 		{name: "missing target tariff", reason: TransitionReasonDowngradeScheduled, initiator: InitiatorUser},
 		{name: "empty reason", target: uuid.Must(uuid.NewV7()), reason: "", initiator: InitiatorUser},
-		{name: "unknown initiator", target: uuid.Must(uuid.NewV7()), reason: TransitionReasonDowngradeScheduled, initiator: "robot"},
-		{name: "system initiator with actor id", target: uuid.Must(uuid.NewV7()), reason: TransitionReasonDowngradeScheduled, initiator: InitiatorSystem, initiatorID: new(uuid.Must(uuid.NewV7()))},
+		{name: "unknown initiator", target: uuid.Must(uuid.NewV7()), reason: TransitionReasonDowngradeScheduled, initiator: unknownInitiator},
+		{
+			name: "system initiator with actor id", target: uuid.Must(uuid.NewV7()),
+			reason: TransitionReasonDowngradeScheduled, initiator: InitiatorSystem,
+			initiatorID: new(uuid.Must(uuid.NewV7())),
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -159,8 +169,8 @@ func TestParseTransitionInitiator(t *testing.T) {
 			t.Errorf("ParseTransitionInitiator(%q) error = %v", raw, err)
 		}
 	}
-	if _, err := ParseTransitionInitiator("robot"); err == nil {
-		t.Error(`ParseTransitionInitiator("robot") error = nil, want error`)
+	if _, err := ParseTransitionInitiator(unknownInitiator); err == nil {
+		t.Error(`ParseTransitionInitiator(unknownInitiator) error = nil, want error`)
 	}
 }
 
@@ -231,7 +241,7 @@ func TestReconstituteTransition(t *testing.T) {
 	}
 
 	badInitiator := valid
-	badInitiator.Initiator = "robot"
+	badInitiator.Initiator = unknownInitiator
 	if _, err := ReconstituteTransition(badInitiator); err == nil {
 		t.Error("ReconstituteTransition(unknown initiator) error = nil, want error")
 	}

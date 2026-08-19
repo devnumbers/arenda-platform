@@ -21,14 +21,16 @@ type SubscriptionPropertyLimiter struct {
 	subscriptions SubscriptionRepository
 	tariffs       TariffRepository
 	clock         clock.Clock
-	// lock, when set by WithTx, makes ActivePropertyLimit read the subscription
+	// Lock, when set by WithTx, makes ActivePropertyLimit read the subscription
 	// with SELECT ... FOR UPDATE so concurrent property-limit checks serialize
 	// on the subscription row instead of racing past the limit.
 	lock bool
 }
 
 // NewSubscriptionPropertyLimiter creates a new limiter.
-func NewSubscriptionPropertyLimiter(subscriptions SubscriptionRepository, tariffs TariffRepository, clk clock.Clock) *SubscriptionPropertyLimiter {
+func NewSubscriptionPropertyLimiter(
+	subscriptions SubscriptionRepository, tariffs TariffRepository, clk clock.Clock,
+) *SubscriptionPropertyLimiter {
 	if clk == nil {
 		clk = clock.Real{}
 	}

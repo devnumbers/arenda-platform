@@ -12,6 +12,12 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
+// testProviderFake is the provider identity shared by the application tests.
+const testProviderFake = "fake"
+
+// testErrCodeDeclined is the shared declined-charge error-code fixture.
+const testErrCodeDeclined = "card_declined"
+
 // stubPaymentProvider is a configurable provider for the payment-flow tests:
 // it satisfies both consumer-side provider slices (initiation for
 // SubscriptionService, finalization for PaymentService) and the fake
@@ -30,7 +36,7 @@ type stubPaymentProvider struct {
 
 	refundCalls int
 	refundReqs  []RefundRequest
-	// refundRes is answered for every refund request unless refundFn is set;
+	// RefundRes is answered for every refund request unless refundFn is set;
 	// the zero value means "full refund confirmed" — the default a captured
 	// charge produces.
 	refundRes RefundResult
@@ -41,7 +47,7 @@ type stubPaymentProvider struct {
 	parseErr   error
 }
 
-func (p *stubPaymentProvider) Name() domain.PaymentProvider { return "fake" }
+func (p *stubPaymentProvider) Name() domain.PaymentProvider { return testProviderFake }
 
 func (p *stubPaymentProvider) InitPayment(_ context.Context, req InitPaymentRequest) (InitPaymentResult, error) {
 	p.mu.Lock()
@@ -349,7 +355,9 @@ func TestChangeTariff_UpgradeUniqueRaceReturnsExistingPayment(t *testing.T) {
 
 	// Simulate a concurrent winner: the pending lookup is blind once, then a
 	// conflicting pending payment appears and Create fails on the index.
-	existing, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness), domain.PeriodMonth, 99000, "fake", h.now)
+	existing, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+		domain.PeriodMonth, 99000, testProviderFake, h.now)
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment() error = %v", err)
 	}
@@ -390,7 +398,9 @@ func TestChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(t *testing.T) {
 
 	// Simulate the crash state: a pending payment exists but has no provider
 	// reference.
-	lost, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness), domain.PeriodMonth, 99000, "fake", h.now)
+	lost, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+		domain.PeriodMonth, 99000, testProviderFake, h.now)
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment() error = %v", err)
 	}
@@ -565,7 +575,7 @@ func (h *paymentHarness) webhookSucceeded(t *testing.T, payment domain.Subscript
 		Status:            domain.PaymentStatusSucceeded,
 		AmountKopecks:     payment.AmountKopecks,
 	})
-	return h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`))
+	return h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`))
 }
 
 // TestWebhook_SucceededAppliesUpgrade proves the acceptance criterion of
@@ -747,7 +757,7 @@ func TestWebhook_AppliesFailedUpgradePayment(t *testing.T) {
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
-	errCode := "card_declined"
+	errCode := testErrCodeDeclined
 	h.setNotification(&PaymentNotification{
 		InternalPaymentID: result.PaymentID,
 		ProviderPaymentID: "stub_" + result.PaymentID.String(),
@@ -755,7 +765,7 @@ func TestWebhook_AppliesFailedUpgradePayment(t *testing.T) {
 		ErrorCode:         &errCode,
 	})
 
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v", err)
 	}
 
@@ -794,7 +804,9 @@ func TestWebhook_SucceededPersistsProviderPaymentID(t *testing.T) {
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	// Crash state: the provider was called but the reference was lost.
-	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness), domain.PeriodMonth, 99000, "fake", h.now)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+		domain.PeriodMonth, 99000, testProviderFake, h.now)
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment() error = %v", err)
 	}
@@ -809,7 +821,7 @@ func TestWebhook_SucceededPersistsProviderPaymentID(t *testing.T) {
 		AmountKopecks:     99000,
 	})
 
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v", err)
 	}
 
@@ -838,7 +850,9 @@ func TestWebhook_SucceededPersistsProviderPaymentID(t *testing.T) {
 func TestWebhook_PendingNotificationBackfillsReference(t *testing.T) {
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
-	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness), domain.PeriodMonth, 99000, "fake", h.now)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+		domain.PeriodMonth, 99000, testProviderFake, h.now)
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment() error = %v", err)
 	}
@@ -852,7 +866,7 @@ func TestWebhook_PendingNotificationBackfillsReference(t *testing.T) {
 		Status:            domain.PaymentStatusPending,
 	})
 
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v", err)
 	}
 
@@ -885,7 +899,7 @@ func TestWebhook_SucceededAfterFailed_ReconcilesToSucceeded(t *testing.T) {
 		Status:            domain.PaymentStatusFailed,
 		ErrorCode:         &errCode,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("failed HandleWebhook() error = %v", err)
 	}
 
@@ -897,7 +911,7 @@ func TestWebhook_SucceededAfterFailed_ReconcilesToSucceeded(t *testing.T) {
 		ProviderPaymentID: "stub_" + result.PaymentID.String(),
 		Status:            domain.PaymentStatusSucceeded,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("out-of-order HandleWebhook() error = %v", err)
 	}
 	if h.provider.statusCalls == 0 {
@@ -932,24 +946,24 @@ func TestWebhook_SucceededAfterFailed_ProviderStillFailsIsNoOp(t *testing.T) {
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
-	errCode := "card_declined"
+	errCode := testErrCodeDeclined
 	h.setNotification(&PaymentNotification{
 		InternalPaymentID: result.PaymentID,
 		ProviderPaymentID: "stub_" + result.PaymentID.String(),
 		Status:            domain.PaymentStatusFailed,
 		ErrorCode:         &errCode,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("failed HandleWebhook() error = %v", err)
 	}
 
-	h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusFailed, ErrorCode: "card_declined"}
+	h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusFailed, ErrorCode: testErrCodeDeclined}
 	h.setNotification(&PaymentNotification{
 		InternalPaymentID: result.PaymentID,
 		ProviderPaymentID: "stub_" + result.PaymentID.String(),
 		Status:            domain.PaymentStatusSucceeded,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v (contradicted success is a no-op success)", err)
 	}
 
@@ -985,7 +999,7 @@ func TestWebhook_SucceededAfterFailed_StatusErrorPropagates(t *testing.T) {
 		Status:            domain.PaymentStatusFailed,
 		ErrorCode:         &errCode,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("failed HandleWebhook() error = %v", err)
 	}
 
@@ -995,7 +1009,7 @@ func TestWebhook_SucceededAfterFailed_StatusErrorPropagates(t *testing.T) {
 		ProviderPaymentID: "stub_" + result.PaymentID.String(),
 		Status:            domain.PaymentStatusSucceeded,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err == nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err == nil {
 		t.Fatal("HandleWebhook() error = nil, want the provider status failure to fail the delivery")
 	}
 }
@@ -1021,7 +1035,7 @@ func TestWebhook_FailedAfterSucceededIsNoOp(t *testing.T) {
 		Status:            domain.PaymentStatusFailed,
 		ErrorCode:         &errCode,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v (a late failure after success is a no-op)", err)
 	}
 	stored, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
@@ -1053,7 +1067,7 @@ func TestWebhook_RefundedMarksPaymentRefunded(t *testing.T) {
 		ProviderPaymentID: "stub_" + result.PaymentID.String(),
 		Status:            domain.PaymentStatusRefunded,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v", err)
 	}
 	stored, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
@@ -1077,7 +1091,8 @@ func TestWebhook_RefundedMarksPaymentRefunded(t *testing.T) {
 		t.Errorf("tariff = %v, want basic after the refund", subsStored.TariffID)
 	}
 	if subsStored.ValidUntil != nil || subsStored.AutoRenewEnabled {
-		t.Errorf("subscription = valid_until %v, auto-renew %t; want both cleared by the downgrade to basic", subsStored.ValidUntil, subsStored.AutoRenewEnabled)
+		t.Errorf("subscription = valid_until %v, auto-renew %t; want both cleared by the downgrade to basic",
+			subsStored.ValidUntil, subsStored.AutoRenewEnabled)
 	}
 	// The transition log records the refund downgrade with the system
 	// initiator and the refunded payment.
@@ -1120,7 +1135,7 @@ func TestWebhook_Rejections(t *testing.T) {
 	}
 
 	h.provider.parseErr = errors.New("bad signature")
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err == nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err == nil {
 		t.Error("parse error = nil, want the delivery to fail")
 	}
 	h.provider.parseErr = nil
@@ -1130,7 +1145,7 @@ func TestWebhook_Rejections(t *testing.T) {
 		ProviderPaymentID: "unknown",
 		Status:            domain.PaymentStatusSucceeded,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); !errors.Is(err, ErrPaymentNotFound) {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); !errors.Is(err, ErrPaymentNotFound) {
 		t.Errorf("unknown payment err = %v, want ErrPaymentNotFound", err)
 	}
 
@@ -1139,7 +1154,7 @@ func TestWebhook_Rejections(t *testing.T) {
 		ProviderPaymentID: "other_payment",
 		Status:            domain.PaymentStatusSucceeded,
 	})
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); !errors.Is(err, ErrWebhookPaymentMismatch) {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); !errors.Is(err, ErrWebhookPaymentMismatch) {
 		t.Errorf("mismatched provider payment id err = %v, want ErrWebhookPaymentMismatch", err)
 	}
 
@@ -1218,7 +1233,9 @@ func TestListPayments_ReturnsPaymentsWithTariffs(t *testing.T) {
 	if err := h.webhookSucceeded(t, payment); err != nil {
 		t.Fatalf("HandleWebhook() error = %v", err)
 	}
-	later, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness), domain.PeriodYear, 890000, "fake", h.now.Add(time.Minute))
+	later, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+		domain.PeriodYear, 890000, testProviderFake, h.now.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment() error = %v", err)
 	}

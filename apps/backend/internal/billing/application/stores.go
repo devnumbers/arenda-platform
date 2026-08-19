@@ -23,7 +23,7 @@ type txStores struct {
 	methods       PaymentMethodRepository
 	bindings      CardBindingSessionRepository
 	audit         auditapp.Recorder
-	// archiver and slots are the cross-context lifecycle bridges (issue #252),
+	// Archiver and slots are the cross-context lifecycle bridges (issue #252),
 	// bound to the transaction by runLifecycleTx when the worker phases were
 	// wired with them; nil keeps the helpers below no-ops.
 	archiver ExcessPropertyArchiver
@@ -80,8 +80,8 @@ func (s *txStores) subscriptionForUpdate(ctx context.Context, userID uuid.UUID) 
 // matches the worker selection that listed it (issue #286). The batch
 // predicate lives in SQL, so the under-lock re-check re-lists the selection
 // narrowed to the locked user instead of re-stating eligibility in Go; the
-// listing runs in the caller's transaction and therefore observes the locked
-// row. ok=false means the state the listing saw is gone — the phase's no-op
+// Listing runs in the caller's transaction and therefore observes the locked
+// row. An ok=false result means the state the listing saw is gone — the phase's no-op
 // signal.
 func (s *txStores) lockInSelection(ctx context.Context, userID uuid.UUID, sel SubscriptionSelection) (domain.Subscription, bool, error) {
 	sub, err := s.subscriptionForUpdate(ctx, userID)
@@ -188,7 +188,7 @@ func NewTxStoreFactory(
 // back otherwise; a panic in work rolls back and re-panics (see
 // transaction.UoW).
 //
-// runInTx returns an error if the factory's UoW was not configured — a service
+// The runInTx call returns an error if the factory's UoW was not configured — a service
 // without a UoW has no business calling it. This keeps the call sites free of
 // nil checks while making a wiring mistake loud and immediate.
 func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error) error {
@@ -219,9 +219,9 @@ func (f *txStoreFactory) runInTxWithBridges(
 }
 
 // buildTxStores binds every billing repository and the audit recorder to the
-// transaction, plus the lifecycle bridges when their sources are given. WithTx
-// errors are wrapped so a repository that fails to bind aborts the transaction
-// with a clear cause rather than a silent fallthrough. audit is bound last:
+// transaction, plus the lifecycle bridges when their sources are given.
+// WithTx errors are wrapped so a repository that fails to bind aborts the transaction
+// with a clear cause rather than a silent fallthrough. Audit is bound last:
 // its WithTx is infallible (auditapp.Recorder.WithTx returns no error), so it
 // cannot mask a prior repository-bind failure.
 func (f *txStoreFactory) buildTxStores(

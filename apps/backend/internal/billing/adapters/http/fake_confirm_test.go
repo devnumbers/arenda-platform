@@ -35,7 +35,9 @@ func (p *stubFakeProvider) ConfirmCardBinding(ctx context.Context, requestKey st
 	return billingapp.WebhookEvent{}, errors.New("unexpected ConfirmCardBinding call")
 }
 
-func (p *stubFakeProvider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (billingapp.PaymentStatusResult, error) {
+func (p *stubFakeProvider) PaymentStatus(
+	ctx context.Context, paymentID uuid.UUID, providerPaymentID string,
+) (billingapp.PaymentStatusResult, error) {
 	if p.status != nil {
 		return p.status(ctx, paymentID, providerPaymentID)
 	}
@@ -282,14 +284,14 @@ func TestFakeConfirmPayment_InvalidUUIDMapsTo400(t *testing.T) {
 // through the synchronous webhook path (issue #287).
 func TestFakeConfirmCardBinding_AppliesConfirmedEvent(t *testing.T) {
 	confirmed := billingapp.WebhookEvent{MethodBound: &billingapp.MethodBoundNotification{
-		BindingID: "fake_bind_1",
+		BindingID: testBindingID,
 		Method:    billingapp.SavedMethod{ChargeToken: "token_1"},
 	}}
 	var applied *billingapp.WebhookEvent
 	h := newFakeConfirmRouter(
 		&stubFakeProvider{confirmBind: func(_ context.Context, key string) (billingapp.WebhookEvent, error) {
-			if key != "fake_bind_1" {
-				t.Errorf("ConfirmCardBinding called with %q, want %q", key, "fake_bind_1")
+			if key != testBindingID {
+				t.Errorf("ConfirmCardBinding called with %q, want %q", key, testBindingID)
 			}
 			return confirmed, nil
 		}},
@@ -303,7 +305,7 @@ func TestFakeConfirmCardBinding_AppliesConfirmedEvent(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
-	if applied == nil || applied.MethodBound == nil || applied.MethodBound.BindingID != "fake_bind_1" {
+	if applied == nil || applied.MethodBound == nil || applied.MethodBound.BindingID != testBindingID {
 		t.Errorf("applied event = %+v, want the method-bound notification", applied)
 	}
 }

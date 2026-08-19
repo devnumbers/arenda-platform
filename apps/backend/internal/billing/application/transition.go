@@ -19,18 +19,18 @@ type transitionSpec struct {
 	reason      domain.TransitionReason
 	initiator   domain.TransitionInitiator
 	initiatorID *uuid.UUID
-	// paymentID references the subscription payment that caused the
+	// PaymentID references the subscription payment that caused the
 	// transition; nil for the flows that change no payment.
 	paymentID *uuid.UUID
-	// scheduledTariffID marks a deferred tariff change (issue #249 downgrade
+	// ScheduledTariffID marks a deferred tariff change (issue #249 downgrade
 	// planning): the log entry records the future target as its to-side while
 	// the aggregate keeps its current tariff.
 	scheduledTariffID *uuid.UUID
-	// auditAction names the audit entry recorded with the transition. A zero
+	// AuditAction names the audit entry recorded with the transition. A zero
 	// action records none: the worker phases and the payment applications
 	// audit their payments, not the subscription change itself.
 	auditAction auditdomain.Action
-	// auditContext, when set, builds the audit entry's context from the
+	// AuditContext, when set, builds the audit entry's context from the
 	// post-change subscription and the appended transition — some entries
 	// quote state only one of the two knows (the extended grace deadline, the
 	// captured from-tariff). The transition is always freshly captured by
@@ -131,7 +131,8 @@ func (spec transitionSpec) validate() error {
 	case domain.TransitionReasonRefunded:
 		return nil
 	default:
-		return fmt.Errorf("transition spec: paymentID requires reason %q or %q, got %q", domain.TransitionReasonPaymentApplied, domain.TransitionReasonRefunded, spec.reason)
+		return fmt.Errorf("transition spec: paymentID requires reason %q or %q, got %q",
+			domain.TransitionReasonPaymentApplied, domain.TransitionReasonRefunded, spec.reason)
 	}
 }
 

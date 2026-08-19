@@ -31,14 +31,17 @@ func TestPaymentRepository_Integration_ListSelection(t *testing.T) {
 		t.Fatalf("GetByName(business) error = %v", err)
 	}
 
-	// seedPayment onboards a user — optionally lifting their subscription onto
+	// SeedPayment onboards a user — optionally lifting their subscription onto
 	// a paid current tariff — and stores one payment in the given state,
 	// backdating its clocks through raw SQL the way a stuck row looks. Every
 	// payment gets its own user so the pending-payment unique index never
 	// interferes; the onboarding subscription stays on basic, so a business
 	// payment is a tariff-change one, while a pro payment against a pro
 	// subscription is not.
-	seedPayment := func(name string, currentTariff *domain.Tariff, targetTariff domain.Tariff, ref string, status domain.PaymentStatus, age time.Duration) domain.SubscriptionPayment {
+	seedPayment := func(
+		name string, currentTariff *domain.Tariff, targetTariff domain.Tariff,
+		ref string, status domain.PaymentStatus, age time.Duration,
+	) domain.SubscriptionPayment {
 		t.Helper()
 		userID := h.seedUser()
 		if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
@@ -57,7 +60,9 @@ func TestPaymentRepository_Integration_ListSelection(t *testing.T) {
 				t.Fatalf("lift subscription(%s) error = %v", name, err)
 			}
 		}
-		payment, err := domain.NewSubscriptionPayment(userID, sub.ID, targetTariff.ID, domain.PeriodMonth, targetTariff.MonthlyPriceKopecks, "fake", now.Add(-age))
+		payment, err := domain.NewSubscriptionPayment(
+			userID, sub.ID, targetTariff.ID, domain.PeriodMonth,
+			targetTariff.MonthlyPriceKopecks, testProviderFake, now.Add(-age))
 		if err != nil {
 			t.Fatalf("NewSubscriptionPayment(%s) error = %v", name, err)
 		}
@@ -82,7 +87,9 @@ func TestPaymentRepository_Integration_ListSelection(t *testing.T) {
 			}
 			_, err := h.pool.Exec(h.ctx(),
 				`UPDATE subscription_payments SET created_at = $1, updated_at = $1 WHERE id = $2`, aged, stored.ID)
-			if _, enableErr := h.pool.Exec(h.ctx(), `ALTER TABLE subscription_payments ENABLE TRIGGER trg_subscription_payments_updated_at`); enableErr != nil {
+			if _, enableErr := h.pool.Exec(
+				h.ctx(),
+				`ALTER TABLE subscription_payments ENABLE TRIGGER trg_subscription_payments_updated_at`); enableErr != nil {
 				t.Fatalf("restore updated_at trigger(%s): %v", name, enableErr)
 			}
 			if err != nil {

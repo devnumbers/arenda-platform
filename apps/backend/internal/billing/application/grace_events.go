@@ -26,11 +26,11 @@ import (
 type graceEvents struct {
 	publisher EventPublisher
 	log       *slog.Logger
-	// entered is the GraceEntered event of the window this transaction opened;
+	// Entered is the GraceEntered event of the window this transaction opened;
 	// nil when no window was entered, so the event fires exactly once per
 	// grace window.
 	entered *GraceEntered
-	// expiring is the GraceExpiring reminder this transaction marked
+	// Expiring is the GraceExpiring reminder this transaction marked
 	// dispatched; nil when no window was reminded.
 	expiring *GraceExpiring
 }

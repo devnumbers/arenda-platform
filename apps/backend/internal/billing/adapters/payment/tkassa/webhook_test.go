@@ -22,14 +22,14 @@ func signedWebhookPayload(t *testing.T, payload map[string]any) []byte {
 }
 
 func TestParseWebhookPayment(t *testing.T) {
-	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	paymentID := uuid.MustParse(testPaymentUUID)
 	payload := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"OrderId":     paymentID.String(),
-		"Status":      "CONFIRMED",
-		"Success":     true,
-		"PaymentId":   json.Number("12345"),
-		"Amount":      json.Number("10000"),
+		fieldTerminalKey: testTerminalKey,
+		fieldOrderID:     paymentID.String(),
+		fieldStatus:      statusConfirmed,
+		fieldSuccess:     true,
+		fieldPaymentID:   json.Number("12345"),
+		fieldAmount:      json.Number("10000"),
 	}
 
 	p := newTestProvider("")
@@ -70,17 +70,17 @@ func TestParseWebhookPayment(t *testing.T) {
 func TestParseWebhookPaymentWithRebillIdSurfacesSavedMethod(t *testing.T) {
 	paymentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	payload := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"OrderId":     paymentID.String(),
-		"Status":      "AUTHORIZED",
-		"Success":     true,
-		"PaymentId":   json.Number("777"),
-		"Amount":      json.Number("500"),
-		"RebillId":    "rebill-777",
-		"CardId":      "card-777",
-		"Pan":         "4300********1234",
-		"ExpDate":     "1230",
-		"CustomerKey": "customer-1",
+		fieldTerminalKey: testTerminalKey,
+		fieldOrderID:     paymentID.String(),
+		fieldStatus:      statusAuthorized,
+		fieldSuccess:     true,
+		fieldPaymentID:   json.Number("777"),
+		fieldAmount:      json.Number("500"),
+		fieldRebillID:    "rebill-777",
+		fieldCardID:      "card-777",
+		fieldPan:         testMaskedPan,
+		fieldExpDate:     "1230",
+		"CustomerKey":    testCustomerRef,
 	}
 
 	p := newTestProvider("")
@@ -93,7 +93,7 @@ func TestParseWebhookPaymentWithRebillIdSurfacesSavedMethod(t *testing.T) {
 	}
 	m := event.Payment.SavedMethod
 	if m.ProviderMethodID != "card-777" || m.ChargeToken != "rebill-777" ||
-		m.MaskedPan != "4300********1234" || m.ExpDate != "1230" || m.CustomerRef != "customer-1" {
+		m.MaskedPan != testMaskedPan || m.ExpDate != "1230" || m.CustomerRef != testCustomerRef {
 		t.Fatalf("SavedMethod: got %+v", *m)
 	}
 }
@@ -101,12 +101,12 @@ func TestParseWebhookPaymentWithRebillIdSurfacesSavedMethod(t *testing.T) {
 func TestParseWebhookFailedPaymentCarriesErrorCode(t *testing.T) {
 	paymentID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 	payload := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"OrderId":     paymentID.String(),
-		"Status":      "REJECTED",
-		"Success":     false,
-		"PaymentId":   json.Number("888"),
-		"ErrorCode":   "103",
+		fieldTerminalKey: testTerminalKey,
+		fieldOrderID:     paymentID.String(),
+		fieldStatus:      statusRejected,
+		fieldSuccess:     false,
+		fieldPaymentID:   json.Number("888"),
+		fieldErrorCode:   "103",
 	}
 
 	p := newTestProvider("")
@@ -139,12 +139,12 @@ func TestParseWebhookRefundStatuses(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := map[string]any{
-				"TerminalKey": testTerminalKey,
-				"OrderId":     "22222222-2222-2222-2222-222222222222",
-				"PaymentId":   json.Number("12345"),
-				"Status":      tt.status,
-				"Amount":      json.Number(strconv.FormatInt(tt.amount, 10)),
-				"Success":     true,
+				fieldTerminalKey: testTerminalKey,
+				fieldOrderID:     "22222222-2222-2222-2222-222222222222",
+				fieldPaymentID:   json.Number("12345"),
+				fieldStatus:      tt.status,
+				fieldAmount:      json.Number(strconv.FormatInt(tt.amount, 10)),
+				fieldSuccess:     true,
 			}
 
 			p := newTestProvider("")
@@ -164,16 +164,16 @@ func TestParseWebhookRefundStatuses(t *testing.T) {
 
 func TestParseWebhookAddCard(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey":      testTerminalKey,
-		"RequestKey":       "request-key-1",
-		"CustomerKey":      "customer-1",
-		"CardId":           "card-1",
-		"RebillId":         "rebill-1",
-		"Pan":              "4300********1234",
-		"ExpDate":          "1230",
-		"Status":           "COMPLETED",
-		"Success":          true,
-		"NotificationType": "NotificationAddCard",
+		fieldTerminalKey:      testTerminalKey,
+		fieldRequestKey:       testRequestKey,
+		"CustomerKey":         testCustomerRef,
+		fieldCardID:           testCardID,
+		fieldRebillID:         testRebillID,
+		fieldPan:              testMaskedPan,
+		fieldExpDate:          "1230",
+		fieldStatus:           statusCompleted,
+		fieldSuccess:          true,
+		fieldNotificationType: notificationTypeAddCard,
 	}
 
 	p := newTestProvider("")
@@ -187,26 +187,26 @@ func TestParseWebhookAddCard(t *testing.T) {
 	if event.MethodBound == nil {
 		t.Fatal("MethodBound missing")
 	}
-	if event.MethodBound.BindingID != "request-key-1" {
-		t.Errorf("BindingID: got %q, want %q", event.MethodBound.BindingID, "request-key-1")
+	if event.MethodBound.BindingID != testRequestKey {
+		t.Errorf("BindingID: got %q, want %q", event.MethodBound.BindingID, testRequestKey)
 	}
 	m := event.MethodBound.Method
-	if m.ProviderMethodID != "card-1" || m.ChargeToken != "rebill-1" ||
-		m.MaskedPan != "4300********1234" || m.ExpDate != "1230" || m.CustomerRef != "customer-1" {
+	if m.ProviderMethodID != testCardID || m.ChargeToken != testRebillID ||
+		m.MaskedPan != testMaskedPan || m.ExpDate != "1230" || m.CustomerRef != testCustomerRef {
 		t.Errorf("Method: got %+v", m)
 	}
 }
 
 func TestParseWebhookAddCardLegacyType(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"RequestKey":  "request-key-2",
-		"CardId":      "card-2",
-		"RebillId":    "rebill-2",
-		"Status":      "COMPLETED",
-		"Success":     true,
+		fieldTerminalKey: testTerminalKey,
+		fieldRequestKey:  "request-key-2",
+		fieldCardID:      "card-2",
+		fieldRebillID:    "rebill-2",
+		fieldStatus:      statusCompleted,
+		fieldSuccess:     true,
 		// Legacy notifications carry the bare "AddCard" type (ADR 0017).
-		"NotificationType": "AddCard",
+		fieldNotificationType: notificationTypeAddCardLegacy,
 	}
 
 	p := newTestProvider("")
@@ -224,12 +224,12 @@ func TestParseWebhookAddCardLegacyType(t *testing.T) {
 // falls back to RequestKey presence (ADR 0017).
 func TestParseWebhookAddCardWithoutNotificationType(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"RequestKey":  "request-key-3",
-		"CardId":      "card-3",
-		"RebillId":    "rebill-3",
-		"Status":      "COMPLETED",
-		"Success":     true,
+		fieldTerminalKey: testTerminalKey,
+		fieldRequestKey:  "request-key-3",
+		fieldCardID:      "card-3",
+		fieldRebillID:    "rebill-3",
+		fieldStatus:      statusCompleted,
+		fieldSuccess:     true,
 	}
 
 	p := newTestProvider("")
@@ -244,12 +244,12 @@ func TestParseWebhookAddCardWithoutNotificationType(t *testing.T) {
 
 func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey":      testTerminalKey,
-		"RequestKey":       "request-key-4",
-		"CardId":           "card-4",
-		"Status":           "REJECTED",
-		"Success":          false,
-		"NotificationType": "NotificationAddCard",
+		fieldTerminalKey:      testTerminalKey,
+		fieldRequestKey:       "request-key-4",
+		fieldCardID:           "card-4",
+		fieldStatus:           statusRejected,
+		fieldSuccess:          false,
+		fieldNotificationType: notificationTypeAddCard,
 	}
 
 	p := newTestProvider("")
@@ -264,9 +264,9 @@ func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
 
 func TestParseWebhookUnknownNotificationType(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey":      testTerminalKey,
-		"NotificationType": "NotificationSomethingElse",
-		"Status":           "CONFIRMED",
+		fieldTerminalKey:      testTerminalKey,
+		fieldNotificationType: "NotificationSomethingElse",
+		fieldStatus:           statusConfirmed,
 	}
 
 	p := newTestProvider("")
@@ -281,10 +281,10 @@ func TestParseWebhookUnknownNotificationType(t *testing.T) {
 
 func TestParseWebhookInvalidOrderID(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"OrderId":     "not-a-uuid",
-		"Status":      "CONFIRMED",
-		"Success":     true,
+		fieldTerminalKey: testTerminalKey,
+		fieldOrderID:     "not-a-uuid",
+		fieldStatus:      statusConfirmed,
+		fieldSuccess:     true,
 	}
 
 	p := newTestProvider("")
@@ -299,9 +299,9 @@ func TestParseWebhookInvalidOrderID(t *testing.T) {
 
 func TestVerifyWebhookTokenMissing(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"OrderId":     "11111111-1111-1111-1111-111111111111",
-		"Status":      "CONFIRMED",
+		fieldTerminalKey: testTerminalKey,
+		fieldOrderID:     testPaymentUUID,
+		fieldStatus:      statusConfirmed,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -320,11 +320,11 @@ func TestVerifyWebhookTokenMissing(t *testing.T) {
 
 func TestVerifyWebhookTokenInvalid(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey": testTerminalKey,
-		"OrderId":     "11111111-1111-1111-1111-111111111111",
-		"Status":      "CONFIRMED",
-		"Success":     true,
-		"PaymentId":   json.Number("12345"),
+		fieldTerminalKey: testTerminalKey,
+		fieldOrderID:     testPaymentUUID,
+		fieldStatus:      statusConfirmed,
+		fieldSuccess:     true,
+		fieldPaymentID:   json.Number("12345"),
 	}
 	payload["Token"] = "invalid"
 	body, err := json.Marshal(payload)
@@ -344,10 +344,10 @@ func TestVerifyWebhookTokenInvalid(t *testing.T) {
 
 func TestParseWebhookTerminalKeyMismatch(t *testing.T) {
 	payload := map[string]any{
-		"TerminalKey": "anotherTerminal",
-		"OrderId":     "11111111-1111-1111-1111-111111111111",
-		"Status":      "CONFIRMED",
-		"Success":     true,
+		fieldTerminalKey: "anotherTerminal",
+		fieldOrderID:     testPaymentUUID,
+		fieldStatus:      statusConfirmed,
+		fieldSuccess:     true,
 	}
 
 	p := newTestProvider("")
@@ -367,12 +367,12 @@ func TestGetAmount(t *testing.T) {
 		want    int64
 		wantErr bool
 	}{
-		{"number", map[string]any{"Amount": json.Number("10000")}, 10000, false},
-		{"float-ish number", map[string]any{"Amount": json.Number("10000")}, 10000, false},
-		{"string digits", map[string]any{"Amount": "10000"}, 10000, false},
+		{"number", map[string]any{fieldAmount: json.Number("10000")}, 10000, false},
+		{"float-ish number", map[string]any{fieldAmount: json.Number("10000")}, 10000, false},
+		{"string digits", map[string]any{fieldAmount: "10000"}, 10000, false},
 		{"missing", map[string]any{}, 0, false},
-		{"empty string", map[string]any{"Amount": ""}, 0, false},
-		{"garbage", map[string]any{"Amount": "abc"}, 0, true},
+		{"empty string", map[string]any{fieldAmount: ""}, 0, false},
+		{"garbage", map[string]any{fieldAmount: "abc"}, 0, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

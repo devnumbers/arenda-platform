@@ -12,6 +12,12 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
+// Shared fixtures of the payment-method tests.
+const (
+	testMaskedPan   = "4111********1111"
+	testChargeToken = "token_1"
+)
+
 // stubMethodProvider is a configurable provider for the payment-method tests:
 // it satisfies the consumer-side provider slices of PaymentMethodService and
 // PaymentService — including the fake card-binding confirmation hook — with
@@ -30,7 +36,7 @@ type stubMethodProvider struct {
 	removeCalls int
 	removeErr   error
 
-	// startedBindings records the request keys BindPaymentMethod handed out,
+	// StartedBindings records the request keys BindPaymentMethod handed out,
 	// so ConfirmCardBinding can distinguish started from unknown bindings.
 	startedBindings map[string]bool
 
@@ -41,7 +47,7 @@ func newStubMethodProvider() *stubMethodProvider {
 	return &stubMethodProvider{startedBindings: make(map[string]bool)}
 }
 
-func (p *stubMethodProvider) Name() domain.PaymentProvider { return "fake" }
+func (p *stubMethodProvider) Name() domain.PaymentProvider { return testProviderFake }
 
 func (p *stubMethodProvider) BindPaymentMethod(_ context.Context, _ BindMethodRequest) (BindMethodResult, error) {
 	p.mu.Lock()
@@ -79,7 +85,7 @@ func (p *stubMethodProvider) AddPaymentMethodFromToken(_ context.Context, custom
 	return SavedMethod{
 		ProviderMethodID: "card_from_token",
 		ChargeToken:      token,
-		MaskedPan:        "4111********1111",
+		MaskedPan:        testMaskedPan,
 		ExpDate:          "1230",
 		CustomerRef:      customerRef,
 	}, nil
@@ -177,7 +183,7 @@ func (h *methodHarness) openSession(t *testing.T, userID uuid.UUID) domain.CardB
 	if result.ConfirmURL == "" || result.PaymentMethod != nil {
 		t.Fatalf("AddPaymentMethod result = %+v, want confirm url only", result)
 	}
-	session, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", "req_"+userID.String())
+	session, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, "req_"+userID.String())
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
 	}
@@ -192,7 +198,7 @@ func (h *methodHarness) methodBoundEvent(bindingID string) *MethodBoundNotificat
 		Method: SavedMethod{
 			ProviderMethodID: "card_" + bindingID,
 			ChargeToken:      "token_" + bindingID,
-			MaskedPan:        "4111********1111",
+			MaskedPan:        testMaskedPan,
 			ExpDate:          "1230",
 			CustomerRef:      "ignored",
 		},
@@ -276,7 +282,9 @@ func (p bankFormStubProvider) PaymentMethodBinding(ctx context.Context, bindingI
 	return p.stub.PaymentMethodBinding(ctx, bindingID)
 }
 
-func (p bankFormStubProvider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (PaymentStatusResult, error) {
+func (p bankFormStubProvider) PaymentStatus(
+	ctx context.Context, paymentID uuid.UUID, providerPaymentID string,
+) (PaymentStatusResult, error) {
 	return p.stub.PaymentStatus(ctx, paymentID, providerPaymentID)
 }
 
@@ -349,7 +357,7 @@ func TestAddPaymentMethod_BindingStartsSessionWithTTL(t *testing.T) {
 
 	session := h.openSession(t, userID)
 
-	if session.UserID != userID || session.Provider != "fake" {
+	if session.UserID != userID || session.Provider != testProviderFake {
 		t.Errorf("session = user %v provider %q, want the caller's", session.UserID, session.Provider)
 	}
 	if session.Status != domain.CardBindingNew {
@@ -387,7 +395,7 @@ func TestWebhook_MethodBoundCreatesActivatesAndLinks(t *testing.T) {
 	session := h.openSession(t, userID)
 	n := h.methodBoundEvent(session.RequestKey)
 
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v", err)
 	}
 
@@ -405,7 +413,7 @@ func TestWebhook_MethodBoundCreatesActivatesAndLinks(t *testing.T) {
 	if stored.ActivePaymentMethodID == nil || *stored.ActivePaymentMethodID != active.ID {
 		t.Fatalf("subscription active method = %v, want %v", stored.ActivePaymentMethodID, active.ID)
 	}
-	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", session.RequestKey)
+	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, session.RequestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
 	}
@@ -427,7 +435,7 @@ func TestWebhook_MethodBoundRedeliveryIsIdempotent(t *testing.T) {
 	h.methodBoundEvent(session.RequestKey)
 
 	for range 2 {
-		if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+		if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 			t.Fatalf("HandleWebhook() error = %v", err)
 		}
 	}
@@ -439,7 +447,7 @@ func TestWebhook_MethodBoundRedeliveryIsIdempotent(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("methods after redelivery = %d, want 1", len(list))
 	}
-	h.activeMethod(t, userID) // asserts exactly one active
+	h.activeMethod(t, userID) // Asserts exactly one active.
 	if entries := h.audit.recorded(); len(entries) != 1 {
 		t.Fatalf("audit entries = %d, want 1 (no duplicate on redelivery)", len(entries))
 	}
@@ -461,7 +469,7 @@ func TestWebhook_MethodBoundExpiredSessionCreatesNoCard(t *testing.T) {
 	}
 	h.methodBoundEvent(session.RequestKey)
 
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v (expired sessions answer processed)", err)
 	}
 
@@ -472,7 +480,7 @@ func TestWebhook_MethodBoundExpiredSessionCreatesNoCard(t *testing.T) {
 	if len(methods) != 0 {
 		t.Fatalf("methods = %d, want 0 from an expired session", len(methods))
 	}
-	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", session.RequestKey)
+	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, session.RequestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
 	}
@@ -489,7 +497,7 @@ func TestWebhook_MethodBoundUnknownRequestKeyIsProcessedNoop(t *testing.T) {
 	userID, _ := h.seedMethodSubscription(t)
 	h.methodBoundEvent("req_never_initiated")
 
-	if err := h.payments.HandleWebhook(t.Context(), "fake", []byte(`{}`)); err != nil {
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
 		t.Fatalf("HandleWebhook() error = %v, want processed no-op", err)
 	}
 
@@ -515,8 +523,8 @@ func TestSyncPaymentMethods_CompletesOpenBinding(t *testing.T) {
 		Status: MethodBindingCompleted,
 		Method: &SavedMethod{
 			ProviderMethodID: "card_1",
-			ChargeToken:      "token_1",
-			MaskedPan:        "4111********1111",
+			ChargeToken:      testChargeToken,
+			MaskedPan:        testMaskedPan,
 		},
 	}
 
@@ -534,7 +542,7 @@ func TestSyncPaymentMethods_CompletesOpenBinding(t *testing.T) {
 	if stored.ActivePaymentMethodID == nil || *stored.ActivePaymentMethodID != methods[0].ID {
 		t.Fatalf("subscription active method = %v, want %v", stored.ActivePaymentMethodID, methods[0].ID)
 	}
-	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", session.RequestKey)
+	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, session.RequestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
 	}
@@ -556,7 +564,7 @@ func TestSyncPaymentMethods_RejectedBindingClosed(t *testing.T) {
 		t.Fatalf("SyncPaymentMethods() error = %v", err)
 	}
 
-	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", session.RequestKey)
+	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, session.RequestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
 	}
@@ -580,7 +588,7 @@ func TestSyncPaymentMethods_ExpiredSessionClosedWithoutPolling(t *testing.T) {
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	fresh := h.openSession(t, userID)
-	expired, err := domain.NewCardBindingSession(userID, "fake", "req_expired", h.now.Add(-time.Hour), h.now.Add(-time.Minute))
+	expired, err := domain.NewCardBindingSession(userID, testProviderFake, "req_expired", h.now.Add(-time.Hour), h.now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("NewCardBindingSession() error = %v", err)
 	}
@@ -599,14 +607,14 @@ func TestSyncPaymentMethods_ExpiredSessionClosedWithoutPolling(t *testing.T) {
 	if polls != 1 {
 		t.Fatalf("provider polls = %d, want 1 (only the fresh session)", polls)
 	}
-	closedExpired, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", "req_expired")
+	closedExpired, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, "req_expired")
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate(expired) error = %v", err)
 	}
 	if closedExpired.Status != domain.CardBindingRejected {
 		t.Errorf("expired session status = %q, want rejected", closedExpired.Status)
 	}
-	openFresh, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", fresh.RequestKey)
+	openFresh, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, fresh.RequestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate(fresh) error = %v", err)
 	}
@@ -629,7 +637,7 @@ func TestSyncPaymentMethods_UnknownRequestKeyClosesSession(t *testing.T) {
 		t.Fatalf("SyncPaymentMethods() error = %v", err)
 	}
 
-	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", session.RequestKey)
+	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, session.RequestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
 	}
@@ -651,7 +659,7 @@ func TestSyncPaymentMethods_TransientPollErrorKeepsSessionOpen(t *testing.T) {
 		t.Fatalf("SyncPaymentMethods() error = %v (a poll failure must not fail the sync)", err)
 	}
 
-	open, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), "fake", session.RequestKey)
+	open, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, session.RequestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
 	}
@@ -753,7 +761,7 @@ func TestDeletePaymentMethod_RejectsActiveUntilAnotherActivated(t *testing.T) {
 	if err := h.methods.ActivatePaymentMethod(t.Context(), userID, first.PaymentMethod.ID); err != nil {
 		t.Fatalf("ActivatePaymentMethod(first) error = %v", err)
 	}
-	// second is inactive now — deletable.
+	// Second is inactive now — deletable.
 	if err := h.methods.DeletePaymentMethod(t.Context(), userID, second.PaymentMethod.ID); err != nil {
 		t.Fatalf("DeletePaymentMethod(inactive) error = %v, want nil", err)
 	}
@@ -773,7 +781,7 @@ func TestDeletePaymentMethod_RejectsActiveUntilAnotherActivated(t *testing.T) {
 func TestDeletePaymentMethod_DetachesProviderCardBestEffort(t *testing.T) {
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
-	added, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{ProviderToken: "token_1"})
+	added, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{ProviderToken: testChargeToken})
 	if err != nil {
 		t.Fatalf("AddPaymentMethod() error = %v", err)
 	}
@@ -848,7 +856,7 @@ func TestAddPaymentMethod_DuplicateTokenConverges(t *testing.T) {
 func TestGetSubscription_IncludesActivePaymentMethod(t *testing.T) {
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
-	added, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{ProviderToken: "token_1"})
+	added, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{ProviderToken: testChargeToken})
 	if err != nil {
 		t.Fatalf("AddPaymentMethod() error = %v", err)
 	}

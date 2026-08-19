@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 )
 
@@ -49,11 +50,11 @@ func (e *ProviderError) ProviderErrorCode() string { return e.ErrorCode }
 // decline) and keeps payment.provider.errors comparable across providers.
 func metricStatus(err error) string {
 	if err == nil {
-		return "ok"
+		return payment.StatusOK
 	}
 	if errors.Is(err, application.ErrProviderAuthRejected) ||
 		errors.Is(err, application.ErrProviderInvalidOperation) {
-		return "error"
+		return payment.StatusError
 	}
 	var providerErr *ProviderError
 	if errors.As(err, &providerErr) ||
@@ -63,9 +64,9 @@ func metricStatus(err error) string {
 		errors.Is(err, application.ErrProviderChargeBlocked) ||
 		errors.Is(err, application.ErrProviderPaymentNotFound) ||
 		errors.Is(err, application.ErrProviderBindingNotFound) {
-		return "ok"
+		return payment.StatusOK
 	}
-	return "error"
+	return payment.StatusError
 }
 
 // isProviderErrorCode reports whether err carries a *ProviderError with one of

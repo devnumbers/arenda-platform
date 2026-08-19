@@ -25,7 +25,7 @@ func TestPaymentDescription(t *testing.T) {
 				TariffName: domain.TariffPro,
 				Period:     domain.PeriodMonth,
 			},
-			want: "Оплата подписки Pro (месяц)",
+			want: testProMonthDescription,
 		},
 		{
 			name: "subscription year",
@@ -52,7 +52,7 @@ func TestPaymentDescription(t *testing.T) {
 				TariffName: domain.TariffPro,
 				Period:     domain.PeriodMonth,
 			},
-			want: "Оплата подписки Pro (месяц)",
+			want: testProMonthDescription,
 		},
 	}
 	for _, tt := range tests {
@@ -69,7 +69,7 @@ func TestPaymentDescription(t *testing.T) {
 // §2.1). The limit is 140 characters for card and COF payments.
 func TestTruncateDescriptionRunes(t *testing.T) {
 	// Short strings pass through untouched.
-	short := "Оплата подписки Pro (месяц)"
+	short := testProMonthDescription
 	if got := truncateDescription(short); got != short {
 		t.Fatalf("short string modified: got %q, want %q", got, short)
 	}

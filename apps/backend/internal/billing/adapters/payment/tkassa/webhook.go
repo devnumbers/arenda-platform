@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	// webhookOK is the fixed acknowledgement body T-Kassa expects: HTTP 200
-	// with the plain text "OK" (uppercase, no tags).
+	// Fixed acknowledgement body T-Kassa expects: HTTP 200 with the plain
+	// text "OK" (uppercase, no tags).
 	webhookOK = "OK"
 
 	notificationTypeAddCard       = "NotificationAddCard"
@@ -39,17 +39,17 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		return application.WebhookEvent{}, err
 	}
 
-	if getString(data, "TerminalKey") != p.terminalKey {
+	if getString(data, fieldTerminalKey) != p.terminalKey {
 		return application.WebhookEvent{}, errors.New("tkassa: webhook terminal key mismatch")
 	}
 
-	notificationType := getString(data, "NotificationType")
+	notificationType := getString(data, fieldNotificationType)
 	// The official NotificationAddCard payload omits NotificationType and
 	// OrderId: discriminate by RequestKey (present on add-card notifications,
 	// absent on payment notifications) so it does not fall into the payment
 	// branch and fail OrderId parsing with a 500. Normalize the type so
 	// downstream handling is uniform.
-	if notificationType == "" && getString(data, "RequestKey") != "" && getString(data, "OrderId") == "" {
+	if notificationType == "" && getString(data, fieldRequestKey) != "" && getString(data, fieldOrderID) == "" {
 		notificationType = notificationTypeAddCard
 	}
 	switch notificationType {
@@ -59,7 +59,7 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		}
 		return application.WebhookEvent{
 			MethodBound: &application.MethodBoundNotification{
-				BindingID: getString(data, "RequestKey"),
+				BindingID: getString(data, fieldRequestKey),
 				Method:    savedMethodFromWebhook(data),
 			},
 		}, nil
@@ -71,14 +71,14 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		return application.WebhookEvent{}, fmt.Errorf("tkassa: unknown notification type %q", notificationType)
 	}
 
-	orderID := getString(data, "OrderId")
+	orderID := getString(data, fieldOrderID)
 	internalPaymentID, err := uuid.Parse(orderID)
 	if err != nil {
 		return application.WebhookEvent{}, fmt.Errorf("tkassa: parse OrderId %q: %w", orderID, err)
 	}
 
 	status := mapStatus(getString(data, "Status"))
-	errorCode := getString(data, "ErrorCode")
+	errorCode := getString(data, fieldErrorCode)
 	var errorCodePtr *string
 	if errorCode != "" && errorCode != "0" {
 		errorCodePtr = &errorCode
@@ -92,7 +92,7 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 	event := application.WebhookEvent{
 		Payment: &application.PaymentNotification{
 			InternalPaymentID: internalPaymentID,
-			ProviderPaymentID: getString(data, "PaymentId"),
+			ProviderPaymentID: getString(data, fieldPaymentID),
 			Status:            status,
 			ErrorCode:         errorCodePtr,
 			AmountKopecks:     amount,
@@ -102,7 +102,7 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 	// notifications (typically AUTHORIZED): surface it as the saved method so
 	// the application can store the charge token, exactly like a dedicated
 	// binding notification would.
-	if rebillID := getString(data, "RebillId"); rebillID != "" {
+	if rebillID := getString(data, fieldRebillID); rebillID != "" {
 		method := savedMethodFromWebhook(data)
 		event.Payment.SavedMethod = &method
 	}
@@ -113,10 +113,10 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 // payment and add-card notifications.
 func savedMethodFromWebhook(data map[string]any) application.SavedMethod {
 	return application.SavedMethod{
-		ProviderMethodID: getString(data, "CardId"),
-		ChargeToken:      getString(data, "RebillId"),
+		ProviderMethodID: getString(data, fieldCardID),
+		ChargeToken:      getString(data, fieldRebillID),
 		MaskedPan:        getString(data, "Pan"),
-		ExpDate:          getString(data, "ExpDate"),
+		ExpDate:          getString(data, fieldExpDate),
 		CustomerRef:      getString(data, "CustomerKey"),
 	}
 }
@@ -130,7 +130,7 @@ func getString(data map[string]any, key string) string {
 }
 
 func getAmount(data map[string]any) (int64, error) {
-	v, ok := data["Amount"]
+	v, ok := data[fieldAmount]
 	if !ok {
 		return 0, nil
 	}
@@ -151,6 +151,6 @@ func isAddCardSuccessful(data map[string]any) bool {
 	if status := getString(data, "Status"); status != statusCompleted {
 		return false
 	}
-	success, ok := data["Success"].(bool)
+	success, ok := data[fieldSuccess].(bool)
 	return ok && success
 }

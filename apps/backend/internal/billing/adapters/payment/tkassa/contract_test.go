@@ -35,10 +35,10 @@ func TestProviderInitPaymentContract(t *testing.T) {
 		{
 			name: "first_payment_save_method",
 			req: application.InitPaymentRequest{
-				PaymentID:     uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+				PaymentID:     uuid.MustParse(testPaymentUUID),
 				AmountKopecks: 10000,
 				Period:        domain.PeriodMonth,
-				CustomerRef:   "customer-1",
+				CustomerRef:   testCustomerRef,
 				Purpose: application.PaymentPurpose{
 					Kind:       application.PaymentPurposeSubscription,
 					TariffName: domain.TariffPro,
@@ -48,7 +48,7 @@ func TestProviderInitPaymentContract(t *testing.T) {
 				Initiator:    application.InitiatorCustomer,
 				FormDeadline: time.Date(2026, 7, 13, 15, 0, 0, 0, time.UTC),
 			},
-			wantOperationInitiator: spec.CommonOperationInitiatorTypeN1, // CIT CC per the spec
+			wantOperationInitiator: spec.CommonOperationInitiatorTypeN1, // CIT CC per the spec.
 			wantRecurrent:          true,
 		},
 		{
@@ -66,14 +66,14 @@ func TestProviderInitPaymentContract(t *testing.T) {
 				SaveMethod: false,
 				Initiator:  application.InitiatorMerchant,
 			},
-			wantOperationInitiator: spec.CommonOperationInitiatorTypeR, // MIT COF Recurring per the spec
+			wantOperationInitiator: spec.CommonOperationInitiatorTypeR, // MIT COF Recurring per the spec.
 			wantRecurrent:          false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			paymentURL := "https://securepayments.tinkoff.ru/rest/show/123456"
+			paymentURL := testPaymentURL
 			var captured []byte
 			var capturedMap map[string]any
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +89,7 @@ func TestProviderInitPaymentContract(t *testing.T) {
 					Amount:      tt.req.AmountKopecks,
 					OrderId:     tt.req.PaymentID.String(),
 					Success:     true,
-					Status:      "NEW",
+					Status:      statusNew,
 					PaymentId:   "123456",
 					ErrorCode:   "0",
 					PaymentURL:  &paymentURL,
@@ -257,13 +257,13 @@ func TestProviderChargePaymentContract(t *testing.T) {
 		// openapi.yaml (no generated type), so the JSON is built as a literal
 		// matching that schema and its example (/v2/Charge).
 		writeJSON(t, w, map[string]any{
-			"TerminalKey": testTerminalKey,
-			"Amount":      10000,
-			"OrderId":     paymentID.String(),
-			"Success":     true,
-			"Status":      "CONFIRMED",
-			"PaymentId":   "123",
-			"ErrorCode":   "0",
+			fieldTerminalKey: testTerminalKey,
+			"Amount":         10000,
+			fieldOrderID:     paymentID.String(),
+			fieldSuccess:     true,
+			fieldStatus:      statusConfirmed,
+			fieldPaymentID:   "123",
+			fieldErrorCode:   "0",
 		})
 	}))
 	defer server.Close()
@@ -273,7 +273,7 @@ func TestProviderChargePaymentContract(t *testing.T) {
 		PaymentID:         paymentID,
 		ProviderPaymentID: "123",
 		AmountKopecks:     10000,
-		ChargeToken:       "rebill-token",
+		ChargeToken:       testChargeToken,
 	})
 	if err != nil {
 		t.Fatalf("ChargePayment failed: %v", err)
@@ -308,8 +308,8 @@ func TestProviderChargePaymentContract(t *testing.T) {
 	if reqBody.PaymentId != "123" {
 		t.Errorf("PaymentId: got %q, want %q", reqBody.PaymentId, "123")
 	}
-	if reqBody.RebillId != "rebill-token" {
-		t.Errorf("RebillId: got %q, want %q", reqBody.RebillId, "rebill-token")
+	if reqBody.RebillId != testChargeToken {
+		t.Errorf("RebillId: got %q, want %q", reqBody.RebillId, testChargeToken)
 	}
 }
 
@@ -324,17 +324,17 @@ func TestProviderGetStateContract(t *testing.T) {
 		// openapi.yaml (no generated type), so the JSON is built as a literal
 		// matching that schema and its example (/v2/GetState).
 		writeJSON(t, w, map[string]any{
-			"Success":     true,
-			"ErrorCode":   "0",
-			"Message":     "OK",
-			"TerminalKey": testTerminalKey,
-			"Status":      "AUTHORIZED",
-			"PaymentId":   "999",
-			"OrderId":     "21050",
+			fieldSuccess:     true,
+			fieldErrorCode:   "0",
+			"Message":        "OK",
+			fieldTerminalKey: testTerminalKey,
+			fieldStatus:      statusAuthorized,
+			fieldPaymentID:   "999",
+			fieldOrderID:     "21050",
 			"Params": []map[string]any{
-				{"Key": "Route", "Value": "ACQ"},
-				{"Key": "Source", "Value": "cards"},
-				{"Key": "CreditAmount", "Value": "100000"},
+				{fieldKey: "Route", fieldValue: "ACQ"},
+				{fieldKey: "Source", fieldValue: "cards"},
+				{fieldKey: "CreditAmount", fieldValue: "100000"},
 			},
 			"Amount": 1230,
 		})
@@ -383,14 +383,14 @@ func TestProviderCancelContract(t *testing.T) {
 		// literal matching the Cancel 200 schema and its example in
 		// openapi.yaml (/v2/Cancel).
 		writeJSON(t, w, map[string]any{
-			"TerminalKey":       testTerminalKey,
-			"OrderId":           paymentID.String(),
-			"Success":           true,
-			"Status":            "REFUNDED",
+			fieldTerminalKey:    testTerminalKey,
+			fieldOrderID:        paymentID.String(),
+			fieldSuccess:        true,
+			fieldStatus:         statusRefunded,
 			"OriginalAmount":    10000,
 			"NewAmount":         0,
-			"PaymentId":         providerPaymentID,
-			"ErrorCode":         "0",
+			fieldPaymentID:      providerPaymentID,
+			fieldErrorCode:      "0",
 			"Message":           "OK",
 			"Details":           "None",
 			"ExternalRequestId": "756478567845678436",
@@ -443,26 +443,26 @@ func TestProviderAddCustomerAddCardContract(t *testing.T) {
 	var addCardCapturedMap map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v2/AddCustomer":
+		case "/v2/" + methodAddCustomer:
 			addCustomerCaptured, _ = captureRequest(t, r)
 			// Response fixture from the spec: generated
 			// spec.AddCustomerResponse, shaped after the /v2/AddCustomer
 			// example in openapi.yaml.
 			writeJSON(t, w, spec.AddCustomerResponse{
 				TerminalKey: testTerminalKey,
-				CustomerKey: "customer-1",
+				CustomerKey: testCustomerRef,
 				Success:     true,
 				ErrorCode:   "0",
 			})
-		case "/v2/AddCard":
+		case "/v2/" + methodAddCard:
 			_, addCardCapturedMap = captureRequest(t, r, addCardExtraFieldsAllowlist...)
 			writeJSON(t, w, spec.AddCardResponse{
 				TerminalKey: testTerminalKey,
-				CustomerKey: "customer-1",
-				RequestKey:  "request-key-1",
+				CustomerKey: testCustomerRef,
+				RequestKey:  testRequestKey,
 				Success:     true,
 				ErrorCode:   "0",
-				PaymentURL:  "https://securepayments.tinkoff.ru/rest/addcard/abc",
+				PaymentURL:  testAddCardURL,
 			})
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -472,16 +472,16 @@ func TestProviderAddCustomerAddCardContract(t *testing.T) {
 
 	p := newTestProvider(server.URL)
 	result, err := p.BindPaymentMethod(context.Background(), application.BindMethodRequest{
-		CustomerRef: "customer-1",
+		CustomerRef: testCustomerRef,
 	})
 	if err != nil {
 		t.Fatalf("BindPaymentMethod failed: %v", err)
 	}
-	if result.FormURL != "https://securepayments.tinkoff.ru/rest/addcard/abc" {
+	if result.FormURL != testAddCardURL {
 		t.Errorf("FormURL: got %q", result.FormURL)
 	}
-	if result.BindingID != "request-key-1" {
-		t.Errorf("BindingID: got %q, want %q", result.BindingID, "request-key-1")
+	if result.BindingID != testRequestKey {
+		t.Errorf("BindingID: got %q, want %q", result.BindingID, testRequestKey)
 	}
 
 	var addCustomerBody spec.AddCustomerRequest
@@ -492,19 +492,19 @@ func TestProviderAddCustomerAddCardContract(t *testing.T) {
 	if addCustomerBody.Token == "" {
 		t.Errorf("AddCustomer Token is empty")
 	}
-	if addCustomerBody.CustomerKey != "customer-1" {
-		t.Errorf("AddCustomer CustomerKey: got %q, want %q", addCustomerBody.CustomerKey, "customer-1")
+	if addCustomerBody.CustomerKey != testCustomerRef {
+		t.Errorf("AddCustomer CustomerKey: got %q, want %q", addCustomerBody.CustomerKey, testCustomerRef)
 	}
 
 	// The AddCard extras are outside the spec schema (undocumented per-request
 	// redirect/notification URLs, ADR 0017): assert them at map level, strip
 	// them, then strict-decode the remaining body into spec.AddCardRequest.
 	wantExtras := map[string]string{
-		"RedirectUrl":       testAppBaseURL + bindingReturnSuccessPath,
-		"FailRedirectUrl":   testAppBaseURL + bindingReturnFailPath,
-		"SuccessAddCardURL": testAppBaseURL + bindingReturnSuccessPath,
-		"FailAddCardURL":    testAppBaseURL + bindingReturnFailPath,
-		"NotificationURL":   testAppBaseURL + notificationPath,
+		fieldRedirectURL:       testAppBaseURL + bindingReturnSuccessPath,
+		fieldFailRedirectURL:   testAppBaseURL + bindingReturnFailPath,
+		fieldSuccessAddCardURL: testAppBaseURL + bindingReturnSuccessPath,
+		fieldFailAddCardURL:    testAppBaseURL + bindingReturnFailPath,
+		fieldNotificationURL:   testAppBaseURL + notificationPath,
 	}
 	for field, want := range wantExtras {
 		if got := addCardCapturedMap[field]; got != want {
@@ -527,8 +527,8 @@ func TestProviderAddCustomerAddCardContract(t *testing.T) {
 	if addCardBody.Token == "" {
 		t.Errorf("AddCard Token is empty")
 	}
-	if addCardBody.CustomerKey != "customer-1" {
-		t.Errorf("AddCard CustomerKey: got %q, want %q", addCardBody.CustomerKey, "customer-1")
+	if addCardBody.CustomerKey != testCustomerRef {
+		t.Errorf("AddCard CustomerKey: got %q, want %q", addCardBody.CustomerKey, testCustomerRef)
 	}
 	if addCardBody.CheckType == nil || *addCardBody.CheckType != spec.N3DSHOLD {
 		t.Errorf("AddCard CheckType: got %v, want %v", addCardBody.CheckType, spec.N3DSHOLD)
@@ -544,8 +544,8 @@ func TestProviderRemoveCardContract(t *testing.T) {
 		captured, _ = captureRequest(t, r)
 		writeJSON(t, w, spec.RemoveCardResponse{
 			TerminalKey: testTerminalKey,
-			CustomerKey: "customer-1",
-			CardId:      "card-1",
+			CustomerKey: testCustomerRef,
+			CardId:      testCardID,
 			Success:     true,
 			ErrorCode:   "0",
 		})
@@ -553,7 +553,7 @@ func TestProviderRemoveCardContract(t *testing.T) {
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	if err := p.RemovePaymentMethod(context.Background(), "customer-1", "card-1"); err != nil {
+	if err := p.RemovePaymentMethod(context.Background(), testCustomerRef, testCardID); err != nil {
 		t.Fatalf("RemovePaymentMethod failed: %v", err)
 	}
 
@@ -565,11 +565,11 @@ func TestProviderRemoveCardContract(t *testing.T) {
 	if reqBody.Token == "" {
 		t.Errorf("Token is empty")
 	}
-	if reqBody.CustomerKey != "customer-1" {
-		t.Errorf("CustomerKey: got %q, want %q", reqBody.CustomerKey, "customer-1")
+	if reqBody.CustomerKey != testCustomerRef {
+		t.Errorf("CustomerKey: got %q, want %q", reqBody.CustomerKey, testCustomerRef)
 	}
-	if reqBody.CardId != "card-1" {
-		t.Errorf("CardId: got %q, want %q", reqBody.CardId, "card-1")
+	if reqBody.CardId != testCardID {
+		t.Errorf("CardId: got %q, want %q", reqBody.CardId, testCardID)
 	}
 }
 
@@ -584,19 +584,19 @@ func TestProviderGetCardListContract(t *testing.T) {
 		// array of cards (oneOf[array, ErrorResponse] in 1.27).
 		writeJSON(t, w, []map[string]any{
 			{
-				"Pan":       "4300********1234",
-				"ExpDate":   "1230",
-				"CardId":    "card-1",
-				"RebillId":  "rebill-1",
-				"Status":    "A",
-				"IsDefault": false,
+				fieldPan:     testMaskedPan,
+				fieldExpDate: "1230",
+				"CardId":     testCardID,
+				"RebillId":   testRebillID,
+				fieldStatus:  "A",
+				"IsDefault":  false,
 			},
 		})
 	}))
 	defer server.Close()
 
 	p := newTestProvider(server.URL)
-	methods, err := p.ListPaymentMethods(context.Background(), "customer-1")
+	methods, err := p.ListPaymentMethods(context.Background(), testCustomerRef)
 	if err != nil {
 		t.Fatalf("ListPaymentMethods failed: %v", err)
 	}
@@ -615,8 +615,8 @@ func TestProviderGetCardListContract(t *testing.T) {
 	if reqBody.Token == "" {
 		t.Errorf("Token is empty")
 	}
-	if reqBody.CustomerKey != "customer-1" {
-		t.Errorf("CustomerKey: got %q, want %q", reqBody.CustomerKey, "customer-1")
+	if reqBody.CustomerKey != testCustomerRef {
+		t.Errorf("CustomerKey: got %q, want %q", reqBody.CustomerKey, testCustomerRef)
 	}
 }
 
@@ -631,9 +631,9 @@ func TestProviderGetAddCardStateContract(t *testing.T) {
 		// spec.GetAddCardStateResponse, shaped after the /v2/GetAddCardState
 		// example in openapi.yaml.
 		errorCode := "0"
-		cardID := "card-1"
-		rebillID := "rebill-1"
-		customerKey := "customer-1"
+		cardID := testCardID
+		rebillID := testRebillID
+		customerKey := testCustomerRef
 		writeJSON(t, w, spec.GetAddCardStateResponse{
 			TerminalKey: testTerminalKey,
 			CustomerKey: &customerKey,
@@ -655,7 +655,7 @@ func TestProviderGetAddCardStateContract(t *testing.T) {
 	if state.Status != application.MethodBindingCompleted {
 		t.Errorf("Status: got %q, want %q", state.Status, application.MethodBindingCompleted)
 	}
-	if state.Method == nil || state.Method.ProviderMethodID != "card-1" || state.Method.ChargeToken != "rebill-1" {
+	if state.Method == nil || state.Method.ProviderMethodID != testCardID || state.Method.ChargeToken != testRebillID {
 		t.Errorf("Method: got %+v", state.Method)
 	}
 
@@ -697,7 +697,7 @@ func TestClassifyProviderError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := classifyProviderError(&ProviderError{Method: "Charge", ErrorCode: tt.code})
+			err := classifyProviderError(&ProviderError{Method: methodCharge, ErrorCode: tt.code})
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("classify code %s: got %v, want %v", tt.code, err, tt.want)
 			}
@@ -705,7 +705,7 @@ func TestClassifyProviderError(t *testing.T) {
 	}
 
 	t.Run("unknown code returns unchanged", func(t *testing.T) {
-		providerErr := &ProviderError{Method: "Charge", ErrorCode: "9999"}
+		providerErr := &ProviderError{Method: methodCharge, ErrorCode: "9999"}
 		if got := classifyProviderError(providerErr); !errors.Is(got, providerErr) || got.Error() != providerErr.Error() {
 			t.Fatalf("expected unchanged error, got %v", got)
 		}

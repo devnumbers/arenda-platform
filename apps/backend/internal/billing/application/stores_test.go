@@ -332,11 +332,11 @@ func (r *fakeTransitionRepo) WithTx(transaction.Tx) (SubscriptionTransitionRepos
 type fakePaymentRepo struct {
 	mu       sync.Mutex
 	payments map[uuid.UUID]domain.SubscriptionPayment
-	// hidePending, when positive, makes ListPendingByUserID return empty and
+	// HidePending, when positive, makes ListPendingByUserID return empty and
 	// decrements, simulating a lookup that misses right before a concurrent
 	// writer creates the conflicting pending payment.
 	hidePending int
-	// tariffOfSubscription resolves the user's current subscription tariff for
+	// TariffOfSubscription resolves the user's current subscription tariff for
 	// the tariff-change narrowing of the payment selection; fakeStores wires it
 	// to the subscription fake.
 	tariffOfSubscription func(userID uuid.UUID) (uuid.UUID, bool)
@@ -592,7 +592,9 @@ func (r *fakeBindingRepo) Create(_ context.Context, session domain.CardBindingSe
 	return session, nil
 }
 
-func (r *fakeBindingRepo) GetByRequestKeyForUpdate(_ context.Context, provider domain.PaymentProvider, requestKey string) (domain.CardBindingSession, error) {
+func (r *fakeBindingRepo) GetByRequestKeyForUpdate(
+	_ context.Context, provider domain.PaymentProvider, requestKey string,
+) (domain.CardBindingSession, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, session := range r.sessions {
@@ -681,10 +683,11 @@ func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
 	}
 }
 
-// factory builds a txStoreFactory from the fakes plus a fakeUoW. audit defaults
+// Factory builds a txStoreFactory from the fakes plus a fakeUoW. Audit defaults
 // to nil (NewTxStoreFactory substitutes Noop).
 func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
-	return NewTxStoreFactory(s.tariffs, s.subscriptions, s.transitions, s.payments, s.methods, s.bindings, audit, &fakeUoW{beginner: s.beginner})
+	return NewTxStoreFactory(s.tariffs, s.subscriptions, s.transitions, s.payments,
+		s.methods, s.bindings, audit, &fakeUoW{beginner: s.beginner})
 }
 
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds every
@@ -756,7 +759,7 @@ func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
 		tariffs:       newFakeTariffRepo(),
 		subscriptions: newFakeSubscriptionRepo(),
 		transitions:   newFakeTransitionRepo(),
-		// uow intentionally nil
+		// The uow is intentionally nil.
 	}
 	err := f.runInTx(t.Context(), func(*txStores) error { return nil })
 	if err == nil {

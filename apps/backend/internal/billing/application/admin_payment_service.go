@@ -87,7 +87,7 @@ func (s *PaymentService) RefundPayment(ctx context.Context, adminID, paymentID u
 			return s.resolveDuplicateRefund(ctx, paymentID, reservation.prevStatus, adminID)
 		}
 		s.log.ErrorContext(ctx, "provider refund failed",
-			slog.String("payment_id", paymentID.String()),
+			slog.String(auditKeyPaymentID, paymentID.String()),
 			slog.String("error", sanitize.Error(err)))
 		s.revertRefundReservationBestEffort(ctx, paymentID, reservation.prevStatus)
 		return fmt.Errorf("provider refund: %w", err)
@@ -102,7 +102,7 @@ func (s *PaymentService) RefundPayment(ctx context.Context, adminID, paymentID u
 			// that did not happen (the reconciliation worker still resolves
 			// the payment from the provider status later).
 			s.log.WarnContext(ctx, "provider refunded less than the full amount; keeping the reservation for review",
-				slog.String("payment_id", paymentID.String()),
+				slog.String(auditKeyPaymentID, paymentID.String()),
 				slog.Int64("requested_amount_kopecks", reservation.amountKopecks),
 				slog.Int64("refunded_amount_kopecks", result.RefundedAmountKopecks))
 			return nil
@@ -115,12 +115,12 @@ func (s *PaymentService) RefundPayment(ctx context.Context, adminID, paymentID u
 		// the reconciliation worker finalizes or reverts from the provider
 		// state once it settles.
 		s.log.InfoContext(ctx, "provider accepted the refund; waiting for settlement",
-			slog.String("payment_id", paymentID.String()))
+			slog.String(auditKeyPaymentID, paymentID.String()))
 		return nil
 
 	default:
 		s.log.ErrorContext(ctx, "provider refund returned a non-refund status",
-			slog.String("payment_id", paymentID.String()),
+			slog.String(auditKeyPaymentID, paymentID.String()),
 			slog.String("provider_status", string(result.Status)))
 		s.revertRefundReservationBestEffort(ctx, paymentID, reservation.prevStatus)
 		return fmt.Errorf("%w: provider refund returned status %q", domain.ErrInvalidPaymentStatus, result.Status)
@@ -204,7 +204,7 @@ func (s *PaymentService) revertRefundReservation(ctx context.Context, paymentID 
 func (s *PaymentService) revertRefundReservationBestEffort(ctx context.Context, paymentID uuid.UUID, prev domain.PaymentStatus) {
 	if err := s.revertRefundReservation(ctx, paymentID, prev); err != nil {
 		s.log.ErrorContext(ctx, "failed to revert the refund reservation; leaving it to the reconciliation worker",
-			slog.String("payment_id", paymentID.String()),
+			slog.String(auditKeyPaymentID, paymentID.String()),
 			slog.String("prev_status", string(prev)),
 			slog.String("error", sanitize.Error(err)))
 	}
@@ -216,7 +216,9 @@ func (s *PaymentService) revertRefundReservationBestEffort(ctx context.Context, 
 // refund attributed to the admin whose request reached the provider, a
 // still-captured charge reverts the reservation to the payment's previous
 // status, anything else keeps the reservation for the reconciliation worker.
-func (s *PaymentService) resolveDuplicateRefund(ctx context.Context, paymentID uuid.UUID, prev domain.PaymentStatus, adminID uuid.UUID) error {
+func (s *PaymentService) resolveDuplicateRefund(
+	ctx context.Context, paymentID uuid.UUID, prev domain.PaymentStatus, adminID uuid.UUID,
+) error {
 	status, err := s.providerStatus(ctx, paymentID)
 	if err != nil {
 		return fmt.Errorf("provider status after duplicate refund: %w", err)
@@ -246,7 +248,7 @@ func (s *PaymentService) finalizeRefund(ctx context.Context, paymentID uuid.UUID
 		}
 		switch payment.Status {
 		case domain.PaymentStatusRefunded:
-			return nil // another flow finalized first
+			return nil // Another flow finalized first.
 		case domain.PaymentStatusRefunding, domain.PaymentStatusSucceeded, domain.PaymentStatusPending:
 			// The reservation of this saga, or a state a concurrent flow
 			// restored it to — both finalize from the provider-confirmed
@@ -265,7 +267,9 @@ func (s *PaymentService) finalizeRefund(ctx context.Context, paymentID uuid.UUID
 // enforced, the transition log records the downgrade with the refund reason
 // and the audit log records the refunded payment — both with the actor's
 // attribution (issue #254).
-func (s *PaymentService) applyRefundedPayment(ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, actor refundActor) error {
+func (s *PaymentService) applyRefundedPayment(
+	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, actor refundActor,
+) error {
 	if err := payment.MarkRefunded(now); err != nil {
 		return err
 	}
@@ -306,7 +310,10 @@ func (s *PaymentService) applyRefundedPayment(ctx context.Context, stores *txSto
 		Action:     auditdomain.ActionSubscriptionPaymentRefunded,
 		EntityType: auditdomain.EntitySubscriptionPayment,
 		EntityID:   &payment.ID,
-		Context:    map[string]any{"payment_id": payment.ID, "provider": string(s.provider.Name()), "amount_kopecks": payment.AmountKopecks},
+		Context: map[string]any{
+			auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name()),
+			auditKeyAmountKopecks: payment.AmountKopecks,
+		},
 	}); err != nil {
 		return fmt.Errorf("record audit: %w", err)
 	}
@@ -322,7 +329,9 @@ func (s *PaymentService) applyRefundedPayment(ctx context.Context, stores *txSto
 // payment's previous status (a pending one re-enters the pending-payment
 // reconciliation). It reports whether the reservation was actually resolved;
 // everything else waits for the provider to settle.
-func (s *PaymentService) ResolveRefundingFromStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) (bool, error) {
+func (s *PaymentService) ResolveRefundingFromStatus(
+	ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult,
+) (bool, error) {
 	switch status.Status {
 	case domain.PaymentStatusRefunded:
 		return true, s.finalizeRefund(ctx, payment.ID, systemRefundActor())
@@ -332,7 +341,7 @@ func (s *PaymentService) ResolveRefundingFromStatus(ctx context.Context, payment
 			return false, err
 		}
 		s.log.InfoContext(ctx, "stuck refund reverted; the charge is still captured at the provider",
-			slog.String("payment_id", payment.ID.String()),
+			slog.String(auditKeyPaymentID, payment.ID.String()),
 			slog.String("restored_status", string(prev)))
 		return true, nil
 	default:
@@ -406,8 +415,8 @@ func (s *PaymentService) SyncPayment(ctx context.Context, adminID, paymentID uui
 			EntityType: auditdomain.EntitySubscriptionPayment,
 			EntityID:   &payment.ID,
 			Context: map[string]any{
-				"payment_id":      payment.ID,
-				"provider":        string(s.provider.Name()),
+				auditKeyPaymentID: payment.ID,
+				auditKeyProvider:  string(s.provider.Name()),
 				"provider_status": string(providerStatus),
 				"local_status":    string(payment.Status),
 			},
@@ -467,7 +476,8 @@ func normalizeAdminPaymentFilters(filters AdminPaymentFilters) (AdminPaymentFilt
 
 	sort := strings.TrimSpace(filters.Sort)
 	if sort != "" && !slices.Contains(adminPaymentSortFields, sort) {
-		return filters, fmt.Errorf("%w: unsupported sort field %q (allowed: %s)", ErrInvalidFilter, sort, strings.Join(adminPaymentSortFields, ", "))
+		return filters, fmt.Errorf("%w: unsupported sort field %q (allowed: %s)",
+			ErrInvalidFilter, sort, strings.Join(adminPaymentSortFields, ", "))
 	}
 	filters.Sort = sort
 	order := strings.TrimSpace(filters.Order)
@@ -513,7 +523,9 @@ func validAdminPaymentStatus(status string) bool {
 
 // ListAdminPayments returns the cross-user payment listing for the admin
 // screen with the total count of the filtered set (issue #254).
-func (s *PaymentService) ListAdminPayments(ctx context.Context, filters AdminPaymentFilters) ([]AdminSubscriptionPaymentView, int64, error) {
+func (s *PaymentService) ListAdminPayments(
+	ctx context.Context, filters AdminPaymentFilters,
+) ([]AdminSubscriptionPaymentView, int64, error) {
 	if s.adminPayments == nil {
 		return nil, 0, errors.New("admin payment listing is not wired")
 	}
@@ -560,7 +572,8 @@ func (s *PaymentService) GetAdminPayment(ctx context.Context, paymentID uuid.UUI
 	tariff, err := s.tariffs.GetByID(ctx, row.Payment.TariffID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return AdminSubscriptionPaymentView{}, fmt.Errorf("payment %s references unknown tariff %s: %w", row.Payment.ID, row.Payment.TariffID, ErrTariffNotFound)
+			return AdminSubscriptionPaymentView{}, fmt.Errorf(
+				"payment %s references unknown tariff %s: %w", row.Payment.ID, row.Payment.TariffID, ErrTariffNotFound)
 		}
 		return AdminSubscriptionPaymentView{}, fmt.Errorf("get payment tariff: %w", err)
 	}

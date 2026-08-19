@@ -157,7 +157,8 @@ func (h *refundHarness) assertRefundTransition(t *testing.T, subscriptionID uuid
 	if refundTransition == nil {
 		t.Fatalf("transitions contain no refunded entry: %+v", transitions)
 	}
-	if refundTransition.Initiator != domain.InitiatorAdmin || refundTransition.InitiatorID == nil || *refundTransition.InitiatorID != h.adminID {
+	if refundTransition.Initiator != domain.InitiatorAdmin || refundTransition.InitiatorID == nil ||
+		*refundTransition.InitiatorID != h.adminID {
 		t.Errorf("refund transition initiator = %q/%v, want the acting admin", refundTransition.Initiator, refundTransition.InitiatorID)
 	}
 	if refundTransition.PaymentID == nil || *refundTransition.PaymentID != payment.ID {
@@ -245,7 +246,9 @@ func TestRefundPayment_RejectedBeforeProviderCall(t *testing.T) {
 
 	t.Run("payment without a provider reference", func(t *testing.T) {
 		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness), domain.PeriodMonth, 99000, "fake", h.now)
+		payment, err := domain.NewSubscriptionPayment(
+			sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+			domain.PeriodMonth, 99000, testProviderFake, h.now)
 		if err != nil {
 			t.Fatalf("NewSubscriptionPayment() error = %v", err)
 		}
@@ -530,7 +533,9 @@ func TestSyncPayment(t *testing.T) {
 	t.Run("without a provider reference", func(t *testing.T) {
 		h := newRefundHarness(t)
 		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness), domain.PeriodMonth, 99000, "fake", h.now)
+		payment, err := domain.NewSubscriptionPayment(
+			sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+			domain.PeriodMonth, 99000, testProviderFake, h.now)
 		if err != nil {
 			t.Fatalf("NewSubscriptionPayment() error = %v", err)
 		}
@@ -560,7 +565,7 @@ func TestReconcileStaleRefunds(t *testing.T) {
 	seedStuckRefund := func(h *workersHarness, status domain.PaymentStatus) domain.SubscriptionPayment {
 		t.Helper()
 		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, 49000, "fake", h.now)
+		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, 49000, testProviderFake, h.now)
 		if err != nil {
 			t.Fatalf("NewSubscriptionPayment() error = %v", err)
 		}

@@ -52,7 +52,9 @@ type CardBindingSession struct {
 
 // NewCardBindingSession creates a fresh open binding session with the given
 // lifetime.
-func NewCardBindingSession(userID uuid.UUID, provider PaymentProvider, requestKey string, expiresAt, now time.Time) (CardBindingSession, error) {
+func NewCardBindingSession(
+	userID uuid.UUID, provider PaymentProvider, requestKey string, expiresAt, now time.Time,
+) (CardBindingSession, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return CardBindingSession{}, err

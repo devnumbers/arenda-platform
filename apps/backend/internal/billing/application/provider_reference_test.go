@@ -42,7 +42,9 @@ func (h *providerReferenceHarness) seedPendingPayment(t *testing.T, mutate func(
 			pro = tariff
 		}
 	}
-	payment, err := domain.NewSubscriptionPayment(uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), pro.ID, domain.PeriodMonth, pro.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
+	payment, err := domain.NewSubscriptionPayment(
+		uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), pro.ID,
+		domain.PeriodMonth, pro.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment() error = %v", err)
 	}
@@ -56,7 +58,9 @@ func (h *providerReferenceHarness) seedPendingPayment(t *testing.T, mutate func(
 }
 
 // save runs one saveProviderReference call through the harness factory.
-func (h *providerReferenceHarness) save(t *testing.T, paymentID uuid.UUID, initRes InitPaymentResult, now time.Time) (domain.SubscriptionPayment, error) {
+func (h *providerReferenceHarness) save(
+	t *testing.T, paymentID uuid.UUID, initRes InitPaymentResult, now time.Time,
+) (domain.SubscriptionPayment, error) {
 	t.Helper()
 	factory := h.stores.factory(nil)
 	return saveProviderReference(t.Context(), factory.runInTx, paymentID, initRes, now)
@@ -81,7 +85,7 @@ func TestSaveProviderReference_CITAndMITShapes(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		initRes InitPaymentResult
-		wantURL string // empty means the initiation carried no URL to persist
+		wantURL string // Empty means the initiation carried no URL to persist.
 	}{
 		{
 			name:    "cit persists reference and payer url",
@@ -136,7 +140,8 @@ func TestSaveProviderReference_SecondWriteKeepsFirstReference(t *testing.T) {
 		t.Fatalf("first saveProviderReference() error = %v", err)
 	}
 
-	saved, err := h.save(t, seeded.ID, InitPaymentResult{ProviderPaymentID: "prov_second", PaymentURL: "https://pay/second"}, h.now.Add(time.Hour))
+	saved, err := h.save(t, seeded.ID,
+		InitPaymentResult{ProviderPaymentID: "prov_second", PaymentURL: "https://pay/second"}, h.now.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("second saveProviderReference() error = %v", err)
 	}
@@ -171,7 +176,8 @@ func TestSaveProviderReference_FinalizedPaymentWins(t *testing.T) {
 		t.Fatalf("saveProviderReference() error = %v", err)
 	}
 	if saved.Status != domain.PaymentStatusSucceeded || saved.HasProviderReference() {
-		t.Errorf("returned payment = %q/referenced %t, want the persisted succeeded without a reference", saved.Status, saved.HasProviderReference())
+		t.Errorf("returned payment = %q/referenced %t, want the persisted succeeded without a reference",
+			saved.Status, saved.HasProviderReference())
 	}
 	if stored := h.storedPayment(t, seeded.ID); stored.HasProviderReference() {
 		t.Errorf("stored payment got a reference over the final state: %v", stored.ProviderPaymentID)

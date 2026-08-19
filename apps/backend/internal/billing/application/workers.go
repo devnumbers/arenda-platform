@@ -77,7 +77,7 @@ type PaymentLifecycle interface {
 // retries what failed.
 type Workers struct {
 	txStoreFactory
-	// payments applies provider-confirmed outcomes and resolves stuck refunds
+	// Payments applies provider-confirmed outcomes and resolves stuck refunds
 	// through the narrow lifecycle port — the same synchronous paths the
 	// webhook flow ends in, without a reference to the whole payment service
 	// (issue #288, ADR 0035).
@@ -86,10 +86,10 @@ type Workers struct {
 	clock    clock.Clock
 	config   Config
 	log      *slog.Logger
-	// publisher emits the grace lifecycle events best-effort (issue #253);
+	// Publisher emits the grace lifecycle events best-effort (issue #253);
 	// nil keeps the pre-#253 behaviour of no grace notifications.
 	publisher EventPublisher
-	// archiverSource and slotSource bridge the expiry and downgrade phases to
+	// ArchiverSource and slotSource bridge the expiry and downgrade phases to
 	// the properties and access contexts; nil until SetLifecycleBridges wires
 	// them (the subscription-side phases still run without the bridges).
 	archiverSource ExcessPropertyArchiverSource
@@ -513,7 +513,9 @@ type renewalPlan struct {
 // not ready is an early exit: the subscription renewed or changed since
 // listing, its terms are free (applied right here), or it entered grace — so
 // no charge is due.
-func (w *Workers) planRenewal(ctx context.Context, grace *graceEvents, stores *txStores, listed domain.Subscription, now time.Time) (renewalPlan, error) {
+func (w *Workers) planRenewal(
+	ctx context.Context, grace *graceEvents, stores *txStores, listed domain.Subscription, now time.Time,
+) (renewalPlan, error) {
 	sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, upForRenewalSelection(now, 1))
 	if err != nil {
 		return renewalPlan{}, err
@@ -624,7 +626,10 @@ func renewalTerms(ctx context.Context, stores *txStores, sub domain.Subscription
 // properties archived, the shared expiry outcome. A free non-basic target
 // (none is seeded today, the branch keeps the phase total) renews in place or
 // applies a pending free change without a payment.
-func (w *Workers) applyFreeRenewal(ctx context.Context, stores *txStores, sub domain.Subscription, tariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time) error {
+func (w *Workers) applyFreeRenewal(
+	ctx context.Context, stores *txStores, sub domain.Subscription,
+	tariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time,
+) error {
 	reason := domain.TransitionReasonExpired
 	if tariff.Name != domain.TariffBasic {
 		reason = domain.TransitionReasonScheduledChangeApplied
@@ -720,7 +725,7 @@ func (w *Workers) chargeRenewal(ctx context.Context, plan renewalPlan, now time.
 		// The previous outcome may be a success; never charge over an unknown
 		// status. The payment stays pending and a later tick resolves it.
 		w.log.WarnContext(ctx, "provider status unavailable; skipping charge attempt this tick",
-			slog.String("payment_id", payment.ID.String()),
+			slog.String(auditKeyPaymentID, payment.ID.String()),
 			slog.String("error", sanitize.Error(err)))
 		return nil
 	}
@@ -818,7 +823,10 @@ func (w *Workers) applyRenewalSuccess(ctx context.Context, payment domain.Subscr
 			Action:     auditdomain.ActionSubscriptionPaymentSucceeded,
 			EntityType: auditdomain.EntitySubscriptionPayment,
 			EntityID:   &current.ID,
-			Context:    map[string]any{"payment_id": current.ID, "provider": string(w.provider.Name()), "amount_kopecks": current.AmountKopecks},
+			Context: map[string]any{
+				auditKeyPaymentID: current.ID, auditKeyProvider: string(w.provider.Name()),
+				auditKeyAmountKopecks: current.AmountKopecks,
+			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -861,7 +869,7 @@ func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, e
 			Action:     auditdomain.ActionSubscriptionPaymentFailed,
 			EntityType: auditdomain.EntitySubscriptionPayment,
 			EntityID:   &payment.ID,
-			Context:    map[string]any{"payment_id": payment.ID, "provider": string(w.provider.Name())},
+			Context:    map[string]any{auditKeyPaymentID: payment.ID, auditKeyProvider: string(w.provider.Name())},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -879,12 +887,16 @@ func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, e
 func (w *Workers) recoverUncertainCharge(ctx context.Context, payment domain.SubscriptionPayment, cause error, now time.Time) error {
 	switch {
 	case errors.Is(cause, ErrProviderChargeBlocked):
-		w.log.ErrorContext(ctx, "renewal charge blocked by provider: COF/recurring operations are not enabled on the terminal; contact the provider manager to enable them",
-			slog.String("payment_id", payment.ID.String()),
+		w.log.ErrorContext(ctx,
+			"renewal charge blocked by provider: COF/recurring operations are not enabled on the terminal; "+
+				"contact the provider manager to enable them",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
 			slog.String("error", sanitize.Error(cause)))
 	case errors.Is(cause, ErrProviderInvalidOperation):
-		w.log.ErrorContext(ctx, "renewal rejected by provider as an invalid operation: integration misconfiguration; investigate the provider integration",
-			slog.String("payment_id", payment.ID.String()),
+		w.log.ErrorContext(ctx,
+			"renewal rejected by provider as an invalid operation: "+
+				"integration misconfiguration; investigate the provider integration",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
 			slog.String("error", sanitize.Error(cause)))
 	}
 
@@ -898,7 +910,7 @@ func (w *Workers) recoverUncertainCharge(ctx context.Context, payment domain.Sub
 		// Still unknown: this must not count as a charge attempt — the charge
 		// may already be captured. Leave everything for a later tick.
 		w.log.WarnContext(ctx, "provider status unknown after charge error; leaving subscription active and payment pending",
-			slog.String("payment_id", payment.ID.String()),
+			slog.String(auditKeyPaymentID, payment.ID.String()),
 			slog.String("error", sanitize.Error(err)))
 		return nil
 	}
@@ -937,12 +949,12 @@ func (w *Workers) recoverUncertainCharge(ctx context.Context, payment domain.Sub
 	}
 	if exceeded {
 		w.log.ErrorContext(ctx, "renewal charge hit the attempt limit; failing payment and moving subscription to grace",
-			slog.String("payment_id", payment.ID.String()),
+			slog.String(auditKeyPaymentID, payment.ID.String()),
 			slog.Int("charge_attempt_limit", w.config.ChargeAttemptLimit))
 		return w.failRenewalPayment(ctx, payment.ID, providerErrorCode(cause), now)
 	}
 	w.log.WarnContext(ctx, "renewal charge unresolved at provider; leaving subscription active and payment pending",
-		slog.String("payment_id", payment.ID.String()),
+		slog.String(auditKeyPaymentID, payment.ID.String()),
 		slog.String("provider_status", string(status.Status)))
 	return nil
 }
@@ -1031,7 +1043,9 @@ func (w *Workers) remindGraceExpiring(ctx context.Context, listed domain.Subscri
 // listing saw may be gone), downgrades to basic with its transition-log entry,
 // archives the excess properties and enforces the recipient slots. An
 // out-of-selection subscription is a no-op, not an error.
-func (w *Workers) expireSubscription(ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, trigger string, sel SubscriptionSelection) error {
+func (w *Workers) expireSubscription(
+	ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, trigger string, sel SubscriptionSelection,
+) error {
 	return w.runLifecycleTx(ctx, func(stores *txStores) error {
 		sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, sel)
 		if err != nil {
@@ -1101,7 +1115,7 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, 
 			if statusErr != nil {
 				w.log.WarnContext(ctx, "failed to query provider status for stale payments",
 					slog.String("selection", op),
-					slog.String("payment_id", payment.ID.String()),
+					slog.String(auditKeyPaymentID, payment.ID.String()),
 					slog.String("error", sanitize.Error(statusErr)))
 				continue
 			}
@@ -1110,7 +1124,7 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, 
 				if err := w.finalizeFromProviderStatus(ctx, payment, status); err != nil {
 					w.log.ErrorContext(ctx, "failed to finalize stale payment from provider status",
 						slog.String("selection", op),
-						slog.String("payment_id", payment.ID.String()),
+						slog.String(auditKeyPaymentID, payment.ID.String()),
 						slog.String("error", sanitize.Error(err)))
 					continue
 				}
@@ -1120,7 +1134,7 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, 
 			default:
 				w.log.WarnContext(ctx, "unexpected provider status for stale payment",
 					slog.String("selection", op),
-					slog.String("payment_id", payment.ID.String()),
+					slog.String(auditKeyPaymentID, payment.ID.String()),
 					slog.String("provider_status", string(status.Status)))
 			}
 		}
@@ -1177,7 +1191,7 @@ func (w *Workers) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int
 			didResolve, err := w.resolveStaleRefund(ctx, payment)
 			if err != nil {
 				w.log.ErrorContext(ctx, "failed to resolve stale refunding payment",
-					slog.String("payment_id", payment.ID.String()),
+					slog.String(auditKeyPaymentID, payment.ID.String()),
 					slog.String("error", sanitize.Error(err)))
 				continue
 			}
@@ -1217,7 +1231,7 @@ func (w *Workers) resolveStaleRefund(ctx context.Context, payment domain.Subscri
 		// whether the refund happened before the failure is unknowable from
 		// the status alone, so the payment stays for manual review.
 		w.log.WarnContext(ctx, "refunding payment has a failed status at the provider; manual review required",
-			slog.String("payment_id", payment.ID.String()),
+			slog.String(auditKeyPaymentID, payment.ID.String()),
 			slog.String("provider_payment_id", *payment.ProviderPaymentID))
 		return false, nil
 	default:

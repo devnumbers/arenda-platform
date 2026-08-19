@@ -22,8 +22,14 @@ func newOnboardingHarness() (*OnboardingService, *fakeStores) {
 func testTariffs() []domain.Tariff {
 	return []domain.Tariff{
 		{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBasic, ActivePropertyLimit: 1, IsActive: true},
-		{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
-		{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: true},
+		{
+			ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5,
+			MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true,
+		},
+		{
+			ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1,
+			MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: true,
+		},
 	}
 }
 
@@ -155,7 +161,8 @@ func TestOnboardingService_OnUserRegistered_ConcurrentCreateSkipsTransition(t *t
 	}
 	racing := &racingSubscriptionRepo{fakeSubscriptionRepo: stores.subscriptions, existing: winner}
 	svc := NewOnboardingService(
-		NewTxStoreFactory(stores.tariffs, racing, stores.transitions, stores.payments, stores.methods, stores.bindings, nil, &fakeUoW{beginner: stores.beginner}),
+		NewTxStoreFactory(stores.tariffs, racing, stores.transitions, stores.payments,
+			stores.methods, stores.bindings, nil, &fakeUoW{beginner: stores.beginner}),
 		OnboardingServiceConfig{Logger: slog.New(slog.DiscardHandler)},
 	)
 
@@ -175,7 +182,7 @@ func TestOnboardingService_OnUserRegistered_ConcurrentCreateSkipsTransition(t *t
 // onboarding fails loudly when the basic tariff seed is absent instead of
 // creating a subscription with a nil tariff.
 func TestOnboardingService_OnUserRegistered_MissingBasicSeedFails(t *testing.T) {
-	stores := newFakeStores() // no tariffs seeded
+	stores := newFakeStores() // No tariffs seeded.
 	svc := NewOnboardingService(stores.factory(nil), OnboardingServiceConfig{Logger: slog.New(slog.DiscardHandler)})
 
 	err := svc.OnUserRegistered(t.Context(), uuid.Must(uuid.NewV7()))

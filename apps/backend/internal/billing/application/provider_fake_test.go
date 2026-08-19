@@ -17,6 +17,9 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
+// testProviderFake is the provider identity shared by the external application tests.
+const testProviderFake = "fake"
+
 type fixedClock struct{ t time.Time }
 
 func (c fixedClock) Now() time.Time { return c.t }
@@ -27,7 +30,7 @@ func newFakeProvider(t *testing.T) application.PaymentProvider {
 		"http://localhost:8080",
 		slog.New(slog.DiscardHandler),
 		fixedClock{t: time.Now()},
-		nil, // nil metrics is safe: RecordRequest is nil-safe
+		nil, // Nil metrics is safe: RecordRequest is nil-safe.
 	)
 }
 
@@ -129,7 +132,8 @@ func TestProviderPortWebhookShape(t *testing.T) {
 		t.Fatalf("InitPayment: %v", err)
 	}
 
-	payload := []byte(`{"provider_payment_id":"` + init.ProviderPaymentID + `","internal_payment_id":"` + paymentID.String() + `","status":"succeeded"}`)
+	payload := []byte(`{"provider_payment_id":"` + init.ProviderPaymentID +
+		`","internal_payment_id":"` + paymentID.String() + `","status":"succeeded"}`)
 	event, err := provider.ParseWebhook(ctx, payload)
 	if err != nil {
 		t.Fatalf("ParseWebhook: %v", err)

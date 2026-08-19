@@ -32,11 +32,22 @@ type retryTransport struct {
 	maxRetries int
 	baseDelay  time.Duration
 	maxDelay   time.Duration
-	// jitter maps the deterministic backoff delay to the actual sleep duration.
+	// Jitter maps the deterministic backoff delay to the actual sleep duration.
 	// It defaults to the identity so callers (and tests) that do not configure
 	// it observe the exact backoff values; production wiring installs full-jitter.
 	jitter func(time.Duration) time.Duration
 }
+
+// T-Kassa API method names: the metric method label, ProviderError.Method, and
+// the retry-safety table share them.
+const (
+	methodInit        = "Init"
+	methodCharge      = "Charge"
+	methodGetState    = "GetState"
+	methodCancel      = "Cancel"
+	methodAddCustomer = "AddCustomer"
+	methodAddCard     = "AddCard"
+)
 
 // retryOnTimeoutMethods may be retried even after the request bytes reached
 // the provider: GetState is a pure read and Init is idempotent by OrderId —
@@ -45,8 +56,8 @@ type retryTransport struct {
 // RemoveCard, and anything unknown) is retried only before the request is
 // sent.
 var retryOnTimeoutMethods = map[string]bool{
-	"Init":     true,
-	"GetState": true,
+	methodInit:     true,
+	methodGetState: true,
 }
 
 func newRetryTransport(base http.RoundTripper, maxRetries int, baseDelay, maxDelay time.Duration) *retryTransport {
@@ -67,7 +78,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var err error
 
 	// Capture the request body once so it can be replayed on each retry.
-	// http.Request.Clone performs only a shallow copy of Body, so a fresh
+	// An http.Request.Clone performs only a shallow copy of Body, so a fresh
 	// ReadCloser is required for every attempt.
 	var body []byte
 	if req.Body != nil {

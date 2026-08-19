@@ -145,7 +145,9 @@ func (r *PaymentMethodRepository) Delete(ctx context.Context, userID, methodID u
 
 // upsertParams encrypts the sensitive fields, derives the token hash and
 // builds the upsert parameters.
-func (r *PaymentMethodRepository) upsertParams(ctx context.Context, method domain.PaymentMethod) (postgres.UpsertPaymentMethodByTokenHashParams, error) {
+func (r *PaymentMethodRepository) upsertParams(
+	ctx context.Context, method domain.PaymentMethod,
+) (postgres.UpsertPaymentMethodByTokenHashParams, error) {
 	token, err := r.encryptor.Encrypt(ctx, method.ProviderToken)
 	if err != nil {
 		return postgres.UpsertPaymentMethodByTokenHashParams{}, fmt.Errorf("encrypt provider token: %w", err)

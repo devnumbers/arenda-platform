@@ -61,13 +61,13 @@ type Provider struct {
 	mu               sync.Mutex
 	pending          map[string]pendingEntry
 	confirmedAmounts map[string]int64
-	// charges counts completed charges by internal payment id — the probe
+	// Charges counts completed charges by internal payment id — the probe
 	// tests use to prove a payment was charged exactly once.
 	charges map[string]int
-	// refundOutcomes programs RefundPayment answers by internal payment id
+	// RefundOutcomes programs RefundPayment answers by internal payment id
 	// (issue #254): outcome.result is answered when set, otherwise outcome.err.
 	refundOutcomes map[string]refundOutcome
-	// paymentStates programs PaymentStatus answers by internal payment id
+	// PaymentStates programs PaymentStatus answers by internal payment id
 	// (issue #254): programmed states take precedence over the pending map —
 	// the refund tests model a provider that already settled a refund.
 	paymentStates map[string]application.PaymentStatusResult
@@ -128,9 +128,9 @@ func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock, metrics *pay
 func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentRequest) (res application.InitPaymentResult, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "Init", status, time.Since(start))
 	}()
@@ -215,12 +215,14 @@ func (p *Provider) PaymentURL(internalPaymentID uuid.UUID) string {
 // PaymentStatus returns the provider-side status of a payment. If the payment
 // is not found in the pending map it is assumed to have been completed and
 // succeeded. A status programmed via SetPaymentState takes precedence.
-func (p *Provider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (res application.PaymentStatusResult, err error) {
+func (p *Provider) PaymentStatus(
+	ctx context.Context, paymentID uuid.UUID, providerPaymentID string,
+) (res application.PaymentStatusResult, err error) {
 	start := time.Now()
 	defer func() {
-		recStatus := "ok"
+		recStatus := payment.StatusOK
 		if err != nil {
-			recStatus = "error"
+			recStatus = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "Status", recStatus, time.Since(start))
 	}()
@@ -251,9 +253,9 @@ func (p *Provider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, provi
 func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequest) (res application.ChargeResult, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "Charge", status, time.Since(start))
 	}()
@@ -322,9 +324,9 @@ func (p *Provider) ChargeCount(internalPaymentID uuid.UUID) int {
 func (p *Provider) BindPaymentMethod(ctx context.Context, req application.BindMethodRequest) (res application.BindMethodResult, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "BindPaymentMethod", status, time.Since(start))
 	}()
@@ -366,9 +368,9 @@ func (p *Provider) bindingConfirmURL(bindingID string) string {
 func (p *Provider) AddPaymentMethodFromToken(ctx context.Context, customerRef, token string) (res application.SavedMethod, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "AddPaymentMethodFromToken", status, time.Since(start))
 	}()
@@ -396,9 +398,9 @@ func (p *Provider) AddPaymentMethodFromToken(ctx context.Context, customerRef, t
 func (p *Provider) PaymentMethodBinding(ctx context.Context, bindingID string) (res application.MethodBindingState, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "PaymentMethodBinding", status, time.Since(start))
 	}()
@@ -426,9 +428,9 @@ func (p *Provider) PaymentMethodBinding(ctx context.Context, bindingID string) (
 func (p *Provider) RemovePaymentMethod(ctx context.Context, customerRef, providerMethodID string) (err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "RemovePaymentMethod", status, time.Since(start))
 	}()
@@ -444,9 +446,9 @@ func (p *Provider) RemovePaymentMethod(ctx context.Context, customerRef, provide
 func (p *Provider) ListPaymentMethods(ctx context.Context, customerRef string) (methods []application.SavedMethod, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "ListPaymentMethods", status, time.Since(start))
 	}()
@@ -473,9 +475,9 @@ func (p *Provider) SetBindingState(bindingID string, state application.MethodBin
 func (p *Provider) ConfirmCardBinding(ctx context.Context, requestKey string) (res application.WebhookEvent, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "ConfirmCardBinding", status, time.Since(start))
 	}()
@@ -520,9 +522,9 @@ func (p *Provider) ConfirmCardBinding(ctx context.Context, requestKey string) (r
 func (p *Provider) RefundPayment(ctx context.Context, req application.RefundRequest) (res application.RefundResult, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "RefundPayment", status, time.Since(start))
 	}()
@@ -651,9 +653,9 @@ func (p *Provider) ParseWebhook(_ context.Context, payload []byte) (application.
 func (p *Provider) ConfirmPayment(ctx context.Context, internalPaymentID string) (res application.WebhookEvent, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "ConfirmPayment", status, time.Since(start))
 	}()
@@ -663,12 +665,14 @@ func (p *Provider) ConfirmPayment(ctx context.Context, internalPaymentID string)
 
 // ConfirmPaymentFailed completes a previously initialized fake payment as
 // failed.
-func (p *Provider) ConfirmPaymentFailed(ctx context.Context, internalPaymentID string, errorCode *string) (res application.WebhookEvent, err error) {
+func (p *Provider) ConfirmPaymentFailed(
+	ctx context.Context, internalPaymentID string, errorCode *string,
+) (res application.WebhookEvent, err error) {
 	start := time.Now()
 	defer func() {
-		status := "ok"
+		status := payment.StatusOK
 		if err != nil {
-			status = "error"
+			status = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "ConfirmPaymentFailed", status, time.Since(start))
 	}()
@@ -720,7 +724,7 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 }
 
 // purgeLocked removes pending payments and open bindings older than
-// pendingTTL. p.mu must be held.
+// pendingTTL. The p.mu mutex must be held.
 func (p *Provider) purgeLocked() {
 	now := p.clock.Now().UTC()
 	for id, entry := range p.pending {

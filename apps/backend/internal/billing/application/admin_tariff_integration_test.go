@@ -202,7 +202,9 @@ func TestAdminTariff_Integration_UpdatePersistsWithAudit(t *testing.T) {
 	if stored.MonthlyPriceKopecks != 59000 || stored.ActivePropertyLimit != 7 || stored.IsActive {
 		t.Errorf("stored = %+v, want the edited plan", stored)
 	}
-	if n := h.countRows("SELECT COUNT(*) FROM audit_log WHERE action = 'tariff.updated' AND actor_id = $1 AND entity_id = $2", adminID, proID); n != 1 {
+	if n := h.countRows(
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'tariff.updated' AND actor_id = $1 AND entity_id = $2",
+		adminID, proID); n != 1 {
 		t.Errorf("audit rows = %d, want 1", n)
 	}
 

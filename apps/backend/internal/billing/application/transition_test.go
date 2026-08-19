@@ -81,7 +81,9 @@ func (h *transitionHarness) seedSubscription(t *testing.T, name domain.TariffNam
 
 // apply runs one applyTransition call inside a factory transaction and
 // returns the applied transition and the call's error.
-func (h *transitionHarness) apply(t *testing.T, sub *domain.Subscription, mutate func(*domain.Subscription) error, spec transitionSpec) (domain.Transition, error) {
+func (h *transitionHarness) apply(
+	t *testing.T, sub *domain.Subscription, mutate func(*domain.Subscription) error, spec transitionSpec,
+) (domain.Transition, error) {
 	t.Helper()
 	var applied domain.Transition
 	factory := h.stores.factory(h.audit)
@@ -204,7 +206,8 @@ func TestApplyTransition_TariffChange(t *testing.T) {
 		t.Errorf("stored subscription = %q/%v, want active on basic with no validity", stored.Status, stored.TariffID)
 	}
 
-	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusActive || applied.ToStatus != domain.SubscriptionStatusActive {
+	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusActive ||
+		applied.ToStatus != domain.SubscriptionStatusActive {
 		t.Errorf("status side = %v→%q, want active unchanged", applied.FromStatus, applied.ToStatus)
 	}
 	if applied.FromTariffID == nil || *applied.FromTariffID != h.tariffID(t, domain.TariffPro) || applied.ToTariffID != basicID {
@@ -239,7 +242,7 @@ func TestApplyTransition_StatusAndTariffChange(t *testing.T) {
 			initiatorID: &adminID,
 			auditAction: auditdomain.ActionSubscriptionServiceAssigned,
 			auditContext: func(s domain.Subscription, _ domain.Transition) map[string]any {
-				return map[string]any{"tariff_name": string(domain.TariffBusiness), "valid_until": *s.ValidUntil}
+				return map[string]any{auditKeyTariffName: string(domain.TariffBusiness), auditKeyValidUntil: *s.ValidUntil}
 			},
 		},
 	)
@@ -247,7 +250,8 @@ func TestApplyTransition_StatusAndTariffChange(t *testing.T) {
 		t.Fatalf("applyTransition() error = %v", err)
 	}
 
-	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusGrace || applied.ToStatus != domain.SubscriptionStatusActive {
+	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusGrace ||
+		applied.ToStatus != domain.SubscriptionStatusActive {
 		t.Errorf("status side = %v→%q, want grace→active", applied.FromStatus, applied.ToStatus)
 	}
 	if applied.FromTariffID == nil || *applied.FromTariffID != h.tariffID(t, domain.TariffPro) || applied.ToTariffID != businessID {
@@ -261,11 +265,11 @@ func TestApplyTransition_StatusAndTariffChange(t *testing.T) {
 	if records[0].ActorRole != auditdomain.ActorRoleAdmin || records[0].ActorID == nil || *records[0].ActorID != adminID {
 		t.Errorf("audit actor = %q/%v, want the acting admin", records[0].ActorRole, records[0].ActorID)
 	}
-	if records[0].Context["tariff_name"] != string(domain.TariffBusiness) {
-		t.Errorf("audit context tariff = %v, want business", records[0].Context["tariff_name"])
+	if records[0].Context[auditKeyTariffName] != string(domain.TariffBusiness) {
+		t.Errorf("audit context tariff = %v, want business", records[0].Context[auditKeyTariffName])
 	}
-	if got, ok := records[0].Context["valid_until"].(time.Time); !ok || !got.Equal(until) {
-		t.Errorf("audit context valid_until = %v, want the post-change %v", records[0].Context["valid_until"], until)
+	if got, ok := records[0].Context[auditKeyValidUntil].(time.Time); !ok || !got.Equal(until) {
+		t.Errorf("audit context valid_until = %v, want the post-change %v", records[0].Context[auditKeyValidUntil], until)
 	}
 }
 
@@ -350,7 +354,7 @@ func TestApplyTransition_ValidityOnlyChange(t *testing.T) {
 			auditAction: auditdomain.ActionSubscriptionGraceExtended,
 			auditContext: func(s domain.Subscription, _ domain.Transition) map[string]any {
 				auditQuoted = *s.ValidUntil
-				return map[string]any{"valid_until": *s.ValidUntil}
+				return map[string]any{auditKeyValidUntil: *s.ValidUntil}
 			},
 		},
 	)
@@ -358,7 +362,8 @@ func TestApplyTransition_ValidityOnlyChange(t *testing.T) {
 		t.Fatalf("applyTransition() error = %v", err)
 	}
 
-	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusGrace || applied.ToStatus != domain.SubscriptionStatusGrace {
+	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusGrace ||
+		applied.ToStatus != domain.SubscriptionStatusGrace {
 		t.Errorf("status side = %v→%q, want grace unchanged", applied.FromStatus, applied.ToStatus)
 	}
 	if applied.FromTariffID == nil || *applied.FromTariffID != applied.ToTariffID {
@@ -393,7 +398,7 @@ func TestApplyTransition_ScheduledTariffChange(t *testing.T) {
 			auditAction:       auditdomain.ActionSubscriptionTariffChanged,
 			auditContext: func(_ domain.Subscription, tr domain.Transition) map[string]any {
 				auditedFrom = *tr.FromTariffID
-				return map[string]any{"from_tariff_id": *tr.FromTariffID, "to_tariff_id": tr.ToTariffID}
+				return map[string]any{auditKeyFromTariffID: *tr.FromTariffID, auditKeyToTariffID: tr.ToTariffID}
 			},
 		},
 	)
@@ -401,7 +406,8 @@ func TestApplyTransition_ScheduledTariffChange(t *testing.T) {
 		t.Fatalf("applyTransition() error = %v", err)
 	}
 
-	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusActive || applied.ToStatus != domain.SubscriptionStatusActive {
+	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusActive ||
+		applied.ToStatus != domain.SubscriptionStatusActive {
 		t.Errorf("status side = %v→%q, want active unchanged", applied.FromStatus, applied.ToStatus)
 	}
 	if applied.FromTariffID == nil || *applied.FromTariffID != business {

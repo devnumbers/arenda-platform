@@ -20,6 +20,20 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
+// Shared wire fixtures of the handler tests: tariff names, the fake provider
+// identity, the binding id, and the admin-tariff payload keys.
+const (
+	testTariffPro    = "pro"
+	testTariffBiz    = "business"
+	testProviderFake = "fake"
+	testBindingID    = "fake_bind_1"
+	// Admin-tariff JSON payload keys shared by the request fixtures.
+	testKeyName                = "name"
+	testKeyActivePropertyLimit = "activePropertyLimit"
+	testKeyMonthlyPrice        = "monthlyPriceKopecks"
+	testKeyYearlyPrice         = "yearlyPriceKopecks"
+)
+
 // fakeTariffLister is a func-backed TariffLister (the consumer-side port of
 // these handlers, ADR 0035).
 type fakeTariffLister struct {
@@ -75,7 +89,9 @@ func (f *fakeSubscriptionManager) ToggleAutoRenew(ctx context.Context, userID uu
 	return errors.New("unexpected ToggleAutoRenew call")
 }
 
-func (f *fakeSubscriptionManager) ChangeTariff(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+func (f *fakeSubscriptionManager) ChangeTariff(
+	ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest,
+) (billingapp.ChangeTariffResult, error) {
 	if f.changeTariff != nil {
 		return f.changeTariff(ctx, userID, req)
 	}
@@ -112,7 +128,9 @@ func (f *fakePaymentMethodManager) ListPaymentMethods(ctx context.Context, userI
 	return nil, errors.New("unexpected ListPaymentMethods call")
 }
 
-func (f *fakePaymentMethodManager) AddPaymentMethod(ctx context.Context, userID uuid.UUID, req billingapp.AddPaymentMethodRequest) (billingapp.AddPaymentMethodResult, error) {
+func (f *fakePaymentMethodManager) AddPaymentMethod(
+	ctx context.Context, userID uuid.UUID, req billingapp.AddPaymentMethodRequest,
+) (billingapp.AddPaymentMethodResult, error) {
 	if f.add != nil {
 		return f.add(ctx, userID, req)
 	}
@@ -162,14 +180,18 @@ type fakeAdminTariffManager struct {
 	update func(ctx context.Context, adminID, tariffID uuid.UUID, req billingapp.UpdateTariffRequest) (domain.Tariff, error)
 }
 
-func (f *fakeAdminTariffManager) CreateTariff(ctx context.Context, adminID uuid.UUID, req billingapp.CreateTariffRequest) (domain.Tariff, error) {
+func (f *fakeAdminTariffManager) CreateTariff(
+	ctx context.Context, adminID uuid.UUID, req billingapp.CreateTariffRequest,
+) (domain.Tariff, error) {
 	if f.create != nil {
 		return f.create(ctx, adminID, req)
 	}
 	return domain.Tariff{}, errors.New("unexpected CreateTariff call")
 }
 
-func (f *fakeAdminTariffManager) UpdateTariff(ctx context.Context, adminID, tariffID uuid.UUID, req billingapp.UpdateTariffRequest) (domain.Tariff, error) {
+func (f *fakeAdminTariffManager) UpdateTariff(
+	ctx context.Context, adminID, tariffID uuid.UUID, req billingapp.UpdateTariffRequest,
+) (domain.Tariff, error) {
 	if f.update != nil {
 		return f.update(ctx, adminID, tariffID, req)
 	}
@@ -184,7 +206,10 @@ func newTestHandlers(tariffs TariffLister, subs SubscriptionViewer, managers Sub
 
 // newTestHandlersOpts builds handlers with explicit payment,
 // payment-method and webhook options.
-func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager, payments PaymentManager, methods PaymentMethodManager, webhooks WebhookProcessor) *BillingHandlers {
+func newTestHandlersOpts(
+	tariffs TariffLister, subs SubscriptionViewer, managers SubscriptionManager,
+	payments PaymentManager, methods PaymentMethodManager, webhooks WebhookProcessor,
+) *BillingHandlers {
 	if tariffs == nil {
 		tariffs = &fakeTariffLister{}
 	}
@@ -203,7 +228,10 @@ func newTestHandlersOpts(tariffs TariffLister, subs SubscriptionViewer, managers
 	if webhooks == nil {
 		webhooks = &fakeWebhookProcessor{}
 	}
-	return NewBillingHandlers(tariffs, &fakeAdminTariffManager{}, subs, managers, payments, methods, webhooks, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
+	return NewBillingHandlers(
+		tariffs, &fakeAdminTariffManager{}, subs, managers, payments, methods, webhooks,
+		&fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil,
+	)
 }
 
 // fakeAdminPaymentManager fails the test when an admin payment endpoint is
@@ -215,14 +243,18 @@ type fakeAdminPaymentManager struct {
 	sync   func(ctx context.Context, adminID, paymentID uuid.UUID) error
 }
 
-func (f *fakeAdminPaymentManager) GetAdminPayment(ctx context.Context, paymentID uuid.UUID) (billingapp.AdminSubscriptionPaymentView, error) {
+func (f *fakeAdminPaymentManager) GetAdminPayment(
+	ctx context.Context, paymentID uuid.UUID,
+) (billingapp.AdminSubscriptionPaymentView, error) {
 	if f.get != nil {
 		return f.get(ctx, paymentID)
 	}
 	return billingapp.AdminSubscriptionPaymentView{}, errors.New("unexpected GetAdminPayment call")
 }
 
-func (f *fakeAdminPaymentManager) ListAdminPayments(ctx context.Context, filters billingapp.AdminPaymentFilters) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
+func (f *fakeAdminPaymentManager) ListAdminPayments(
+	ctx context.Context, filters billingapp.AdminPaymentFilters,
+) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
 	if f.list != nil {
 		return f.list(ctx, filters)
 	}
@@ -254,14 +286,18 @@ type fakeAdminSubscriptionManager struct {
 	transitions   func(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionTransitionView, error)
 }
 
-func (f *fakeAdminSubscriptionManager) AssignServiceSubscription(ctx context.Context, adminID, userID uuid.UUID, req billingapp.AssignServiceSubscriptionRequest) error {
+func (f *fakeAdminSubscriptionManager) AssignServiceSubscription(
+	ctx context.Context, adminID, userID uuid.UUID, req billingapp.AssignServiceSubscriptionRequest,
+) error {
 	if f.assignService != nil {
 		return f.assignService(ctx, adminID, userID, req)
 	}
 	return errors.New("unexpected AssignServiceSubscription call")
 }
 
-func (f *fakeAdminSubscriptionManager) ForceChangeTariff(ctx context.Context, adminID, userID uuid.UUID, req billingapp.ForceChangeTariffRequest) error {
+func (f *fakeAdminSubscriptionManager) ForceChangeTariff(
+	ctx context.Context, adminID, userID uuid.UUID, req billingapp.ForceChangeTariffRequest,
+) error {
 	if f.forceChange != nil {
 		return f.forceChange(ctx, adminID, userID, req)
 	}
@@ -282,7 +318,9 @@ func (f *fakeAdminSubscriptionManager) CancelSubscriptionAsAdmin(ctx context.Con
 	return errors.New("unexpected CancelSubscriptionAsAdmin call")
 }
 
-func (f *fakeAdminSubscriptionManager) ListTransitions(ctx context.Context, userID uuid.UUID) ([]billingapp.SubscriptionTransitionView, error) {
+func (f *fakeAdminSubscriptionManager) ListTransitions(
+	ctx context.Context, userID uuid.UUID,
+) ([]billingapp.SubscriptionTransitionView, error) {
 	if f.transitions != nil {
 		return f.transitions(ctx, userID)
 	}
@@ -332,7 +370,7 @@ func TestListTariffs_MapsDomainTariffsToContract(t *testing.T) {
 		t.Fatalf("items = %d, want 3", len(resp.Items))
 	}
 	pro := resp.Items[1]
-	if pro.Name != "pro" || pro.ActivePropertyLimit != 5 || pro.MonthlyPriceKopecks != 49000 || pro.YearlyPriceKopecks != 440000 {
+	if pro.Name != testTariffPro || pro.ActivePropertyLimit != 5 || pro.MonthlyPriceKopecks != 49000 || pro.YearlyPriceKopecks != 440000 {
 		t.Errorf("pro item = %+v, want name=pro limit=5 monthly=49000 yearly=440000", pro)
 	}
 }
@@ -357,9 +395,18 @@ func TestListAdminTariffs_MapsDomainTariffsToContract(t *testing.T) {
 	hiddenID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(&fakeTariffLister{listAll: func(context.Context) ([]domain.Tariff, error) {
 		return []domain.Tariff{
-			{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBasic, ActivePropertyLimit: 1, MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0, IsActive: true},
-			{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
-			{ID: hiddenID, Name: domain.TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: false},
+			{
+				ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBasic, ActivePropertyLimit: 1,
+				MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0, IsActive: true,
+			},
+			{
+				ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5,
+				MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true,
+			},
+			{
+				ID: hiddenID, Name: domain.TariffBusiness, ActivePropertyLimit: -1,
+				MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: false,
+			},
 		}, nil
 	}}, nil, nil)
 
@@ -389,7 +436,8 @@ func TestListAdminTariffs_MapsDomainTariffsToContract(t *testing.T) {
 	if hidden.ID != hiddenID.String() {
 		t.Errorf("hidden item id = %q, want %q", hidden.ID, hiddenID)
 	}
-	if hidden.Name != "business" || hidden.IsActive || hidden.ActivePropertyLimit != -1 || hidden.MonthlyPriceKopecks != 99000 || hidden.YearlyPriceKopecks != 890000 {
+	if hidden.Name != testTariffBiz || hidden.IsActive || hidden.ActivePropertyLimit != -1 ||
+		hidden.MonthlyPriceKopecks != 99000 || hidden.YearlyPriceKopecks != 890000 {
 		t.Errorf("hidden item = %+v, want name=business isActive=false limit=-1 monthly=99000 yearly=890000", hidden)
 	}
 }
@@ -436,7 +484,9 @@ func TestCreateAdminTariff_CreatesAndAnswers201(t *testing.T) {
 		ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5,
 		MonthlyPriceKopecks: 59000, YearlyPriceKopecks: 540000, IsActive: true,
 	}
-	h := NewBillingHandlers(nil, &fakeAdminTariffManager{create: func(_ context.Context, gotAdmin uuid.UUID, req billingapp.CreateTariffRequest) (domain.Tariff, error) {
+	h := NewBillingHandlers(nil, &fakeAdminTariffManager{create: func(
+		_ context.Context, gotAdmin uuid.UUID, req billingapp.CreateTariffRequest,
+	) (domain.Tariff, error) {
 		if gotAdmin != adminID {
 			t.Errorf("CreateTariff admin = %v, want %v", gotAdmin, adminID)
 		}
@@ -449,7 +499,7 @@ func TestCreateAdminTariff_CreatesAndAnswers201(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	h.CreateAdminTariff(w, adminJSONRequest(t, http.MethodPost, "/admin/tariffs", adminID, map[string]any{
-		"name": "pro", "activePropertyLimit": 5, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000,
+		testKeyName: testTariffPro, testKeyActivePropertyLimit: 5, testKeyMonthlyPrice: 59000, testKeyYearlyPrice: 540000,
 	}))
 
 	if w.Code != http.StatusCreated {
@@ -466,7 +516,7 @@ func TestCreateAdminTariff_CreatesAndAnswers201(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.ID != created.ID.String() || resp.Name != "pro" || !resp.IsActive ||
+	if resp.ID != created.ID.String() || resp.Name != testTariffPro || !resp.IsActive ||
 		resp.ActivePropertyLimit != 5 || resp.MonthlyPriceKopecks != 59000 || resp.YearlyPriceKopecks != 540000 {
 		t.Errorf("response = %+v, want the created tariff", resp)
 	}
@@ -477,7 +527,7 @@ func TestCreateAdminTariff_CreatesAndAnswers201(t *testing.T) {
 // an unknown name 400, and no session 401 before the service is touched.
 func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
 	validBody := func() map[string]any {
-		return map[string]any{"name": "pro", "activePropertyLimit": 5, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000}
+		return map[string]any{testKeyName: testTariffPro, testKeyActivePropertyLimit: 5, testKeyMonthlyPrice: 59000, testKeyYearlyPrice: 540000}
 	}
 	tests := []struct {
 		name   string
@@ -486,12 +536,22 @@ func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
 		want   int
 	}{
 		{"duplicate name", validBody(), billingapp.ErrTariffAlreadyExists, http.StatusConflict},
-		{"invalid pricing", map[string]any{"name": "pro", "activePropertyLimit": 5, "monthlyPriceKopecks": -1, "yearlyPriceKopecks": 540000}, domain.ErrInvalidTariffPricing, http.StatusBadRequest},
-		{"unknown name", map[string]any{"name": "premium", "activePropertyLimit": 5, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000}, nil, http.StatusBadRequest},
+		{
+			"invalid pricing",
+			map[string]any{testKeyName: testTariffPro, testKeyActivePropertyLimit: 5, testKeyMonthlyPrice: -1, testKeyYearlyPrice: 540000},
+			domain.ErrInvalidTariffPricing, http.StatusBadRequest,
+		},
+		{
+			"unknown name",
+			map[string]any{testKeyName: "premium", testKeyActivePropertyLimit: 5, testKeyMonthlyPrice: 59000, testKeyYearlyPrice: 540000},
+			nil, http.StatusBadRequest,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewBillingHandlers(nil, &fakeAdminTariffManager{create: func(context.Context, uuid.UUID, billingapp.CreateTariffRequest) (domain.Tariff, error) {
+			h := NewBillingHandlers(nil, &fakeAdminTariffManager{create: func(
+				context.Context, uuid.UUID, billingapp.CreateTariffRequest,
+			) (domain.Tariff, error) {
 				return domain.Tariff{}, tt.svcErr
 			}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 
@@ -505,7 +565,8 @@ func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
 	}
 
 	t.Run("requires admin session", func(t *testing.T) {
-		h := NewBillingHandlers(nil, &fakeAdminTariffManager{}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
+		h := NewBillingHandlers(nil, &fakeAdminTariffManager{}, nil, nil, nil, nil, nil,
+			&fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 
 		w := httptest.NewRecorder()
 		payload, err := json.Marshal(validBody())
@@ -530,7 +591,9 @@ func TestUpdateAdminTariff_UpdatesAndAnswers200(t *testing.T) {
 		ID: tariffID, Name: domain.TariffPro, ActivePropertyLimit: 7,
 		MonthlyPriceKopecks: 59000, YearlyPriceKopecks: 540000, IsActive: false,
 	}
-	h := NewBillingHandlers(nil, &fakeAdminTariffManager{update: func(_ context.Context, gotAdmin, gotID uuid.UUID, req billingapp.UpdateTariffRequest) (domain.Tariff, error) {
+	h := NewBillingHandlers(nil, &fakeAdminTariffManager{update: func(
+		_ context.Context, gotAdmin, gotID uuid.UUID, req billingapp.UpdateTariffRequest,
+	) (domain.Tariff, error) {
 		if gotAdmin != adminID {
 			t.Errorf("UpdateTariff admin = %v, want %v", gotAdmin, adminID)
 		}
@@ -546,7 +609,7 @@ func TestUpdateAdminTariff_UpdatesAndAnswers200(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	h.UpdateAdminTariff(w, adminJSONRequest(t, http.MethodPut, "/admin/tariffs/"+tariffID.String(), adminID, map[string]any{
-		"activePropertyLimit": 7, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000, "isActive": false,
+		testKeyActivePropertyLimit: 7, testKeyMonthlyPrice: 59000, testKeyYearlyPrice: 540000, "isActive": false,
 	}), tariffID)
 
 	if w.Code != http.StatusOK {
@@ -577,14 +640,16 @@ func TestUpdateAdminTariff_ErrorMapping(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewBillingHandlers(nil, &fakeAdminTariffManager{update: func(context.Context, uuid.UUID, uuid.UUID, billingapp.UpdateTariffRequest) (domain.Tariff, error) {
+			h := NewBillingHandlers(nil, &fakeAdminTariffManager{update: func(
+				context.Context, uuid.UUID, uuid.UUID, billingapp.UpdateTariffRequest,
+			) (domain.Tariff, error) {
 				return domain.Tariff{}, tt.svcErr
 			}}, nil, nil, nil, nil, nil, &fakeAdminPaymentManager{}, &fakeAdminSubscriptionManager{}, nil)
 
 			tariffID := uuid.Must(uuid.NewV7())
 			w := httptest.NewRecorder()
 			h.UpdateAdminTariff(w, adminJSONRequest(t, http.MethodPut, "/admin/tariffs/"+tariffID.String(), uuid.Must(uuid.NewV7()), map[string]any{
-				"activePropertyLimit": 7, "monthlyPriceKopecks": 59000, "yearlyPriceKopecks": 540000, "isActive": false,
+				testKeyActivePropertyLimit: 7, testKeyMonthlyPrice: 59000, testKeyYearlyPrice: 540000, "isActive": false,
 			}), tariffID)
 
 			if w.Code != tt.want {
@@ -647,7 +712,7 @@ func TestGetSubscription_MapsViewToContract(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Tariff.Name != "pro" {
+	if resp.Tariff.Name != testTariffPro {
 		t.Errorf("tariff.name = %q, want pro", resp.Tariff.Name)
 	}
 	if resp.Status != "active" {
@@ -737,7 +802,7 @@ func adminPaymentView(t *testing.T) billingapp.AdminSubscriptionPaymentView {
 		uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 		uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		uuid.MustParse("33333333-3333-3333-3333-333333333333"),
-		domain.PeriodMonth, 99000, "fake", time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC),
+		domain.PeriodMonth, 99000, testProviderFake, time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC),
 	)
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment() error = %v", err)
@@ -759,7 +824,9 @@ func adminPaymentView(t *testing.T) billingapp.AdminSubscriptionPaymentView {
 func TestGetAdminSubscriptionPayment_AnswersView(t *testing.T) {
 	view := adminPaymentView(t)
 	h := newTestHandlers(nil, nil, nil)
-	h.adminPayments = &fakeAdminPaymentManager{get: func(_ context.Context, paymentID uuid.UUID) (billingapp.AdminSubscriptionPaymentView, error) {
+	h.adminPayments = &fakeAdminPaymentManager{get: func(
+		_ context.Context, paymentID uuid.UUID,
+	) (billingapp.AdminSubscriptionPaymentView, error) {
 		if paymentID != view.Payment.ID {
 			t.Errorf("GetAdminPayment called with %v, want %v", paymentID, view.Payment.ID)
 		}
@@ -767,7 +834,8 @@ func TestGetAdminSubscriptionPayment_AnswersView(t *testing.T) {
 	}}
 
 	w := httptest.NewRecorder()
-	h.GetAdminSubscriptionPayment(w, adminRequest(t, http.MethodGet, "/admin/subscription/payments/"+view.Payment.ID.String(), uuid.Must(uuid.NewV7())), view.Payment.ID)
+	h.GetAdminSubscriptionPayment(w,
+		adminRequest(t, http.MethodGet, "/admin/subscription/payments/"+view.Payment.ID.String(), uuid.Must(uuid.NewV7())), view.Payment.ID)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
@@ -801,7 +869,8 @@ func TestRefundSubscriptionPayment_AttributesAdmin(t *testing.T) {
 	h.adminPayments = &fakeAdminPaymentManager{refund: check}
 
 	w := httptest.NewRecorder()
-	h.RefundSubscriptionPayment(w, adminRequest(t, http.MethodPost, "/admin/subscription/payments/"+paymentID.String()+"/refund", adminID), paymentID)
+	h.RefundSubscriptionPayment(w,
+		adminRequest(t, http.MethodPost, "/admin/subscription/payments/"+paymentID.String()+"/refund", adminID), paymentID)
 
 	requireNoContentAndCalled(t, w, called)
 }
@@ -809,7 +878,9 @@ func TestRefundSubscriptionPayment_AttributesAdmin(t *testing.T) {
 // requireAdminAttribution builds a manager callback for the *AttributesAdmin
 // tests: it records the call and asserts the acting admin and the target entity
 // were forwarded unchanged (issues #254, #255).
-func requireAdminAttribution(t *testing.T, what string, wantAdmin, wantEntity uuid.UUID) (check func(context.Context, uuid.UUID, uuid.UUID) error, called *bool) {
+func requireAdminAttribution(
+	t *testing.T, what string, wantAdmin, wantEntity uuid.UUID,
+) (check func(context.Context, uuid.UUID, uuid.UUID) error, called *bool) {
 	t.Helper()
 	called = new(bool)
 	return func(_ context.Context, gotAdmin, gotEntity uuid.UUID) error {
@@ -854,7 +925,8 @@ func TestSyncSubscriptionPayment_AttributesAdmin(t *testing.T) {
 	}}
 
 	w := httptest.NewRecorder()
-	h.SyncSubscriptionPayment(w, adminRequest(t, http.MethodPost, "/admin/subscription/payments/"+paymentID.String()+"/sync", adminID), paymentID)
+	h.SyncSubscriptionPayment(w,
+		adminRequest(t, http.MethodPost, "/admin/subscription/payments/"+paymentID.String()+"/sync", adminID), paymentID)
 
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
@@ -868,7 +940,9 @@ func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
 	userID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 	limit, offset := 50, 10
 	h := newTestHandlers(nil, nil, nil)
-	h.adminPayments = &fakeAdminPaymentManager{list: func(_ context.Context, filters billingapp.AdminPaymentFilters) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
+	h.adminPayments = &fakeAdminPaymentManager{list: func(
+		_ context.Context, filters billingapp.AdminPaymentFilters,
+	) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
 		if filters.UserID == nil || *filters.UserID != userID {
 			t.Errorf("userID filter = %v, want %v", filters.UserID, userID)
 		}
@@ -899,16 +973,17 @@ func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
 	subscriptionStatusParam := openapi.SubscriptionStatus("grace")
 	sortParam := "amountKopecks"
 	orderParam := openapi.ListAdminSubscriptionPaymentsParamsOrder("asc")
-	h.ListAdminSubscriptionPayments(w, adminRequest(t, http.MethodGet, target, uuid.Must(uuid.NewV7())), openapi.ListAdminSubscriptionPaymentsParams{
-		UserId:             &userID,
-		Status:             &statusParam,
-		UserPhone:          &phoneParam,
-		SubscriptionStatus: &subscriptionStatusParam,
-		Sort:               &sortParam,
-		Order:              &orderParam,
-		Limit:              &limit,
-		Offset:             &offset,
-	})
+	h.ListAdminSubscriptionPayments(w,
+		adminRequest(t, http.MethodGet, target, uuid.Must(uuid.NewV7())), openapi.ListAdminSubscriptionPaymentsParams{
+			UserId:             &userID,
+			Status:             &statusParam,
+			UserPhone:          &phoneParam,
+			SubscriptionStatus: &subscriptionStatusParam,
+			Sort:               &sortParam,
+			Order:              &orderParam,
+			Limit:              &limit,
+			Offset:             &offset,
+		})
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
@@ -929,12 +1004,15 @@ func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
 // field outside the whitelist answers 400, not 500 (issue #254).
 func TestListAdminSubscriptionPayments_InvalidFilterAnswers400(t *testing.T) {
 	h := newTestHandlers(nil, nil, nil)
-	h.adminPayments = &fakeAdminPaymentManager{list: func(_ context.Context, filters billingapp.AdminPaymentFilters) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
+	h.adminPayments = &fakeAdminPaymentManager{list: func(
+		_ context.Context, filters billingapp.AdminPaymentFilters,
+	) ([]billingapp.AdminSubscriptionPaymentView, int64, error) {
 		return nil, 0, billingapp.ErrInvalidFilter
 	}}
 
 	w := httptest.NewRecorder()
-	h.ListAdminSubscriptionPayments(w, adminRequest(t, http.MethodGet, "/admin/subscription/payments", uuid.Must(uuid.NewV7())), openapi.ListAdminSubscriptionPaymentsParams{})
+	h.ListAdminSubscriptionPayments(w,
+		adminRequest(t, http.MethodGet, "/admin/subscription/payments", uuid.Must(uuid.NewV7())), openapi.ListAdminSubscriptionPaymentsParams{})
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}
@@ -1081,7 +1159,9 @@ func TestToggleAutoRenew_CannotEnableMapsTo409(t *testing.T) {
 func TestChangeTariff_DowngradeReturnsEmptyResult(t *testing.T) {
 	ownerID := uuid.Must(uuid.NewV7())
 	var gotReq billingapp.ChangeTariffRequest
-	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(_ context.Context, got uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(
+		_ context.Context, got uuid.UUID, req billingapp.ChangeTariffRequest,
+	) (billingapp.ChangeTariffResult, error) {
 		if got != ownerID {
 			t.Errorf("ChangeTariff called with %v, want %v", got, ownerID)
 		}
@@ -1114,12 +1194,15 @@ func TestChangeTariff_DowngradeReturnsEmptyResult(t *testing.T) {
 // 503 with an explicit payment-unavailable problem until the payment flow
 // lands (issue #250).
 func TestChangeTariff_UpgradeTemporarilyUnavailable(t *testing.T) {
-	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(
+		context.Context, uuid.UUID, billingapp.ChangeTariffRequest,
+	) (billingapp.ChangeTariffResult, error) {
 		return billingapp.ChangeTariffResult{}, billingapp.ErrPaymentUnavailable
 	}})
 
 	w := httptest.NewRecorder()
-	h.ChangeTariff(w, ownerJSONRequest(t, http.MethodPost, "/subscription/change", uuid.Must(uuid.NewV7()), `{"tariffName":"business","period":"month"}`))
+	h.ChangeTariff(w,
+		ownerJSONRequest(t, http.MethodPost, "/subscription/change", uuid.Must(uuid.NewV7()), `{"tariffName":"business","period":"month"}`))
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503; body: %s", w.Code, w.Body.String())
@@ -1144,12 +1227,15 @@ func TestChangeTariff_ErrorMapping(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(
+				context.Context, uuid.UUID, billingapp.ChangeTariffRequest,
+			) (billingapp.ChangeTariffResult, error) {
 				return billingapp.ChangeTariffResult{}, tc.err
 			}})
 
 			w := httptest.NewRecorder()
-			h.ChangeTariff(w, ownerJSONRequest(t, http.MethodPost, "/subscription/change", uuid.Must(uuid.NewV7()), `{"tariffName":"pro","period":"month"}`))
+			h.ChangeTariff(w,
+				ownerJSONRequest(t, http.MethodPost, "/subscription/change", uuid.Must(uuid.NewV7()), `{"tariffName":"pro","period":"month"}`))
 
 			if w.Code != tc.want {
 				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
@@ -1172,7 +1258,9 @@ func TestChangeTariff_RejectsInvalidInput(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(
+				context.Context, uuid.UUID, billingapp.ChangeTariffRequest,
+			) (billingapp.ChangeTariffResult, error) {
 				t.Error("service must not be called on invalid input")
 				return billingapp.ChangeTariffResult{}, nil
 			}})
@@ -1196,7 +1284,9 @@ func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
 	paymentID := uuid.Must(uuid.NewV7())
 	url := "http://localhost:8080/internal/fake-subscription-payment/x/confirm"
 	createdAt := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
-	h := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{list: func(_ context.Context, got uuid.UUID) ([]billingapp.SubscriptionPaymentView, error) {
+	h := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{list: func(
+		_ context.Context, got uuid.UUID,
+	) ([]billingapp.SubscriptionPaymentView, error) {
 		if got != ownerID {
 			t.Errorf("ListPayments called with %v, want %v", got, ownerID)
 		}
@@ -1207,13 +1297,16 @@ func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
 				TariffID:          uuid.Must(uuid.NewV7()),
 				Period:            domain.PeriodMonth,
 				AmountKopecks:     49000,
-				Provider:          "fake",
+				Provider:          testProviderFake,
 				ProviderPaymentID: new(string),
 				PaymentURL:        &url,
 				Status:            domain.PaymentStatusPending,
 				CreatedAt:         createdAt,
 			},
-			Tariff: domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true},
+			Tariff: domain.Tariff{
+				Name: domain.TariffPro, ActivePropertyLimit: 5,
+				MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true,
+			},
 		}}, nil
 	}}, nil, nil)
 
@@ -1244,8 +1337,8 @@ func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
 		t.Fatalf("items = %d, want 1", len(resp.Items))
 	}
 	item := resp.Items[0]
-	if item.ID != paymentID.String() || item.Tariff.Name != "pro" || item.Period != "month" ||
-		item.Status != "pending" || item.AmountKopecks != 49000 || item.Provider != "fake" {
+	if item.ID != paymentID.String() || item.Tariff.Name != testTariffPro || item.Period != "month" ||
+		item.Status != "pending" || item.AmountKopecks != 49000 || item.Provider != testProviderFake {
 		t.Errorf("item = %+v, want id/tariff=pro/month/pending/49000/fake", item)
 	}
 	if item.PaymentURL == nil || *item.PaymentURL != url {
@@ -1279,7 +1372,7 @@ func TestHandlePaymentWebhook_AnswersAckOnSuccess(t *testing.T) {
 	var gotPayload []byte
 	h := newTestHandlersOpts(nil, nil, nil, nil, nil, &fakeWebhookProcessor{
 		handle: func(_ context.Context, providerName string, payload []byte) error {
-			if providerName != "fake" {
+			if providerName != testProviderFake {
 				t.Errorf("provider = %q, want fake", providerName)
 			}
 			gotPayload = payload
@@ -1289,7 +1382,8 @@ func TestHandlePaymentWebhook_AnswersAckOnSuccess(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	h.HandlePaymentWebhook(w, webhookRequest(t, "fake", `{"internal_payment_id":"11111111-1111-1111-1111-111111111111"}`), "fake")
+	h.HandlePaymentWebhook(w,
+		webhookRequest(t, testProviderFake, `{"internal_payment_id":"11111111-1111-1111-1111-111111111111"}`), testProviderFake)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
@@ -1325,7 +1419,7 @@ func TestHandlePaymentWebhook_ErrorMapping(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			h.HandlePaymentWebhook(w, webhookRequest(t, "fake", `{}`), "fake")
+			h.HandlePaymentWebhook(w, webhookRequest(t, testProviderFake, `{}`), testProviderFake)
 
 			if w.Code != tc.want {
 				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
@@ -1346,7 +1440,7 @@ func TestHandlePaymentWebhook_RejectsOversizedBody(t *testing.T) {
 
 	big := strings.Repeat("x", maxWebhookBody+1)
 	w := httptest.NewRecorder()
-	h.HandlePaymentWebhook(w, webhookRequest(t, "fake", big), "fake")
+	h.HandlePaymentWebhook(w, webhookRequest(t, testProviderFake, big), testProviderFake)
 
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413; body: %s", w.Code, w.Body.String())
@@ -1360,14 +1454,16 @@ func TestListPaymentMethods_MapsDomainMethodsToContract(t *testing.T) {
 	ownerID := uuid.Must(uuid.NewV7())
 	createdAt := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	methodID := uuid.Must(uuid.NewV7())
-	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{list: func(_ context.Context, got uuid.UUID) ([]domain.PaymentMethod, error) {
+	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{list: func(
+		_ context.Context, got uuid.UUID,
+	) ([]domain.PaymentMethod, error) {
 		if got != ownerID {
 			t.Errorf("ListPaymentMethods called with %v, want %v", got, ownerID)
 		}
 		return []domain.PaymentMethod{{
 			ID:            methodID,
 			UserID:        ownerID,
-			Provider:      "fake",
+			Provider:      testProviderFake,
 			ProviderToken: "secret-token",
 			DisplayMask:   "4111********1111",
 			IsActive:      true,
@@ -1401,7 +1497,7 @@ func TestListPaymentMethods_MapsDomainMethodsToContract(t *testing.T) {
 		t.Fatalf("items = %d, want 1", len(resp.Items))
 	}
 	item := resp.Items[0]
-	if item.ID != methodID.String() || item.Provider != "fake" ||
+	if item.ID != methodID.String() || item.Provider != testProviderFake ||
 		item.DisplayMask != "4111********1111" || !item.IsActive || item.CreatedAt == "" {
 		t.Errorf("item = %+v, want the full display shape", item)
 	}
@@ -1424,7 +1520,9 @@ func TestListPaymentMethods_RequiresOwner(t *testing.T) {
 // answers with the confirmation URL and no method (issue #251).
 func TestAddPaymentMethod_BindingReturnsConfirmURL(t *testing.T) {
 	ownerID := uuid.Must(uuid.NewV7())
-	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{add: func(_ context.Context, got uuid.UUID, req billingapp.AddPaymentMethodRequest) (billingapp.AddPaymentMethodResult, error) {
+	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{add: func(
+		_ context.Context, got uuid.UUID, req billingapp.AddPaymentMethodRequest,
+	) (billingapp.AddPaymentMethodResult, error) {
 		if got != ownerID {
 			t.Errorf("AddPaymentMethod called with %v, want %v", got, ownerID)
 		}
@@ -1462,12 +1560,14 @@ func TestAddPaymentMethod_BindingReturnsConfirmURL(t *testing.T) {
 func TestAddPaymentMethod_TokenReturnsMethod(t *testing.T) {
 	ownerID := uuid.Must(uuid.NewV7())
 	methodID := uuid.Must(uuid.NewV7())
-	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{add: func(_ context.Context, _ uuid.UUID, req billingapp.AddPaymentMethodRequest) (billingapp.AddPaymentMethodResult, error) {
+	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{add: func(
+		_ context.Context, _ uuid.UUID, req billingapp.AddPaymentMethodRequest,
+	) (billingapp.AddPaymentMethodResult, error) {
 		if req.ProviderToken != "raw-token" {
 			t.Errorf("request token = %q, want the raw token forwarded", req.ProviderToken)
 		}
 		return billingapp.AddPaymentMethodResult{PaymentMethod: &domain.PaymentMethod{
-			ID: methodID, UserID: ownerID, Provider: "fake", ProviderToken: "raw-token", IsActive: true,
+			ID: methodID, UserID: ownerID, Provider: testProviderFake, ProviderToken: "raw-token", IsActive: true,
 			CreatedAt: time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC),
 		}}, nil
 	}}, nil)
@@ -1536,7 +1636,9 @@ func TestActivatePaymentMethod_Returns204(t *testing.T) {
 	ownerID := uuid.Must(uuid.NewV7())
 	methodID := uuid.Must(uuid.NewV7())
 	called := false
-	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{activate: func(_ context.Context, gotUser, gotMethod uuid.UUID) error {
+	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{activate: func(
+		_ context.Context, gotUser, gotMethod uuid.UUID,
+	) error {
 		called = true
 		if gotUser != ownerID || gotMethod != methodID {
 			t.Errorf("ActivatePaymentMethod called with %v/%v, want %v/%v", gotUser, gotMethod, ownerID, methodID)
@@ -1545,7 +1647,8 @@ func TestActivatePaymentMethod_Returns204(t *testing.T) {
 	}}, nil)
 
 	w := httptest.NewRecorder()
-	h.ActivatePaymentMethod(w, ownerRequest(t, http.MethodPost, "/subscription/payment-methods/"+methodID.String()+"/activate", ownerID), methodID)
+	h.ActivatePaymentMethod(w,
+		ownerRequest(t, http.MethodPost, "/subscription/payment-methods/"+methodID.String()+"/activate", ownerID), methodID)
 
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
@@ -1559,11 +1662,18 @@ func TestActivatePaymentMethod_Returns204(t *testing.T) {
 // up-to-date method list (issue #251).
 func TestSyncPaymentMethods_ReturnsList(t *testing.T) {
 	ownerID := uuid.Must(uuid.NewV7())
-	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{sync: func(_ context.Context, got uuid.UUID) ([]domain.PaymentMethod, error) {
+	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{sync: func(
+		_ context.Context, got uuid.UUID,
+	) ([]domain.PaymentMethod, error) {
 		if got != ownerID {
 			t.Errorf("SyncPaymentMethods called with %v, want %v", got, ownerID)
 		}
-		return []domain.PaymentMethod{{ID: uuid.Must(uuid.NewV7()), UserID: ownerID, Provider: "fake", ProviderToken: "t", IsActive: true, CreatedAt: time.Now()}}, nil
+		return []domain.PaymentMethod{
+			{
+				ID: uuid.Must(uuid.NewV7()), UserID: ownerID, Provider: testProviderFake, ProviderToken: "t",
+				IsActive: true, CreatedAt: time.Now(),
+			},
+		}, nil
 	}}, nil)
 
 	w := httptest.NewRecorder()
@@ -1604,7 +1714,7 @@ func subscriptionTransitionView(t *testing.T) billingapp.SubscriptionTransitionV
 	adminID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 	paymentID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
 	fromStatus := domain.SubscriptionStatusActive
-	fromName := "pro"
+	fromName := testTariffPro
 	return billingapp.SubscriptionTransitionView{
 		Transition: domain.Transition{
 			ID:             uuid.MustParse("66666666-6666-6666-6666-666666666666"),
@@ -1620,7 +1730,7 @@ func subscriptionTransitionView(t *testing.T) billingapp.SubscriptionTransitionV
 			CreatedAt:      time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC),
 		},
 		FromTariffName: &fromName,
-		ToTariffName:   "business",
+		ToTariffName:   testTariffBiz,
 	}
 }
 
@@ -1632,7 +1742,9 @@ func TestAssignAdminServiceSubscription_MapsBodyAndAttributesAdmin(t *testing.T)
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777777")
 	called := false
 	h := newTestHandlers(nil, nil, nil)
-	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(_ context.Context, gotAdmin, gotUser uuid.UUID, req billingapp.AssignServiceSubscriptionRequest) error {
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(
+		_ context.Context, gotAdmin, gotUser uuid.UUID, req billingapp.AssignServiceSubscriptionRequest,
+	) error {
 		called = true
 		if gotAdmin != adminID {
 			t.Errorf("AssignServiceSubscription admin = %v, want %v", gotAdmin, adminID)
@@ -1671,7 +1783,9 @@ func TestAssignAdminServiceSubscription_MapsBodyAndAttributesAdmin(t *testing.T)
 func TestAssignAdminServiceSubscription_ErrorMapping(t *testing.T) {
 	userID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(nil, nil, nil)
-	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(_ context.Context, _, _ uuid.UUID, _ billingapp.AssignServiceSubscriptionRequest) error {
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(
+		_ context.Context, _, _ uuid.UUID, _ billingapp.AssignServiceSubscriptionRequest,
+	) error {
 		return fmt.Errorf("%w: untilDate is in the past", domain.ErrInvalidTerm)
 	}}
 	w := httptest.NewRecorder()
@@ -1681,7 +1795,9 @@ func TestAssignAdminServiceSubscription_ErrorMapping(t *testing.T) {
 		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}
 
-	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(_ context.Context, _, _ uuid.UUID, _ billingapp.AssignServiceSubscriptionRequest) error {
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(
+		_ context.Context, _, _ uuid.UUID, _ billingapp.AssignServiceSubscriptionRequest,
+	) error {
 		return domain.ErrInvalidSubscriptionState
 	}}
 	w = httptest.NewRecorder()
@@ -1699,7 +1815,9 @@ func TestForceChangeAdminSubscriptionTariff_MapsBodyAndAttributesAdmin(t *testin
 	adminID := uuid.Must(uuid.NewV7())
 	userID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(nil, nil, nil)
-	h.adminSubscriptions = &fakeAdminSubscriptionManager{forceChange: func(_ context.Context, gotAdmin, gotUser uuid.UUID, req billingapp.ForceChangeTariffRequest) error {
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{forceChange: func(
+		_ context.Context, gotAdmin, gotUser uuid.UUID, req billingapp.ForceChangeTariffRequest,
+	) error {
 		if gotAdmin != adminID {
 			t.Errorf("ForceChangeTariff admin = %v, want %v", gotAdmin, adminID)
 		}
@@ -1777,7 +1895,9 @@ func TestListAdminSubscriptionTransitions_MapsView(t *testing.T) {
 	userID := uuid.Must(uuid.NewV7())
 	view := subscriptionTransitionView(t)
 	h := newTestHandlers(nil, nil, nil)
-	h.adminSubscriptions = &fakeAdminSubscriptionManager{transitions: func(_ context.Context, gotUser uuid.UUID) ([]billingapp.SubscriptionTransitionView, error) {
+	h.adminSubscriptions = &fakeAdminSubscriptionManager{transitions: func(
+		_ context.Context, gotUser uuid.UUID,
+	) ([]billingapp.SubscriptionTransitionView, error) {
 		if gotUser != userID {
 			t.Errorf("ListTransitions user = %v, want %v", gotUser, userID)
 		}
@@ -1785,7 +1905,8 @@ func TestListAdminSubscriptionTransitions_MapsView(t *testing.T) {
 	}}
 
 	w := httptest.NewRecorder()
-	h.ListAdminSubscriptionTransitions(w, adminRequest(t, http.MethodGet, "/admin/users/"+userID.String()+"/subscription/transitions", uuid.Must(uuid.NewV7())), userID)
+	h.ListAdminSubscriptionTransitions(w,
+		adminRequest(t, http.MethodGet, "/admin/users/"+userID.String()+"/subscription/transitions", uuid.Must(uuid.NewV7())), userID)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())

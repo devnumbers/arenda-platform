@@ -377,7 +377,8 @@ func TestAdminExtendGrace_Rejections(t *testing.T) {
 	if err := h.svc.ExtendGrace(t.Context(), adminID, grace.UserID, 0); !errors.Is(err, domain.ErrInvalidGraceExtension) {
 		t.Fatalf("ExtendGrace(0 days) error = %v, want ErrInvalidGraceExtension", err)
 	}
-	if err := h.svc.ExtendGrace(t.Context(), adminID, grace.UserID, DefaultConfig().MaxGraceExtensionDays+1); !errors.Is(err, domain.ErrInvalidGraceExtension) {
+	if err := h.svc.ExtendGrace(t.Context(), adminID, grace.UserID,
+		DefaultConfig().MaxGraceExtensionDays+1); !errors.Is(err, domain.ErrInvalidGraceExtension) {
 		t.Fatalf("ExtendGrace(over cap) error = %v, want ErrInvalidGraceExtension", err)
 	}
 }

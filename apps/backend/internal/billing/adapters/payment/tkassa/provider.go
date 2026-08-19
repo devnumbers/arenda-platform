@@ -42,19 +42,18 @@ var tracer = otel.Tracer(instrumentationName)
 
 // Callback route contract with the platform edge: the paths the adapter
 // builds provider callbacks from (issue #248 — URL construction is provider
-// concern). The HTTP layer serves them under these public paths — Caddy
-// routes /api and /webhooks prefixes to the backend on stage/prod and the
-// Next.js dev rewrite does the same locally; /subscription/... return pages
-// are frontend routes.
+// concern). The HTTP layer serves them under these public paths: Caddy
+// routes /api and /webhooks prefixes to the backend on stage/prod, the
+// Next.js dev rewrite does the same locally, and /subscription/* return
+// pages are frontend routes.
 const (
-	// notificationPath is the public webhook endpoint T-Kassa posts status
-	// notifications to (payment and card binding alike).
+	// Public webhook endpoint T-Kassa posts status notifications to
+	// (payment and card binding alike).
 	notificationPath = "/webhooks/payment/tkassa"
-	// paymentResultPathFmt builds the browser return URLs after the payment
-	// form (success and fail), parameterized by the internal payment id.
+	// Browser return URL format after the payment form (success and fail),
+	// parameterized by the internal payment id.
 	paymentResultPathFmt = "/subscription/payments/%s/"
-	// bindingReturnSuccessPath / bindingReturnFailPath are the browser return
-	// URLs after the card-binding form.
+	// Browser return URLs after the card-binding form: success and fail.
 	bindingReturnSuccessPath = "/api/subscription/payment-methods/add-card/success"
 	bindingReturnFailPath    = "/api/subscription/payment-methods/add-card/fail"
 )
@@ -201,7 +200,7 @@ func toSpecOperationInitiatorType(i application.Initiator) (spec.CommonOperation
 func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentRequest) (res application.InitPaymentResult, err error) {
 	start := time.Now()
 	defer func() {
-		p.metrics.RecordRequest(ctx, "tkassa", "Init", metricStatus(err), time.Since(start))
+		p.metrics.RecordRequest(ctx, "tkassa", methodInit, metricStatus(err), time.Since(start))
 	}()
 
 	ctx, span := tracer.Start(ctx, "tkassa.InitPayment")
@@ -271,7 +270,7 @@ func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentR
 	)
 
 	var resp initResponse
-	if err := p.post(ctx, "Init", body, &resp); err != nil {
+	if err := p.post(ctx, methodInit, body, &resp); err != nil {
 		err = classifyProviderError(err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -291,7 +290,7 @@ func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentR
 func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequest) (res application.ChargeResult, err error) {
 	start := time.Now()
 	defer func() {
-		p.metrics.RecordRequest(ctx, "tkassa", "Charge", metricStatus(err), time.Since(start))
+		p.metrics.RecordRequest(ctx, "tkassa", methodCharge, metricStatus(err), time.Since(start))
 	}()
 
 	ctx, span := tracer.Start(ctx, "tkassa.ChargePayment")
@@ -324,7 +323,7 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 	)
 
 	var resp chargeResponse
-	if err := p.post(ctx, "Charge", body, &resp); err != nil {
+	if err := p.post(ctx, methodCharge, body, &resp); err != nil {
 		err = classifyProviderError(err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -342,7 +341,9 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 }
 
 // PaymentStatus queries the current status of a payment through T-Kassa.
-func (p *Provider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (res application.PaymentStatusResult, err error) {
+func (p *Provider) PaymentStatus(
+	ctx context.Context, paymentID uuid.UUID, providerPaymentID string,
+) (res application.PaymentStatusResult, err error) {
 	start := time.Now()
 	defer func() {
 		p.metrics.RecordRequest(ctx, "tkassa", "Status", metricStatus(err), time.Since(start))
@@ -375,7 +376,7 @@ func (p *Provider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, provi
 	)
 
 	var resp getStateResponse
-	if err := p.post(ctx, "GetState", body, &resp); err != nil {
+	if err := p.post(ctx, methodGetState, body, &resp); err != nil {
 		err = classifyProviderError(err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -399,7 +400,7 @@ func (p *Provider) PaymentStatus(ctx context.Context, paymentID uuid.UUID, provi
 func (p *Provider) RefundPayment(ctx context.Context, req application.RefundRequest) (res application.RefundResult, err error) {
 	start := time.Now()
 	defer func() {
-		p.metrics.RecordRequest(ctx, "tkassa", "Cancel", metricStatus(err), time.Since(start))
+		p.metrics.RecordRequest(ctx, "tkassa", methodCancel, metricStatus(err), time.Since(start))
 	}()
 
 	ctx, span := tracer.Start(ctx, "tkassa.RefundPayment")
@@ -434,7 +435,7 @@ func (p *Provider) RefundPayment(ctx context.Context, req application.RefundRequ
 	)
 
 	var resp cancelResponse
-	if err := p.post(ctx, "Cancel", body, &resp); err != nil {
+	if err := p.post(ctx, methodCancel, body, &resp); err != nil {
 		err = classifyProviderError(err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -543,19 +544,19 @@ func (p *Provider) BindPaymentMethod(ctx context.Context, req application.BindMe
 		return application.BindMethodResult{}, err
 	}
 	token := sign(cardBody, p.password)
-	cardBody["RedirectUrl"] = p.appBaseURL + bindingReturnSuccessPath
-	cardBody["FailRedirectUrl"] = p.appBaseURL + bindingReturnFailPath
-	cardBody["SuccessAddCardURL"] = p.appBaseURL + bindingReturnSuccessPath
-	cardBody["FailAddCardURL"] = p.appBaseURL + bindingReturnFailPath
-	cardBody["NotificationURL"] = p.notificationURL()
-	cardBody["Token"] = token
+	cardBody[fieldRedirectURL] = p.appBaseURL + bindingReturnSuccessPath
+	cardBody[fieldFailRedirectURL] = p.appBaseURL + bindingReturnFailPath
+	cardBody[fieldSuccessAddCardURL] = p.appBaseURL + bindingReturnSuccessPath
+	cardBody[fieldFailAddCardURL] = p.appBaseURL + bindingReturnFailPath
+	cardBody[fieldNotificationURL] = p.notificationURL()
+	cardBody[fieldToken] = token
 
 	log.InfoContext(ctx, "tkassa add card",
 		"customer_ref", req.CustomerRef,
 	)
 
 	var cardResp addCardResponse
-	if err := p.send(ctx, "AddCard", cardBody, &cardResp); err != nil {
+	if err := p.send(ctx, methodAddCard, cardBody, &cardResp); err != nil {
 		err = classifyProviderError(err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

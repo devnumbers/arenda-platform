@@ -126,7 +126,7 @@ func TestWorkers_Integration_RenewalChargesActiveMethod(t *testing.T) {
 		t.Fatalf("payments = %d (err %v), want the single renewal", len(payments), err)
 	}
 	payment := payments[0]
-	if payment.Status != domain.PaymentStatusSucceeded || payment.Provider != "fake" {
+	if payment.Status != domain.PaymentStatusSucceeded || payment.Provider != testProviderFake {
 		t.Errorf("payment = %s/%s, want succeeded/fake", payment.Status, payment.Provider)
 	}
 	if payment.TariffID != sub.TariffID || payment.AmountKopecks != 49000 {
@@ -155,7 +155,9 @@ func TestWorkers_Integration_RenewalChargesActiveMethod(t *testing.T) {
 	if len(transitions) != 2 || transitions[0].Reason != domain.TransitionReasonPaymentApplied {
 		t.Fatalf("transitions = %+v, want registered + payment_applied", transitions)
 	}
-	if got := h.countRows(`SELECT count(*) FROM audit_log WHERE action = 'subscription_payment.succeeded' AND entity_id = $1`, payment.ID); got != 1 {
+	if got := h.countRows(
+		`SELECT count(*) FROM audit_log WHERE action = 'subscription_payment.succeeded' AND entity_id = $1`,
+		payment.ID); got != 1 {
 		t.Errorf("succeeded-payment audit rows = %d, want 1", got)
 	}
 }
@@ -190,7 +192,9 @@ func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
 	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(graceEnd) {
 		t.Errorf("ValidUntil = %v, want the grace window end %v", stored.ValidUntil, graceEnd)
 	}
-	if got := h.countRows(`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'grace_entered'`, sub.ID); got != 1 {
+	if got := h.countRows(
+		`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'grace_entered'`,
+		sub.ID); got != 1 {
 		t.Fatalf("grace_entered transitions = %d, want 1", got)
 	}
 
@@ -221,7 +225,9 @@ func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
 	if got := slots.recorded(); len(got) != 1 || got[0] != "grace_expired" {
 		t.Errorf("slot calls = %v, want one grace_expired", got)
 	}
-	if got := h.countRows(`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'expired'`, sub.ID); got != 1 {
+	if got := h.countRows(
+		`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'expired'`,
+		sub.ID); got != 1 {
 		t.Errorf("expired transitions = %d, want 1", got)
 	}
 }
@@ -410,7 +416,9 @@ func TestWorkers_Integration_NonRenewingAndCancelledExpireToBasic(t *testing.T) 
 		if stored.TariffID != basic.ID || stored.ValidUntil != nil || stored.Status != domain.SubscriptionStatusActive {
 			t.Errorf("subscription %s = %+v, want basic/no validity/active", tc.user, stored)
 		}
-		if got := h.countRows(`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'expired'`, tc.sub.ID); got != 1 {
+		if got := h.countRows(
+			`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'expired'`,
+			tc.sub.ID); got != 1 {
 			t.Errorf("expired transitions = %d, want 1", got)
 		}
 	}
@@ -510,7 +518,9 @@ func TestWorkers_Integration_ReconcileLostWebhook(t *testing.T) {
 	// The row's created_at comes from the database clock; pin it to the fake
 	// clock's past so the staleness threshold of the reconciliation selects it.
 	staleCreated := h.clock.Now().Add(-10 * time.Minute)
-	if _, err := h.pool.Exec(h.ctx(), `UPDATE subscription_payments SET created_at = $1 WHERE id = $2`, staleCreated, result.PaymentID); err != nil {
+	if _, err := h.pool.Exec(
+		h.ctx(), `UPDATE subscription_payments SET created_at = $1 WHERE id = $2`, staleCreated,
+		result.PaymentID); err != nil {
 		t.Fatalf("age payment row: %v", err)
 	}
 	if count, err := h.services.Workers.ReconcilePendingPayments(h.ctx(), h.clock.Now()); err != nil || count != 1 {

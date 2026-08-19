@@ -38,15 +38,15 @@ type PaymentService struct {
 	clock    clock.Clock
 	config   Config
 	log      *slog.Logger
-	// publisher emits the grace-entered event best-effort when an
+	// Publisher emits the grace-entered event best-effort when an
 	// asynchronously failed renewal charge moves the subscription into grace
 	// (issue #253); nil keeps the pre-#253 behaviour.
 	publisher EventPublisher
-	// adminPayments reads the cross-user payment rows behind the admin views
+	// AdminPayments reads the cross-user payment rows behind the admin views
 	// (issue #254); nil keeps the admin read methods answered by an explicit
 	// wiring error.
 	adminPayments AdminPaymentListing
-	// archiverSource and slotSource bridge the refund's subscription
+	// ArchiverSource and slotSource bridge the refund's subscription
 	// downgrade to the properties and access contexts (issue #254); nil until
 	// SetLifecycleBridges wires them (the payment-side refund still applies
 	// without the bridges, only the excess archiving waits).
@@ -202,7 +202,7 @@ func (s *PaymentService) applyMethodBoundNotification(ctx context.Context, n *Me
 			if errors.Is(err, ErrNotFound) {
 				s.log.WarnContext(ctx, "method-bound webhook for unknown binding session; ignoring",
 					slog.String("binding_id", n.BindingID),
-					slog.String("provider", string(s.provider.Name())))
+					slog.String(auditKeyProvider, string(s.provider.Name())))
 				return nil
 			}
 			return fmt.Errorf("get card binding session: %w", err)
@@ -321,7 +321,7 @@ func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment
 		// Without a provider reference there is nothing to reconcile against;
 		// a success we cannot verify is not applied.
 		s.log.WarnContext(ctx, "cannot reconcile failed payment: missing provider reference",
-			slog.String("payment_id", payment.ID.String()))
+			slog.String(auditKeyPaymentID, payment.ID.String()))
 		return nil
 	}
 	status, err := s.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
@@ -330,7 +330,7 @@ func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment
 	}
 	if status.Status != domain.PaymentStatusSucceeded {
 		s.log.InfoContext(ctx, "out-of-order success notification contradicted by provider status; skipping",
-			slog.String("payment_id", payment.ID.String()),
+			slog.String(auditKeyPaymentID, payment.ID.String()),
 			slog.String("provider_status", string(status.Status)))
 		return nil
 	}
@@ -341,7 +341,7 @@ func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment
 // verifies the notification against the persisted provider reference, moves
 // the payment to the notification's status and — for a success — applies the
 // tariff or renewal to the subscription with its transition-log entry and
-// audit record. allowReconcile marks callers that verified an out-of-order
+// audit record. AllowReconcile marks callers that verified an out-of-order
 // success against the provider; without it a failed payment is never
 // overwritten by this path. When a merchant-initiated renewal charge moves
 // the subscription into grace, the grace-entered event is captured by the
@@ -400,7 +400,7 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 				Action:     auditdomain.ActionSubscriptionPaymentFailed,
 				EntityType: auditdomain.EntitySubscriptionPayment,
 				EntityID:   &payment.ID,
-				Context:    map[string]any{"payment_id": payment.ID, "provider": string(s.provider.Name())},
+				Context:    map[string]any{auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name())},
 			}); err != nil {
 				return fmt.Errorf("record audit: %w", err)
 			}
@@ -409,7 +409,7 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 		case domain.PaymentStatusSucceeded:
 			switch payment.Status {
 			case domain.PaymentStatusSucceeded:
-				return nil // duplicate delivery
+				return nil // Duplicate delivery.
 			case domain.PaymentStatusFailed:
 				if !allowReconcile {
 					// The payment became failed after the caller's check;
@@ -425,9 +425,9 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 					return err
 				}
 			default:
-				// refunded (and the internal refunding reservation): a refund
-				// is a later, deliberate state that a payment notification
-				// does not override.
+				// A refund (and the internal refunding reservation) is a
+				// later, deliberate state that a payment notification does
+				// not override.
 				return nil
 			}
 			if err := stores.payments.Update(ctx, payment); err != nil {
@@ -441,7 +441,10 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 				Action:     auditdomain.ActionSubscriptionPaymentSucceeded,
 				EntityType: auditdomain.EntitySubscriptionPayment,
 				EntityID:   &payment.ID,
-				Context:    map[string]any{"payment_id": payment.ID, "provider": string(s.provider.Name()), "amount_kopecks": payment.AmountKopecks},
+				Context: map[string]any{
+					auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name()),
+					auditKeyAmountKopecks: payment.AmountKopecks,
+				},
 			}); err != nil {
 				return fmt.Errorf("record audit: %w", err)
 			}
@@ -461,7 +464,9 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 // the subscription already reflects is a no-op — the zero transition it
 // returns keeps duplicate deliveries, reconciliations and worker retries
 // idempotent. Shared by the webhook flow and the renewal worker (issue #252).
-func applySucceededPayment(ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time) (domain.Transition, error) {
+func applySucceededPayment(
+	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time,
+) (domain.Transition, error) {
 	sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
 	if err != nil {
 		return domain.Transition{}, err
@@ -517,10 +522,10 @@ func (s *PaymentService) applyRefundNotification(ctx context.Context, n *Payment
 		}
 		switch payment.Status {
 		case domain.PaymentStatusRefunded:
-			return nil // duplicate delivery; the effects were applied with it
+			return nil // Duplicate delivery; the effects were applied with it.
 		case domain.PaymentStatusPending, domain.PaymentStatusSucceeded, domain.PaymentStatusRefunding:
 		default:
-			return nil // a failed charge was never captured; nothing to refund
+			return nil // A failed charge was never captured; nothing to refund.
 		}
 		if err := s.applyRefundedPayment(ctx, stores, payment, s.clock.Now().UTC(), systemRefundActor()); err != nil {
 			return err

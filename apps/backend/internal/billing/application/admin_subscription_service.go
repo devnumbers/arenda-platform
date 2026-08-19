@@ -54,7 +54,9 @@ func (s *SubscriptionService) runLifecycleTx(ctx context.Context, work func(*txS
 // expiry path, archiving excess properties. When the new tariff's limit is
 // lower than the overwritten one's, the excess is archived in the same
 // transaction.
-func (s *SubscriptionService) AssignServiceSubscription(ctx context.Context, adminID, userID uuid.UUID, req AssignServiceSubscriptionRequest) error {
+func (s *SubscriptionService) AssignServiceSubscription(
+	ctx context.Context, adminID, userID uuid.UUID, req AssignServiceSubscriptionRequest,
+) error {
 	validUntil, err := serviceTermValidUntil(req, s.clock.Now().UTC())
 	if err != nil {
 		return err
@@ -79,7 +81,7 @@ func (s *SubscriptionService) AssignServiceSubscription(ctx context.Context, adm
 				initiatorID: &adminID,
 				auditAction: auditdomain.ActionSubscriptionServiceAssigned,
 				auditContext: func(domain.Subscription, domain.Transition) map[string]any {
-					return map[string]any{"tariff_name": string(tariff.Name), "valid_until": validUntil}
+					return map[string]any{auditKeyTariffName: string(tariff.Name), auditKeyValidUntil: validUntil}
 				},
 			},
 		)
@@ -148,7 +150,7 @@ func (s *SubscriptionService) ForceChangeTariff(ctx context.Context, adminID, us
 				initiatorID: &adminID,
 				auditAction: auditdomain.ActionSubscriptionTariffForced,
 				auditContext: func(_ domain.Subscription, transition domain.Transition) map[string]any {
-					return map[string]any{"from_tariff_id": *transition.FromTariffID, "to_tariff_id": tariff.ID}
+					return map[string]any{auditKeyFromTariffID: *transition.FromTariffID, auditKeyToTariffID: tariff.ID}
 				},
 			},
 		); err != nil {
@@ -185,7 +187,7 @@ func (s *SubscriptionService) ExtendGrace(ctx context.Context, adminID, userID u
 				initiatorID: &adminID,
 				auditAction: auditdomain.ActionSubscriptionGraceExtended,
 				auditContext: func(s domain.Subscription, _ domain.Transition) map[string]any {
-					return map[string]any{"days": days, "valid_until": *s.ValidUntil}
+					return map[string]any{"days": days, auditKeyValidUntil: *s.ValidUntil}
 				},
 			},
 		); err != nil {

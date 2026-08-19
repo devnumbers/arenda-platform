@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 )
 
@@ -20,7 +21,7 @@ import (
 func TestMetricStatus(t *testing.T) {
 	// Mirror how post constructs a provider error-code response.
 	providerErr := &ProviderError{
-		Method:    "Charge",
+		Method:    methodCharge,
 		ErrorCode: "105",
 		Message:   "Charge rejected",
 		Details:   "insufficient funds",
@@ -36,72 +37,72 @@ func TestMetricStatus(t *testing.T) {
 		{
 			name: "nil error is ok",
 			err:  nil,
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "business decline ProviderError is ok",
 			err:  providerErr,
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "wrapped ProviderError is still ok",
 			err:  fmt.Errorf("tkassa: add customer failed: %w", providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "method-not-found sentinel is ok",
 			err:  application.ErrProviderMethodNotFound,
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "charge-blocked sentinel is ok",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderChargeBlocked, providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "payment-not-found sentinel is ok",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderPaymentNotFound, providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "insufficient-funds sentinel is ok (business outcome)",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderInsufficientFunds, providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "saved-method-expired sentinel is ok (business outcome)",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderSavedMethodExpired, providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "duplicate-operation sentinel is ok (business outcome)",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderDuplicateOperation, providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "auth-rejected sentinel is a broken-integration error",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderAuthRejected, providerErr),
-			want: "error",
+			want: payment.StatusError,
 		},
 		{
 			name: "invalid-operation sentinel is a broken-integration error",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderInvalidOperation, providerErr),
-			want: "error",
+			want: payment.StatusError,
 		},
 		{
 			name: "plain transport error is error",
 			err:  net.ErrClosed,
-			want: "error",
+			want: payment.StatusError,
 		},
 		{
 			name: "wrapped transport error is error",
 			err:  transportErr,
-			want: "error",
+			want: payment.StatusError,
 		},
 		{
 			name: "canceled context is error",
 			err:  context.Canceled,
-			want: "error",
+			want: payment.StatusError,
 		},
 	}
 	for _, tt := range tests {

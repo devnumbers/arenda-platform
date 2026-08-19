@@ -77,7 +77,9 @@ func NewPaymentMethodService(factory txStoreFactory, provider methodBindingProvi
 // the payer follows. Both paths converge on the same end state — a saved
 // method that is the user's single active one and the subscription's charge
 // target.
-func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid.UUID, req AddPaymentMethodRequest) (AddPaymentMethodResult, error) {
+func (s *PaymentMethodService) AddPaymentMethod(
+	ctx context.Context, userID uuid.UUID, req AddPaymentMethodRequest,
+) (AddPaymentMethodResult, error) {
 	if s.provider == nil {
 		// No provider wired (pre-#250 construction): refuse before anything is
 		// persisted, mirroring the tariff-change flow.
@@ -93,7 +95,9 @@ func (s *PaymentMethodService) AddPaymentMethod(ctx context.Context, userID uuid
 // synchronous counterpart of a completed binding, so local runs and tests
 // reach the same end state. The token itself is accepted by the provider (the
 // capability the caller checked), never trusted raw.
-func (s *PaymentMethodService) addFromToken(ctx context.Context, acceptor RawTokenMethodAcceptor, userID uuid.UUID, token string) (AddPaymentMethodResult, error) {
+func (s *PaymentMethodService) addFromToken(
+	ctx context.Context, acceptor RawTokenMethodAcceptor, userID uuid.UUID, token string,
+) (AddPaymentMethodResult, error) {
 	saved, err := acceptor.AddPaymentMethodFromToken(ctx, userID.String(), token)
 	if err != nil {
 		return AddPaymentMethodResult{}, fmt.Errorf("add payment method from token at provider: %w", err)
@@ -258,7 +262,7 @@ func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uu
 	now := s.clock.Now().UTC()
 	for _, session := range sessions {
 		if s.provider == nil {
-			break // nothing to poll without a provider; sessions expire by TTL
+			break // Nothing to poll without a provider; sessions expire by TTL.
 		}
 		if session.IsExpired(now) {
 			// The binding form has expired: the binding can never complete,
@@ -331,7 +335,9 @@ func (s *PaymentMethodService) closeBindingSession(ctx context.Context, session 
 // completeBindingSession applies a provider-confirmed binding through the
 // shared completion path. Failures are logged, not propagated: the sync
 // continues with the remaining sessions.
-func (s *PaymentMethodService) completeBindingSession(ctx context.Context, session domain.CardBindingSession, method SavedMethod, now time.Time) {
+func (s *PaymentMethodService) completeBindingSession(
+	ctx context.Context, session domain.CardBindingSession, method SavedMethod, now time.Time,
+) {
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		current, err := stores.bindings.GetByRequestKeyForUpdate(ctx, session.Provider, session.RequestKey)
 		if err != nil {
@@ -359,13 +365,16 @@ func (s *PaymentMethodService) completeBindingSession(ctx context.Context, sessi
 // hash (a re-bound card converges on its row instead of duplicating), the
 // session is marked completed, the method becomes the user's single active
 // one, and the subscription's charge target points at it so renewals charge
-// the new card. session is nil on the synchronous token path. A session that
+// the new card. Session is nil on the synchronous token path. A session that
 // is already resolved (a concurrent delivery won) or expired writes nothing —
 // a repeated delivery is a no-op and an expired session never produces a
 // payment method. A missing subscription is not fatal for the binding itself:
 // the method is still saved and active, only the renewal link is skipped (the
 // webhook flow must not make the provider retry forever).
-func applyCompletedCardBinding(ctx context.Context, stores *txStores, log *slog.Logger, method domain.PaymentMethod, session *domain.CardBindingSession, now time.Time) (domain.PaymentMethod, error) {
+func applyCompletedCardBinding(
+	ctx context.Context, stores *txStores, log *slog.Logger,
+	method domain.PaymentMethod, session *domain.CardBindingSession, now time.Time,
+) (domain.PaymentMethod, error) {
 	if session != nil && !session.CanComplete(now) {
 		// The session is already resolved (a concurrent delivery won) or its
 		// lifetime is over — an expired session must never produce a payment
@@ -401,7 +410,7 @@ func applyCompletedCardBinding(ctx context.Context, stores *txStores, log *slog.
 		Action:     auditdomain.ActionPaymentMethodAdded,
 		EntityType: auditdomain.EntityPaymentMethod,
 		EntityID:   &saved.ID,
-		Context:    map[string]any{"payment_method_id": saved.ID, "provider": string(saved.Provider)},
+		Context:    map[string]any{"payment_method_id": saved.ID, auditKeyProvider: string(saved.Provider)},
 	}); err != nil {
 		return domain.PaymentMethod{}, fmt.Errorf("record audit: %w", err)
 	}

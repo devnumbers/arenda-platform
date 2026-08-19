@@ -24,7 +24,7 @@ import (
 func sign(data map[string]any, password string) string {
 	keys := make([]string, 0, len(data)+1)
 	for k := range data {
-		if k == "Token" || k == "DATA" || k == "Data" || k == "Receipt" {
+		if k == fieldToken || k == fieldDATA || k == fieldData || k == fieldReceipt {
 			continue
 		}
 		keys = append(keys, k)
@@ -122,7 +122,7 @@ func verifyToken(payload []byte, password string) error {
 	}
 
 	expected := sign(data, password)
-	actual, ok := data["Token"].(string)
+	actual, ok := data[fieldToken].(string)
 
 	if !ok || !hmac.Equal([]byte(expected), []byte(actual)) {
 		return errors.New("tkassa: invalid webhook token")

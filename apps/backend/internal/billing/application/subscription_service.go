@@ -30,7 +30,7 @@ type SubscriptionService struct {
 	clock    clock.Clock
 	config   Config
 	log      *slog.Logger
-	// archiverSource and slotSource bridge the admin operations that lower a
+	// ArchiverSource and slotSource bridge the admin operations that lower a
 	// tariff limit to the properties and access contexts (issue #255); nil
 	// until SetLifecycleBridges wires them — the subscription-side change
 	// still applies, only the excess archiving waits.
@@ -100,7 +100,9 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.U
 		pending, err := s.tariffs.GetByID(ctx, *sub.PendingTariffID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
-				return SubscriptionView{}, fmt.Errorf("subscription %s references missing pending tariff %s: %w", sub.ID, *sub.PendingTariffID, ErrTariffNotFound)
+				return SubscriptionView{}, fmt.Errorf(
+					"subscription %s references missing pending tariff %s: %w",
+					sub.ID, *sub.PendingTariffID, ErrTariffNotFound)
 			}
 			return SubscriptionView{}, fmt.Errorf("get pending tariff: %w", err)
 		}
@@ -110,7 +112,9 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.U
 		method, err := s.methods.GetByID(ctx, *sub.ActivePaymentMethodID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
-				return SubscriptionView{}, fmt.Errorf("subscription %s references missing payment method %s: %w", sub.ID, *sub.ActivePaymentMethodID, ErrPaymentMethodNotFound)
+				return SubscriptionView{}, fmt.Errorf(
+					"subscription %s references missing payment method %s: %w",
+					sub.ID, *sub.ActivePaymentMethodID, ErrPaymentMethodNotFound)
 			}
 			return SubscriptionView{}, fmt.Errorf("get active payment method: %w", err)
 		}
@@ -194,7 +198,7 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 // service subscription takes the payment path too (issue #255): the applied
 // payment converts the subscription into a paid one from the new period.
 func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResult, error) {
-	// state captured by the planning transaction for the payment orchestration
+	// State captured by the planning transaction for the payment orchestration
 	// that runs after it commits.
 	var (
 		needsPayment    bool
@@ -302,7 +306,7 @@ func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID
 				scheduledTariffID: &newTariff.ID,
 				auditAction:       auditdomain.ActionSubscriptionTariffChanged,
 				auditContext: func(_ domain.Subscription, transition domain.Transition) map[string]any {
-					return map[string]any{"from_tariff_id": *transition.FromTariffID, "to_tariff_id": transition.ToTariffID}
+					return map[string]any{auditKeyFromTariffID: *transition.FromTariffID, auditKeyToTariffID: transition.ToTariffID}
 				},
 			},
 		); err != nil {
@@ -379,7 +383,7 @@ func (s *SubscriptionService) planPayment(
 		Action:     auditdomain.ActionSubscriptionTariffChanged,
 		EntityType: auditdomain.EntitySubscription,
 		EntityID:   &sub.ID,
-		Context:    map[string]any{"from_tariff_id": currentTariff.ID, "to_tariff_id": newTariff.ID, "payment_id": payment.ID},
+		Context:    map[string]any{auditKeyFromTariffID: currentTariff.ID, auditKeyToTariffID: newTariff.ID, auditKeyPaymentID: payment.ID},
 	}); err != nil {
 		return nil, nil, fmt.Errorf("record audit: %w", err)
 	}
@@ -389,10 +393,12 @@ func (s *SubscriptionService) planPayment(
 // findPendingPayment returns the user's pending payment for the given tariff
 // and period, or nil. Both the pre-create deduplication lookup and the
 // unique-race backstop resolve through it.
-func findPendingPayment(stores *txStores, ctx context.Context, userID, tariffID uuid.UUID, period domain.SubscriptionPeriod) *domain.SubscriptionPayment {
+func findPendingPayment(
+	stores *txStores, ctx context.Context, userID, tariffID uuid.UUID, period domain.SubscriptionPeriod,
+) *domain.SubscriptionPayment {
 	pending, err := stores.payments.ListPendingByUserID(ctx, userID)
 	if err != nil {
-		return nil // the caller's Create path surfaces real repository errors
+		return nil // The caller's Create path surfaces real repository errors.
 	}
 	for i := range pending {
 		if pending[i].TariffID == tariffID && pending[i].Period == period {
@@ -436,7 +442,9 @@ func (s *SubscriptionService) initiatePaymentAtProvider(
 // the fresh-initiation and recovery paths: a customer-initiated payment that
 // saves its method for later merchant-initiated charges, with the form
 // deadline from the module config.
-func (s *SubscriptionService) initPaymentRequest(payment domain.SubscriptionPayment, tariff domain.Tariff, purpose PaymentPurposeKind) InitPaymentRequest {
+func (s *SubscriptionService) initPaymentRequest(
+	payment domain.SubscriptionPayment, tariff domain.Tariff, purpose PaymentPurposeKind,
+) InitPaymentRequest {
 	return InitPaymentRequest{
 		PaymentID:     payment.ID,
 		AmountKopecks: payment.AmountKopecks,
@@ -478,12 +486,12 @@ func (s *SubscriptionService) markPaymentFailedBestEffort(ctx context.Context, p
 			Action:     auditdomain.ActionSubscriptionPaymentFailed,
 			EntityType: auditdomain.EntitySubscriptionPayment,
 			EntityID:   &payment.ID,
-			Context:    map[string]any{"payment_id": payment.ID, "provider": string(s.provider.Name())},
+			Context:    map[string]any{auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name())},
 		})
 	})
 	if err != nil {
 		s.log.ErrorContext(ctx, "failed to mark payment failed after provider init error",
-			slog.String("payment_id", paymentID.String()),
+			slog.String(auditKeyPaymentID, paymentID.String()),
 			slog.String("error", sanitize.Error(err)))
 	}
 }

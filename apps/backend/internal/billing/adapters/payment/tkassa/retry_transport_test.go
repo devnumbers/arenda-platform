@@ -15,6 +15,14 @@ import (
 	"time"
 )
 
+// Shared error-string fixtures for the net.Error fakes and the future-method
+// probe used by the retry tables.
+const (
+	errTimeout       = "timeout"
+	errBoom          = "boom"
+	futureMethodName = "SomeFutureMethod"
+)
+
 type timeoutNetError struct {
 	errorString string
 }
@@ -66,7 +74,7 @@ func TestRetryTransportSuccessFirstAttempt(t *testing.T) {
 func TestRetryTransportRetryThenSuccess(t *testing.T) {
 	base := &countingRoundTripper{
 		failures: 2,
-		err:      &timeoutNetError{errorString: "timeout"},
+		err:      &timeoutNetError{errorString: errTimeout},
 	}
 	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
 
@@ -82,7 +90,7 @@ func TestRetryTransportRetryThenSuccess(t *testing.T) {
 }
 
 func TestRetryTransportExhaustsRetries(t *testing.T) {
-	retriableErr := &timeoutNetError{errorString: "boom"}
+	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
 	tr := newRetryTransport(base, 2, 1*time.Millisecond, 5*time.Millisecond)
 
@@ -101,7 +109,7 @@ func TestRetryTransportExhaustsRetries(t *testing.T) {
 }
 
 func TestRetryTransportNoRetryWhenDisabled(t *testing.T) {
-	retriableErr := &timeoutNetError{errorString: "boom"}
+	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
 	tr := newRetryTransport(base, 0, 1*time.Millisecond, 5*time.Millisecond)
 
@@ -136,7 +144,7 @@ func TestRetryTransportPreservesBodyAcrossRetries(t *testing.T) {
 	wantBody := `{"key":"value"}`
 	base := &bodyCapturingRoundTripper{
 		failures: 2,
-		err:      &timeoutNetError{errorString: "timeout"},
+		err:      &timeoutNetError{errorString: errTimeout},
 	}
 	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
 
@@ -181,7 +189,7 @@ func TestRetryTransportBackoffExponential(t *testing.T) {
 }
 
 func TestRetryTransportJitterApplied(t *testing.T) {
-	retriableErr := &timeoutNetError{errorString: "boom"}
+	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
 	tr := newRetryTransport(base, 1, 1*time.Millisecond, 100*time.Millisecond)
 
@@ -204,7 +212,7 @@ func TestRetryTransportJitterApplied(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	// maxRetries=1 with an always-failing base yields exactly one retry
+	// MaxRetries=1 with an always-failing base yields exactly one retry
 	// (1 initial + 1 retry) and therefore exactly one sleep at attempt 0.
 	if base.calls.Load() != 2 {
 		t.Fatalf("expected 2 calls (1 initial + 1 retry), got %d", base.calls.Load())
@@ -221,7 +229,7 @@ func TestRetryTransportJitterApplied(t *testing.T) {
 
 func TestRetryTransportBackoffOverflowCap(t *testing.T) {
 	tr := &retryTransport{baseDelay: time.Hour, maxDelay: 10 * time.Minute}
-	// shift is capped at 30; time.Hour * (1<<30) exceeds int64 and wraps to a
+	// Shift is capped at 30; time.Hour * (1<<30) exceeds int64 and wraps to a
 	// negative value. The overflow guard must clamp the result to maxDelay and
 	// never return a negative (or zero) duration.
 	got := tr.backoff(30)
@@ -247,7 +255,7 @@ func TestCryptoJitter_DrawsWithinHalfOpenInterval(t *testing.T) {
 
 func TestCryptoJitter_NonPositiveMaxIsZero(t *testing.T) {
 	t.Parallel()
-	// crypto/rand.Int panics for max <= 0; a zero-configured delay must
+	// A non-positive max makes crypto/rand.Int panic; a zero-configured delay must
 	// degrade to "no sleep" instead of panicking inside the transport.
 	if got := cryptoJitter(0); got != 0 {
 		t.Fatalf("cryptoJitter(0) = %v, want 0", got)
@@ -258,7 +266,7 @@ func TestCryptoJitter_NonPositiveMaxIsZero(t *testing.T) {
 }
 
 func TestRetryTransportCanRetry(t *testing.T) {
-	timeout := &timeoutNetError{errorString: "timeout"}
+	timeout := &timeoutNetError{errorString: errTimeout}
 	cases := []struct {
 		name         string
 		method       string
@@ -266,21 +274,21 @@ func TestRetryTransportCanRetry(t *testing.T) {
 		wroteRequest bool
 		want         bool
 	}{
-		{"nil error", "GetState", nil, false, false},
-		{"context canceled", "GetState", context.Canceled, false, false},
-		{"non-timeout net error", "GetState", &nonTimeoutNetError{errorString: "temp"}, false, false},
-		{"permanent net error", "GetState", &permanentNetError{errorString: "perm"}, false, false},
-		{"plain error", "GetState", errors.New("plain"), false, false},
-		{"read method retries timeout after send", "GetState", timeout, true, true},
-		{"idempotent Init retries timeout after send", "Init", timeout, true, true},
-		{"Charge retries timeout before send", "Charge", timeout, false, true},
-		{"Charge never retries after send", "Charge", timeout, true, false},
-		{"Cancel never retries after send", "Cancel", timeout, true, false},
-		{"AddCard never retries after send", "AddCard", timeout, true, false},
+		{"nil error", methodGetState, nil, false, false},
+		{"context canceled", methodGetState, context.Canceled, false, false},
+		{"non-timeout net error", methodGetState, &nonTimeoutNetError{errorString: "temp"}, false, false},
+		{"permanent net error", methodGetState, &permanentNetError{errorString: "perm"}, false, false},
+		{"plain error", methodGetState, errors.New("plain"), false, false},
+		{"read method retries timeout after send", methodGetState, timeout, true, true},
+		{"idempotent Init retries timeout after send", methodInit, timeout, true, true},
+		{"Charge retries timeout before send", methodCharge, timeout, false, true},
+		{"Charge never retries after send", methodCharge, timeout, true, false},
+		{"Cancel never retries after send", methodCancel, timeout, true, false},
+		{"AddCard never retries after send", methodAddCard, timeout, true, false},
 		{"RemoveCard never retries after send", "RemoveCard", timeout, true, false},
 		{"AddCustomer never retries after send", "AddCustomer", timeout, true, false},
-		{"unknown method is conservative after send", "SomeFutureMethod", timeout, true, false},
-		{"unknown method retries before send", "SomeFutureMethod", timeout, false, true},
+		{"unknown method is conservative after send", futureMethodName, timeout, true, false},
+		{"unknown method retries before send", futureMethodName, timeout, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -467,12 +475,12 @@ func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
 		method   string
 		wantHits int32
 	}{
-		{"Charge", 1},
-		{"Cancel", 1},
-		{"AddCard", 1},
+		{methodCharge, 1},
+		{methodCancel, 1},
+		{methodAddCard, 1},
 		{"RemoveCard", 1},
 		{"AddCustomer", 1},
-		{"SomeFutureMethod", 1},
+		{futureMethodName, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.method, func(t *testing.T) {
@@ -498,7 +506,7 @@ func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
 }
 
 func TestRetryTransportReadMethodsRetriedAfterReadTimeout(t *testing.T) {
-	for _, method := range []string{"Init", "GetState"} {
+	for _, method := range []string{methodInit, methodGetState} {
 		t.Run(method, func(t *testing.T) {
 			var hits atomic.Int32
 			srv := hangingServer(t, &hits)
@@ -535,9 +543,9 @@ func (s *signalingRoundTripper) RoundTrip(_ *http.Request) (*http.Response, erro
 func TestRetryTransportBackoffRespectsContextCancel(t *testing.T) {
 	base := &signalingRoundTripper{
 		calls: make(chan struct{}, 4),
-		err:   &timeoutNetError{errorString: "boom"},
+		err:   &timeoutNetError{errorString: errBoom},
 	}
-	tr := newRetryTransport(base, 3, time.Hour, time.Hour) // backoff that would hang without ctx awareness
+	tr := newRetryTransport(base, 3, time.Hour, time.Hour) // Backoff that would hang without ctx awareness.
 
 	ctx, cancel := context.WithCancel(t.Context())
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://securepay.tinkoff.ru/v2/Charge", nil)
@@ -549,7 +557,7 @@ func TestRetryTransportBackoffRespectsContextCancel(t *testing.T) {
 		done <- err
 	}()
 
-	<-base.calls // first attempt failed, backoff sleep started
+	<-base.calls // First attempt failed, backoff sleep started.
 	cancel()
 
 	select {

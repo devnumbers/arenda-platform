@@ -368,7 +368,7 @@ func TestSubscriptionService_ChangeTariff_DowngradeIsScheduled(t *testing.T) {
 	if entries[0].Action != auditdomain.ActionSubscriptionTariffChanged {
 		t.Errorf("audit action = %q, want %q", entries[0].Action, auditdomain.ActionSubscriptionTariffChanged)
 	}
-	if entries[0].Context["from_tariff_id"] != sub.TariffID || entries[0].Context["to_tariff_id"] != h.tariffID(t, domain.TariffPro) {
+	if entries[0].Context[auditKeyFromTariffID] != sub.TariffID || entries[0].Context[auditKeyToTariffID] != h.tariffID(t, domain.TariffPro) {
 		t.Errorf("audit context = %v, want from business to pro", entries[0].Context)
 	}
 }

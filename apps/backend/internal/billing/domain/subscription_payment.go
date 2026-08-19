@@ -38,7 +38,10 @@ type SubscriptionPayment struct {
 // provider reference fields are empty: they are filled atomically after the
 // provider accepts the initiation (the pending row survives a crash between
 // the provider call and the save).
-func NewSubscriptionPayment(userID, subscriptionID, tariffID uuid.UUID, period SubscriptionPeriod, amountKopecks int64, provider PaymentProvider, now time.Time) (SubscriptionPayment, error) {
+func NewSubscriptionPayment(
+	userID, subscriptionID, tariffID uuid.UUID, period SubscriptionPeriod,
+	amountKopecks int64, provider PaymentProvider, now time.Time,
+) (SubscriptionPayment, error) {
 	if amountKopecks <= 0 {
 		return SubscriptionPayment{}, ErrInvalidAmount
 	}

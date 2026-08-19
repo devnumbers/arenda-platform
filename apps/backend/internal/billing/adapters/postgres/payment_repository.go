@@ -50,7 +50,9 @@ func (r *SubscriptionPaymentRepository) WithTx(tx transaction.Tx) (application.S
 // Create inserts a new payment. A unique violation on the pending-payments
 // partial index is narrowed to ErrAlreadyExists: a concurrent request won the
 // initiation race and the caller returns the existing pending payment.
-func (r *SubscriptionPaymentRepository) Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error) {
+func (r *SubscriptionPaymentRepository) Create(
+	ctx context.Context, payment domain.SubscriptionPayment,
+) (domain.SubscriptionPayment, error) {
 	row, err := r.q().CreateSubscriptionPayment(ctx, mapCreatePaymentParams(payment))
 	if err != nil {
 		if pgerr.IsUniqueViolation(err) {
@@ -126,7 +128,9 @@ func (r *SubscriptionPaymentRepository) List(ctx context.Context, sel applicatio
 // adminPaymentQueryParams maps the validated application filters to the SQL
 // parameters. The phone filter is encrypted deterministically so it matches
 // the stored ciphertext; a plaintext row still matches its own form.
-func (r *SubscriptionPaymentRepository) adminPaymentQueryParams(ctx context.Context, filters application.AdminPaymentFilters) (postgres.ListSubscriptionPaymentsAdminParams, error) {
+func (r *SubscriptionPaymentRepository) adminPaymentQueryParams(
+	ctx context.Context, filters application.AdminPaymentFilters,
+) (postgres.ListSubscriptionPaymentsAdminParams, error) {
 	params := postgres.ListSubscriptionPaymentsAdminParams{
 		Status:             filters.Status,
 		UserPhone:          filters.UserPhone,
@@ -152,7 +156,9 @@ func (r *SubscriptionPaymentRepository) adminPaymentQueryParams(ctx context.Cont
 // ListAdminPayments implements the admin payment listing (issue #254): every
 // user's payments joined with the payer's phone, filtered and sorted by the
 // validated filters, with the total count of the filtered set.
-func (r *SubscriptionPaymentRepository) ListAdminPayments(ctx context.Context, filters application.AdminPaymentFilters) ([]application.AdminPaymentRow, int64, error) {
+func (r *SubscriptionPaymentRepository) ListAdminPayments(
+	ctx context.Context, filters application.AdminPaymentFilters,
+) ([]application.AdminPaymentRow, int64, error) {
 	params, err := r.adminPaymentQueryParams(ctx, filters)
 	if err != nil {
 		return nil, 0, err
@@ -205,7 +211,9 @@ func (r *SubscriptionPaymentRepository) GetAdminPayment(ctx context.Context, pay
 
 // mapAdminPaymentRows maps the admin listing rows to the application shape,
 // decrypting the payer's phone where it is stored as ciphertext.
-func mapAdminPaymentRows(ctx context.Context, r *SubscriptionPaymentRepository, rows []postgres.ListSubscriptionPaymentsAdminRow) ([]application.AdminPaymentRow, error) {
+func mapAdminPaymentRows(
+	ctx context.Context, r *SubscriptionPaymentRepository, rows []postgres.ListSubscriptionPaymentsAdminRow,
+) ([]application.AdminPaymentRow, error) {
 	result := make([]application.AdminPaymentRow, 0, len(rows))
 	for _, row := range rows {
 		payment, err := mapSubscriptionPaymentFromColumns(
@@ -305,7 +313,7 @@ func mapCreatePaymentParams(p domain.SubscriptionPayment) postgres.CreateSubscri
 		PaymentUrl:            pgconv.StringPtrToPgtype(p.PaymentURL),
 		Status:                string(p.Status),
 		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(p.RefundedAmountKopecks),
-		// charge_attempts is a bounded retry counter (config limit is 3).
+		// The charge_attempts counter is bounded (config limit is 3).
 		ChargeAttempts: shared.ToInt32Clamped(p.ChargeAttempts),
 		ErrorCode:      pgconv.StringPtrToPgtype(p.ErrorCode),
 		SucceededAt:    pgconv.TimePtrToPgtype(p.SucceededAt),
@@ -320,7 +328,7 @@ func mapUpdatePaymentParams(p domain.SubscriptionPayment) postgres.UpdateSubscri
 		PaymentUrl:            pgconv.StringPtrToPgtype(p.PaymentURL),
 		Status:                string(p.Status),
 		RefundedAmountKopecks: pgconv.Int8PtrToPgtype(p.RefundedAmountKopecks),
-		// charge_attempts is a bounded retry counter (config limit is 3).
+		// The charge_attempts counter is bounded (config limit is 3).
 		ChargeAttempts: shared.ToInt32Clamped(p.ChargeAttempts),
 		ErrorCode:      pgconv.StringPtrToPgtype(p.ErrorCode),
 		SucceededAt:    pgconv.TimePtrToPgtype(p.SucceededAt),

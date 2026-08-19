@@ -6,6 +6,18 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
+// Audit and log context keys shared by the billing use cases: the same keys
+// appear in audit Entry.Context maps and in slog attribute lists.
+const (
+	auditKeyPaymentID     = "payment_id"
+	auditKeyAmountKopecks = "amount_kopecks"
+	auditKeyProvider      = "provider"
+	auditKeyTariffName    = "tariff_name"
+	auditKeyFromTariffID  = "from_tariff_id"
+	auditKeyToTariffID    = "to_tariff_id"
+	auditKeyValidUntil    = "valid_until"
+)
+
 // Services is the billing module's public composition surface: the services
 // every consumer (HTTP handlers, event subscribers, cross-context bridges,
 // workers) is wired against.
@@ -64,12 +76,16 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 		AdminPayments: cfg.AdminPayments,
 	})
 	return Services{
-		Tariffs:        NewTariffService(factory, TariffServiceConfig{Log: cfg.Logger}),
-		Subscriptions:  NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger}),
-		Payments:       payments,
-		PaymentMethods: NewPaymentMethodService(factory, cfg.Provider, PaymentMethodServiceConfig{Config: cfg.Config, Clock: cfg.Clock, Log: cfg.Logger}),
-		Onboarding:     NewOnboardingService(factory, OnboardingServiceConfig{Logger: cfg.Logger}),
-		Limiter:        NewSubscriptionPropertyLimiter(factory.subscriptions, factory.tariffs, cfg.Clock),
+		Tariffs: NewTariffService(factory, TariffServiceConfig{Log: cfg.Logger}),
+		Subscriptions: NewSubscriptionService(factory, SubscriptionServiceConfig{
+			Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger,
+		}),
+		Payments: payments,
+		PaymentMethods: NewPaymentMethodService(factory, cfg.Provider, PaymentMethodServiceConfig{
+			Config: cfg.Config, Clock: cfg.Clock, Log: cfg.Logger,
+		}),
+		Onboarding: NewOnboardingService(factory, OnboardingServiceConfig{Logger: cfg.Logger}),
+		Limiter:    NewSubscriptionPropertyLimiter(factory.subscriptions, factory.tariffs, cfg.Clock),
 		Workers: NewWorkers(factory, WorkersConfig{
 			Provider:  cfg.Provider,
 			Payments:  payments,

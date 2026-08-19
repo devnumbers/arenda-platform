@@ -118,7 +118,9 @@ func (l *scriptedLifecycle) ApplyPaymentNotification(_ context.Context, n *Payme
 	return l.applyErr
 }
 
-func (l *scriptedLifecycle) ResolveRefundingFromStatus(_ context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) (bool, error) {
+func (l *scriptedLifecycle) ResolveRefundingFromStatus(
+	_ context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult,
+) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.resolved = append(l.resolved, refundResolution{payment: payment, status: status})
@@ -220,11 +222,20 @@ func newWorkersHarness(t *testing.T, cfg Config) *workersHarness {
 		}
 	}
 	clk := fakeClock{now: workersNow}
-	basic := domain.Tariff{ID: mustNewUUID(), Name: domain.TariffBasic, ActivePropertyLimit: 1, MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0, IsActive: true}
-	pro := domain.Tariff{ID: mustNewUUID(), Name: domain.TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true}
-	business := domain.Tariff{ID: mustNewUUID(), Name: domain.TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: true}
+	basic := domain.Tariff{
+		ID: mustNewUUID(), Name: domain.TariffBasic, ActivePropertyLimit: 1,
+		MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0, IsActive: true,
+	}
+	pro := domain.Tariff{
+		ID: mustNewUUID(), Name: domain.TariffPro, ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000, IsActive: true,
+	}
+	business := domain.Tariff{
+		ID: mustNewUUID(), Name: domain.TariffBusiness, ActivePropertyLimit: -1,
+		MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000, IsActive: true,
+	}
 	stores := newFakeStores(basic, pro, business)
-	provider := &scriptedProvider{name: "fake"}
+	provider := &scriptedProvider{name: testProviderFake}
 	factory := stores.factory(nil)
 	logger := slog.New(slog.DiscardHandler)
 	workers := NewWorkers(factory, WorkersConfig{
@@ -234,7 +245,10 @@ func newWorkersHarness(t *testing.T, cfg Config) *workersHarness {
 		Config:   cfg,
 		Logger:   logger,
 	})
-	return &workersHarness{stores: stores, provider: provider, workers: workers, cfg: cfg, now: workersNow, basic: basic, pro: pro, business: business}
+	return &workersHarness{
+		stores: stores, provider: provider, workers: workers, cfg: cfg, now: workersNow,
+		basic: basic, pro: pro, business: business,
+	}
 }
 
 func mustNewUUID() uuid.UUID {
@@ -256,7 +270,7 @@ func (h *workersHarness) seedSubscription(t *testing.T, mutate func(*domain.Subs
 	}
 	month := domain.PeriodMonth
 	sub.TariffID = h.pro.ID
-	validUntil := h.now.AddDate(0, -1, 0) // expired a month ago
+	validUntil := h.now.AddDate(0, -1, 0) // Expired a month ago.
 	sub.ValidUntil = &validUntil
 	sub.AutoRenewEnabled = true
 	sub.CurrentPeriod = &month
@@ -272,7 +286,9 @@ func (h *workersHarness) seedSubscription(t *testing.T, mutate func(*domain.Subs
 
 // seedActiveMethod stores an active payment method and links it as the
 // subscription's charge target.
-func (h *workersHarness) seedActiveMethod(t *testing.T, sub domain.Subscription, providerName domain.PaymentProvider, token string) domain.PaymentMethod {
+func (h *workersHarness) seedActiveMethod(
+	t *testing.T, sub domain.Subscription, providerName domain.PaymentProvider, token string,
+) domain.PaymentMethod {
 	t.Helper()
 	method, err := domain.NewPaymentMethod(sub.UserID, providerName, token, h.now)
 	if err != nil {
@@ -330,7 +346,7 @@ func (h *workersHarness) storedSubscription(t *testing.T, sub domain.Subscriptio
 func TestWorkers_RenewalChargesActiveMethodAndRenews(t *testing.T) {
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
-	method := h.seedActiveMethod(t, sub, "fake", "token_good")
+	method := h.seedActiveMethod(t, sub, testProviderFake, "token_good")
 
 	count, err := h.workers.ProcessRenewals(t.Context(), h.now)
 	if err != nil {
@@ -350,7 +366,7 @@ func TestWorkers_RenewalChargesActiveMethodAndRenews(t *testing.T) {
 	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != method.ID {
 		t.Errorf("payment method = %v, want the active method", payment.PaymentMethodID)
 	}
-	if payment.Provider != "fake" {
+	if payment.Provider != testProviderFake {
 		t.Errorf("payment provider = %q, want fake", payment.Provider)
 	}
 
@@ -457,7 +473,7 @@ func TestWorkers_RenewalWithoutChargeableMethodEntersGrace(t *testing.T) {
 func TestWorkers_RenewalFailedChargeMovesToGrace(t *testing.T) {
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
-	h.seedActiveMethod(t, sub, "fake", "token_bad")
+	h.seedActiveMethod(t, sub, testProviderFake, "token_bad")
 	h.provider.chargeFn = func(req ChargeRequest) (ChargeResult, error) {
 		return ChargeResult{ProviderPaymentID: req.ProviderPaymentID, Status: domain.PaymentStatusFailed, ErrorCode: "53"}, nil
 	}
@@ -490,11 +506,13 @@ func TestWorkers_RenewalFailedChargeMovesToGrace(t *testing.T) {
 func TestWorkers_RenewalSkipsRechargeWhenProviderSucceeded(t *testing.T) {
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
-	method := h.seedActiveMethod(t, sub, "fake", "token_good")
+	method := h.seedActiveMethod(t, sub, testProviderFake, "token_good")
 
 	// A previous run crashed after the provider captured the charge but before
 	// the result was applied: the pending payment already has its reference.
-	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, h.pro.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+		h.pro.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("new payment: %v", err)
 	}
@@ -539,8 +557,10 @@ func TestWorkers_RenewalSkipsRechargeWhenProviderSucceeded(t *testing.T) {
 func TestWorkers_RenewalFinalizesProviderFailedWithoutCharge(t *testing.T) {
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
-	h.seedActiveMethod(t, sub, "fake", "token_good")
-	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, h.pro.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
+	h.seedActiveMethod(t, sub, testProviderFake, "token_good")
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+		h.pro.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("new payment: %v", err)
 	}
@@ -581,8 +601,10 @@ func TestWorkers_RenewalFinalizesProviderFailedWithoutCharge(t *testing.T) {
 func TestWorkers_RenewalProviderStatusUnknownSkipsCharge(t *testing.T) {
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
-	h.seedActiveMethod(t, sub, "fake", "token_good")
-	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, h.pro.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
+	h.seedActiveMethod(t, sub, testProviderFake, "token_good")
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+		h.pro.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("new payment: %v", err)
 	}
@@ -626,7 +648,7 @@ func TestWorkers_RenewalUncertainChargeResolvesFromProviderStatus(t *testing.T) 
 	t.Run("provider succeeded", func(t *testing.T) {
 		h := newWorkersHarness(t, Config{})
 		sub := h.seedSubscription(t, nil)
-		h.seedActiveMethod(t, sub, "fake", "token_good")
+		h.seedActiveMethod(t, sub, testProviderFake, "token_good")
 		// The pre-charge status check sees the charge in flight; the charge
 		// call itself times out; the recovery query then reports the capture.
 		var statusCalls int
@@ -660,7 +682,7 @@ func TestWorkers_RenewalUncertainChargeResolvesFromProviderStatus(t *testing.T) 
 	t.Run("provider unknown", func(t *testing.T) {
 		h := newWorkersHarness(t, Config{})
 		sub := h.seedSubscription(t, nil)
-		h.seedActiveMethod(t, sub, "fake", "token_good")
+		h.seedActiveMethod(t, sub, testProviderFake, "token_good")
 		// Pre-charge check pending, the charge times out, the recovery query
 		// cannot resolve the outcome either.
 		var statusCalls int
@@ -693,9 +715,12 @@ func TestWorkers_RenewalUncertainChargeResolvesFromProviderStatus(t *testing.T) 
 // configured number of attempts and the subscription enters grace (ported
 // from TestBilling_ProcessRenewals_ChargeAttemptLimitMovesToGrace).
 func TestWorkers_RenewalChargeAttemptLimitMovesToGrace(t *testing.T) {
-	h := newWorkersHarness(t, Config{ChargeAttemptLimit: 2, WorkerBatchSize: 100, GraceDuration: 7 * 24 * time.Hour, PendingPaymentStaleness: 5 * time.Minute})
+	h := newWorkersHarness(t, Config{
+		ChargeAttemptLimit: 2, WorkerBatchSize: 100,
+		GraceDuration: 7 * 24 * time.Hour, PendingPaymentStaleness: 5 * time.Minute,
+	})
 	sub := h.seedSubscription(t, nil)
-	h.seedActiveMethod(t, sub, "fake", "token_good")
+	h.seedActiveMethod(t, sub, testProviderFake, "token_good")
 	h.provider.chargeFn = func(ChargeRequest) (ChargeResult, error) {
 		return ChargeResult{}, errors.New("charge timeout")
 	}
@@ -738,8 +763,10 @@ func TestWorkers_RenewalChargeAttemptLimitMovesToGrace(t *testing.T) {
 func TestWorkers_RenewalRecoversPendingPaymentFromCreateRace(t *testing.T) {
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
-	method := h.seedActiveMethod(t, sub, "fake", "token_good")
-	existing, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, h.pro.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
+	method := h.seedActiveMethod(t, sub, testProviderFake, "token_good")
+	existing, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+		h.pro.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("new payment: %v", err)
 	}
@@ -786,7 +813,8 @@ func TestWorkers_RenewalFreeBasicTermsFallToBasic(t *testing.T) {
 
 	stored := h.storedSubscription(t, sub)
 	if stored.TariffID != h.basic.ID || stored.ValidUntil != nil || stored.AutoRenewEnabled {
-		t.Errorf("subscription = tariff %s until %v autorenew %t, want basic/no validity/off", stored.TariffID, stored.ValidUntil, stored.AutoRenewEnabled)
+		t.Errorf("subscription = tariff %s until %v autorenew %t, want basic/no validity/off",
+			stored.TariffID, stored.ValidUntil, stored.AutoRenewEnabled)
 	}
 	if stored.Status != domain.SubscriptionStatusActive {
 		t.Errorf("status = %q, want active", stored.Status)
@@ -871,7 +899,7 @@ func TestWorkers_ScheduledChangesSkipPaidTargetForRenewalCharge(t *testing.T) {
 	archiver := &fakeArchiverSource{}
 	h.workers.SetLifecycleBridges(archiver, nil)
 
-	// business -> pro: a paid downgrade, due now.
+	// Tariff business -> pro: a paid downgrade, due now.
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
 		s.TariffID = h.business.ID
 		target := h.pro.ID
@@ -881,7 +909,7 @@ func TestWorkers_ScheduledChangesSkipPaidTargetForRenewalCharge(t *testing.T) {
 		s.PendingChangeAt = &changeAt
 		s.PendingPeriod = &period
 	})
-	h.seedActiveMethod(t, sub, "fake", "token_good")
+	h.seedActiveMethod(t, sub, testProviderFake, "token_good")
 
 	count, err := h.workers.ProcessScheduledChanges(t.Context(), h.now)
 	if err != nil {
@@ -945,7 +973,8 @@ func TestWorkers_ExpiredGraceDowngradesToBasicWithBridges(t *testing.T) {
 		t.Fatalf("ProcessExpiredGrace() = %d, want 1", count)
 	}
 	stored := h.storedSubscription(t, sub)
-	if stored.TariffID != h.basic.ID || stored.ValidUntil != nil || stored.AutoRenewEnabled || stored.Status != domain.SubscriptionStatusActive {
+	if stored.TariffID != h.basic.ID || stored.ValidUntil != nil || stored.AutoRenewEnabled ||
+		stored.Status != domain.SubscriptionStatusActive {
 		t.Errorf("subscription = %+v, want basic/no validity/no autorenew/active", stored)
 	}
 	transitions := h.transitionsOf(t, sub)
@@ -1030,7 +1059,9 @@ func TestWorkers_ProcessRenewalsRequiresProvider(t *testing.T) {
 func TestWorkers_ReconcileStalePendingPayments(t *testing.T) {
 	newStaleUpgrade := func(t *testing.T, h *workersHarness, sub domain.Subscription, ref string) domain.SubscriptionPayment {
 		t.Helper()
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth, h.business.MonthlyPriceKopecks, "fake", h.now.Add(-10*time.Minute))
+		payment, err := domain.NewSubscriptionPayment(
+			sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
+			h.business.MonthlyPriceKopecks, testProviderFake, h.now.Add(-10*time.Minute))
 		if err != nil {
 			t.Fatalf("new payment: %v", err)
 		}
@@ -1046,7 +1077,7 @@ func TestWorkers_ReconcileStalePendingPayments(t *testing.T) {
 
 	t.Run("succeeded finalizes upgrade", func(t *testing.T) {
 		h := newWorkersHarness(t, Config{})
-		sub := h.seedSubscription(t, nil) // still on pro; the payment buys business
+		sub := h.seedSubscription(t, nil) // Still on pro; the payment buys business.
 		payment := newStaleUpgrade(t, h, sub, "prov_stale_1")
 		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
 			return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
@@ -1108,7 +1139,9 @@ func TestWorkers_ReconcileStalePendingPayments(t *testing.T) {
 	t.Run("fresh pending payments are not stale", func(t *testing.T) {
 		h := newWorkersHarness(t, Config{})
 		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth, h.business.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
+		payment, err := domain.NewSubscriptionPayment(
+			sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
+			h.business.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
 		if err != nil {
 			t.Fatalf("new payment: %v", err)
 		}
@@ -1138,7 +1171,9 @@ func TestWorkers_ReconciliationRoutesThroughLifecyclePort(t *testing.T) {
 	seedStalePending := func(t *testing.T, h *workersHarness, ref string) domain.SubscriptionPayment {
 		t.Helper()
 		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth, h.business.MonthlyPriceKopecks, "fake", h.now.Add(-10*time.Minute))
+		payment, err := domain.NewSubscriptionPayment(
+			sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
+			h.business.MonthlyPriceKopecks, testProviderFake, h.now.Add(-10*time.Minute))
 		if err != nil {
 			t.Fatalf("new payment: %v", err)
 		}
@@ -1154,7 +1189,9 @@ func TestWorkers_ReconciliationRoutesThroughLifecyclePort(t *testing.T) {
 	seedStuckRefund := func(t *testing.T, h *workersHarness) domain.SubscriptionPayment {
 		t.Helper()
 		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, h.pro.MonthlyPriceKopecks, "fake", h.now)
+		payment, err := domain.NewSubscriptionPayment(
+			sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+			h.pro.MonthlyPriceKopecks, testProviderFake, h.now)
 		if err != nil {
 			t.Fatalf("new payment: %v", err)
 		}
@@ -1313,8 +1350,10 @@ func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
 		t.Helper()
 		h := newWorkersHarness(t, Config{})
 		sub := h.seedSubscription(t, nil)
-		method := h.seedActiveMethod(t, sub, "fake", "token_async")
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, h.pro.MonthlyPriceKopecks, "fake", h.now.Add(-time.Minute))
+		method := h.seedActiveMethod(t, sub, testProviderFake, "token_async")
+		payment, err := domain.NewSubscriptionPayment(
+			sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+			h.pro.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
 		if err != nil {
 			t.Fatalf("new payment: %v", err)
 		}
@@ -1385,7 +1424,10 @@ func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
 // TestBilling_ProcessRenewals_BatchWithoutProgressStops and
 // ..._ProcessExpiredGrace_BatchWithoutProgressStops).
 func TestWorkers_BatchWithoutProgressStops(t *testing.T) {
-	h := newWorkersHarness(t, Config{WorkerBatchSize: 1, GraceDuration: 7 * 24 * time.Hour, ChargeAttemptLimit: 3, PendingPaymentStaleness: 5 * time.Minute})
+	h := newWorkersHarness(t, Config{
+		WorkerBatchSize: 1, GraceDuration: 7 * 24 * time.Hour,
+		ChargeAttemptLimit: 3, PendingPaymentStaleness: 5 * time.Minute,
+	})
 
 	// First by pending_change_at: its pending tariff is missing, so it fails
 	// every attempt. The second is a healthy free downgrade that must wait.
@@ -1428,7 +1470,7 @@ func TestWorkers_BatchWithoutProgressStops(t *testing.T) {
 func TestWorkers_UncertainChargeKeepsProviderErrorCode(t *testing.T) {
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
-	h.seedActiveMethod(t, sub, "fake", "token_good")
+	h.seedActiveMethod(t, sub, testProviderFake, "token_good")
 
 	codeErr := fmt.Errorf("charge rejected: %w", &testProviderError{code: "156"})
 	var statusCalls int

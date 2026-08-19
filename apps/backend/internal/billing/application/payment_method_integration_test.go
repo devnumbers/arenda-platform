@@ -128,7 +128,7 @@ func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
 
 	// 5. The session is completed and a repeated confirmation changes
 	// nothing.
-	closed, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), "fake", session.RequestKey)
+	closed, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), testProviderFake, session.RequestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate(): %v", err)
 	}
@@ -173,7 +173,7 @@ func TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook(t *testing.T) {
 	if len(methods) != 0 {
 		t.Fatalf("methods = %d, want 0 while the binding is pending", len(methods))
 	}
-	open, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), "fake", requestKey)
+	open, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), testProviderFake, requestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate(): %v", err)
 	}
@@ -211,7 +211,7 @@ func TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook(t *testing.T) {
 	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != methods[0].ID {
 		t.Fatalf("subscription active method = %v, want %v", sub.ActivePaymentMethodID, methods[0].ID)
 	}
-	closed, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), "fake", requestKey)
+	closed, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), testProviderFake, requestKey)
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate(): %v", err)
 	}
@@ -236,7 +236,7 @@ func TestPaymentMethodRepository_DuplicateTokenConvergesByHash(t *testing.T) {
 	h := newMethodIntegrationHarness(t)
 	userID := h.seedMethodUser(t)
 
-	first, err := domain.NewPaymentMethod(userID, "fake", "token_same", h.clock.Now())
+	first, err := domain.NewPaymentMethod(userID, testProviderFake, "token_same", h.clock.Now())
 	if err != nil {
 		t.Fatalf("NewPaymentMethod(): %v", err)
 	}
@@ -247,7 +247,7 @@ func TestPaymentMethodRepository_DuplicateTokenConvergesByHash(t *testing.T) {
 		t.Fatalf("UpsertByTokenHash(first): %v", err)
 	}
 
-	second, err := domain.NewPaymentMethod(userID, "fake", "token_same", h.clock.Now().Add(time.Minute))
+	second, err := domain.NewPaymentMethod(userID, testProviderFake, "token_same", h.clock.Now().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("NewPaymentMethod(): %v", err)
 	}
@@ -283,7 +283,7 @@ func TestPaymentMethodRepository_OneActivePerUserAndDeleteGuards(t *testing.T) {
 	h := newMethodIntegrationHarness(t)
 	userID := h.seedMethodUser(t)
 
-	first, err := domain.NewPaymentMethod(userID, "fake", "token_1", h.clock.Now())
+	first, err := domain.NewPaymentMethod(userID, testProviderFake, "token_1", h.clock.Now())
 	if err != nil {
 		t.Fatalf("NewPaymentMethod(): %v", err)
 	}
@@ -291,7 +291,7 @@ func TestPaymentMethodRepository_OneActivePerUserAndDeleteGuards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertByTokenHash(first): %v", err)
 	}
-	second, err := domain.NewPaymentMethod(userID, "fake", "token_2", h.clock.Now())
+	second, err := domain.NewPaymentMethod(userID, testProviderFake, "token_2", h.clock.Now())
 	if err != nil {
 		t.Fatalf("NewPaymentMethod(): %v", err)
 	}
@@ -347,7 +347,7 @@ func TestCardBindingSessionRepository_RoundTrip(t *testing.T) {
 	other := h.seedMethodUser(t)
 	now := h.clock.Now()
 
-	session, err := domain.NewCardBindingSession(userID, "fake", "req_key_1", now.Add(24*time.Hour), now)
+	session, err := domain.NewCardBindingSession(userID, testProviderFake, "req_key_1", now.Add(24*time.Hour), now)
 	if err != nil {
 		t.Fatalf("NewCardBindingSession(): %v", err)
 	}
@@ -356,7 +356,7 @@ func TestCardBindingSessionRepository_RoundTrip(t *testing.T) {
 	}
 
 	// The request key is unique per provider.
-	dup, err := domain.NewCardBindingSession(other, "fake", "req_key_1", now.Add(24*time.Hour), now)
+	dup, err := domain.NewCardBindingSession(other, testProviderFake, "req_key_1", now.Add(24*time.Hour), now)
 	if err != nil {
 		t.Fatalf("NewCardBindingSession(): %v", err)
 	}
@@ -364,7 +364,7 @@ func TestCardBindingSessionRepository_RoundTrip(t *testing.T) {
 		t.Fatal("duplicate (provider, request_key) must be rejected")
 	}
 
-	loaded, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), "fake", "req_key_1")
+	loaded, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), testProviderFake, "req_key_1")
 	if err != nil {
 		t.Fatalf("GetByRequestKeyForUpdate(): %v", err)
 	}

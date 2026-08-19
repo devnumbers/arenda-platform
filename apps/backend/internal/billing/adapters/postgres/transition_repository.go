@@ -70,7 +70,9 @@ func (r *SubscriptionTransitionRepository) Append(ctx context.Context, transitio
 }
 
 // ListBySubscriptionID returns the subscription's transitions, newest first.
-func (r *SubscriptionTransitionRepository) ListBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) ([]domain.Transition, error) {
+func (r *SubscriptionTransitionRepository) ListBySubscriptionID(
+	ctx context.Context, subscriptionID uuid.UUID,
+) ([]domain.Transition, error) {
 	rows, err := r.q().ListSubscriptionTransitionsBySubscription(ctx, pgtype.UUID{Bytes: subscriptionID, Valid: true})
 	if err != nil {
 		return nil, fmt.Errorf("list subscription transitions: %w", err)

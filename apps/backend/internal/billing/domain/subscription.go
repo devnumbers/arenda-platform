@@ -215,7 +215,9 @@ func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period
 // change on top of a service subscription converts it to the paid track
 // (issue #255): the owner paid, so the subscription is theirs from the new
 // period.
-func (s *Subscription) ApplyTariffChange(paymentID uuid.UUID, currentTariff, newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
+func (s *Subscription) ApplyTariffChange(
+	paymentID uuid.UUID, currentTariff, newTariff Tariff, period SubscriptionPeriod, now time.Time,
+) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
 	}

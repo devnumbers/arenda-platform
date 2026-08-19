@@ -25,7 +25,7 @@ import (
 // write — the incident-review trail of a pricing change.
 func tariffAuditContext(tariff domain.Tariff) map[string]any {
 	return map[string]any{
-		"tariff_name":           string(tariff.Name),
+		auditKeyTariffName:      string(tariff.Name),
 		"active_property_limit": tariff.ActivePropertyLimit,
 		"monthly_price_kopecks": tariff.MonthlyPriceKopecks,
 		"yearly_price_kopecks":  tariff.YearlyPriceKopecks,
