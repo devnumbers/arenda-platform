@@ -42,6 +42,11 @@ excluded_paths = [
   "*000104_billing_core_rewrite.up.sql",             # ban-drop-table ×4: переписывание billing (ADR 0037)
   "*000105_grace_notifications.up.sql",              # require-enum-value-ordering
   "*000108_drop_free_reminders.up.sql",              # ban-drop-column + ban-drop-table: осознанный drop (спека #380, решение #277)
+  # Новые миграции ниже — не «исторические»: осознанные решения текущей
+  # конвенции. NOT VALID + VALIDATE отклонён (#295: одна транзакция на файл,
+  # таблицы малы); операционный риск очереди блокировок гасят SET-таймауты
+  # в начале файла.
+  "*000111_property_contacts_owner_fk.up.sql",       # adding-foreign-key-constraint: FK без NOT VALID (тикет #351, решение #324)
 ]
 
 excluded_rules = [
@@ -54,10 +59,11 @@ excluded_rules = [
   # assume_in_transaction выше).
   "require-concurrent-index-creation",
   "require-concurrent-index-deletion",
-  # Репо не открывает миграции SET lock_timeout/statement_timeout: весь
-  # исторический корпус (каждый файл) этой конвенции предшествует, ретрофит =
-  # правка применённых миграций. Ввести конвенцию для новых миграций —
-  # отдельное решение (trigger-based gate review, docs/agents/tooling.md).
+  # Правила остаются выключенными: ретрофит исторического корпуса (файлы до
+  # 108) невозможен без правки применённых миграций. Конвенция для новых
+  # миграций уже принята (#324): файлы >= 000108 открываются SET
+  # lock_timeout/statement_timeout; cutoff-правило в domain-rules.mjs —
+  # отдельное внедрение пайплайна #324.
   "require-lock-timeout",
   "require-statement-timeout",
   # NOT VALID-констрейнты: таблицы малы, миграция исполняется одной транзакцией

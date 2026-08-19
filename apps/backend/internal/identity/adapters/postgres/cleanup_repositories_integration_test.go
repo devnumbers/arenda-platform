@@ -92,8 +92,22 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 		t.Fatalf("new live email: %v", err)
 	}
 	userID := user.ID
-	if err := codes.Save(ctx, mustLoginCode(t, expiredPhone, expiredEmail, "expiredhash", &userID, now.Add(-2*time.Hour))); err != nil {
-		t.Fatalf("save expired code: %v", err)
+	// The expired code is seeded with direct SQL for the same reason as the
+	// sessions above: Save pins created_at to the DB now() while expiry comes
+	// from the domain object, and chk_login_codes_expires_after_created
+	// forbids a code created already expired — only time passing makes a
+	// code expire.
+	expiredCodeID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new expired code id: %v", err)
+	}
+	_, err = pool.Exec(ctx,
+		`INSERT INTO login_codes (id, user_id, phone, email, code_hash, purpose, expires_at, used, created_at, phone_encrypted)
+		 VALUES ($1, $2, $3, $4, $5, 'login', $6, false, $7, false)`,
+		expiredCodeID, userID, expiredPhone.String(), expiredEmail.String(), "expiredhash",
+		now.Add(-2*time.Hour), now.Add(-35*24*time.Hour))
+	if err != nil {
+		t.Fatalf("insert expired code: %v", err)
 	}
 	if err := codes.Save(ctx, mustLoginCode(t, livePhone, liveEmail, "livehash", &userID, now)); err != nil {
 		t.Fatalf("save live code: %v", err)

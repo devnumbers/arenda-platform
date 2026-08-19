@@ -194,12 +194,17 @@ func bulkSeedLoginCodes(t *testing.T, pool *pgxpool.Pool, n int, usedRows bool, 
 			global := offset*batchSize + j
 			phone := fmt.Sprintf("+7916%02d%07d", phonePrefix, global)
 			expiresAt := now.Add(5 * time.Minute)
+			createdAt := now.Add(-time.Duration(global+1) * time.Second)
 			if usedRows {
+				// Used rows are expired historical noise; the lifecycle must
+				// still hold — chk_login_codes_expires_after_created forbids
+				// a code created already expired.
 				expiresAt = now.Add(-time.Duration(global+1) * time.Minute)
+				createdAt = now.Add(-time.Duration(global+1) * time.Hour)
 			}
 			args = append(args,
 				uuid.Must(uuid.NewV7()), phone, "bulk@example.com", "bulkhash",
-				expiresAt, usedRows, now.Add(-time.Duration(global+1)*time.Second), "login", false,
+				expiresAt, usedRows, createdAt, "login", false,
 			)
 			if j > 0 {
 				sb.WriteByte(',')
