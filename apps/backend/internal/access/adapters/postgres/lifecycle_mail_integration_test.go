@@ -57,9 +57,18 @@ func (u lifecycleUoW) Do(ctx context.Context, work func(tx transaction.Tx) error
 		return err
 	}
 	defer func() {
-		_ = tx.Rollback(ctx)
+		// Same defer shape as the production UoW (rollback, then recover and
+		// re-panic). Unlike prod's `_ =` discard, the rollback error is folded
+		// into the named return — and only when work succeeded, so it never
+		// masks the work error or the re-panicked value. The wrapped
+		// lifecycleNoCommitTx rollback is a no-op (the outer test transaction
+		// owns cleanup), so the fold never fires.
+		rollbackErr := tx.Rollback(ctx)
 		if r := recover(); r != nil {
 			panic(r)
+		}
+		if rollbackErr != nil && err == nil {
+			err = rollbackErr
 		}
 	}()
 	if err := work(tx); err != nil {

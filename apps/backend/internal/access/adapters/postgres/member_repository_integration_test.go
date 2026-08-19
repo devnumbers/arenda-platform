@@ -48,7 +48,13 @@ func beginAccessTx(t *testing.T, pool *pgxpool.Pool) (context.Context, pgx.Tx, f
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	return ctx, tx, func() { _ = tx.Rollback(ctx) }
+	return ctx, tx, func() {
+		if err := tx.Rollback(ctx); err != nil {
+			// Rollback failure means test isolation broke: rows written in the
+			// aborted test transaction would persist in the shared database.
+			t.Errorf("rollback access test tx: %v", err)
+		}
+	}
 }
 
 func createAccessTestUser(t *testing.T, ctx context.Context, q *genpostgres.Queries) uuid.UUID {
@@ -156,13 +162,13 @@ func TestMembershipRepository_DuplicateUnique(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	id1, _ := uuid.NewV7()
+	id1 := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: id1, PropertyID: property, UserID: other, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
-	id2, _ := uuid.NewV7()
+	id2 := uuid.Must(uuid.NewV7())
 	_, err := repo.Create(ctx, domain.Membership{
 		ID: id2, PropertyID: property, UserID: other, Role: domain.RoleFullAccess, GrantedBy: owner,
 	})
@@ -182,7 +188,7 @@ func TestMembershipRepository_UpdateRoleAndDelete(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	id, _ := uuid.NewV7()
+	id := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: id, PropertyID: property, UserID: other, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
@@ -220,7 +226,7 @@ func TestMembershipRepository_SuspendedMembershipVisible(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	id, _ := uuid.NewV7()
+	id := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: id, PropertyID: property, UserID: other, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
@@ -262,7 +268,7 @@ func TestOwnerResolver_ReturnsOwner(t *testing.T) {
 	}
 
 	// Missing property does not leak existence.
-	missing, _ := uuid.NewV7()
+	missing := uuid.Must(uuid.NewV7())
 	if _, err := resolver.GetOwnerID(ctx, missing); !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Errorf("expected ErrMemberNotFound for missing property, got %v", err)
 	}
@@ -286,19 +292,19 @@ func TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries(t *testing
 	archivedSuspendedProp := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	activeID, _ := uuid.NewV7()
+	activeID := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: activeID, PropertyID: activeProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
 		t.Fatalf("Create active: %v", err)
 	}
-	archivedActiveID, _ := uuid.NewV7()
+	archivedActiveID := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: archivedActiveID, PropertyID: archivedActiveProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
 		t.Fatalf("Create archived-active: %v", err)
 	}
-	archivedSuspendedID, _ := uuid.NewV7()
+	archivedSuspendedID := uuid.Must(uuid.NewV7())
 	if _, err := repo.CreateWithStatus(ctx, domain.Membership{
 		ID: archivedSuspendedID, PropertyID: archivedSuspendedProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
 		Status: domain.MemberStatusSuspended,

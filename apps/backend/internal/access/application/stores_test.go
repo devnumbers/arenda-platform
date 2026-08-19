@@ -23,9 +23,18 @@ func (u fakeUoW) Do(ctx context.Context, work func(tx transaction.Tx) error) (er
 		return err
 	}
 	defer func() {
-		_ = tx.Rollback(ctx)
+		// Same defer shape as the production UoW (rollback, then recover and
+		// re-panic). Unlike prod's `_ =` discard, the rollback error is folded
+		// into the named return — and only when work succeeded, so it never
+		// masks the work error or the re-panicked value. The fake
+		// transactions (noopTx/countingTx) never fail to roll back, so the
+		// fold never fires in practice.
+		rollbackErr := tx.Rollback(ctx)
 		if r := recover(); r != nil {
 			panic(r)
+		}
+		if rollbackErr != nil && err == nil {
+			err = rollbackErr
 		}
 	}()
 	if err := work(tx); err != nil {
@@ -176,10 +185,12 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 		}
 	}()
 
-	_ = f.runInTx(t.Context(), func(*txStores) error {
+	// Unreachable while runInTx honors the re-panic contract; if it ever
+	// returns, fail with the value instead of discarding it.
+	err := f.runInTx(t.Context(), func(*txStores) error {
 		panic(panicVal)
 	})
-	t.Fatal("expected runInTx to re-panic")
+	t.Fatalf("runInTx returned %v, want re-panic", err)
 }
 
 // TestRunInTx_RollsBackOnWorkError proves a non-nil work error rolls the

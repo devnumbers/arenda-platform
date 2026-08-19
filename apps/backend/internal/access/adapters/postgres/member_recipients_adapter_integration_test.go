@@ -27,13 +27,13 @@ func TestMemberRecipientAdapter_ListActiveRecipientIDs(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	activeID, _ := uuid.NewV7()
+	activeID := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: activeID, PropertyID: property, UserID: activeMember, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
 		t.Fatalf("create active membership: %v", err)
 	}
-	suspendedID, _ := uuid.NewV7()
+	suspendedID := uuid.Must(uuid.NewV7())
 	if _, err := repo.CreateWithStatus(ctx, domain.Membership{
 		ID: suspendedID, PropertyID: property, UserID: suspendedMember, Role: domain.RoleFullAccess,
 		GrantedBy: owner, Status: domain.MemberStatusSuspended,

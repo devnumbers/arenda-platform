@@ -352,11 +352,17 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 	}
 
 	// Policy resolves roles correctly for allow/deny reasoning.
-	roleFull, _ := policy.RoleForProperty(context.Background(), member, property)
+	roleFull, err := policy.RoleForProperty(context.Background(), member, property)
+	if err != nil {
+		t.Fatalf("RoleForProperty(member): %v", err)
+	}
 	if roleFull != sharedpolicy.RoleFullAccess {
 		t.Errorf("member role = %v, want full_access", roleFull)
 	}
-	roleNone, _ := policy.RoleForProperty(context.Background(), uuid.Must(uuid.NewV7()), property)
+	roleNone, err := policy.RoleForProperty(context.Background(), uuid.Must(uuid.NewV7()), property)
+	if err != nil {
+		t.Fatalf("RoleForProperty(stranger): %v", err)
+	}
 	if roleNone != sharedpolicy.RoleNone {
 		t.Errorf("stranger role = %v, want none", roleNone)
 	}
@@ -383,7 +389,10 @@ func TestAccessService_LeaveProperty(t *testing.T) {
 	}
 
 	// Member no longer listed.
-	members, _ := svc.ListMembers(context.Background(), owner, property)
+	members, err := svc.ListMembers(context.Background(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers after leave: %v", err)
+	}
 	for _, m := range members {
 		if m.UserID == member {
 			t.Errorf("member still present after leave")

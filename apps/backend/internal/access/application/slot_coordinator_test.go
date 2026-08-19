@@ -215,6 +215,27 @@ func (f *coordinatorFixture) assertStatus(t *testing.T, memberID, propertyID uui
 	}
 }
 
+// assertOneActiveOneSuspended fails the test unless the recipient currently has
+// exactly one active and one suspended membership — the steady state the
+// downgrade/recovery scenarios converge to.
+func (f *coordinatorFixture) assertOneActiveOneSuspended(t *testing.T, recipientID uuid.UUID) {
+	t.Helper()
+	active, err := f.repo.ListActiveByUser(context.Background(), recipientID)
+	if err != nil {
+		t.Fatalf("ListActiveByUser: %v", err)
+	}
+	if len(active) != 1 {
+		t.Errorf("ListActiveByUser = %d, want 1", len(active))
+	}
+	suspended, err := f.repo.ListSuspendedByUser(context.Background(), recipientID)
+	if err != nil {
+		t.Fatalf("ListSuspendedByUser: %v", err)
+	}
+	if len(suspended) != 1 {
+		t.Errorf("ListSuspendedByUser = %d, want 1", len(suspended))
+	}
+}
+
 // ---------------------------------------------------------------------------
 // memRepo test helpers: deterministic timestamps.
 // ---------------------------------------------------------------------------
@@ -295,12 +316,7 @@ func TestSlotCoordinator_EnforceRecipientLimit_DowngradeSuspendsExcess(t *testin
 	f.assertStatus(t, m1, p1, domain.MemberStatusSuspended, "excess member should be suspended")
 	f.assertStatus(t, m2, p2, domain.MemberStatusActive, "kept member should stay active")
 
-	if got, _ := f.repo.ListActiveByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListActiveByUser = %d, want 1", len(got))
-	}
-	if got, _ := f.repo.ListSuspendedByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListSuspendedByUser = %d, want 1", len(got))
-	}
+	f.assertOneActiveOneSuspended(t, recipient)
 }
 
 // Scenario B: EnforceRecipientLimit — the recipient's own objects appear in the
@@ -467,12 +483,7 @@ func TestSlotCoordinator_RecoverSuspended_FIFORecoversEarliest(t *testing.T) {
 	f.assertStatus(t, m1, p1, domain.MemberStatusActive, "earliest suspended should be reactivated (FIFO)")
 	f.assertStatus(t, m2, p2, domain.MemberStatusSuspended, "later suspended should stay suspended")
 
-	if got, _ := f.repo.ListActiveByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListActiveByUser = %d, want 1", len(got))
-	}
-	if got, _ := f.repo.ListSuspendedByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListSuspendedByUser = %d, want 1", len(got))
-	}
+	f.assertOneActiveOneSuspended(t, recipient)
 }
 
 // Scenario H: RecoverSuspended — no free slot (an active membership already
@@ -500,12 +511,7 @@ func TestSlotCoordinator_RecoverSuspended_NoFreeSlotRecoverNothing(t *testing.T)
 	f.assertStatus(t, mSuspended, pSuspended, domain.MemberStatusSuspended, "suspended should stay suspended (no free slot)")
 	f.assertStatus(t, mActive, pActive, domain.MemberStatusActive, "active should stay active")
 
-	if got, _ := f.repo.ListActiveByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListActiveByUser = %d, want 1", len(got))
-	}
-	if got, _ := f.repo.ListSuspendedByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListSuspendedByUser = %d, want 1", len(got))
-	}
+	f.assertOneActiveOneSuspended(t, recipient)
 }
 
 // Scenario I: RecoverSuspended — tie-break inside a downgrade batch (equal

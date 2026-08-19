@@ -89,7 +89,13 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 	if err != nil {
 		t.Fatalf("begin test tx: %v", err)
 	}
-	defer func() { _ = testTx.Rollback(ctx) }()
+	defer func() {
+		if err := testTx.Rollback(ctx); err != nil {
+			// Isolation guard: a failed rollback would persist the test's
+			// writes in the shared database.
+			t.Errorf("rollback test tx: %v", err)
+		}
+	}()
 	testQ := genpostgres.New(testTx)
 
 	// own-properties port over the POOL (production wiring: injected once at
