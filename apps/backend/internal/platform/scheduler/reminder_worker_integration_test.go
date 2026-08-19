@@ -1,9 +1,10 @@
+//go:build integration
+
 package scheduler
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -48,17 +49,10 @@ func (b beginnerOverTx) Begin(context.Context) (transaction.Tx, error) {
 
 func setupReminderWorkerDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
-	ctx := context.Background()
-	pool, err := database.NewPool(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("new pool: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-	return pool
+	// The shared testdb harness (testcontainers PostgreSQL 18, or
+	// TEST_DATABASE_URL when set) keeps these legacy per-transaction fixtures
+	// running under the same CI integration job as the testdb-based tests.
+	return testdb.Setup(t)
 }
 
 func beginReminderWorkerTx(t *testing.T, pool *pgxpool.Pool) (context.Context, pgx.Tx, func()) {
@@ -321,4 +315,112 @@ func TestReminderWorker_Integration_SuspendedMemberReceivesNothing(t *testing.T)
 	f := newReminderFanoutFixture(t, ctx, tx, accessdomain.MemberStatusSuspended)
 	f.dispatch(t, ctx)
 	f.assertDelivered(t, ctx, []uuid.UUID{f.ownerID})
+}
+
+// The due selection carries the eternal filter against the dead 'free' target
+// type (ticket #381, code contract of the FreeReminder removal): orphaned
+// materialized free-reminder rows stay in the table until the drop migration,
+// but the worker must never pick them up for dispatch again. The free row is
+// planted with raw SQL to simulate a pre-removal orphan — no service, no
+// repository — while a due operation reminder planted beside it proves the
+// selection itself still works.
+func TestReminderWorker_Integration_ListDueSkipsFreeTargetRows(t *testing.T) {
+	pool := setupReminderWorkerDB(t)
+	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
+	defer cleanup()
+
+	q := genpostgres.New(tx)
+	ownerID := createWorkerTestUser(t, ctx, q)
+	propertyID := createWorkerTestProperty(t, ctx, q, ownerID)
+	pgOwner := pgtype.UUID{Bytes: ownerID, Valid: true}
+	pgProperty := pgtype.UUID{Bytes: propertyID, Valid: true}
+	dueAt := workerTestNow.Add(-time.Hour)
+
+	// Control: a due operation reminder created through the regular queries.
+	categoryID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := q.CreateOperationCategory(ctx, genpostgres.CreateOperationCategoryParams{
+		ID: pgtype.UUID{Bytes: categoryID, Valid: true}, OwnerID: pgOwner,
+		Type: "expense", Name: "utilities",
+	}); err != nil {
+		t.Fatalf("create operation category: %v", err)
+	}
+	operationID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := q.CreateOperation(ctx, genpostgres.CreateOperationParams{
+		ID: pgtype.UUID{Bytes: operationID, Valid: true}, OwnerID: pgOwner,
+		PropertyID: pgProperty, Type: "expense",
+		CategoryID: pgtype.UUID{Bytes: categoryID, Valid: true},
+		Name:       "Utilities", AmountKopecks: 1000,
+		OperationDate:       pgtype.Date{Time: workerTestNow, Valid: true},
+		SourceOperationDate: pgtype.Date{Time: workerTestNow, Valid: true},
+		Status:              "pending",
+	}); err != nil {
+		t.Fatalf("create operation: %v", err)
+	}
+	controlID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := q.CreateReminder(ctx, genpostgres.CreateReminderParams{
+		ID: pgtype.UUID{Bytes: controlID, Valid: true}, OwnerID: pgOwner,
+		TargetType:   genpostgres.NotificationTargetTypeOperation,
+		OperationID:  pgtype.UUID{Bytes: operationID, Valid: true},
+		PropertyID:   pgProperty,
+		EventType:    genpostgres.NotificationEventTypeOperationDue,
+		Status:       genpostgres.NotificationStatusPending,
+		ScheduledAt:  pgtype.Timestamptz{Time: dueAt, Valid: true},
+		MessageTitle: "Utilities due", MessageBody: "Pay utilities",
+		CreatedAt: pgtype.Timestamptz{Time: dueAt, Valid: true},
+	}); err != nil {
+		t.Fatalf("create control reminder: %v", err)
+	}
+
+	// The orphan: a 'free' target row planted directly with SQL. The CHECK
+	// exactly_one_target still accepts it, so only the template row is needed.
+	templateID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO free_reminders (id, owner_id, property_id, title, trigger_at, periodicity, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, 'once', $5, $5)`,
+		templateID, ownerID, propertyID, "Orphan", dueAt,
+	); err != nil {
+		t.Fatalf("insert free reminder template: %v", err)
+	}
+	freeID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO reminders (id, owner_id, target_type, property_id, free_reminder_id, event_type, status, scheduled_at, message_title, message_body, created_at)
+		 VALUES ($1, $2, 'free', $3, $4, 'free_reminder', 'pending', $5, $6, $7, $5)`,
+		freeID, ownerID, propertyID, templateID, dueAt, "Orphan", "Orphan body",
+	); err != nil {
+		t.Fatalf("insert free reminder row: %v", err)
+	}
+
+	repo := notificationspg.NewReminderRepository(tx)
+	due, err := repo.ListDue(ctx, workerTestNow, 10)
+	if err != nil {
+		t.Fatalf("ListDue: %v", err)
+	}
+
+	if len(due) != 1 || due[0].ID != controlID {
+		t.Fatalf("ListDue = %v reminders, want exactly the operation reminder %v", len(due), controlID)
+	}
+	// The free row must have been skipped by the filter, not by a broken seed:
+	// it is still a pending row in the table.
+	free, err := repo.GetByIDUnscoped(ctx, freeID)
+	if err != nil {
+		t.Fatalf("GetByIDUnscoped(free): %v", err)
+	}
+	if free.Status != domain.ReminderPending || free.TargetType != domain.TargetFree {
+		t.Fatalf("free row = (%s, %s), want (pending, free) — seed broken", free.TargetType, free.Status)
+	}
 }

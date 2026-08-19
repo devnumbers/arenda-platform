@@ -1,4 +1,5 @@
 import type {
+  CarriedNotificationPreference,
   NotificationEventType,
   NotificationPreference,
 } from '@/entities/user';
@@ -27,11 +28,6 @@ export const NOTIFICATION_OPTIONS: {
     eventType: 'lease_requires_action',
     label: 'Аренда требует действия',
     description: 'Аренда закончилась и ждёт решения',
-  },
-  {
-    eventType: 'free_reminder',
-    label: 'Свои напоминания',
-    description: 'Созданные вами напоминания о любых датах по объектам',
   },
   {
     eventType: 'subscription_grace',
@@ -63,7 +59,6 @@ export function buildInitialPreferences(
     operation_overdue: true,
     lease_expiring: true,
     lease_requires_action: true,
-    free_reminder: true,
     subscription_grace: true,
   };
   for (const preference of preferences) {
@@ -84,7 +79,6 @@ export function buildInitialChannelPreferences(
     operation_overdue: { ...DEFAULT_CHANNEL_FLAGS },
     lease_expiring: { ...DEFAULT_CHANNEL_FLAGS },
     lease_requires_action: { ...DEFAULT_CHANNEL_FLAGS },
-    free_reminder: { ...DEFAULT_CHANNEL_FLAGS },
     subscription_grace: { ...DEFAULT_CHANNEL_FLAGS },
   };
   for (const preference of preferences) {
@@ -97,7 +91,19 @@ export function buildInitialChannelPreferences(
 }
 
 /**
- * Builds the full per-event-type payload for the PUT endpoint from a UI state.
+ * One payload item for the PUT endpoint: a live event type driven by the UI
+ * state, or a carried (product-removed) event type passed through unchanged —
+ * the server validates the request against the full event-type set until its
+ * domain is cleaned up (ticket #381).
+ */
+export type NotificationPreferencePayloadItem =
+  | NotificationPreference
+  | CarriedNotificationPreference;
+
+/**
+ * Builds the full per-event-type payload for the PUT endpoint from a UI state:
+ * live event types carry the UI state, carried ones are appended as is so the
+ * removed event's server rows keep their values.
  * The onboarding UI (ADR 0030) exposes a single toggle per event type that
  * drives the email channel; push settings are carried through from the last
  * known server preferences so they are not clobbered on save.
@@ -105,12 +111,13 @@ export function buildInitialChannelPreferences(
 export function buildPreferencePayload(
   state: NotificationPreferencesState,
   preferences: NotificationPreference[],
-): NotificationPreference[] {
+  carried: readonly CarriedNotificationPreference[],
+): NotificationPreferencePayloadItem[] {
   const pushAllowedByType = new Map<NotificationEventType, boolean>();
   for (const preference of preferences) {
     pushAllowedByType.set(preference.eventType, preference.pushAllowed);
   }
-  return NOTIFICATION_OPTIONS.map(({eventType}) => {
+  const live = NOTIFICATION_OPTIONS.map(({eventType}) => {
     const allowed = state[eventType];
     const pushAllowed = pushAllowedByType.get(eventType) ?? allowed;
     return {
@@ -119,16 +126,19 @@ export function buildPreferencePayload(
       pushAllowed,
     };
   });
+  return [...live, ...carried];
 }
 
 /**
  * Build the per-event-type × per-channel payload for the PUT endpoint from a
- * channel-matrix state.
+ * channel-matrix state: live event types carry the matrix flags, carried ones
+ * are appended as is (ticket #381).
  */
 export function buildChannelPreferencePayload(
   state: NotificationChannelState,
-): NotificationPreference[] {
-  return NOTIFICATION_OPTIONS.map(({eventType}) => {
+  carried: readonly CarriedNotificationPreference[],
+): NotificationPreferencePayloadItem[] {
+  const live = NOTIFICATION_OPTIONS.map(({eventType}) => {
     const flags = state[eventType];
     return {
       eventType,
@@ -136,6 +146,7 @@ export function buildChannelPreferencePayload(
       pushAllowed: flags.push,
     };
   });
+  return [...live, ...carried];
 }
 
 /** Structural equality over the fixed event-type set (both channels). */

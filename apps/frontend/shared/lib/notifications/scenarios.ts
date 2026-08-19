@@ -246,14 +246,6 @@ const demo = {
     }, options)) satisfies PromiseScenarioFn,
 } as const;
 
-const freeReminders = {
-  createError: errorScenario('Не удалось создать напоминание'),
-  updateError: errorScenario('Не удалось сохранить напоминание'),
-  deleted: ((options?) =>
-    notify.success('Напоминание удалено', options)) satisfies ScenarioFn,
-  deleteError: errorScenario('Не удалось удалить напоминание'),
-} as const;
-
 export type Scenarios = {
   readonly auth: typeof auth;
   readonly tenants: typeof tenants;
@@ -266,7 +258,6 @@ export type Scenarios = {
   readonly tariff: typeof tariff;
   readonly paymentMethods: typeof paymentMethods;
   readonly demo: typeof demo;
-  readonly freeReminders: typeof freeReminders;
 };
 
 export const scenarios: Scenarios = {
@@ -281,5 +272,4 @@ export const scenarios: Scenarios = {
   tariff,
   paymentMethods,
   demo,
-  freeReminders,
 };

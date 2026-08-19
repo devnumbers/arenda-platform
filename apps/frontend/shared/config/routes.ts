@@ -42,6 +42,4 @@ export const ROUTES = {
   profilePrivacy: '/profile/info/privacy',
   profileTerms: '/profile/info/terms',
   calendar: '/calendar',
-  freeReminderNew: '/reminders/new',
-  freeReminder: (id: string) => `/reminders/${id}`,
 } as const;

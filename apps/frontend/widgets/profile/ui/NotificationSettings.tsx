@@ -20,6 +20,7 @@ import { usePushSubscriptionStatus } from '@/features/push-notifications';
 import { useSubscribePush } from '@/features/push-notifications';
 import { isPushSupported } from '@/features/push-notifications';
 import type {
+  CarriedNotificationPreference,
   NotificationEventType,
   NotificationPreference,
 } from '@/entities/user';
@@ -27,9 +28,10 @@ import styles from './NotificationSettings.module.css';
 
 type NotificationSettingsViewProps = {
   readonly preferences: NotificationPreference[];
+  readonly carried: readonly CarriedNotificationPreference[];
 };
 
-function NotificationSettingsView({ preferences }: NotificationSettingsViewProps): JSX.Element {
+function NotificationSettingsView({ preferences, carried }: NotificationSettingsViewProps): JSX.Element {
   const updateNotificationPreferences = useUpdateNotificationPreferences();
   const { refresh: refreshPushStatus, ...pushStatus } = usePushSubscriptionStatus();
   const { subscribe: subscribePush } = useSubscribePush();
@@ -67,9 +69,10 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
       const run = async (): Promise<void> => {
         let current = snapshot;
         for (;;) {
-          // Every save sends the full preference set; there is no submit
-          // button and no success toast.
-          const payload: NotificationPreference[] = buildChannelPreferencePayload(current);
+          // Every save sends the full preference set (live matrix flags plus
+          // the carried removed-event rows passed through unchanged); there is
+          // no submit button and no success toast.
+          const payload = buildChannelPreferencePayload(current, carried);
 
           try {
             await updateNotificationPreferences.mutateAsync(payload);
@@ -105,7 +108,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
 
       void run();
     },
-    [updateNotificationPreferences],
+    [updateNotificationPreferences, carried],
   );
 
   const updateChannel = useCallback(
@@ -220,7 +223,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
 }
 
 export function NotificationSettings(): JSX.Element {
-  const { data: preferences, isPending, isError, refetch } = useNotificationPreferences();
+  const { data, isPending, isError, refetch } = useNotificationPreferences();
 
   return (
     <>
@@ -233,7 +236,7 @@ export function NotificationSettings(): JSX.Element {
           </Button>
         </div>
       )}
-      {!isError && (isPending || !preferences) && (
+      {!isError && (isPending || !data) && (
         <div className={styles.container}>
           <p className={styles.notificationsHint}>
             Напоминания приходят на вашу почту.
@@ -241,8 +244,11 @@ export function NotificationSettings(): JSX.Element {
           <NotificationChannelMatrix disabled />
         </div>
       )}
-      {!isError && !isPending && preferences && (
-        <NotificationSettingsView preferences={preferences} />
+      {!isError && !isPending && data && (
+        <NotificationSettingsView
+          preferences={data.preferences}
+          carried={data.carried}
+        />
       )}
     </>
   );

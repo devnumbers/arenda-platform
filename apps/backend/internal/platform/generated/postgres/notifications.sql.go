@@ -457,6 +457,7 @@ SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id
 WHERE status = 'pending'
   AND scheduled_at <= $1
   AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+  AND target_type <> 'free'
 ORDER BY scheduled_at ASC
 LIMIT $2
 FOR UPDATE SKIP LOCKED
@@ -467,6 +468,9 @@ type ListDueRemindersParams struct {
 	Limit       int32              `json:"limit"`
 }
 
+// target_type <> 'free' is the eternal filter of the FreeReminder removal
+// (ticket #381): orphaned materialized free rows stay in the table until the
+// drop migration, but the worker must never dispatch them again.
 func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error) {
 	rows, err := q.db.Query(ctx, listDueReminders, arg.ScheduledAt, arg.Limit)
 	if err != nil {

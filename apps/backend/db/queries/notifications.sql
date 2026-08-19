@@ -45,10 +45,14 @@ ORDER BY scheduled_at ASC
 LIMIT $3 OFFSET $4;
 
 -- name: ListDueReminders :many
+-- target_type <> 'free' is the eternal filter of the FreeReminder removal
+-- (ticket #381): orphaned materialized free rows stay in the table until the
+-- drop migration, but the worker must never dispatch them again.
 SELECT * FROM reminders
 WHERE status = 'pending'
   AND scheduled_at <= $1
   AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+  AND target_type <> 'free'
 ORDER BY scheduled_at ASC
 LIMIT $2
 FOR UPDATE SKIP LOCKED;

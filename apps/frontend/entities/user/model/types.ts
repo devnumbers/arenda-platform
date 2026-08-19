@@ -1,3 +1,5 @@
+import type { components } from '@/shared/api/dto';
+
 export type User = {
   readonly id: string;
   readonly phone: string;
@@ -33,16 +35,36 @@ export type ChangePhoneCommand = {
 
 export type { TariffName } from '@/shared/model/tariff';
 
-export type NotificationEventType =
-  | 'operation_due'
-  | 'operation_overdue'
-  | 'lease_expiring'
-  | 'lease_requires_action'
-  | 'free_reminder'
-  | 'subscription_grace';
+// Свободные напоминания выведены из продукта (тикет #381), но enum в
+// сгенерированном API-клиенте ещё содержит 'free_reminder' — регенерация
+// контрактного клиента едет следующим тикетом набора. Рантайм-список —
+// источник истины для разделения живых и выведенных строк в маппере.
+export const NOTIFICATION_EVENT_TYPES = [
+  'operation_due',
+  'operation_overdue',
+  'lease_expiring',
+  'lease_requires_action',
+  'subscription_grace',
+] as const;
+
+export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
 
 export type NotificationPreference = {
   readonly eventType: NotificationEventType;
+  readonly emailAllowed: boolean;
+  readonly pushAllowed: boolean;
+};
+
+type ApiNotificationPreference = components['schemas']['NotificationPreference'];
+
+/**
+ * Строка настроек события, выведенного из продукта: UI её не показывает, но
+ * PUT /notification-preferences сервер валидирует полным набором событий,
+ * пока его домен не почищен (тикет #381) — поэтому такие строки переносятся
+ * в payload как есть, без изменений значений.
+ */
+export type CarriedNotificationPreference = {
+  readonly eventType: Exclude<ApiNotificationPreference['event_type'], NotificationEventType>;
   readonly emailAllowed: boolean;
   readonly pushAllowed: boolean;
 };

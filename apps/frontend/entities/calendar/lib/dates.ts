@@ -1,8 +1,6 @@
 // Дейт-хелперы календаря: нативный Date + Intl('ru-RU'), без сторонних библиотек.
 // Арифметика ведётся на строках 'YYYY-MM-DD' (локальная дата), неделя начинается с понедельника.
 
-import type { CalendarEntryType } from '@/entities/calendar/model/types';
-
 const WEEKDAY_SHORT_MONDAY_FIRST: readonly string[] = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 const WEEKDAY_FULL_BY_GETDAY: readonly string[] = [
@@ -91,27 +89,4 @@ export function formatDateShort(isoDate: string): string {
 // дают локальные компоненты в поясе браузера (равно поясу владельца).
 export function localDateOf(scheduledAt: string): string {
   return toISODate(new Date(scheduledAt));
-}
-
-// 'HH:MM' в локальном времени из date-time строки API, либо null для «весь день».
-//
-// Бэкенд не отдаёт отдельного флага allDay, поэтому правило по типу записи:
-//  - free: scheduled_at несёт явное пользовательское время (часы:минуты сохранены),
-//    включая 00:00 как валидный выбор — рендерим конкретное время;
-//  - operation/system: scheduled_at всегда = системные 10:00 по поясу владельца
-//    (диспетчерский час, не выбор пользователя) — трактуем как событие дня без акцента на время.
-export function localTimeOf(
-  scheduledAt: string,
-  type: CalendarEntryType,
-): string | null {
-  if (type !== 'free') {
-    return null;
-  }
-  const date = new Date(scheduledAt);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }

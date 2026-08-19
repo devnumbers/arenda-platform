@@ -37,7 +37,6 @@ import {PropertyOperationsCard} from './PropertyOperationsCard';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyAttributesSection} from './PropertyAttributesSection';
 import {PropertyContactsSection} from './PropertyContactsSection';
-import {PropertyRemindersSection} from './PropertyRemindersSection';
 import {PropertyActionMenu} from './PropertyActionMenu';
 import {PropertyBlockedModal} from './PropertyBlockedModal';
 import {PropertyArchiveModal} from './PropertyArchiveModal';
@@ -433,11 +432,6 @@ export function PropertyDetailPage(): JSX.Element {
                     />
 
                     <PropertyContactsSection
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
-
-                    <PropertyRemindersSection
                         propertyId={id}
                         isArchived={property.status === 'archived'}
                     />

@@ -22,7 +22,6 @@ const EMPTY_STATE: NotificationChannelState = {
     operation_overdue: {email: false, push: false},
     lease_expiring: {email: false, push: false},
     lease_requires_action: {email: false, push: false},
-    free_reminder: {email: false, push: false},
     subscription_grace: {email: false, push: false},
 };
 

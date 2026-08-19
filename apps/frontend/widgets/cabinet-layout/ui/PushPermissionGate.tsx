@@ -23,10 +23,11 @@ import { readNotificationPermission } from '@/features/push-notifications';
  * best-effort channel and the email path is unaffected.
  */
 export function PushPermissionGate(): JSX.Element | null {
-  const { data: preferences } = useNotificationPreferences();
+  const { data } = useNotificationPreferences();
   const { vapidKey, postSubscription } = useEnsureSubscriptionTools();
 
   useEffect(() => {
+    const preferences = data?.preferences;
     if (!preferences) return;
 
     const anyPushAllowed = preferences.some((preference) => preference.pushAllowed);
@@ -60,7 +61,7 @@ export function PushPermissionGate(): JSX.Element | null {
     return () => {
       cancelled = true;
     };
-  }, [preferences, vapidKey, postSubscription]);
+  }, [data, vapidKey, postSubscription]);
 
   return null;
 }

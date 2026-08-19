@@ -1,21 +1,17 @@
 'use client';
 
 import { type JSX, useMemo, useState } from 'react';
-import NextLink from 'next/link';
 import clsx from 'clsx';
-import { ArrowLeft, ArrowRight, Bell, Plus } from '@/shared/assets/icons';
+import { ArrowLeft, ArrowRight, Bell } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { IconButton } from '@/shared/ui/icon-button';
-import { LinkButton } from '@/shared/ui/link-button';
 import { PageHeader } from '@/shared/ui/page-header';
 import { useCalendarReminders } from '@/features/reminders';
-import { ROUTES } from '@/shared/config/routes';
 import {
   addDays,
   formatDateWithWeekday,
   localDateOf,
-  localTimeOf,
   todayISO,
   weekdayShort,
   weekDates,
@@ -23,9 +19,7 @@ import {
 import {
   calendarEntryStatusLabels,
   calendarEntryTypeLabels,
-  entryStatusEventType,
-  isRecurring,
-  mapCalendarEntry,
+  mapCalendarEntries,
   propertyDisplayName,
 } from '@/entities/calendar';
 import type {
@@ -41,12 +35,10 @@ const STUB_TITLES: Record<'operation' | 'system', string> = {
 };
 
 function dotClass(entry: CalendarEntry): string {
-  const eventType = entryStatusEventType(entry);
   return clsx(
     styles.dot,
-    entry.type === 'free' && styles.dotFree,
-    eventType === 'operation_due' && styles.dotDueSoon,
-    eventType === 'operation_overdue' && styles.dotOverdue,
+    entry.eventType === 'operation_due' && styles.dotDueSoon,
+    entry.eventType === 'operation_overdue' && styles.dotOverdue,
     entry.type === 'system' && styles.dotSystem,
   );
 }
@@ -61,15 +53,8 @@ function statusChipClass(eventType: CalendarEntryEventType): string {
   );
 }
 
-// Сортировка повестки: по времени; безвременные (operation/system — события дня) — после временных.
+// Сортировка повестки: стабильная по id — все записи являются событиями дня.
 function compareEntries(a: CalendarEntry, b: CalendarEntry): number {
-  const aTime = localTimeOf(a.scheduledAt, a.type);
-  const bTime = localTimeOf(b.scheduledAt, b.type);
-  if (aTime === null && bTime !== null) return 1;
-  if (aTime !== null && bTime === null) return -1;
-  if (aTime !== null && bTime !== null && aTime !== bTime) {
-    return aTime.localeCompare(bTime);
-  }
   return a.id.localeCompare(b.id);
 }
 
@@ -85,7 +70,7 @@ export function CalendarPage(): JSX.Element {
   const { data, isLoading, isError } = useCalendarReminders(from, to);
 
   const entries = useMemo(
-    () => (data?.items ?? []).map(mapCalendarEntry),
+    () => mapCalendarEntries(data?.items ?? []),
     [data],
   );
 
@@ -120,19 +105,7 @@ export function CalendarPage(): JSX.Element {
 
   return (
     <div className={styles.root}>
-      <PageHeader
-        title="Календарь"
-        actions={
-          <LinkButton
-            href={ROUTES.freeReminderNew}
-            variant="primary"
-            size="medium"
-            leftIcon={<Plus />}
-          >
-            Создать напоминание
-          </LinkButton>
-        }
-      />
+      <PageHeader title="Календарь" />
 
       <div className={styles.weekNav}>
         <IconButton
@@ -213,31 +186,19 @@ export function CalendarPage(): JSX.Element {
                 icon={<Bell />}
                 title="Нет напоминаний"
                 subtitle="На этот день ничего не запланировано"
-                actionNode={
-                  <LinkButton
-                    href={ROUTES.freeReminderNew}
-                    variant="primary"
-                    size="medium"
-                    leftIcon={<Plus />}
-                  >
-                    Создать напоминание
-                  </LinkButton>
-                }
               />
             ) : (
               <ul className={styles.agendaList}>
-                {selectedReminders.map((reminder, index) => {
-                  const eventType = entryStatusEventType(reminder);
-                  const time = localTimeOf(reminder.scheduledAt, reminder.type);
-                  const rowBody = (
-                    <>
-                      <span className={styles.rowTime}>
-                        {time ?? 'весь день'}
-                      </span>
+                {selectedReminders.map((reminder, index) => (
+                  <li key={`${reminder.id}-${index}`}>
+                    <div
+                      className={clsx(styles.row, styles.rowStub)}
+                      title={STUB_TITLES[reminder.type]}
+                    >
+                      <span className={styles.rowTime}>весь день</span>
                       <span
                         className={clsx(
                           styles.kindBadge,
-                          reminder.type === 'free' && styles.kindBadgeFree,
                           reminder.type === 'operation' &&
                             styles.kindBadgeOperation,
                           reminder.type === 'system' && styles.kindBadgeSystem,
@@ -247,14 +208,6 @@ export function CalendarPage(): JSX.Element {
                       </span>
                       <span className={styles.rowMain}>
                         <span className={styles.rowTitle}>
-                          {isRecurring(reminder) && (
-                            <span
-                              className={styles.rowRepeat}
-                              aria-hidden="true"
-                            >
-                              ↻
-                            </span>
-                          )}
                           {reminder.title}
                         </span>
                         <span
@@ -266,38 +219,14 @@ export function CalendarPage(): JSX.Element {
                           {propertyDisplayName(reminder)}
                         </span>
                       </span>
-                      {eventType && (
-                        <span className={statusChipClass(eventType)}>
-                          {calendarEntryStatusLabels[eventType]}
+                      {reminder.eventType && (
+                        <span className={statusChipClass(reminder.eventType)}>
+                          {calendarEntryStatusLabels[reminder.eventType]}
                         </span>
                       )}
-                    </>
-                  );
-
-                  if (reminder.type === 'free') {
-                    const href = reminder.freeReminderId
-                      ? ROUTES.freeReminder(reminder.freeReminderId)
-                      : ROUTES.freeReminderNew;
-                    return (
-                      <li key={`${reminder.id}-${index}`}>
-                        <NextLink href={href} className={styles.row}>
-                          {rowBody}
-                        </NextLink>
-                      </li>
-                    );
-                  }
-
-                  return (
-                    <li key={`${reminder.id}-${index}`}>
-                      <div
-                        className={clsx(styles.row, styles.rowStub)}
-                        title={STUB_TITLES[reminder.type]}
-                      >
-                        {rowBody}
-                      </div>
-                    </li>
-                  );
-                })}
+                    </div>
+                  </li>
+                ))}
               </ul>
             )}
           </section>

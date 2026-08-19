@@ -21,7 +21,7 @@ import {
 import {NotificationPreferencesFields} from '@/features/notification-preferences';
 import {useSubscribePush} from '@/features/push-notifications';
 import {isPushSupported} from '@/features/push-notifications';
-import type {NotificationEventType, NotificationPreference,} from '@/entities/user';
+import type {CarriedNotificationPreference, NotificationEventType, NotificationPreference,} from '@/entities/user';
 import styles from './RemindersOnboardingModal.module.css';
 
 const MOBILE_MEDIA_QUERY = '(max-width: 767px)';
@@ -152,10 +152,12 @@ function PushContent({isBusy, onAllow, onSkip}: PushContentProps): JSX.Element {
 
 type RemindersOnboardingModalContentProps = {
     readonly preferences: NotificationPreference[];
+    readonly carried: readonly CarriedNotificationPreference[];
 };
 
 function RemindersOnboardingModalContent({
                                              preferences,
+                                             carried,
                                          }: RemindersOnboardingModalContentProps): JSX.Element | null {
     const updateNotificationPreferences = useUpdateNotificationPreferences();
     const markPopupSeen = useMarkPopupSeen();
@@ -195,9 +197,12 @@ function RemindersOnboardingModalContent({
     }, [markPopupSeen]);
 
     const handleNext = useCallback(async () => {
-        const payload: NotificationPreference[] = buildPreferencePayload(
+        // carried: выведенные из продукта события сервер требует в PUT
+        // полным набором (тикет #381) — переносятся как есть.
+        const payload = buildPreferencePayload(
             notificationPrefs,
             preferences,
+            carried,
         );
 
         try {
@@ -215,7 +220,7 @@ function RemindersOnboardingModalContent({
         }
 
         setStep('push');
-    }, [closeWithPopupSeen, notificationPrefs, preferences, updateNotificationPreferences]);
+    }, [closeWithPopupSeen, notificationPrefs, preferences, carried, updateNotificationPreferences]);
 
     const handleAllowPush = useCallback(async () => {
         setIsPushBusy(true);
@@ -298,7 +303,7 @@ function RemindersOnboardingModalContent({
 
 export function RemindersOnboardingModal(): JSX.Element | null {
     const {data: pendingPopups, isPending: isPopupsPending} = usePendingPopups();
-    const {data: preferences, isPending: isPreferencesPending} =
+    const {data: preferencesData, isPending: isPreferencesPending} =
         useNotificationPreferences();
 
     if (isPopupsPending || isPreferencesPending) {
@@ -308,9 +313,14 @@ export function RemindersOnboardingModal(): JSX.Element | null {
     // If a request failed after the react-query retries, its data stays
     // undefined and the one-time onboarding is silently skipped until the next
     // page load — an accepted trade-off.
-    if (!pendingPopups?.includes(REMINDERS_ONBOARDING_POPUP_KEY) || !preferences) {
+    if (!pendingPopups?.includes(REMINDERS_ONBOARDING_POPUP_KEY) || !preferencesData) {
         return null;
     }
 
-    return <RemindersOnboardingModalContent preferences={preferences}/>;
+    return (
+        <RemindersOnboardingModalContent
+            preferences={preferencesData.preferences}
+            carried={preferencesData.carried}
+        />
+    );
 }

@@ -1,19 +1,16 @@
 // Entity-модель календаря напоминаний. Мэппится из DTO эндпоинта
 // GET /reminders/calendar на границе API, чтобы не тащить generated-типы в widgets.
 
-export type CalendarEntryType = 'free' | 'operation' | 'system';
+export type CalendarEntryType = 'operation' | 'system';
 
-// Статус показывается только у operation/system; у свободных его нет.
+// Статус показывается у operation/system — события дня без акцента на время.
 export type CalendarEntryStatus = 'pending' | 'sent';
 
 export type CalendarEntryEventType =
   | 'operation_due'
   | 'operation_overdue'
   | 'lease_expiring'
-  | 'lease_requires_action'
-  | 'free_reminder';
-
-export type CalendarEntryPeriodicity = 'once' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  | 'lease_requires_action';
 
 export type CalendarEntry = {
   readonly id: string;
@@ -25,8 +22,6 @@ export type CalendarEntry = {
   readonly propertyName: string | null;
   readonly status: CalendarEntryStatus | null;
   readonly eventType: CalendarEntryEventType | null;
-  readonly periodicity: CalendarEntryPeriodicity | null;
   readonly operationId: string | null;
   readonly leaseId: string | null;
-  readonly freeReminderId: string | null;
 };

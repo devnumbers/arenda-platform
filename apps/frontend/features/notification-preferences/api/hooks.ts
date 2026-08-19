@@ -9,9 +9,12 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
-import { mapNotificationPreferencesResponse } from '@/entities/user';
-import type { NotificationPreference } from '@/entities/user';
+import {
+  mapNotificationPreferencesResponse,
+  type NotificationPreferencesData,
+} from '@/entities/user';
 import type { components } from '@/shared/api/dto';
+import type { NotificationPreferencePayloadItem } from '../lib/preferences';
 
 type NotificationPreferencesResponse =
   components['schemas']['NotificationPreferencesResponse'];
@@ -25,7 +28,7 @@ export const notificationPreferencesKeys = {
 };
 
 export function useNotificationPreferences(): UseQueryResult<
-  NotificationPreference[],
+  NotificationPreferencesData,
   ApiError
 > {
   return useQuery({
@@ -40,15 +43,15 @@ export function useNotificationPreferences(): UseQueryResult<
 }
 
 export function useUpdateNotificationPreferences(): UseMutationResult<
-  NotificationPreference[],
+  NotificationPreferencesData,
   ApiError,
-  NotificationPreference[]
+  NotificationPreferencePayloadItem[]
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (preferences: NotificationPreference[]) => {
+    mutationFn: async (preferenceItems: NotificationPreferencePayloadItem[]) => {
       const payload: NotificationPreferencesUpdateRequest = {
-        preferences: preferences.map((preference) => ({
+        preferences: preferenceItems.map((preference) => ({
           event_type: preference.eventType,
           email_allowed: preference.emailAllowed,
           push_allowed: preference.pushAllowed,
