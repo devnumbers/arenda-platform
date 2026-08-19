@@ -251,9 +251,10 @@ type Querier interface {
 	ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error)
 	ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error)
 	// target_type <> 'free' is the eternal filter guarding the dead enum value
-	// left by the free-reminders removal (issues #381/#382): orphaned rows stay
-	// in the table until the drop migration, and the worker must never dispatch
-	// them again.
+	// left by the free-reminders removal (issues #381/#382; drop migration
+	// 000108, issue #383). The rebuilt exactly_one_target CHECK already makes
+	// such rows impossible; the filter stays as defense-in-depth so the dead
+	// value never reaches dispatch even if planted by hand.
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]ListFutureOperationsByLeaseRow, error)
 	ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error)

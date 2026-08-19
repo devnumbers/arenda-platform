@@ -46,9 +46,10 @@ LIMIT $3 OFFSET $4;
 
 -- name: ListDueReminders :many
 -- target_type <> 'free' is the eternal filter guarding the dead enum value
--- left by the free-reminders removal (issues #381/#382): orphaned rows stay
--- in the table until the drop migration, and the worker must never dispatch
--- them again.
+-- left by the free-reminders removal (issues #381/#382; drop migration
+-- 000108, issue #383). The rebuilt exactly_one_target CHECK already makes
+-- such rows impossible; the filter stays as defense-in-depth so the dead
+-- value never reaches dispatch even if planted by hand.
 SELECT * FROM reminders
 WHERE status = 'pending'
   AND scheduled_at <= $1

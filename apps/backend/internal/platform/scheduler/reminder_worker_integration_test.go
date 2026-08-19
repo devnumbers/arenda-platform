@@ -337,14 +337,15 @@ func TestReminderWorker_Integration_SuspendedMemberReceivesNothing(t *testing.T)
 	f.assertDelivered(t, ctx, []uuid.UUID{f.ownerID})
 }
 
-// The due selection carries the eternal filter against the dead 'free' target
-// type (ticket #381, code contract of the FreeReminder removal): orphaned
-// materialized free-reminder rows stay in the table until the drop migration,
-// but the worker must never pick them up for dispatch again. The free row is
-// planted with raw SQL to simulate a pre-removal orphan — no service, no
-// repository — while a due operation reminder planted beside it proves the
-// selection itself still works.
-func TestReminderWorker_Integration_ListDueSkipsFreeTargetRows(t *testing.T) {
+// The due selection feeds the worker: only pending rows whose scheduled_at
+// has arrived and whose retry backoff (next_attempt_at) is not holding them
+// may be claimed. Historically this test also planted an orphaned
+// target_type='free' row to prove the eternal filter (ticket #381); after
+// the schema contract (#383, migration 000108) such rows are structurally
+// impossible — the rebuilt exactly_one_target CHECK rejects them, covered by
+// TestFreeRemindersDropContract — so the selection is verified against live
+// operation reminders only.
+func TestReminderWorker_Integration_ListDueSelection(t *testing.T) {
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -354,9 +355,7 @@ func TestReminderWorker_Integration_ListDueSkipsFreeTargetRows(t *testing.T) {
 	propertyID := createWorkerTestProperty(t, ctx, q, ownerID)
 	pgOwner := pgtype.UUID{Bytes: ownerID, Valid: true}
 	pgProperty := pgtype.UUID{Bytes: propertyID, Valid: true}
-	dueAt := workerTestNow.Add(-time.Hour)
 
-	// Control: a due operation reminder created through the regular queries.
 	categoryID, err := uuid.NewV7()
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
@@ -367,62 +366,64 @@ func TestReminderWorker_Integration_ListDueSkipsFreeTargetRows(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create operation category: %v", err)
 	}
-	operationID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	if _, err := q.CreateOperation(ctx, genpostgres.CreateOperationParams{
-		ID: pgtype.UUID{Bytes: operationID, Valid: true}, OwnerID: pgOwner,
-		PropertyID: pgProperty, Type: "expense",
-		CategoryID: pgtype.UUID{Bytes: categoryID, Valid: true},
-		Name:       "Utilities", AmountKopecks: 1000,
-		OperationDate:       pgtype.Date{Time: workerTestNow, Valid: true},
-		SourceOperationDate: pgtype.Date{Time: workerTestNow, Valid: true},
-		Status:              "pending",
-	}); err != nil {
-		t.Fatalf("create operation: %v", err)
-	}
-	controlID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	if _, err := q.CreateReminder(ctx, genpostgres.CreateReminderParams{
-		ID: pgtype.UUID{Bytes: controlID, Valid: true}, OwnerID: pgOwner,
-		TargetType:   genpostgres.NotificationTargetTypeOperation,
-		OperationID:  pgtype.UUID{Bytes: operationID, Valid: true},
-		PropertyID:   pgProperty,
-		EventType:    genpostgres.NotificationEventTypeOperationDue,
-		Status:       genpostgres.NotificationStatusPending,
-		ScheduledAt:  pgtype.Timestamptz{Time: dueAt, Valid: true},
-		MessageTitle: "Utilities due", MessageBody: "Pay utilities",
-		CreatedAt: pgtype.Timestamptz{Time: dueAt, Valid: true},
-	}); err != nil {
-		t.Fatalf("create control reminder: %v", err)
+
+	// seedReminder plants a pending operation reminder scheduled at the given
+	// time; every variant shares the property's category and operation, so
+	// only the selection semantics under test differ.
+	seedReminder := func(scheduledAt time.Time) uuid.UUID {
+		t.Helper()
+		operationID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("new uuid: %v", err)
+		}
+		if _, err := q.CreateOperation(ctx, genpostgres.CreateOperationParams{
+			ID: pgtype.UUID{Bytes: operationID, Valid: true}, OwnerID: pgOwner,
+			PropertyID: pgProperty, Type: "expense",
+			CategoryID: pgtype.UUID{Bytes: categoryID, Valid: true},
+			Name:       "Utilities", AmountKopecks: 1000,
+			OperationDate:       pgtype.Date{Time: workerTestNow, Valid: true},
+			SourceOperationDate: pgtype.Date{Time: workerTestNow, Valid: true},
+			Status:              "pending",
+		}); err != nil {
+			t.Fatalf("create operation: %v", err)
+		}
+		reminderID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("new uuid: %v", err)
+		}
+		if _, err := q.CreateReminder(ctx, genpostgres.CreateReminderParams{
+			ID: pgtype.UUID{Bytes: reminderID, Valid: true}, OwnerID: pgOwner,
+			TargetType:   genpostgres.NotificationTargetTypeOperation,
+			OperationID:  pgtype.UUID{Bytes: operationID, Valid: true},
+			PropertyID:   pgProperty,
+			EventType:    genpostgres.NotificationEventTypeOperationDue,
+			Status:       genpostgres.NotificationStatusPending,
+			ScheduledAt:  pgtype.Timestamptz{Time: scheduledAt, Valid: true},
+			MessageTitle: "Utilities due", MessageBody: "Pay utilities",
+			CreatedAt: pgtype.Timestamptz{Time: workerTestNow, Valid: true},
+		}); err != nil {
+			t.Fatalf("create reminder: %v", err)
+		}
+		return reminderID
 	}
 
-	// The orphan: a 'free' target row planted directly with SQL. The CHECK
-	// exactly_one_target still accepts it, so only the template row is needed.
-	templateID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
+	dueID := seedReminder(workerTestNow.Add(-time.Hour))
+	seedReminder(workerTestNow.Add(time.Hour))
+
+	// A sent row scheduled in the past must not be re-claimed…
+	sentID := seedReminder(workerTestNow.Add(-time.Hour))
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO free_reminders (id, owner_id, property_id, title, trigger_at, periodicity, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, 'once', $5, $5)`,
-		templateID, ownerID, propertyID, "Orphan", dueAt,
+		`UPDATE reminders SET status = 'sent' WHERE id = $1`, sentID,
 	); err != nil {
-		t.Fatalf("insert free reminder template: %v", err)
+		t.Fatalf("mark sent: %v", err)
 	}
-	freeID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
+	// …nor a pending one still held by its retry backoff.
+	backoffID := seedReminder(workerTestNow.Add(-time.Hour))
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO reminders (id, owner_id, target_type, property_id, free_reminder_id, event_type, status, scheduled_at, message_title, message_body, created_at)
-		 VALUES ($1, $2, 'free', $3, $4, 'free_reminder', 'pending', $5, $6, $7, $5)`,
-		freeID, ownerID, propertyID, templateID, dueAt, "Orphan", "Orphan body",
+		`UPDATE reminders SET next_attempt_at = $2 WHERE id = $1`,
+		backoffID, workerTestNow.Add(time.Hour),
 	); err != nil {
-		t.Fatalf("insert free reminder row: %v", err)
+		t.Fatalf("set backoff: %v", err)
 	}
 
 	repo := notificationspg.NewReminderRepository(tx)
@@ -431,16 +432,11 @@ func TestReminderWorker_Integration_ListDueSkipsFreeTargetRows(t *testing.T) {
 		t.Fatalf("ListDue: %v", err)
 	}
 
-	if len(due) != 1 || due[0].ID != controlID {
-		t.Fatalf("ListDue = %v reminders, want exactly the operation reminder %v", len(due), controlID)
-	}
-	// The free row must have been skipped by the filter, not by a broken seed:
-	// it is still a pending row in the table.
-	free, err := repo.GetByIDUnscoped(ctx, freeID)
-	if err != nil {
-		t.Fatalf("GetByIDUnscoped(free): %v", err)
-	}
-	if free.Status != domain.ReminderPending || string(free.TargetType) != "free" {
-		t.Fatalf("planted row = (%s, %s), want (pending, free) — seed broken", free.TargetType, free.Status)
+	if len(due) != 1 || due[0].ID != dueID {
+		got := make([]uuid.UUID, 0, len(due))
+		for _, r := range due {
+			got = append(got, r.ID)
+		}
+		t.Fatalf("ListDue = %v, want exactly the due reminder %v", got, dueID)
 	}
 }

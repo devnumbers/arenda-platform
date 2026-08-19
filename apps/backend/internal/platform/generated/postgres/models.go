@@ -214,17 +214,6 @@ type CardBindingSession struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
-type FreeReminder struct {
-	ID          pgtype.UUID        `json:"id"`
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-	PropertyID  pgtype.UUID        `json:"property_id"`
-	Title       string             `json:"title"`
-	TriggerAt   pgtype.Timestamptz `json:"trigger_at"`
-	Periodicity string             `json:"periodicity"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-}
-
 type Lease struct {
 	ID                   pgtype.UUID        `json:"id"`
 	OwnerID              pgtype.UUID        `json:"owner_id"`
@@ -412,7 +401,6 @@ type Reminder struct {
 	MessageBody          string                 `json:"message_body"`
 	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
-	FreeReminderID       pgtype.UUID            `json:"free_reminder_id"`
 }
 
 type SentEmailReminder struct {

@@ -41,6 +41,7 @@ excluded_paths = [
   "*000102_drop_legacy_notification_preferences.up.sql", # ban-drop-table: осознанный drop
   "*000104_billing_core_rewrite.up.sql",             # ban-drop-table ×4: переписывание billing (ADR 0037)
   "*000105_grace_notifications.up.sql",              # require-enum-value-ordering
+  "*000108_drop_free_reminders.up.sql",              # ban-drop-column + ban-drop-table: осознанный drop (спека #380, решение #277)
 ]
 
 excluded_rules = [
