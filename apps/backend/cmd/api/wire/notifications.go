@@ -26,7 +26,8 @@ func WireNotifications(p platformDeps) *Notifications {
 	reminderService := notificationsapp.NewReminderService(reminderRepo, p.Clock, p.TZResolver, p.Policy)
 	calendarService := notificationsapp.NewCalendarService(reminderRepo, p.TZResolver)
 
-	preferenceService := notificationsapp.NewPreferenceService(reminderRepo, p.Beginner, p.AuditRecorder)
+	factory := notificationsapp.NewTxStoreFactory(reminderRepo, p.AuditRecorder, p.UoW)
+	preferenceService := notificationsapp.NewPreferenceService(factory)
 
 	pushSubscriptionRepo := notificationspg.NewPushSubscriptionRepository(p.DB)
 	pushSubscriptionService := notificationsapp.NewPushSubscriptionService(pushSubscriptionRepo, p.Clock)

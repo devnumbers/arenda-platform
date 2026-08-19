@@ -5,26 +5,21 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // PreferenceService implements the notification preference use cases: reading
 // the effective per-channel permissions and replacing them atomically.
 type PreferenceService struct {
-	repo  ReminderRepository
-	db    transaction.Beginner
-	audit auditapp.Recorder
+	txStoreFactory
 }
 
-// NewPreferenceService creates a new notification preference service.
-func NewPreferenceService(repo ReminderRepository, db transaction.Beginner, audit auditapp.Recorder) *PreferenceService {
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
-	return &PreferenceService{repo: repo, db: db, audit: audit}
+// NewPreferenceService creates a new notification preference service bound to
+// the shared notifications txStoreFactory, so ReplaceChannelPreferences runs
+// through runInTx (ADR 0033).
+func NewPreferenceService(factory txStoreFactory) *PreferenceService {
+	return &PreferenceService{txStoreFactory: factory}
 }
 
 // ListChannelPreferences returns the effective per-channel permission for
@@ -46,41 +41,34 @@ func (s *PreferenceService) ReplaceChannelPreferences(ctx context.Context, userI
 		return nil, err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRepo := s.repo.WithTx(tx)
-
-	stored, err := txRepo.ListChannelPreferences(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("list notification channel preferences: %w", err)
-	}
-	current := mergeChannelPreferences(stored)
-
-	for _, p := range prefs {
-		if err := txRepo.UpsertChannelPreference(ctx, userID, p); err != nil {
-			return nil, fmt.Errorf("upsert notification channel preference: %w", err)
+	if err := s.runInTx(ctx, func(stores *txStores) error {
+		stored, err := stores.repo.ListChannelPreferences(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("list notification channel preferences: %w", err)
 		}
-	}
+		current := mergeChannelPreferences(stored)
 
-	if changes := channelPreferenceChanges(current, prefs); len(changes) > 0 {
-		if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-			ActorID:    &userID,
-			ActorRole:  auditdomain.ActorRoleOwner,
-			Action:     auditdomain.ActionNotificationPreferencesUpdated,
-			EntityType: auditdomain.EntityUser,
-			EntityID:   &userID,
-			Context:    map[string]any{"changes": changes},
-		}); err != nil {
-			return nil, fmt.Errorf("record audit: %w", err)
+		for _, p := range prefs {
+			if err := stores.repo.UpsertChannelPreference(ctx, userID, p); err != nil {
+				return fmt.Errorf("upsert notification channel preference: %w", err)
+			}
 		}
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit tx: %w", err)
+		if changes := channelPreferenceChanges(current, prefs); len(changes) > 0 {
+			if err := stores.audit.Record(ctx, auditdomain.Entry{
+				ActorID:    &userID,
+				ActorRole:  auditdomain.ActorRoleOwner,
+				Action:     auditdomain.ActionNotificationPreferencesUpdated,
+				EntityType: auditdomain.EntityUser,
+				EntityID:   &userID,
+				Context:    map[string]any{"changes": changes},
+			}); err != nil {
+				return fmt.Errorf("record audit: %w", err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return mergeChannelPreferences(prefs), nil
 }

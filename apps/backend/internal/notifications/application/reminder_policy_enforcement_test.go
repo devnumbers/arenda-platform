@@ -97,6 +97,10 @@ type fakeReminderRepo struct {
 	updateScheduledAtCalls [][2]uuid.UUID // (scope, id)
 	cancelCalls            [][2]uuid.UUID // (scope, reminderID)
 	cancelled              bool           // CancelByIDAndOwner result
+
+	storedPrefs   []domain.NotificationChannelPreference // ListChannelPreferences result
+	upsertedPrefs []domain.NotificationChannelPreference // recorded by UpsertChannelPreference
+	upsertErr     error                                  // UpsertChannelPreference failure
 }
 
 func (r *fakeReminderRepo) Save(context.Context, domain.Reminder) error { return nil }
@@ -237,10 +241,14 @@ func (r *fakeReminderRepo) HasReminderForOperationEvent(context.Context, uuid.UU
 }
 
 func (r *fakeReminderRepo) ListChannelPreferences(context.Context, uuid.UUID) ([]domain.NotificationChannelPreference, error) {
-	return nil, nil
+	return r.storedPrefs, nil
 }
 
-func (r *fakeReminderRepo) UpsertChannelPreference(context.Context, uuid.UUID, domain.NotificationChannelPreference) error {
+func (r *fakeReminderRepo) UpsertChannelPreference(_ context.Context, _ uuid.UUID, p domain.NotificationChannelPreference) error {
+	if r.upsertErr != nil {
+		return r.upsertErr
+	}
+	r.upsertedPrefs = append(r.upsertedPrefs, p)
 	return nil
 }
 
