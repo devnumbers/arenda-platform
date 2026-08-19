@@ -34,6 +34,15 @@ func seedPropertyOwners(propertyRepo *fakePropertyRepo, ownerID uuid.UUID) {
 	}
 }
 
+// mustCreateOperation seeds an operation through the fake repo, failing the
+// test when the seed itself breaks instead of discarding the error.
+func mustCreateOperation(t *testing.T, repo *fakeOperationRepo, ctx context.Context, op domain.Operation) {
+	t.Helper()
+	if _, err := repo.Create(ctx, op); err != nil {
+		t.Fatalf("seed operation: %v", err)
+	}
+}
+
 func newGuardTestOperation(id, ownerID, propertyID uuid.UUID, status domain.OperationStatus) domain.Operation {
 	return domain.Operation{
 		ID:            id,
@@ -101,7 +110,7 @@ func TestUpdateOperation_ArchivedPropertyGuard(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opRepo := &fakeOperationRepo{}
-			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
+			mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
 			_, err := svc.UpdateOperation(ctx, ownerID, operationID, cmd)
 			if !errors.Is(err, tc.wantErr) {
@@ -117,7 +126,7 @@ func TestUpdateOperation_NoPropertySkipsGuard(t *testing.T) {
 	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
 	opRepo := &fakeOperationRepo{}
-	_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, uuid.Nil, domain.OperationStatusPending))
+	mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, uuid.Nil, domain.OperationStatusPending))
 	svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{})
 
 	name := "updated"
@@ -138,7 +147,7 @@ func TestDeleteOperation_ArchivedPropertyGuard(t *testing.T) {
 
 	t.Run("archived rejected", func(t *testing.T) {
 		opRepo := &fakeOperationRepo{}
-		_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
+		mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
 		svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "archived"}})
 		if err := svc.DeleteOperation(ctx, ownerID, operationID); !errors.Is(err, ErrArchivedProperty) {
 			t.Fatalf("DeleteOperation: want ErrArchivedProperty, got %v", err)
@@ -151,7 +160,7 @@ func TestDeleteOperation_ArchivedPropertyGuard(t *testing.T) {
 	for _, status := range []string{"active", "maintenance"} {
 		t.Run(status+" allowed", func(t *testing.T) {
 			opRepo := &fakeOperationRepo{}
-			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
+			mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: status}})
 			if err := svc.DeleteOperation(ctx, ownerID, operationID); err != nil {
 				t.Fatalf("DeleteOperation: %v", err)
@@ -185,7 +194,7 @@ func runArchivedPropertyGuard(
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opRepo := &fakeOperationRepo{}
-			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, seedStatus))
+			mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, seedStatus))
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
 			if err := call(ctx, svc, ownerID, operationID); !errors.Is(err, tc.wantErr) {
 				t.Fatalf("use case: want %v, got %v", tc.wantErr, err)
@@ -268,7 +277,7 @@ func TestCompleteOperation_Unconfirmed(t *testing.T) {
 			op.CategoryID = tc.categoryID
 
 			opRepo := &fakeOperationRepo{}
-			_, _ = opRepo.Create(ctx, op)
+			mustCreateOperation(t, opRepo, ctx, op)
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}})
 
 			updated, err := svc.CompleteOperation(ctx, CompleteOperationCommand{Actor: ownerID, OperationID: operationID})
@@ -289,7 +298,7 @@ func TestProcessOverdueOperation_SkipsUnconfirmed(t *testing.T) {
 	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
 	opRepo := &fakeOperationRepo{}
-	_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed))
+	mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed))
 	svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}})
 
 	changed, err := svc.ProcessOverdueOperation(ctx, ownerID, operationID, date(2026, 6, 15))
@@ -324,7 +333,7 @@ func TestUpdateOperation_UnconfirmedStatusPreservedOnDateChange(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opRepo := &fakeOperationRepo{}
-			_, _ = opRepo.Create(ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed))
+			mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed))
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}})
 
 			newDate := date(tc.newDate[0], tc.newDate[1], tc.newDate[2])

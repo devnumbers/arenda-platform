@@ -28,8 +28,7 @@ func (r *fakeOperationRepo) Create(_ context.Context, op domain.Operation) (doma
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if op.ID == uuid.Nil {
-		id, _ := uuid.NewV7()
-		op.ID = id
+		op.ID = uuid.Must(uuid.NewV7())
 	}
 	r.ops = append(r.ops, op)
 	return op, nil
@@ -40,8 +39,7 @@ func (r *fakeOperationRepo) BulkCreate(_ context.Context, ops []domain.Operation
 	defer r.mu.Unlock()
 	for _, op := range ops {
 		if op.ID == uuid.Nil {
-			id, _ := uuid.NewV7()
-			op.ID = id
+			op.ID = uuid.Must(uuid.NewV7())
 		}
 		r.ops = append(r.ops, op)
 	}
@@ -660,7 +658,7 @@ func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t 
 	opsRepo := &fakeOperationRepo{}
 	recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{recID: rec}}
 
-	_, _ = opsRepo.Create(ctx, domain.Operation{
+	mustCreateOperation(t, opsRepo, ctx, domain.Operation{
 		ID:            deletedOperationID,
 		OwnerID:       ownerID,
 		PropertyID:    propertyID,
@@ -734,7 +732,7 @@ func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t
 	opsRepo := &fakeOperationRepo{}
 	recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{recID: rec}}
 
-	_, _ = opsRepo.Create(ctx, domain.Operation{
+	mustCreateOperation(t, opsRepo, ctx, domain.Operation{
 		ID:                   movedOperationID,
 		OwnerID:              ownerID,
 		PropertyID:           propertyID,
@@ -816,7 +814,7 @@ func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
 
 	// Seed generated rent operations for the original schedule.
 	for _, d := range []time.Time{date(2024, 3, 1), date(2024, 4, 1), date(2024, 5, 1)} {
-		_, _ = opsRepo.Create(ctx, domain.Operation{
+		mustCreateOperation(t, opsRepo, ctx, domain.Operation{
 			OwnerID:              ownerID,
 			PropertyID:           propertyID,
 			LeaseID:              leaseID,
@@ -831,7 +829,7 @@ func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
 
 	// Seed a manual exception that should survive the rebuild.
 	exceptionID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
-	_, _ = opsRepo.Create(ctx, domain.Operation{
+	mustCreateOperation(t, opsRepo, ctx, domain.Operation{
 		ID:            exceptionID,
 		OwnerID:       ownerID,
 		PropertyID:    propertyID,

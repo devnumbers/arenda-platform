@@ -505,7 +505,7 @@ func TestCreateReminder_ArchivedPropertyGuard(t *testing.T) {
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
 			opRepo := &fakeOperationRepo{}
-			_, _ = opRepo.Create(ctx, domain.Operation{
+			mustCreateOperation(t, opRepo, ctx, domain.Operation{
 				ID:                   uuid.MustParse("44444444-4444-4444-4444-444444444444"),
 				OwnerID:              ownerID,
 				PropertyID:           propertyID,

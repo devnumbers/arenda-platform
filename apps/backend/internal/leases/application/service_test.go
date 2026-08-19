@@ -164,8 +164,8 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 		AmountKopecks: 10000,
 		OperationDate: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
 	}
-	_, _ = opRepo.Create(ctx, incomeOp)
-	_, _ = opRepo.Create(ctx, expenseOp)
+	mustCreateOperation(t, opRepo, ctx, incomeOp)
+	mustCreateOperation(t, opRepo, ctx, expenseOp)
 
 	cats := newFakeCategoryRepoForOwner(ownerID)
 	svc := NewOperationService(

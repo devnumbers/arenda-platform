@@ -391,7 +391,10 @@ func TestSharingAudit_DetachDelete_HidesFromMember(t *testing.T) {
 	}
 
 	// Before delete: member sees the shared operation.
-	opsBefore, _ := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	opsBefore, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	if err != nil {
+		t.Fatalf("list operations before delete: %v", err)
+	}
 	if !containsOp(opsBefore, op.ID) {
 		t.Fatalf("member did not see shared op before delete — test seed broken")
 	}
@@ -412,7 +415,10 @@ func TestSharingAudit_DetachDelete_HidesFromMember(t *testing.T) {
 
 	// After detach delete: member no longer sees the operation (no membership,
 	// and the detached op has no property_id to match).
-	opsAfter, _ := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	opsAfter, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	if err != nil {
+		t.Fatalf("list operations after delete: %v", err)
+	}
 	if containsOp(opsAfter, op.ID) {
 		t.Errorf("member saw detached operation after property delete — privacy leak")
 	}
@@ -442,7 +448,10 @@ func TestSharingAudit_SuspendReactivate_AggregateVisibility(t *testing.T) {
 	memID := membershipIDFor(t, ctx, f.members, property, member)
 
 	// Active: sees the operation.
-	opsActive, _ := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsActive, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	if err != nil {
+		t.Fatalf("list operations as active member: %v", err)
+	}
 	if !containsOp(opsActive, op.ID) {
 		t.Fatalf("active member did not see shared op — test seed broken")
 	}
@@ -451,7 +460,10 @@ func TestSharingAudit_SuspendReactivate_AggregateVisibility(t *testing.T) {
 	if err := f.members.Suspend(ctx, memID, property); err != nil {
 		t.Fatalf("suspend: %v", err)
 	}
-	opsSuspended, _ := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsSuspended, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	if err != nil {
+		t.Fatalf("list operations as suspended member: %v", err)
+	}
 	if containsOp(opsSuspended, op.ID) {
 		t.Errorf("suspended member saw shared op — should be hidden")
 	}
@@ -460,7 +472,10 @@ func TestSharingAudit_SuspendReactivate_AggregateVisibility(t *testing.T) {
 	if _, err := f.members.Reactivate(ctx, memID, property); err != nil {
 		t.Fatalf("reactivate: %v", err)
 	}
-	opsReactivated, _ := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsReactivated, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	if err != nil {
+		t.Fatalf("list operations as reactivated member: %v", err)
+	}
 	if !containsOp(opsReactivated, op.ID) {
 		t.Errorf("reactivated member did not see shared op — should be visible again")
 	}
@@ -491,7 +506,10 @@ func TestSharingAudit_DowngradeFullToViewer_ReadOkWriteBlocked(t *testing.T) {
 
 	// full_access: can read + write.
 	svc := f.operationServiceWithShared()
-	opsFull, _ := svc.ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsFull, err := svc.ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	if err != nil {
+		t.Fatalf("list operations as full_access member: %v", err)
+	}
 	if !containsOp(opsFull, op.ID) {
 		t.Fatalf("full_access member did not see shared op — test seed broken")
 	}
@@ -505,7 +523,10 @@ func TestSharingAudit_DowngradeFullToViewer_ReadOkWriteBlocked(t *testing.T) {
 	}
 
 	// viewer: can still read.
-	opsViewer, _ := svc.ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsViewer, err := svc.ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	if err != nil {
+		t.Fatalf("list operations as viewer member: %v", err)
+	}
 	if !containsOp(opsViewer, op.ID) {
 		t.Errorf("viewer member did not see shared op — read access must persist after downgrade")
 	}

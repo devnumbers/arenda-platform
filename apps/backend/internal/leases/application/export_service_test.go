@@ -318,7 +318,13 @@ func openExport(t *testing.T, content []byte) *excelize.File {
 	if err != nil {
 		t.Fatalf("excelize.OpenReader: %v", err)
 	}
-	t.Cleanup(func() { _ = f.Close() })
+	t.Cleanup(func() {
+		// A failed close means the workbook reader leaked; the parsed cells
+		// are already asserted, so a warning-level failure is enough.
+		if err := f.Close(); err != nil {
+			t.Errorf("close workbook: %v", err)
+		}
+	})
 	return f
 }
 
@@ -571,7 +577,11 @@ func TestExportProperty_EmptySectionsRenderHeaders(t *testing.T) {
 
 	// All seven sheets must exist even when their data is empty.
 	for _, name := range []string{objectSheetName, exportSheetName, monthlySheetName, categorySheetName, leasesSheetName, tenantsSheetName, contactsSheetName} {
-		if idx, _ := f.GetSheetIndex(name); idx < 0 {
+		idx, err := f.GetSheetIndex(name)
+		if err != nil {
+			t.Fatalf("GetSheetIndex(%q): %v", name, err)
+		}
+		if idx < 0 {
 			t.Errorf("expected sheet %q to exist", name)
 		}
 	}
