@@ -84,7 +84,7 @@ func TestProviderInitPaymentContract(t *testing.T) {
 				// Response fixture from the spec: the Init 200 response is the
 				// generated spec.InitResponse type, shaped after the example in
 				// openapi.yaml (/v2/Init).
-				_ = json.NewEncoder(w).Encode(spec.InitResponse{
+				writeJSON(t, w, spec.InitResponse{
 					TerminalKey: testTerminalKey,
 					Amount:      tt.req.AmountKopecks,
 					OrderId:     tt.req.PaymentID.String(),
@@ -256,7 +256,7 @@ func TestProviderChargePaymentContract(t *testing.T) {
 		// Response fixture from the spec: the Charge 200 schema is inline in
 		// openapi.yaml (no generated type), so the JSON is built as a literal
 		// matching that schema and its example (/v2/Charge).
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(t, w, map[string]any{
 			"TerminalKey": testTerminalKey,
 			"Amount":      10000,
 			"OrderId":     paymentID.String(),
@@ -323,7 +323,7 @@ func TestProviderGetStateContract(t *testing.T) {
 		// Response fixture from the spec: the GetState 200 schema is inline in
 		// openapi.yaml (no generated type), so the JSON is built as a literal
 		// matching that schema and its example (/v2/GetState).
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(t, w, map[string]any{
 			"Success":     true,
 			"ErrorCode":   "0",
 			"Message":     "OK",
@@ -382,7 +382,7 @@ func TestProviderCancelContract(t *testing.T) {
 		// float32 amounts in the generated type, so the JSON is built as a
 		// literal matching the Cancel 200 schema and its example in
 		// openapi.yaml (/v2/Cancel).
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(t, w, map[string]any{
 			"TerminalKey":       testTerminalKey,
 			"OrderId":           paymentID.String(),
 			"Success":           true,
@@ -448,7 +448,7 @@ func TestProviderAddCustomerAddCardContract(t *testing.T) {
 			// Response fixture from the spec: generated
 			// spec.AddCustomerResponse, shaped after the /v2/AddCustomer
 			// example in openapi.yaml.
-			_ = json.NewEncoder(w).Encode(spec.AddCustomerResponse{
+			writeJSON(t, w, spec.AddCustomerResponse{
 				TerminalKey: testTerminalKey,
 				CustomerKey: "customer-1",
 				Success:     true,
@@ -456,7 +456,7 @@ func TestProviderAddCustomerAddCardContract(t *testing.T) {
 			})
 		case "/v2/AddCard":
 			_, addCardCapturedMap = captureRequest(t, r, addCardExtraFieldsAllowlist...)
-			_ = json.NewEncoder(w).Encode(spec.AddCardResponse{
+			writeJSON(t, w, spec.AddCardResponse{
 				TerminalKey: testTerminalKey,
 				CustomerKey: "customer-1",
 				RequestKey:  "request-key-1",
@@ -542,7 +542,7 @@ func TestProviderRemoveCardContract(t *testing.T) {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		captured, _ = captureRequest(t, r)
-		_ = json.NewEncoder(w).Encode(spec.RemoveCardResponse{
+		writeJSON(t, w, spec.RemoveCardResponse{
 			TerminalKey: testTerminalKey,
 			CustomerKey: "customer-1",
 			CardId:      "card-1",
@@ -582,7 +582,7 @@ func TestProviderGetCardListContract(t *testing.T) {
 		captured, _ = captureRequest(t, r)
 		// Response fixture from the spec: the GetCardList 200 body is a bare
 		// array of cards (oneOf[array, ErrorResponse] in 1.27).
-		_ = json.NewEncoder(w).Encode([]map[string]any{
+		writeJSON(t, w, []map[string]any{
 			{
 				"Pan":       "4300********1234",
 				"ExpDate":   "1230",
@@ -634,7 +634,7 @@ func TestProviderGetAddCardStateContract(t *testing.T) {
 		cardID := "card-1"
 		rebillID := "rebill-1"
 		customerKey := "customer-1"
-		_ = json.NewEncoder(w).Encode(spec.GetAddCardStateResponse{
+		writeJSON(t, w, spec.GetAddCardStateResponse{
 			TerminalKey: testTerminalKey,
 			CustomerKey: &customerKey,
 			Success:     true,

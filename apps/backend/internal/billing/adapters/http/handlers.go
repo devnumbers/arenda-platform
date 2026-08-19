@@ -534,8 +534,8 @@ func paymentMethodItems(methods []domain.PaymentMethod) []openapi.PaymentMethod 
 // answers non-200 so the provider retries. See the "synchronous payment
 // webhooks" ADR.
 func (h *BillingHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, provider string) {
-	defer func() { _ = r.Body.Close() }()
-
+	// r.Body is not closed by the handler: the http.Server owns the request
+	// body's lifecycle and closes it after the handler returns.
 	payload, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBody+1))
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to read webhook body",
@@ -581,7 +581,14 @@ func (h *BillingHandlers) HandlePaymentWebhook(w http.ResponseWriter, r *http.Re
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(ack)
+	if _, err := w.Write(ack); err != nil {
+		// The provider treats a truncated acknowledgement as a failed
+		// delivery and redelivers the notification, which the processing
+		// above is idempotent against — so the write failure is only logged.
+		h.logger.WarnContext(r.Context(), "failed to write payment webhook acknowledgement",
+			slog.String("provider", provider),
+			slog.String("error", httpsupport.SanitizeError(err)))
+	}
 }
 
 // GetAdminSubscriptionPayment implements GET /admin/subscription/payments/{paymentId}

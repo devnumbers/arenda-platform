@@ -29,6 +29,28 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
+// writeJSON encodes a test-fixture response into w, failing the test when the
+// encoder errors: a fixture that fails to encode would silently produce an
+// empty body and mislead the test about the provider's behavior.
+func writeJSON(t *testing.T, w io.Writer, v any) {
+	t.Helper()
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Errorf("encode fixture response: %v", err)
+	}
+}
+
+// closeResp closes a test response body, surfacing a close failure as a test
+// error; a nil resp (error-path RoundTrip results) is skipped.
+func closeResp(t *testing.T, resp *http.Response) {
+	t.Helper()
+	if resp == nil {
+		return
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Errorf("close response body: %v", err)
+	}
+}
+
 func newTestProvider(serverURL string) *Provider {
 	p, err := NewProvider(Config{
 		BaseURL:     serverURL + "/v2/",
@@ -222,7 +244,7 @@ func TestProviderInitPayment(t *testing.T) {
 			t.Fatalf("Token missing from DATA exclusion test")
 		}
 
-		_ = json.NewEncoder(w).Encode(initResponse{
+		writeJSON(t, w, initResponse{
 			baseResponse: baseResponse{Success: true, Status: "NEW"},
 			PaymentID:    "123456",
 			PaymentURL:   "https://securepayments.tinkoff.ru/rest/show/123456",
@@ -265,7 +287,7 @@ func TestProviderInitPaymentInitiatorRequired(t *testing.T) {
 	var requests int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests++
-		_ = json.NewEncoder(w).Encode(initResponse{baseResponse: baseResponse{Success: true, Status: "NEW"}, PaymentID: "1"})
+		writeJSON(t, w, initResponse{baseResponse: baseResponse{Success: true, Status: "NEW"}, PaymentID: "1"})
 	}))
 	defer server.Close()
 
@@ -290,7 +312,7 @@ func TestProviderInitPaymentMerchantInitiated(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = verifyRequestToken(t, r)
-		_ = json.NewEncoder(w).Encode(initResponse{
+		writeJSON(t, w, initResponse{
 			baseResponse: baseResponse{Success: true, Status: "NEW"},
 			PaymentID:    "123",
 			PaymentURL:   "https://pay.example.com/123",
@@ -336,7 +358,7 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 	newServer := func(captured *map[string]any) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			*captured = verifyRequestToken(t, r)
-			_ = json.NewEncoder(w).Encode(initResponse{
+			writeJSON(t, w, initResponse{
 				baseResponse: baseResponse{Success: true, Status: "NEW"},
 				PaymentID:    "1",
 				PaymentURL:   "https://pay",
@@ -398,7 +420,7 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 func TestProviderInitPaymentError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = verifyRequestToken(t, r)
-		_ = json.NewEncoder(w).Encode(initResponse{
+		writeJSON(t, w, initResponse{
 			baseResponse: baseResponse{
 				Success:   false,
 				ErrorCode: "7",
@@ -448,7 +470,7 @@ func TestProviderChargePayment(t *testing.T) {
 			t.Fatalf("Charge body must not contain Amount, got %v", data["Amount"])
 		}
 
-		_ = json.NewEncoder(w).Encode(chargeResponse{
+		writeJSON(t, w, chargeResponse{
 			baseResponse: baseResponse{Success: true, Status: "CONFIRMED", ErrorCode: "0"},
 			PaymentID:    "123",
 			OrderID:      paymentID.String(),
@@ -480,7 +502,7 @@ func TestProviderChargePayment(t *testing.T) {
 
 func TestProviderChargePaymentRejectedCarriesErrorCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(chargeResponse{
+		writeJSON(t, w, chargeResponse{
 			baseResponse: baseResponse{Success: true, Status: "REJECTED", ErrorCode: "103"},
 		})
 	}))
@@ -514,7 +536,7 @@ func TestProviderPaymentStatus(t *testing.T) {
 			t.Fatalf("PaymentId: got %v, want %v", got, want)
 		}
 
-		_ = json.NewEncoder(w).Encode(getStateResponse{
+		writeJSON(t, w, getStateResponse{
 			baseResponse: baseResponse{Success: true, Status: "AUTHORIZED", ErrorCode: "0"},
 			PaymentID:    "999",
 			Amount:       1230,
@@ -550,7 +572,7 @@ func TestProviderRefundPayment(t *testing.T) {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		captured = verifyRequestToken(t, r)
-		_ = json.NewEncoder(w).Encode(cancelResponse{
+		writeJSON(t, w, cancelResponse{
 			baseResponse:   baseResponse{Success: true, Status: "REFUNDED", ErrorCode: "0"},
 			OrderID:        paymentID.String(),
 			PaymentID:      "777",
@@ -584,7 +606,7 @@ func TestProviderRefundPayment(t *testing.T) {
 
 func TestProviderRefundPaymentReversedPending(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(cancelResponse{
+		writeJSON(t, w, cancelResponse{
 			baseResponse:   baseResponse{Success: true, Status: "REVERSED", ErrorCode: "0"},
 			OriginalAmount: 5000,
 			NewAmount:      0,
@@ -611,7 +633,7 @@ func TestProviderRefundPaymentReversedPending(t *testing.T) {
 
 func TestProviderRefundPaymentError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(cancelResponse{
+		writeJSON(t, w, cancelResponse{
 			baseResponse: baseResponse{
 				Success:   false,
 				ErrorCode: "255",
@@ -646,7 +668,7 @@ func TestProviderBindPaymentMethod(t *testing.T) {
 			if got, want := data["CustomerKey"], any(customerRef); got != want {
 				t.Fatalf("AddCustomer CustomerKey: got %v, want %v", got, want)
 			}
-			_ = json.NewEncoder(w).Encode(addCustomerResponse{
+			writeJSON(t, w, addCustomerResponse{
 				baseResponse: baseResponse{Success: true, ErrorCode: "0"},
 				CustomerKey:  customerRef,
 			})
@@ -654,7 +676,7 @@ func TestProviderBindPaymentMethod(t *testing.T) {
 			// The extras sit outside the schema and outside the token: verify
 			// the token over the schema fields only, then assert the extras.
 			addCardCaptured = verifyRequestTokenExcluding(t, r, addCardExtraFieldsAllowlist...)
-			_ = json.NewEncoder(w).Encode(addCardResponse{
+			writeJSON(t, w, addCardResponse{
 				baseResponse: baseResponse{Success: true, ErrorCode: "0"},
 				PaymentURL:   "https://securepayments.tinkoff.ru/rest/addcard/abc",
 				RequestKey:   "request-key-1",
@@ -712,12 +734,12 @@ func TestProviderBindPaymentMethodCustomerAlreadyExistsProceeds(t *testing.T) {
 		switch r.URL.Path {
 		case "/v2/AddCustomer":
 			_ = verifyRequestToken(t, r)
-			_ = json.NewEncoder(w).Encode(addCustomerResponse{
+			writeJSON(t, w, addCustomerResponse{
 				baseResponse: baseResponse{Success: false, ErrorCode: "7", Message: "Покупатель уже существует"},
 			})
 		case "/v2/AddCard":
 			_ = verifyRequestTokenExcluding(t, r, addCardExtraFieldsAllowlist...)
-			_ = json.NewEncoder(w).Encode(addCardResponse{
+			writeJSON(t, w, addCardResponse{
 				baseResponse: baseResponse{Success: true, ErrorCode: "0"},
 				PaymentURL:   "https://pay",
 				RequestKey:   "rk",
@@ -744,7 +766,7 @@ func TestProviderBindPaymentMethodOtherAPIErrorPropagated(t *testing.T) {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		_ = verifyRequestToken(t, r)
-		_ = json.NewEncoder(w).Encode(addCustomerResponse{
+		writeJSON(t, w, addCustomerResponse{
 			baseResponse: baseResponse{Success: false, ErrorCode: "255", Message: "other"},
 		})
 	}))
@@ -770,7 +792,7 @@ func TestProviderPaymentMethodBinding(t *testing.T) {
 			if got, want := data["RequestKey"], any("rk-1"); got != want {
 				t.Fatalf("RequestKey: got %v, want %v", got, want)
 			}
-			_ = json.NewEncoder(w).Encode(getAddCardStateResponse{
+			writeJSON(t, w, getAddCardStateResponse{
 				baseResponse: baseResponse{Success: true, ErrorCode: "0", Status: "COMPLETED"},
 				CardID:       "card-1",
 				RebillID:     "rebill-1",
@@ -800,7 +822,7 @@ func TestProviderPaymentMethodBinding(t *testing.T) {
 		for _, status := range []string{"NEW", "FORM_SHOWED", "3DS_CHECKING", "3DS_CHECKED", "AUTHORIZING", "AUTHORIZED"} {
 			t.Run(status, func(t *testing.T) {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					_ = json.NewEncoder(w).Encode(getAddCardStateResponse{
+					writeJSON(t, w, getAddCardStateResponse{
 						baseResponse: baseResponse{Success: true, Status: status},
 						RequestKey:   "rk-2",
 					})
@@ -824,7 +846,7 @@ func TestProviderPaymentMethodBinding(t *testing.T) {
 
 	t.Run("rejected is failed with error code", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(getAddCardStateResponse{
+			writeJSON(t, w, getAddCardStateResponse{
 				baseResponse: baseResponse{Success: true, ErrorCode: "7", Status: "REJECTED"},
 				RequestKey:   "rk-3",
 			})
@@ -846,7 +868,7 @@ func TestProviderPaymentMethodBinding(t *testing.T) {
 
 	t.Run("unknown status errors", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(getAddCardStateResponse{
+			writeJSON(t, w, getAddCardStateResponse{
 				baseResponse: baseResponse{Success: true, Status: "TOTALLY_NEW_STATUS"},
 				RequestKey:   "rk-4",
 			})
@@ -873,7 +895,7 @@ func TestProviderRemovePaymentMethod(t *testing.T) {
 		if got, want := data["CardId"], any("card-1"); got != want {
 			t.Fatalf("CardId: got %v, want %v", got, want)
 		}
-		_ = json.NewEncoder(w).Encode(removeCardResponse{
+		writeJSON(t, w, removeCardResponse{
 			baseResponse: baseResponse{Success: true, ErrorCode: "0"},
 			CardID:       "card-1",
 		})
@@ -888,7 +910,7 @@ func TestProviderRemovePaymentMethod(t *testing.T) {
 
 func TestProviderRemovePaymentMethodNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(removeCardResponse{
+		writeJSON(t, w, removeCardResponse{
 			baseResponse: baseResponse{Success: false, ErrorCode: "107", Message: "Неверно введен CardId"},
 		})
 	}))
@@ -910,7 +932,7 @@ func TestProviderListPaymentMethods(t *testing.T) {
 		if got, want := data["CustomerKey"], any("customer-1"); got != want {
 			t.Fatalf("CustomerKey: got %v, want %v", got, want)
 		}
-		_ = json.NewEncoder(w).Encode([]cardListItem{
+		writeJSON(t, w, []cardListItem{
 			{CardID: "card-a", Pan: "4300********1234", ExpDate: "1230", Status: "A", RebillID: "rebill-a"},
 			{CardID: "card-d", Pan: "5500********5678", ExpDate: "1130", Status: "D", RebillID: "rebill-d"},
 			{CardID: "card-i", Pan: "2200********9012", ExpDate: "1029", Status: "I", RebillID: "rebill-i"},
@@ -935,7 +957,7 @@ func TestProviderListPaymentMethods(t *testing.T) {
 
 func TestProviderListPaymentMethodsCustomerNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(baseResponse{
+		writeJSON(t, w, baseResponse{
 			Success:   false,
 			ErrorCode: "7",
 			Message:   "Покупатель не найден",
@@ -956,7 +978,7 @@ func TestProviderListPaymentMethodsCustomerNotFound(t *testing.T) {
 
 func TestProviderListPaymentMethodsEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode([]cardListItem{})
+		writeJSON(t, w, []cardListItem{})
 	}))
 	defer server.Close()
 
@@ -980,7 +1002,9 @@ func TestProviderWebhookAck(t *testing.T) {
 func TestProviderHTTPErrorIncludesBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("upstream exploded"))
+		if _, err := w.Write([]byte("upstream exploded")); err != nil {
+			t.Errorf("write fixture body: %v", err)
+		}
 	}))
 	defer server.Close()
 

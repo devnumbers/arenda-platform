@@ -122,9 +122,9 @@ func verifyToken(payload []byte, password string) error {
 	}
 
 	expected := sign(data, password)
-	actual, _ := data["Token"].(string)
+	actual, ok := data["Token"].(string)
 
-	if !hmac.Equal([]byte(expected), []byte(actual)) {
+	if !ok || !hmac.Equal([]byte(expected), []byte(actual)) {
 		return errors.New("tkassa: invalid webhook token")
 	}
 	return nil

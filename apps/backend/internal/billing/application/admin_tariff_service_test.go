@@ -28,7 +28,7 @@ func newTariffHarness(t *testing.T) *tariffHarness {
 	tariffs := testTariffs()
 	stores := newFakeStores(tariffs...)
 	audit := &captureRecorder{}
-	return &tariffHarness{svc: NewTariffService(stores.factory(audit)), stores: stores, audit: audit, tariffs: tariffs}
+	return &tariffHarness{svc: NewTariffService(stores.factory(audit), TariffServiceConfig{}), stores: stores, audit: audit, tariffs: tariffs}
 }
 
 func (h *tariffHarness) tariffID(t *testing.T, name domain.TariffName) uuid.UUID {

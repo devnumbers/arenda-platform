@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -71,9 +72,16 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var body []byte
 	if req.Body != nil {
 		body, err = io.ReadAll(req.Body)
-		_ = req.Body.Close()
+		closeErr := req.Body.Close()
 		if err != nil {
+			// The read error is the more informative failure; a concurrent
+			// close error is intentionally dropped in its favor.
 			return nil, err
+		}
+		// The body bytes are captured, but a stream that fails to close is a
+		// transport anomaly worth surfacing rather than discarding.
+		if closeErr != nil {
+			return nil, fmt.Errorf("tkassa: close request body: %w", closeErr)
 		}
 	}
 

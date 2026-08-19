@@ -151,11 +151,26 @@ func TestSubscriptionPayment_RefundTransitions(t *testing.T) {
 
 	t.Run("begin refund rejects terminal and reserved payments", func(t *testing.T) {
 		for status, prepare := range map[PaymentStatus]func(*SubscriptionPayment){
-			PaymentStatusFailed:   func(p *SubscriptionPayment) { _ = p.MarkFailed(nil, paymentNow) },
-			PaymentStatusRefunded: func(p *SubscriptionPayment) { _ = p.MarkSucceeded(paymentNow); _ = p.MarkRefunded(paymentNow) },
+			PaymentStatusFailed: func(p *SubscriptionPayment) {
+				if err := p.MarkFailed(nil, paymentNow); err != nil {
+					t.Fatalf("MarkFailed() error = %v", err)
+				}
+			},
+			PaymentStatusRefunded: func(p *SubscriptionPayment) {
+				if err := p.MarkSucceeded(paymentNow); err != nil {
+					t.Fatalf("MarkSucceeded() error = %v", err)
+				}
+				if err := p.MarkRefunded(paymentNow); err != nil {
+					t.Fatalf("MarkRefunded() error = %v", err)
+				}
+			},
 			PaymentStatusRefunding: func(p *SubscriptionPayment) {
-				_ = p.MarkSucceeded(paymentNow)
-				_ = p.BeginRefund(paymentNow)
+				if err := p.MarkSucceeded(paymentNow); err != nil {
+					t.Fatalf("MarkSucceeded() error = %v", err)
+				}
+				if err := p.BeginRefund(paymentNow); err != nil {
+					t.Fatalf("BeginRefund() error = %v", err)
+				}
 			},
 		} {
 			payment := newTestPayment(t)

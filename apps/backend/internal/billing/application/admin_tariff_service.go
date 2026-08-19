@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
 // The admin tariff management operations of issue #256: creating a plan,
@@ -35,9 +37,13 @@ func tariffAuditContext(tariff domain.Tariff) map[string]any {
 // committed admin write. It is best-effort by design: a failure only means
 // readers may serve the previous values until the cache TTL expires — the
 // write itself is durable, so it must not fail the already-committed result
-// (a failed answer would send the admin into a retry that ends in 409).
+// (a failed answer would send the admin into a retry that ends in 409). The
+// failure is warned about instead of silently discarded.
 func (s *TariffService) invalidateAfterCommit(ctx context.Context) {
-	_ = s.tariffs.Invalidate(ctx)
+	if err := s.tariffs.Invalidate(ctx); err != nil {
+		s.log.WarnContext(ctx, "tariff cache invalidation failed after admin write; stale values may be served until the cache TTL",
+			slog.String("error", sanitize.Error(err)))
+	}
 }
 
 // CreateTariff creates a new plan (issue #256). The name must come from the

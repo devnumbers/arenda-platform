@@ -13,7 +13,7 @@ import (
 func TestTariffService_ListTariffs_ReturnsActiveOnly(t *testing.T) {
 	hidden := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
 	stores := newFakeStores(append(testTariffs(), hidden)...)
-	svc := NewTariffService(stores.factory(nil))
+	svc := NewTariffService(stores.factory(nil), TariffServiceConfig{})
 
 	tariffs, err := svc.ListTariffs(t.Context())
 	if err != nil {
@@ -35,7 +35,7 @@ func TestTariffService_ListAllTariffs_ReturnsHiddenToo(t *testing.T) {
 	hidden := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
 	seeded := append(testTariffs(), hidden)
 	stores := newFakeStores(seeded...)
-	svc := NewTariffService(stores.factory(nil))
+	svc := NewTariffService(stores.factory(nil), TariffServiceConfig{})
 
 	tariffs, err := svc.ListAllTariffs(t.Context())
 	if err != nil {

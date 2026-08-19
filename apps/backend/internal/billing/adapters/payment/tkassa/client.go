@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
 	"time"
+
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/logger"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 )
 
 const (
@@ -143,10 +147,22 @@ func (p *Provider) send(ctx context.Context, method string, reqBody map[string]a
 	if err != nil {
 		return fmt.Errorf("tkassa: %s request failed: %w", method, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		// The response is already decoded by now, so a close failure cannot
+		// fail the call — but it does break connection reuse, which is worth
+		// a warning on a payment-processing path.
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.WithCorrelation(ctx, p.log).WarnContext(ctx, "tkassa: close response body",
+				slog.String("method", method),
+				slog.String("error", sanitize.Error(closeErr)))
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bodySnippet, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		bodySnippet, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		if readErr != nil {
+			return fmt.Errorf("tkassa: %s returned HTTP %d (response body read failed: %w)", method, resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("tkassa: %s returned HTTP %d: %s", method, resp.StatusCode, string(bodySnippet))
 	}
 

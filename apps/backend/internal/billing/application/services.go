@@ -64,7 +64,7 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 		AdminPayments: cfg.AdminPayments,
 	})
 	return Services{
-		Tariffs:        NewTariffService(factory),
+		Tariffs:        NewTariffService(factory, TariffServiceConfig{Log: cfg.Logger}),
 		Subscriptions:  NewSubscriptionService(factory, SubscriptionServiceConfig{Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger}),
 		Payments:       payments,
 		PaymentMethods: NewPaymentMethodService(factory, cfg.Provider, PaymentMethodServiceConfig{Config: cfg.Config, Clock: cfg.Clock, Log: cfg.Logger}),

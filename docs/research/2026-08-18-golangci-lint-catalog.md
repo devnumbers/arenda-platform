@@ -113,7 +113,7 @@ Research-тикет [#321](https://github.com/devnumbers/arenda-platform/issues/
 
 ### 2.3. Ужесточить большой ремедиацией (решение бара №323)
 
-- `errcheck`: `check-blank: true`, `check-type-assertions: true`, `disable-default-exclusions: true` → 248.
+- `errcheck`: `check-blank: true`, `check-type-assertions: true`, `disable-default-exclusions: true` → 248. exclude-functions для Builder-методов — только в pointer-форме `(*strings.Builder).WriteString`: форма без `(*...)` не матчится и под disable-default-exclusions молча перестаёт исключать (обнаружено волной #354); для revive unhandled-error форма проверяется при его включении.
 - `godot`: `scope: all`, `capital: true` → 395.
 - `govet` + `shadow` → **341**: сохраняю рекомендацию «не включать»: `if err := ...; err != nil` — фундаментальная идиома; shadow-находки в 95% легитимные затенения в ветках обработки. Это не глушение шума, а выбор идиомы.
 - `govet` + `fieldalignment` → **269**: не включать — переупаковка полей ради байтов противоречит читаемости DDD-доменов (не embedded).
@@ -376,9 +376,11 @@ linters:
       # check-type-assertions: true
       # disable-default-exclusions: true
       exclude-functions:
-        - strings.Builder.WriteString
-        - strings.Builder.WriteByte
-        - strings.Builder.WriteRune
+        # pointer-receiver форма обязательна: без `(*...)` запись не матчится,
+        # и под disable-default-exclusions Builder-находки вернутся (волна #354)
+        - (*strings.Builder).WriteString
+        - (*strings.Builder).WriteByte
+        - (*strings.Builder).WriteRune
     govet:
       enable:
         - nilness

@@ -151,6 +151,6 @@ func isAddCardSuccessful(data map[string]any) bool {
 	if status := getString(data, "Status"); status != statusCompleted {
 		return false
 	}
-	success, _ := data["Success"].(bool)
-	return success
+	success, ok := data["Success"].(bool)
+	return ok && success
 }

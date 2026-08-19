@@ -228,9 +228,13 @@ linters:
       exclude-functions:
         # Документированный always-nil error (go.dev/ref/spec: «Write can never
         # return a non-nil error») — исключён здесь и в revive unhandled-error.
-        - strings.Builder.WriteString
-        - strings.Builder.WriteByte
-        - strings.Builder.WriteRune
+        # Форма со звёздочкой обязательна: у методов pointer-receiver, форма
+        # без `(*...)` не матчится и работает сегодня только за счёт дефолтных
+        # исключений errcheck — которые выключит disable-default-exclusions
+        # на флипе волны errcheck (волна #354, сетка #325).
+        - (*strings.Builder).WriteString
+        - (*strings.Builder).WriteByte
+        - (*strings.Builder).WriteRune
       # REMEDIATION (этап 2, волны errcheck #353–#359): 248 нарушений
       # (tx.Rollback, Body.Close, w.Write, blank uuid.NewV7).
       # check-blank: true

@@ -439,7 +439,10 @@ func TestWorkers_RenewalWithoutChargeableMethodEntersGrace(t *testing.T) {
 			if _, _, charges := h.provider.calls(); charges != 0 {
 				t.Errorf("charge calls = %d, want 0", charges)
 			}
-			pending, _ := h.stores.payments.ListPendingByUserID(t.Context(), sub.UserID)
+			pending, err := h.stores.payments.ListPendingByUserID(t.Context(), sub.UserID)
+			if err != nil {
+				t.Fatalf("ListPendingByUserID: %v", err)
+			}
 			if len(pending) != 0 {
 				t.Errorf("pending payments = %d, want 0 (nothing was initiated)", len(pending))
 			}

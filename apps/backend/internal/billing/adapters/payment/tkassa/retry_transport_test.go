@@ -57,7 +57,7 @@ func TestRetryTransportSuccessFirstAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer closeResp(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
@@ -75,7 +75,7 @@ func TestRetryTransportRetryThenSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error after retries: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer closeResp(t, resp)
 	if base.calls.Load() != 3 {
 		t.Fatalf("expected 3 calls (1 initial + 2 retries), got %d", base.calls.Load())
 	}
@@ -88,9 +88,7 @@ func TestRetryTransportExhaustsRetries(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
+	closeResp(t, resp)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -109,9 +107,7 @@ func TestRetryTransportNoRetryWhenDisabled(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
+	closeResp(t, resp)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -127,9 +123,7 @@ func TestRetryTransportNoRetryOnPermanentError(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
+	closeResp(t, resp)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -153,7 +147,7 @@ func TestRetryTransportPreservesBodyAcrossRetries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error after retries: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer closeResp(t, resp)
 
 	if base.calls.Load() != 3 {
 		t.Fatalf("expected 3 calls (1 initial + 2 retries), got %d", base.calls.Load())
@@ -206,9 +200,7 @@ func TestRetryTransportJitterApplied(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
+	closeResp(t, resp)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -322,9 +314,7 @@ func TestRetryTransportChargeNotRetriedAfterRequestSent(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://securepay.tinkoff.ru/v2/Charge", nil)
 	resp, err := tr.RoundTrip(req)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
+	closeResp(t, resp)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -339,9 +329,7 @@ func TestRetryTransportInitRetriedAfterRequestSent(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://securepay.tinkoff.ru/v2/Init", nil)
 	resp, err := tr.RoundTrip(req)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
+	closeResp(t, resp)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -412,12 +400,31 @@ var (
 	_ http.RoundTripper = (*signalingRoundTripper)(nil)
 )
 
-// Ensure net.Error implementations satisfy the interface at compile time.
-var (
-	_ net.Error = (*timeoutNetError)(nil)
-	_ net.Error = (*nonTimeoutNetError)(nil)
-	_ net.Error = (*permanentNetError)(nil)
-)
+// TestNetErrorFakesImplementNetError pins the timeout/non-timeout/permanent
+// fakes to net.Error. The compile-time `var _ net.Error = (*T)(nil)` form
+// assigns an error-implementing value to the blank identifier, which errcheck
+// check-blank rejects; errors.As here keeps the same interface guarantee as a
+// suite assertion — and it is the exact check canRetry performs at runtime.
+func TestNetErrorFakesImplementNetError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"timeoutNetError", &timeoutNetError{errorString: "x"}},
+		{"nonTimeoutNetError", &nonTimeoutNetError{errorString: "x"}},
+		{"permanentNetError", &permanentNetError{errorString: "x"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var netErr net.Error
+			if !errors.As(tc.err, &netErr) {
+				t.Errorf("%T does not implement net.Error", tc.err)
+			}
+		})
+	}
+}
 
 // hangingServer reads the request body and then blocks until the client
 // gives up, producing a real ResponseHeaderTimeout after WroteRequest.
@@ -425,7 +432,9 @@ func hangingServer(t *testing.T, hits *atomic.Int32) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		_, _ = io.Copy(io.Discard, r.Body)
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			t.Errorf("drain request body: %v", err)
+		}
 		<-r.Context().Done()
 	}))
 	t.Cleanup(srv.Close)
@@ -476,9 +485,7 @@ func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
 				t.Fatalf("create request: %v", err)
 			}
 			resp, err := tr.RoundTrip(req)
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
+			closeResp(t, resp)
 			if err == nil {
 				t.Fatalf("expected read timeout error")
 			}
@@ -502,9 +509,7 @@ func TestRetryTransportReadMethodsRetriedAfterReadTimeout(t *testing.T) {
 				t.Fatalf("create request: %v", err)
 			}
 			resp, err := tr.RoundTrip(req)
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
+			closeResp(t, resp)
 			if err == nil {
 				t.Fatalf("expected read timeout error")
 			}
@@ -540,9 +545,7 @@ func TestRetryTransportBackoffRespectsContextCancel(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		resp, err := tr.RoundTrip(req)
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
+		closeResp(t, resp)
 		done <- err
 	}()
 
