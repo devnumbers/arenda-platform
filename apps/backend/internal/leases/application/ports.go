@@ -176,7 +176,9 @@ type OperationRepository interface {
 	ListByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]domain.Operation, error)
 	ListOperationDatesByLease(ctx context.Context, leaseID uuid.UUID) ([]time.Time, error)
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]time.Time, error)
-	UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, scope, recurringOperationID uuid.UUID, offsetDays *int, from time.Time) error
+	UpdateFutureGeneratedOperationReminderOffsets(
+		ctx context.Context, scope, recurringOperationID uuid.UUID, offsetDays *int, from time.Time,
+	) error
 	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID) ([]domain.Operation, error)
 	ListByPropertyWithStatuses(ctx context.Context, scope, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error)
 	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.Operation, error)
@@ -202,10 +204,18 @@ type OperationRepository interface {
 	GetPropertyOperationsSummary(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) (OperationsSummary, error)
 	ListOverdueRentOperations(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]OverdueRentOperation, error)
 	ListNextRentPayments(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, asOf time.Time) ([]NextRentPayment, error)
-	GetFinanceReportTotals(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) (FinanceReportTotals, error)
-	GetFinanceReportByProperty(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]FinanceReportPropertyRow, error)
-	GetFinanceReportByCategory(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]FinanceReportCategoryRow, error)
-	GetFinanceReportByMonth(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]FinanceReportMonthRow, error)
+	GetFinanceReportTotals(
+		ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time,
+	) (FinanceReportTotals, error)
+	GetFinanceReportByProperty(
+		ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time,
+	) ([]FinanceReportPropertyRow, error)
+	GetFinanceReportByCategory(
+		ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time,
+	) ([]FinanceReportCategoryRow, error)
+	GetFinanceReportByMonth(
+		ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time,
+	) ([]FinanceReportMonthRow, error)
 	GetPropertyFinanceByMonth(ctx context.Context, scope, propertyID uuid.UUID) ([]FinanceReportMonthRow, error)
 	GetPropertyFinanceByCategory(ctx context.Context, scope, propertyID uuid.UUID) ([]FinanceReportCategoryRow, error)
 	ListCompletedForExport(ctx context.Context, scope, propertyID uuid.UUID) ([]ExportOperationRow, error)

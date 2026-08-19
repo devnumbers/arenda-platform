@@ -29,9 +29,9 @@ type NextRentPayment struct {
 // OverdueSince is the earliest overdue rent operation of any period; HasOverdue
 // reports whether the lease has at least one overdue rent operation.
 type LeasePaymentSchedule struct {
-	NextPaymentDate *time.Time // nil, если нет будущих неоплаченных операций (pending, operation_date >= as_of)
-	OverdueSince    *time.Time // nil, если у аренды нет просроченных операций
-	HasOverdue      bool       // true, если есть хотя бы одна overdue rent-операция любого периода
+	NextPaymentDate *time.Time // Пусто, если нет будущих неоплаченных операций (pending, operation_date >= as_of).
+	OverdueSince    *time.Time // Пусто, если у аренды нет просроченных операций.
+	HasOverdue      bool       // Истинно, если есть хотя бы одна overdue rent-операция любого периода.
 }
 
 // resolveAccessiblePropertyIDs returns the ids of properties shared with the
@@ -54,7 +54,12 @@ func (s *LeaseService) resolveAccessiblePropertyIDs(ctx context.Context, actor u
 // date. The presence of a key means the lease has an overdue rent payment for
 // the current period; overdue debt from past periods does not set the flag.
 // A single repository call is made regardless of the number of leases.
-func (s *LeaseService) CurrentPeriodOverdueIndex(ctx context.Context, actor uuid.UUID, leases []domain.Lease, asOf time.Time) (map[uuid.UUID]time.Time, error) {
+func (s *LeaseService) CurrentPeriodOverdueIndex(
+	ctx context.Context,
+	actor uuid.UUID,
+	leases []domain.Lease,
+	asOf time.Time,
+) (map[uuid.UUID]time.Time, error) {
 	accessible, err := s.resolveAccessiblePropertyIDs(ctx, actor)
 	if err != nil {
 		return nil, err
@@ -88,7 +93,12 @@ func (s *LeaseService) CurrentPeriodOverdueIndex(ctx context.Context, actor uuid
 // the map only when at least one of the three is known; callers must check key
 // presence. Two owner-scoped repository calls are made regardless of the number
 // of leases.
-func (s *LeaseService) LeasePaymentScheduleIndex(ctx context.Context, actor uuid.UUID, leases []domain.Lease, asOf time.Time) (map[uuid.UUID]LeasePaymentSchedule, error) {
+func (s *LeaseService) LeasePaymentScheduleIndex(
+	ctx context.Context,
+	actor uuid.UUID,
+	leases []domain.Lease,
+	asOf time.Time,
+) (map[uuid.UUID]LeasePaymentSchedule, error) {
 	accessible, err := s.resolveAccessiblePropertyIDs(ctx, actor)
 	if err != nil {
 		return nil, err

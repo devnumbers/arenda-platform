@@ -11,10 +11,21 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
-// propertyStatusArchived mirrors the properties module archived status. The
-// leases module must not depend on the properties module, so the status value
-// is duplicated here.
-const propertyStatusArchived = "archived"
+// Property statuses mirror the properties module vocabulary. The leases module
+// must not depend on the properties module, so the status values are
+// duplicated here.
+const (
+	propertyStatusActive      = "active"
+	propertyStatusMaintenance = "maintenance"
+	propertyStatusArchived    = "archived"
+)
+
+// Audit context keys shared by the leases application services (same naming as
+// the access module, wave #360).
+const (
+	auditKeyFields     = "fields"
+	auditKeyPropertyID = "property_id"
+)
 
 // validatePropertyNotArchived verifies that the property exists for the owner
 // and is not archived. Mutations linked to an archived property are rejected;
@@ -48,7 +59,13 @@ func parseTypeAndCategory(cmdType string, categoryID uuid.UUID) (domain.Operatio
 	return opType, categoryID, nil
 }
 
-func validateCategory(ctx context.Context, categories OperationCategoryRepository, scope uuid.UUID, opType domain.OperationType, categoryID uuid.UUID) error {
+func validateCategory(
+	ctx context.Context,
+	categories OperationCategoryRepository,
+	scope uuid.UUID,
+	opType domain.OperationType,
+	categoryID uuid.UUID,
+) error {
 	cat, err := categories.GetByIDAndOwner(ctx, categoryID, scope)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -62,7 +79,12 @@ func validateCategory(ctx context.Context, categories OperationCategoryRepositor
 	return nil
 }
 
-func getDefaultCategoryID(ctx context.Context, categories OperationCategoryRepository, scope uuid.UUID, code domain.OperationCategoryDefaultCode) (uuid.UUID, error) {
+func getDefaultCategoryID(
+	ctx context.Context,
+	categories OperationCategoryRepository,
+	scope uuid.UUID,
+	code domain.OperationCategoryDefaultCode,
+) (uuid.UUID, error) {
 	cat, err := categories.GetByOwnerAndCode(ctx, scope, code)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("get default category %q: %w", code, err)
@@ -74,7 +96,12 @@ func getDefaultCategoryID(ctx context.Context, categories OperationCategoryRepos
 // data and returns the data owner (scope) for repository calls. Any role
 // without view capability — including a suspended membership — maps to
 // ErrNotFound so the existence of an object is never revealed (issue #166).
-func resolveReadScope(ctx context.Context, policy sharedpolicy.Policy, properties PropertyRepository, actor, propertyID uuid.UUID) (uuid.UUID, error) {
+func resolveReadScope(
+	ctx context.Context,
+	policy sharedpolicy.Policy,
+	properties PropertyRepository,
+	actor, propertyID uuid.UUID,
+) (uuid.UUID, error) {
 	role, err := policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
@@ -91,7 +118,12 @@ func resolveReadScope(ctx context.Context, policy sharedpolicy.Policy, propertie
 // (object privacy); a role that can view but not edit (viewer) maps to
 // ErrForbidden. The role is returned so callers can attribute audit entries
 // to the actor's real role (issue #166 follow-up).
-func resolveWriteScope(ctx context.Context, policy sharedpolicy.Policy, properties PropertyRepository, actor, propertyID uuid.UUID) (sharedpolicy.Role, uuid.UUID, error) {
+func resolveWriteScope(
+	ctx context.Context,
+	policy sharedpolicy.Policy,
+	properties PropertyRepository,
+	actor, propertyID uuid.UUID,
+) (sharedpolicy.Role, uuid.UUID, error) {
 	role, err := policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
 		return "", uuid.Nil, fmt.Errorf("resolve role: %w", err)
@@ -118,7 +150,13 @@ func resolveWriteScope(ctx context.Context, policy sharedpolicy.Policy, properti
 // to ErrForbidden. A property context without the policy or the property
 // repository wired maps to ErrNotFound as well: the degraded pre-T2a service
 // can only write the actor's own scope, which is the branch above.
-func resolveOwnerWideWriteScope(ctx context.Context, policy sharedpolicy.Policy, properties PropertyRepository, actor uuid.UUID, propertyID *uuid.UUID) (sharedpolicy.Role, uuid.UUID, error) {
+func resolveOwnerWideWriteScope(
+	ctx context.Context,
+	policy sharedpolicy.Policy,
+	properties PropertyRepository,
+	actor uuid.UUID,
+	propertyID *uuid.UUID,
+) (sharedpolicy.Role, uuid.UUID, error) {
 	if propertyID == nil || *propertyID == uuid.Nil {
 		return sharedpolicy.RoleOwner, actor, nil
 	}

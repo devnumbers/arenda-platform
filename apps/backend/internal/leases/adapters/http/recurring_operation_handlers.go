@@ -20,7 +20,11 @@ type RecurringOperationHandlers struct {
 }
 
 // NewRecurringOperationHandlers creates HTTP handlers for the recurring operations API.
-func NewRecurringOperationHandlers(svc *leasesapp.RecurringOperationService, categories *leasesapp.CategoryService, logger *slog.Logger) *RecurringOperationHandlers {
+func NewRecurringOperationHandlers(
+	svc *leasesapp.RecurringOperationService,
+	categories *leasesapp.CategoryService,
+	logger *slog.Logger,
+) *RecurringOperationHandlers {
 	return &RecurringOperationHandlers{svc: svc, categories: categories, logger: logger}
 }
 
@@ -32,14 +36,17 @@ func (h *RecurringOperationHandlers) handleRecurringOperationError(w http.Respon
 func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.RecurringOperationCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create recurring operation request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		h.logger.ErrorContext(r.Context(), "failed to decode create recurring operation request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -87,7 +94,8 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -115,7 +123,8 @@ func (h *RecurringOperationHandlers) ListRecurringOperationsByProperty(w http.Re
 func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -143,7 +152,8 @@ func (h *RecurringOperationHandlers) ListRecurringOperations(w http.ResponseWrit
 func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -166,7 +176,8 @@ func (h *RecurringOperationHandlers) GetRecurringOperation(w http.ResponseWriter
 func (h *RecurringOperationHandlers) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -182,14 +193,17 @@ func (h *RecurringOperationHandlers) DeleteRecurringOperation(w http.ResponseWri
 func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.RecurringOperationUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update recurring operation request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		h.logger.ErrorContext(r.Context(), "failed to decode update recurring operation request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -242,7 +256,8 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -265,7 +280,8 @@ func (h *RecurringOperationHandlers) PauseRecurringOperation(w http.ResponseWrit
 func (h *RecurringOperationHandlers) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

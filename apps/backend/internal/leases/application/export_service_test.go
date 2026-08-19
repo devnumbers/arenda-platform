@@ -26,7 +26,7 @@ import (
 // implements the slice of its interface that ExportProperty actually calls; the
 // rest are zero-value stubs so the fake still satisfies the full interface.
 
-// --- export fakes --------------------------------------------------------
+// Export fakes.
 
 // exportPropertyRepo satisfies PropertyRepository for ExportProperty. Only
 // GetForExport is configurable; the rest return zero / not-found.
@@ -115,7 +115,11 @@ func (r *exportOperationRepo) ListByProperty(_ context.Context, _, _ uuid.UUID) 
 	return nil, nil
 }
 
-func (r *exportOperationRepo) ListByPropertyWithStatuses(_ context.Context, _, _ uuid.UUID, _ []domain.OperationStatus) ([]domain.Operation, error) {
+func (r *exportOperationRepo) ListByPropertyWithStatuses(
+	_ context.Context,
+	_, _ uuid.UUID,
+	_ []domain.OperationStatus,
+) ([]domain.Operation, error) {
 	return nil, nil
 }
 
@@ -171,7 +175,12 @@ func (r *exportOperationRepo) DeleteUneditedOperationsByLease(_ context.Context,
 	return nil
 }
 
-func (r *exportOperationRepo) ListPendingOperationsWithPastDate(_ context.Context, _ uuid.UUID, _ time.Time, _ int) ([]domain.Operation, error) {
+func (r *exportOperationRepo) ListPendingOperationsWithPastDate(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+	_ int,
+) ([]domain.Operation, error) {
 	return nil, nil
 }
 
@@ -191,19 +200,39 @@ func (r *exportOperationRepo) ListNextRentPayments(_ context.Context, _ uuid.UUI
 	return nil, nil
 }
 
-func (r *exportOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
+func (r *exportOperationRepo) GetFinanceReportTotals(
+	_ context.Context,
+	_ uuid.UUID,
+	_ []uuid.UUID,
+	_, _ *time.Time,
+) (FinanceReportTotals, error) {
 	return FinanceReportTotals{}, nil
 }
 
-func (r *exportOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
+func (r *exportOperationRepo) GetFinanceReportByProperty(
+	_ context.Context,
+	_ uuid.UUID,
+	_ []uuid.UUID,
+	_, _ *time.Time,
+) ([]FinanceReportPropertyRow, error) {
 	return nil, nil
 }
 
-func (r *exportOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
+func (r *exportOperationRepo) GetFinanceReportByCategory(
+	_ context.Context,
+	_ uuid.UUID,
+	_ []uuid.UUID,
+	_, _ *time.Time,
+) ([]FinanceReportCategoryRow, error) {
 	return nil, nil
 }
 
-func (r *exportOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
+func (r *exportOperationRepo) GetFinanceReportByMonth(
+	_ context.Context,
+	_ uuid.UUID,
+	_ []uuid.UUID,
+	_, _ *time.Time,
+) ([]FinanceReportMonthRow, error) {
 	return nil, nil
 }
 
@@ -298,7 +327,7 @@ var (
 	_ PropertyContactRepository = (*exportContactRepo)(nil)
 )
 
-// --- helpers -------------------------------------------------------------
+// Helpers.
 
 var (
 	exportTestOwner    = uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -306,9 +335,17 @@ var (
 )
 
 // newExportService wires an ExportService with the given fakes and a fixed clock.
-func newExportService(t *testing.T, prop *exportPropertyRepo, ops *exportOperationRepo, leases *exportLeaseRepo, contacts *exportContactRepo) *ExportService {
+func newExportService(
+	t *testing.T,
+	prop *exportPropertyRepo,
+	ops *exportOperationRepo,
+	leases *exportLeaseRepo,
+	contacts *exportContactRepo,
+) *ExportService {
 	t.Helper()
-	return NewExportService(ops, leases, prop, contacts, fakePolicy{}, fakeClock{now: time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)}, slog.Default())
+	return NewExportService(
+		ops, leases, prop, contacts, fakePolicy{},
+		fakeClock{now: time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)}, slog.Default())
 }
 
 // openExport parses the generated workbook bytes for assertions.
@@ -379,13 +416,13 @@ func itoa(n int) string {
 	return string(buf[i:])
 }
 
-// --- tests ---------------------------------------------------------------
+// Tests.
 
 func TestExportProperty_SheetNames(t *testing.T) {
 	prop := &exportPropertyRepo{row: ExportPropertyRow{
-		Name:    "Тест",
+		Name:    testPropertyName,
 		Type:    propdomain.PropertyTypeApartment,
-		Address: "Москва, Тверская 1",
+		Address: testPropertyAddress,
 	}}
 	svc := newExportService(t, prop, &exportOperationRepo{}, &exportLeaseRepo{}, &exportContactRepo{})
 
@@ -418,7 +455,7 @@ func TestExportProperty_SheetNames(t *testing.T) {
 }
 
 func TestExportProperty_OperationDateFormat(t *testing.T) {
-	july31 := time.Date(2026, 7, 31, 9, 30, 0, 0, time.UTC) // time component must be dropped
+	july31 := time.Date(2026, 7, 31, 9, 30, 0, 0, time.UTC) // Time component must be dropped.
 	ops := &exportOperationRepo{completed: []ExportOperationRow{
 		{
 			OperationDate: july31,
@@ -429,7 +466,7 @@ func TestExportProperty_OperationDateFormat(t *testing.T) {
 		},
 	}}
 	svc := newExportService(t, &exportPropertyRepo{row: ExportPropertyRow{
-		Name: "Тест", Type: propdomain.PropertyTypeApartment, Address: "Адрес",
+		Name: testPropertyName, Type: propdomain.PropertyTypeApartment, Address: testPropertyShortAddress,
 	}}, ops, &exportLeaseRepo{}, &exportContactRepo{})
 
 	out, err := svc.ExportProperty(context.Background(), exportTestOwner, exportTestProperty)
@@ -454,7 +491,7 @@ func TestExportProperty_ObjectSheet(t *testing.T) {
 	prop := &exportPropertyRepo{row: ExportPropertyRow{
 		Name:        "Тестовая квартира",
 		Type:        propdomain.PropertyTypeApartment,
-		Address:     "Москва, Тверская 1",
+		Address:     testPropertyAddress,
 		Description: "Уютная",
 		// Attributes arrive from JSON: numeric fields are float64.
 		Attributes: propdomain.Attributes{
@@ -481,7 +518,7 @@ func TestExportProperty_ObjectSheet(t *testing.T) {
 	if got := pairs["Тип"]; got != "Квартира" {
 		t.Errorf("Тип: want %q, got %q", "Квартира", got)
 	}
-	if got := pairs["Адрес"]; !strings.Contains(got, "Тверская") {
+	if got := pairs[testPropertyShortAddress]; !strings.Contains(got, "Тверская") {
 		t.Errorf("Адрес: want to contain %q, got %q", "Тверская", got)
 	}
 	if got := pairs["Описание"]; got != "Уютная" {
@@ -508,9 +545,9 @@ func TestExportProperty_ObjectSheet(t *testing.T) {
 
 func TestExportProperty_ObjectSheetSkipsMissingAttributes(t *testing.T) {
 	prop := &exportPropertyRepo{row: ExportPropertyRow{
-		Name:    "Тест",
+		Name:    testPropertyName,
 		Type:    propdomain.PropertyTypeApartment,
-		Address: "Адрес",
+		Address: testPropertyShortAddress,
 		// Only rooms is set; floor and floors_total are absent.
 		Attributes: propdomain.Attributes{"rooms": float64(2)},
 	}}
@@ -524,7 +561,7 @@ func TestExportProperty_ObjectSheetSkipsMissingAttributes(t *testing.T) {
 	f := openExport(t, out.Content)
 	pairs := objectSheetPairs(t, f)
 
-	// rooms is present...
+	// Rooms is present...
 	if pairs["Комнаты"] != "2" {
 		t.Errorf("Комнаты: want %q, got %q", "2", pairs["Комнаты"])
 	}
@@ -540,7 +577,7 @@ func TestExportProperty_EmptySectionsRenderHeaders(t *testing.T) {
 	// No operations, leases, or contacts — but every sheet must still render
 	// with its header row and the monthly/category skeletons.
 	prop := &exportPropertyRepo{row: ExportPropertyRow{
-		Name: "Пустой объект", Type: propdomain.PropertyTypeApartment, Address: "Адрес",
+		Name: "Пустой объект", Type: propdomain.PropertyTypeApartment, Address: testPropertyShortAddress,
 	}}
 	svc := newExportService(t, prop, &exportOperationRepo{}, &exportLeaseRepo{}, &exportContactRepo{})
 
@@ -576,7 +613,11 @@ func TestExportProperty_EmptySectionsRenderHeaders(t *testing.T) {
 	}
 
 	// All seven sheets must exist even when their data is empty.
-	for _, name := range []string{objectSheetName, exportSheetName, monthlySheetName, categorySheetName, leasesSheetName, tenantsSheetName, contactsSheetName} {
+	sheets := []string{
+		objectSheetName, exportSheetName, monthlySheetName, categorySheetName,
+		leasesSheetName, tenantsSheetName, contactsSheetName,
+	}
+	for _, name := range sheets {
 		idx, err := f.GetSheetIndex(name)
 		if err != nil {
 			t.Fatalf("GetSheetIndex(%q): %v", name, err)

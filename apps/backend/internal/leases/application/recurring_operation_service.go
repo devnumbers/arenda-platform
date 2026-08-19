@@ -63,7 +63,7 @@ type RecurringOperationService struct {
 	tzResolver sharedtz.OwnerTimezoneResolver
 	policy     sharedpolicy.Policy
 	logger     *slog.Logger
-	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
+	// SharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
 	// aggregate list covers only the actor's own recurring operations, when set
 	// it additionally includes recurring operations of properties shared with
 	// the actor (issue #157, T3), excluding archived shared properties.
@@ -82,7 +82,9 @@ func (s *RecurringOperationService) SetSharedPropertyIDs(ids SharedPropertyIDs) 
 // ReminderLister lists reminders for the recurring operation command.
 type ReminderLister interface {
 	ListByOwner(ctx context.Context, scope uuid.UUID, filter notificationsapp.ListFilter) ([]notificationsdomain.Reminder, error)
-	ListByRecurringOperation(ctx context.Context, scope, recurringOpID uuid.UUID, filter notificationsapp.ListFilter) ([]notificationsdomain.Reminder, error)
+	ListByRecurringOperation(
+		ctx context.Context, scope, recurringOpID uuid.UUID, filter notificationsapp.ListFilter,
+	) ([]notificationsdomain.Reminder, error)
 }
 
 // NewRecurringOperationService creates a new recurring operation service. The
@@ -167,7 +169,10 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		paymentDay = cmd.StartDate.Day()
 	}
 
-	if err := s.validateCommand(ctx, s.categories, scope, cmd.Type, cmd.CategoryID, cmd.AmountKopecks, cmd.StartDate, paymentDay, cmd.EndDate); err != nil {
+	if err := s.validateCommand(
+		ctx, s.categories, scope, cmd.Type, cmd.CategoryID,
+		cmd.AmountKopecks, cmd.StartDate, paymentDay, cmd.EndDate,
+	); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -235,9 +240,9 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 			EntityType: auditdomain.EntityRecurringOperation,
 			EntityID:   &created.ID,
 			Context: map[string]any{
-				"property_id":    domain.PropertyIDPtr(created.PropertyID),
-				"type":           string(created.Type),
-				"amount_kopecks": created.AmountKopecks,
+				auditKeyPropertyID: domain.PropertyIDPtr(created.PropertyID),
+				"type":             string(created.Type),
+				"amount_kopecks":   created.AmountKopecks,
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -381,7 +386,7 @@ func (s *RecurringOperationService) DeleteRecurringOperation(
 			Action:     auditdomain.ActionRecurringOperationDeleted,
 			EntityType: auditdomain.EntityRecurringOperation,
 			EntityID:   &id,
-			Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
+			Context:    map[string]any{auditKeyPropertyID: domain.PropertyIDPtr(rec.PropertyID)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -464,7 +469,10 @@ func (s *RecurringOperationService) applyRecurringOperationUpdate(
 		rec.ReminderOffsetDays = normalizeReminderOffsetDays(cmd.ReminderOffsetDays)
 	}
 
-	if err := s.validateCommand(ctx, txCategories, scope, string(rec.Type), rec.CategoryID, rec.AmountKopecks, rec.StartDate, rec.PaymentDay, rec.EndDate); err != nil {
+	if err := s.validateCommand(
+		ctx, txCategories, scope, string(rec.Type), rec.CategoryID,
+		rec.AmountKopecks, rec.StartDate, rec.PaymentDay, rec.EndDate,
+	); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -486,7 +494,9 @@ func (s *RecurringOperationService) resyncRecurringSeries(
 	hadReminderOffset bool,
 ) error {
 	if cmd.ReminderOffsetDays != nil {
-		if err := stores.operations.UpdateFutureGeneratedOperationReminderOffsets(ctx, scope, updated.ID, updated.ReminderOffsetDays, today); err != nil {
+		if err := stores.operations.UpdateFutureGeneratedOperationReminderOffsets(
+			ctx, scope, updated.ID, updated.ReminderOffsetDays, today,
+		); err != nil {
 			return fmt.Errorf("sync generated operation reminder offsets: %w", err)
 		}
 	}
@@ -587,7 +597,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 				EntityType: auditdomain.EntityRecurringOperation,
 				EntityID:   &id,
 				Context: map[string]any{
-					"fields":        updatedRecurringOperationFields(cmd),
+					auditKeyFields:  updatedRecurringOperationFields(cmd),
 					"new_series_id": newRec.ID,
 				},
 			}); err != nil {
@@ -620,7 +630,7 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 			Action:     auditdomain.ActionRecurringOperationUpdated,
 			EntityType: auditdomain.EntityRecurringOperation,
 			EntityID:   &id,
-			Context:    map[string]any{"fields": updatedRecurringOperationFields(cmd)},
+			Context:    map[string]any{auditKeyFields: updatedRecurringOperationFields(cmd)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -725,7 +735,10 @@ func (s *RecurringOperationService) newSeriesFromUpdate(
 		}
 	}
 
-	if err := s.validateCommand(ctx, txCategories, scope, string(opType), categoryID, amountKopecks, applyFromDate, paymentDay, newEndDate); err != nil {
+	if err := s.validateCommand(
+		ctx, txCategories, scope, string(opType), categoryID,
+		amountKopecks, applyFromDate, paymentDay, newEndDate,
+	); err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
@@ -762,7 +775,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 	now time.Time,
 ) (domain.RecurringOperation, error) {
 	applyFromDate := timeutil.Date(*cmd.ApplyFromDate)
-	// now is already normalized to midnight in the owner's timezone by the caller.
+	// The caller passes now already normalized to midnight in the owner's timezone.
 	today := now
 
 	if applyFromDate.Before(today) {
@@ -891,7 +904,7 @@ func (s *RecurringOperationService) PauseRecurringOperation(
 			Action:     auditdomain.ActionRecurringOperationPaused,
 			EntityType: auditdomain.EntityRecurringOperation,
 			EntityID:   &id,
-			Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
+			Context:    map[string]any{auditKeyPropertyID: domain.PropertyIDPtr(rec.PropertyID)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -987,7 +1000,7 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 			Action:     auditdomain.ActionRecurringOperationResumed,
 			EntityType: auditdomain.EntityRecurringOperation,
 			EntityID:   &id,
-			Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
+			Context:    map[string]any{auditKeyPropertyID: domain.PropertyIDPtr(rec.PropertyID)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -1212,7 +1225,17 @@ func (s *RecurringOperationService) CreateReminder(
 	return reminders, nil
 }
 
-func (s *RecurringOperationService) validateCommand(ctx context.Context, categories OperationCategoryRepository, scope uuid.UUID, opType string, categoryID uuid.UUID, amount int64, startDate time.Time, paymentDay int, endDate *time.Time) error {
+func (s *RecurringOperationService) validateCommand(
+	ctx context.Context,
+	categories OperationCategoryRepository,
+	scope uuid.UUID,
+	opType string,
+	categoryID uuid.UUID,
+	amount int64,
+	startDate time.Time,
+	paymentDay int,
+	endDate *time.Time,
+) error {
 	parsedType, _, err := parseTypeAndCategory(opType, categoryID)
 	if err != nil {
 		return err
@@ -1235,7 +1258,11 @@ func (s *RecurringOperationService) validateCommand(ctx context.Context, categor
 	return nil
 }
 
-func (s *RecurringOperationService) existingOperationDates(ctx context.Context, ops OperationRepository, recurringOperationID uuid.UUID) (map[time.Time]struct{}, error) {
+func (s *RecurringOperationService) existingOperationDates(
+	ctx context.Context,
+	ops OperationRepository,
+	recurringOperationID uuid.UUID,
+) (map[time.Time]struct{}, error) {
 	existing, err := ops.ListOperationDatesByRecurringOperation(ctx, recurringOperationID)
 	if err != nil {
 		return nil, err
@@ -1434,7 +1461,9 @@ func scheduleRemindersForOperations(
 		LeaseID:    domain.LeaseIDPtr(rec.LeaseID),
 	}
 
-	if err := scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered, categoryNames)); err != nil {
+	if err := scheduler.ScheduleForRecurringOperation(
+		ctx, recInfo, baseReminderDate, ToOperationInfoSlice(filtered, categoryNames),
+	); err != nil {
 		if errors.Is(err, notificationsdomain.ErrInvalidReminderDate) {
 			return newInvalidInputError("reminder date must be today or in the future")
 		}

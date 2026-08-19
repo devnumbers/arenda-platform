@@ -14,14 +14,14 @@ import (
 type CategoryService struct {
 	categories OperationCategoryRepository
 	audit      auditapp.Recorder
-	// policy is injected after construction (see SetPolicy) because the
+	// Policy is injected after construction (see SetPolicy) because the
 	// membership-aware policy is built after the category service in the
 	// composition root. When nil, only the actor's own data is listed (pre-T2a).
 	policy sharedpolicy.Policy
-	// scopes is optionally injected (see SetAccessibleScopes); when nil only the
+	// Scopes is optionally injected (see SetAccessibleScopes); when nil only the
 	// actor's own categories are listed.
 	scopes AccessibleScopes
-	// properties resolves the data owner of a property for owner-wide writes
+	// Properties resolves the data owner of a property for owner-wide writes
 	// issued in a property context (Property Sharing follow-up). Injected via
 	// SetProperties; when nil a property context cannot be resolved.
 	properties PropertyRepository
@@ -61,7 +61,11 @@ func (s *CategoryService) SetProperties(properties PropertyRepository) {
 // category is created in the actor's own account; with cmd.PropertyID set it
 // is created in the account of the property's data owner after the
 // shared-access write gate (issue #157 follow-up, card #145 decision).
-func (s *CategoryService) CreateCategory(ctx context.Context, actor uuid.UUID, cmd CreateOperationCategoryCommand) (domain.OperationCategory, error) {
+func (s *CategoryService) CreateCategory(
+	ctx context.Context,
+	actor uuid.UUID,
+	cmd CreateOperationCategoryCommand,
+) (domain.OperationCategory, error) {
 	if err := cmd.validate(); err != nil {
 		return domain.OperationCategory{}, err
 	}
@@ -93,7 +97,11 @@ func (s *CategoryService) CreateCategory(ctx context.Context, actor uuid.UUID, c
 	return created, nil
 }
 
-func (s *CategoryService) ListCategories(ctx context.Context, actor uuid.UUID, q ListOperationCategoriesQuery) ([]domain.OperationCategory, error) {
+func (s *CategoryService) ListCategories(
+	ctx context.Context,
+	actor uuid.UUID,
+	q ListOperationCategoriesQuery,
+) ([]domain.OperationCategory, error) {
 	var t *domain.OperationType
 	if q.Type != "" {
 		qt, err := domain.ParseOperationType(q.Type)

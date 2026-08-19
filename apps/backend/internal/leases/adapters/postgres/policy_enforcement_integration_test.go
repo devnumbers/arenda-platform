@@ -134,7 +134,13 @@ func createPolicyTestProperty(t *testing.T, ctx context.Context, q *genpostgres.
 	return id
 }
 
-func addPolicyMembership(t *testing.T, ctx context.Context, repo *accesspg.MembershipRepository, property, user, grantedBy uuid.UUID, role accessdomain.Role) {
+func addPolicyMembership(
+	t *testing.T,
+	ctx context.Context,
+	repo *accesspg.MembershipRepository,
+	property, user, grantedBy uuid.UUID,
+	role accessdomain.Role,
+) {
 	t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -147,7 +153,13 @@ func addPolicyMembership(t *testing.T, ctx context.Context, repo *accesspg.Membe
 	}
 }
 
-func addSuspendedPolicyMembership(t *testing.T, ctx context.Context, repo *accesspg.MembershipRepository, property, user, grantedBy uuid.UUID, role accessdomain.Role) {
+func addSuspendedPolicyMembership(
+	t *testing.T,
+	ctx context.Context,
+	repo *accesspg.MembershipRepository,
+	property, user, grantedBy uuid.UUID,
+	role accessdomain.Role,
+) {
 	t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -225,7 +237,8 @@ func (f *policyFixture) leaseServiceWithShared() *application.LeaseService {
 
 func (f *policyFixture) recurringService() *application.RecurringOperationService {
 	factory := application.NewTxStoreFactory(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, nil, f.uow)
-	return application.NewRecurringOperationService(f.recs, f.ops, f.props, f.cats, nil, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
+	return application.NewRecurringOperationService(
+		f.recs, f.ops, f.props, f.cats, nil, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
 }
 
 // expenseCategoryID returns a seeded default expense category of the owner.
@@ -392,11 +405,15 @@ func TestPolicyIntegration_ViewerReadsButCannotWrite(t *testing.T) {
 	}
 
 	// Writes are forbidden.
-	if _, err := f.operationService().CreateOperation(ctx, viewer, f.createOperationCmd(property, categoryID)); !errors.Is(err, application.ErrForbidden) {
+	if _, err := f.operationService().CreateOperation(
+		ctx, viewer, f.createOperationCmd(property, categoryID),
+	); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("CreateOperation as viewer: want ErrForbidden, got %v", err)
 	}
 	name := "viewer edit"
-	if _, err := f.operationService().UpdateOperation(ctx, viewer, op.ID, application.UpdateOperationCommand{Name: &name}); !errors.Is(err, application.ErrForbidden) {
+	if _, err := f.operationService().UpdateOperation(
+		ctx, viewer, op.ID, application.UpdateOperationCommand{Name: &name},
+	); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("UpdateOperation as viewer: want ErrForbidden, got %v", err)
 	}
 	if err := f.operationService().DeleteOperation(ctx, viewer, op.ID); !errors.Is(err, application.ErrForbidden) {
@@ -432,20 +449,28 @@ func TestPolicyIntegration_NoneAndSuspendedGetNotFound(t *testing.T) {
 	}
 
 	for name, actor := range map[string]uuid.UUID{"outsider": outsider, "suspended": suspended} {
-		if _, err := f.operationService().GetOperation(ctx, actor, op.ID); !errors.Is(err, application.ErrNotFound) {
+		if _, err := f.operationService().GetOperation(
+			ctx, actor, op.ID,
+		); !errors.Is(err, application.ErrNotFound) {
 			t.Errorf("GetOperation as %s: want ErrNotFound, got %v", name, err)
 		}
-		if _, err := f.operationService().ListOperationsByProperty(ctx, actor, property, application.OperationFilter{}); !errors.Is(err, application.ErrNotFound) {
+		if _, err := f.operationService().ListOperationsByProperty(
+			ctx, actor, property, application.OperationFilter{},
+		); !errors.Is(err, application.ErrNotFound) {
 			t.Errorf("ListOperationsByProperty as %s: want ErrNotFound, got %v", name, err)
 		}
 		newName := "intruder edit"
-		if _, err := f.operationService().UpdateOperation(ctx, actor, op.ID, application.UpdateOperationCommand{Name: &newName}); !errors.Is(err, application.ErrNotFound) {
+		if _, err := f.operationService().UpdateOperation(
+			ctx, actor, op.ID, application.UpdateOperationCommand{Name: &newName},
+		); !errors.Is(err, application.ErrNotFound) {
 			t.Errorf("UpdateOperation as %s: want ErrNotFound, got %v", name, err)
 		}
 		if err := f.operationService().DeleteOperation(ctx, actor, op.ID); !errors.Is(err, application.ErrNotFound) {
 			t.Errorf("DeleteOperation as %s: want ErrNotFound, got %v", name, err)
 		}
-		if _, err := f.operationService().CreateOperation(ctx, actor, f.createOperationCmd(property, categoryID)); !errors.Is(err, application.ErrNotFound) {
+		if _, err := f.operationService().CreateOperation(
+			ctx, actor, f.createOperationCmd(property, categoryID),
+		); !errors.Is(err, application.ErrNotFound) {
 			t.Errorf("CreateOperation as %s: want ErrNotFound, got %v", name, err)
 		}
 	}
@@ -485,7 +510,9 @@ func TestPolicyIntegration_StandaloneReads(t *testing.T) {
 	if _, err := f.leaseService().GetLease(ctx, outsider, lease.ID); !errors.Is(err, application.ErrNotFound) {
 		t.Errorf("GetLease as outsider: want ErrNotFound, got %v", err)
 	}
-	if _, err := f.operationService().GetPropertyOperationsSummary(ctx, outsider, property); !errors.Is(err, application.ErrNotFound) {
+	if _, err := f.operationService().GetPropertyOperationsSummary(
+		ctx, outsider, property,
+	); !errors.Is(err, application.ErrNotFound) {
 		t.Errorf("GetPropertyOperationsSummary as outsider: want ErrNotFound, got %v", err)
 	}
 }
@@ -534,10 +561,14 @@ func TestPolicyIntegration_MoveOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed second operation: %v", err)
 	}
-	if _, err := f.operationService().MoveOperation(ctx, member, op2.ID, application.MoveOperationCommand{PropertyID: foreign}); !errors.Is(err, application.ErrInvalidInput) {
+	if _, err := f.operationService().MoveOperation(
+		ctx, member, op2.ID, application.MoveOperationCommand{PropertyID: foreign},
+	); !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("cross-owner move: want ErrInvalidInput, got %v", err)
 	}
-	if _, err := f.operationService().MoveOperation(ctx, member, op2.ID, application.MoveOperationCommand{PropertyID: source}); !errors.Is(err, application.ErrInvalidInput) {
+	if _, err := f.operationService().MoveOperation(
+		ctx, member, op2.ID, application.MoveOperationCommand{PropertyID: source},
+	); !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("same-property move: want ErrInvalidInput, got %v", err)
 	}
 
@@ -571,7 +602,9 @@ func TestPolicyIntegration_MoveOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed recurring child: %v", err)
 	}
-	if _, err := f.operationService().MoveOperation(ctx, owner, child.ID, application.MoveOperationCommand{PropertyID: target}); !errors.Is(err, application.ErrInvalidInput) {
+	if _, err := f.operationService().MoveOperation(
+		ctx, owner, child.ID, application.MoveOperationCommand{PropertyID: target},
+	); !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("recurring-child move: want ErrInvalidInput, got %v", err)
 	}
 }
@@ -622,7 +655,9 @@ func TestPolicyIntegration_TenantContactsOwnerWideAccess(t *testing.T) {
 			t.Errorf("GetTenantContact as %s: %v", name, err)
 		}
 	}
-	if _, err := contactService().GetTenantContact(ctx, outsider, memberCreated.ID); !errors.Is(err, application.ErrNotFound) {
+	if _, err := contactService().GetTenantContact(
+		ctx, outsider, memberCreated.ID,
+	); !errors.Is(err, application.ErrNotFound) {
 		t.Errorf("GetTenantContact as outsider: want ErrNotFound, got %v", err)
 	}
 
@@ -637,11 +672,15 @@ func TestPolicyIntegration_TenantContactsOwnerWideAccess(t *testing.T) {
 		t.Errorf("updated OwnerID: want owner %s, got %s", owner, updated.OwnerID)
 	}
 	viewerName := "Viewer Rename"
-	if _, err := contactService().UpdateTenantContact(ctx, viewer, memberCreated.ID, application.UpdateTenantContactCommand{Name: &viewerName}); !errors.Is(err, application.ErrForbidden) {
+	if _, err := contactService().UpdateTenantContact(
+		ctx, viewer, memberCreated.ID, application.UpdateTenantContactCommand{Name: &viewerName},
+	); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("UpdateTenantContact as viewer: want ErrForbidden, got %v", err)
 	}
 	outsiderName := "Outsider Rename"
-	if _, err := contactService().UpdateTenantContact(ctx, outsider, memberCreated.ID, application.UpdateTenantContactCommand{Name: &outsiderName}); !errors.Is(err, application.ErrNotFound) {
+	if _, err := contactService().UpdateTenantContact(
+		ctx, outsider, memberCreated.ID, application.UpdateTenantContactCommand{Name: &outsiderName},
+	); !errors.Is(err, application.ErrNotFound) {
 		t.Errorf("UpdateTenantContact as outsider: want ErrNotFound, got %v", err)
 	}
 }

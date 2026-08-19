@@ -31,7 +31,7 @@ func (r *fakePropertyRepo) GetStatusByOwner(_ context.Context, id, _ uuid.UUID) 
 		return status, nil
 	}
 	if r.existsByOwner[id] {
-		return "active", nil
+		return propertyStatusActive, nil
 	}
 	return "", nil
 }
@@ -139,7 +139,10 @@ func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
 	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	now := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 
-	propertyRepo := &fakePropertyRepo{existsByOwner: map[uuid.UUID]bool{propertyID: true}, owners: map[uuid.UUID]uuid.UUID{propertyID: ownerID}}
+	propertyRepo := &fakePropertyRepo{
+		existsByOwner: map[uuid.UUID]bool{propertyID: true},
+		owners:        map[uuid.UUID]uuid.UUID{propertyID: ownerID},
+	}
 	opRepo := &fakeOperationRepo{}
 
 	incomeOp := domain.Operation{

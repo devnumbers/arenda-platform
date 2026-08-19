@@ -87,13 +87,30 @@ const (
 	contactsSheetName    = "Контакты"
 	exportMaxRows        = 1_000_000
 	exportFilenameMaxLen = 50
+
+	// Labels reused across sheets (headers, row labels, month-table columns).
+	exportLabelIncome    = "Доход"
+	exportLabelExpense   = "Расход"
+	exportLabelCategory  = "Категория"
+	exportLabelAddress   = "Адрес"
+	exportLabelType      = "Тип"
+	exportLabelComment   = "Комментарий"
+	activePaneBottomLeft = "bottomLeft" // The excelize.Panes.ActivePane value for frozen-top-row sheets.
 )
 
-var exportHeaders = []string{"Дата", "Тип", "Категория", "Название", "Сумма", "Аренда/арендатор", "Комментарий"}
+var exportHeaders = []string{
+	"Дата", exportLabelType, exportLabelCategory, "Название",
+	"Сумма", "Аренда/арендатор", exportLabelComment,
+}
 
-var exportLeaseHeaders = []string{"Арендатор", "Статус", "Дата начала", "Дата окончания", "Ставка ₽/мес", "Депозит ₽", "День платежа", "Комментарий"}
+var exportLeaseHeaders = []string{
+	"Арендатор", "Статус", "Дата начала", "Дата окончания",
+	"Ставка ₽/мес", "Депозит ₽", "День платежа", exportLabelComment,
+}
 
-var exportTenantHeaders = []string{"Фамилия", "Имя", "Отчество", "Телефон", "Email", "Связанная аренда/период", "Комментарий"}
+var exportTenantHeaders = []string{
+	"Фамилия", "Имя", "Отчество", "Телефон", "Email", "Связанная аренда/период", exportLabelComment,
+}
 
 var exportContactHeaders = []string{"Имя", "Телефон"}
 
@@ -109,8 +126,19 @@ type ExportService struct {
 }
 
 // NewExportService creates the property export use case.
-func NewExportService(operations OperationRepository, leases LeaseRepository, properties PropertyRepository, contacts PropertyContactRepository, policy sharedpolicy.Policy, clk clock.Clock, logger *slog.Logger) *ExportService {
-	return &ExportService{operations: operations, leases: leases, properties: properties, contacts: contacts, policy: policy, clock: clk, logger: logger}
+func NewExportService(
+	operations OperationRepository,
+	leases LeaseRepository,
+	properties PropertyRepository,
+	contacts PropertyContactRepository,
+	policy sharedpolicy.Policy,
+	clk clock.Clock,
+	logger *slog.Logger,
+) *ExportService {
+	return &ExportService{
+		operations: operations, leases: leases, properties: properties,
+		contacts: contacts, policy: policy, clock: clk, logger: logger,
+	}
 }
 
 // ExportProperty returns the xlsx workbook with the property card, operations,
@@ -172,7 +200,15 @@ func (s *ExportService) ExportProperty(ctx context.Context, actor, propertyID uu
 // buildExportWorkbook renders the "Объект", "Операции", "Сводка по месяцам",
 // "По категориям", "Аренды", "Арендаторы", and "Контакты" sheets in memory.
 // The default Sheet1 is renamed to "Объект" so it stays first in the tab order.
-func buildExportWorkbook(propRow ExportPropertyRow, summary OperationsSummary, months []FinanceReportMonthRow, categories []FinanceReportCategoryRow, rows []ExportOperationRow, leases []ExportLeaseRow, contacts []ExportContactRow) (_ []byte, err error) {
+func buildExportWorkbook(
+	propRow ExportPropertyRow,
+	summary OperationsSummary,
+	months []FinanceReportMonthRow,
+	categories []FinanceReportCategoryRow,
+	rows []ExportOperationRow,
+	leases []ExportLeaseRow,
+	contacts []ExportContactRow,
+) (_ []byte, err error) {
 	f := excelize.NewFile()
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil && err == nil {
@@ -272,9 +308,9 @@ func renderOperationsSheet(f *excelize.File, rows []ExportOperationRow, headerSt
 			return fmt.Errorf("set date: %w", err)
 		}
 
-		opType := "Расход"
+		opType := exportLabelExpense
 		if row.Type == domain.OperationTypeIncome {
-			opType = "Доход"
+			opType = exportLabelIncome
 		}
 		if err := f.SetCellStr(exportSheetName, "B"+strconv.Itoa(rowNum), opType); err != nil {
 			return fmt.Errorf("set type: %w", err)
@@ -310,7 +346,9 @@ func renderOperationsSheet(f *excelize.File, rows []ExportOperationRow, headerSt
 	if err := f.AutoFilter(exportSheetName, fmt.Sprintf("A1:G%d", lastRow), nil); err != nil {
 		return fmt.Errorf("auto filter: %w", err)
 	}
-	if err := f.SetPanes(exportSheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
+	if err := f.SetPanes(exportSheetName, &excelize.Panes{
+		Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: activePaneBottomLeft,
+	}); err != nil {
 		return fmt.Errorf("freeze panes: %w", err)
 	}
 	colWidths := []struct {
@@ -345,8 +383,8 @@ func renderObjectSheet(f *excelize.File, propRow ExportPropertyRow, boldStyle in
 	}
 	basic := []kv{
 		{"Название", propRow.Name},
-		{"Тип", propdomain.PropertyTypeLabel(propRow.Type)},
-		{"Адрес", propRow.Address},
+		{exportLabelType, propdomain.PropertyTypeLabel(propRow.Type)},
+		{exportLabelAddress, propRow.Address},
 		{"Описание", propRow.Description},
 	}
 
@@ -378,7 +416,7 @@ func renderObjectSheet(f *excelize.File, propRow ExportPropertyRow, boldStyle in
 		if !hasAttrs {
 			// Section header row before the first characteristic.
 			hasAttrs = true
-			row++ // blank separator row
+			row++ // Blank separator row.
 			headerRow := row
 			hr := strconv.Itoa(headerRow)
 			if err := f.SetCellStr(objectSheetName, "A"+hr, "Характеристики"); err != nil {
@@ -429,7 +467,13 @@ func formatAttributeValue(propType propdomain.PropertyType, key string, value an
 
 // renderMonthlySheet fills the "Сводка по месяцам" sheet: all-time totals
 // (Доход/Расход/Прибыль) and the month-by-month finance breakdown.
-func renderMonthlySheet(f *excelize.File, summary OperationsSummary, months []FinanceReportMonthRow, headerStyle, boldStyle, moneyStyle int) error {
+func renderMonthlySheet(
+	f *excelize.File,
+	summary OperationsSummary,
+	months []FinanceReportMonthRow,
+	headerStyle,
+	boldStyle, moneyStyle int,
+) error {
 	setMoney := func(cell string, kopecks int64) error {
 		if err := f.SetCellFloat(monthlySheetName, cell, float64(kopecks)/100, 2, 64); err != nil {
 			return fmt.Errorf("set amount %s: %w", cell, err)
@@ -450,8 +494,8 @@ func renderMonthlySheet(f *excelize.File, summary OperationsSummary, months []Fi
 		label   string
 		kopecks int64
 	}{
-		{"Доход", summary.AllTimeIncomeKopecks},
-		{"Расход", summary.AllTimeExpenseKopecks},
+		{exportLabelIncome, summary.AllTimeIncomeKopecks},
+		{exportLabelExpense, summary.AllTimeExpenseKopecks},
 		{"Прибыль", summary.AllTimeProfitKopecks},
 	}
 	for i, total := range totals {
@@ -471,7 +515,7 @@ func renderMonthlySheet(f *excelize.File, summary OperationsSummary, months []Fi
 	if err := f.SetCellStyle(monthlySheetName, "A"+strconv.Itoa(monthHeaderRow-1), "A"+strconv.Itoa(monthHeaderRow-1), boldStyle); err != nil {
 		return fmt.Errorf("style months section header: %w", err)
 	}
-	monthHeaders := []string{"Месяц", "Доход", "Расход", "Прибыль"}
+	monthHeaders := []string{"Месяц", exportLabelIncome, exportLabelExpense, "Прибыль"}
 	for i, header := range monthHeaders {
 		cell, err := excelize.CoordinatesToCellName(i+1, monthHeaderRow)
 		if err != nil {
@@ -504,7 +548,11 @@ func renderMonthlySheet(f *excelize.File, summary OperationsSummary, months []Fi
 	}
 
 	// Freeze the month-table header (row 6) so the totals stay visible above it.
-	if err := f.SetPanes(monthlySheetName, &excelize.Panes{Freeze: true, YSplit: monthHeaderRow, TopLeftCell: "A" + strconv.Itoa(monthHeaderRow+1), ActivePane: "bottomLeft"}); err != nil {
+	if err := f.SetPanes(monthlySheetName, &excelize.Panes{
+		Freeze: true, YSplit: monthHeaderRow,
+		TopLeftCell: "A" + strconv.Itoa(monthHeaderRow+1),
+		ActivePane:  activePaneBottomLeft,
+	}); err != nil {
 		return fmt.Errorf("freeze panes: %w", err)
 	}
 	colWidths := []struct {
@@ -537,7 +585,7 @@ func renderCategorySheet(f *excelize.File, categories []FinanceReportCategoryRow
 		return nil
 	}
 
-	categoryHeaders := []string{"Категория", "Тип", "Сумма"}
+	categoryHeaders := []string{exportLabelCategory, exportLabelType, "Сумма"}
 	for i, header := range categoryHeaders {
 		cell, err := excelize.CoordinatesToCellName(i+1, 1)
 		if err != nil {
@@ -555,9 +603,9 @@ func renderCategorySheet(f *excelize.File, categories []FinanceReportCategoryRow
 		if err := f.SetCellStr(categorySheetName, "A"+row, category.CategoryName); err != nil {
 			return fmt.Errorf("set category: %w", err)
 		}
-		opType := "Расход"
+		opType := exportLabelExpense
 		if category.Type == domain.OperationTypeIncome {
-			opType = "Доход"
+			opType = exportLabelIncome
 		}
 		if err := f.SetCellStr(categorySheetName, "B"+row, opType); err != nil {
 			return fmt.Errorf("set category type: %w", err)
@@ -567,7 +615,9 @@ func renderCategorySheet(f *excelize.File, categories []FinanceReportCategoryRow
 		}
 	}
 
-	if err := f.SetPanes(categorySheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
+	if err := f.SetPanes(categorySheetName, &excelize.Panes{
+		Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: activePaneBottomLeft,
+	}); err != nil {
 		return fmt.Errorf("freeze panes: %w", err)
 	}
 	colWidths := []struct {
@@ -656,7 +706,9 @@ func renderLeasesSheet(f *excelize.File, leases []ExportLeaseRow, headerStyle, m
 		}
 	}
 
-	if err := f.SetPanes(leasesSheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
+	if err := f.SetPanes(leasesSheetName, &excelize.Panes{
+		Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: activePaneBottomLeft,
+	}); err != nil {
 		return fmt.Errorf("freeze panes: %w", err)
 	}
 	colWidths := []struct {
@@ -745,7 +797,9 @@ func renderTenantsSheet(f *excelize.File, leases []ExportLeaseRow, headerStyle i
 		}
 	}
 
-	if err := f.SetPanes(tenantsSheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
+	if err := f.SetPanes(tenantsSheetName, &excelize.Panes{
+		Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: activePaneBottomLeft,
+	}); err != nil {
 		return fmt.Errorf("freeze panes: %w", err)
 	}
 	colWidths := []struct {
@@ -802,7 +856,9 @@ func renderContactsSheet(f *excelize.File, contacts []ExportContactRow, headerSt
 		}
 	}
 
-	if err := f.SetPanes(contactsSheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
+	if err := f.SetPanes(contactsSheetName, &excelize.Panes{
+		Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: activePaneBottomLeft,
+	}); err != nil {
 		return fmt.Errorf("freeze panes: %w", err)
 	}
 	colWidths := []struct {

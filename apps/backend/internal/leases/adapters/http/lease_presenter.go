@@ -27,7 +27,11 @@ func NewLeasePresenter(tenantContactSvc *leasesapp.TenantContactService) *LeaseP
 	return &LeasePresenter{tenantContactSvc: tenantContactSvc}
 }
 
-func (p *LeasePresenter) tenantContactIDs(ctx context.Context, _ uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
+func (p *LeasePresenter) tenantContactIDs(
+	ctx context.Context,
+	_ uuid.UUID,
+	leases []leasesdomain.Lease,
+) (map[uuid.UUID]leasesdomain.TenantContact, error) {
 	// Group contact ids by the lease's data owner: leases of a shared property
 	// reference the owner's tenant contacts, so scoping the lookup by the actor
 	// would miss them (Property Sharing follow-up). CanView is already enforced
@@ -55,11 +59,22 @@ func (p *LeasePresenter) tenantContactIDs(ctx context.Context, _ uuid.UUID, leas
 // TenantContactIDs resolves the distinct tenant contacts referenced by the
 // given leases into a map keyed by contact ID. It is the batched lookup used by
 // list endpoints so each response avoids a per-lease round trip.
-func (p *LeasePresenter) TenantContactIDs(ctx context.Context, actor uuid.UUID, leases []leasesdomain.Lease) (map[uuid.UUID]leasesdomain.TenantContact, error) {
+func (p *LeasePresenter) TenantContactIDs(
+	ctx context.Context,
+	actor uuid.UUID,
+	leases []leasesdomain.Lease,
+) (map[uuid.UUID]leasesdomain.TenantContact, error) {
 	return p.tenantContactIDs(ctx, actor, leases)
 }
 
-func (p *LeasePresenter) leaseResponse(ctx context.Context, actor uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact, overdueSince, nextPaymentDate *time.Time, hasOverdue bool) (openapi.LeaseResponse, error) {
+func (p *LeasePresenter) leaseResponse(
+	ctx context.Context,
+	actor uuid.UUID,
+	lease leasesdomain.Lease,
+	contacts map[uuid.UUID]leasesdomain.TenantContact,
+	overdueSince, nextPaymentDate *time.Time,
+	hasOverdue bool,
+) (openapi.LeaseResponse, error) {
 	resp := openapi.LeaseResponse{
 		Id:                   lease.ID,
 		OwnerId:              lease.OwnerID,
@@ -106,6 +121,13 @@ func (p *LeasePresenter) leaseResponse(ctx context.Context, actor uuid.UUID, lea
 // payment-schedule fields) into the openapi LeaseResponse DTO. The properties
 // HTTP adapter calls this to embed the active lease summary in property
 // responses and to render a property's lease list.
-func (p *LeasePresenter) LeaseResponse(ctx context.Context, actor uuid.UUID, lease leasesdomain.Lease, contacts map[uuid.UUID]leasesdomain.TenantContact, overdueSince, nextPaymentDate *time.Time, hasOverdue bool) (openapi.LeaseResponse, error) {
+func (p *LeasePresenter) LeaseResponse(
+	ctx context.Context,
+	actor uuid.UUID,
+	lease leasesdomain.Lease,
+	contacts map[uuid.UUID]leasesdomain.TenantContact,
+	overdueSince, nextPaymentDate *time.Time,
+	hasOverdue bool,
+) (openapi.LeaseResponse, error) {
 	return p.leaseResponse(ctx, actor, lease, contacts, overdueSince, nextPaymentDate, hasOverdue)
 }

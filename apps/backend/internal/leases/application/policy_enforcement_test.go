@@ -72,9 +72,9 @@ func newPolicyPropertyRepo() *fakePropertyRepo {
 	return &fakePropertyRepo{
 		existsActiveByOwner: map[uuid.UUID]bool{policyPropertyID: true},
 		statuses: map[uuid.UUID]string{
-			policyPropertyID: "active",
-			policyTargetID:   "active",
-			policyForeignID:  "active",
+			policyPropertyID: propertyStatusActive,
+			policyTargetID:   propertyStatusActive,
+			policyForeignID:  propertyStatusActive,
 		},
 		owners: map[uuid.UUID]uuid.UUID{
 			policyPropertyID: policyOwnerID,
@@ -92,13 +92,19 @@ func policyTestOperation() domain.Operation {
 		Type:          domain.OperationTypeExpense,
 		CategoryID:    testCustomExpenseCategoryID,
 		Status:        domain.OperationStatusPending,
-		Name:          "test",
+		Name:          testOperationName,
 		AmountKopecks: 1000,
 		OperationDate: date(2026, 6, 20),
 	}
 }
 
-func newPolicyOperationService(policy fakePolicy, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo, scheduler ReminderScheduler, audit auditapp.Recorder) *OperationService {
+func newPolicyOperationService(
+	policy fakePolicy,
+	opRepo *fakeOperationRepo,
+	propertyRepo *fakePropertyRepo,
+	scheduler ReminderScheduler,
+	audit auditapp.Recorder,
+) *OperationService {
 	cats := newFakeCategoryRepoForOwner(policyOwnerID)
 	return NewOperationService(
 		opRepo, propertyRepo, nil, cats,
@@ -107,7 +113,14 @@ func newPolicyOperationService(policy fakePolicy, opRepo *fakeOperationRepo, pro
 	)
 }
 
-func newPolicyLeaseService(policy fakePolicy, leaseRepo *fakeLeaseRepo, propertyRepo *fakePropertyRepo, opRepo *fakeOperationRepo, recRepo *fakeRecurringOperationRepo, audit auditapp.Recorder) *LeaseService {
+func newPolicyLeaseService(
+	policy fakePolicy,
+	leaseRepo *fakeLeaseRepo,
+	propertyRepo *fakePropertyRepo,
+	opRepo *fakeOperationRepo,
+	recRepo *fakeRecurringOperationRepo,
+	audit auditapp.Recorder,
+) *LeaseService {
 	cats := newFakeCategoryRepoForOwner(policyOwnerID)
 	return NewLeaseService(
 		leaseRepo, propertyRepo, nil, cats,
@@ -116,7 +129,13 @@ func newPolicyLeaseService(policy fakePolicy, leaseRepo *fakeLeaseRepo, property
 	)
 }
 
-func newPolicyRecurringService(policy fakePolicy, recRepo *fakeRecurringOperationRepo, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo, audit auditapp.Recorder) *RecurringOperationService {
+func newPolicyRecurringService(
+	policy fakePolicy,
+	recRepo *fakeRecurringOperationRepo,
+	opRepo *fakeOperationRepo,
+	propertyRepo *fakePropertyRepo,
+	audit auditapp.Recorder,
+) *RecurringOperationService {
 	cats := newFakeCategoryRepoForOwner(policyOwnerID)
 	return NewRecurringOperationService(
 		recRepo, opRepo, propertyRepo, cats, nil,
@@ -191,7 +210,12 @@ func (f *fakeReminderScheduler) ScheduleOverdueReminder(context.Context, notific
 	return nil
 }
 
-func (f *fakeReminderScheduler) ScheduleForRecurringOperation(context.Context, notificationsapp.RecurringOperationInfo, time.Time, []notificationsapp.OperationInfo) error {
+func (f *fakeReminderScheduler) ScheduleForRecurringOperation(
+	context.Context,
+	notificationsapp.RecurringOperationInfo,
+	time.Time,
+	[]notificationsapp.OperationInfo,
+) error {
 	return nil
 }
 
@@ -225,11 +249,21 @@ func (f *fakeReminderScheduler) HasReminderForOperationEvent(context.Context, uu
 	return false, nil
 }
 
-func (f *fakeReminderScheduler) ListByOperation(context.Context, uuid.UUID, uuid.UUID, notificationsapp.ListFilter) ([]notifdomain.Reminder, error) {
+func (f *fakeReminderScheduler) ListByOperation(
+	context.Context,
+	uuid.UUID,
+	uuid.UUID,
+	notificationsapp.ListFilter,
+) ([]notifdomain.Reminder, error) {
 	return nil, nil
 }
 
-func (f *fakeReminderScheduler) ListByLease(context.Context, uuid.UUID, uuid.UUID, notificationsapp.ListFilter) ([]notifdomain.Reminder, error) {
+func (f *fakeReminderScheduler) ListByLease(
+	context.Context,
+	uuid.UUID,
+	uuid.UUID,
+	notificationsapp.ListFilter,
+) ([]notifdomain.Reminder, error) {
 	return nil, nil
 }
 
@@ -241,7 +275,7 @@ var (
 	_ sharedpolicy.Policy                = fakePolicy{}
 )
 
-// --- operations -------------------------------------------------------------
+// Operations.
 
 func TestPolicyEnforcement_GetOperation(t *testing.T) {
 	ctx := context.Background()
@@ -362,9 +396,9 @@ func TestPolicyEnforcement_CreateOperation(t *testing.T) {
 	ctx := context.Background()
 	cmd := CreateOperationCommand{
 		PropertyID:    policyPropertyID,
-		Type:          "expense",
+		Type:          testTypeExpense,
 		CategoryID:    testCustomExpenseCategoryID,
-		Name:          "test",
+		Name:          testOperationName,
 		AmountKopecks: 1000,
 		OperationDate: date(2026, 6, 10),
 	}
@@ -399,7 +433,7 @@ func TestPolicyEnforcement_CreateOperation(t *testing.T) {
 	}
 }
 
-// --- leases -----------------------------------------------------------------
+// Leases.
 
 func policyTestLease() domain.Lease {
 	return domain.Lease{
@@ -446,7 +480,9 @@ func TestPolicyEnforcement_CreateLease(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actor, policy := policyActorAndPolicy(tc.role)
 			audit := &fakeAuditRecorder{}
-			svc := newPolicyLeaseService(policy, &fakeLeaseRepo{}, newPolicyPropertyRepo(), &fakeOperationRepo{}, &fakeRecurringOperationRepo{}, audit)
+			svc := newPolicyLeaseService(
+				policy, &fakeLeaseRepo{}, newPolicyPropertyRepo(),
+				&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, audit)
 
 			created, err := svc.CreateLease(ctx, actor, cmd)
 			switch {
@@ -473,7 +509,7 @@ func TestPolicyEnforcement_CreateLease(t *testing.T) {
 	}
 }
 
-// --- recurring operations -----------------------------------------------------
+// Recurring operations.
 
 func TestPolicyEnforcement_GetRecurringOperation(t *testing.T) {
 	ctx := context.Background()
@@ -503,9 +539,9 @@ func TestPolicyEnforcement_CreateRecurringOperation(t *testing.T) {
 	ctx := context.Background()
 	cmd := CreateRecurringOperationCommand{
 		PropertyID:    policyPropertyID,
-		Type:          "expense",
+		Type:          testTypeExpense,
 		CategoryID:    testCustomExpenseCategoryID,
-		Name:          "test",
+		Name:          testOperationName,
 		AmountKopecks: 1000,
 		StartDate:     date(2026, 6, 1),
 		PaymentDay:    1,
@@ -577,7 +613,7 @@ func TestPolicyEnforcement_DeleteRecurringOperation(t *testing.T) {
 	}
 }
 
-// --- export -----------------------------------------------------------------
+// Export.
 
 func TestPolicyEnforcement_ExportProperty(t *testing.T) {
 	ctx := context.Background()
@@ -585,11 +621,12 @@ func TestPolicyEnforcement_ExportProperty(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actor, policy := policyActorAndPolicy(tc.role)
 			prop := &exportPropertyRepo{row: ExportPropertyRow{
-				Name:    "Тест",
+				Name:    testPropertyName,
 				Type:    propdomain.PropertyTypeApartment,
-				Address: "Москва, Тверская 1",
+				Address: testPropertyAddress,
 			}}
-			svc := NewExportService(&exportOperationRepo{}, &exportLeaseRepo{}, prop, &exportContactRepo{}, policy, fakeClock{now: date(2026, 6, 15)}, slog.Default())
+			svc := NewExportService(&exportOperationRepo{}, &exportLeaseRepo{}, prop,
+				&exportContactRepo{}, policy, fakeClock{now: date(2026, 6, 15)}, slog.Default())
 
 			_, err := svc.ExportProperty(ctx, actor, policyPropertyID)
 			if sharedpolicy.CanView(tc.role) {
@@ -605,11 +642,17 @@ func TestPolicyEnforcement_ExportProperty(t *testing.T) {
 	}
 }
 
-// --- move operation -----------------------------------------------------------
+// Move operation.
 
 // newMoveOperationService wires an OperationService for move tests with a
 // seeded movable operation.
-func newMoveOperationService(policy fakePolicy, propertyRepo *fakePropertyRepo, op domain.Operation, scheduler ReminderScheduler, audit auditapp.Recorder) (*OperationService, *fakeOperationRepo) {
+func newMoveOperationService(
+	policy fakePolicy,
+	propertyRepo *fakePropertyRepo,
+	op domain.Operation,
+	scheduler ReminderScheduler,
+	audit auditapp.Recorder,
+) (*OperationService, *fakeOperationRepo) {
 	opRepo := &fakeOperationRepo{ops: []domain.Operation{op}}
 	return newPolicyOperationService(policy, opRepo, propertyRepo, scheduler, audit), opRepo
 }
@@ -689,9 +732,9 @@ func TestPolicyEnforcement_MoveOperation_Guards(t *testing.T) {
 	leaseLinked.LeaseID = policyLeaseID
 
 	archivedSourceRepo := newPolicyPropertyRepo()
-	archivedSourceRepo.statuses[policyPropertyID] = "archived"
+	archivedSourceRepo.statuses[policyPropertyID] = propertyStatusArchived
 	archivedTargetRepo := newPolicyPropertyRepo()
-	archivedTargetRepo.statuses[policyTargetID] = "archived"
+	archivedTargetRepo.statuses[policyTargetID] = propertyStatusArchived
 
 	for _, tc := range []struct {
 		name         string
@@ -795,7 +838,7 @@ func TestPolicyEnforcement_CreateCategory(t *testing.T) {
 			svc := newPolicyCategoryService(policy, &fakeCategoryRepo{}, audit)
 
 			created, err := svc.CreateCategory(ctx, actor, CreateOperationCategoryCommand{
-				Type: "expense", Name: "Shared", PropertyID: &propertyID,
+				Type: testTypeExpense, Name: "Shared", PropertyID: &propertyID,
 			})
 			switch {
 			case sharedpolicy.CanEdit(tc.role):
@@ -834,7 +877,7 @@ func TestPolicyEnforcement_CreateCategory_ForeignPropertyContext(t *testing.T) {
 
 	foreignID := policyForeignID
 	_, err := svc.CreateCategory(ctx, policyMemberID, CreateOperationCategoryCommand{
-		Type: "expense", Name: "Shared", PropertyID: &foreignID,
+		Type: testTypeExpense, Name: "Shared", PropertyID: &foreignID,
 	})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("CreateCategory: want ErrNotFound, got %v", err)
@@ -851,7 +894,7 @@ func TestPolicyEnforcement_CreateCategory_NoPropertyContext(t *testing.T) {
 	svc := newPolicyCategoryService(policy, &fakeCategoryRepo{}, audit)
 
 	created, err := svc.CreateCategory(ctx, policyMemberID, CreateOperationCategoryCommand{
-		Type: "expense", Name: "Own",
+		Type: testTypeExpense, Name: testOwnedRowName,
 	})
 	if err != nil {
 		t.Fatalf("CreateCategory: want success, got %v", err)
@@ -872,7 +915,7 @@ func TestPolicyEnforcement_CreateTenantContact(t *testing.T) {
 			svc := newPolicyTenantContactService(policy, &fakeTenantContactRepo{}, audit)
 
 			created, err := svc.CreateTenantContact(ctx, actor, CreateTenantContactCommand{
-				Name: "Ivan", PropertyID: &propertyID,
+				Name: testTenantName, PropertyID: &propertyID,
 			})
 			switch {
 			case sharedpolicy.CanEdit(tc.role):
@@ -904,12 +947,12 @@ func TestPolicyEnforcement_UpdateTenantContact(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actor, policy := ownerWideActorAndPolicy(tc.role)
 			repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{
-				{ID: policyContactID, OwnerID: policyOwnerID, Name: "Ivan"},
+				{ID: policyContactID, OwnerID: policyOwnerID, Name: testTenantName},
 			}}
 			audit := &fakeAuditRecorder{}
 			svc := newPolicyTenantContactService(policy, repo, audit)
 
-			name := "Petr"
+			name := testTenantRenameTo
 			updated, err := svc.UpdateTenantContact(ctx, actor, policyContactID, UpdateTenantContactCommand{Name: &name})
 			switch {
 			case sharedpolicy.CanEdit(tc.role):

@@ -103,7 +103,7 @@ func TestListTenantContactsByIDs(t *testing.T) {
 		contacts: []domain.TenantContact{
 			{ID: id1, OwnerID: ownerID, Name: "One"},
 			{ID: id2, OwnerID: ownerID, Name: "Two"},
-			{ID: uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05"), OwnerID: otherOwner, Name: "Other"},
+			{ID: uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05"), OwnerID: otherOwner, Name: testOtherRowName},
 		},
 	}
 	svc := NewTenantContactService(repo, nil, nil)
@@ -149,17 +149,17 @@ func TestListTenantContactsByIDsRepositoryError(t *testing.T) {
 }
 
 func setupUpdateTenantContactService(ownerID, contactID uuid.UUID) *TenantContactService {
-	surname := "Ivanov"
-	patronymic := "Ivanovich"
+	surname := testTenantSurname
+	patronymic := testTenantPatronymic
 	phone := "+79161234567"
-	email := "ivan@example.com"
-	comment := "initial comment"
+	email := testTenantEmail
+	comment := testTenantComment
 	repo := &fakeTenantContactRepo{
 		contacts: []domain.TenantContact{
 			{
 				ID:         contactID,
 				OwnerID:    ownerID,
-				Name:       "Ivan",
+				Name:       testTenantName,
 				Surname:    &surname,
 				Patronymic: &patronymic,
 				Phone:      &phone,
@@ -330,15 +330,15 @@ func TestUpdateTenantContactUpdatesName(t *testing.T) {
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
 
-	newName := "Petr"
+	newName := testTenantRenameTo
 	updated, err := svc.UpdateTenantContact(context.Background(), ownerID, contactID, UpdateTenantContactCommand{
 		Name: &newName,
 	})
 	if err != nil {
 		t.Fatalf("UpdateTenantContact failed: %v", err)
 	}
-	if updated.Name != "Petr" {
-		t.Fatalf("expected name %q, got %q", "Petr", updated.Name)
+	if updated.Name != testTenantRenameTo {
+		t.Fatalf("expected name %q, got %q", testTenantRenameTo, updated.Name)
 	}
 }
 
@@ -365,23 +365,23 @@ func TestUpdateTenantContactNoOpPreservesValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTenantContact failed: %v", err)
 	}
-	if updated.Name != "Ivan" {
-		t.Fatalf("expected name %q, got %q", "Ivan", updated.Name)
+	if updated.Name != testTenantName {
+		t.Fatalf("expected name %q, got %q", testTenantName, updated.Name)
 	}
-	if updated.Surname == nil || *updated.Surname != "Ivanov" {
-		t.Fatalf("expected surname %q, got %v", "Ivanov", updated.Surname)
+	if updated.Surname == nil || *updated.Surname != testTenantSurname {
+		t.Fatalf("expected surname %q, got %v", testTenantSurname, updated.Surname)
 	}
-	if updated.Patronymic == nil || *updated.Patronymic != "Ivanovich" {
-		t.Fatalf("expected patronymic %q, got %v", "Ivanovich", updated.Patronymic)
+	if updated.Patronymic == nil || *updated.Patronymic != testTenantPatronymic {
+		t.Fatalf("expected patronymic %q, got %v", testTenantPatronymic, updated.Patronymic)
 	}
 	if updated.Phone == nil || *updated.Phone != "+79161234567" {
 		t.Fatalf("expected phone %q, got %v", "+79161234567", updated.Phone)
 	}
-	if updated.Email == nil || *updated.Email != "ivan@example.com" {
-		t.Fatalf("expected email %q, got %v", "ivan@example.com", updated.Email)
+	if updated.Email == nil || *updated.Email != testTenantEmail {
+		t.Fatalf("expected email %q, got %v", testTenantEmail, updated.Email)
 	}
-	if updated.Comment == nil || *updated.Comment != "initial comment" {
-		t.Fatalf("expected comment %q, got %v", "initial comment", updated.Comment)
+	if updated.Comment == nil || *updated.Comment != testTenantComment {
+		t.Fatalf("expected comment %q, got %v", testTenantComment, updated.Comment)
 	}
 }
 
@@ -391,7 +391,7 @@ func TestUpdateTenantContactNotFound(t *testing.T) {
 	svc := setupUpdateTenantContactService(ownerID, contactID)
 
 	otherID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a99")
-	newName := "Petr"
+	newName := testTenantRenameTo
 	_, err := svc.UpdateTenantContact(context.Background(), ownerID, otherID, UpdateTenantContactCommand{
 		Name: &newName,
 	})
@@ -406,16 +406,16 @@ func TestUpdateTenantContactDuplicatePhone(t *testing.T) {
 	contactID2 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")
 	phone1 := "+79161234567"
 	phone2 := "+79169876543"
-	surname := "Ivanov"
-	patronymic := "Ivanovich"
-	email := "ivan@example.com"
-	comment := "initial comment"
+	surname := testTenantSurname
+	patronymic := testTenantPatronymic
+	email := testTenantEmail
+	comment := testTenantComment
 	repo := &fakeTenantContactRepo{
 		contacts: []domain.TenantContact{
 			{
 				ID:         contactID1,
 				OwnerID:    ownerID,
-				Name:       "Ivan",
+				Name:       testTenantName,
 				Surname:    &surname,
 				Patronymic: &patronymic,
 				Phone:      &phone1,
@@ -425,7 +425,7 @@ func TestUpdateTenantContactDuplicatePhone(t *testing.T) {
 			{
 				ID:         contactID2,
 				OwnerID:    ownerID,
-				Name:       "Petr",
+				Name:       testTenantRenameTo,
 				Surname:    &surname,
 				Patronymic: &patronymic,
 				Phone:      &phone2,

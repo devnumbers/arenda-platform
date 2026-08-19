@@ -31,11 +31,22 @@ type PropertyBillingLifecycle struct {
 }
 
 // NewPropertyBillingLifecycle creates a new property billing lifecycle adapter.
-func NewPropertyBillingLifecycle(ops *OperationRepository, recurringOps *RecurringOperationRepository, leases *LeaseRepository, categories leasesapp.OperationCategoryRepository, scheduler leasesapp.ReminderScheduler, audit auditapp.Recorder, clk clock.Clock) *PropertyBillingLifecycle {
+func NewPropertyBillingLifecycle(
+	ops *OperationRepository,
+	recurringOps *RecurringOperationRepository,
+	leases *LeaseRepository,
+	categories leasesapp.OperationCategoryRepository,
+	scheduler leasesapp.ReminderScheduler,
+	audit auditapp.Recorder,
+	clk clock.Clock,
+) *PropertyBillingLifecycle {
 	if audit == nil {
 		audit = auditapp.Noop{}
 	}
-	return &PropertyBillingLifecycle{ops: ops, recurringOps: recurringOps, leases: leases, categories: categories, scheduler: scheduler, audit: audit, clock: clk}
+	return &PropertyBillingLifecycle{
+		ops: ops, recurringOps: recurringOps, leases: leases,
+		categories: categories, scheduler: scheduler, audit: audit, clock: clk,
+	}
 }
 
 // WithTx returns an instance bound to the provided transaction.
@@ -250,7 +261,9 @@ func (l *PropertyBillingLifecycle) Resume(ctx context.Context, propertyID, scope
 					LeaseID:    leasesdomain.LeaseIDPtr(rec.LeaseID),
 				}
 				baseReminderDate := futureOps[0].OperationDate.AddDate(0, 0, -(*rec.ReminderOffsetDays))
-				if err := l.scheduler.ScheduleForRecurringOperation(ctx, recInfo, baseReminderDate, leasesapp.ToOperationInfoSlice(futureOps, categoryNames)); err != nil {
+				if err := l.scheduler.ScheduleForRecurringOperation(
+					ctx, recInfo, baseReminderDate, leasesapp.ToOperationInfoSlice(futureOps, categoryNames),
+				); err != nil {
 					return fmt.Errorf("schedule reminders: %w", err)
 				}
 			}

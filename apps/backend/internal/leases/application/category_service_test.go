@@ -13,7 +13,12 @@ type fakeCategoryRepo struct {
 	categories []domain.OperationCategory
 }
 
-func (f *fakeCategoryRepo) Create(ctx context.Context, ownerID uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error) {
+func (f *fakeCategoryRepo) Create(
+	ctx context.Context,
+	ownerID uuid.UUID,
+	categoryType domain.OperationType,
+	name string,
+) (domain.OperationCategory, error) {
 	c := domain.OperationCategory{
 		ID:      uuid.Must(uuid.NewV7()),
 		OwnerID: ownerID,
@@ -24,7 +29,11 @@ func (f *fakeCategoryRepo) Create(ctx context.Context, ownerID uuid.UUID, catego
 	return c, nil
 }
 
-func (f *fakeCategoryRepo) ListByOwner(_ context.Context, ownerID uuid.UUID, categoryType *domain.OperationType) ([]domain.OperationCategory, error) {
+func (f *fakeCategoryRepo) ListByOwner(
+	_ context.Context,
+	ownerID uuid.UUID,
+	categoryType *domain.OperationType,
+) ([]domain.OperationCategory, error) {
 	var out []domain.OperationCategory
 	for _, c := range f.categories {
 		if c.OwnerID != ownerID {
@@ -47,7 +56,11 @@ func (f *fakeCategoryRepo) GetByIDAndOwner(ctx context.Context, id, ownerID uuid
 	return domain.OperationCategory{}, ErrNotFound
 }
 
-func (f *fakeCategoryRepo) GetByOwnerAndCode(ctx context.Context, ownerID uuid.UUID, code domain.OperationCategoryDefaultCode) (domain.OperationCategory, error) {
+func (f *fakeCategoryRepo) GetByOwnerAndCode(
+	ctx context.Context,
+	ownerID uuid.UUID,
+	code domain.OperationCategoryDefaultCode,
+) (domain.OperationCategory, error) {
 	for _, c := range f.categories {
 		if c.OwnerID == ownerID && c.Code != nil && *c.Code == string(code) {
 			return c, nil
@@ -72,7 +85,7 @@ func TestCreateOperationCategoryCommand_Validate(t *testing.T) {
 		t.Fatal("expected error for invalid type")
 	}
 
-	_, err = svc.CreateCategory(context.Background(), uuid.Must(uuid.NewV7()), CreateOperationCategoryCommand{Type: "income", Name: ""})
+	_, err = svc.CreateCategory(context.Background(), uuid.Must(uuid.NewV7()), CreateOperationCategoryCommand{Type: testTypeIncome, Name: ""})
 	if err == nil {
 		t.Fatal("expected error for empty name")
 	}
@@ -84,7 +97,7 @@ func TestCategoryService_CreateCategory(t *testing.T) {
 	repo := &fakeCategoryRepo{}
 	svc := NewCategoryService(repo, nil)
 
-	cat, err := svc.CreateCategory(ctx, owner, CreateOperationCategoryCommand{Type: "expense", Name: "Custom Expense"})
+	cat, err := svc.CreateCategory(ctx, owner, CreateOperationCategoryCommand{Type: testTypeExpense, Name: "Custom Expense"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

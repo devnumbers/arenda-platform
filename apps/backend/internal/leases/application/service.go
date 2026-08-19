@@ -49,7 +49,7 @@ type LeaseService struct {
 	tzResolver sharedtz.OwnerTimezoneResolver
 	policy     sharedpolicy.Policy
 	logger     *slog.Logger
-	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
+	// SharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
 	// payment-schedule reads (LeasePaymentScheduleIndex,
 	// CurrentPeriodOverdueIndex) cover only the actor's own rent operations,
 	// when set they additionally include the shared properties' operations
@@ -165,7 +165,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, actor uuid.UUID, cmd Cre
 		if err != nil {
 			return fmt.Errorf("lock property: %w", err)
 		}
-		if propertyStatus != "active" {
+		if propertyStatus != propertyStatusActive {
 			return ErrPropertyNotAvailable
 		}
 
@@ -238,7 +238,7 @@ func (s *LeaseService) CreateLease(ctx context.Context, actor uuid.UUID, cmd Cre
 			EntityType: auditdomain.EntityLease,
 			EntityID:   &created.ID,
 			Context: map[string]any{
-				"property_id":         domain.PropertyIDPtr(created.PropertyID),
+				auditKeyPropertyID:    domain.PropertyIDPtr(created.PropertyID),
 				"rent_amount_kopecks": created.RentAmountKopecks,
 			},
 		}); err != nil {
@@ -516,7 +516,7 @@ func (s *LeaseService) UpdateLease(ctx context.Context, actor, id uuid.UUID, cmd
 			Action:     auditdomain.ActionLeaseUpdated,
 			EntityType: auditdomain.EntityLease,
 			EntityID:   &id,
-			Context:    map[string]any{"fields": updatedLeaseFields(cmd)},
+			Context:    map[string]any{auditKeyFields: updatedLeaseFields(cmd)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -642,7 +642,7 @@ func (s *LeaseService) CompleteLease(ctx context.Context, actor, id uuid.UUID) (
 			Action:     auditdomain.ActionLeaseCompleted,
 			EntityType: auditdomain.EntityLease,
 			EntityID:   &id,
-			Context:    map[string]any{"property_id": domain.PropertyIDPtr(lease.PropertyID)},
+			Context:    map[string]any{auditKeyPropertyID: domain.PropertyIDPtr(lease.PropertyID)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}

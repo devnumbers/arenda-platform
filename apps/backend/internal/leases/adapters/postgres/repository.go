@@ -623,7 +623,10 @@ func (r *RecurringOperationRepository) GetByID(ctx context.Context, id uuid.UUID
 	return recurringOperationFromRow(row), nil
 }
 
-func (r *RecurringOperationRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.RecurringOperation, error) {
+func (r *RecurringOperationRepository) GetByIDAndOwnerForUpdate(
+	ctx context.Context,
+	id, scope uuid.UUID,
+) (domain.RecurringOperation, error) {
 	row, err := r.q().GetRecurringOperationByIDAndOwnerForUpdate(ctx, postgres.GetRecurringOperationByIDAndOwnerForUpdateParams{
 		ID:      pgconv.UUIDToPgtype(id),
 		OwnerID: pgconv.UUIDToPgtype(scope),
@@ -637,7 +640,11 @@ func (r *RecurringOperationRepository) GetByIDAndOwnerForUpdate(ctx context.Cont
 	return recurringOperationFromRow(row), nil
 }
 
-func (r *RecurringOperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]domain.RecurringOperation, error) {
+func (r *RecurringOperationRepository) ListByOwner(
+	ctx context.Context,
+	scope uuid.UUID,
+	accessiblePropertyIDs []uuid.UUID,
+) ([]domain.RecurringOperation, error) {
 	rows, err := r.q().ListRecurringOperationsByOwner(ctx, postgres.ListRecurringOperationsByOwnerParams{
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
@@ -652,7 +659,10 @@ func (r *RecurringOperationRepository) ListByOwner(ctx context.Context, scope uu
 	return ops, nil
 }
 
-func (r *RecurringOperationRepository) ListByProperty(ctx context.Context, scope, propertyID uuid.UUID) ([]domain.RecurringOperation, error) {
+func (r *RecurringOperationRepository) ListByProperty(
+	ctx context.Context,
+	scope, propertyID uuid.UUID,
+) ([]domain.RecurringOperation, error) {
 	rows, err := r.q().ListRecurringOperationsByProperty(ctx, postgres.ListRecurringOperationsByPropertyParams{
 		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
@@ -694,7 +704,11 @@ func (r *RecurringOperationRepository) Update(ctx context.Context, op domain.Rec
 	return recurringOperationFromRow(row), nil
 }
 
-func (r *RecurringOperationRepository) UpdateStatus(ctx context.Context, id, scope uuid.UUID, status string) (domain.RecurringOperation, error) {
+func (r *RecurringOperationRepository) UpdateStatus(
+	ctx context.Context,
+	id, scope uuid.UUID,
+	status string,
+) (domain.RecurringOperation, error) {
 	row, err := r.q().UpdateRecurringOperationStatus(ctx, postgres.UpdateRecurringOperationStatusParams{
 		ID:      pgconv.UUIDToPgtype(id),
 		OwnerID: pgconv.UUIDToPgtype(scope),
@@ -709,7 +723,11 @@ func (r *RecurringOperationRepository) UpdateStatus(ctx context.Context, id, sco
 	return recurringOperationFromRow(row), nil
 }
 
-func (r *RecurringOperationRepository) UpdateStatusByID(ctx context.Context, id uuid.UUID, status string) (domain.RecurringOperation, error) {
+func (r *RecurringOperationRepository) UpdateStatusByID(
+	ctx context.Context,
+	id uuid.UUID,
+	status string,
+) (domain.RecurringOperation, error) {
 	row, err := r.q().UpdateRecurringOperationStatusByID(ctx, postgres.UpdateRecurringOperationStatusByIDParams{
 		ID:     pgconv.UUIDToPgtype(id),
 		Status: status,
@@ -922,7 +940,11 @@ type copyFromer interface {
 	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
 }
 
-func (r *OperationRepository) ListByOwner(ctx context.Context, scope uuid.UUID, filter application.OperationFilter) ([]domain.Operation, error) {
+func (r *OperationRepository) ListByOwner(
+	ctx context.Context,
+	scope uuid.UUID,
+	filter application.OperationFilter,
+) ([]domain.Operation, error) {
 	types := make([]string, 0, len(filter.Types))
 	for _, t := range filter.Types {
 		types = append(types, string(t))
@@ -1047,7 +1069,10 @@ func (r *OperationRepository) ListOperationDatesByLease(ctx context.Context, lea
 	return dates, nil
 }
 
-func (r *OperationRepository) ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID) ([]time.Time, error) {
+func (r *OperationRepository) ListOperationDatesByRecurringOperation(
+	ctx context.Context,
+	recurringOperationID uuid.UUID,
+) ([]time.Time, error) {
 	rows, err := r.q().ListOperationDatesByRecurringOperation(ctx, pgconv.UUIDToPgtype(recurringOperationID))
 	if err != nil {
 		return nil, err
@@ -1059,7 +1084,12 @@ func (r *OperationRepository) ListOperationDatesByRecurringOperation(ctx context
 	return dates, nil
 }
 
-func (r *OperationRepository) UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, scope, recurringOperationID uuid.UUID, offsetDays *int, from time.Time) error {
+func (r *OperationRepository) UpdateFutureGeneratedOperationReminderOffsets(
+	ctx context.Context,
+	scope, recurringOperationID uuid.UUID,
+	offsetDays *int,
+	from time.Time,
+) error {
 	var reminderOffsetDays pgtype.Int4
 	if offsetDays != nil {
 		reminderOffsetDays = pgtype.Int4{Int32: shared.ToInt32Clamped(*offsetDays), Valid: true}
@@ -1076,7 +1106,11 @@ func (r *OperationRepository) UpdateFutureGeneratedOperationReminderOffsets(ctx 
 	return nil
 }
 
-func (r *OperationRepository) DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, after time.Time) error {
+func (r *OperationRepository) DeleteUneditedFutureOperationsByRecurringOperation(
+	ctx context.Context,
+	recurringOperationID uuid.UUID,
+	after time.Time,
+) error {
 	return r.q().DeleteUneditedFutureOperationsByRecurringOperation(ctx, postgres.DeleteUneditedFutureOperationsByRecurringOperationParams{
 		RecurringOperationID: pgconv.UUIDToPgtype(recurringOperationID),
 		OperationDate:        pgconv.DateToPgtype(after),
@@ -1090,7 +1124,11 @@ func (r *OperationRepository) DeleteFutureGeneratedOperations(ctx context.Contex
 	})
 }
 
-func (r *OperationRepository) DeleteUneditedOperationsByRecurringOperation(ctx context.Context, recurringOperationID uuid.UUID, from time.Time) error {
+func (r *OperationRepository) DeleteUneditedOperationsByRecurringOperation(
+	ctx context.Context,
+	recurringOperationID uuid.UUID,
+	from time.Time,
+) error {
 	return r.q().DeleteUneditedOperationsByRecurringOperation(ctx, postgres.DeleteUneditedOperationsByRecurringOperationParams{
 		RecurringOperationID: pgconv.UUIDToPgtype(recurringOperationID),
 		OperationDate:        pgconv.DateToPgtype(from),
@@ -1111,7 +1149,12 @@ func (r *OperationRepository) DeleteFutureUneditedOperationsByProperty(ctx conte
 	})
 }
 
-func (r *OperationRepository) DeleteOperationsOutsideLeaseRange(ctx context.Context, leaseID uuid.UUID, start time.Time, end *time.Time) error {
+func (r *OperationRepository) DeleteOperationsOutsideLeaseRange(
+	ctx context.Context,
+	leaseID uuid.UUID,
+	start time.Time,
+	end *time.Time,
+) error {
 	var endDate pgtype.Date
 	if end != nil {
 		endDate = pgconv.DateToPgtype(*end)
@@ -1149,7 +1192,11 @@ func (r *OperationRepository) ListByProperty(ctx context.Context, scope, propert
 	return ops, nil
 }
 
-func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) (application.OperationsSummary, error) {
+func (r *OperationRepository) GetPropertyOperationsSummary(
+	ctx context.Context,
+	scope, propertyID uuid.UUID,
+	asOf time.Time,
+) (application.OperationsSummary, error) {
 	row, err := r.q().GetPropertyOperationsSummary(ctx, postgres.GetPropertyOperationsSummaryParams{
 		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
@@ -1169,7 +1216,11 @@ func (r *OperationRepository) GetPropertyOperationsSummary(ctx context.Context, 
 	}, nil
 }
 
-func (r *OperationRepository) ListOverdueRentOperations(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]application.OverdueRentOperation, error) {
+func (r *OperationRepository) ListOverdueRentOperations(
+	ctx context.Context,
+	scope uuid.UUID,
+	accessiblePropertyIDs []uuid.UUID,
+) ([]application.OverdueRentOperation, error) {
 	rows, err := r.q().ListOverdueRentOperationsByOwner(ctx, postgres.ListOverdueRentOperationsByOwnerParams{
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
@@ -1187,7 +1238,12 @@ func (r *OperationRepository) ListOverdueRentOperations(ctx context.Context, sco
 	return result, nil
 }
 
-func (r *OperationRepository) ListNextRentPayments(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, asOf time.Time) ([]application.NextRentPayment, error) {
+func (r *OperationRepository) ListNextRentPayments(
+	ctx context.Context,
+	scope uuid.UUID,
+	accessiblePropertyIDs []uuid.UUID,
+	asOf time.Time,
+) ([]application.NextRentPayment, error) {
 	rows, err := r.q().ListNextRentPaymentsByOwner(ctx, postgres.ListNextRentPaymentsByOwnerParams{
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
@@ -1252,7 +1308,11 @@ func (r *OperationRepository) GetByID(ctx context.Context, id uuid.UUID) (domain
 }
 
 // MoveToProperty reassigns an operation to another property of the same owner.
-func (r *OperationRepository) MoveToProperty(ctx context.Context, id, scope, propertyID uuid.UUID, updatedAt time.Time) (domain.Operation, error) {
+func (r *OperationRepository) MoveToProperty(
+	ctx context.Context,
+	id, scope, propertyID uuid.UUID,
+	updatedAt time.Time,
+) (domain.Operation, error) {
 	row, err := r.q().MoveOperationToProperty(ctx, postgres.MoveOperationToPropertyParams{
 		ID:         pgconv.UUIDToPgtype(id),
 		OwnerID:    pgconv.UUIDToPgtype(scope),
@@ -1294,7 +1354,11 @@ func (r *OperationRepository) Update(ctx context.Context, op domain.Operation) (
 	return operationFromRow(row)
 }
 
-func (r *OperationRepository) ListByPropertyWithStatuses(ctx context.Context, scope, propertyID uuid.UUID, statuses []domain.OperationStatus) ([]domain.Operation, error) {
+func (r *OperationRepository) ListByPropertyWithStatuses(
+	ctx context.Context,
+	scope, propertyID uuid.UUID,
+	statuses []domain.OperationStatus,
+) ([]domain.Operation, error) {
 	if len(statuses) == 0 {
 		return r.ListByProperty(ctx, scope, propertyID)
 	}
@@ -1324,7 +1388,12 @@ func (r *OperationRepository) ListByPropertyWithStatuses(ctx context.Context, sc
 	return ops, nil
 }
 
-func (r *OperationRepository) ListPendingOperationsWithPastDate(ctx context.Context, scope uuid.UUID, asOf time.Time, limit int) ([]domain.Operation, error) {
+func (r *OperationRepository) ListPendingOperationsWithPastDate(
+	ctx context.Context,
+	scope uuid.UUID,
+	asOf time.Time,
+	limit int,
+) ([]domain.Operation, error) {
 	rows, err := r.q().ListPendingOperationsWithPastDate(ctx, postgres.ListPendingOperationsWithPastDateParams{
 		OwnerID: pgconv.UUIDToPgtype(scope),
 		AsOf:    pgconv.DateToPgtype(asOf),
@@ -1345,7 +1414,11 @@ func (r *OperationRepository) ListPendingOperationsWithPastDate(ctx context.Cont
 	return ops, nil
 }
 
-func (r *OperationRepository) ListAllPendingOperationsWithPastDate(ctx context.Context, asOf time.Time, limit int) ([]domain.Operation, error) {
+func (r *OperationRepository) ListAllPendingOperationsWithPastDate(
+	ctx context.Context,
+	asOf time.Time,
+	limit int,
+) ([]domain.Operation, error) {
 	rows, err := r.q().ListAllPendingOperationsWithPastDate(ctx, postgres.ListAllPendingOperationsWithPastDateParams{
 		AsOf:  pgconv.DateToPgtype(asOf),
 		Limit: shared.ToInt32Clamped(limit),
@@ -1413,7 +1486,12 @@ func (r *OperationRepository) SoftDeleteOperation(ctx context.Context, id, scope
 	return nil
 }
 
-func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) (application.FinanceReportTotals, error) {
+func (r *OperationRepository) GetFinanceReportTotals(
+	ctx context.Context,
+	scope uuid.UUID,
+	accessiblePropertyIDs []uuid.UUID,
+	from, to *time.Time,
+) (application.FinanceReportTotals, error) {
 	row, err := r.q().GetFinanceReportTotals(ctx, postgres.GetFinanceReportTotalsParams{
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
@@ -1429,7 +1507,12 @@ func (r *OperationRepository) GetFinanceReportTotals(ctx context.Context, scope 
 	}, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]application.FinanceReportPropertyRow, error) {
+func (r *OperationRepository) GetFinanceReportByProperty(
+	ctx context.Context,
+	scope uuid.UUID,
+	accessiblePropertyIDs []uuid.UUID,
+	from, to *time.Time,
+) ([]application.FinanceReportPropertyRow, error) {
 	rows, err := r.q().GetFinanceReportByProperty(ctx, postgres.GetFinanceReportByPropertyParams{
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
@@ -1451,7 +1534,12 @@ func (r *OperationRepository) GetFinanceReportByProperty(ctx context.Context, sc
 	return result, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]application.FinanceReportCategoryRow, error) {
+func (r *OperationRepository) GetFinanceReportByCategory(
+	ctx context.Context,
+	scope uuid.UUID,
+	accessiblePropertyIDs []uuid.UUID,
+	from, to *time.Time,
+) ([]application.FinanceReportCategoryRow, error) {
 	rows, err := r.q().GetFinanceReportByCategory(ctx, postgres.GetFinanceReportByCategoryParams{
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
@@ -1474,7 +1562,12 @@ func (r *OperationRepository) GetFinanceReportByCategory(ctx context.Context, sc
 	return result, nil
 }
 
-func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID, from, to *time.Time) ([]application.FinanceReportMonthRow, error) {
+func (r *OperationRepository) GetFinanceReportByMonth(
+	ctx context.Context,
+	scope uuid.UUID,
+	accessiblePropertyIDs []uuid.UUID,
+	from, to *time.Time,
+) ([]application.FinanceReportMonthRow, error) {
 	rows, err := r.q().GetFinanceReportByMonth(ctx, postgres.GetFinanceReportByMonthParams{
 		OwnerID:               pgconv.UUIDToPgtype(scope),
 		AccessiblePropertyIds: pgconv.UUIDSliceToPgtype(accessiblePropertyIDs),
@@ -1496,7 +1589,10 @@ func (r *OperationRepository) GetFinanceReportByMonth(ctx context.Context, scope
 	return result, nil
 }
 
-func (r *OperationRepository) GetPropertyFinanceByMonth(ctx context.Context, scope, propertyID uuid.UUID) ([]application.FinanceReportMonthRow, error) {
+func (r *OperationRepository) GetPropertyFinanceByMonth(
+	ctx context.Context,
+	scope, propertyID uuid.UUID,
+) ([]application.FinanceReportMonthRow, error) {
 	rows, err := r.q().GetPropertyFinanceByMonth(ctx, postgres.GetPropertyFinanceByMonthParams{
 		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
@@ -1516,7 +1612,10 @@ func (r *OperationRepository) GetPropertyFinanceByMonth(ctx context.Context, sco
 	return result, nil
 }
 
-func (r *OperationRepository) GetPropertyFinanceByCategory(ctx context.Context, scope, propertyID uuid.UUID) ([]application.FinanceReportCategoryRow, error) {
+func (r *OperationRepository) GetPropertyFinanceByCategory(
+	ctx context.Context,
+	scope, propertyID uuid.UUID,
+) ([]application.FinanceReportCategoryRow, error) {
 	rows, err := r.q().GetPropertyFinanceByCategory(ctx, postgres.GetPropertyFinanceByCategoryParams{
 		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
@@ -1536,7 +1635,10 @@ func (r *OperationRepository) GetPropertyFinanceByCategory(ctx context.Context, 
 	return result, nil
 }
 
-func (r *OperationRepository) ListCompletedForExport(ctx context.Context, scope, propertyID uuid.UUID) ([]application.ExportOperationRow, error) {
+func (r *OperationRepository) ListCompletedForExport(
+	ctx context.Context,
+	scope, propertyID uuid.UUID,
+) ([]application.ExportOperationRow, error) {
 	rows, err := r.q().ListCompletedOperationsForExport(ctx, postgres.ListCompletedOperationsForExportParams{
 		OwnerID:    pgconv.UUIDToPgtype(scope),
 		PropertyID: pgconv.UUIDToPgtype(propertyID),
@@ -1671,7 +1773,12 @@ func (r *OperationCategoryRepository) WithTx(tx transaction.Tx) application.Oper
 	return NewOperationCategoryRepository(dbtx)
 }
 
-func (r *OperationCategoryRepository) Create(ctx context.Context, scope uuid.UUID, categoryType domain.OperationType, name string) (domain.OperationCategory, error) {
+func (r *OperationCategoryRepository) Create(
+	ctx context.Context,
+	scope uuid.UUID,
+	categoryType domain.OperationType,
+	name string,
+) (domain.OperationCategory, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return domain.OperationCategory{}, fmt.Errorf("generate operation category id: %w", err)
@@ -1691,7 +1798,11 @@ func (r *OperationCategoryRepository) Create(ctx context.Context, scope uuid.UUI
 	return operationCategoryFromRow(row), nil
 }
 
-func (r *OperationCategoryRepository) ListByOwner(ctx context.Context, scope uuid.UUID, categoryType *domain.OperationType) ([]domain.OperationCategory, error) {
+func (r *OperationCategoryRepository) ListByOwner(
+	ctx context.Context,
+	scope uuid.UUID,
+	categoryType *domain.OperationType,
+) ([]domain.OperationCategory, error) {
 	var t string
 	if categoryType != nil {
 		t = string(*categoryType)
@@ -1724,7 +1835,11 @@ func (r *OperationCategoryRepository) GetByIDAndOwner(ctx context.Context, id, s
 	return operationCategoryFromRow(row), nil
 }
 
-func (r *OperationCategoryRepository) GetByOwnerAndCode(ctx context.Context, scope uuid.UUID, code domain.OperationCategoryDefaultCode) (domain.OperationCategory, error) {
+func (r *OperationCategoryRepository) GetByOwnerAndCode(
+	ctx context.Context,
+	scope uuid.UUID,
+	code domain.OperationCategoryDefaultCode,
+) (domain.OperationCategory, error) {
 	row, err := r.q().GetOperationCategoryByOwnerAndCode(ctx, postgres.GetOperationCategoryByOwnerAndCodeParams{
 		OwnerID: pgconv.UUIDToPgtype(scope),
 		Code:    pgtype.Text{String: string(code), Valid: true},

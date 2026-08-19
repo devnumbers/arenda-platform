@@ -30,20 +30,20 @@ func TestCategoryService_ListCategories_DerivedAccess(t *testing.T) {
 		roles: map[[2]uuid.UUID]sharedpolicy.Role{
 			{memberFull, owner}:   sharedpolicy.RoleFullAccess,
 			{memberViewer, owner}: sharedpolicy.RoleViewer,
-			// stranger has no entry -> RoleNone.
+			// Stranger has no entry -> RoleNone.
 		},
 	}
 	scopes := fakeAccessibleScopes{
 		memberFull:   []uuid.UUID{owner},
 		memberViewer: []uuid.UUID{owner},
-		// stranger -> nil (no accessible owners).
+		// Stranger -> nil (no accessible owners).
 	}
 
 	tests := []struct {
 		name      string
 		actor     uuid.UUID
 		wantCount int
-		wantCat   bool // expects ownerCat in result
+		wantCat   bool // Expects ownerCat in result.
 	}{
 		{"owner sees own", owner, 1, true},
 		{"member with full access sees owner categories", memberFull, 1, true},
@@ -86,7 +86,7 @@ func TestCategoryService_ListCategories_DerivedAccess_Dedup(t *testing.T) {
 
 	policy := fakePolicy{}
 	scopes := fakeAccessibleScopes{
-		// owner is (incorrectly) listed as accessible to themselves; the
+		// Owner is (incorrectly) listed as accessible to themselves; the
 		// service must dedup so the own category is not returned twice.
 		owner: []uuid.UUID{owner},
 	}
@@ -128,7 +128,7 @@ func TestCategoryService_ListCategories_DerivedAccess_TypeFilter(t *testing.T) {
 	svc.SetPolicy(policy)
 	svc.SetAccessibleScopes(scopes)
 
-	got, err := svc.ListCategories(ctx, member, ListOperationCategoriesQuery{Type: "expense"})
+	got, err := svc.ListCategories(ctx, member, ListOperationCategoriesQuery{Type: testTypeExpense})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -149,11 +149,11 @@ func TestCategoryService_ListCategories_NilSafe_OwnOnly(t *testing.T) {
 	owner := uuid.Must(uuid.NewV7())
 	other := uuid.Must(uuid.NewV7())
 	repo := &fakeCategoryRepo{categories: []domain.OperationCategory{
-		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Own"},
-		{ID: uuid.Must(uuid.NewV7()), OwnerID: other, Type: domain.OperationTypeIncome, Name: "Other"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeIncome, Name: testOwnedRowName},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: other, Type: domain.OperationTypeIncome, Name: testOtherRowName},
 	}}
 
-	svc := NewCategoryService(repo, nil) // no SetPolicy/SetAccessibleScopes
+	svc := NewCategoryService(repo, nil) // No SetPolicy/SetAccessibleScopes.
 
 	got, err := svc.ListCategories(ctx, owner, ListOperationCategoriesQuery{})
 	if err != nil {
@@ -176,11 +176,11 @@ func TestCategoryService_ListCategories_NilSafe_OnlyPolicy(t *testing.T) {
 
 	owner := uuid.Must(uuid.NewV7())
 	repo := &fakeCategoryRepo{categories: []domain.OperationCategory{
-		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeIncome, Name: "Own"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Type: domain.OperationTypeIncome, Name: testOwnedRowName},
 	}}
 
 	svc := NewCategoryService(repo, nil)
-	svc.SetPolicy(fakePolicy{}) // scopes intentionally left nil
+	svc.SetPolicy(fakePolicy{}) // Scopes intentionally left nil.
 
 	got, err := svc.ListCategories(ctx, owner, ListOperationCategoriesQuery{})
 	if err != nil {

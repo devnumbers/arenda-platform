@@ -70,7 +70,7 @@ type OperationService struct {
 	clock      clock.Clock
 	tzResolver sharedtz.OwnerTimezoneResolver
 	policy     sharedpolicy.Policy
-	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
+	// SharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
 	// finance report only covers the actor's own operations (issue #157, T3).
 	sharedIDs SharedPropertyIDs
 	logger    *slog.Logger
@@ -221,10 +221,10 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 		}
 
 		opCtx := map[string]any{
-			"property_id":    domain.PropertyIDPtr(created.PropertyID),
-			"type":           string(created.Type),
-			"amount_kopecks": created.AmountKopecks,
-			"operation_date": created.OperationDate.Format(time.DateOnly),
+			auditKeyPropertyID: domain.PropertyIDPtr(created.PropertyID),
+			"type":             string(created.Type),
+			"amount_kopecks":   created.AmountKopecks,
+			"operation_date":   created.OperationDate.Format(time.DateOnly),
 		}
 		if created.LeaseID != uuid.Nil {
 			opCtx["lease_id"] = created.LeaseID
@@ -268,7 +268,7 @@ type FinanceReport struct {
 }
 
 func (s *OperationService) GetFinanceReport(ctx context.Context, actor uuid.UUID, from, to *time.Time) (FinanceReport, error) {
-	// accessiblePropertyIDs restricts the report to the actor's own operations
+	// AccessiblePropertyIDs restricts the report to the actor's own operations
 	// plus operations of properties shared with the actor (issue #157, T3). For
 	// the owner this is empty and the report covers all of the owner's
 	// operations; for a member it additionally includes the shared properties'
@@ -327,7 +327,11 @@ func (s *OperationService) ListOperations(ctx context.Context, actor uuid.UUID, 
 
 // ListOperationsByProperty returns operations for the given owner and property,
 // filtered by the provided criteria.
-func (s *OperationService) ListOperationsByProperty(ctx context.Context, actor, propertyID uuid.UUID, filter OperationFilter) ([]domain.Operation, error) {
+func (s *OperationService) ListOperationsByProperty(
+	ctx context.Context,
+	actor, propertyID uuid.UUID,
+	filter OperationFilter,
+) ([]domain.Operation, error) {
 	scope, err := resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
 	if err != nil {
 		return nil, err
@@ -422,7 +426,7 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 			Action:     auditdomain.ActionOperationUpdated,
 			EntityType: auditdomain.EntityOperation,
 			EntityID:   &id,
-			Context:    map[string]any{"fields": updatedOperationFields(cmd)},
+			Context:    map[string]any{auditKeyFields: updatedOperationFields(cmd)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -636,7 +640,7 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 			Action:     auditdomain.ActionOperationCompleted,
 			EntityType: auditdomain.EntityOperation,
 			EntityID:   &cmd.OperationID,
-			Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
+			Context:    map[string]any{auditKeyPropertyID: domain.PropertyIDPtr(op.PropertyID)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -743,7 +747,7 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 			Action:     auditdomain.ActionOperationMarkedIncomplete,
 			EntityType: auditdomain.EntityOperation,
 			EntityID:   &cmd.OperationID,
-			Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
+			Context:    map[string]any{auditKeyPropertyID: domain.PropertyIDPtr(op.PropertyID)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -757,7 +761,12 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 }
 
 // ListOverdueCandidates returns pending operations with an operation_date before asOf.
-func (s *OperationService) ListOverdueCandidates(ctx context.Context, actor uuid.UUID, asOf time.Time, limit int) ([]domain.Operation, error) {
+func (s *OperationService) ListOverdueCandidates(
+	ctx context.Context,
+	actor uuid.UUID,
+	asOf time.Time,
+	limit int,
+) ([]domain.Operation, error) {
 	ops, err := s.operations.ListPendingOperationsWithPastDate(ctx, actor, asOf, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list overdue candidates: %w", err)
@@ -828,7 +837,7 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, actor, o
 			Action:     auditdomain.ActionOperationUpdated,
 			EntityType: auditdomain.EntityOperation,
 			EntityID:   &operationID,
-			Context:    map[string]any{"trigger": "scheduler", "fields": []string{"status"}},
+			Context:    map[string]any{"trigger": "scheduler", auditKeyFields: []string{"status"}},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -895,7 +904,7 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 			Action:     auditdomain.ActionOperationDeleted,
 			EntityType: auditdomain.EntityOperation,
 			EntityID:   &id,
-			Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
+			Context:    map[string]any{auditKeyPropertyID: domain.PropertyIDPtr(op.PropertyID)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -1051,7 +1060,12 @@ func validateMovableOperation(op domain.Operation, targetPropertyID uuid.UUID) e
 // validateMovePropertiesNotArchived rejects a move when the source or the
 // target property is archived. A property-less operation (detached source)
 // skips the source check.
-func validateMovePropertiesNotArchived(ctx context.Context, properties PropertyRepository, scope, sourcePropertyID, targetPropertyID uuid.UUID) error {
+func validateMovePropertiesNotArchived(
+	ctx context.Context,
+	properties PropertyRepository,
+	scope,
+	sourcePropertyID, targetPropertyID uuid.UUID,
+) error {
 	if sourcePropertyID != uuid.Nil {
 		status, err := properties.GetStatusByOwner(ctx, sourcePropertyID, scope)
 		if err != nil {

@@ -7,7 +7,13 @@ import "time"
 // fall on paymentDay of each month or year (depending on periodicity), clamped
 // to the last day of the month when necessary. Generation stops at 100 years
 // from now or at endDate, whichever comes first.
-func GenerateDates(start time.Time, paymentDay int, endDate *time.Time, now time.Time, periodicity RecurringOperationPeriodicity) []time.Time {
+func GenerateDates(
+	start time.Time,
+	paymentDay int,
+	endDate *time.Time,
+	now time.Time,
+	periodicity RecurringOperationPeriodicity,
+) []time.Time {
 	var dates []time.Time
 
 	windowEnd := date(now).AddDate(100, 0, 0)

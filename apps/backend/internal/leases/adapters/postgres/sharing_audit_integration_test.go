@@ -38,7 +38,8 @@ func (f *policyFixture) incomeRentCategoryID(t *testing.T, ctx context.Context, 
 
 func (f *policyFixture) recurringServiceWithShared() *application.RecurringOperationService {
 	factory := application.NewTxStoreFactory(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, nil, f.uow)
-	svc := application.NewRecurringOperationService(f.recs, f.ops, f.props, f.cats, nil, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
+	svc := application.NewRecurringOperationService(
+		f.recs, f.ops, f.props, f.cats, nil, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
 	svc.SetSharedPropertyIDs(accesspg.NewSharedProperties(f.tx))
 	return svc
 }
@@ -120,7 +121,7 @@ func TestSharingAudit_MultiOwner_AggregatesMerge(t *testing.T) {
 	f := newPolicyFixture(tx)
 	owner1 := createPolicyTestUser(t, ctx, f.q)
 	owner2 := createPolicyTestUser(t, ctx, f.q)
-	stranger := createPolicyTestUser(t, ctx, f.q) // owner the member has NO access to
+	stranger := createPolicyTestUser(t, ctx, f.q) // Owner the member has NO access to.
 	member := createPolicyTestUser(t, ctx, f.q)
 
 	prop1 := createPolicyTestProperty(t, ctx, f.q, owner1)
@@ -174,15 +175,18 @@ func TestSharingAudit_MultiOwner_AggregatesMerge(t *testing.T) {
 	// 1. Operations aggregate: member sees op1 + op2, not opForeign.
 	// Use a property filter scoped to prop1 to isolate from unrelated rows in
 	// the shared test database, then prop2 separately.
-	memberOps1, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: prop1, CategoryIDs: []uuid.UUID{cat1}, Limit: 100})
+	memberOps1, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: prop1, CategoryIDs: []uuid.UUID{cat1}, Limit: 100})
 	if err != nil {
 		t.Fatalf("ListOperations (prop1) as member: %v", err)
 	}
-	memberOps2, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: prop2, CategoryIDs: []uuid.UUID{cat2}, Limit: 100})
+	memberOps2, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: prop2, CategoryIDs: []uuid.UUID{cat2}, Limit: 100})
 	if err != nil {
 		t.Fatalf("ListOperations (prop2) as member: %v", err)
 	}
-	memberOpsForeign, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: foreign, CategoryIDs: []uuid.UUID{catForeign}, Limit: 100})
+	memberOpsForeign, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: foreign, CategoryIDs: []uuid.UUID{catForeign}, Limit: 100})
 	if err != nil {
 		t.Fatalf("ListOperations (foreign) as member: %v", err)
 	}
@@ -268,7 +272,8 @@ func TestSharingAudit_SuspendedMember_ExcludedFromAggregates(t *testing.T) {
 	}
 
 	// Suspended member sees NOTHING of the shared property on aggregates.
-	ops, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	ops, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{Limit: 100})
 	if err != nil {
 		t.Fatalf("ListOperations as suspended: %v", err)
 	}
@@ -312,7 +317,8 @@ func TestSharingAudit_ArchivedSharedProperty_ExcludedFromAggregates(t *testing.T
 	}
 
 	// Before archive: member sees the operation.
-	opsBefore, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	opsBefore, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{Limit: 100})
 	if err != nil {
 		t.Fatalf("ListOperations before archive: %v", err)
 	}
@@ -327,7 +333,8 @@ func TestSharingAudit_ArchivedSharedProperty_ExcludedFromAggregates(t *testing.T
 	}
 
 	// After archive: member no longer sees the shared operation on the aggregate.
-	opsAfter, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	opsAfter, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{Limit: 100})
 	if err != nil {
 		t.Fatalf("ListOperations after archive: %v", err)
 	}
@@ -391,7 +398,8 @@ func TestSharingAudit_DetachDelete_HidesFromMember(t *testing.T) {
 	}
 
 	// Before delete: member sees the shared operation.
-	opsBefore, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	opsBefore, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{Limit: 100})
 	if err != nil {
 		t.Fatalf("list operations before delete: %v", err)
 	}
@@ -415,7 +423,8 @@ func TestSharingAudit_DetachDelete_HidesFromMember(t *testing.T) {
 
 	// After detach delete: member no longer sees the operation (no membership,
 	// and the detached op has no property_id to match).
-	opsAfter, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{Limit: 100})
+	opsAfter, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{Limit: 100})
 	if err != nil {
 		t.Fatalf("list operations after delete: %v", err)
 	}
@@ -448,7 +457,8 @@ func TestSharingAudit_SuspendReactivate_AggregateVisibility(t *testing.T) {
 	memID := membershipIDFor(t, ctx, f.members, property, member)
 
 	// Active: sees the operation.
-	opsActive, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsActive, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
 	if err != nil {
 		t.Fatalf("list operations as active member: %v", err)
 	}
@@ -460,7 +470,8 @@ func TestSharingAudit_SuspendReactivate_AggregateVisibility(t *testing.T) {
 	if err := f.members.Suspend(ctx, memID, property); err != nil {
 		t.Fatalf("suspend: %v", err)
 	}
-	opsSuspended, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsSuspended, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
 	if err != nil {
 		t.Fatalf("list operations as suspended member: %v", err)
 	}
@@ -472,7 +483,8 @@ func TestSharingAudit_SuspendReactivate_AggregateVisibility(t *testing.T) {
 	if _, err := f.members.Reactivate(ctx, memID, property); err != nil {
 		t.Fatalf("reactivate: %v", err)
 	}
-	opsReactivated, err := f.operationServiceWithShared().ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsReactivated, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
 	if err != nil {
 		t.Fatalf("list operations as reactivated member: %v", err)
 	}
@@ -504,9 +516,10 @@ func TestSharingAudit_DowngradeFullToViewer_ReadOkWriteBlocked(t *testing.T) {
 	}
 	memID := membershipIDFor(t, ctx, f.members, property, member)
 
-	// full_access: can read + write.
+	// Full access: can read + write.
 	svc := f.operationServiceWithShared()
-	opsFull, err := svc.ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsFull, err := svc.ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
 	if err != nil {
 		t.Fatalf("list operations as full_access member: %v", err)
 	}
@@ -523,7 +536,8 @@ func TestSharingAudit_DowngradeFullToViewer_ReadOkWriteBlocked(t *testing.T) {
 	}
 
 	// viewer: can still read.
-	opsViewer, err := svc.ListOperations(ctx, member, application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	opsViewer, err := svc.ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: property, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
 	if err != nil {
 		t.Fatalf("list operations as viewer member: %v", err)
 	}

@@ -29,7 +29,13 @@ type LeaseHandlers struct {
 }
 
 // NewLeaseHandlers creates HTTP handlers for the leases API.
-func NewLeaseHandlers(leaseSvc *leasesapp.LeaseService, tenantContactSvc *leasesapp.TenantContactService, logger *slog.Logger, clk clock.Clock, tzResolver sharedtz.OwnerTimezoneResolver) *LeaseHandlers {
+func NewLeaseHandlers(
+	leaseSvc *leasesapp.LeaseService,
+	tenantContactSvc *leasesapp.TenantContactService,
+	logger *slog.Logger,
+	clk clock.Clock,
+	tzResolver sharedtz.OwnerTimezoneResolver,
+) *LeaseHandlers {
 	return &LeaseHandlers{
 		leaseSvc:         leaseSvc,
 		tenantContactSvc: tenantContactSvc,
@@ -52,11 +58,14 @@ func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request,
 	case errors.Is(err, leasesapp.ErrNotFound):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Аренда не найдена"))
 	case errors.Is(err, leasesapp.ErrForbidden):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, leasesapp.ErrPropertyNotAvailable):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Объект недоступен для аренды"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "Объект недоступен для аренды"))
 	case errors.Is(err, leasesapp.ErrOpenLeaseExists):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "У объекта уже есть открытая аренда"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "У объекта уже есть открытая аренда"))
 	case errors.Is(err, leasesapp.ErrAlreadyCompleted),
 		errors.Is(err, leasesapp.ErrArchivedLease),
 		errors.Is(err, leasesapp.ErrInvalidTransition),
@@ -83,14 +92,16 @@ func (h *LeaseHandlers) handleLeaseError(w http.ResponseWriter, r *http.Request,
 func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.LeaseCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create lease request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -128,7 +139,8 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -159,7 +171,8 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 	items := make([]openapi.LeaseResponse, 0, len(leases))
 	for _, lease := range leases {
 		schedule := scheduleIndex[lease.ID]
-		resp, err := h.presenter.LeaseResponse(r.Context(), actor, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
+		resp, err := h.presenter.LeaseResponse(
+			r.Context(), actor, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
 		if err != nil {
 			h.handleLeaseError(w, r, err)
 			return
@@ -174,7 +187,8 @@ func (h *LeaseHandlers) ListLeases(w http.ResponseWriter, r *http.Request) {
 func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -197,7 +211,8 @@ func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid
 	}
 	schedule := scheduleIndex[lease.ID]
 
-	resp, err := h.presenter.LeaseResponse(r.Context(), actor, lease, nil, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
+	resp, err := h.presenter.LeaseResponse(
+		r.Context(), actor, lease, nil, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
 	if err != nil {
 		h.handleLeaseError(w, r, err)
 		return
@@ -210,14 +225,16 @@ func (h *LeaseHandlers) GetLease(w http.ResponseWriter, r *http.Request, id uuid
 func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.LeaseUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update lease request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -257,7 +274,8 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -280,14 +298,16 @@ func (h *LeaseHandlers) CompleteLease(w http.ResponseWriter, r *http.Request, id
 func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.TenantContactCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode create tenant contact request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -314,7 +334,8 @@ func (h *LeaseHandlers) CreateTenantContact(w http.ResponseWriter, r *http.Reque
 func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -359,7 +380,8 @@ func (h *LeaseHandlers) ListTenantContacts(w http.ResponseWriter, r *http.Reques
 func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -376,14 +398,16 @@ func (h *LeaseHandlers) GetTenantContact(w http.ResponseWriter, r *http.Request,
 func (h *LeaseHandlers) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.TenantContactUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update tenant contact request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -417,7 +441,8 @@ func handleTenantContactError(w http.ResponseWriter, r *http.Request, err error)
 	case errors.Is(err, leasesapp.ErrNotFound):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Арендатор не найден"))
 	case errors.Is(err, leasesapp.ErrForbidden):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для изменения арендатора"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для изменения арендатора"))
 	case errors.Is(err, leasesapp.ErrDuplicatePhone):
 		detail, ok := httpsupport.UserFacingDetail(err)
 		if !ok {

@@ -106,7 +106,12 @@ func (r *fakeOperationRepo) ListOperationDatesByRecurringOperation(_ context.Con
 	return out, nil
 }
 
-func (r *fakeOperationRepo) UpdateFutureGeneratedOperationReminderOffsets(_ context.Context, ownerID, recurringOperationID uuid.UUID, offsetDays *int, from time.Time) error {
+func (r *fakeOperationRepo) UpdateFutureGeneratedOperationReminderOffsets(
+	_ context.Context,
+	ownerID, recurringOperationID uuid.UUID,
+	offsetDays *int,
+	from time.Time,
+) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for id, op := range r.ops {
@@ -127,7 +132,11 @@ func (r *fakeOperationRepo) ListByProperty(_ context.Context, ownerID, propertyI
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetPropertyOperationsSummary(_ context.Context, ownerID, propertyID uuid.UUID, asOf time.Time) (OperationsSummary, error) {
+func (r *fakeOperationRepo) GetPropertyOperationsSummary(
+	_ context.Context,
+	ownerID, propertyID uuid.UUID,
+	asOf time.Time,
+) (OperationsSummary, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	monthStart := time.Date(asOf.Year(), asOf.Month(), 1, 0, 0, 0, 0, time.UTC)
@@ -200,7 +209,12 @@ func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID
 	return out, nil
 }
 
-func (r *fakeOperationRepo) ListNextRentPayments(_ context.Context, ownerID uuid.UUID, _ []uuid.UUID, asOf time.Time) ([]NextRentPayment, error) {
+func (r *fakeOperationRepo) ListNextRentPayments(
+	_ context.Context,
+	ownerID uuid.UUID,
+	_ []uuid.UUID,
+	asOf time.Time,
+) ([]NextRentPayment, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	minByLease := make(map[uuid.UUID]time.Time)
@@ -239,7 +253,12 @@ func (r *fakeOperationRepo) GetByID(_ context.Context, id uuid.UUID) (domain.Ope
 	return domain.Operation{}, ErrNotFound
 }
 
-func (r *fakeOperationRepo) MoveToProperty(_ context.Context, id, scope, propertyID uuid.UUID, updatedAt time.Time) (domain.Operation, error) {
+func (r *fakeOperationRepo) MoveToProperty(
+	_ context.Context,
+	id,
+	scope, propertyID uuid.UUID,
+	updatedAt time.Time,
+) (domain.Operation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.ops {
@@ -313,7 +332,11 @@ func (r *fakeOperationRepo) DeleteUneditedFutureOperationsByLease(_ context.Cont
 	return nil
 }
 
-func (r *fakeOperationRepo) DeleteUneditedFutureOperationsByRecurringOperation(_ context.Context, recurringOperationID uuid.UUID, after time.Time) error {
+func (r *fakeOperationRepo) DeleteUneditedFutureOperationsByRecurringOperation(
+	_ context.Context,
+	recurringOperationID uuid.UUID,
+	after time.Time,
+) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	after = timeutil.Date(after)
@@ -339,7 +362,8 @@ func (r *fakeOperationRepo) DeleteFutureGeneratedOperations(_ context.Context, r
 	for _, op := range r.ops {
 		keep := true
 		if op.RecurringOperationID == recurringOperationID && op.OwnerID == ownerID && !op.IsException && op.DeletedAt == nil {
-			if timeutil.Date(op.OperationDate).After(today) && (op.Status == domain.OperationStatusPending || op.Status == domain.OperationStatusOverdue) {
+			if timeutil.Date(op.OperationDate).After(today) &&
+				(op.Status == domain.OperationStatusPending || op.Status == domain.OperationStatusOverdue) {
 				keep = false
 			}
 		}
@@ -351,7 +375,11 @@ func (r *fakeOperationRepo) DeleteFutureGeneratedOperations(_ context.Context, r
 	return nil
 }
 
-func (r *fakeOperationRepo) DeleteUneditedOperationsByRecurringOperation(_ context.Context, recurringOperationID uuid.UUID, from time.Time) error {
+func (r *fakeOperationRepo) DeleteUneditedOperationsByRecurringOperation(
+	_ context.Context,
+	recurringOperationID uuid.UUID,
+	from time.Time,
+) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	from = timeutil.Date(from)
@@ -408,11 +436,20 @@ func (r *fakeOperationRepo) DeleteUneditedOperationsByLease(_ context.Context, l
 	return nil
 }
 
-func (r *fakeOperationRepo) ListByPropertyWithStatuses(_ context.Context, _, _ uuid.UUID, _ []domain.OperationStatus) ([]domain.Operation, error) {
+func (r *fakeOperationRepo) ListByPropertyWithStatuses(
+	_ context.Context,
+	_, _ uuid.UUID,
+	_ []domain.OperationStatus,
+) ([]domain.Operation, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) ListPendingOperationsWithPastDate(_ context.Context, _ uuid.UUID, _ time.Time, _ int) ([]domain.Operation, error) {
+func (r *fakeOperationRepo) ListPendingOperationsWithPastDate(
+	_ context.Context,
+	_ uuid.UUID,
+	_ time.Time,
+	_ int,
+) ([]domain.Operation, error) {
 	return nil, nil
 }
 
@@ -435,19 +472,39 @@ func (r *fakeOperationRepo) MarkOverdue(_ context.Context, ownerID, id uuid.UUID
 	return domain.Operation{}, false, ErrNotFound
 }
 
-func (r *fakeOperationRepo) GetFinanceReportTotals(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) (FinanceReportTotals, error) {
+func (r *fakeOperationRepo) GetFinanceReportTotals(
+	_ context.Context,
+	_ uuid.UUID,
+	_ []uuid.UUID,
+	_, _ *time.Time,
+) (FinanceReportTotals, error) {
 	return FinanceReportTotals{}, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByProperty(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportPropertyRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByProperty(
+	_ context.Context,
+	_ uuid.UUID,
+	_ []uuid.UUID,
+	_, _ *time.Time,
+) ([]FinanceReportPropertyRow, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByCategory(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportCategoryRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByCategory(
+	_ context.Context,
+	_ uuid.UUID,
+	_ []uuid.UUID,
+	_, _ *time.Time,
+) ([]FinanceReportCategoryRow, error) {
 	return nil, nil
 }
 
-func (r *fakeOperationRepo) GetFinanceReportByMonth(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _, _ *time.Time) ([]FinanceReportMonthRow, error) {
+func (r *fakeOperationRepo) GetFinanceReportByMonth(
+	_ context.Context,
+	_ uuid.UUID,
+	_ []uuid.UUID,
+	_, _ *time.Time,
+) ([]FinanceReportMonthRow, error) {
 	return nil, nil
 }
 
@@ -524,7 +581,10 @@ func (r *fakeRecurringOperationRepo) GetByIDAndOwner(_ context.Context, id, _ uu
 	return rec, nil
 }
 
-func (r *fakeRecurringOperationRepo) GetByIDAndOwnerForUpdate(ctx context.Context, id, ownerID uuid.UUID) (domain.RecurringOperation, error) {
+func (r *fakeRecurringOperationRepo) GetByIDAndOwnerForUpdate(
+	ctx context.Context,
+	id, ownerID uuid.UUID,
+) (domain.RecurringOperation, error) {
 	return r.GetByIDAndOwner(ctx, id, ownerID)
 }
 
@@ -604,7 +664,8 @@ func TestGenerateRentOperations_BackdatedLeaseMarksPastPeriodsUnconfirmed(t *tes
 		PaymentDay:        1,
 	}
 
-	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{}, newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 30)}, fakeTzResolver{})
+	svc := NewRentService(&fakeOperationRepo{}, &fakeRecurringOperationRepo{},
+		newFakeCategoryRepoForOwner(ownerID), fakeClock{now: date(2024, 6, 30)}, fakeTzResolver{})
 	ops, err := svc.GenerateRentOperations(ctx, lease, recID, ownerID, testRentCategoryID)
 	if err != nil {
 		t.Fatalf("generate rent operations: %v", err)
@@ -768,7 +829,8 @@ func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t
 	}
 
 	if originalDateCount != 0 {
-		t.Fatalf("expected moved generated operation to block original date %s, got %d operation(s)", originalScheduleDate.Format("2006-01-02"), originalDateCount)
+		t.Fatalf("expected moved generated operation to block original date %s, got %d operation(s)",
+			originalScheduleDate.Format("2006-01-02"), originalDateCount)
 	}
 	if movedDateCount != 1 {
 		t.Fatalf("expected moved generated operation on %s to be preserved once, got %d", movedDate.Format("2006-01-02"), movedDateCount)

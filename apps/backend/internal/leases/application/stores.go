@@ -103,9 +103,9 @@ func NewTxStoreFactory(
 // there are no bind errors to wrap here; audit is bound last all the same.
 // Unwired optional stores stay nil (see txStores).
 //
-// runInTx returns an error if the factory's UoW was not configured — a
-// service without a UoW has no business calling it. This keeps the call sites
-// free of nil checks while making a wiring mistake loud and immediate.
+// A call to runInTx returns an error if the factory's UoW was not configured:
+// a service without a UoW has no business calling it. This keeps the call
+// sites free of nil checks while making a wiring mistake loud and immediate.
 func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error) error {
 	if f.uow == nil {
 		return errors.New("leases runInTx: Unit-of-Work is not configured")

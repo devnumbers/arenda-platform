@@ -30,20 +30,20 @@ func TestTenantContactService_ListTenantContacts_DerivedAccess(t *testing.T) {
 		roles: map[[2]uuid.UUID]sharedpolicy.Role{
 			{memberFull, owner}:   sharedpolicy.RoleFullAccess,
 			{memberViewer, owner}: sharedpolicy.RoleViewer,
-			// stranger has no entry -> RoleNone.
+			// Stranger has no entry -> RoleNone.
 		},
 	}
 	scopes := fakeAccessibleScopes{
 		memberFull:   []uuid.UUID{owner},
 		memberViewer: []uuid.UUID{owner},
-		// stranger -> nil (no accessible owners).
+		// Stranger -> nil (no accessible owners).
 	}
 
 	tests := []struct {
 		name        string
 		actor       uuid.UUID
 		wantCount   int
-		wantContact bool // expects ownerContact in result
+		wantContact bool // Expects ownerContact in result.
 	}{
 		{"owner sees own", owner, 1, true},
 		{"member with full access sees owner contacts", memberFull, 1, true},
@@ -86,7 +86,7 @@ func TestTenantContactService_ListTenantContacts_DerivedAccess_Dedup(t *testing.
 
 	policy := fakePolicy{}
 	scopes := fakeAccessibleScopes{
-		// owner is (incorrectly) listed as accessible to themselves; the
+		// Owner is (incorrectly) listed as accessible to themselves; the
 		// service must dedup so the own contact is not returned twice.
 		owner: []uuid.UUID{owner},
 	}
@@ -172,11 +172,11 @@ func TestTenantContactService_ListTenantContacts_NilSafe_OwnOnly(t *testing.T) {
 	owner := uuid.Must(uuid.NewV7())
 	other := uuid.Must(uuid.NewV7())
 	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{
-		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: "Own"},
-		{ID: uuid.Must(uuid.NewV7()), OwnerID: other, Name: "Other"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: testOwnedRowName},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: other, Name: testOtherRowName},
 	}}
 
-	svc := NewTenantContactService(repo, nil, nil) // no SetPolicy/SetAccessibleScopes
+	svc := NewTenantContactService(repo, nil, nil) // No SetPolicy/SetAccessibleScopes.
 
 	got, err := svc.ListTenantContacts(ctx, owner)
 	if err != nil {
@@ -199,11 +199,11 @@ func TestTenantContactService_ListTenantContacts_NilSafe_OnlyScopes(t *testing.T
 
 	owner := uuid.Must(uuid.NewV7())
 	repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{
-		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: "Own"},
+		{ID: uuid.Must(uuid.NewV7()), OwnerID: owner, Name: testOwnedRowName},
 	}}
 
 	svc := NewTenantContactService(repo, nil, nil)
-	svc.SetAccessibleScopes(fakeAccessibleScopes{}) // policy intentionally left nil
+	svc.SetAccessibleScopes(fakeAccessibleScopes{}) // Policy intentionally left nil.
 
 	got, err := svc.ListTenantContacts(ctx, owner)
 	if err != nil {
@@ -234,7 +234,7 @@ func TestTenantContactService_GetTenantContact_DerivedAccess(t *testing.T) {
 		roles: map[[2]uuid.UUID]sharedpolicy.Role{
 			{memberFull, owner}:   sharedpolicy.RoleFullAccess,
 			{memberViewer, owner}: sharedpolicy.RoleViewer,
-			// stranger has no entry -> RoleNone.
+			// Stranger has no entry -> RoleNone.
 		},
 	}
 
@@ -272,7 +272,7 @@ func TestTenantContactService_GetTenantContact_DerivedAccess(t *testing.T) {
 
 	t.Run("nil policy keeps owner-only behaviour", func(t *testing.T) {
 		t.Parallel()
-		svc := NewTenantContactService(repo, nil, nil) // no SetPolicy
+		svc := NewTenantContactService(repo, nil, nil) // No SetPolicy.
 
 		if _, err := svc.GetTenantContact(ctx, stranger, ownerContact.ID); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("expected ErrNotFound, got %v", err)

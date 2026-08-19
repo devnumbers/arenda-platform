@@ -44,14 +44,14 @@ type TenantContactService struct {
 	repo   TenantContactRepository
 	audit  auditapp.Recorder
 	logger *slog.Logger
-	// policy is injected after construction (see SetPolicy) because the
+	// Policy is injected after construction (see SetPolicy) because the
 	// membership-aware policy is built after the tenant contact service in the
 	// composition root. When nil, only the actor's own data is listed (pre-T2a).
 	policy sharedpolicy.Policy
-	// scopes is optionally injected (see SetAccessibleScopes); when nil only the
+	// Scopes is optionally injected (see SetAccessibleScopes); when nil only the
 	// actor's own contacts are listed.
 	scopes AccessibleScopes
-	// properties resolves the data owner of a property for owner-wide writes
+	// Properties resolves the data owner of a property for owner-wide writes
 	// issued in a property context (Property Sharing follow-up). Injected via
 	// SetProperties; when nil a property context cannot be resolved.
 	properties PropertyRepository
@@ -93,7 +93,11 @@ func (s *TenantContactService) SetProperties(properties PropertyRepository) {
 // the contact is created in the actor's own account; with cmd.PropertyID set
 // it is created in the account of the property's data owner after the
 // shared-access write gate (issue #157 follow-up, card #145 decision).
-func (s *TenantContactService) CreateTenantContact(ctx context.Context, actor uuid.UUID, cmd CreateTenantContactCommand) (domain.TenantContact, error) {
+func (s *TenantContactService) CreateTenantContact(
+	ctx context.Context,
+	actor uuid.UUID,
+	cmd CreateTenantContactCommand,
+) (domain.TenantContact, error) {
 	if strings.TrimSpace(cmd.Name) == "" {
 		return domain.TenantContact{}, ErrInvalidInput
 	}
@@ -190,7 +194,11 @@ func (s *TenantContactService) GetTenantContact(ctx context.Context, actor, id u
 // contacts, a viewer gets ErrForbidden, and anyone without access gets
 // ErrNotFound. Without the policy wired the historical owner-only behaviour
 // is kept.
-func (s *TenantContactService) UpdateTenantContact(ctx context.Context, actor, id uuid.UUID, cmd UpdateTenantContactCommand) (domain.TenantContact, error) {
+func (s *TenantContactService) UpdateTenantContact(
+	ctx context.Context,
+	actor, id uuid.UUID,
+	cmd UpdateTenantContactCommand,
+) (domain.TenantContact, error) {
 	contact, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -286,7 +294,7 @@ func (s *TenantContactService) UpdateTenantContact(ctx context.Context, actor, i
 		Action:     auditdomain.ActionTenantContactUpdated,
 		EntityType: auditdomain.EntityTenantContact,
 		EntityID:   &id,
-		Context:    map[string]any{"fields": updatedTenantContactFields(cmd)},
+		Context:    map[string]any{auditKeyFields: updatedTenantContactFields(cmd)},
 	}); err != nil {
 		return domain.TenantContact{}, fmt.Errorf("record audit: %w", err)
 	}
@@ -322,7 +330,10 @@ func (s *TenantContactService) ListTenantContacts(ctx context.Context, actor uui
 // each enriched with the active lease (if any) and the most recent terminal
 // lease. When the access adapter is injected, contacts of owners whose
 // properties the actor is a member of are appended (issue #157, T2a).
-func (s *TenantContactService) ListTenantContactsWithLeaseStatus(ctx context.Context, actor uuid.UUID) ([]domain.TenantContactWithLeases, error) {
+func (s *TenantContactService) ListTenantContactsWithLeaseStatus(
+	ctx context.Context,
+	actor uuid.UUID,
+) ([]domain.TenantContactWithLeases, error) {
 	var result []domain.TenantContactWithLeases
 	seen := map[uuid.UUID]bool{}
 	if err := s.forEachAccessibleScope(ctx, actor, func(ctx context.Context, scope uuid.UUID) error {
@@ -347,7 +358,11 @@ func (s *TenantContactService) ListTenantContactsWithLeaseStatus(ctx context.Con
 // policy and scopes adapter are injected, for each accessible owner gated by
 // CanView (issue #157, T2a). When either dependency is nil only the actor's own
 // scope is loaded (the pre-T2a behaviour).
-func (s *TenantContactService) forEachAccessibleScope(ctx context.Context, actor uuid.UUID, load func(ctx context.Context, scope uuid.UUID) error) error {
+func (s *TenantContactService) forEachAccessibleScope(
+	ctx context.Context,
+	actor uuid.UUID,
+	load func(ctx context.Context, scope uuid.UUID) error,
+) error {
 	if err := load(ctx, actor); err != nil {
 		return err
 	}
@@ -374,7 +389,11 @@ func (s *TenantContactService) forEachAccessibleScope(ctx context.Context, actor
 }
 
 // ListTenantContactsByIDs returns the tenant contacts for the given owner and IDs.
-func (s *TenantContactService) ListTenantContactsByIDs(ctx context.Context, actor uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]domain.TenantContact, error) {
+func (s *TenantContactService) ListTenantContactsByIDs(
+	ctx context.Context,
+	actor uuid.UUID,
+	ids []uuid.UUID,
+) (map[uuid.UUID]domain.TenantContact, error) {
 	if len(ids) == 0 {
 		return map[uuid.UUID]domain.TenantContact{}, nil
 	}
