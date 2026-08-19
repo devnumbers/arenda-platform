@@ -48,7 +48,7 @@ Adding a new bounded context — checklist:
 
 ## Concurrency and workers
 
-- **Every goroutine has an owner responsible for its exit.** The owner passes the context that cancels it; "fire-and-forget" goroutines with no cancellation path fail review even when `contextcheck` stays quiet about them.
+- **Every goroutine has an owner responsible for its exit.** The owner passes the context that cancels it; "fire-and-forget" goroutines with no cancellation path fail review even when `contextcheck` stays quiet about them. The two long-lived scheduler test binaries (`platform/scheduler`, `identity/adapters/scheduler`) also fail their run on any goroutine that outlives the tests, via `goleak.VerifyTestMain` in `TestMain` (`docs/agents/tooling.md`, #352).
 - Periodic work lives in `platform/scheduler` workers; contexts do not hand-roll their own tick loops.
 - Prefer ownership and channels over shared memory; a mutex is fine for a cache, not fine around an I/O call (see rubric).
 - `make test`'s `-race` integration runs are the backstop, not the design argument.
