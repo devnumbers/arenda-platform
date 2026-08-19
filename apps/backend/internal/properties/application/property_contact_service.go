@@ -32,7 +32,7 @@ type PropertyContactService struct {
 	repo         PropertyContactRepository
 	propertyRepo PropertyRepository
 	logger       *slog.Logger
-	// policy is injected after construction (see SetPolicy) because the
+	// The policy is injected after construction (see SetPolicy) because the
 	// membership-aware policy is built after the properties module in the
 	// composition root. When nil, the historical owner-only behaviour is kept.
 	policy sharedpolicy.Policy
@@ -43,7 +43,9 @@ type PropertyContactService struct {
 // Unit-of-Work of every mutating use case arrive through the embedded factory
 // (ADR 0033 γ-factory); repo and propertyRepo additionally serve the
 // non-transactional reads.
-func NewPropertyContactService(repo PropertyContactRepository, propertyRepo PropertyRepository, factory txStoreFactory, logger *slog.Logger) *PropertyContactService {
+func NewPropertyContactService(
+	repo PropertyContactRepository, propertyRepo PropertyRepository, factory txStoreFactory, logger *slog.Logger,
+) *PropertyContactService {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -62,7 +64,9 @@ func (s *PropertyContactService) SetPolicy(policy sharedpolicy.Policy) {
 // must exist and not be archived. With the policy wired, a member with the edit
 // capability creates the contact in the account of the property's data owner
 // (Property Sharing follow-up); without it, only the owner can create contacts.
-func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, actor, propertyID uuid.UUID, cmd CreatePropertyContactCommand) (domain.PropertyContact, error) {
+func (s *PropertyContactService) CreatePropertyContact(
+	ctx context.Context, actor, propertyID uuid.UUID, cmd CreatePropertyContactCommand,
+) (domain.PropertyContact, error) {
 	name := strings.TrimSpace(cmd.Name)
 	if name == "" {
 		return domain.PropertyContact{}, ErrInvalidInput
@@ -160,7 +164,9 @@ func (s *PropertyContactService) ListPropertyContacts(ctx context.Context, actor
 // archived property is allowed; a missing or foreign contact returns
 // ErrNotFound. With the policy wired, any member with the view capability
 // reads the contacts of the property's data owner (Property Sharing follow-up).
-func (s *PropertyContactService) GetPropertyContact(ctx context.Context, actor, propertyID, contactID uuid.UUID) (domain.PropertyContact, error) {
+func (s *PropertyContactService) GetPropertyContact(
+	ctx context.Context, actor, propertyID, contactID uuid.UUID,
+) (domain.PropertyContact, error) {
 	scope, err := s.readScope(ctx, actor, propertyID)
 	if err != nil {
 		return domain.PropertyContact{}, err
@@ -217,7 +223,9 @@ func (s *PropertyContactService) readScope(ctx context.Context, actor, propertyI
 // With the policy wired, a member with the edit capability updates the contacts
 // of the property's data owner (Property Sharing follow-up); without it, only
 // the owner can update contacts.
-func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, actor, propertyID, contactID uuid.UUID, cmd UpdatePropertyContactCommand) (domain.PropertyContact, error) {
+func (s *PropertyContactService) UpdatePropertyContact(
+	ctx context.Context, actor, propertyID, contactID uuid.UUID, cmd UpdatePropertyContactCommand,
+) (domain.PropertyContact, error) {
 	role := sharedpolicy.RoleOwner
 	if s.policy != nil {
 		r, err := s.policy.RoleForProperty(ctx, actor, propertyID)
@@ -359,7 +367,9 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, acto
 // propertyForUpdate fetches the property inside a write transaction. With the
 // policy wired the fetch is unscoped (the role gate has already authorized the
 // actor); without it the historical owner-scoped fetch is kept.
-func (s *PropertyContactService) propertyForUpdate(ctx context.Context, repo PropertyRepository, actor, propertyID uuid.UUID) (domain.Property, error) {
+func (s *PropertyContactService) propertyForUpdate(
+	ctx context.Context, repo PropertyRepository, actor, propertyID uuid.UUID,
+) (domain.Property, error) {
 	if s.policy != nil {
 		return repo.GetByIDForUpdate(ctx, propertyID)
 	}

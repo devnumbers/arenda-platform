@@ -23,7 +23,9 @@ type S3Storage struct {
 
 // NewS3Storage creates an S3-compatible storage adapter. The ctx scopes the
 // AWS config loading done during construction.
-func NewS3Storage(ctx context.Context, endpoint, region, bucket, accessKey, secretKey, publicBaseURL string, pathStyle bool) (*S3Storage, error) {
+func NewS3Storage(
+	ctx context.Context, endpoint, region, bucket, accessKey, secretKey, publicBaseURL string, pathStyle bool,
+) (*S3Storage, error) {
 	if region == "" {
 		region = "us-east-1"
 	}

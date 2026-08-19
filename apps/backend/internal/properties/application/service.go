@@ -28,7 +28,7 @@ const (
 	maxPhotoCount = 10
 	// MaxPhotoSize caps a single property photo upload; the HTTP adapter
 	// enforces the same bound while buffering a streamed multipart upload.
-	MaxPhotoSize   = 5 * 1024 * 1024 // 5 MiB
+	MaxPhotoSize   = 5 * 1024 * 1024 // 5 MiB.
 	photoKeyPrefix = "properties"
 )
 
@@ -1075,7 +1075,9 @@ func NewPhotoTooLargeError(size int64) error {
 }
 
 // AddPropertyPhoto validates and uploads a photo for the given property.
-func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyID uuid.UUID, file io.Reader, filename, contentType string, size int64) (domain.Property, error) {
+func (s *PropertyService) AddPropertyPhoto(
+	ctx context.Context, actor, propertyID uuid.UUID, file io.Reader, filename, contentType string, size int64,
+) (domain.Property, error) {
 	if _, ok := allowedPhotoContentTypes[contentType]; !ok {
 		return domain.Property{}, fmt.Errorf("%w: unsupported content type %q", ErrInvalidInput, contentType)
 	}

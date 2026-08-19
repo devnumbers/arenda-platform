@@ -67,7 +67,10 @@ func TestPropertyService_DeleteProperty_NotifiesFormerSharedMembers(t *testing.T
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	repo := newFakePropertyRepo(
-		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Квартира на Невском", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{
+			ID: propertyID, OwnerID: ownerID, Name: "Квартира на Невском",
+			Address: testPropertyAddress, Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
 	)
 	shared := &fakeSharedDeleteFlow{emails: []string{"a@example.com", "b@example.com"}}
 	billing := &recordingBillingLifecycle{}

@@ -91,7 +91,8 @@ func TestS3Storage_Upload_SetsContentLength(t *testing.T) {
 	}
 
 	wantSize := int64(42)
-	_, err = storage.Upload(context.Background(), "properties/123/image.jpg", "image/jpeg", wantSize, strings.NewReader(strings.Repeat("x", int(wantSize))))
+	_, err = storage.Upload(context.Background(), "properties/123/image.jpg",
+		"image/jpeg", wantSize, strings.NewReader(strings.Repeat("x", int(wantSize))))
 	if err != nil {
 		t.Fatalf("upload failed: %v", err)
 	}

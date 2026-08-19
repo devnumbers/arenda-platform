@@ -24,6 +24,9 @@ func newPropertyHandlersForMapping(t *testing.T) *PropertyHandlers {
 	return &PropertyHandlers{logger: slog.New(slog.DiscardHandler)}
 }
 
+// attrFloor — код атрибута, повторённый маппинг-тестами пакета.
+const attrFloor = "floor"
+
 func TestPropertyResponse_IncludesAttributes(t *testing.T) {
 	h := newPropertyHandlersForMapping(t)
 
@@ -108,7 +111,7 @@ func TestHandlePropertyError_AttributeValidationErrors(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	err := &propertiesapp.AttributesValidationError{Errors: []domain.AttributeValidationError{
-		{Field: "floor", Reason: "must be between -3 and 200"},
+		{Field: attrFloor, Reason: "must be between -3 and 200"},
 	}}
 	h.handlePropertyError(rr, req, err)
 
@@ -129,7 +132,7 @@ func TestHandlePropertyError_AttributeValidationErrors(t *testing.T) {
 	if got := len(*prob.Errors); got != 1 {
 		t.Fatalf("len(*Problem.Errors) = %d, want 1", got)
 	}
-	if got := (*prob.Errors)[0].Field; got != "floor" {
+	if got := (*prob.Errors)[0].Field; got != attrFloor {
 		t.Fatalf("Problem.Errors[0].Field = %q, want \"floor\"", got)
 	}
 	if got := (*prob.Errors)[0].Detail; got != "must be between -3 and 200" {
@@ -142,7 +145,7 @@ func TestProblemWithFieldErrors(t *testing.T) {
 		context.Background(),
 		"Bad request",
 		"msg",
-		[]openapi.ProblemError{{Field: "floor", Detail: "too high"}},
+		[]openapi.ProblemError{{Field: attrFloor, Detail: "too high"}},
 	)
 
 	if p.Errors == nil {
@@ -151,7 +154,7 @@ func TestProblemWithFieldErrors(t *testing.T) {
 	if got := len(*p.Errors); got != 1 {
 		t.Fatalf("len(*Problem.Errors) = %d, want 1", got)
 	}
-	if got := (*p.Errors)[0].Field; got != "floor" {
+	if got := (*p.Errors)[0].Field; got != attrFloor {
 		t.Fatalf("Problem.Errors[0].Field = %q, want \"floor\"", got)
 	}
 }

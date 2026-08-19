@@ -7,6 +7,52 @@ import (
 	"time"
 )
 
+// Коды атрибутов каталога (tools/property-attributes/catalog.json) и их
+// enum-значения, повторённые в тестах пакета.
+const (
+	attrRooms           = "rooms"
+	attrAreaKitchen     = "area_kitchen"
+	attrAreaLiving      = "area_living"
+	attrAreaTotal       = "area_total"
+	attrBalcony         = "balcony"
+	attrBathroom        = "bathroom"
+	attrCeilingHeight   = "ceiling_height"
+	attrFloor           = "floor"
+	attrFloorsTotal     = "floors_total"
+	attrHouseType       = "house_type"
+	attrLandArea        = "land_area"
+	attrLandType        = "land_type"
+	attrMaterial        = "material"
+	attrBuildingType    = "building_type"
+	attrEntrance        = "entrance"
+	attrParkingLevel    = "parking_level"
+	attrParkingType     = "parking_type"
+	attrParkingLocation = "parking_location"
+	attrRenovation      = "renovation"
+	attrShower          = "shower"
+	attrSpotNumber      = "spot_number"
+	attrYearBuilt       = "year_built"
+
+	enumStudio            = "studio"
+	enumCombined          = "combined"
+	enumLoggia            = "loggia"
+	enumEuro              = "euro"
+	enumUnderground       = "underground"
+	enumGarden            = "garden"
+	enumResidential       = "residential"
+	enumTownhouse         = "townhouse"
+	enumBrickMonolithic   = "brick_monolithic"
+	enumOutdoor           = "outdoor"
+	enumIndoor            = "indoor"
+	enumBusinessCenter    = "business_center"
+	enumSeparate          = "separate"
+	enumDesign            = "design"
+	enumCommon            = "common"
+	enumWarehouseBuilding = "warehouse_building"
+	enumMetal             = "metal"
+	enumIzhs              = "izhs"
+)
+
 // findField returns the first validation error whose Field matches name.
 func findField(t *testing.T, res ValidationResult, name string) (AttributeValidationError, bool) {
 	t.Helper()
@@ -38,9 +84,9 @@ func assertNoField(t *testing.T, res ValidationResult, name string) {
 
 func TestAttributesCatalogKeys(t *testing.T) {
 	apartmentWant := []string{
-		"area_kitchen", "area_living", "area_total", "balcony", "bathroom",
-		"ceiling_height", "floor", "floors_total", "parking_type", "renovation",
-		"rooms", "year_built",
+		attrAreaKitchen, attrAreaLiving, attrAreaTotal, attrBalcony, attrBathroom,
+		attrCeilingHeight, attrFloor, attrFloorsTotal, attrParkingType, attrRenovation,
+		attrRooms, attrYearBuilt,
 	}
 	if got := CatalogKeys(PropertyTypeApartment); !slices.Equal(got, apartmentWant) {
 		t.Fatalf("apartment keys = %v, want %v", got, apartmentWant)
@@ -50,24 +96,24 @@ func TestAttributesCatalogKeys(t *testing.T) {
 	}
 
 	roomWant := []string{
-		"area_kitchen", "area_total", "balcony", "bathroom", "floor",
-		"floors_total", "renovation", "rooms", "year_built",
+		attrAreaKitchen, attrAreaTotal, attrBalcony, attrBathroom, attrFloor,
+		attrFloorsTotal, attrRenovation, attrRooms, attrYearBuilt,
 	}
 	if got := CatalogKeys(PropertyTypeRoom); !slices.Equal(got, roomWant) {
 		t.Fatalf("room keys = %v, want %v", got, roomWant)
 	}
 
 	houseWant := []string{
-		"area_total", "bathroom", "floors_total", "house_type", "land_area",
-		"land_type", "material", "rooms", "shower", "year_built",
+		attrAreaTotal, attrBathroom, attrFloorsTotal, attrHouseType, attrLandArea,
+		attrLandType, attrMaterial, attrRooms, attrShower, attrYearBuilt,
 	}
 	if got := CatalogKeys(PropertyTypeHouse); !slices.Equal(got, houseWant) {
 		t.Fatalf("house keys = %v, want %v", got, houseWant)
 	}
 
 	officeWant := []string{
-		"area_total", "building_type", "entrance", "floor", "floors_total",
-		"renovation", "rooms",
+		attrAreaTotal, attrBuildingType, attrEntrance, attrFloor, attrFloorsTotal,
+		attrRenovation, attrRooms,
 	}
 	if got := CatalogKeys(PropertyTypeOffice); !slices.Equal(got, officeWant) {
 		t.Fatalf("office keys = %v, want %v", got, officeWant)
@@ -77,25 +123,25 @@ func TestAttributesCatalogKeys(t *testing.T) {
 	}
 
 	warehouseWant := []string{
-		"area_total", "building_type", "entrance",
+		attrAreaTotal, attrBuildingType, attrEntrance,
 	}
 	if got := CatalogKeys(PropertyTypeWarehouse); !slices.Equal(got, warehouseWant) {
 		t.Fatalf("warehouse keys = %v, want %v", got, warehouseWant)
 	}
 
-	garageWant := []string{"area_total", "material"}
+	garageWant := []string{attrAreaTotal, attrMaterial}
 	if got := CatalogKeys(PropertyTypeGarage); !slices.Equal(got, garageWant) {
 		t.Fatalf("garage keys = %v, want %v", got, garageWant)
 	}
 
 	parkingWant := []string{
-		"area_total", "parking_level", "parking_location", "spot_number",
+		attrAreaTotal, attrParkingLevel, attrParkingLocation, attrSpotNumber,
 	}
 	if got := CatalogKeys(PropertyTypeParking); !slices.Equal(got, parkingWant) {
 		t.Fatalf("parking keys = %v, want %v", got, parkingWant)
 	}
 
-	landWant := []string{"land_area", "land_type"}
+	landWant := []string{attrLandArea, attrLandType}
 	if got := CatalogKeys(PropertyTypeLand); !slices.Equal(got, landWant) {
 		t.Fatalf("land keys = %v, want %v", got, landWant)
 	}
@@ -108,25 +154,25 @@ func TestAttributesEnumValues(t *testing.T) {
 		valid    string
 		invalid  string
 	}{
-		{PropertyTypeApartment, "rooms", "studio", "studioo"},
-		{PropertyTypeApartment, "bathroom", "combined", "ensuite"},
-		{PropertyTypeApartment, "balcony", "loggia", "terrace"},
-		{PropertyTypeApartment, "renovation", "euro", "lux"},
-		{PropertyTypeApartment, "parking_type", "underground", "valet"},
-		{PropertyTypeRoom, "rooms", "2", "studio"},
-		{PropertyTypeHouse, "land_type", "garden", "residential"},
-		{PropertyTypeHouse, "house_type", "townhouse", "cottage"},
-		{PropertyTypeHouse, "material", "brick_monolithic", "straw"},
-		{PropertyTypeHouse, "bathroom", "outdoor", "bidet"},
-		{PropertyTypeHouse, "shower", "indoor", "bathtub"},
-		{PropertyTypeOffice, "building_type", "business_center", "skyscraper"},
-		{PropertyTypeOffice, "entrance", "separate", "private"},
-		{PropertyTypeOffice, "renovation", "design", "luxury"},
-		{PropertyTypeWarehouse, "entrance", "common", "shared"},
-		{PropertyTypeWarehouse, "building_type", "warehouse_building", "industrial"},
-		{PropertyTypeGarage, "material", "metal", "plastic"},
-		{PropertyTypeParking, "parking_location", "underground", "rooftop"},
-		{PropertyTypeLand, "land_type", "izhs", "recreational"},
+		{PropertyTypeApartment, attrRooms, enumStudio, "studioo"},
+		{PropertyTypeApartment, attrBathroom, enumCombined, "ensuite"},
+		{PropertyTypeApartment, attrBalcony, enumLoggia, "terrace"},
+		{PropertyTypeApartment, attrRenovation, enumEuro, "lux"},
+		{PropertyTypeApartment, attrParkingType, enumUnderground, "valet"},
+		{PropertyTypeRoom, attrRooms, "2", enumStudio},
+		{PropertyTypeHouse, attrLandType, enumGarden, enumResidential},
+		{PropertyTypeHouse, attrHouseType, enumTownhouse, "cottage"},
+		{PropertyTypeHouse, attrMaterial, enumBrickMonolithic, "straw"},
+		{PropertyTypeHouse, attrBathroom, enumOutdoor, "bidet"},
+		{PropertyTypeHouse, attrShower, enumIndoor, "bathtub"},
+		{PropertyTypeOffice, attrBuildingType, enumBusinessCenter, "skyscraper"},
+		{PropertyTypeOffice, attrEntrance, enumSeparate, "private"},
+		{PropertyTypeOffice, attrRenovation, enumDesign, "luxury"},
+		{PropertyTypeWarehouse, attrEntrance, enumCommon, "shared"},
+		{PropertyTypeWarehouse, attrBuildingType, enumWarehouseBuilding, "industrial"},
+		{PropertyTypeGarage, attrMaterial, enumMetal, "plastic"},
+		{PropertyTypeParking, attrParkingLocation, enumUnderground, "rooftop"},
+		{PropertyTypeLand, attrLandType, enumIzhs, "recreational"},
 	}
 	for _, c := range enumCases {
 		res := ValidateAttributes(c.propType, Attributes{c.field: c.valid})
@@ -145,25 +191,25 @@ func TestAttributesNumberRanges(t *testing.T) {
 		wantErr  bool
 	}
 	cases := []tc{
-		{PropertyTypeApartment, "area_total", 1.0, false},
-		{PropertyTypeApartment, "area_total", 0.5, true},
-		{PropertyTypeApartment, "area_total", 100000.0, false},
-		{PropertyTypeApartment, "area_total", 100001.0, true},
-		{PropertyTypeApartment, "ceiling_height", 2.0, false},
-		{PropertyTypeApartment, "ceiling_height", 1.9, true},
-		{PropertyTypeApartment, "ceiling_height", 10.0, false},
-		{PropertyTypeApartment, "ceiling_height", 10.1, true},
-		{PropertyTypeHouse, "land_area", 0.01, false},
-		{PropertyTypeHouse, "land_area", 0.001, true},
-		{PropertyTypeWarehouse, "area_total", 1.0, false},
-		{PropertyTypeWarehouse, "area_total", 0.5, true},
-		{PropertyTypeGarage, "area_total", 100000.0, false},
-		{PropertyTypeGarage, "area_total", 100001.0, true},
-		{PropertyTypeParking, "area_total", 25.0, false},
-		{PropertyTypeLand, "land_area", 0.01, false},
-		{PropertyTypeLand, "land_area", 0.001, true},
-		{PropertyTypeLand, "land_area", 1000000.0, false},
-		{PropertyTypeLand, "land_area", 1000001.0, true},
+		{PropertyTypeApartment, attrAreaTotal, 1.0, false},
+		{PropertyTypeApartment, attrAreaTotal, 0.5, true},
+		{PropertyTypeApartment, attrAreaTotal, 100000.0, false},
+		{PropertyTypeApartment, attrAreaTotal, 100001.0, true},
+		{PropertyTypeApartment, attrCeilingHeight, 2.0, false},
+		{PropertyTypeApartment, attrCeilingHeight, 1.9, true},
+		{PropertyTypeApartment, attrCeilingHeight, 10.0, false},
+		{PropertyTypeApartment, attrCeilingHeight, 10.1, true},
+		{PropertyTypeHouse, attrLandArea, 0.01, false},
+		{PropertyTypeHouse, attrLandArea, 0.001, true},
+		{PropertyTypeWarehouse, attrAreaTotal, 1.0, false},
+		{PropertyTypeWarehouse, attrAreaTotal, 0.5, true},
+		{PropertyTypeGarage, attrAreaTotal, 100000.0, false},
+		{PropertyTypeGarage, attrAreaTotal, 100001.0, true},
+		{PropertyTypeParking, attrAreaTotal, 25.0, false},
+		{PropertyTypeLand, attrLandArea, 0.01, false},
+		{PropertyTypeLand, attrLandArea, 0.001, true},
+		{PropertyTypeLand, attrLandArea, 1000000.0, false},
+		{PropertyTypeLand, attrLandArea, 1000001.0, true},
 	}
 	for _, c := range cases {
 		res := ValidateAttributes(c.propType, Attributes{c.field: c.value})
@@ -183,28 +229,28 @@ func TestAttributesIntegerRanges(t *testing.T) {
 		value    float64
 		wantErr  bool
 	}{
-		{PropertyTypeApartment, "floor", -3, false},
-		{PropertyTypeApartment, "floor", -4, true},
-		{PropertyTypeApartment, "floor", 200, false},
-		{PropertyTypeApartment, "floor", 201, true},
-		{PropertyTypeApartment, "floors_total", 1, false},
-		{PropertyTypeApartment, "floors_total", 0, true},
-		{PropertyTypeApartment, "year_built", 1800, false},
-		{PropertyTypeApartment, "year_built", 1799, true},
-		{PropertyTypeApartment, "year_built", float64(currentYear + 5), false},
-		{PropertyTypeApartment, "year_built", float64(currentYear + 6), true},
-		{PropertyTypeHouse, "year_built", 1800, false},
-		{PropertyTypeHouse, "year_built", float64(currentYear + 5), false},
-		{PropertyTypeOffice, "floor", -3, false},
-		{PropertyTypeOffice, "floor", -4, true},
-		{PropertyTypeOffice, "floor", 200, false},
-		{PropertyTypeOffice, "floor", 201, true},
-		{PropertyTypeOffice, "floors_total", 1, false},
-		{PropertyTypeOffice, "floors_total", 0, true},
-		{PropertyTypeParking, "parking_level", -5, false},
-		{PropertyTypeParking, "parking_level", -6, true},
-		{PropertyTypeParking, "parking_level", 100, false},
-		{PropertyTypeParking, "parking_level", 101, true},
+		{PropertyTypeApartment, attrFloor, -3, false},
+		{PropertyTypeApartment, attrFloor, -4, true},
+		{PropertyTypeApartment, attrFloor, 200, false},
+		{PropertyTypeApartment, attrFloor, 201, true},
+		{PropertyTypeApartment, attrFloorsTotal, 1, false},
+		{PropertyTypeApartment, attrFloorsTotal, 0, true},
+		{PropertyTypeApartment, attrYearBuilt, 1800, false},
+		{PropertyTypeApartment, attrYearBuilt, 1799, true},
+		{PropertyTypeApartment, attrYearBuilt, float64(currentYear + 5), false},
+		{PropertyTypeApartment, attrYearBuilt, float64(currentYear + 6), true},
+		{PropertyTypeHouse, attrYearBuilt, 1800, false},
+		{PropertyTypeHouse, attrYearBuilt, float64(currentYear + 5), false},
+		{PropertyTypeOffice, attrFloor, -3, false},
+		{PropertyTypeOffice, attrFloor, -4, true},
+		{PropertyTypeOffice, attrFloor, 200, false},
+		{PropertyTypeOffice, attrFloor, 201, true},
+		{PropertyTypeOffice, attrFloorsTotal, 1, false},
+		{PropertyTypeOffice, attrFloorsTotal, 0, true},
+		{PropertyTypeParking, attrParkingLevel, -5, false},
+		{PropertyTypeParking, attrParkingLevel, -6, true},
+		{PropertyTypeParking, attrParkingLevel, 100, false},
+		{PropertyTypeParking, attrParkingLevel, 101, true},
 	}
 	for _, c := range cases {
 		res := ValidateAttributes(c.propType, Attributes{c.field: c.value})
@@ -217,16 +263,16 @@ func TestAttributesIntegerRanges(t *testing.T) {
 }
 
 func TestAttributesRoomHasNoAreaLiving(t *testing.T) {
-	res := ValidateAttributes(PropertyTypeRoom, Attributes{"area_living": 50.0})
-	assertHasField(t, res, "area_living", "unknown attribute for property type room")
+	res := ValidateAttributes(PropertyTypeRoom, Attributes{attrAreaLiving: 50.0})
+	assertHasField(t, res, attrAreaLiving, "unknown attribute for property type room")
 }
 
 func TestAttributesRoomRoomsStartsAtTwo(t *testing.T) {
-	for _, v := range []string{"studio", "1"} {
-		res := ValidateAttributes(PropertyTypeRoom, Attributes{"rooms": v})
-		assertHasField(t, res, "rooms", "must be one of")
+	for _, v := range []string{enumStudio, "1"} {
+		res := ValidateAttributes(PropertyTypeRoom, Attributes{attrRooms: v})
+		assertHasField(t, res, attrRooms, "must be one of")
 	}
-	res := ValidateAttributes(PropertyTypeRoom, Attributes{"rooms": "2"})
+	res := ValidateAttributes(PropertyTypeRoom, Attributes{attrRooms: "2"})
 	if !res.Valid() {
 		t.Fatalf("rooms=2 on room should be valid, got errors: %+v", res.Errors)
 	}
@@ -235,30 +281,30 @@ func TestAttributesRoomRoomsStartsAtTwo(t *testing.T) {
 func TestAttributesCrossValidations(t *testing.T) {
 	t.Run("apartment floor exceeds floors_total", func(t *testing.T) {
 		res := ValidateAttributes(PropertyTypeApartment, Attributes{
-			"floor":        float64(5),
-			"floors_total": float64(3),
+			attrFloor:       float64(5),
+			attrFloorsTotal: float64(3),
 		})
-		assertHasField(t, res, "floor", "")
+		assertHasField(t, res, attrFloor, "")
 	})
 
 	t.Run("apartment area_living exceeds area_total", func(t *testing.T) {
 		res := ValidateAttributes(PropertyTypeApartment, Attributes{
-			"area_living": 80.0,
-			"area_total":  50.0,
+			attrAreaLiving: 80.0,
+			attrAreaTotal:  50.0,
 		})
-		assertHasField(t, res, "area_living", "")
+		assertHasField(t, res, attrAreaLiving, "")
 	})
 
 	t.Run("apartment area_kitchen exceeds area_total", func(t *testing.T) {
 		res := ValidateAttributes(PropertyTypeApartment, Attributes{
-			"area_kitchen": 40.0,
-			"area_total":   30.0,
+			attrAreaKitchen: 40.0,
+			attrAreaTotal:   30.0,
 		})
-		assertHasField(t, res, "area_kitchen", "")
+		assertHasField(t, res, attrAreaKitchen, "")
 	})
 
 	t.Run("floor alone without floors_total passes", func(t *testing.T) {
-		res := ValidateAttributes(PropertyTypeApartment, Attributes{"floor": float64(3)})
+		res := ValidateAttributes(PropertyTypeApartment, Attributes{attrFloor: float64(3)})
 		if !res.Valid() {
 			t.Fatalf("floor=3 alone should be valid, got errors: %+v", res.Errors)
 		}
@@ -266,34 +312,34 @@ func TestAttributesCrossValidations(t *testing.T) {
 
 	t.Run("room floor exceeds floors_total", func(t *testing.T) {
 		res := ValidateAttributes(PropertyTypeRoom, Attributes{
-			"floor":        float64(5),
-			"floors_total": float64(3),
+			attrFloor:       float64(5),
+			attrFloorsTotal: float64(3),
 		})
-		assertHasField(t, res, "floor", "")
+		assertHasField(t, res, attrFloor, "")
 	})
 
 	t.Run("room area_kitchen exceeds area_total", func(t *testing.T) {
 		res := ValidateAttributes(PropertyTypeRoom, Attributes{
-			"area_kitchen": 40.0,
-			"area_total":   30.0,
+			attrAreaKitchen: 40.0,
+			attrAreaTotal:   30.0,
 		})
-		assertHasField(t, res, "area_kitchen", "")
+		assertHasField(t, res, attrAreaKitchen, "")
 	})
 
 	t.Run("office floor exceeds floors_total", func(t *testing.T) {
 		res := ValidateAttributes(PropertyTypeOffice, Attributes{
-			"floor":        float64(10),
-			"floors_total": float64(5),
+			attrFloor:       float64(10),
+			attrFloorsTotal: float64(5),
 		})
-		assertHasField(t, res, "floor", "")
+		assertHasField(t, res, attrFloor, "")
 	})
 
 	t.Run("commercial floor exceeds floors_total", func(t *testing.T) {
 		res := ValidateAttributes(PropertyTypeCommercial, Attributes{
-			"floor":        float64(10),
-			"floors_total": float64(5),
+			attrFloor:       float64(10),
+			attrFloorsTotal: float64(5),
 		})
-		assertHasField(t, res, "floor", "")
+		assertHasField(t, res, attrFloor, "")
 	})
 }
 
@@ -303,22 +349,22 @@ func TestAttributesUnknownKeys(t *testing.T) {
 }
 
 func TestAttributesNullValues(t *testing.T) {
-	res := ValidateAttributes(PropertyTypeApartment, Attributes{"floor": nil})
-	assertHasField(t, res, "floor", "null")
+	res := ValidateAttributes(PropertyTypeApartment, Attributes{attrFloor: nil})
+	assertHasField(t, res, attrFloor, "null")
 }
 
 func TestAttributesMultipleErrorsCollected(t *testing.T) {
-	// floor=-4 (out of range), rooms=invalid, area_total=0.5 (below min).
+	// Floor=-4 (out of range), rooms=invalid, area_total=0.5 (below min).
 	res := ValidateAttributes(PropertyTypeApartment, Attributes{
-		"floor":      float64(-4),
-		"rooms":      "studioo",
-		"area_total": 0.5,
+		attrFloor:     float64(-4),
+		attrRooms:     "studioo",
+		attrAreaTotal: 0.5,
 	})
 	fields := make(map[string]bool)
 	for _, e := range res.Errors {
 		fields[e.Field] = true
 	}
-	for _, want := range []string{"floor", "rooms", "area_total"} {
+	for _, want := range []string{attrFloor, attrRooms, attrAreaTotal} {
 		if !fields[want] {
 			t.Fatalf("expected an error on field %q, got errors: %+v", want, res.Errors)
 		}
@@ -359,8 +405,8 @@ func TestAttributesUnknownPropertyType(t *testing.T) {
 	}
 
 	res = ValidateAttributes(unknownType, Attributes{
-		"floor":      float64(3),
-		"area_total": 50.0,
+		attrFloor:     float64(3),
+		attrAreaTotal: 50.0,
 	})
 	if len(res.Errors) != 2 {
 		t.Fatalf("expected 2 errors for unknown type non-empty, got %d: %+v", len(res.Errors), res.Errors)
@@ -374,21 +420,22 @@ func TestAttributesUnknownPropertyType(t *testing.T) {
 
 func TestAttributesFilterByType(t *testing.T) {
 	// Use keys that are apartment-only (not in the house catalog) plus one
-	// house-only key (land_area). rooms/area_total are shared by both
-	// apartment and house, so they are excluded to keep the assertions exact.
+	// house-only key (land_area). The rooms and area_total keys are shared
+	// by both apartment and house, so they are excluded to keep the
+	// assertions exact.
 	attrs := Attributes{
-		"area_living":    40.0,  // apartment-only
-		"area_kitchen":   10.0,  // apartment/room-only (not house)
-		"ceiling_height": 2.7,   // apartment-only
-		"land_area":      100.0, // house-only
+		attrAreaLiving:    40.0,  // Apartment-only.
+		attrAreaKitchen:   10.0,  // Apartment/room-only (not house).
+		attrCeilingHeight: 2.7,   // Apartment-only.
+		attrLandArea:      100.0, // House-only.
 	}
 
 	t.Run("apartment filter drops land_area", func(t *testing.T) {
 		out := attrs.FilterByType(PropertyTypeApartment)
-		if _, ok := out["land_area"]; ok {
+		if _, ok := out[attrLandArea]; ok {
 			t.Fatal("land_area should be dropped for apartment")
 		}
-		for _, k := range []string{"area_living", "area_kitchen", "ceiling_height"} {
+		for _, k := range []string{attrAreaLiving, attrAreaKitchen, attrCeilingHeight} {
 			if _, ok := out[k]; !ok {
 				t.Fatalf("%s should be retained for apartment", k)
 			}
@@ -397,10 +444,10 @@ func TestAttributesFilterByType(t *testing.T) {
 
 	t.Run("house filter keeps only land_area", func(t *testing.T) {
 		out := attrs.FilterByType(PropertyTypeHouse)
-		if _, ok := out["land_area"]; !ok {
+		if _, ok := out[attrLandArea]; !ok {
 			t.Fatal("land_area should be retained for house")
 		}
-		for _, k := range []string{"area_living", "area_kitchen", "ceiling_height"} {
+		for _, k := range []string{attrAreaLiving, attrAreaKitchen, attrCeilingHeight} {
 			if _, ok := out[k]; ok {
 				t.Fatalf("%s should be dropped for house", k)
 			}
@@ -420,72 +467,72 @@ func TestAttributesFilterByType(t *testing.T) {
 }
 
 func TestAttributesNumberTypeStrictness(t *testing.T) {
-	res := ValidateAttributes(PropertyTypeApartment, Attributes{"floor": 5.5})
-	assertHasField(t, res, "floor", "expected an integer")
+	res := ValidateAttributes(PropertyTypeApartment, Attributes{attrFloor: 5.5})
+	assertHasField(t, res, attrFloor, "expected an integer")
 
-	// float64 in a string field position is a type mismatch too.
-	res = ValidateAttributes(PropertyTypeApartment, Attributes{"rooms": 3.0})
-	assertHasField(t, res, "rooms", "expected a string")
+	// A float64 in a string field position is a type mismatch too.
+	res = ValidateAttributes(PropertyTypeApartment, Attributes{attrRooms: 3.0})
+	assertHasField(t, res, attrRooms, "expected a string")
 }
 
 func TestAttributesApartmentsMirrorsApartment(t *testing.T) {
 	// A valid apartment set must also be valid for the apartments type, and a
 	// cross-field violation surfaces identically.
 	valid := Attributes{
-		"rooms":        "3",
-		"area_total":   60.0,
-		"area_living":  40.0,
-		"area_kitchen": 10.0,
-		"floor":        float64(2),
-		"floors_total": float64(5),
+		attrRooms:       "3",
+		attrAreaTotal:   60.0,
+		attrAreaLiving:  40.0,
+		attrAreaKitchen: 10.0,
+		attrFloor:       float64(2),
+		attrFloorsTotal: float64(5),
 	}
 	if res := ValidateAttributes(PropertyTypeApartments, valid); !res.Valid() {
 		t.Fatalf("apartments valid set should be valid, got errors: %+v", res.Errors)
 	}
 
 	bad := Attributes{
-		"floor":        float64(9),
-		"floors_total": float64(5),
+		attrFloor:       float64(9),
+		attrFloorsTotal: float64(5),
 	}
 	res := ValidateAttributes(PropertyTypeApartments, bad)
-	assertHasField(t, res, "floor", "")
+	assertHasField(t, res, attrFloor, "")
 }
 
 func TestAttributesCommercialMirrorsOffice(t *testing.T) {
 	valid := Attributes{
-		"building_type": "business_center",
-		"floor":         float64(3),
-		"floors_total":  float64(10),
-		"area_total":    120.0,
-		"rooms":         "4",
-		"entrance":      "separate",
-		"renovation":    "euro",
+		attrBuildingType: enumBusinessCenter,
+		attrFloor:        float64(3),
+		attrFloorsTotal:  float64(10),
+		attrAreaTotal:    120.0,
+		attrRooms:        "4",
+		attrEntrance:     enumSeparate,
+		attrRenovation:   enumEuro,
 	}
 	if res := ValidateAttributes(PropertyTypeCommercial, valid); !res.Valid() {
 		t.Fatalf("commercial valid set should be valid, got errors: %+v", res.Errors)
 	}
 
 	bad := Attributes{
-		"floor":        float64(15),
-		"floors_total": float64(5),
+		attrFloor:       float64(15),
+		attrFloorsTotal: float64(5),
 	}
 	res := ValidateAttributes(PropertyTypeCommercial, bad)
-	assertHasField(t, res, "floor", "")
+	assertHasField(t, res, attrFloor, "")
 }
 
 func TestAttributesParkingSpotNumber(t *testing.T) {
 	// Valid string.
-	res := ValidateAttributes(PropertyTypeParking, Attributes{"spot_number": "A-42"})
+	res := ValidateAttributes(PropertyTypeParking, Attributes{attrSpotNumber: "A-42"})
 	if !res.Valid() {
 		t.Fatalf("spot_number=A-42 should be valid, got errors: %+v", res.Errors)
 	}
 
 	// Over max length (51 chars).
 	longSpot := strings.Repeat("A", 51)
-	res = ValidateAttributes(PropertyTypeParking, Attributes{"spot_number": longSpot})
-	assertHasField(t, res, "spot_number", "must be at most 50 characters")
+	res = ValidateAttributes(PropertyTypeParking, Attributes{attrSpotNumber: longSpot})
+	assertHasField(t, res, attrSpotNumber, "must be at most 50 characters")
 
 	// Non-string value.
-	res = ValidateAttributes(PropertyTypeParking, Attributes{"spot_number": 42.0})
-	assertHasField(t, res, "spot_number", "expected a string")
+	res = ValidateAttributes(PropertyTypeParking, Attributes{attrSpotNumber: 42.0})
+	assertHasField(t, res, attrSpotNumber, "expected a string")
 }

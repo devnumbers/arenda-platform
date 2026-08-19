@@ -24,11 +24,11 @@ import (
 // which keeps a test or a future wiring free to supply only the stores its
 // use cases reach.
 //
-// tx additionally exposes the raw transaction handle: the RecipientSlotPolicy
-// and SharedMembersDeleteMailer ports take a transaction.Tx because the access
-// context implements them over the caller's transaction, so a use case passes
-// stores.tx through when it needs slot enforcement or former-member
-// collection in its transaction.
+// The tx field additionally exposes the raw transaction handle: the
+// RecipientSlotPolicy and SharedMembersDeleteMailer ports take a
+// transaction.Tx because the access context implements them over the caller's
+// transaction, so a use case passes stores.tx through when it needs slot
+// enforcement or former-member collection in its transaction.
 type txStores struct {
 	repo      PropertyRepository
 	photos    PropertyPhotoRepository
@@ -100,13 +100,13 @@ func NewTxStoreFactory(
 //
 // The subscription limiter is the only store with a fallible WithTx; its bind
 // error is wrapped so a limiter that fails to bind aborts the transaction with
-// a clear cause rather than a silent fallthrough. audit is bound last: its
-// WithTx is infallible (auditapp.Recorder.WithTx returns no error), so it
-// cannot mask a prior bind failure.
+// a clear cause rather than a silent fallthrough. The audit store is bound
+// last: its WithTx is infallible (auditapp.Recorder.WithTx returns no error),
+// so it cannot mask a prior bind failure.
 //
-// runInTx returns an error if the factory's UoW was not configured — a service
-// without a UoW has no business calling it. This keeps the call sites free of
-// nil checks while making a wiring mistake loud and immediate.
+// An error is returned if the factory's UoW was not configured — a service
+// without a UoW has no business calling this method. This keeps the call
+// sites free of nil checks while making a wiring mistake loud and immediate.
 func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error) error {
 	if f.uow == nil {
 		return errors.New("properties runInTx: Unit-of-Work is not configured")

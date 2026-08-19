@@ -84,7 +84,9 @@ func (r *PropertyContactRepository) GetByIDAndOwner(ctx context.Context, contact
 }
 
 // Update modifies an existing property contact scoped to the owner.
-func (r *PropertyContactRepository) Update(ctx context.Context, scope uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error) {
+func (r *PropertyContactRepository) Update(
+	ctx context.Context, scope uuid.UUID, contact domain.PropertyContact,
+) (domain.PropertyContact, error) {
 	row, err := r.q().UpdatePropertyContact(ctx, postgres.UpdatePropertyContactParams{
 		ID:      pgconv.UUIDToPgtype(contact.ID),
 		OwnerID: pgconv.UUIDToPgtype(scope),

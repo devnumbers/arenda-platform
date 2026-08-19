@@ -81,7 +81,9 @@ func (r *fakePropertyContactRepo) GetByIDAndOwner(_ context.Context, contactID, 
 	return c, nil
 }
 
-func (r *fakePropertyContactRepo) Update(_ context.Context, scope uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error) {
+func (r *fakePropertyContactRepo) Update(
+	_ context.Context, scope uuid.UUID, contact domain.PropertyContact,
+) (domain.PropertyContact, error) {
 	c, ok := r.contacts[contact.ID]
 	if !ok || c.OwnerID != scope {
 		return domain.PropertyContact{}, ErrNotFound

@@ -8,6 +8,12 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
+// Имя и адрес стандартной фикстуры объекта, повторённые тест-файлами пакета.
+const (
+	testPropertyName    = "Test"
+	testPropertyAddress = "Addr"
+)
+
 // newPropertyTestFactory builds the txStoreFactory for the property service
 // tests: the same collaborators the service receives for its transactional
 // use cases, over the fakeUoW backed by fakePropertyTxBeginner so the

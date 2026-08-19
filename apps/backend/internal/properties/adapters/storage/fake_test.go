@@ -53,7 +53,7 @@ func TestFakeStorage_Upload_LargeFile(t *testing.T) {
 	ctx := context.Background()
 	s := NewFakeStorage("http://localhost:8080/uploads")
 
-	data := bytes.Repeat([]byte("x"), 1024*1024) // 1 MiB
+	data := bytes.Repeat([]byte("x"), 1024*1024) // 1 MiB.
 	url, err := s.Upload(ctx, "properties/123/large.jpg", "image/jpeg", int64(len(data)), bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("upload failed: %v", err)

@@ -194,7 +194,8 @@ func TestPolicyIntegration_PropertyContacts(t *testing.T) {
 		t.Errorf("updated OwnerID: want owner %s, got %s", owner, updated.OwnerID)
 	}
 	viewerName := "Viewer Rename"
-	if _, err := svc.UpdatePropertyContact(ctx, viewer, property, created.ID, application.UpdatePropertyContactCommand{Name: &viewerName}); !errors.Is(err, application.ErrForbidden) {
+	if _, err := svc.UpdatePropertyContact(ctx, viewer, property, created.ID,
+		application.UpdatePropertyContactCommand{Name: &viewerName}); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("UpdatePropertyContact as viewer: want ErrForbidden, got %v", err)
 	}
 	if err := svc.DeletePropertyContact(ctx, viewer, property, created.ID); !errors.Is(err, application.ErrForbidden) {

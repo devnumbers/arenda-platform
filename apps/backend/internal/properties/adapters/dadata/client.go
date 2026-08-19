@@ -19,7 +19,7 @@ import (
 const (
 	defaultTimeout   = 10 * time.Second
 	maxSuggestions   = 10
-	maxResponseBytes = 1 << 20 // 1 MiB
+	maxResponseBytes = 1 << 20 // 1 MiB.
 )
 
 // Config holds the external DaData API settings.

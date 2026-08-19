@@ -22,7 +22,7 @@ func TestHandlePropertyError_AccessOutcomes(t *testing.T) {
 		err                error
 		wantStatus         int
 		wantTitle          string
-		wantCode           string // empty means the "code" key must be absent from the JSON body
+		wantCode           string // Empty means the "code" key must be absent from the JSON body.
 		wantDetailNonEmpty bool
 	}{
 		{

@@ -341,7 +341,8 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 		fakeOccupancyProvider{},
 		fakePropertyBillingLifecycle{},
 		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 10}, fakeOccupancyProvider{}, fakePropertyBillingLifecycle{}),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 10},
+			fakeOccupancyProvider{}, fakePropertyBillingLifecycle{}),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -420,7 +421,8 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 		fakeOccupancyProvider{},
 		fakePropertyBillingLifecycle{},
 		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 1}, fakeOccupancyProvider{}, fakePropertyBillingLifecycle{}),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 1},
+			fakeOccupancyProvider{}, fakePropertyBillingLifecycle{}),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -839,7 +841,7 @@ var _ OccupancyProvider = occupiedSetOccupancyProvider{}
 // recordingBillingLifecycle records the order and arguments of lifecycle calls.
 type recordingBillingLifecycle struct {
 	calls                 []string
-	completeOpenLeasesIDs []uuid.UUID // property IDs passed to CompleteOpenLeases
+	completeOpenLeasesIDs []uuid.UUID // Property IDs passed to CompleteOpenLeases.
 	suspendedIDs          []uuid.UUID
 }
 
@@ -873,9 +875,18 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 	excessID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	repo := newFakePropertyRepo(
-		domain.Property{ID: keepAID, OwnerID: ownerID, Name: "Keep A", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)},
-		domain.Property{ID: keepBID, OwnerID: ownerID, Name: "Keep B", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC)},
-		domain.Property{ID: excessID, OwnerID: ownerID, Name: "Excess", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)},
+		domain.Property{
+			ID: keepAID, OwnerID: ownerID, Name: "Keep A", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		},
+		domain.Property{
+			ID: keepBID, OwnerID: ownerID, Name: "Keep B", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
+		},
+		domain.Property{
+			ID: excessID, OwnerID: ownerID, Name: "Excess", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+		},
 	)
 	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
@@ -885,7 +896,8 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{excessID: true}},
 		billing,
 		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{excessID: true}}, billing),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil,
+			occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{excessID: true}}, billing),
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -938,8 +950,14 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 	propertyBID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 
 	repo := newFakePropertyRepo(
-		domain.Property{ID: propertyAID, OwnerID: ownerID, Name: "A", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
-		domain.Property{ID: propertyBID, OwnerID: ownerID, Name: "B", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{
+			ID: propertyAID, OwnerID: ownerID, Name: "A", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
+		domain.Property{
+			ID: propertyBID, OwnerID: ownerID, Name: "B", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
 	)
 	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
@@ -949,7 +967,8 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyAID: true}},
 		billing,
 		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyAID: true}}, billing),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil,
+			occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyAID: true}}, billing),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -979,7 +998,10 @@ func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	repo := newFakePropertyRepo(
-		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Occupied", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{
+			ID: propertyID, OwnerID: ownerID, Name: "Occupied", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
 	)
 	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
@@ -989,7 +1011,8 @@ func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
 		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyID: true}},
 		billing,
 		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyID: true}}, billing),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil,
+			occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyID: true}}, billing),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -1039,7 +1062,10 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newFakePropertyRepo(
-				domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+				domain.Property{
+					ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: testPropertyAddress,
+					Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+				},
 			)
 			svc := NewPropertyService(
 				repo,
@@ -1113,9 +1139,18 @@ func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *tes
 	excessBID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	repo := newFakePropertyRepo(
-		domain.Property{ID: keepID, OwnerID: ownerID, Name: "Keep", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)},
-		domain.Property{ID: excessAID, OwnerID: ownerID, Name: "Excess A", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC)},
-		domain.Property{ID: excessBID, OwnerID: ownerID, Name: "Excess B", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)},
+		domain.Property{
+			ID: keepID, OwnerID: ownerID, Name: "Keep", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		},
+		domain.Property{
+			ID: excessAID, OwnerID: ownerID, Name: "Excess A", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
+		},
+		domain.Property{
+			ID: excessBID, OwnerID: ownerID, Name: "Excess B", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+		},
 	)
 	slots := &recordingSlotPolicy{}
 	billing := &recordingBillingLifecycle{}
@@ -1202,9 +1237,18 @@ func TestListProperties_AccessRoles(t *testing.T) {
 	brokenID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	repo := scopedPropertyRepo{newFakePropertyRepo(
-		domain.Property{ID: ownID, OwnerID: ownerID, Name: "Own", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
-		domain.Property{ID: sharedID, OwnerID: otherOwnerID, Name: "Shared", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
-		domain.Property{ID: brokenID, OwnerID: otherOwnerID, Name: "Broken", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{
+			ID: ownID, OwnerID: ownerID, Name: "Own", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
+		domain.Property{
+			ID: sharedID, OwnerID: otherOwnerID, Name: "Shared", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
+		domain.Property{
+			ID: brokenID, OwnerID: otherOwnerID, Name: "Broken", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
 	)}
 	svc := NewPropertyService(
 		repo,
@@ -1264,9 +1308,18 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 	brokenID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 
 	repo := scopedPropertyRepo{newFakePropertyRepo(
-		domain.Property{ID: ownID, OwnerID: ownerID, Name: "Own", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived},
-		domain.Property{ID: sharedID, OwnerID: otherOwnerID, Name: "Shared", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived},
-		domain.Property{ID: brokenID, OwnerID: otherOwnerID, Name: "Broken", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived},
+		domain.Property{
+			ID: ownID, OwnerID: ownerID, Name: "Own", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
+		},
+		domain.Property{
+			ID: sharedID, OwnerID: otherOwnerID, Name: "Shared", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
+		},
+		domain.Property{
+			ID: brokenID, OwnerID: otherOwnerID, Name: "Broken", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
+		},
 	)}
 	svc := NewPropertyService(
 		repo,
@@ -1316,12 +1369,18 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 // A resolver failure is logged and degrades to an empty name, never to a
 // failed request.
 func TestGetProperty_AccessContext(t *testing.T) {
+	// Фикстура отображаемого имени владельца.
+	const testOwnerName = "Ivan Petrov"
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	recipientID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
-	property := domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive}
+	property := domain.Property{
+		ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: testPropertyAddress,
+		Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+	}
 
 	newSvc := func(role sharedpolicy.Role, resolver OwnerDisplayNameResolver) *PropertyService {
 		repo := newFakePropertyRepo(property)
@@ -1345,7 +1404,7 @@ func TestGetProperty_AccessContext(t *testing.T) {
 	}
 
 	t.Run("owner gets owner role and no owner name", func(t *testing.T) {
-		svc := newSvc(sharedpolicy.RoleOwner, fakeOwnerNames{names: map[uuid.UUID]string{ownerID: "Ivan Petrov"}})
+		svc := newSvc(sharedpolicy.RoleOwner, fakeOwnerNames{names: map[uuid.UUID]string{ownerID: testOwnerName}})
 		p, err := svc.GetProperty(ctx, ownerID, propertyID)
 		if err != nil {
 			t.Fatalf("GetProperty failed: %v", err)
@@ -1359,7 +1418,7 @@ func TestGetProperty_AccessContext(t *testing.T) {
 	})
 
 	t.Run("recipient gets membership role and owner name", func(t *testing.T) {
-		svc := newSvc(sharedpolicy.RoleFullAccess, fakeOwnerNames{names: map[uuid.UUID]string{ownerID: "Ivan Petrov"}})
+		svc := newSvc(sharedpolicy.RoleFullAccess, fakeOwnerNames{names: map[uuid.UUID]string{ownerID: testOwnerName}})
 		p, err := svc.GetProperty(ctx, recipientID, propertyID)
 		if err != nil {
 			t.Fatalf("GetProperty failed: %v", err)
@@ -1367,8 +1426,8 @@ func TestGetProperty_AccessContext(t *testing.T) {
 		if p.AccessRole != sharedpolicy.RoleFullAccess {
 			t.Errorf("AccessRole = %q, want %q", p.AccessRole, sharedpolicy.RoleFullAccess)
 		}
-		if p.OwnerName != "Ivan Petrov" {
-			t.Errorf("OwnerName = %q, want %q", p.OwnerName, "Ivan Petrov")
+		if p.OwnerName != testOwnerName {
+			t.Errorf("OwnerName = %q, want %q", p.OwnerName, testOwnerName)
 		}
 	})
 
@@ -1411,7 +1470,10 @@ func TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient(t *t
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	repo := newFakePropertyRepo(
-		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Своя квартира", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{
+			ID: propertyID, OwnerID: ownerID, Name: "Своя квартира", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
 	)
 	slots := &recordingSlotPolicy{}
 	billing := &recordingBillingLifecycle{}
@@ -1455,7 +1517,10 @@ func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *te
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	repo := newFakePropertyRepo(
-		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Своя квартира", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{
+			ID: propertyID, OwnerID: ownerID, Name: "Своя квартира", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
 	)
 	slots := &recordingSlotPolicy{}
 	billing := &recordingBillingLifecycle{}

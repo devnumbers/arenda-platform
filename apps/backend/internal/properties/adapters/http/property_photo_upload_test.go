@@ -16,9 +16,9 @@ import (
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 )
 
-// buildPhotoUploadRequest builds a POST request with a multipart/form-data
-// body: an optional leading text field, then a "file" part carrying filename,
-// content type and payload. contentType is empty for a part without one.
+// Builds a POST request with a multipart/form-data body: an optional leading
+// text field, then a "file" part carrying filename, content type and payload.
+// The contentType argument is empty for a part without one.
 func buildPhotoUploadRequest(t *testing.T, leadingTextField bool, filename, contentType string, payload []byte) *http.Request {
 	t.Helper()
 	var buf bytes.Buffer

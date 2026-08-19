@@ -13,6 +13,9 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 )
 
+// attrRooms — код атрибута rooms, повторённый JSONB-тестами пакета.
+const attrRooms = "rooms"
+
 var (
 	migrateOnce sync.Once
 	errMigrate  error
@@ -57,8 +60,9 @@ func createTestOwner(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 		t.Fatalf("insert test owner: %v", err)
 	}
 	t.Cleanup(func() {
-		// t.Context() is canceled once the test ends, so use a fresh context
-		// for cleanup to ensure the owner (and its cascaded property) is removed.
+		// Since t.Context() is canceled once the test ends, use a fresh
+		// context for cleanup to ensure the owner (and its cascaded property)
+		// is removed.
 		if _, err := pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, id); err != nil {
 			t.Logf("cleanup delete owner %s: %v", id, err)
 		}
@@ -86,7 +90,7 @@ func TestPropertyRepository_Attributes_JSONBRoundTrip(t *testing.T) {
 	ownerID := createTestOwner(t, pool)
 
 	property := sampleProperty(ownerID, domain.Attributes{
-		"rooms":      "2",
+		attrRooms:    "2",
 		"area_total": 50.0,
 		"floor":      float64(3),
 	})
@@ -105,9 +109,9 @@ func TestPropertyRepository_Attributes_JSONBRoundTrip(t *testing.T) {
 		t.Fatalf("expected 3 attributes, got %d (%v)", len(got.Attributes), got.Attributes)
 	}
 
-	rooms, ok := got.Attributes["rooms"].(string)
+	rooms, ok := got.Attributes[attrRooms].(string)
 	if !ok || rooms != "2" {
-		t.Fatalf("expected rooms to be string %q, got %T %v", "2", got.Attributes["rooms"], got.Attributes["rooms"])
+		t.Fatalf("expected rooms to be string %q, got %T %v", "2", got.Attributes[attrRooms], got.Attributes[attrRooms])
 	}
 	areaTotal, ok := got.Attributes["area_total"].(float64)
 	if !ok || areaTotal != 50.0 {
@@ -151,7 +155,7 @@ func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
 	repo := NewPropertyRepository(pool)
 	ownerID := createTestOwner(t, pool)
 
-	property := sampleProperty(ownerID, domain.Attributes{"rooms": "2"})
+	property := sampleProperty(ownerID, domain.Attributes{attrRooms: "2"})
 
 	created, err := repo.Create(ctx, ownerID, property)
 	if err != nil {
@@ -160,7 +164,7 @@ func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
 
 	// Update with a completely different key set: the old single key must be gone.
 	created.Attributes = domain.Attributes{
-		"rooms":      "3",
+		attrRooms:    "3",
 		"area_total": 60.0,
 	}
 	if _, err := repo.Update(ctx, ownerID, created); err != nil {
@@ -176,9 +180,9 @@ func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
 		t.Fatalf("expected exactly 2 attributes after update, got %d (%v)", len(got.Attributes), got.Attributes)
 	}
 
-	rooms, ok := got.Attributes["rooms"].(string)
+	rooms, ok := got.Attributes[attrRooms].(string)
 	if !ok || rooms != "3" {
-		t.Fatalf("expected rooms to be string %q, got %T %v", "3", got.Attributes["rooms"], got.Attributes["rooms"])
+		t.Fatalf("expected rooms to be string %q, got %T %v", "3", got.Attributes[attrRooms], got.Attributes[attrRooms])
 	}
 	areaTotal, ok := got.Attributes["area_total"].(float64)
 	if !ok || areaTotal != 60.0 {
