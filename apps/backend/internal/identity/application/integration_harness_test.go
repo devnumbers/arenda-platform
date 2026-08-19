@@ -22,9 +22,14 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// integrationBaseTime anchors every fake-clock advance against a fixed instant
-// so sliding-window and TTL behaviour is deterministic across tests.
-var integrationBaseTime = time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
+// integrationBaseTime anchors every fake-clock advance against the test start
+// so sliding-window and TTL behaviour is deterministic within a test. It must
+// not be frozen to a literal date: sessions.created_at is stamped by the
+// database wall clock, and the chk_sessions_expires_after_created CHECK
+// rejects rows whose fake-clock expires_at falls behind it — a frozen date
+// rots as soon as the real clock passes it. All assertions are relative to
+// the base instant, so anchoring to time.Now() keeps them deterministic.
+var integrationBaseTime = time.Now().UTC().Truncate(time.Second)
 
 // mutableClock is a fake clock.Clock whose Now can be advanced mid-test. It is
 // shared by every service in an integration harness so that the attempt window,
