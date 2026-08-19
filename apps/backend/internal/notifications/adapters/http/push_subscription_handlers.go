@@ -21,23 +21,29 @@ type PushSubscriptionHandlers struct {
 }
 
 // NewPushSubscriptionHandlers creates HTTP handlers for the Web Push API.
-// vapidPublicKey is the application server's public VAPID key served to the
-// frontend; when empty the VAPID endpoint returns 503.
-func NewPushSubscriptionHandlers(svc *notificationsapp.PushSubscriptionService, vapidPublicKey string, logger *slog.Logger) *PushSubscriptionHandlers {
+// The vapidPublicKey parameter is the application server's public VAPID key
+// served to the frontend; when empty the VAPID endpoint returns 503.
+func NewPushSubscriptionHandlers(
+	svc *notificationsapp.PushSubscriptionService,
+	vapidPublicKey string,
+	logger *slog.Logger,
+) *PushSubscriptionHandlers {
 	return &PushSubscriptionHandlers{svc: svc, vapidPubKey: vapidPublicKey, logger: logger}
 }
 
 // GetVapidPublicKey implements GET /push/vapid-public-key.
 func (h *PushSubscriptionHandlers) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
 	if _, ok := httpsupport.UserIDFromContext(r.Context()); !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	if h.vapidPubKey == "" {
 		// VAPID is not configured on the server. The frontend treats this as
 		// "push unavailable" rather than retrying.
-		httpsupport.WriteProblem(r.Context(), w, http.StatusServiceUnavailable, httpsupport.Problem(r.Context(), "Service Unavailable", "Web Push не настроен"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusServiceUnavailable,
+			httpsupport.Problem(r.Context(), "Service Unavailable", "Web Push не настроен"))
 		return
 	}
 
@@ -48,14 +54,17 @@ func (h *PushSubscriptionHandlers) GetVapidPublicKey(w http.ResponseWriter, r *h
 func (h *PushSubscriptionHandlers) CreatePushSubscription(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PushSubscriptionCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create push subscription request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		h.logger.ErrorContext(r.Context(), "failed to decode create push subscription request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -67,7 +76,8 @@ func (h *PushSubscriptionHandlers) CreatePushSubscription(w http.ResponseWriter,
 	})
 	if err != nil {
 		if errors.Is(err, notificationsapp.ErrInvalidPushSubscription) {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+				httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
 			return
 		}
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
@@ -81,14 +91,17 @@ func (h *PushSubscriptionHandlers) CreatePushSubscription(w http.ResponseWriter,
 func (h *PushSubscriptionHandlers) DeletePushSubscription(w http.ResponseWriter, r *http.Request) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PushSubscriptionDeleteRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode delete push subscription request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		h.logger.ErrorContext(r.Context(), "failed to decode delete push subscription request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -98,7 +111,8 @@ func (h *PushSubscriptionHandlers) DeletePushSubscription(w http.ResponseWriter,
 			return
 		}
 		if errors.Is(err, notificationsapp.ErrInvalidPushSubscription) {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+				httpsupport.Problem(r.Context(), "Bad request", "Некорректная push-подписка"))
 			return
 		}
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))

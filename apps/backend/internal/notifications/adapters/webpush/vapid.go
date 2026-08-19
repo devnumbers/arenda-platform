@@ -34,7 +34,7 @@ var ErrInvalidVAPIDKey = errors.New("webpush: invalid VAPID key")
 // p256OrderHex is the order n of the P-256 base point group (SEC 2 §2.4.2).
 const p256OrderHex = "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
 
-// p256Order is the ES256 modulus for scalar arithmetic. stdlib exposes the
+// p256Order is the ES256 modulus for scalar arithmetic. The stdlib exposes the
 // value only through crypto/elliptic, which this package dropped (ADR 0043),
 // so it is pinned as a constant and guarded against drift by
 // TestP256Order_MatchesStdlib.
@@ -45,8 +45,8 @@ var p256Order, _ = new(big.Int).SetString(p256OrderHex, 16)
 // message.
 type vapidSigner struct {
 	privateKey *ecdh.PrivateKey
-	// publicKeyB64 is the base64url-encoded uncompressed public key placed in
-	// the Authorization header's k= segment.
+	// The publicKeyB64 field is the base64url-encoded uncompressed public key
+	// placed in the Authorization header's k= segment.
 	publicKeyB64 string
 	subject      string
 
@@ -213,10 +213,10 @@ func (v *vapidSigner) es256Sign(data []byte) ([]byte, error) {
 
 // es256SignDigest computes the ECDSA signature for an explicit digest and
 // nonce scalar; es256Sign passes a random k, the known-answer test a fixed
-// one. k must be in [1, n-1], and a nonce must never be reused across two
-// signatures — reusing one exposes the private key. The nonce point k·G is
-// derived through crypto/ecdh, and r and s then follow the plain modular
-// equation s = k⁻¹(e + r·d) mod n over big.Int.
+// one. The nonce k must be in [1, n-1], and a nonce must never be reused
+// across two signatures — reusing one exposes the private key. The nonce
+// point k·G is derived through crypto/ecdh, and r and s then follow the plain
+// modular equation s = k⁻¹(e + r·d) mod n over big.Int.
 func (v *vapidSigner) es256SignDigest(digest []byte, k *big.Int) ([]byte, error) {
 	kBytes := make([]byte, 32)
 	k.FillBytes(kBytes)
@@ -224,7 +224,7 @@ func (v *vapidSigner) es256SignDigest(digest []byte, k *big.Int) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("es256 nonce rejected: %w", err)
 	}
-	// Uncompressed point: 0x04 || X || Y. r is the x coordinate modulo n.
+	// Uncompressed point: 0x04 || X || Y. The r component is the x coordinate modulo n.
 	point := noncePriv.PublicKey().Bytes()
 
 	r := new(big.Int).SetBytes(point[1:33])
@@ -233,8 +233,8 @@ func (v *vapidSigner) es256SignDigest(digest []byte, k *big.Int) ([]byte, error)
 		return nil, errES256ZeroComponent
 	}
 
-	// s = k⁻¹(e + r·d) mod n (FIPS 186 §6.4.1). The SHA-256 digest is used
-	// whole: its bit length matches the P-256 order, so only the final
+	// The s value is k⁻¹(e + r·d) mod n (FIPS 186 §6.4.1). The SHA-256 digest
+	// is used whole: its bit length matches the P-256 order, so only the final
 	// reduction modulo n applies.
 	d := new(big.Int).SetBytes(v.privateKey.Bytes())
 	e := new(big.Int).SetBytes(digest)

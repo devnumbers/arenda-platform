@@ -32,11 +32,16 @@ type ReminderRepository interface {
 	// ListCalendarByOwner returns non-cancelled, non-skipped operation and
 	// system reminders for an owner in the half-open time window [from, to),
 	// each with its resolved property name (nil for orphans). Ordered by
-	// scheduled_at ascending. accessiblePropertyIDs extends the result with
-	// reminders of properties shared with the actor (issue #157, T3), restricted
-	// to active/maintenance properties; when empty, only the owner's own
-	// reminders are returned.
-	ListCalendarByOwner(ctx context.Context, scope uuid.UUID, from, to time.Time, accessiblePropertyIDs []uuid.UUID) ([]domain.CalendarReminder, error)
+	// scheduled_at ascending. The accessiblePropertyIDs parameter extends the
+	// result with reminders of properties shared with the actor (issue #157,
+	// T3), restricted to active/maintenance properties; when empty, only the
+	// owner's own reminders are returned.
+	ListCalendarByOwner(
+		ctx context.Context,
+		scope uuid.UUID,
+		from, to time.Time,
+		accessiblePropertyIDs []uuid.UUID,
+	) ([]domain.CalendarReminder, error)
 	MarkReminderSending(ctx context.Context, id uuid.UUID) (domain.Reminder, error)
 	// MarkSent marks a reminder that is currently sending as sent. It is used
 	// after a notification has been dispatched successfully.

@@ -110,7 +110,10 @@ func createPolicyTestProperty(t *testing.T, ctx context.Context, q *genpostgres.
 	return id
 }
 
-func addPolicyMembership(t *testing.T, ctx context.Context, repo *accesspg.MembershipRepository, property, user, grantedBy uuid.UUID, role accessdomain.Role) {
+func addPolicyMembership(
+	t *testing.T, ctx context.Context, repo *accesspg.MembershipRepository,
+	property, user, grantedBy uuid.UUID, role accessdomain.Role,
+) {
 	t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -123,7 +126,10 @@ func addPolicyMembership(t *testing.T, ctx context.Context, repo *accesspg.Membe
 	}
 }
 
-func addSuspendedPolicyMembership(t *testing.T, ctx context.Context, repo *accesspg.MembershipRepository, property, user, grantedBy uuid.UUID, role accessdomain.Role) {
+func addSuspendedPolicyMembership(
+	t *testing.T, ctx context.Context, repo *accesspg.MembershipRepository,
+	property, user, grantedBy uuid.UUID, role accessdomain.Role,
+) {
 	t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {

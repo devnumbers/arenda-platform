@@ -24,7 +24,10 @@ func NewNotifier(resolver application.ContactResolver, sender application.SMSSen
 }
 
 // Notify sends the notification via SMS using the resolved contact when provided.
-func (n *Notifier) Notify(ctx context.Context, notification application.Notification) (providerResponse, renderedPlainBody string, err error) {
+func (n *Notifier) Notify(
+	ctx context.Context,
+	notification application.Notification,
+) (providerResponse, renderedPlainBody string, err error) {
 	contact := notification.Contact
 	if contact == nil {
 		resolved, err := n.resolver.Resolve(ctx, notification.RecipientID)

@@ -35,9 +35,9 @@ func TestScheduledAtForDate(t *testing.T) {
 		date time.Time
 		loc  *time.Location
 		hour int
-		want time.Time // always in UTC
+		want time.Time // Always in UTC.
 	}{
-		// --- Fixed-offset Russian timezones (no DST) ---
+		// Fixed-offset Russian timezones (no DST).
 		{
 			name: "Europe/Moscow UTC+3 hour 10 -> 07:00Z",
 			date: time.Date(2026, 3, 15, 12, 0, 0, 0, moscow),
@@ -60,7 +60,7 @@ func TestScheduledAtForDate(t *testing.T) {
 			want: time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC),
 		},
 
-		// --- America/New_York: DST boundary (spring forward 2026-03-08 02:00) ---
+		// America/New_York: DST boundary (spring forward 2026-03-08 02:00).
 		{
 			name: "America/New_York winter EST UTC-5 hour 10 -> 15:00Z",
 			date: time.Date(2026, 1, 15, 12, 0, 0, 0, newYork),
@@ -90,7 +90,7 @@ func TestScheduledAtForDate(t *testing.T) {
 			want: time.Date(2026, 3, 8, 14, 0, 0, 0, time.UTC),
 		},
 
-		// --- Europe/Berlin: CET/CEST DST ---
+		// Europe/Berlin: CET/CEST DST.
 		{
 			name: "Europe/Berlin winter CET UTC+1 hour 10 -> 09:00Z",
 			date: time.Date(2026, 1, 15, 12, 0, 0, 0, berlin),
@@ -106,7 +106,7 @@ func TestScheduledAtForDate(t *testing.T) {
 			want: time.Date(2026, 7, 15, 8, 0, 0, 0, time.UTC),
 		},
 
-		// --- Different dispatch hours (Europe/Moscow UTC+3) ---
+		// Different dispatch hours (Europe/Moscow UTC+3).
 		{
 			name: "Europe/Moscow midnight hour 0 -> previous day 21:00Z",
 			date: time.Date(2026, 3, 15, 12, 0, 0, 0, moscow),
@@ -338,7 +338,7 @@ func TestValidateReminderDate(t *testing.T) {
 func TestValidateReminderDate_TimezoneShiftsTodayBoundary(t *testing.T) {
 	t.Parallel()
 
-	// now = 2026-03-15T23:30:00Z. In UTC it is still March 15; in
+	// The now value is 2026-03-15T23:30:00Z. In UTC it is still March 15; in
 	// Asia/Vladivostok (UTC+10) it is already March 16 09:30. The acceptance of
 	// a reminder date therefore depends on the owner's timezone: "сегодня" is
 	// interpreted in the owner's timezone.

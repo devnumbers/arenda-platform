@@ -124,11 +124,15 @@ var _ leasesapp.LeaseRepository = handlerFakeLeaseRepo{}
 // constructor requires a non-nil value but GetLease never calls it.
 type handlerFakeCategories struct{}
 
-func (handlerFakeCategories) Create(context.Context, uuid.UUID, leasesdomain.OperationType, string) (leasesdomain.OperationCategory, error) {
+func (handlerFakeCategories) Create(
+	context.Context, uuid.UUID, leasesdomain.OperationType, string,
+) (leasesdomain.OperationCategory, error) {
 	return leasesdomain.OperationCategory{}, nil
 }
 
-func (handlerFakeCategories) ListByOwner(context.Context, uuid.UUID, *leasesdomain.OperationType) ([]leasesdomain.OperationCategory, error) {
+func (handlerFakeCategories) ListByOwner(
+	context.Context, uuid.UUID, *leasesdomain.OperationType,
+) ([]leasesdomain.OperationCategory, error) {
 	return nil, nil
 }
 
@@ -136,7 +140,9 @@ func (handlerFakeCategories) GetByIDAndOwner(context.Context, uuid.UUID, uuid.UU
 	return leasesdomain.OperationCategory{}, nil
 }
 
-func (handlerFakeCategories) GetByOwnerAndCode(context.Context, uuid.UUID, leasesdomain.OperationCategoryDefaultCode) (leasesdomain.OperationCategory, error) {
+func (handlerFakeCategories) GetByOwnerAndCode(
+	context.Context, uuid.UUID, leasesdomain.OperationCategoryDefaultCode,
+) (leasesdomain.OperationCategory, error) {
 	return leasesdomain.OperationCategory{}, nil
 }
 
@@ -169,7 +175,7 @@ func (handlerFakeTzResolver) Resolve(context.Context, uuid.UUID) (*time.Location
 // handlerFakeReminderRepo records the scope and lease of ListByLease calls;
 // the other methods are stubs to satisfy notificationsapp.ReminderRepository.
 type handlerFakeReminderRepo struct {
-	listByLeaseCall [2]uuid.UUID // (scope, leaseID)
+	listByLeaseCall [2]uuid.UUID // (scope, leaseID).
 	called          bool
 }
 
@@ -197,21 +203,29 @@ func (r *handlerFakeReminderRepo) GetByIDUnscoped(context.Context, uuid.UUID) (n
 	return notificationsdomain.Reminder{}, nil
 }
 
-func (r *handlerFakeReminderRepo) ListByOwner(context.Context, uuid.UUID, notificationsapp.ListFilter, []uuid.UUID) ([]notificationsdomain.Reminder, error) {
+func (r *handlerFakeReminderRepo) ListByOwner(
+	context.Context, uuid.UUID, notificationsapp.ListFilter, []uuid.UUID,
+) ([]notificationsdomain.Reminder, error) {
 	return nil, nil
 }
 
-func (r *handlerFakeReminderRepo) ListByOperation(context.Context, uuid.UUID, uuid.UUID, notificationsapp.ListFilter) ([]notificationsdomain.Reminder, error) {
+func (r *handlerFakeReminderRepo) ListByOperation(
+	context.Context, uuid.UUID, uuid.UUID, notificationsapp.ListFilter,
+) ([]notificationsdomain.Reminder, error) {
 	return nil, nil
 }
 
-func (r *handlerFakeReminderRepo) ListByLease(_ context.Context, scope, leaseID uuid.UUID, _ notificationsapp.ListFilter) ([]notificationsdomain.Reminder, error) {
+func (r *handlerFakeReminderRepo) ListByLease(
+	_ context.Context, scope, leaseID uuid.UUID, _ notificationsapp.ListFilter,
+) ([]notificationsdomain.Reminder, error) {
 	r.listByLeaseCall = [2]uuid.UUID{scope, leaseID}
 	r.called = true
 	return nil, nil
 }
 
-func (r *handlerFakeReminderRepo) ListByRecurringOperation(context.Context, uuid.UUID, uuid.UUID, notificationsapp.ListFilter) ([]notificationsdomain.Reminder, error) {
+func (r *handlerFakeReminderRepo) ListByRecurringOperation(
+	context.Context, uuid.UUID, uuid.UUID, notificationsapp.ListFilter,
+) ([]notificationsdomain.Reminder, error) {
 	return nil, nil
 }
 
@@ -223,7 +237,9 @@ func (r *handlerFakeReminderRepo) ListStaleSendingReminders(context.Context, tim
 	return nil, nil
 }
 
-func (r *handlerFakeReminderRepo) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID) ([]notificationsdomain.CalendarReminder, error) {
+func (r *handlerFakeReminderRepo) ListCalendarByOwner(
+	context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID,
+) ([]notificationsdomain.CalendarReminder, error) {
 	return nil, nil
 }
 
@@ -241,7 +257,9 @@ func (r *handlerFakeReminderRepo) MarkFailed(context.Context, uuid.UUID, *time.T
 	return nil
 }
 
-func (r *handlerFakeReminderRepo) SaveSentSMSReminder(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, time.Time) error {
+func (r *handlerFakeReminderRepo) SaveSentSMSReminder(
+	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, time.Time,
+) error {
 	return nil
 }
 
@@ -289,7 +307,9 @@ func (r *handlerFakeReminderRepo) CancelByIDAndOwner(context.Context, uuid.UUID,
 	return false, nil
 }
 
-func (r *handlerFakeReminderRepo) CancelByTarget(context.Context, uuid.UUID, notificationsdomain.TargetType, uuid.UUID, notificationsdomain.EventType) error {
+func (r *handlerFakeReminderRepo) CancelByTarget(
+	context.Context, uuid.UUID, notificationsdomain.TargetType, uuid.UUID, notificationsdomain.EventType,
+) error {
 	return nil
 }
 
@@ -297,23 +317,33 @@ func (r *handlerFakeReminderRepo) CancelByRecurringOperationID(context.Context, 
 	return nil
 }
 
-func (r *handlerFakeReminderRepo) HasReminderForLeaseEvent(context.Context, uuid.UUID, uuid.UUID, notificationsdomain.EventType) (bool, error) {
+func (r *handlerFakeReminderRepo) HasReminderForLeaseEvent(
+	context.Context, uuid.UUID, uuid.UUID, notificationsdomain.EventType,
+) (bool, error) {
 	return false, nil
 }
 
-func (r *handlerFakeReminderRepo) HasReminderForOperationEvent(context.Context, uuid.UUID, uuid.UUID, notificationsdomain.EventType) (bool, error) {
+func (r *handlerFakeReminderRepo) HasReminderForOperationEvent(
+	context.Context, uuid.UUID, uuid.UUID, notificationsdomain.EventType,
+) (bool, error) {
 	return false, nil
 }
 
-func (r *handlerFakeReminderRepo) ListChannelPreferences(context.Context, uuid.UUID) ([]notificationsdomain.NotificationChannelPreference, error) {
+func (r *handlerFakeReminderRepo) ListChannelPreferences(
+	context.Context, uuid.UUID,
+) ([]notificationsdomain.NotificationChannelPreference, error) {
 	return nil, nil
 }
 
-func (r *handlerFakeReminderRepo) UpsertChannelPreference(context.Context, uuid.UUID, notificationsdomain.NotificationChannelPreference) error {
+func (r *handlerFakeReminderRepo) UpsertChannelPreference(
+	context.Context, uuid.UUID, notificationsdomain.NotificationChannelPreference,
+) error {
 	return nil
 }
 
-func (r *handlerFakeReminderRepo) IsChannelAllowed(context.Context, uuid.UUID, notificationsdomain.EventType, notificationsdomain.NotificationChannel) (bool, error) {
+func (r *handlerFakeReminderRepo) IsChannelAllowed(
+	context.Context, uuid.UUID, notificationsdomain.EventType, notificationsdomain.NotificationChannel,
+) (bool, error) {
 	return true, nil
 }
 
@@ -337,7 +367,7 @@ func newListLeaseRemindersHandler(reminderRepo *handlerFakeReminderRepo) *Remind
 	leaseSvc := leasesapp.NewLeaseService(
 		leaseRepo,
 		nil, // properties: unused by GetLease
-		nil, // tenantContacts: unused
+		nil, // The tenantContacts parameter is unused here.
 		handlerFakeCategories{},
 		factory,
 		handlerFakeClock{},

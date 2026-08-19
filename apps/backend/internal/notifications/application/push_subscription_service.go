@@ -37,7 +37,11 @@ type UpsertPushSubscriptionInput struct {
 // Upsert validates the subscription fields and stores them keyed by endpoint.
 // A repeated call with the same endpoint updates the mutable fields (idempotent
 // re-subscribe). It returns the stored subscription.
-func (s *PushSubscriptionService) Upsert(ctx context.Context, userID uuid.UUID, in UpsertPushSubscriptionInput) (domain.PushSubscription, error) {
+func (s *PushSubscriptionService) Upsert(
+	ctx context.Context,
+	userID uuid.UUID,
+	in UpsertPushSubscriptionInput,
+) (domain.PushSubscription, error) {
 	if err := domain.ValidatePushSubscription(in.Endpoint, in.P256dh, in.Auth); err != nil {
 		return domain.PushSubscription{}, fmt.Errorf("%w: %w", ErrInvalidPushSubscription, err)
 	}

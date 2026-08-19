@@ -41,9 +41,9 @@ func NewMetrics() (*Metrics, error) {
 	return &Metrics{dispatched: dispatched}, nil
 }
 
-// RecordDispatch records one push delivery attempt with its outcome. outcome
-// must be one of the outcome* constants. It is nil-safe so the Sender can call
-// it unconditionally even when metrics are disabled.
+// RecordDispatch records one push delivery attempt with its outcome. The
+// outcome must be one of the outcome* constants. It is nil-safe so the Sender
+// can call it unconditionally even when metrics are disabled.
 func (m *Metrics) RecordDispatch(ctx context.Context, outcome string) {
 	if m == nil {
 		return

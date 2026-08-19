@@ -11,6 +11,10 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 )
 
+// removedFreeReminderPath is a removed free-reminder detail path with a fixed
+// id; shared by the three method cases below.
+const removedFreeReminderPath = "/free-reminders/ffffffff-0000-0000-0000-000000000001"
+
 // TestRemovedReminderRoutes_NotFound pins the code contract of the
 // free-reminders removal (issue #382): the generated router no longer
 // registers the removed paths, so any request to them — including old links
@@ -31,9 +35,9 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 		{http.MethodGet, fmt.Sprintf("/properties/%s/free-reminders", handlerPropertyID)},
 		{http.MethodGet, fmt.Sprintf("/properties/%s/free-reminders/upcoming", handlerPropertyID)},
 		{http.MethodGet, "/free-reminders"},
-		{http.MethodGet, "/free-reminders/ffffffff-0000-0000-0000-000000000001"},
-		{http.MethodPatch, "/free-reminders/ffffffff-0000-0000-0000-000000000001"},
-		{http.MethodDelete, "/free-reminders/ffffffff-0000-0000-0000-000000000001"},
+		{http.MethodGet, removedFreeReminderPath},
+		{http.MethodPatch, removedFreeReminderPath},
+		{http.MethodDelete, removedFreeReminderPath},
 	}
 	for _, tc := range removed {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {

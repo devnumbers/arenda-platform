@@ -41,7 +41,7 @@ type DirectNotificationService struct {
 }
 
 // NewDirectNotificationService creates a direct-notification delivery service.
-// appBaseURL is the public web app URL the email buttons point at.
+// The appBaseURL parameter is the public web app URL the email buttons point at.
 func NewDirectNotificationService(
 	prefs ReminderRepository,
 	resolver ContactResolver,
@@ -105,7 +105,13 @@ func (s *DirectNotificationService) notify(ctx context.Context, eventType domain
 // dispatchEmail delivers the email leg: the per-channel preference gates it
 // (ADR 0030), a user without a verified contact is skipped, and a send
 // failure is logged without affecting push.
-func (s *DirectNotificationService) dispatchEmail(ctx context.Context, eventType domain.EventType, userID uuid.UUID, title, body string, logAttrs []any) {
+func (s *DirectNotificationService) dispatchEmail(
+	ctx context.Context,
+	eventType domain.EventType,
+	userID uuid.UUID,
+	title, body string,
+	logAttrs []any,
+) {
 	allowed, err := s.prefs.IsChannelAllowed(ctx, userID, eventType, domain.ChannelEmail)
 	if err != nil {
 		s.log.ErrorContext(ctx, "check email notification permission failed", append(logAttrs, slog.String("error", sanitize.Error(err)))...)
@@ -137,7 +143,13 @@ func (s *DirectNotificationService) dispatchEmail(ctx context.Context, eventType
 // Dead subscriptions (404/410) are deleted; rate limiting stops the device
 // fan-out for this notification; other failures are logged — none of them
 // affect the email leg (mirrors the reminder worker's push semantics).
-func (s *DirectNotificationService) dispatchPush(ctx context.Context, eventType domain.EventType, userID uuid.UUID, title, body string, logAttrs []any) {
+func (s *DirectNotificationService) dispatchPush(
+	ctx context.Context,
+	eventType domain.EventType,
+	userID uuid.UUID,
+	title, body string,
+	logAttrs []any,
+) {
 	if s.pushSender == nil {
 		return
 	}
@@ -176,7 +188,8 @@ pushSubs:
 				s.log.InfoContext(ctx, "push subscription removed (gone)", logAttrs...)
 			}
 		case errors.Is(sendErr, ErrRateLimited):
-			s.log.WarnContext(ctx, "push rate limited, skipping remaining devices", append(logAttrs, slog.String("error", sanitize.Error(sendErr)))...)
+			s.log.WarnContext(ctx, "push rate limited, skipping remaining devices",
+				append(logAttrs, slog.String("error", sanitize.Error(sendErr)))...)
 			break pushSubs
 		default:
 			s.log.ErrorContext(ctx, "send push failed", append(logAttrs, slog.String("error", sanitize.Error(sendErr)))...)

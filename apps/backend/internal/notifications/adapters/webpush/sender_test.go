@@ -76,8 +76,8 @@ func TestSend_Success(t *testing.T) {
 	if got := gotHeaders.Get("Topic"); got != "tag1" {
 		t.Errorf("Topic = %q, want tag1", got)
 	}
-	if got := gotHeaders.Get("Urgency"); got != "normal" {
-		t.Errorf("Urgency = %q, want normal", got)
+	if got := gotHeaders.Get("Urgency"); got != urgencyNormal {
+		t.Errorf("Urgency = %q, want %s", got, urgencyNormal)
 	}
 	authHeader := gotHeaders.Get("Authorization")
 	if authHeader == "" || authHeader[:6] != "vapid " {
@@ -278,11 +278,11 @@ func TestUrgencyForEventType(t *testing.T) {
 		eventType domain.EventType
 		want      string
 	}{
-		{domain.EventOperationDue, "normal"},
-		{domain.EventOperationOverdue, "high"},
-		{domain.EventLeaseExpiring, "normal"},
-		{domain.EventLeaseRequiresAction, "high"},
-		{domain.EventSubscriptionGrace, "normal"},
+		{domain.EventOperationDue, urgencyNormal},
+		{domain.EventOperationOverdue, urgencyHigh},
+		{domain.EventLeaseExpiring, urgencyNormal},
+		{domain.EventLeaseRequiresAction, urgencyHigh},
+		{domain.EventSubscriptionGrace, urgencyNormal},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.eventType), func(t *testing.T) {

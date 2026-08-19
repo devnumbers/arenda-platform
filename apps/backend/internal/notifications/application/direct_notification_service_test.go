@@ -15,6 +15,9 @@ import (
 // best-effort — logged and never failing the other channel — and a nil push
 // sender keeps delivery email-only.
 
+// testOwnerEmail is the shared contact fixture of the direct-notification tests.
+const testOwnerEmail = "owner@example.com"
+
 // channelPrefsRepo embeds the policy-test fake and answers IsChannelAllowed
 // from a per-channel map.
 type channelPrefsRepo struct {
@@ -22,7 +25,9 @@ type channelPrefsRepo struct {
 	allowed map[domain.NotificationChannel]bool
 }
 
-func (r *channelPrefsRepo) IsChannelAllowed(_ context.Context, _ uuid.UUID, _ domain.EventType, ch domain.NotificationChannel) (bool, error) {
+func (r *channelPrefsRepo) IsChannelAllowed(
+	_ context.Context, _ uuid.UUID, _ domain.EventType, ch domain.NotificationChannel,
+) (bool, error) {
 	return r.allowed[ch], nil
 }
 
@@ -116,7 +121,7 @@ func newDirectHarness(t *testing.T) *directHarness {
 	}
 	h.svc = NewDirectNotificationService(
 		h.prefs,
-		fakeResolver{contact: Contact{Channel: ChannelEmail, Email: "owner@example.com"}},
+		fakeResolver{contact: Contact{Channel: ChannelEmail, Email: testOwnerEmail}},
 		h.email,
 		h.push,
 		h.pushSub,
@@ -149,7 +154,7 @@ func TestDirectNotification_BothChannelsDelivered(t *testing.T) {
 	if len(h.email.calls) != 1 {
 		t.Fatalf("emails sent = %d, want 1", len(h.email.calls))
 	}
-	if h.email.calls[0].to != "owner@example.com" || h.email.calls[0].template != "notification" {
+	if h.email.calls[0].to != testOwnerEmail || h.email.calls[0].template != "notification" {
 		t.Errorf("email = %+v, want to owner with the notification template", h.email.calls[0])
 	}
 	if len(h.push.sent) != 2 {
@@ -282,7 +287,7 @@ func TestDirectNotification_NilPushSenderIsEmailOnly(t *testing.T) {
 	h.withSubscriptions(t, directRecipient, "https://push.example/a")
 	h.svc = NewDirectNotificationService(
 		h.prefs,
-		fakeResolver{contact: Contact{Channel: ChannelEmail, Email: "owner@example.com"}},
+		fakeResolver{contact: Contact{Channel: ChannelEmail, Email: testOwnerEmail}},
 		h.email,
 		nil,
 		h.pushSub,

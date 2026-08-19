@@ -94,13 +94,13 @@ func reminderActorAndPolicy(role sharedpolicy.Role) (uuid.UUID, fakePolicy) {
 type fakeReminderRepo struct {
 	reminders map[uuid.UUID]domain.Reminder
 
-	updateScheduledAtCalls [][2]uuid.UUID // (scope, id)
-	cancelCalls            [][2]uuid.UUID // (scope, reminderID)
-	cancelled              bool           // CancelByIDAndOwner result
+	updateScheduledAtCalls [][2]uuid.UUID // (scope, id).
+	cancelCalls            [][2]uuid.UUID // (scope, reminderID).
+	cancelled              bool           // CancelByIDAndOwner result.
 
-	storedPrefs   []domain.NotificationChannelPreference // ListChannelPreferences result
-	upsertedPrefs []domain.NotificationChannelPreference // recorded by UpsertChannelPreference
-	upsertErr     error                                  // UpsertChannelPreference failure
+	storedPrefs   []domain.NotificationChannelPreference // ListChannelPreferences result.
+	upsertedPrefs []domain.NotificationChannelPreference // Recorded by UpsertChannelPreference.
+	upsertErr     error                                  // UpsertChannelPreference failure.
 }
 
 func (r *fakeReminderRepo) Save(context.Context, domain.Reminder) error { return nil }
@@ -161,7 +161,9 @@ func (r *fakeReminderRepo) ListStaleSendingReminders(context.Context, time.Time,
 	return nil, nil
 }
 
-func (r *fakeReminderRepo) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID) ([]domain.CalendarReminder, error) {
+func (r *fakeReminderRepo) ListCalendarByOwner(
+	context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID,
+) ([]domain.CalendarReminder, error) {
 	return nil, nil
 }
 

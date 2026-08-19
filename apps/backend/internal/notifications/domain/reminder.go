@@ -106,16 +106,38 @@ func ValidateReminderDate(reminderDate, now time.Time, loc *time.Location) error
 }
 
 // NewOperationReminder creates a pending reminder for a future operation.
-func NewOperationReminder(ownerID, operationID, propertyID uuid.UUID, reminderDate time.Time, title, body string, now time.Time, loc *time.Location, hour int) (Reminder, error) {
+func NewOperationReminder(
+	ownerID, operationID, propertyID uuid.UUID,
+	reminderDate time.Time,
+	title, body string,
+	now time.Time,
+	loc *time.Location,
+	hour int,
+) (Reminder, error) {
 	return newOperationEventReminder(ownerID, operationID, propertyID, EventOperationDue, reminderDate, title, body, now, loc, hour)
 }
 
 // NewOperationOverdueReminder creates a pending reminder for an overdue operation.
-func NewOperationOverdueReminder(ownerID, operationID, propertyID uuid.UUID, reminderDate time.Time, title, body string, now time.Time, loc *time.Location, hour int) (Reminder, error) {
+func NewOperationOverdueReminder(
+	ownerID, operationID, propertyID uuid.UUID,
+	reminderDate time.Time,
+	title, body string,
+	now time.Time,
+	loc *time.Location,
+	hour int,
+) (Reminder, error) {
 	return newOperationEventReminder(ownerID, operationID, propertyID, EventOperationOverdue, reminderDate, title, body, now, loc, hour)
 }
 
-func newOperationEventReminder(ownerID, operationID, propertyID uuid.UUID, eventType EventType, reminderDate time.Time, title, body string, now time.Time, loc *time.Location, hour int) (Reminder, error) {
+func newOperationEventReminder(
+	ownerID, operationID, propertyID uuid.UUID,
+	eventType EventType,
+	reminderDate time.Time,
+	title, body string,
+	now time.Time,
+	loc *time.Location,
+	hour int,
+) (Reminder, error) {
 	if err := ValidateReminderDate(reminderDate, now, loc); err != nil {
 		return Reminder{}, err
 	}
@@ -140,7 +162,15 @@ func newOperationEventReminder(ownerID, operationID, propertyID uuid.UUID, event
 }
 
 // NewLeaseReminder creates a pending reminder for a lease event.
-func NewLeaseReminder(ownerID, leaseID, propertyID uuid.UUID, reminderDate time.Time, title, body string, eventType EventType, now time.Time, loc *time.Location, hour int) (Reminder, error) {
+func NewLeaseReminder(
+	ownerID, leaseID, propertyID uuid.UUID,
+	reminderDate time.Time,
+	title, body string,
+	eventType EventType,
+	now time.Time,
+	loc *time.Location,
+	hour int,
+) (Reminder, error) {
 	if err := ValidateReminderDate(reminderDate, now, loc); err != nil {
 		return Reminder{}, err
 	}

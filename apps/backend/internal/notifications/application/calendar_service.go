@@ -17,10 +17,10 @@ import (
 type CalendarService struct {
 	reminders  ReminderRepository
 	tzResolver tzresolver.OwnerTimezoneResolver
-	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
-	// agenda covers only the actor's own reminders, when set it additionally
-	// includes reminders of the properties shared with the actor (issue #157,
-	// T3), restricted to active/maintenance properties.
+	// The shared IDs are optionally injected (see SetSharedPropertyIDs); when
+	// nil the agenda covers only the actor's own reminders, when set it
+	// additionally includes reminders of the properties shared with the actor
+	// (issue #157, T3), restricted to active/maintenance properties.
 	sharedIDs SharedPropertyIDs
 }
 
@@ -50,11 +50,12 @@ func (s *CalendarService) ListCalendar(ctx context.Context, actor uuid.UUID, fro
 		return nil, fmt.Errorf("resolve owner timezone: %w", err)
 	}
 
-	// accessiblePropertyIDs extends the agenda with reminders of properties
-	// shared with the actor via property membership (issue #157, T3). For the
-	// owner this is empty and the agenda covers only their own reminders; for a
-	// member it additionally includes the shared properties' reminders (matched
-	// by property_id, since their owner_id differs), excluding archived ones.
+	// The accessiblePropertyIDs slice extends the agenda with reminders of
+	// properties shared with the actor via property membership (issue #157, T3).
+	// For the owner this is empty and the agenda covers only their own
+	// reminders; for a member it additionally includes the shared properties'
+	// reminders (matched by property_id, since their owner_id differs),
+	// excluding archived ones.
 	var accessible []uuid.UUID
 	if s.sharedIDs != nil {
 		shared, err := s.sharedIDs.SharedWith(ctx, actor)

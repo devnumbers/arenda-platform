@@ -24,6 +24,9 @@ import (
 // MembershipPolicy over the real repository, with the service called as
 // owner, full-access member, viewer, outsider and suspended member.
 
+// policyTestName is the shared name/title fixture of the seeded rows.
+const policyTestName = "policy test"
+
 // reminderPolicyFixture wires the reminder service with the real repository
 // bound to the test transaction and the real membership policy.
 type reminderPolicyFixture struct {
@@ -72,7 +75,7 @@ func (f *reminderPolicyFixture) seedReminder(t *testing.T, ctx context.Context, 
 	}
 	if _, err := f.q.CreateOperationCategory(ctx, genpostgres.CreateOperationCategoryParams{
 		ID: pgUUID(categoryID), OwnerID: pgUUID(owner),
-		Type: "expense", Name: "policy test",
+		Type: "expense", Name: policyTestName,
 	}); err != nil {
 		t.Fatalf("seed operation category: %v", err)
 	}
@@ -85,7 +88,7 @@ func (f *reminderPolicyFixture) seedReminder(t *testing.T, ctx context.Context, 
 		ID: pgUUID(operationID), OwnerID: pgUUID(owner),
 		PropertyID: pgUUID(property), Type: "expense",
 		CategoryID:          pgUUID(categoryID),
-		Name:                "policy test",
+		Name:                policyTestName,
 		AmountKopecks:       1000,
 		OperationDate:       pgtype.Date{Time: f.clock.now.Add(72 * time.Hour), Valid: true},
 		SourceOperationDate: pgtype.Date{Time: f.clock.now.Add(72 * time.Hour), Valid: true},
@@ -107,8 +110,8 @@ func (f *reminderPolicyFixture) seedReminder(t *testing.T, ctx context.Context, 
 		EventType:    domain.EventOperationDue,
 		Status:       domain.ReminderPending,
 		ScheduledAt:  f.clock.now.Add(24 * time.Hour),
-		MessageTitle: "policy test",
-		MessageBody:  "policy test",
+		MessageTitle: policyTestName,
+		MessageBody:  policyTestName,
 		CreatedAt:    f.clock.now,
 		UpdatedAt:    f.clock.now,
 	}

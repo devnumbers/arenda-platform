@@ -49,7 +49,8 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", notFoundMessage(resource)))
 	case errors.Is(err, notificationsapp.ErrForbidden),
 		errors.Is(err, leasesapp.ErrForbidden):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
 	case errors.Is(err, notificationsapp.ErrInvalidReminderDate),
 		errors.Is(err, notificationsapp.ErrReminderNotPending),
 		errors.Is(err, leasesapp.ErrInvalidInput):
@@ -60,7 +61,8 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 		}
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
 	case errors.Is(err, notificationsapp.ErrConcurrentUpdate):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Напоминание изменено одновременно"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "Напоминание изменено одновременно"))
 	default:
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
@@ -70,7 +72,8 @@ func (h *ReminderHandlers) handleReminderError(w http.ResponseWriter, r *http.Re
 func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -97,7 +100,8 @@ func (h *ReminderHandlers) ListLeaseReminders(w http.ResponseWriter, r *http.Req
 func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request, params openapi.ListRemindersParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -130,12 +134,14 @@ func (h *ReminderHandlers) ListReminders(w http.ResponseWriter, r *http.Request,
 func (h *ReminderHandlers) ListCalendarReminders(w http.ResponseWriter, r *http.Request, params openapi.ListCalendarRemindersParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	if !params.To.After(params.From.Time) {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Диапазон дат некорректен: 'to' должно быть позже 'from'"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Диапазон дат некорректен: 'to' должно быть позже 'from'"))
 		return
 	}
 
@@ -157,14 +163,17 @@ func (h *ReminderHandlers) ListCalendarReminders(w http.ResponseWriter, r *http.
 func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request, reminderID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.ReminderUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update reminder request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		h.logger.ErrorContext(r.Context(), "failed to decode update reminder request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
@@ -181,7 +190,8 @@ func (h *ReminderHandlers) UpdateReminder(w http.ResponseWriter, r *http.Request
 func (h *ReminderHandlers) DeleteReminder(w http.ResponseWriter, r *http.Request, reminderID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

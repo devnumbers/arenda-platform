@@ -37,6 +37,12 @@ const maxResponseRead = 1 << 10
 // is still delivered, it just loses its collapse/replace semantics.
 const maxTopicLen = 32
 
+// Urgency header values (RFC 8030 §5.3); shared with the sender tests.
+const (
+	urgencyHigh   = "high"
+	urgencyNormal = "normal"
+)
+
 // Sender implements application.PushSender with a stdlib-only Web Push adapter:
 // it encrypts the payload (RFC 8291), signs a per-origin VAPID JWT (RFC 8292),
 // and POSTs to the push service endpoint (RFC 8030), mapping the response code
@@ -53,8 +59,8 @@ type Sender struct {
 // client. The keys are base64url-encoded: publicKey is the 65-byte uncompressed
 // P-256 key, privateKey is the 32-byte scalar. Returns an error if the keys are
 // inconsistent (the public key must match the one derived from the private key).
-// metrics records push delivery outcomes (sent/gone/rate_limited/failed); nil
-// is safe (recording becomes a no-op).
+// The metrics parameter records push delivery outcomes
+// (sent/gone/rate_limited/failed); nil is safe (recording becomes a no-op).
 func NewSender(subject, publicKey, privateKey string, metrics *Metrics, logger *slog.Logger) (*Sender, error) {
 	signer, err := newVAPIDSigner(subject, publicKey, privateKey)
 	if err != nil {
@@ -176,9 +182,9 @@ func (s *Sender) mapResponse(ctx context.Context, resp *http.Response) error {
 func urgencyForEventType(eventType domain.EventType) string {
 	switch eventType {
 	case domain.EventOperationOverdue, domain.EventLeaseRequiresAction:
-		return "high"
+		return urgencyHigh
 	default:
-		return "normal"
+		return urgencyNormal
 	}
 }
 

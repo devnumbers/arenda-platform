@@ -36,7 +36,11 @@ func (s *PreferenceService) ListChannelPreferences(ctx context.Context, userID u
 // ReplaceChannelPreferences validates the full per-channel preference set,
 // stores it in a single transaction, and audits the pairs whose permission
 // actually changed. It returns the effective preferences in stable order.
-func (s *PreferenceService) ReplaceChannelPreferences(ctx context.Context, userID uuid.UUID, prefs []domain.NotificationChannelPreference) ([]domain.NotificationChannelPreference, error) {
+func (s *PreferenceService) ReplaceChannelPreferences(
+	ctx context.Context,
+	userID uuid.UUID,
+	prefs []domain.NotificationChannelPreference,
+) ([]domain.NotificationChannelPreference, error) {
 	if err := validateChannelPreferences(prefs); err != nil {
 		return nil, err
 	}

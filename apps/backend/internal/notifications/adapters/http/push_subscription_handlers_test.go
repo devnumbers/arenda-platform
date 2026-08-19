@@ -24,6 +24,9 @@ type fakePushRepo struct {
 	subs []domain.PushSubscription
 }
 
+// testP256dh is the shared P-256dh fixture of the push handler tests.
+const testP256dh = "p256dh-val"
+
 func (r *fakePushRepo) Upsert(_ context.Context, sub domain.PushSubscription) (domain.PushSubscription, error) {
 	for i, s := range r.subs {
 		if s.Endpoint == sub.Endpoint {
@@ -112,7 +115,7 @@ func TestCreatePushSubscription_StoresAndReturns201(t *testing.T) {
 	userID := uuid.Must(uuid.NewV7())
 	body := openapi.PushSubscriptionCreateRequest{
 		Endpoint: "https://fcm.googleapis.com/fcm/send/abc",
-		P256dh:   "p256dh-val",
+		P256dh:   testP256dh,
 		Auth:     "auth-val",
 	}
 
@@ -136,13 +139,13 @@ func TestCreatePushSubscription_IdempotentUpsertByEndpoint(t *testing.T) {
 
 	w1 := httptest.NewRecorder()
 	h.CreatePushSubscription(w1, newPushJSONRequest(t, http.MethodPost, "/push/subscriptions", &userID, openapi.PushSubscriptionCreateRequest{
-		Endpoint: endpoint, P256dh: "p256dh-val", Auth: "auth-1",
+		Endpoint: endpoint, P256dh: testP256dh, Auth: "auth-1",
 	}))
 	require.Equal(t, http.StatusCreated, w1.Code)
 
 	w2 := httptest.NewRecorder()
 	h.CreatePushSubscription(w2, newPushJSONRequest(t, http.MethodPost, "/push/subscriptions", &userID, openapi.PushSubscriptionCreateRequest{
-		Endpoint: endpoint, P256dh: "p256dh-val", Auth: "auth-2",
+		Endpoint: endpoint, P256dh: testP256dh, Auth: "auth-2",
 	}))
 	require.Equal(t, http.StatusCreated, w2.Code)
 
@@ -155,7 +158,7 @@ func TestCreatePushSubscription_InvalidReturns400(t *testing.T) {
 	uid := uuid.Must(uuid.NewV7())
 	body := openapi.PushSubscriptionCreateRequest{
 		Endpoint: "not-a-url",
-		P256dh:   "p256dh-val",
+		P256dh:   testP256dh,
 		Auth:     "auth-val",
 	}
 

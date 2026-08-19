@@ -25,13 +25,13 @@ type ReminderService struct {
 	repo       ReminderRepository
 	clock      clock.Clock
 	tzResolver tzresolver.OwnerTimezoneResolver
-	// policy is injected after construction (see SetPolicy) because the
+	// The policy is injected after construction (see SetPolicy) because the
 	// membership-aware policy is built after the reminder service in the
 	// composition root. Mirrors CategoryService.SetPolicy (issue #166).
 	policy sharedpolicy.Policy
-	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
-	// aggregate list covers only the actor's own reminders, when set it
-	// additionally includes reminders of properties shared with the actor
+	// The shared IDs are optionally injected (see SetSharedPropertyIDs); when
+	// nil the aggregate list covers only the actor's own reminders, when set
+	// it additionally includes reminders of properties shared with the actor
 	// (issue #157, T3), excluding archived shared properties.
 	sharedIDs SharedPropertyIDs
 }
@@ -45,7 +45,12 @@ func (s *ReminderService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
 }
 
 // NewReminderService creates a new reminder service.
-func NewReminderService(repo ReminderRepository, clk clock.Clock, tzResolver tzresolver.OwnerTimezoneResolver, policy sharedpolicy.Policy) *ReminderService {
+func NewReminderService(
+	repo ReminderRepository,
+	clk clock.Clock,
+	tzResolver tzresolver.OwnerTimezoneResolver,
+	policy sharedpolicy.Policy,
+) *ReminderService {
 	return &ReminderService{repo: repo, clock: clk, tzResolver: tzResolver, policy: policy}
 }
 
@@ -119,7 +124,12 @@ func (s *ReminderService) CreateForOperation(ctx context.Context, op OperationIn
 // CreateForRecurringOperation creates concrete reminders for all generated operations using a computed offset.
 // The caller is responsible for providing a transaction-bound service when the
 // reminders must be committed atomically with another operation.
-func (s *ReminderService) CreateForRecurringOperation(ctx context.Context, rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo) error {
+func (s *ReminderService) CreateForRecurringOperation(
+	ctx context.Context,
+	rec RecurringOperationInfo,
+	baseReminderDate time.Time,
+	ops []OperationInfo,
+) error {
 	loc, err := s.tzResolver.Resolve(ctx, rec.OwnerID)
 	if err != nil {
 		return fmt.Errorf("resolve owner timezone: %w", err)
@@ -199,7 +209,11 @@ func (s *ReminderService) ListByLease(ctx context.Context, scope, leaseID uuid.U
 
 // ListByRecurringOperation returns non-cancelled reminders for a recurring
 // operation template and owner.
-func (s *ReminderService) ListByRecurringOperation(ctx context.Context, actor, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error) {
+func (s *ReminderService) ListByRecurringOperation(
+	ctx context.Context,
+	actor, recurringOpID uuid.UUID,
+	filter ListFilter,
+) ([]domain.Reminder, error) {
 	reminders, err := s.repo.ListByRecurringOperation(ctx, actor, recurringOpID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
@@ -334,7 +348,13 @@ func overdueCTA(opType string) string {
 	}
 }
 
-func buildRecurringReminders(rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo, now time.Time, loc *time.Location) ([]domain.Reminder, error) {
+func buildRecurringReminders(
+	rec RecurringOperationInfo,
+	baseReminderDate time.Time,
+	ops []OperationInfo,
+	now time.Time,
+	loc *time.Location,
+) ([]domain.Reminder, error) {
 	if len(ops) == 0 {
 		return nil, nil
 	}
@@ -372,7 +392,10 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time, loc *time.Location) ([]
 	if !timeutil.DateIn(expiringDate, loc).Before(timeutil.DateIn(now, loc)) {
 		expiringTitle := "Аренда скоро заканчивается"
 		expiringBody := "Аренда по объекту заканчивается " + endDate.Format("02.01.2006")
-		expiring, err := domain.NewLeaseReminder(scope, lease.ID, propertyID, expiringDate, expiringTitle, expiringBody, domain.EventLeaseExpiring, now, loc, dispatchHour)
+		expiring, err := domain.NewLeaseReminder(
+			scope, lease.ID, propertyID, expiringDate, expiringTitle, expiringBody,
+			domain.EventLeaseExpiring, now, loc, dispatchHour,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("create lease expiring reminder: %w", err)
 		}
@@ -394,7 +417,10 @@ func buildLeaseReminders(lease LeaseInfo, now time.Time, loc *time.Location) ([]
 func buildLeaseRequiresActionReminder(lease LeaseInfo, now, reminderDate time.Time, loc *time.Location) (domain.Reminder, error) {
 	requiresActionTitle := "Аренда требует действия"
 	requiresActionBody := "Срок аренды закончился. Подтвердите продление или завершение аренды."
-	return domain.NewLeaseReminder(lease.OwnerID, lease.ID, lease.PropertyID, reminderDate, requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, now, loc, dispatchHour)
+	return domain.NewLeaseReminder(
+		lease.OwnerID, lease.ID, lease.PropertyID, reminderDate,
+		requiresActionTitle, requiresActionBody, domain.EventLeaseRequiresAction, now, loc, dispatchHour,
+	)
 }
 
 // scheduler implements ReminderScheduler and runs inside transactions.
@@ -465,7 +491,12 @@ func (s *scheduler) ScheduleOverdueReminder(ctx context.Context, op OperationInf
 }
 
 // ScheduleForRecurringOperation cancels existing reminders and creates concrete reminders for generated operations.
-func (s *scheduler) ScheduleForRecurringOperation(ctx context.Context, rec RecurringOperationInfo, baseReminderDate time.Time, ops []OperationInfo) error {
+func (s *scheduler) ScheduleForRecurringOperation(
+	ctx context.Context,
+	rec RecurringOperationInfo,
+	baseReminderDate time.Time,
+	ops []OperationInfo,
+) error {
 	if err := s.repo.CancelByRecurringOperationID(ctx, rec.OwnerID, rec.ID); err != nil {
 		return err
 	}
@@ -582,7 +613,11 @@ func (s *scheduler) CancelByLease(ctx context.Context, actor, leaseID uuid.UUID)
 
 // HasReminderForOperationEvent reports whether an active reminder exists for the
 // given operation and event type.
-func (s *scheduler) HasReminderForOperationEvent(ctx context.Context, actor, operationID uuid.UUID, eventType domain.EventType) (bool, error) {
+func (s *scheduler) HasReminderForOperationEvent(
+	ctx context.Context,
+	actor, operationID uuid.UUID,
+	eventType domain.EventType,
+) (bool, error) {
 	return s.repo.HasReminderForOperationEvent(ctx, actor, operationID, eventType)
 }
 
