@@ -407,7 +407,12 @@ func (h *PropertyHandlers) ExportPropertyData(w http.ResponseWriter, r *http.Req
 
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", exportASCIIFilename(file.Filename), url.PathEscape(file.Filename)))
-	_, _ = w.Write(file.Content)
+	if _, err := w.Write(file.Content); err != nil {
+		// A truncated export download cannot be retried by the handler (the
+		// status and headers are already sent), so the failure is only logged.
+		h.logger.WarnContext(r.Context(), "failed to write property export body",
+			slog.String("error", httpsupport.SanitizeError(err)))
+	}
 }
 
 // exportASCIIFilename replaces non-ASCII runes with underscores for the

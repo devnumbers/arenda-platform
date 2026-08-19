@@ -230,16 +230,16 @@ linters:
         # return a non-nil error») — исключён здесь и в revive unhandled-error.
         # Форма со звёздочкой обязательна: у методов pointer-receiver, форма
         # без `(*...)` не матчится и работает сегодня только за счёт дефолтных
-        # исключений errcheck — которые выключит disable-default-exclusions
-        # на флипе волны errcheck (волна #354, сетка #325).
+        # исключений errcheck — которые выключил disable-default-exclusions
+        # на флипе волны errcheck (сетка #325, тикет #359).
         - (*strings.Builder).WriteString
         - (*strings.Builder).WriteByte
         - (*strings.Builder).WriteRune
-      # REMEDIATION (этап 2, волны errcheck #353–#359): 248 нарушений
-      # (tx.Rollback, Body.Close, w.Write, blank uuid.NewV7).
-      # check-blank: true
-      # check-type-assertions: true
-      # disable-default-exclusions: true
+      # Флип волны errcheck (волны #353–#359, сетка #325): глобальный счётчик
+      # доведён до 0 — строгость этапа 2 перенесена в действующий конфиг.
+      check-blank: true
+      check-type-assertions: true
+      disable-default-exclusions: true
     govet:
       enable:
         - nilness          # SSA-анализ nil-дерефов; shadow НЕ включать (139 шумовых срабатываний)

@@ -87,7 +87,10 @@ func TestSuggestAddresses(t *testing.T) {
 			var lastBody string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				lastRequest = r
-				body, _ := io.ReadAll(r.Body)
+				body, readErr := io.ReadAll(r.Body)
+				if readErr != nil {
+					t.Errorf("read request body: %v", readErr)
+				}
 				lastBody = string(body)
 				if tc.serverSleep > 0 {
 					time.Sleep(tc.serverSleep)
@@ -95,7 +98,9 @@ func TestSuggestAddresses(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.serverCode)
 				if tc.serverJSON != "" {
-					_, _ = w.Write([]byte(tc.serverJSON))
+					if _, err := w.Write([]byte(tc.serverJSON)); err != nil {
+						t.Errorf("write server fixture body: %v", err)
+					}
 				}
 			}))
 			defer server.Close()
@@ -184,7 +189,9 @@ func TestSuggestAddressesHandlesEmptySuggestions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"suggestions":[]}`))
+		if _, err := w.Write([]byte(`{"suggestions":[]}`)); err != nil {
+			t.Errorf("write empty-suggestions body: %v", err)
+		}
 	}))
 	defer server.Close()
 

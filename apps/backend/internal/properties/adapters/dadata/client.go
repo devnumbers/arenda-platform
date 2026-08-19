@@ -103,7 +103,14 @@ func (c *Client) SuggestAddresses(ctx context.Context, query string) ([]properti
 		}
 		return nil, fmt.Errorf("%w: dadata request failed: %w", propertiesapp.ErrAddressSuggestFailed, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		// The response status is already mapped, so a close failure cannot
+		// fail the suggestion — but it does break connection reuse, which is
+		// worth a warning.
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.log.WarnContext(ctx, "dadata close response body", slog.String("error", closeErr.Error()))
+		}
+	}()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		c.log.WarnContext(ctx, "dadata suggestion upstream error",

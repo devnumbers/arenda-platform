@@ -97,7 +97,13 @@ func TestPolicyIntegration_PropertyContacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() {
+		// Rollback failure means test isolation broke: rows written in the
+		// aborted test transaction would persist in the shared database.
+		if err := tx.Rollback(ctx); err != nil {
+			t.Errorf("rollback properties test tx: %v", err)
+		}
+	}()
 
 	q := genpostgres.New(tx)
 	owner := createContactPolicyTestUser(t, ctx, q)

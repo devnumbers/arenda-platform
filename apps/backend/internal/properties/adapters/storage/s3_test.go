@@ -12,12 +12,13 @@ import (
 func TestS3Storage_Upload_RequestShape(t *testing.T) {
 	var gotMethod, gotPath, gotContentType, gotACL string
 	var gotBody []byte
+	var readErr error
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotContentType = r.Header.Get("Content-Type")
 		gotACL = r.Header.Get("X-Amz-Acl")
-		gotBody, _ = io.ReadAll(r.Body)
+		gotBody, readErr = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -30,6 +31,9 @@ func TestS3Storage_Upload_RequestShape(t *testing.T) {
 	url, err := storage.Upload(context.Background(), "properties/123/image.jpg", "image/jpeg", int64(len("data")), strings.NewReader("data"))
 	if err != nil {
 		t.Fatalf("upload failed: %v", err)
+	}
+	if readErr != nil {
+		t.Fatalf("read uploaded body: %v", readErr)
 	}
 
 	if gotMethod != http.MethodPut {
