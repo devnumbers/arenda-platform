@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -29,10 +28,9 @@ type UpdatePropertyContactCommand struct {
 
 // PropertyContactService orchestrates property contact use cases.
 type PropertyContactService struct {
+	txStoreFactory
 	repo         PropertyContactRepository
 	propertyRepo PropertyRepository
-	db           txBeginner
-	audit        auditapp.Recorder
 	logger       *slog.Logger
 	// policy is injected after construction (see SetPolicy) because the
 	// membership-aware policy is built after the properties module in the
@@ -40,15 +38,16 @@ type PropertyContactService struct {
 	policy sharedpolicy.Policy
 }
 
-// NewPropertyContactService creates a new property contact service.
-func NewPropertyContactService(repo PropertyContactRepository, propertyRepo PropertyRepository, db txBeginner, audit auditapp.Recorder, logger *slog.Logger) *PropertyContactService {
+// NewPropertyContactService creates a new property contact service. The
+// property repository, the contact repository, the audit recorder and the
+// Unit-of-Work of every mutating use case arrive through the embedded factory
+// (ADR 0033 γ-factory); repo and propertyRepo additionally serve the
+// non-transactional reads.
+func NewPropertyContactService(repo PropertyContactRepository, propertyRepo PropertyRepository, factory txStoreFactory, logger *slog.Logger) *PropertyContactService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
-	return &PropertyContactService{repo: repo, propertyRepo: propertyRepo, db: db, audit: audit, logger: logger}
+	return &PropertyContactService{txStoreFactory: factory, repo: repo, propertyRepo: propertyRepo, logger: logger}
 }
 
 // SetPolicy injects the authorization policy (Property Sharing follow-up). The
@@ -89,57 +88,52 @@ func (s *PropertyContactService) CreatePropertyContact(ctx context.Context, acto
 		role = r
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := s.propertyForUpdate(ctx, txPropertyRepo, actor, propertyID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.PropertyContact{}, ErrNotFound
+	var created domain.PropertyContact
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		property, err := s.propertyForUpdate(ctx, stores.repo, actor, propertyID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property: %w", err)
 		}
-		return domain.PropertyContact{}, fmt.Errorf("get property: %w", err)
-	}
-	scope := property.OwnerID
-	if property.Status == domain.PropertyStatusArchived {
-		return domain.PropertyContact{}, ErrArchivedProperty
-	}
+		scope := property.OwnerID
+		if property.Status == domain.PropertyStatusArchived {
+			return ErrArchivedProperty
+		}
 
-	id, err := uuid.NewV7()
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate property contact id: %w", err)
+		}
+
+		contact := domain.PropertyContact{
+			ID:         id,
+			PropertyID: propertyID,
+			OwnerID:    scope,
+			Name:       name,
+			Phone:      normalized,
+		}
+
+		created, err = stores.contacts.Create(ctx, contact)
+		if err != nil {
+			return fmt.Errorf("create property contact: %w", err)
+		}
+
+		// PII (name, phone) is never written to the audit context.
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionPropertyContactCreated,
+			EntityType: auditdomain.EntityPropertyContact,
+			EntityID:   &created.ID,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("generate property contact id: %w", err)
-	}
-
-	contact := domain.PropertyContact{
-		ID:         id,
-		PropertyID: propertyID,
-		OwnerID:    scope,
-		Name:       name,
-		Phone:      normalized,
-	}
-
-	txContactRepo := s.repo.WithTx(tx)
-	created, err := txContactRepo.Create(ctx, contact)
-	if err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("create property contact: %w", err)
-	}
-
-	// PII (name, phone) is never written to the audit context.
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionPropertyContactCreated,
-		EntityType: auditdomain.EntityPropertyContact,
-		EntityID:   &created.ID,
-	}); err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("commit tx: %w", err)
+		return domain.PropertyContact{}, err
 	}
 	return created, nil
 }
@@ -236,74 +230,69 @@ func (s *PropertyContactService) UpdatePropertyContact(ctx context.Context, acto
 		role = r
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := s.propertyForUpdate(ctx, txPropertyRepo, actor, propertyID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.PropertyContact{}, ErrNotFound
-		}
-		return domain.PropertyContact{}, fmt.Errorf("get property: %w", err)
-	}
-	scope := property.OwnerID
-	if property.Status == domain.PropertyStatusArchived {
-		return domain.PropertyContact{}, ErrArchivedProperty
-	}
-
-	txContactRepo := s.repo.WithTx(tx)
-	contact, err := txContactRepo.GetByIDAndOwner(ctx, contactID, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.PropertyContact{}, ErrNotFound
-		}
-		return domain.PropertyContact{}, fmt.Errorf("get property contact: %w", err)
-	}
-	if contact.PropertyID != propertyID {
-		return domain.PropertyContact{}, ErrNotFound
-	}
-
-	if cmd.Name != nil {
-		name := strings.TrimSpace(*cmd.Name)
-		if name == "" || len(name) > 255 {
-			return domain.PropertyContact{}, ErrInvalidInput
-		}
-		contact.Name = name
-	}
-	if cmd.Phone != nil {
-		normalized, err := domain.NormalizePhone(*cmd.Phone)
+	var updated domain.PropertyContact
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		property, err := s.propertyForUpdate(ctx, stores.repo, actor, propertyID)
 		if err != nil {
-			return domain.PropertyContact{}, ErrInvalidInput
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property: %w", err)
 		}
-		contact.Phone = normalized
-	}
+		scope := property.OwnerID
+		if property.Status == domain.PropertyStatusArchived {
+			return ErrArchivedProperty
+		}
 
-	updated, err := txContactRepo.Update(ctx, scope, contact)
+		contact, err := stores.contacts.GetByIDAndOwner(ctx, contactID, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property contact: %w", err)
+		}
+		if contact.PropertyID != propertyID {
+			return ErrNotFound
+		}
+
+		if cmd.Name != nil {
+			name := strings.TrimSpace(*cmd.Name)
+			if name == "" || len(name) > 255 {
+				return ErrInvalidInput
+			}
+			contact.Name = name
+		}
+		if cmd.Phone != nil {
+			normalized, err := domain.NormalizePhone(*cmd.Phone)
+			if err != nil {
+				return ErrInvalidInput
+			}
+			contact.Phone = normalized
+		}
+
+		updated, err = stores.contacts.Update(ctx, scope, contact)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("update property contact: %w", err)
+		}
+
+		// PII (name, phone) is never written to the audit context.
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionPropertyContactUpdated,
+			EntityType: auditdomain.EntityPropertyContact,
+			EntityID:   &updated.ID,
+			Context:    map[string]any{"fields": updatedPropertyContactFields(cmd)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.PropertyContact{}, ErrNotFound
-		}
-		return domain.PropertyContact{}, fmt.Errorf("update property contact: %w", err)
-	}
-
-	// PII (name, phone) is never written to the audit context.
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionPropertyContactUpdated,
-		EntityType: auditdomain.EntityPropertyContact,
-		EntityID:   &updated.ID,
-		Context:    map[string]any{"fields": updatedPropertyContactFields(cmd)},
-	}); err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.PropertyContact{}, fmt.Errorf("commit tx: %w", err)
+		return domain.PropertyContact{}, err
 	}
 	return updated, nil
 }
@@ -325,56 +314,46 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, acto
 		role = r
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		property, err := s.propertyForUpdate(ctx, stores.repo, actor, propertyID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property: %w", err)
+		}
+		scope := property.OwnerID
+		if property.Status == domain.PropertyStatusArchived {
+			return ErrArchivedProperty
+		}
 
-	txPropertyRepo := s.propertyRepo.WithTx(tx)
-	property, err := s.propertyForUpdate(ctx, txPropertyRepo, actor, propertyID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		contact, err := stores.contacts.GetByIDAndOwner(ctx, contactID, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property contact: %w", err)
+		}
+		if contact.PropertyID != propertyID {
 			return ErrNotFound
 		}
-		return fmt.Errorf("get property: %w", err)
-	}
-	scope := property.OwnerID
-	if property.Status == domain.PropertyStatusArchived {
-		return ErrArchivedProperty
-	}
 
-	txContactRepo := s.repo.WithTx(tx)
-	contact, err := txContactRepo.GetByIDAndOwner(ctx, contactID, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
+		if err := stores.contacts.Delete(ctx, contactID, scope); err != nil {
+			return fmt.Errorf("delete property contact: %w", err)
 		}
-		return fmt.Errorf("get property contact: %w", err)
-	}
-	if contact.PropertyID != propertyID {
-		return ErrNotFound
-	}
 
-	if err := txContactRepo.Delete(ctx, contactID, scope); err != nil {
-		return fmt.Errorf("delete property contact: %w", err)
-	}
-
-	// PII (name, phone) is never written to the audit context.
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionPropertyContactDeleted,
-		EntityType: auditdomain.EntityPropertyContact,
-		EntityID:   &contactID,
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
+		// PII (name, phone) is never written to the audit context.
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionPropertyContactDeleted,
+			EntityType: auditdomain.EntityPropertyContact,
+			EntityID:   &contactID,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // propertyForUpdate fetches the property inside a write transaction. With the

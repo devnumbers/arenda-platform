@@ -137,7 +137,7 @@ func (f *contactFixture) propertyRepo() *fakePropertyRepo {
 }
 
 func (f *contactFixture) service(role sharedpolicy.Role, audit *fakeAuditRecorder) *PropertyContactService {
-	svc := NewPropertyContactService(f.contactRepo, f.propertyRepo(), fakePropertyTxBeginner{}, audit, nil)
+	svc := NewPropertyContactService(f.contactRepo, f.propertyRepo(), newContactTestFactory(f.propertyRepo(), f.contactRepo, audit), nil)
 	svc.SetPolicy(staticRolePolicy{role: role})
 	return svc
 }

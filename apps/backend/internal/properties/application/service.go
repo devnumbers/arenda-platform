@@ -24,10 +24,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-type txBeginner interface {
-	Begin(ctx context.Context) (transaction.Tx, error)
-}
-
 const (
 	maxPhotoCount = 10
 	// MaxPhotoSize caps a single property photo upload; the HTTP adapter
@@ -60,14 +56,13 @@ type UpdatePropertyCommand struct {
 }
 
 type PropertyService struct {
+	txStoreFactory
 	repo               PropertyRepository
 	photoRepo          PropertyPhotoRepository
 	photoStorage       PhotoStorage
 	occupancyProvider  OccupancyProvider
-	limiter            SubscriptionLimiter
 	billingLifecycle   PropertyBillingLifecycle
 	leaseRepo          LeaseRepository
-	db                 txBeginner
 	audit              auditapp.Recorder
 	clock              clock.Clock
 	tzResolver         sharedtz.OwnerTimezoneResolver
@@ -135,16 +130,19 @@ func (s *PropertyService) SetSharedMembersDeleteMailer(mailer SharedMembersDelet
 	s.sharedDeleteMailer = mailer
 }
 
+// NewPropertyService creates a PropertyService. Persistence, the audit
+// recorder and the Unit-of-Work of every mutating use case arrive through the
+// embedded factory (ADR 0033 γ-factory); repo, photoRepo, occupancyProvider
+// and billingLifecycle additionally serve the non-transactional reads and the
+// externally-owned transaction of ArchiveExcessProperties.
 func NewPropertyService(
 	repo PropertyRepository,
 	photoRepo PropertyPhotoRepository,
 	photoStorage PhotoStorage,
 	occupancyProvider OccupancyProvider,
-	limiter SubscriptionLimiter,
 	billingLifecycle PropertyBillingLifecycle,
 	leaseRepo LeaseRepository,
-	db txBeginner,
-	audit auditapp.Recorder,
+	factory txStoreFactory,
 	clk clock.Clock,
 	tzResolver sharedtz.OwnerTimezoneResolver,
 	policy sharedpolicy.Policy,
@@ -153,19 +151,15 @@ func NewPropertyService(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &PropertyService{
+		txStoreFactory:    factory,
 		repo:              repo,
 		photoRepo:         photoRepo,
 		photoStorage:      photoStorage,
 		occupancyProvider: occupancyProvider,
-		limiter:           limiter,
 		billingLifecycle:  billingLifecycle,
 		leaseRepo:         leaseRepo,
-		db:                db,
-		audit:             audit,
+		audit:             factory.audit,
 		clock:             clk,
 		tzResolver:        tzResolver,
 		policy:            policy,
@@ -193,49 +187,40 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 	property.CreatedAt = now
 	property.UpdatedAt = now
 
-	tx, err := s.db.Begin(ctx)
+	var created domain.Property
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		limit, err := stores.limiter.ActivePropertyLimit(ctx, actor)
+		if err != nil {
+			return fmt.Errorf("get active property limit: %w", err)
+		}
+
+		count, err := stores.repo.CountActiveByOwner(ctx, actor)
+		if err != nil {
+			return fmt.Errorf("count active properties: %w", err)
+		}
+		if count >= limit {
+			return ErrLimitExceeded
+		}
+
+		created, err = stores.repo.Create(ctx, actor, property)
+		if err != nil {
+			return fmt.Errorf("create property: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPropertyCreated,
+			EntityType: auditdomain.EntityProperty,
+			EntityID:   &created.ID,
+			Context:    map[string]any{"name": created.Name, "type": string(created.Type)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRepo := s.repo.WithTx(tx)
-	txLimiter, err := s.limiter.WithTx(tx)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("bind limiter transaction: %w", err)
-	}
-
-	limit, err := txLimiter.ActivePropertyLimit(ctx, actor)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("get active property limit: %w", err)
-	}
-
-	count, err := txRepo.CountActiveByOwner(ctx, actor)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("count active properties: %w", err)
-	}
-	if count >= limit {
-		return domain.Property{}, ErrLimitExceeded
-	}
-
-	created, err := txRepo.Create(ctx, actor, property)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("create property: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionPropertyCreated,
-		EntityType: auditdomain.EntityProperty,
-		EntityID:   &created.ID,
-		Context:    map[string]any{"name": created.Name, "type": string(created.Type)},
-	}); err != nil {
-		return domain.Property{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
+		return domain.Property{}, err
 	}
 
 	created.Occupancy = domain.OccupancyFree
@@ -508,98 +493,92 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 		return domain.Property{}, ErrForbidden
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRepo := s.repo.WithTx(tx)
-	txOccupancy := s.occupancyProvider.WithTx(tx)
-
-	property, err := txRepo.GetByIDForUpdate(ctx, id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Property{}, ErrNotFound
-		}
-		return domain.Property{}, fmt.Errorf("get property: %w", err)
-	}
-	scope := property.OwnerID
-
-	if property.Status == domain.PropertyStatusArchived {
-		return domain.Property{}, ErrArchivedProperty
-	}
-
-	if cmd.Name != nil {
-		property.Name = *cmd.Name
-	}
-	if cmd.Address != nil {
-		property.Address = *cmd.Address
-	}
-	if cmd.Description != nil {
-		property.Description = *cmd.Description
-	}
-	if cmd.Type != nil {
-		propertyType, err := domain.ParsePropertyType(*cmd.Type)
+	var updated domain.Property
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		property, err := stores.repo.GetByIDForUpdate(ctx, id)
 		if err != nil {
-			return domain.Property{}, fmt.Errorf("%w: invalid property type: %w", ErrInvalidInput, err)
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property: %w", err)
 		}
-		property.Type = propertyType
-	}
-	if cmd.Status != nil {
-		status, err := domain.ParsePropertyStatus(*cmd.Status)
-		if err != nil {
-			return domain.Property{}, fmt.Errorf("%w: invalid property status: %w", ErrInvalidInput, err)
+		scope := property.OwnerID
+
+		if property.Status == domain.PropertyStatusArchived {
+			return ErrArchivedProperty
 		}
-		if !isUpdatableStatusTransition(property.Status, status) {
-			return domain.Property{}, &InvalidStatusTransitionError{From: property.Status, To: status}
+
+		if cmd.Name != nil {
+			property.Name = *cmd.Name
 		}
-		if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
-			occupied, err := txOccupancy.IsOccupied(ctx, scope, property.ID)
+		if cmd.Address != nil {
+			property.Address = *cmd.Address
+		}
+		if cmd.Description != nil {
+			property.Description = *cmd.Description
+		}
+		if cmd.Type != nil {
+			propertyType, err := domain.ParsePropertyType(*cmd.Type)
 			if err != nil {
-				return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
+				return fmt.Errorf("%w: invalid property type: %w", ErrInvalidInput, err)
 			}
-			if occupied {
-				return domain.Property{}, ErrPropertyHasOpenLease
+			property.Type = propertyType
+		}
+		if cmd.Status != nil {
+			status, err := domain.ParsePropertyStatus(*cmd.Status)
+			if err != nil {
+				return fmt.Errorf("%w: invalid property status: %w", ErrInvalidInput, err)
 			}
+			if !isUpdatableStatusTransition(property.Status, status) {
+				return &InvalidStatusTransitionError{From: property.Status, To: status}
+			}
+			if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
+				occupied, err := stores.occupancy.IsOccupied(ctx, scope, property.ID)
+				if err != nil {
+					return fmt.Errorf("check occupancy: %w", err)
+				}
+				if occupied {
+					return ErrPropertyHasOpenLease
+				}
+			}
+			property.Status = status
 		}
-		property.Status = status
-	}
-	if cmd.Attributes != nil {
-		attrs := domain.Attributes(*cmd.Attributes)
-		if result := domain.ValidateAttributes(property.Type, attrs); !result.Valid() {
-			return domain.Property{}, &AttributesValidationError{Errors: result.Errors}
+		if cmd.Attributes != nil {
+			attrs := domain.Attributes(*cmd.Attributes)
+			if result := domain.ValidateAttributes(property.Type, attrs); !result.Valid() {
+				return &AttributesValidationError{Errors: result.Errors}
+			}
+			property.Attributes = attrs
 		}
-		property.Attributes = attrs
-	}
 
-	if err := property.Validate(); err != nil {
-		return domain.Property{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
-	}
+		if err := property.Validate(); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		}
 
-	property.UpdatedAt = s.clock.Now()
+		property.UpdatedAt = s.clock.Now()
 
-	updated, err := txRepo.Update(ctx, scope, property)
+		updated, err = stores.repo.Update(ctx, scope, property)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("update property: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionPropertyUpdated,
+			EntityType: auditdomain.EntityProperty,
+			EntityID:   &id,
+			Context:    map[string]any{"fields": updatedPropertyFields(cmd)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Property{}, ErrNotFound
-		}
-		return domain.Property{}, fmt.Errorf("update property: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionPropertyUpdated,
-		EntityType: auditdomain.EntityProperty,
-		EntityID:   &id,
-		Context:    map[string]any{"fields": updatedPropertyFields(cmd)},
-	}); err != nil {
-		return domain.Property{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
+		return domain.Property{}, err
 	}
 
 	properties, err := s.withPhotos(ctx, updated)
@@ -622,53 +601,51 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 		return domain.Property{}, ErrForbidden
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var archived domain.Property
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		archived, err = s.archivePropertyInTx(
+			ctx,
+			stores.repo,
+			stores.occupancy,
+			stores.billing,
+			actor,
+			id,
+			false,
+		)
+		if err != nil {
+			return err
+		}
 
-	archived, err := s.archivePropertyInTx(
-		ctx,
-		s.repo.WithTx(tx),
-		s.occupancyProvider.WithTx(tx),
-		s.billingLifecycle.WithTx(tx),
-		actor,
-		id,
-		false,
-	)
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPropertyArchived,
+			EntityType: auditdomain.EntityProperty,
+			EntityID:   &id,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// Archiving a shared object freed one tariff slot for each recipient: try to
+		// recover their oldest suspended memberships FIFO in the same transaction
+		// (issue #158, T4).
+		if s.slots != nil {
+			if err := s.slots.RecoverSuspendedForProperty(ctx, stores.tx, id); err != nil {
+				return fmt.Errorf("recover suspended memberships after archive: %w", err)
+			}
+			// Archiving one of the owner's OWN objects also freed one of the owner's
+			// own tariff slots: the owner is never a member row of their own object,
+			// so RecoverSuspendedForProperty above did not visit them. Recover their
+			// own suspended shared queue FIFO in the same transaction.
+			if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
+				return fmt.Errorf("recover owner suspended memberships after archive: %w", err)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return domain.Property{}, err
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionPropertyArchived,
-		EntityType: auditdomain.EntityProperty,
-		EntityID:   &id,
-	}); err != nil {
-		return domain.Property{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	// Archiving a shared object freed one tariff slot for each recipient: try to
-	// recover their oldest suspended memberships FIFO in the same transaction
-	// (issue #158, T4).
-	if s.slots != nil {
-		if err := s.slots.RecoverSuspendedForProperty(ctx, tx, id); err != nil {
-			return domain.Property{}, fmt.Errorf("recover suspended memberships after archive: %w", err)
-		}
-		// Archiving one of the owner's OWN objects also freed one of the owner's
-		// own tariff slots: the owner is never a member row of their own object,
-		// so RecoverSuspendedForProperty above did not visit them. Recover their
-		// own suspended shared queue FIFO in the same transaction.
-		if err := s.slots.RecoverSuspended(ctx, tx, actor); err != nil {
-			return domain.Property{}, fmt.Errorf("recover owner suspended memberships after archive: %w", err)
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	properties, err := s.withPhotos(ctx, archived)
@@ -699,84 +676,85 @@ func (s *PropertyService) DeleteProperty(
 		return ErrForbidden
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	repo := s.repo.WithTx(tx)
-
-	property, err := repo.GetByIDAndOwnerForUpdate(ctx, id, actor)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("get property: %w", err)
-	}
-
-	occupied, err := s.occupancyProvider.WithTx(tx).IsOccupied(ctx, actor, id)
-	if err != nil {
-		return fmt.Errorf("check occupancy: %w", err)
-	}
-	if occupied {
-		return ErrPropertyHasOpenLease
-	}
-
-	photos, err := s.photoRepo.WithTx(tx).GetByPropertyID(ctx, id)
-	if err != nil {
-		return fmt.Errorf("list photos: %w", err)
-	}
-
-	if err := s.applyDeleteMode(ctx, tx, repo, actor, id, mode); err != nil {
-		return err
-	}
-
-	// Former shared members are collected before the slot policy drops their
-	// memberships, so the "object deleted" email can reach them after the
-	// commit (issue #162, T6).
-	var formerMemberEmails []string
-	if s.sharedDeleteMailer != nil {
-		formerMemberEmails, err = s.sharedDeleteMailer.CollectFormerMemberEmails(ctx, tx, id)
+	// The deleted property's name and photos, plus the former members'
+	// emails, escape the work closure for the post-commit notifications.
+	var (
+		property           domain.Property
+		photos             []domain.Photo
+		formerMemberEmails []string
+	)
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		property, err = stores.repo.GetByIDAndOwnerForUpdate(ctx, id, actor)
 		if err != nil {
-			return fmt.Errorf("collect former shared members: %w", err)
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property: %w", err)
 		}
-	}
 
-	// Dropping the shared object frees one tariff slot for each recipient:
-	// the access context drops their memberships and recovers the oldest
-	// suspended ones FIFO in the same transaction, before the property row is
-	// removed (issue #158, T4).
-	if s.slots != nil {
-		if err := s.slots.RecoverAfterPropertyDelete(ctx, tx, id); err != nil {
-			return fmt.Errorf("recover suspended memberships before delete: %w", err)
+		occupied, err := stores.occupancy.IsOccupied(ctx, actor, id)
+		if err != nil {
+			return fmt.Errorf("check occupancy: %w", err)
 		}
-		// Deleting one of the owner's OWN objects also freed one of the owner's
-		// own tariff slots: the owner is never a member row of their own object,
-		// so RecoverAfterPropertyDelete above did not visit them. Recover their
-		// own suspended shared queue FIFO in the same transaction.
-		if err := s.slots.RecoverSuspended(ctx, tx, actor); err != nil {
-			return fmt.Errorf("recover owner suspended memberships after delete: %w", err)
+		if occupied {
+			return ErrPropertyHasOpenLease
 		}
-	}
 
-	if err := repo.Delete(ctx, id, actor); err != nil {
-		return fmt.Errorf("delete property: %w", err)
-	}
+		photos, err = stores.photos.GetByPropertyID(ctx, id)
+		if err != nil {
+			return fmt.Errorf("list photos: %w", err)
+		}
 
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionPropertyDeleted,
-		EntityType: auditdomain.EntityProperty,
-		EntityID:   &id,
-		Context:    map[string]any{"mode": string(mode)},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
+		if err := s.applyDeleteMode(ctx, stores, actor, id, mode); err != nil {
+			return err
+		}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
+		// Former shared members are collected before the slot policy drops their
+		// memberships, so the "object deleted" email can reach them after the
+		// commit (issue #162, T6).
+		if s.sharedDeleteMailer != nil {
+			formerMemberEmails, err = s.sharedDeleteMailer.CollectFormerMemberEmails(ctx, stores.tx, id)
+			if err != nil {
+				return fmt.Errorf("collect former shared members: %w", err)
+			}
+		}
+
+		// Dropping the shared object frees one tariff slot for each recipient:
+		// the access context drops their memberships and recovers the oldest
+		// suspended ones FIFO in the same transaction, before the property row is
+		// removed (issue #158, T4).
+		if s.slots != nil {
+			if err := s.slots.RecoverAfterPropertyDelete(ctx, stores.tx, id); err != nil {
+				return fmt.Errorf("recover suspended memberships before delete: %w", err)
+			}
+			// Deleting one of the owner's OWN objects also freed one of the owner's
+			// own tariff slots: the owner is never a member row of their own object,
+			// so RecoverAfterPropertyDelete above did not visit them. Recover their
+			// own suspended shared queue FIFO in the same transaction.
+			if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
+				return fmt.Errorf("recover owner suspended memberships after delete: %w", err)
+			}
+		}
+
+		if err := stores.repo.Delete(ctx, id, actor); err != nil {
+			return fmt.Errorf("delete property: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPropertyDeleted,
+			EntityType: auditdomain.EntityProperty,
+			EntityID:   &id,
+			Context:    map[string]any{"mode": string(mode)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// Post-commit cleanup and notifications never fail the delete itself.
@@ -792,19 +770,18 @@ func (s *PropertyService) DeleteProperty(
 // FK) but pauses the billing lifecycle, same as archiving does.
 func (s *PropertyService) applyDeleteMode(
 	ctx context.Context,
-	tx transaction.Tx,
-	repo PropertyRepository,
+	stores *txStores,
 	actor, id uuid.UUID,
 	mode domain.DeletePropertyMode,
 ) error {
 	if mode == domain.DeletePropertyModeCascade {
-		if err := repo.DeleteOperationsByProperty(ctx, actor, id); err != nil {
+		if err := stores.repo.DeleteOperationsByProperty(ctx, actor, id); err != nil {
 			return fmt.Errorf("delete operations: %w", err)
 		}
-		if err := repo.DeleteRecurringOperationsByProperty(ctx, actor, id); err != nil {
+		if err := stores.repo.DeleteRecurringOperationsByProperty(ctx, actor, id); err != nil {
 			return fmt.Errorf("delete recurring operations: %w", err)
 		}
-		if err := repo.DeleteLeasesByProperty(ctx, actor, id); err != nil {
+		if err := stores.repo.DeleteLeasesByProperty(ctx, actor, id); err != nil {
 			return fmt.Errorf("delete leases: %w", err)
 		}
 	}
@@ -815,7 +792,7 @@ func (s *PropertyService) applyDeleteMode(
 			return fmt.Errorf("resolve owner timezone: %w", err)
 		}
 		asOf := timeutil.DateIn(s.clock.Now(), loc)
-		if err := s.billingLifecycle.WithTx(tx).Suspend(ctx, id, actor, asOf); err != nil {
+		if err := stores.billing.Suspend(ctx, id, actor, asOf); err != nil {
 			return fmt.Errorf("suspend billing: %w", err)
 		}
 	}
@@ -1003,92 +980,83 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 		return domain.Property{}, ErrForbidden
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRepo := s.repo.WithTx(tx)
-	txLimiter, err := s.limiter.WithTx(tx)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("bind limiter transaction: %w", err)
-	}
-
-	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, actor)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Property{}, ErrNotFound
+	var unarchived domain.Property
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		property, err := stores.repo.GetByIDAndOwnerForUpdate(ctx, id, actor)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property: %w", err)
 		}
-		return domain.Property{}, fmt.Errorf("get property: %w", err)
-	}
 
-	if property.Status != domain.PropertyStatusArchived {
-		return domain.Property{}, ErrNotArchived
-	}
-
-	limit, err := txLimiter.ActivePropertyLimit(ctx, actor)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("get active property limit: %w", err)
-	}
-
-	count, err := txRepo.CountActiveByOwner(ctx, actor)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("count active properties: %w", err)
-	}
-	if count >= limit {
-		return domain.Property{}, ErrLimitExceeded
-	}
-
-	if err := txRepo.Unarchive(ctx, id, actor); err != nil {
-		return domain.Property{}, fmt.Errorf("unarchive property: %w", err)
-	}
-
-	resumeLoc, err := s.tzResolver.Resolve(ctx, actor)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("resolve owner timezone: %w", err)
-	}
-	resumeAsOf := timeutil.DateIn(s.clock.Now(), resumeLoc)
-	if err := s.billingLifecycle.WithTx(tx).Resume(ctx, id, actor, resumeAsOf); err != nil {
-		return domain.Property{}, fmt.Errorf("resume billing: %w", err)
-	}
-
-	unarchived, err := txRepo.GetByIDAndOwner(ctx, id, actor)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("reload unarchived property: %w", err)
-	}
-
-	occupied, err := s.occupancyProvider.WithTx(tx).IsOccupied(ctx, actor, unarchived.ID)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
-	}
-	if occupied {
-		unarchived.Occupancy = domain.OccupancyOccupied
-	} else {
-		unarchived.Occupancy = domain.OccupancyFree
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionPropertyUnarchived,
-		EntityType: auditdomain.EntityProperty,
-		EntityID:   &id,
-	}); err != nil {
-		return domain.Property{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	// Unarchiving the object re-enters every recipient's tariff pool: suspend any
-	// recipient already at the limit so the object does not occupy a slot until
-	// one frees up (issue #158, T4).
-	if s.slots != nil {
-		if err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
-			return domain.Property{}, fmt.Errorf("enforce recipient slot on unarchive: %w", err)
+		if property.Status != domain.PropertyStatusArchived {
+			return ErrNotArchived
 		}
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
+		limit, err := stores.limiter.ActivePropertyLimit(ctx, actor)
+		if err != nil {
+			return fmt.Errorf("get active property limit: %w", err)
+		}
+
+		count, err := stores.repo.CountActiveByOwner(ctx, actor)
+		if err != nil {
+			return fmt.Errorf("count active properties: %w", err)
+		}
+		if count >= limit {
+			return ErrLimitExceeded
+		}
+
+		if err := stores.repo.Unarchive(ctx, id, actor); err != nil {
+			return fmt.Errorf("unarchive property: %w", err)
+		}
+
+		resumeLoc, err := s.tzResolver.Resolve(ctx, actor)
+		if err != nil {
+			return fmt.Errorf("resolve owner timezone: %w", err)
+		}
+		resumeAsOf := timeutil.DateIn(s.clock.Now(), resumeLoc)
+		if err := stores.billing.Resume(ctx, id, actor, resumeAsOf); err != nil {
+			return fmt.Errorf("resume billing: %w", err)
+		}
+
+		unarchived, err = stores.repo.GetByIDAndOwner(ctx, id, actor)
+		if err != nil {
+			return fmt.Errorf("reload unarchived property: %w", err)
+		}
+
+		occupied, err := stores.occupancy.IsOccupied(ctx, actor, unarchived.ID)
+		if err != nil {
+			return fmt.Errorf("check occupancy: %w", err)
+		}
+		if occupied {
+			unarchived.Occupancy = domain.OccupancyOccupied
+		} else {
+			unarchived.Occupancy = domain.OccupancyFree
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPropertyUnarchived,
+			EntityType: auditdomain.EntityProperty,
+			EntityID:   &id,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// Unarchiving the object re-enters every recipient's tariff pool: suspend any
+		// recipient already at the limit so the object does not occupy a slot until
+		// one frees up (issue #158, T4).
+		if s.slots != nil {
+			if err := s.slots.EnforceOnUnarchiveForProperty(ctx, stores.tx, id); err != nil {
+				return fmt.Errorf("enforce recipient slot on unarchive: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Property{}, err
 	}
 
 	properties, err := s.withPhotos(ctx, unarchived)
@@ -1126,65 +1094,61 @@ func (s *PropertyService) AddPropertyPhoto(ctx context.Context, actor, propertyI
 		return domain.Property{}, ErrForbidden
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRepo := s.repo.WithTx(tx)
-	txPhotoRepo := s.photoRepo.WithTx(tx)
-
-	property, err := txRepo.GetByIDForUpdate(ctx, propertyID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Property{}, ErrNotFound
+	var property domain.Property
+	var photoID uuid.UUID
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		property, err = stores.repo.GetByIDForUpdate(ctx, propertyID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property: %w", err)
 		}
-		return domain.Property{}, fmt.Errorf("get property: %w", err)
-	}
 
-	if property.Status == domain.PropertyStatusArchived {
-		return domain.Property{}, ErrArchivedProperty
-	}
+		if property.Status == domain.PropertyStatusArchived {
+			return ErrArchivedProperty
+		}
 
-	count, err := txPhotoRepo.CountByPropertyID(ctx, propertyID)
+		count, err := stores.photos.CountByPropertyID(ctx, propertyID)
+		if err != nil {
+			return fmt.Errorf("count photos: %w", err)
+		}
+		if count >= maxPhotoCount {
+			return ErrPhotoLimitReached
+		}
+
+		photoID, err = uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate photo id: %w", err)
+		}
+
+		ext := allowedPhotoContentTypes[contentType]
+		key := fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext)
+
+		photoURL, err := s.photoStorage.Upload(ctx, key, contentType, size, file)
+		if err != nil {
+			return fmt.Errorf("upload photo: %w", err)
+		}
+
+		if _, err := stores.photos.Create(ctx, photoID, propertyID, photoURL); err != nil {
+			return fmt.Errorf("create photo record: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionPropertyPhotoAdded,
+			EntityType: auditdomain.EntityPropertyPhoto,
+			EntityID:   &photoID,
+			Context:    map[string]any{"property_id": propertyID},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return domain.Property{}, fmt.Errorf("count photos: %w", err)
-	}
-	if count >= maxPhotoCount {
-		return domain.Property{}, ErrPhotoLimitReached
-	}
-
-	photoID, err := uuid.NewV7()
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("generate photo id: %w", err)
-	}
-
-	ext := allowedPhotoContentTypes[contentType]
-	key := fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext)
-
-	photoURL, err := s.photoStorage.Upload(ctx, key, contentType, size, file)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("upload photo: %w", err)
-	}
-
-	if _, err := txPhotoRepo.Create(ctx, photoID, propertyID, photoURL); err != nil {
-		return domain.Property{}, fmt.Errorf("create photo record: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionPropertyPhotoAdded,
-		EntityType: auditdomain.EntityPropertyPhoto,
-		EntityID:   &photoID,
-		Context:    map[string]any{"property_id": propertyID},
-	}); err != nil {
-		return domain.Property{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Property{}, fmt.Errorf("commit tx: %w", err)
+		return domain.Property{}, err
 	}
 
 	photos, err := s.photoRepo.GetByPropertyID(ctx, propertyID)
@@ -1212,52 +1176,46 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 		return ErrForbidden
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRepo := s.repo.WithTx(tx)
-	txPhotoRepo := s.photoRepo.WithTx(tx)
-
-	property, err := txRepo.GetByIDForUpdate(ctx, propertyID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
+	var photo domain.Photo
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		property, err := stores.repo.GetByIDForUpdate(ctx, propertyID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get property: %w", err)
 		}
-		return fmt.Errorf("get property: %w", err)
-	}
 
-	if property.Status == domain.PropertyStatusArchived {
-		return ErrArchivedProperty
-	}
-
-	photo, err := txPhotoRepo.GetByIDAndPropertyID(ctx, photoID, propertyID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
+		if property.Status == domain.PropertyStatusArchived {
+			return ErrArchivedProperty
 		}
-		return fmt.Errorf("get photo: %w", err)
-	}
 
-	if err := txPhotoRepo.Delete(ctx, photoID); err != nil {
-		return fmt.Errorf("delete photo record: %w", err)
-	}
+		photo, err = stores.photos.GetByIDAndPropertyID(ctx, photoID, propertyID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get photo: %w", err)
+		}
 
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionPropertyPhotoDeleted,
-		EntityType: auditdomain.EntityPropertyPhoto,
-		EntityID:   &photoID,
-		Context:    map[string]any{"property_id": propertyID},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
+		if err := stores.photos.Delete(ctx, photoID); err != nil {
+			return fmt.Errorf("delete photo record: %w", err)
+		}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionPropertyPhotoDeleted,
+			EntityType: auditdomain.EntityPropertyPhoto,
+			EntityID:   &photoID,
+			Context:    map[string]any{"property_id": propertyID},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	key, err := photoStorageKey(propertyID, photoID, photo.URL)

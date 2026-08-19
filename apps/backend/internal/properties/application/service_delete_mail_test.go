@@ -70,16 +70,15 @@ func TestPropertyService_DeleteProperty_NotifiesFormerSharedMembers(t *testing.T
 		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Квартира на Невском", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
 	)
 	shared := &fakeSharedDeleteFlow{emails: []string{"a@example.com", "b@example.com"}}
+	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
 		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}},
-		nil,
-		&recordingBillingLifecycle{},
+		billing,
 		stubLeaseRepo{},
-		fakePropertyTxBeginner{},
-		nil,
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}}, billing),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},

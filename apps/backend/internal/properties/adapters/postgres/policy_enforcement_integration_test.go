@@ -32,11 +32,14 @@ type contactPolicyNoCommitTx struct{ pgx.Tx }
 func (contactPolicyNoCommitTx) Commit(context.Context) error   { return nil }
 func (contactPolicyNoCommitTx) Rollback(context.Context) error { return nil }
 
-// contactPolicyBeginner always returns the test's already-open transaction.
-type contactPolicyBeginner struct{ tx pgx.Tx }
+// contactPolicyUoW adapts the test's already-open transaction to the
+// transaction.UoW port so the service under test opens its transactions
+// through runInTx (ADR 0033); the no-commit tx keeps the outer test
+// transaction in charge of cleanup.
+type contactPolicyUoW struct{ tx pgx.Tx }
 
-func (b contactPolicyBeginner) Begin(context.Context) (transaction.Tx, error) {
-	return contactPolicyNoCommitTx{Tx: b.tx}, nil
+func (u contactPolicyUoW) Do(_ context.Context, work func(tx transaction.Tx) error) error {
+	return work(contactPolicyNoCommitTx{Tx: u.tx})
 }
 
 func contactPgUUID(id uuid.UUID) pgtype.UUID {
@@ -131,13 +134,12 @@ func TestPolicyIntegration_PropertyContacts(t *testing.T) {
 		t.Fatalf("create suspended membership: %v", err)
 	}
 
-	svc := application.NewPropertyContactService(
-		NewPropertyContactRepository(tx),
-		NewPropertyRepository(tx),
-		contactPolicyBeginner{tx: tx},
-		nil,
-		nil,
-	)
+	contactRepo := NewPropertyContactRepository(tx)
+	propertyRepo := NewPropertyRepository(tx)
+	// The contact service runs its mutations through the properties γ-factory
+	// (ADR 0033); its optional property-service stores stay unwired here.
+	factory := application.NewTxStoreFactory(propertyRepo, nil, contactRepo, nil, nil, nil, nil, contactPolicyUoW{tx: tx})
+	svc := application.NewPropertyContactService(contactRepo, propertyRepo, factory, nil)
 	svc.SetPolicy(policy)
 
 	// The member creates a contact: it lands on the owner's scope.

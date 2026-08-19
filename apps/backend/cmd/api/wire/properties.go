@@ -33,6 +33,7 @@ func WireProperties(
 ) (*Properties, error) {
 	propertyRepo := propertiespg.NewPropertyRepository(p.DB)
 	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(p.DB)
+	propertyContactRepo := propertiespg.NewPropertyContactRepository(p.DB)
 	occupancyProvider := propertiespg.NewOccupancyProvider(p.DB)
 	propertyLimiter := billing.Services.Limiter
 	limiter := billingpg.NewSubscriptionLimiter(propertyLimiter)
@@ -62,24 +63,36 @@ func WireProperties(
 		p.Logger.InfoContext(ctx, "photo storage initialized", "provider", "fake")
 	}
 
+	// factory is the single canonical txStoreFactory bundling the properties
+	// repositories, the cross-context ports, the audit recorder, and the UoW
+	// (ADR 0033 γ-factory). It is passed to both properties services so adding
+	// an Nth repository is a change here, not in several constructors.
+	factory := propertiesapp.NewTxStoreFactory(
+		propertyRepo,
+		propertyPhotoRepo,
+		propertyContactRepo,
+		limiter,
+		occupancyProvider,
+		leasesRepos.PropertyBillingLifecycle,
+		p.AuditRecorder,
+		p.UoW,
+	)
+
 	propertyService := propertiesapp.NewPropertyService(
 		propertyRepo,
 		propertyPhotoRepo,
 		photoStorage,
 		occupancyProvider,
-		limiter,
 		leasesRepos.PropertyBillingLifecycle,
 		leasesRepos.LeaseRepo,
-		p.Beginner,
-		p.AuditRecorder,
+		factory,
 		p.Clock,
 		p.TZResolver,
 		p.Policy,
 		p.Logger,
 	)
 
-	propertyContactRepo := propertiespg.NewPropertyContactRepository(p.DB)
-	propertyContactService := propertiesapp.NewPropertyContactService(propertyContactRepo, propertyRepo, p.Beginner, p.AuditRecorder, p.Logger)
+	propertyContactService := propertiesapp.NewPropertyContactService(propertyContactRepo, propertyRepo, factory, p.Logger)
 
 	dadataClient := dadata.NewClient(dadata.Config{
 		BaseURL:   p.Cfg.DaDataBaseURL,

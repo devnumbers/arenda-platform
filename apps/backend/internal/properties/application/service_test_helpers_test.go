@@ -4,8 +4,37 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
+
+// newPropertyTestFactory builds the txStoreFactory for the property service
+// tests: the same collaborators the service receives for its transactional
+// use cases, over the fakeUoW backed by fakePropertyTxBeginner so the
+// in-memory repositories see the *fakePropertyTx their WithTx expects. A nil
+// limiter/occupancy/billing matches the pre-factory fixtures: runInTx skips
+// unwired optional stores, and the factory defaults a nil audit to Noop (no
+// property service test asserts audit entries).
+func newPropertyTestFactory(
+	repo PropertyRepository,
+	photos PropertyPhotoRepository,
+	limiter SubscriptionLimiter,
+	occupancy OccupancyProvider,
+	billing PropertyBillingLifecycle,
+) txStoreFactory {
+	return NewTxStoreFactory(repo, photos, nil, limiter, occupancy, billing, nil, fakeUoW{beginner: fakePropertyTxBeginner{}})
+}
+
+// newContactTestFactory builds the txStoreFactory for the property contact
+// service tests: the property repository, the contact repository and the
+// audit recorder over the same fakeUoW as the property tests.
+func newContactTestFactory(
+	propertyRepo PropertyRepository,
+	contacts PropertyContactRepository,
+	audit auditapp.Recorder,
+) txStoreFactory {
+	return NewTxStoreFactory(propertyRepo, nil, contacts, nil, nil, nil, audit, fakeUoW{beginner: fakePropertyTxBeginner{}})
+}
 
 // testOwnerPolicy is the policy used by property service tests that pre-date
 // the membership-aware policy. It treats the actor as the owner of every
