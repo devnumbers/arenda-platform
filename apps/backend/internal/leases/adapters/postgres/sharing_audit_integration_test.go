@@ -37,7 +37,8 @@ func (f *policyFixture) incomeRentCategoryID(t *testing.T, ctx context.Context, 
 }
 
 func (f *policyFixture) recurringServiceWithShared() *application.RecurringOperationService {
-	svc := application.NewRecurringOperationService(f.recs, f.ops, f.props, f.cats, nil, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+	factory := application.NewTxStoreFactory(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, nil, f.uow)
+	svc := application.NewRecurringOperationService(f.recs, f.ops, f.props, f.cats, nil, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
 	svc.SetSharedPropertyIDs(accesspg.NewSharedProperties(f.tx))
 	return svc
 }

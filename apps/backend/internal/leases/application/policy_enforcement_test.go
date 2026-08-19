@@ -99,15 +99,30 @@ func policyTestOperation() domain.Operation {
 }
 
 func newPolicyOperationService(policy fakePolicy, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo, scheduler ReminderScheduler, audit auditapp.Recorder) *OperationService {
-	return NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(policyOwnerID), scheduler, fakeTxBeginner{}, audit, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, policy, nil)
+	cats := newFakeCategoryRepoForOwner(policyOwnerID)
+	return NewOperationService(
+		opRepo, propertyRepo, nil, cats,
+		NewTxStoreFactory(nil, propertyRepo, nil, nil, opRepo, cats, scheduler, audit, testUoW()),
+		fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, policy, nil,
+	)
 }
 
 func newPolicyLeaseService(policy fakePolicy, leaseRepo *fakeLeaseRepo, propertyRepo *fakePropertyRepo, opRepo *fakeOperationRepo, recRepo *fakeRecurringOperationRepo, audit auditapp.Recorder) *LeaseService {
-	return NewLeaseService(leaseRepo, propertyRepo, nil, recRepo, opRepo, newFakeCategoryRepoForOwner(policyOwnerID), nil, fakeTxBeginner{}, audit, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, policy, nil)
+	cats := newFakeCategoryRepoForOwner(policyOwnerID)
+	return NewLeaseService(
+		leaseRepo, propertyRepo, nil, cats,
+		NewTxStoreFactory(leaseRepo, propertyRepo, nil, recRepo, opRepo, cats, nil, audit, testUoW()),
+		fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, policy, nil,
+	)
 }
 
 func newPolicyRecurringService(policy fakePolicy, recRepo *fakeRecurringOperationRepo, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo, audit auditapp.Recorder) *RecurringOperationService {
-	return NewRecurringOperationService(recRepo, opRepo, propertyRepo, newFakeCategoryRepoForOwner(policyOwnerID), nil, nil, fakeTxBeginner{}, audit, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, policy, nil)
+	cats := newFakeCategoryRepoForOwner(policyOwnerID)
+	return NewRecurringOperationService(
+		recRepo, opRepo, propertyRepo, cats, nil,
+		NewTxStoreFactory(nil, propertyRepo, nil, recRepo, opRepo, cats, nil, audit, testUoW()),
+		fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, policy, nil,
+	)
 }
 
 // fakeAuditRecorder captures recorded audit entries.

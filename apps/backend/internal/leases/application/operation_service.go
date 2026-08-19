@@ -9,14 +9,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // CreateOperationCommand carries the data needed to create a manual operation.
@@ -64,41 +62,35 @@ type MoveOperationCommand struct {
 // OperationService orchestrates manual operation use cases within the leases
 // bounded context.
 type OperationService struct {
-	operations   OperationRepository
-	properties   PropertyRepository
-	leases       LeaseRepository
-	recurringOps RecurringOperationRepository
-	categories   OperationCategoryRepository
-	scheduler    ReminderScheduler
-	db           txBeginner
-	audit        auditapp.Recorder
-	clock        clock.Clock
-	tzResolver   sharedtz.OwnerTimezoneResolver
-	policy       sharedpolicy.Policy
+	operations OperationRepository
+	properties PropertyRepository
+	leases     LeaseRepository
+	categories OperationCategoryRepository
+	txStoreFactory
+	clock      clock.Clock
+	tzResolver sharedtz.OwnerTimezoneResolver
+	policy     sharedpolicy.Policy
 	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
 	// finance report only covers the actor's own operations (issue #157, T3).
 	sharedIDs SharedPropertyIDs
 	logger    *slog.Logger
 }
 
-// NewOperationService creates a new operation service.
+// NewOperationService creates a new operation service. The shared
+// txStoreFactory carries the transactional collaborators (repositories,
+// scheduler, audit, UoW); the repositories passed separately are the
+// non-transactional read handles (ADR 0033).
 func NewOperationService(
 	operations OperationRepository,
 	properties PropertyRepository,
 	leases LeaseRepository,
-	recurringOps RecurringOperationRepository,
 	categories OperationCategoryRepository,
-	scheduler ReminderScheduler,
-	db txBeginner,
-	audit auditapp.Recorder,
+	factory txStoreFactory,
 	clk clock.Clock,
 	tzResolver sharedtz.OwnerTimezoneResolver,
 	policy sharedpolicy.Policy,
 	logger *slog.Logger,
 ) *OperationService {
-	if db == nil {
-		panic("db beginner is required")
-	}
 	if clk == nil {
 		panic("clk is required")
 	}
@@ -108,22 +100,16 @@ func NewOperationService(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &OperationService{
-		operations:   operations,
-		properties:   properties,
-		leases:       leases,
-		recurringOps: recurringOps,
-		categories:   categories,
-		scheduler:    scheduler,
-		db:           db,
-		audit:        audit,
-		clock:        clk,
-		tzResolver:   tzResolver,
-		policy:       policy,
-		logger:       logger,
+		operations:     operations,
+		properties:     properties,
+		leases:         leases,
+		categories:     categories,
+		txStoreFactory: factory,
+		clock:          clk,
+		tzResolver:     tzResolver,
+		policy:         policy,
+		logger:         logger,
 	}
 }
 
@@ -214,55 +200,49 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 		return domain.Operation{}, err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
-	created, err := txOps.Create(ctx, op)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("create operation: %w", err)
-	}
-
-	if s.scheduler != nil && created.ReminderOffsetDays != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		txCategories := s.categories.WithTx(tx)
-		cat, err := txCategories.GetByIDAndOwner(ctx, created.CategoryID, scope)
+	var created domain.Operation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		created, err = stores.operations.Create(ctx, op)
 		if err != nil {
-			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+			return fmt.Errorf("create operation: %w", err)
 		}
-		reminderDate := created.OperationDate.AddDate(0, 0, -(*created.ReminderOffsetDays))
-		if !reminderDate.Before(today) {
-			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(created, cat.Name), reminderDate); err != nil {
-				return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+
+		if stores.scheduler != nil && created.ReminderOffsetDays != nil {
+			cat, err := stores.categories.GetByIDAndOwner(ctx, created.CategoryID, scope)
+			if err != nil {
+				return fmt.Errorf("get category for reminder: %w", err)
+			}
+			reminderDate := created.OperationDate.AddDate(0, 0, -(*created.ReminderOffsetDays))
+			if !reminderDate.Before(today) {
+				if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(created, cat.Name), reminderDate); err != nil {
+					return fmt.Errorf("schedule operation reminder: %w", err)
+				}
 			}
 		}
-	}
 
-	opCtx := map[string]any{
-		"property_id":    domain.PropertyIDPtr(created.PropertyID),
-		"type":           string(created.Type),
-		"amount_kopecks": created.AmountKopecks,
-		"operation_date": created.OperationDate.Format(time.DateOnly),
-	}
-	if created.LeaseID != uuid.Nil {
-		opCtx["lease_id"] = created.LeaseID
-	}
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionOperationCreated,
-		EntityType: auditdomain.EntityOperation,
-		EntityID:   &created.ID,
-		Context:    opCtx,
-	}); err != nil {
-		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
+		opCtx := map[string]any{
+			"property_id":    domain.PropertyIDPtr(created.PropertyID),
+			"type":           string(created.Type),
+			"amount_kopecks": created.AmountKopecks,
+			"operation_date": created.OperationDate.Format(time.DateOnly),
+		}
+		if created.LeaseID != uuid.Nil {
+			opCtx["lease_id"] = created.LeaseID
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionOperationCreated,
+			EntityType: auditdomain.EntityOperation,
+			EntityID:   &created.ID,
+			Context:    opCtx,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Operation{}, err
 	}
 
 	return created, nil
@@ -398,64 +378,58 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 	}
 	scope := op.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
-	txCategories := s.categories.WithTx(tx)
-
-	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
+	var updated domain.Operation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get operation: %w", err)
 		}
-		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
-	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID); err != nil {
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, op.PropertyID); err != nil {
+			return err
+		}
+
+		originalOffset := op.ReminderOffsetDays
+		originalOperationDate := op.OperationDate
+
+		op, today, err := s.applyOperationUpdate(ctx, stores.categories, op, cmd, scope)
+		if err != nil {
+			return err
+		}
+
+		updated, err = stores.operations.Update(ctx, op)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("update operation: %w", err)
+		}
+
+		offsetChanged := !reminderOffsetDaysEqual(originalOffset, updated.ReminderOffsetDays)
+		dateChanged := !originalOperationDate.Equal(updated.OperationDate)
+		if offsetChanged || dateChanged {
+			if err := s.rescheduleOperationReminders(ctx, stores, updated, scope, today); err != nil {
+				return err
+			}
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionOperationUpdated,
+			EntityType: auditdomain.EntityOperation,
+			EntityID:   &id,
+			Context:    map[string]any{"fields": updatedOperationFields(cmd)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
 		return domain.Operation{}, err
-	}
-
-	originalOffset := op.ReminderOffsetDays
-	originalOperationDate := op.OperationDate
-
-	op, today, err := s.applyOperationUpdate(ctx, txCategories, op, cmd, scope)
-	if err != nil {
-		return domain.Operation{}, err
-	}
-
-	updated, err := txOps.Update(ctx, op)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("update operation: %w", err)
-	}
-
-	offsetChanged := !reminderOffsetDaysEqual(originalOffset, updated.ReminderOffsetDays)
-	dateChanged := !originalOperationDate.Equal(updated.OperationDate)
-	if s.scheduler != nil && (offsetChanged || dateChanged) {
-		if err := s.rescheduleOperationReminders(ctx, tx, txCategories, updated, scope, today); err != nil {
-			return domain.Operation{}, err
-		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionOperationUpdated,
-		EntityType: auditdomain.EntityOperation,
-		EntityID:   &id,
-		Context:    map[string]any{"fields": updatedOperationFields(cmd)},
-	}); err != nil {
-		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return updated, nil
@@ -555,32 +529,34 @@ func (s *OperationService) applyOperationUpdate(
 
 // rescheduleOperationReminders cancels the operation's pending and overdue
 // reminders and re-schedules the operation reminder from the updated offset,
-// keeping only reminders that still fall on today or later.
+// keeping only reminders that still fall on today or later. It is a no-op
+// when no reminder scheduler is wired into the transactional stores.
 func (s *OperationService) rescheduleOperationReminders(
 	ctx context.Context,
-	tx transaction.Tx,
-	txCategories OperationCategoryRepository,
+	stores *txStores,
 	updated domain.Operation,
 	scope uuid.UUID,
 	today time.Time,
 ) error {
-	txScheduler := s.scheduler.WithTx(tx)
-	cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
+	if stores.scheduler == nil {
+		return nil
+	}
+	cat, err := stores.categories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
 	if err != nil {
 		return fmt.Errorf("get category for reminder: %w", err)
 	}
 
-	if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
+	if err := stores.scheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
 		return fmt.Errorf("cancel reminders: %w", err)
 	}
-	if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
+	if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
 		return fmt.Errorf("cancel overdue reminders: %w", err)
 	}
 
 	if updated.ReminderOffsetDays != nil {
 		reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
 		if !reminderDate.Before(today) {
-			if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
+			if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
 				return fmt.Errorf("schedule operation reminder: %w", err)
 			}
 		}
@@ -607,73 +583,67 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 	}
 	scope := op.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
-
-	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
+	var updated domain.Operation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get operation: %w", err)
 		}
-		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
-	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID); err != nil {
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, op.PropertyID); err != nil {
+			return err
+		}
+
+		if !op.Status.CanComplete() {
+			return fmt.Errorf("%w: operation is already completed", ErrOperationAlreadyCompleted)
+		}
+
+		switch op.Type {
+		case domain.OperationTypeExpense:
+			op.Status = domain.OperationStatusPaid
+		case domain.OperationTypeIncome:
+			op.Status = domain.OperationStatusReceived
+		}
+		op.UpdatedAt = s.clock.Now()
+
+		if err := op.ValidateStatusForType(); err != nil {
+			return err
+		}
+
+		updated, err = stores.operations.Update(ctx, op)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("update operation: %w", err)
+		}
+
+		if stores.scheduler != nil {
+			if err := stores.scheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
+				return fmt.Errorf("cancel reminders: %w", err)
+			}
+			if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
+				return fmt.Errorf("cancel overdue reminders: %w", err)
+			}
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &cmd.Actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionOperationCompleted,
+			EntityType: auditdomain.EntityOperation,
+			EntityID:   &cmd.OperationID,
+			Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
 		return domain.Operation{}, err
-	}
-
-	if !op.Status.CanComplete() {
-		return domain.Operation{}, fmt.Errorf("%w: operation is already completed", ErrOperationAlreadyCompleted)
-	}
-
-	switch op.Type {
-	case domain.OperationTypeExpense:
-		op.Status = domain.OperationStatusPaid
-	case domain.OperationTypeIncome:
-		op.Status = domain.OperationStatusReceived
-	}
-	op.UpdatedAt = s.clock.Now()
-
-	if err := op.ValidateStatusForType(); err != nil {
-		return domain.Operation{}, err
-	}
-
-	updated, err := txOps.Update(ctx, op)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("update operation: %w", err)
-	}
-
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
-		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
-		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &cmd.Actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionOperationCompleted,
-		EntityType: auditdomain.EntityOperation,
-		EntityID:   &cmd.OperationID,
-		Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
-	}); err != nil {
-		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return updated, nil
@@ -697,99 +667,90 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 	}
 	scope := op.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
-
-	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
-	}
-
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID); err != nil {
-		return domain.Operation{}, err
-	}
-
-	if !op.Status.IsCompleted() {
-		if err := tx.Commit(ctx); err != nil {
-			return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
-		}
-		return op, nil
-	}
-
-	loc, err := s.tzResolver.Resolve(ctx, scope)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
-	}
-	now := s.clock.Now()
-	today := timeutil.DateIn(now, loc)
-	status := domain.OperationStatusPending
-	if op.OperationDate.Before(today) {
-		status = domain.OperationStatusOverdue
-	}
-	op.Status = status
-	op.UpdatedAt = now
-
-	if err := op.ValidateStatusForType(); err != nil {
-		return domain.Operation{}, err
-	}
-
-	updated, err := txOps.Update(ctx, op)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("update operation: %w", err)
-	}
-
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		txCategories := s.categories.WithTx(tx)
-		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
+	var updated domain.Operation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, scope)
 		if err != nil {
-			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
-		}
-		if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
-		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get operation: %w", err)
 		}
 
-		if updated.Status == domain.OperationStatusOverdue {
-			if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated, cat.Name), now); err != nil {
-				return domain.Operation{}, fmt.Errorf("schedule overdue reminder: %w", err)
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, op.PropertyID); err != nil {
+			return err
+		}
+
+		if !op.Status.IsCompleted() {
+			updated = op
+			return nil
+		}
+
+		loc, err := s.tzResolver.Resolve(ctx, scope)
+		if err != nil {
+			return fmt.Errorf("resolve owner timezone: %w", err)
+		}
+		now := s.clock.Now()
+		today := timeutil.DateIn(now, loc)
+		status := domain.OperationStatusPending
+		if op.OperationDate.Before(today) {
+			status = domain.OperationStatusOverdue
+		}
+		op.Status = status
+		op.UpdatedAt = now
+
+		if err := op.ValidateStatusForType(); err != nil {
+			return err
+		}
+
+		updated, err = stores.operations.Update(ctx, op)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
 			}
-		} else if updated.ReminderOffsetDays != nil {
-			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
-			if !reminderDate.Before(today) {
-				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
-					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+			return fmt.Errorf("update operation: %w", err)
+		}
+
+		if stores.scheduler != nil {
+			cat, err := stores.categories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
+			if err != nil {
+				return fmt.Errorf("get category for reminder: %w", err)
+			}
+			if err := stores.scheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
+				return fmt.Errorf("cancel reminders: %w", err)
+			}
+			if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
+				return fmt.Errorf("cancel overdue reminders: %w", err)
+			}
+
+			if updated.Status == domain.OperationStatusOverdue {
+				if err := stores.scheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated, cat.Name), now); err != nil {
+					return fmt.Errorf("schedule overdue reminder: %w", err)
+				}
+			} else if updated.ReminderOffsetDays != nil {
+				reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
+				if !reminderDate.Before(today) {
+					if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
+						return fmt.Errorf("schedule operation reminder: %w", err)
+					}
 				}
 			}
 		}
-	}
 
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &cmd.Actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionOperationMarkedIncomplete,
-		EntityType: auditdomain.EntityOperation,
-		EntityID:   &cmd.OperationID,
-		Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
-	}); err != nil {
-		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &cmd.Actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionOperationMarkedIncomplete,
+			EntityType: auditdomain.EntityOperation,
+			EntityID:   &cmd.OperationID,
+			Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Operation{}, err
 	}
 
 	return updated, nil
@@ -837,56 +798,47 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, actor, o
 	}
 	normalizedAsOf := timeutil.DateIn(asOf, loc)
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return false, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
-
-	op, changed, err := txOps.MarkOverdue(ctx, actor, operationID, normalizedAsOf)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return false, ErrNotFound
-		}
-		return false, fmt.Errorf("mark overdue: %w", err)
-	}
-	if !changed {
-		if err := tx.Commit(ctx); err != nil {
-			return false, fmt.Errorf("commit tx: %w", err)
-		}
-		return false, nil
-	}
-
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		txCategories := s.categories.WithTx(tx)
-		cat, err := txCategories.GetByIDAndOwner(ctx, op.CategoryID, actor)
+	changed := false
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		op, ch, err := stores.operations.MarkOverdue(ctx, actor, operationID, normalizedAsOf)
 		if err != nil {
-			return false, fmt.Errorf("get category for reminder: %w", err)
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("mark overdue: %w", err)
 		}
-		if err := txScheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op, cat.Name), normalizedAsOf); err != nil {
-			return false, fmt.Errorf("schedule overdue reminder: %w", err)
+		changed = ch
+		if !changed {
+			return nil
 		}
+
+		if stores.scheduler != nil {
+			cat, err := stores.categories.GetByIDAndOwner(ctx, op.CategoryID, actor)
+			if err != nil {
+				return fmt.Errorf("get category for reminder: %w", err)
+			}
+			if err := stores.scheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op, cat.Name), normalizedAsOf); err != nil {
+				return fmt.Errorf("schedule overdue reminder: %w", err)
+			}
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionOperationUpdated,
+			EntityType: auditdomain.EntityOperation,
+			EntityID:   &operationID,
+			Context:    map[string]any{"trigger": "scheduler", "fields": []string{"status"}},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
 	}
 
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionOperationUpdated,
-		EntityType: auditdomain.EntityOperation,
-		EntityID:   &operationID,
-		Context:    map[string]any{"trigger": "scheduler", "fields": []string{"status"}},
-	}); err != nil {
-		return false, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit tx: %w", err)
-	}
-
-	return true, nil
+	return changed, nil
 }
 
 // DeleteOperation soft-deletes an operation after the T3 shared-access write
@@ -908,56 +860,49 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 	}
 	scope := op.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
-
-	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get operation: %w", err)
 		}
-		return fmt.Errorf("get operation: %w", err)
-	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID); err != nil {
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, op.PropertyID); err != nil {
+			return err
+		}
+
+		if err := stores.operations.SoftDeleteOperation(ctx, id, scope); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("delete operation: %w", err)
+		}
+
+		if stores.scheduler != nil {
+			if err := stores.scheduler.CancelByOperation(ctx, scope, id); err != nil {
+				return fmt.Errorf("cancel reminders: %w", err)
+			}
+			if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, id); err != nil {
+				return fmt.Errorf("cancel overdue reminders: %w", err)
+			}
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionOperationDeleted,
+			EntityType: auditdomain.EntityOperation,
+			EntityID:   &id,
+			Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
 		return err
-	}
-
-	if err := txOps.SoftDeleteOperation(ctx, id, scope); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("delete operation: %w", err)
-	}
-
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByOperation(ctx, scope, id); err != nil {
-			return fmt.Errorf("cancel reminders: %w", err)
-		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, id); err != nil {
-			return fmt.Errorf("cancel overdue reminders: %w", err)
-		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionOperationDeleted,
-		EntityType: auditdomain.EntityOperation,
-		EntityID:   &id,
-		Context:    map[string]any{"property_id": domain.PropertyIDPtr(op.PropertyID)},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
 	}
 
 	return nil
@@ -1007,88 +952,81 @@ func (s *OperationService) MoveOperation(ctx context.Context, actor, id uuid.UUI
 		return domain.Operation{}, newInvalidInputError("cannot move an operation to a property of another owner")
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txOps := s.operations.WithTx(tx)
-
-	op, err = txOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
-	}
-
-	// Repeat the guards on the locked row.
-	if err := validateMovableOperation(op, cmd.PropertyID); err != nil {
-		return domain.Operation{}, err
-	}
-	if err := validateMovePropertiesNotArchived(ctx, s.properties.WithTx(tx), scope, op.PropertyID, cmd.PropertyID); err != nil {
-		return domain.Operation{}, err
-	}
-
-	fromPropertyID := op.PropertyID
-	now := s.clock.Now()
-
-	updated, err := txOps.MoveToProperty(ctx, id, scope, cmd.PropertyID, now)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("move operation: %w", err)
-	}
-
-	// Recreate the reminders so their payloads point at the new property,
-	// mirroring the UpdateOperation reschedule flow.
-	if s.scheduler != nil {
-		loc, err := s.tzResolver.Resolve(ctx, scope)
+	var updated domain.Operation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, id, scope)
 		if err != nil {
-			return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get operation: %w", err)
 		}
-		today := timeutil.DateIn(now, loc)
 
-		txScheduler := s.scheduler.WithTx(tx)
-		txCategories := s.categories.WithTx(tx)
-		cat, err := txCategories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
+		// Repeat the guards on the locked row.
+		if err := validateMovableOperation(op, cmd.PropertyID); err != nil {
+			return err
+		}
+		if err := validateMovePropertiesNotArchived(ctx, stores.properties, scope, op.PropertyID, cmd.PropertyID); err != nil {
+			return err
+		}
+
+		fromPropertyID := op.PropertyID
+		now := s.clock.Now()
+
+		updated, err = stores.operations.MoveToProperty(ctx, id, scope, cmd.PropertyID, now)
 		if err != nil {
-			return domain.Operation{}, fmt.Errorf("get category for reminder: %w", err)
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("move operation: %w", err)
 		}
-		if err := txScheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel reminders: %w", err)
-		}
-		if err := txScheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
-			return domain.Operation{}, fmt.Errorf("cancel overdue reminders: %w", err)
-		}
-		if updated.ReminderOffsetDays != nil {
-			reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
-			if !reminderDate.Before(today) {
-				if err := txScheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
-					return domain.Operation{}, fmt.Errorf("schedule operation reminder: %w", err)
+
+		// Recreate the reminders so their payloads point at the new property,
+		// mirroring the UpdateOperation reschedule flow.
+		if stores.scheduler != nil {
+			loc, err := s.tzResolver.Resolve(ctx, scope)
+			if err != nil {
+				return fmt.Errorf("resolve owner timezone: %w", err)
+			}
+			today := timeutil.DateIn(now, loc)
+
+			cat, err := stores.categories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
+			if err != nil {
+				return fmt.Errorf("get category for reminder: %w", err)
+			}
+			if err := stores.scheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
+				return fmt.Errorf("cancel reminders: %w", err)
+			}
+			if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
+				return fmt.Errorf("cancel overdue reminders: %w", err)
+			}
+			if updated.ReminderOffsetDays != nil {
+				reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
+				if !reminderDate.Before(today) {
+					if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
+						return fmt.Errorf("schedule operation reminder: %w", err)
+					}
 				}
 			}
 		}
-	}
 
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionOperationMoved,
-		EntityType: auditdomain.EntityOperation,
-		EntityID:   &id,
-		Context: map[string]any{
-			"from_property_id": domain.PropertyIDPtr(fromPropertyID),
-			"to_property_id":   cmd.PropertyID,
-		},
-	}); err != nil {
-		return domain.Operation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Operation{}, fmt.Errorf("commit tx: %w", err)
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionOperationMoved,
+			EntityType: auditdomain.EntityOperation,
+			EntityID:   &id,
+			Context: map[string]any{
+				"from_property_id": domain.PropertyIDPtr(fromPropertyID),
+				"to_property_id":   cmd.PropertyID,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Operation{}, err
 	}
 
 	return updated, nil

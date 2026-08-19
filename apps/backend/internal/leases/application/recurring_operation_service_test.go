@@ -184,15 +184,10 @@ func TestUpdateRecurringOperation_ConcurrentUpdatesDoNotOverwrite(t *testing.T) 
 	recRepo := newLockingFakeRecurringOperationRepo(rec)
 	opRepo := &fakeOperationRepo{}
 	propertyRepo := &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: "active"}}
+	cats := newFakeCategoryRepoForOwner(ownerID)
 	svc := NewRecurringOperationService(
-		recRepo,
-		opRepo,
-		propertyRepo,
-		newFakeCategoryRepoForOwner(ownerID),
-		nil, // scheduler
-		nil, // reminders
-		fakeTxBeginner{},
-		nil,
+		recRepo, opRepo, propertyRepo, cats, nil,
+		NewTxStoreFactory(nil, propertyRepo, nil, recRepo, opRepo, cats, nil, nil, testUoW()),
 		fakeClock{now: date(2024, 6, 1)},
 		fakeTzResolver{},
 		fakePolicy{}, // policy
@@ -261,7 +256,12 @@ func (fakeReminderLister) ListByRecurringOperation(_ context.Context, _, _ uuid.
 
 func newRecurringGuardService(ownerID uuid.UUID, recRepo RecurringOperationRepository, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo, reminders ReminderLister) *RecurringOperationService {
 	seedPropertyOwners(propertyRepo, ownerID)
-	return NewRecurringOperationService(recRepo, opRepo, propertyRepo, newFakeCategoryRepoForOwner(ownerID), nil, reminders, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, fakePolicy{}, nil)
+	cats := newFakeCategoryRepoForOwner(ownerID)
+	return NewRecurringOperationService(
+		recRepo, opRepo, propertyRepo, cats, reminders,
+		NewTxStoreFactory(nil, propertyRepo, nil, recRepo, opRepo, cats, nil, nil, testUoW()),
+		fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, fakePolicy{}, nil,
+	)
 }
 
 func newGuardTestRecurringOperation(id, ownerID, propertyID uuid.UUID, status domain.RecurringOperationStatus) domain.RecurringOperation {

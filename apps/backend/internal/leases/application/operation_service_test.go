@@ -11,7 +11,12 @@ import (
 
 func newOperationGuardService(ownerID uuid.UUID, opRepo *fakeOperationRepo, propertyRepo *fakePropertyRepo) *OperationService {
 	seedPropertyOwners(propertyRepo, ownerID)
-	return NewOperationService(opRepo, propertyRepo, nil, nil, newFakeCategoryRepoForOwner(ownerID), nil, fakeTxBeginner{}, nil, fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, fakePolicy{}, nil)
+	cats := newFakeCategoryRepoForOwner(ownerID)
+	return NewOperationService(
+		opRepo, propertyRepo, nil, cats,
+		NewTxStoreFactory(nil, propertyRepo, nil, nil, opRepo, cats, nil, nil, testUoW()),
+		fakeClock{now: date(2026, 6, 15)}, fakeTzResolver{}, fakePolicy{}, nil,
+	)
 }
 
 // seedPropertyOwners maps every property known to the fake repository to the

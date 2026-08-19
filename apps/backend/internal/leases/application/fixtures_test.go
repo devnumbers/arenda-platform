@@ -37,3 +37,10 @@ func newFakeCategoryRepoForOwner(ownerID uuid.UUID) *fakeCategoryRepo {
 		{ID: testCustomIncomeCategoryID, OwnerID: ownerID, Type: domain.OperationTypeIncome, Name: "Custom income"},
 	}}
 }
+
+// testUoW adapts the package's fakeTxBeginner to the transaction.UoW port so
+// unit-test factories exercise the production commit/rollback semantics (the
+// production UoW lives in platform/database/postgres).
+func testUoW() fakeUoW {
+	return fakeUoW{beginner: fakeTxBeginner{}}
+}

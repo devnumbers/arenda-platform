@@ -40,11 +40,14 @@ type policyNoCommitTx struct{ pgx.Tx }
 func (policyNoCommitTx) Commit(context.Context) error   { return nil }
 func (policyNoCommitTx) Rollback(context.Context) error { return nil }
 
-// policyBeginner always returns the test's already-open transaction.
-type policyBeginner struct{ tx pgx.Tx }
+// policyUoW adapts the test's already-open transaction to the
+// transaction.UoW port so the services under test open their transactions
+// through runInTx (ADR 0033); the no-commit tx keeps the outer test
+// transaction in charge of cleanup.
+type policyUoW struct{ tx pgx.Tx }
 
-func (b policyBeginner) Begin(context.Context) (transaction.Tx, error) {
-	return policyNoCommitTx{Tx: b.tx}, nil
+func (u policyUoW) Do(_ context.Context, work func(tx transaction.Tx) error) error {
+	return work(policyNoCommitTx{Tx: u.tx})
 }
 
 // policyTestClock is a fixed clock for the services under test.
@@ -155,63 +158,68 @@ func addSuspendedPolicyMembership(t *testing.T, ctx context.Context, repo *acces
 // policyFixture wires the leases services with real repositories bound to the
 // test transaction and the real membership policy.
 type policyFixture struct {
-	q        *genpostgres.Queries
-	tx       pgx.Tx
-	beginner policyBeginner
-	policy   *accessapp.MembershipPolicy
-	members  *accesspg.MembershipRepository
-	ops      *OperationRepository
-	leases   *LeaseRepository
-	recs     *RecurringOperationRepository
-	props    *PropertyRepository
-	cats     *OperationCategoryRepository
-	clock    policyTestClock
+	q       *genpostgres.Queries
+	tx      pgx.Tx
+	uow     policyUoW
+	policy  *accessapp.MembershipPolicy
+	members *accesspg.MembershipRepository
+	ops     *OperationRepository
+	leases  *LeaseRepository
+	recs    *RecurringOperationRepository
+	props   *PropertyRepository
+	cats    *OperationCategoryRepository
+	clock   policyTestClock
 }
 
 func newPolicyFixture(tx pgx.Tx) *policyFixture {
 	return &policyFixture{
-		q:        genpostgres.New(tx),
-		tx:       tx,
-		beginner: policyBeginner{tx: tx},
-		policy:   accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(tx), accesspg.NewMembershipRepository(tx)),
-		members:  accesspg.NewMembershipRepository(tx),
-		ops:      NewOperationRepository(tx),
-		leases:   NewLeaseRepository(tx),
-		recs:     NewRecurringOperationRepository(tx),
-		props:    NewPropertyRepository(tx),
-		cats:     NewOperationCategoryRepository(tx),
-		clock:    policyTestClock{now: time.Now()},
+		q:       genpostgres.New(tx),
+		tx:      tx,
+		uow:     policyUoW{tx: tx},
+		policy:  accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(tx), accesspg.NewMembershipRepository(tx)),
+		members: accesspg.NewMembershipRepository(tx),
+		ops:     NewOperationRepository(tx),
+		leases:  NewLeaseRepository(tx),
+		recs:    NewRecurringOperationRepository(tx),
+		props:   NewPropertyRepository(tx),
+		cats:    NewOperationCategoryRepository(tx),
+		clock:   policyTestClock{now: time.Now()},
 	}
 }
 
 func (f *policyFixture) operationService() *application.OperationService {
-	return application.NewOperationService(f.ops, f.props, f.leases, f.recs, f.cats, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+	factory := application.NewTxStoreFactory(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, nil, f.uow)
+	return application.NewOperationService(f.ops, f.props, f.leases, f.cats, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
 }
 
 // operationServiceWithShared mirrors the production wiring (main.go) where the
 // SharedProperties adapter is injected into OperationService, so aggregate
 // reads (ListOperations) fold in the actor's shared properties (issue #157).
 func (f *policyFixture) operationServiceWithShared() *application.OperationService {
-	svc := application.NewOperationService(f.ops, f.props, f.leases, f.recs, f.cats, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+	factory := application.NewTxStoreFactory(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, nil, f.uow)
+	svc := application.NewOperationService(f.ops, f.props, f.leases, f.cats, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
 	svc.SetSharedPropertyIDs(accesspg.NewSharedProperties(f.tx))
 	return svc
 }
 
 func (f *policyFixture) leaseService() *application.LeaseService {
-	return application.NewLeaseService(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+	factory := application.NewTxStoreFactory(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, nil, f.uow)
+	return application.NewLeaseService(f.leases, f.props, nil, f.cats, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
 }
 
 // leaseServiceWithShared mirrors the production wiring where the
 // SharedProperties adapter is injected into LeaseService, so the lease payment-
 // schedule reads fold in the actor's shared properties (issue #157).
 func (f *policyFixture) leaseServiceWithShared() *application.LeaseService {
-	svc := application.NewLeaseService(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+	factory := application.NewTxStoreFactory(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, nil, f.uow)
+	svc := application.NewLeaseService(f.leases, f.props, nil, f.cats, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
 	svc.SetSharedPropertyIDs(accesspg.NewSharedProperties(f.tx))
 	return svc
 }
 
 func (f *policyFixture) recurringService() *application.RecurringOperationService {
-	return application.NewRecurringOperationService(f.recs, f.ops, f.props, f.cats, nil, nil, f.beginner, nil, f.clock, policyTestTzResolver{}, f.policy, nil)
+	factory := application.NewTxStoreFactory(f.leases, f.props, nil, f.recs, f.ops, f.cats, nil, nil, f.uow)
+	return application.NewRecurringOperationService(f.recs, f.ops, f.props, f.cats, nil, factory, f.clock, policyTestTzResolver{}, f.policy, nil)
 }
 
 // expenseCategoryID returns a seeded default expense category of the owner.

@@ -148,12 +148,12 @@ func (handlerFakeCategories) WithTx(transaction.Tx) leasesapp.OperationCategoryR
 
 var _ leasesapp.OperationCategoryRepository = handlerFakeCategories{}
 
-// handlerFakeBeginner satisfies the leases txBeginner parameter; GetLease
-// never begins a transaction, so Begin fails loudly if it ever is called.
-type handlerFakeBeginner struct{}
+// handlerFakeUoW satisfies the leases txStoreFactory UoW parameter; GetLease
+// never opens a transaction, so Do fails loudly if it ever is called.
+type handlerFakeUoW struct{}
 
-func (handlerFakeBeginner) Begin(context.Context) (transaction.Tx, error) {
-	return nil, errBeginnerNotUsed
+func (handlerFakeUoW) Do(context.Context, func(transaction.Tx) error) error {
+	return errBeginnerNotUsed
 }
 
 type handlerFakeClock struct{}
@@ -324,24 +324,22 @@ func (r *handlerFakeReminderRepo) WithTx(transaction.Tx) notificationsapp.Remind
 var _ notificationsapp.ReminderRepository = (*handlerFakeReminderRepo)(nil)
 
 func newListLeaseRemindersHandler(reminderRepo *handlerFakeReminderRepo) *ReminderHandlers {
+	leaseRepo := handlerFakeLeaseRepo{lease: leasesdomain.Lease{
+		ID:         handlerLeaseID,
+		OwnerID:    handlerOwnerID,
+		PropertyID: handlerPropertyID,
+		Status:     leasesdomain.LeaseStatusActive,
+		StartDate:  handlerReminderNow.Add(-30 * 24 * time.Hour),
+		CreatedAt:  handlerReminderNow,
+		UpdatedAt:  handlerReminderNow,
+	}}
+	factory := leasesapp.NewTxStoreFactory(leaseRepo, nil, nil, nil, nil, handlerFakeCategories{}, nil, nil, handlerFakeUoW{})
 	leaseSvc := leasesapp.NewLeaseService(
-		handlerFakeLeaseRepo{lease: leasesdomain.Lease{
-			ID:         handlerLeaseID,
-			OwnerID:    handlerOwnerID,
-			PropertyID: handlerPropertyID,
-			Status:     leasesdomain.LeaseStatusActive,
-			StartDate:  handlerReminderNow.Add(-30 * 24 * time.Hour),
-			CreatedAt:  handlerReminderNow,
-			UpdatedAt:  handlerReminderNow,
-		}},
+		leaseRepo,
 		nil, // properties: unused by GetLease
 		nil, // tenantContacts: unused
-		nil, // recurringOps: unused
-		nil, // operations: unused
 		handlerFakeCategories{},
-		nil, // scheduler: unused
-		handlerFakeBeginner{},
-		nil, // audit: unused
+		factory,
 		handlerFakeClock{},
 		handlerFakeTzResolver{},
 		handlerFakePolicy{propertyRoles: map[[2]uuid.UUID]sharedpolicy.Role{

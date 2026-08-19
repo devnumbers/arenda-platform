@@ -66,7 +66,12 @@ func WireLeasesServices(
 	leasePropertyContactRepo := leasespg.NewPropertyContactRepository(p.DB)
 	tenantContactRepo := leasespg.NewTenantContactRepository(p.DB)
 
-	leaseService := leasesapp.NewLeaseService(
+	// factory is the single canonical txStoreFactory bundling the leases
+	// repositories, the cross-context reminder scheduler, the audit recorder,
+	// and the UoW (ADR 0033 γ-factory). It is passed to the three leases
+	// services that open their own transactions so adding an Nth repository is
+	// a change here, not in several constructors.
+	factory := leasesapp.NewTxStoreFactory(
 		repos.LeaseRepo,
 		leasePropertyRepo,
 		tenantContactRepo,
@@ -74,8 +79,16 @@ func WireLeasesServices(
 		repos.OperationRepo,
 		repos.CategoryRepo,
 		reminderScheduler,
-		p.Beginner,
 		p.AuditRecorder,
+		p.UoW,
+	)
+
+	leaseService := leasesapp.NewLeaseService(
+		repos.LeaseRepo,
+		leasePropertyRepo,
+		tenantContactRepo,
+		repos.CategoryRepo,
+		factory,
 		p.Clock,
 		p.TZResolver,
 		p.Policy,
@@ -91,11 +104,8 @@ func WireLeasesServices(
 		repos.OperationRepo,
 		leasePropertyRepo,
 		repos.LeaseRepo,
-		repos.RecurringOpRepo,
 		repos.CategoryRepo,
-		reminderScheduler,
-		p.Beginner,
-		p.AuditRecorder,
+		factory,
 		p.Clock,
 		p.TZResolver,
 		p.Policy,
@@ -107,10 +117,8 @@ func WireLeasesServices(
 		repos.OperationRepo,
 		leasePropertyRepo,
 		repos.CategoryRepo,
-		reminderScheduler,
 		reminderService,
-		p.Beginner,
-		p.AuditRecorder,
+		factory,
 		p.Clock,
 		p.TZResolver,
 		p.Policy,

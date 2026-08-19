@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -18,7 +17,6 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // CreateRecurringOperationCommand carries the data needed to create a user-managed
@@ -59,14 +57,12 @@ type RecurringOperationService struct {
 	operations   OperationRepository
 	properties   PropertyRepository
 	categories   OperationCategoryRepository
-	scheduler    ReminderScheduler
 	reminders    ReminderLister
-	db           txBeginner
-	audit        auditapp.Recorder
-	clock        clock.Clock
-	tzResolver   sharedtz.OwnerTimezoneResolver
-	policy       sharedpolicy.Policy
-	logger       *slog.Logger
+	txStoreFactory
+	clock      clock.Clock
+	tzResolver sharedtz.OwnerTimezoneResolver
+	policy     sharedpolicy.Policy
+	logger     *slog.Logger
 	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
 	// aggregate list covers only the actor's own recurring operations, when set
 	// it additionally includes recurring operations of properties shared with
@@ -89,24 +85,22 @@ type ReminderLister interface {
 	ListByRecurringOperation(ctx context.Context, scope, recurringOpID uuid.UUID, filter notificationsapp.ListFilter) ([]notificationsdomain.Reminder, error)
 }
 
-// NewRecurringOperationService creates a new recurring operation service.
+// NewRecurringOperationService creates a new recurring operation service. The
+// shared txStoreFactory carries the transactional collaborators (repositories,
+// scheduler, audit, UoW); the repositories passed separately are the
+// non-transactional read handles (ADR 0033).
 func NewRecurringOperationService(
 	recurringOps RecurringOperationRepository,
 	operations OperationRepository,
 	properties PropertyRepository,
 	categories OperationCategoryRepository,
-	scheduler ReminderScheduler,
 	reminders ReminderLister,
-	db txBeginner,
-	audit auditapp.Recorder,
+	factory txStoreFactory,
 	clk clock.Clock,
 	tzResolver sharedtz.OwnerTimezoneResolver,
 	policy sharedpolicy.Policy,
 	logger *slog.Logger,
 ) *RecurringOperationService {
-	if db == nil {
-		panic("db beginner is required")
-	}
 	if clk == nil {
 		panic("clk is required")
 	}
@@ -116,22 +110,17 @@ func NewRecurringOperationService(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &RecurringOperationService{
-		recurringOps: recurringOps,
-		operations:   operations,
-		properties:   properties,
-		categories:   categories,
-		scheduler:    scheduler,
-		reminders:    reminders,
-		db:           db,
-		audit:        audit,
-		clock:        clk,
-		tzResolver:   tzResolver,
-		policy:       policy,
-		logger:       logger,
+		recurringOps:   recurringOps,
+		operations:     operations,
+		properties:     properties,
+		categories:     categories,
+		reminders:      reminders,
+		txStoreFactory: factory,
+		clock:          clk,
+		tzResolver:     tzResolver,
+		policy:         policy,
+		logger:         logger,
 	}
 }
 
@@ -212,58 +201,51 @@ func (s *RecurringOperationService) CreateRecurringOperation(
 		UpdatedAt:          now,
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-
-	created, err := txRecurring.Create(ctx, rec)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("create recurring operation: %w", err)
-	}
-
-	err = s.generateOperations(ctx, txOps, created, today, nil)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
-	}
-
-	if s.scheduler != nil && created.ReminderOffsetDays != nil {
-		persistedOps, err := txOps.ListByRecurringOperation(ctx, created.ID)
+	var created domain.RecurringOperation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		created, err = stores.recurringOps.Create(ctx, rec)
 		if err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
+			return fmt.Errorf("create recurring operation: %w", err)
 		}
-		txScheduler := s.scheduler.WithTx(tx)
-		txCategories := s.categories.WithTx(tx)
-		categoryNames, err := buildCategoryNamesMap(ctx, txCategories, scope)
+
+		err = s.generateOperations(ctx, stores.operations, created, today, nil)
 		if err != nil {
-			return domain.RecurringOperation{}, err
+			return fmt.Errorf("generate operations: %w", err)
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, categoryNames, today); err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
+
+		if stores.scheduler != nil && created.ReminderOffsetDays != nil {
+			persistedOps, err := stores.operations.ListByRecurringOperation(ctx, created.ID)
+			if err != nil {
+				return fmt.Errorf("list operations for scheduling: %w", err)
+			}
+			categoryNames, err := buildCategoryNamesMap(ctx, stores.categories, scope)
+			if err != nil {
+				return err
+			}
+			if err := scheduleRemindersForOperations(ctx, stores.scheduler, created, persistedOps, categoryNames, today); err != nil {
+				return fmt.Errorf("schedule reminders: %w", err)
+			}
 		}
-	}
 
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionRecurringOperationCreated,
-		EntityType: auditdomain.EntityRecurringOperation,
-		EntityID:   &created.ID,
-		Context: map[string]any{
-			"property_id":    domain.PropertyIDPtr(created.PropertyID),
-			"type":           string(created.Type),
-			"amount_kopecks": created.AmountKopecks,
-		},
-	}); err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionRecurringOperationCreated,
+			EntityType: auditdomain.EntityRecurringOperation,
+			EntityID:   &created.ID,
+			Context: map[string]any{
+				"property_id":    domain.PropertyIDPtr(created.PropertyID),
+				"type":           string(created.Type),
+				"amount_kopecks": created.AmountKopecks,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.RecurringOperation{}, err
 	}
 
 	return created, nil
@@ -359,65 +341,52 @@ func (s *RecurringOperationService) DeleteRecurringOperation(
 	}
 	scope := rec.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-
-	rec, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
+	return s.runInTx(ctx, func(stores *txStores) error {
+		rec, err := stores.recurringOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get recurring operation: %w", err)
 		}
-		return fmt.Errorf("get recurring operation: %w", err)
-	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, rec.PropertyID); err != nil {
-		return err
-	}
-
-	if rec.LeaseID != uuid.Nil {
-		return ErrRecurringOperationLeaseCreated
-	}
-
-	if err := txOps.DeleteFutureGeneratedOperations(ctx, id, scope); err != nil {
-		return fmt.Errorf("delete future generated operations: %w", err)
-	}
-
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByRecurringOperation(ctx, scope, id); err != nil {
-			return fmt.Errorf("cancel recurring reminders: %w", err)
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, rec.PropertyID); err != nil {
+			return err
 		}
-	}
 
-	if err := txRecurring.SoftDelete(ctx, id, scope); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
+		if rec.LeaseID != uuid.Nil {
+			return ErrRecurringOperationLeaseCreated
 		}
-		return fmt.Errorf("soft delete recurring operation: %w", err)
-	}
 
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionRecurringOperationDeleted,
-		EntityType: auditdomain.EntityRecurringOperation,
-		EntityID:   &id,
-		Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
+		if err := stores.operations.DeleteFutureGeneratedOperations(ctx, id, scope); err != nil {
+			return fmt.Errorf("delete future generated operations: %w", err)
+		}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
+		if stores.scheduler != nil {
+			if err := stores.scheduler.CancelByRecurringOperation(ctx, scope, id); err != nil {
+				return fmt.Errorf("cancel recurring reminders: %w", err)
+			}
+		}
 
-	return nil
+		if err := stores.recurringOps.SoftDelete(ctx, id, scope); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("soft delete recurring operation: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionRecurringOperationDeleted,
+			EntityType: auditdomain.EntityRecurringOperation,
+			EntityID:   &id,
+			Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // applyRecurringOperationUpdate applies the update command's patch fields to
@@ -509,8 +478,7 @@ func (s *RecurringOperationService) applyRecurringOperationUpdate(
 // the future operations, and re-schedules reminders when an offset is set.
 func (s *RecurringOperationService) resyncRecurringSeries(
 	ctx context.Context,
-	tx transaction.Tx,
-	txOps OperationRepository,
+	stores *txStores,
 	updated domain.RecurringOperation,
 	cmd UpdateRecurringOperationCommand,
 	scope uuid.UUID,
@@ -518,41 +486,38 @@ func (s *RecurringOperationService) resyncRecurringSeries(
 	hadReminderOffset bool,
 ) error {
 	if cmd.ReminderOffsetDays != nil {
-		if err := txOps.UpdateFutureGeneratedOperationReminderOffsets(ctx, scope, updated.ID, updated.ReminderOffsetDays, today); err != nil {
+		if err := stores.operations.UpdateFutureGeneratedOperationReminderOffsets(ctx, scope, updated.ID, updated.ReminderOffsetDays, today); err != nil {
 			return fmt.Errorf("sync generated operation reminder offsets: %w", err)
 		}
 	}
 
-	if s.scheduler != nil && (hadReminderOffset || updated.ReminderOffsetDays != nil) {
-		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByRecurringOperation(ctx, scope, updated.ID); err != nil {
+	if stores.scheduler != nil && (hadReminderOffset || updated.ReminderOffsetDays != nil) {
+		if err := stores.scheduler.CancelByRecurringOperation(ctx, scope, updated.ID); err != nil {
 			return fmt.Errorf("cancel recurring reminders: %w", err)
 		}
 	}
 
-	if err := txOps.DeleteUneditedFutureOperationsByRecurringOperation(ctx, updated.ID, today); err != nil {
+	if err := stores.operations.DeleteUneditedFutureOperationsByRecurringOperation(ctx, updated.ID, today); err != nil {
 		return fmt.Errorf("delete future operations: %w", err)
 	}
 
-	err := s.generateOperations(ctx, txOps, updated, today, func(d time.Time) bool {
+	err := s.generateOperations(ctx, stores.operations, updated, today, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(today)
 	})
 	if err != nil {
 		return fmt.Errorf("regenerate operations: %w", err)
 	}
 
-	if s.scheduler != nil && updated.ReminderOffsetDays != nil {
-		persistedOps, err := txOps.ListByRecurringOperation(ctx, updated.ID)
+	if stores.scheduler != nil && updated.ReminderOffsetDays != nil {
+		persistedOps, err := stores.operations.ListByRecurringOperation(ctx, updated.ID)
 		if err != nil {
 			return fmt.Errorf("list operations for scheduling: %w", err)
 		}
-		txScheduler := s.scheduler.WithTx(tx)
-		txCategories := s.categories.WithTx(tx)
-		categoryNames, err := buildCategoryNamesMap(ctx, txCategories, scope)
+		categoryNames, err := buildCategoryNamesMap(ctx, stores.categories, scope)
 		if err != nil {
 			return err
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, updated, persistedOps, categoryNames, today); err != nil {
+		if err := scheduleRemindersForOperations(ctx, stores.scheduler, updated, persistedOps, categoryNames, today); err != nil {
 			return fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -585,96 +550,89 @@ func (s *RecurringOperationService) UpdateRecurringOperation(
 	}
 	scope := rec.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-	txCategories := s.categories.WithTx(tx)
-
-	rec, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.RecurringOperation{}, ErrNotFound
-		}
-		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
-	}
-
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, rec.PropertyID); err != nil {
-		return domain.RecurringOperation{}, err
-	}
-
-	loc, err := s.tzResolver.Resolve(ctx, scope)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("resolve owner timezone: %w", err)
-	}
-	now := s.clock.Now()
-	today := timeutil.DateIn(now, loc)
-	originalReminderOffset := rec.ReminderOffsetDays
-
-	if cmd.ApplyFromDate != nil {
-		if cmd.StartDate != nil {
-			return domain.RecurringOperation{}, newInvalidInputError("start_date cannot be used with apply_from_date")
-		}
-		newRec, err := s.splitRecurringOperationSeries(ctx, tx, scope, rec, cmd, today)
+	var result domain.RecurringOperation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		rec, err := stores.recurringOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
 		if err != nil {
-			return domain.RecurringOperation{}, err
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get recurring operation: %w", err)
 		}
-		if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, rec.PropertyID); err != nil {
+			return err
+		}
+
+		loc, err := s.tzResolver.Resolve(ctx, scope)
+		if err != nil {
+			return fmt.Errorf("resolve owner timezone: %w", err)
+		}
+		now := s.clock.Now()
+		today := timeutil.DateIn(now, loc)
+		originalReminderOffset := rec.ReminderOffsetDays
+
+		if cmd.ApplyFromDate != nil {
+			if cmd.StartDate != nil {
+				return newInvalidInputError("start_date cannot be used with apply_from_date")
+			}
+			newRec, err := s.splitRecurringOperationSeries(ctx, stores, scope, rec, cmd, today)
+			if err != nil {
+				return err
+			}
+			if err := stores.audit.Record(ctx, auditdomain.Entry{
+				ActorID:    &actor,
+				ActorRole:  actorRoleFromPolicyRole(role),
+				Action:     auditdomain.ActionRecurringOperationUpdated,
+				EntityType: auditdomain.EntityRecurringOperation,
+				EntityID:   &id,
+				Context: map[string]any{
+					"fields":        updatedRecurringOperationFields(cmd),
+					"new_series_id": newRec.ID,
+				},
+			}); err != nil {
+				return fmt.Errorf("record audit: %w", err)
+			}
+			result = newRec
+			return nil
+		}
+
+		rec, err = s.applyRecurringOperationUpdate(ctx, stores.categories, rec, cmd, scope, now)
+		if err != nil {
+			return err
+		}
+
+		updated, err := stores.recurringOps.Update(ctx, rec)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("update recurring operation: %w", err)
+		}
+
+		if err := s.resyncRecurringSeries(ctx, stores, updated, cmd, scope, today, originalReminderOffset != nil); err != nil {
+			return err
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
 			ActorRole:  actorRoleFromPolicyRole(role),
 			Action:     auditdomain.ActionRecurringOperationUpdated,
 			EntityType: auditdomain.EntityRecurringOperation,
 			EntityID:   &id,
-			Context: map[string]any{
-				"fields":        updatedRecurringOperationFields(cmd),
-				"new_series_id": newRec.ID,
-			},
+			Context:    map[string]any{"fields": updatedRecurringOperationFields(cmd)},
 		}); err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
+			return fmt.Errorf("record audit: %w", err)
 		}
-		if err := tx.Commit(ctx); err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
-		}
-		return newRec, nil
-	}
 
-	rec, err = s.applyRecurringOperationUpdate(ctx, txCategories, rec, cmd, scope, now)
+		result = updated
+		return nil
+	})
 	if err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
-	updated, err := txRecurring.Update(ctx, rec)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.RecurringOperation{}, ErrNotFound
-		}
-		return domain.RecurringOperation{}, fmt.Errorf("update recurring operation: %w", err)
-	}
-
-	if err := s.resyncRecurringSeries(ctx, tx, txOps, updated, cmd, scope, today, originalReminderOffset != nil); err != nil {
-		return domain.RecurringOperation{}, err
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionRecurringOperationUpdated,
-		EntityType: auditdomain.EntityRecurringOperation,
-		EntityID:   &id,
-		Context:    map[string]any{"fields": updatedRecurringOperationFields(cmd)},
-	}); err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
-	}
-
-	return updated, nil
+	return result, nil
 }
 
 // newSeriesFromUpdate computes the new series record for a split: it applies
@@ -797,16 +755,12 @@ func (s *RecurringOperationService) newSeriesFromUpdate(
 // onward, and creates a new recurring operation with the requested changes.
 func (s *RecurringOperationService) splitRecurringOperationSeries(
 	ctx context.Context,
-	tx transaction.Tx,
+	stores *txStores,
 	scope uuid.UUID,
 	rec domain.RecurringOperation,
 	cmd UpdateRecurringOperationCommand,
 	now time.Time,
 ) (domain.RecurringOperation, error) {
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-	txCategories := s.categories.WithTx(tx)
-
 	applyFromDate := timeutil.Date(*cmd.ApplyFromDate)
 	// now is already normalized to midnight in the owner's timezone by the caller.
 	today := now
@@ -821,7 +775,7 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 		return domain.RecurringOperation{}, newInvalidInputError("apply_from_date must be on or before the series end date")
 	}
 
-	newRec, err := s.newSeriesFromUpdate(ctx, txCategories, scope, rec, cmd, applyFromDate, now)
+	newRec, err := s.newSeriesFromUpdate(ctx, stores.categories, scope, rec, cmd, applyFromDate, now)
 	if err != nil {
 		return domain.RecurringOperation{}, err
 	}
@@ -830,53 +784,51 @@ func (s *RecurringOperationService) splitRecurringOperationSeries(
 	rec.EndDate = &oldEndDate
 	rec.UpdatedAt = now
 
-	if _, err := txRecurring.Update(ctx, rec); err != nil {
+	if _, err := stores.recurringOps.Update(ctx, rec); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.RecurringOperation{}, ErrNotFound
 		}
 		return domain.RecurringOperation{}, fmt.Errorf("truncate recurring operation: %w", err)
 	}
 
-	if err := txOps.DeleteUneditedOperationsByRecurringOperation(ctx, rec.ID, applyFromDate); err != nil {
+	if err := stores.operations.DeleteUneditedOperationsByRecurringOperation(ctx, rec.ID, applyFromDate); err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("delete future operations: %w", err)
 	}
 
-	created, err := txRecurring.Create(ctx, newRec)
+	created, err := stores.recurringOps.Create(ctx, newRec)
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("create new recurring operation: %w", err)
 	}
 
-	err = s.generateOperations(ctx, txOps, created, now, func(d time.Time) bool {
+	err = s.generateOperations(ctx, stores.operations, created, now, func(d time.Time) bool {
 		return !timeutil.Date(d).Before(applyFromDate)
 	})
 	if err != nil {
 		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
 	}
 
-	if s.scheduler != nil && (rec.ReminderOffsetDays != nil || created.ReminderOffsetDays != nil) {
-		txScheduler := s.scheduler.WithTx(tx)
-		txCategories := s.categories.WithTx(tx)
-		categoryNames, err := buildCategoryNamesMap(ctx, txCategories, scope)
+	if stores.scheduler != nil && (rec.ReminderOffsetDays != nil || created.ReminderOffsetDays != nil) {
+		categoryNames, err := buildCategoryNamesMap(ctx, stores.categories, scope)
 		if err != nil {
 			return domain.RecurringOperation{}, err
 		}
-		if err := txScheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
+		if err := stores.scheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("cancel recurring reminders: %w", err)
 		}
 
-		retainedOps, err := txOps.ListByRecurringOperation(ctx, rec.ID)
+		retainedOps, err := stores.operations.ListByRecurringOperation(ctx, rec.ID)
 		if err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("list retained operations for scheduling: %w", err)
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, retainedOps, categoryNames, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, stores.scheduler, rec, retainedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders for retained operations: %w", err)
 		}
 
-		persistedOps, err := txOps.ListByRecurringOperation(ctx, created.ID)
+		persistedOps, err := stores.operations.ListByRecurringOperation(ctx, created.ID)
 		if err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
 		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, created, persistedOps, categoryNames, now); err != nil {
+		if err := scheduleRemindersForOperations(ctx, stores.scheduler, created, persistedOps, categoryNames, now); err != nil {
 			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
 		}
 	}
@@ -905,57 +857,53 @@ func (s *RecurringOperationService) PauseRecurringOperation(
 	}
 	scope := rec.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRecurring := s.recurringOps.WithTx(tx)
-
-	rec, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.RecurringOperation{}, ErrNotFound
+	var result domain.RecurringOperation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		rec, err := stores.recurringOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get recurring operation: %w", err)
 		}
-		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
-	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, rec.PropertyID); err != nil {
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, rec.PropertyID); err != nil {
+			return err
+		}
+
+		if stores.scheduler != nil {
+			if err := stores.scheduler.CancelByRecurringOperation(ctx, scope, id); err != nil {
+				return fmt.Errorf("cancel reminders: %w", err)
+			}
+		}
+
+		rec, err = stores.recurringOps.UpdateStatus(ctx, id, scope, string(domain.RecurringOperationStatusPaused))
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("pause recurring operation: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionRecurringOperationPaused,
+			EntityType: auditdomain.EntityRecurringOperation,
+			EntityID:   &id,
+			Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+
+		result = rec
+		return nil
+	})
+	if err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByRecurringOperation(ctx, scope, id); err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("cancel reminders: %w", err)
-		}
-	}
-
-	rec, err = txRecurring.UpdateStatus(ctx, id, scope, string(domain.RecurringOperationStatusPaused))
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.RecurringOperation{}, ErrNotFound
-		}
-		return domain.RecurringOperation{}, fmt.Errorf("pause recurring operation: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionRecurringOperationPaused,
-		EntityType: auditdomain.EntityRecurringOperation,
-		EntityID:   &id,
-		Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
-	}); err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
-	}
-
-	return rec, nil
+	return result, nil
 }
 
 // ResumeRecurringOperation marks a recurring operation as active and generates any
@@ -980,86 +928,78 @@ func (s *RecurringOperationService) ResumeRecurringOperation(
 	}
 	scope := rec.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-
-	rec, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.RecurringOperation{}, ErrNotFound
+	var result domain.RecurringOperation
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		rec, err := stores.recurringOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get recurring operation: %w", err)
 		}
-		return domain.RecurringOperation{}, fmt.Errorf("get recurring operation: %w", err)
-	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, rec.PropertyID); err != nil {
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, rec.PropertyID); err != nil {
+			return err
+		}
+
+		if rec.Status == domain.RecurringOperationStatusActive {
+			result = rec
+			return nil
+		}
+
+		rec, err = stores.recurringOps.UpdateStatus(ctx, id, scope, string(domain.RecurringOperationStatusActive))
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("resume recurring operation: %w", err)
+		}
+
+		loc, err := s.tzResolver.Resolve(ctx, scope)
+		if err != nil {
+			return fmt.Errorf("resolve owner timezone: %w", err)
+		}
+		today := timeutil.DateIn(s.clock.Now(), loc)
+		err = s.generateOperations(ctx, stores.operations, rec, today, func(d time.Time) bool {
+			return !timeutil.Date(d).Before(today)
+		})
+		if err != nil {
+			return fmt.Errorf("generate operations: %w", err)
+		}
+
+		if stores.scheduler != nil && rec.ReminderOffsetDays != nil {
+			persistedOps, err := stores.operations.ListByRecurringOperation(ctx, rec.ID)
+			if err != nil {
+				return fmt.Errorf("list operations for scheduling: %w", err)
+			}
+			categoryNames, err := buildCategoryNamesMap(ctx, stores.categories, scope)
+			if err != nil {
+				return err
+			}
+			if err := scheduleRemindersForOperations(ctx, stores.scheduler, rec, persistedOps, categoryNames, today); err != nil {
+				return fmt.Errorf("schedule reminders: %w", err)
+			}
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionRecurringOperationResumed,
+			EntityType: auditdomain.EntityRecurringOperation,
+			EntityID:   &id,
+			Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+
+		result = rec
+		return nil
+	})
+	if err != nil {
 		return domain.RecurringOperation{}, err
 	}
 
-	if rec.Status == domain.RecurringOperationStatusActive {
-		if err := tx.Commit(ctx); err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
-		}
-		return rec, nil
-	}
-
-	rec, err = txRecurring.UpdateStatus(ctx, id, scope, string(domain.RecurringOperationStatusActive))
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.RecurringOperation{}, ErrNotFound
-		}
-		return domain.RecurringOperation{}, fmt.Errorf("resume recurring operation: %w", err)
-	}
-
-	loc, err := s.tzResolver.Resolve(ctx, scope)
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("resolve owner timezone: %w", err)
-	}
-	today := timeutil.DateIn(s.clock.Now(), loc)
-	err = s.generateOperations(ctx, txOps, rec, today, func(d time.Time) bool {
-		return !timeutil.Date(d).Before(today)
-	})
-	if err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("generate operations: %w", err)
-	}
-
-	if s.scheduler != nil && rec.ReminderOffsetDays != nil {
-		persistedOps, err := txOps.ListByRecurringOperation(ctx, rec.ID)
-		if err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("list operations for scheduling: %w", err)
-		}
-		txScheduler := s.scheduler.WithTx(tx)
-		txCategories := s.categories.WithTx(tx)
-		categoryNames, err := buildCategoryNamesMap(ctx, txCategories, scope)
-		if err != nil {
-			return domain.RecurringOperation{}, err
-		}
-		if err := scheduleRemindersForOperations(ctx, txScheduler, rec, persistedOps, categoryNames, today); err != nil {
-			return domain.RecurringOperation{}, fmt.Errorf("schedule reminders: %w", err)
-		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionRecurringOperationResumed,
-		EntityType: auditdomain.EntityRecurringOperation,
-		EntityID:   &id,
-		Context:    map[string]any{"property_id": domain.PropertyIDPtr(rec.PropertyID)},
-	}); err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.RecurringOperation{}, fmt.Errorf("commit tx: %w", err)
-	}
-
-	return rec, nil
+	return result, nil
 }
 
 // ListOperationsByRecurringOperation returns the generated operations for a
@@ -1117,80 +1057,62 @@ func (s *RecurringOperationService) SetReminderOffset(
 	}
 	scope := rec.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-
-	rec, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
+	return s.runInTx(ctx, func(stores *txStores) error {
+		rec, err := stores.recurringOps.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get recurring operation: %w", err)
 		}
-		return fmt.Errorf("get recurring operation: %w", err)
-	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, rec.PropertyID); err != nil {
-		return err
-	}
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, rec.PropertyID); err != nil {
+			return err
+		}
 
-	ops, err := txOps.ListByRecurringOperation(ctx, id)
-	if err != nil {
-		return fmt.Errorf("list operations: %w", err)
-	}
+		ops, err := stores.operations.ListByRecurringOperation(ctx, id)
+		if err != nil {
+			return fmt.Errorf("list operations: %w", err)
+		}
 
-	loc, err := s.tzResolver.Resolve(ctx, scope)
-	if err != nil {
-		return fmt.Errorf("resolve owner timezone: %w", err)
-	}
-	today := timeutil.DateIn(s.clock.Now(), loc)
-	if err := s.applyReminderOffsetInTx(ctx, tx, scope, rec, ops, offsetDays, today); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
+		loc, err := s.tzResolver.Resolve(ctx, scope)
+		if err != nil {
+			return fmt.Errorf("resolve owner timezone: %w", err)
+		}
+		today := timeutil.DateIn(s.clock.Now(), loc)
+		return s.applyReminderOffset(ctx, stores, scope, rec, ops, offsetDays, today)
+	})
 }
 
-// applyReminderOffsetInTx stores the offset and rebuilds concrete reminders
-// inside an existing transaction. The caller is responsible for committing.
-func (s *RecurringOperationService) applyReminderOffsetInTx(
+// applyReminderOffset stores the offset and rebuilds concrete reminders inside
+// the caller's transaction; the caller's runInTx commits the change.
+func (s *RecurringOperationService) applyReminderOffset(
 	ctx context.Context,
-	tx transaction.Tx,
+	stores *txStores,
 	scope uuid.UUID,
 	rec domain.RecurringOperation,
 	ops []domain.Operation,
 	offsetDays int,
 	now time.Time,
 ) error {
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
 	normalizedOffsetDays := normalizeReminderOffsetDays(&offsetDays)
 
-	if err := txRecurring.SetReminderOffset(ctx, scope, rec.ID, normalizedOffsetDays); err != nil {
+	if err := stores.recurringOps.SetReminderOffset(ctx, scope, rec.ID, normalizedOffsetDays); err != nil {
 		return fmt.Errorf("set reminder offset: %w", err)
 	}
-	if err := txOps.UpdateFutureGeneratedOperationReminderOffsets(ctx, scope, rec.ID, normalizedOffsetDays, now); err != nil {
+	if err := stores.operations.UpdateFutureGeneratedOperationReminderOffsets(ctx, scope, rec.ID, normalizedOffsetDays, now); err != nil {
 		return fmt.Errorf("sync generated operation reminder offsets: %w", err)
 	}
 
-	if s.scheduler == nil {
+	if stores.scheduler == nil {
 		return nil
 	}
 
-	txScheduler := s.scheduler.WithTx(tx)
-	txCategories := s.categories.WithTx(tx)
-	categoryNames, err := buildCategoryNamesMap(ctx, txCategories, scope)
+	categoryNames, err := buildCategoryNamesMap(ctx, stores.categories, scope)
 	if err != nil {
 		return err
 	}
-	if err := txScheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
+	if err := stores.scheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
 		return fmt.Errorf("cancel recurring reminders: %w", err)
 	}
 	if normalizedOffsetDays == nil {
@@ -1198,7 +1120,7 @@ func (s *RecurringOperationService) applyReminderOffsetInTx(
 	}
 
 	rec.ReminderOffsetDays = normalizedOffsetDays
-	if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, categoryNames, now); err != nil {
+	if err := scheduleRemindersForOperations(ctx, stores.scheduler, rec, ops, categoryNames, now); err != nil {
 		return fmt.Errorf("schedule reminders: %w", err)
 	}
 	return nil
@@ -1242,55 +1164,45 @@ func (s *RecurringOperationService) CreateReminder(
 		return nil, newInvalidInputError("reminder date must be today or in the future")
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-
-	rec, err = txRecurring.GetByIDAndOwnerForUpdate(ctx, recurringOperationID, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, ErrNotFound
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		rec, err := stores.recurringOps.GetByIDAndOwnerForUpdate(ctx, recurringOperationID, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get recurring operation: %w", err)
 		}
-		return nil, fmt.Errorf("get recurring operation: %w", err)
-	}
 
-	if err := validatePropertyNotArchived(ctx, s.properties.WithTx(tx), scope, rec.PropertyID); err != nil {
-		return nil, err
-	}
-
-	ops, err := txOps.ListByRecurringOperation(ctx, recurringOperationID)
-	if err != nil {
-		return nil, fmt.Errorf("list operations: %w", err)
-	}
-
-	futureOps := futureOperations(ops, today)
-	if len(futureOps) == 0 {
-		return nil, newInvalidInputError("no future operations for reminder")
-	}
-
-	earliest := futureOps[0]
-	for _, op := range futureOps {
-		if op.OperationDate.Before(earliest.OperationDate) {
-			earliest = op
+		if err := validatePropertyNotArchived(ctx, stores.properties, scope, rec.PropertyID); err != nil {
+			return err
 		}
-	}
 
-	offsetDays := notificationsdomain.ReminderOffset(earliest.OperationDate, reminderDate, loc)
-	if offsetDays < 0 {
-		return nil, newInvalidInputError("reminder date must be on or before the earliest future operation date")
-	}
+		ops, err := stores.operations.ListByRecurringOperation(ctx, recurringOperationID)
+		if err != nil {
+			return fmt.Errorf("list operations: %w", err)
+		}
 
-	if err := s.applyReminderOffsetInTx(ctx, tx, scope, rec, futureOps, offsetDays, today); err != nil {
+		futureOps := futureOperations(ops, today)
+		if len(futureOps) == 0 {
+			return newInvalidInputError("no future operations for reminder")
+		}
+
+		earliest := futureOps[0]
+		for _, op := range futureOps {
+			if op.OperationDate.Before(earliest.OperationDate) {
+				earliest = op
+			}
+		}
+
+		offsetDays := notificationsdomain.ReminderOffset(earliest.OperationDate, reminderDate, loc)
+		if offsetDays < 0 {
+			return newInvalidInputError("reminder date must be on or before the earliest future operation date")
+		}
+
+		return s.applyReminderOffset(ctx, stores, scope, rec, futureOps, offsetDays, today)
+	})
+	if err != nil {
 		return nil, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit tx: %w", err)
 	}
 
 	reminders, err := s.reminders.ListByRecurringOperation(ctx, scope, recurringOperationID, notificationsapp.ListFilter{Limit: 3000})

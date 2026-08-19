@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -16,12 +15,7 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
-
-type txBeginner interface {
-	Begin(ctx context.Context) (transaction.Tx, error)
-}
 
 type CreateLeaseCommand struct {
 	PropertyID           uuid.UUID
@@ -49,16 +43,12 @@ type LeaseService struct {
 	leases         LeaseRepository
 	properties     PropertyRepository
 	tenantContacts TenantContactRepository
-	recurringOps   RecurringOperationRepository
-	operations     OperationRepository
 	categories     OperationCategoryRepository
-	scheduler      notificationsapp.ReminderScheduler
-	db             txBeginner
-	audit          auditapp.Recorder
-	clock          clock.Clock
-	tzResolver     sharedtz.OwnerTimezoneResolver
-	policy         sharedpolicy.Policy
-	logger         *slog.Logger
+	txStoreFactory
+	clock      clock.Clock
+	tzResolver sharedtz.OwnerTimezoneResolver
+	policy     sharedpolicy.Policy
+	logger     *slog.Logger
 	// sharedIDs is optionally injected (see SetSharedPropertyIDs); when nil the
 	// payment-schedule reads (LeasePaymentScheduleIndex,
 	// CurrentPeriodOverdueIndex) cover only the actor's own rent operations,
@@ -75,24 +65,21 @@ func (s *LeaseService) SetSharedPropertyIDs(ids SharedPropertyIDs) {
 	s.sharedIDs = ids
 }
 
+// NewLeaseService creates a new lease service. The shared txStoreFactory
+// carries the transactional collaborators (repositories, scheduler, audit,
+// UoW); the repositories passed separately are the non-transactional read
+// handles (ADR 0033).
 func NewLeaseService(
 	leases LeaseRepository,
 	properties PropertyRepository,
 	tenantContacts TenantContactRepository,
-	recurringOps RecurringOperationRepository,
-	operations OperationRepository,
 	categories OperationCategoryRepository,
-	scheduler notificationsapp.ReminderScheduler,
-	db txBeginner,
-	audit auditapp.Recorder,
+	factory txStoreFactory,
 	clk clock.Clock,
 	tzResolver sharedtz.OwnerTimezoneResolver,
 	policy sharedpolicy.Policy,
 	logger *slog.Logger,
 ) *LeaseService {
-	if db == nil {
-		panic("db beginner is required")
-	}
 	if clk == nil {
 		panic("clk is required")
 	}
@@ -102,19 +89,12 @@ func NewLeaseService(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &LeaseService{
 		leases:         leases,
 		properties:     properties,
 		tenantContacts: tenantContacts,
-		recurringOps:   recurringOps,
-		operations:     operations,
 		categories:     categories,
-		scheduler:      scheduler,
-		db:             db,
-		audit:          audit,
+		txStoreFactory: factory,
 		clock:          clk,
 		tzResolver:     tzResolver,
 		policy:         policy,
@@ -173,109 +153,101 @@ func (s *LeaseService) CreateLease(ctx context.Context, actor uuid.UUID, cmd Cre
 		return domain.Lease{}, fmt.Errorf("rent category: %w", err)
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var created domain.Lease
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		txRentService := NewRentService(stores.operations, stores.recurringOps, stores.categories, s.clock, s.tzResolver)
 
-	txLeases := s.leases.WithTx(tx)
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-	txProperties := s.properties.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock, s.tzResolver)
-
-	// Lock the property row for the rest of the transaction so a concurrent
-	// DeleteProperty cannot remove it between the fast-path check above and
-	// the lease insert. A missing or non-active property is rejected the same
-	// way as in the fast-path check.
-	propertyStatus, err := txProperties.GetByIDAndOwnerForUpdate(ctx, cmd.PropertyID, scope)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("lock property: %w", err)
-	}
-	if propertyStatus != "active" {
-		return domain.Lease{}, ErrPropertyNotAvailable
-	}
-
-	hasOpen, err := txProperties.HasOpenLease(ctx, cmd.PropertyID)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("check open lease: %w", err)
-	}
-	if hasOpen {
-		return domain.Lease{}, ErrOpenLeaseExists
-	}
-
-	created, err := txLeases.Create(ctx, scope, lease)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("create lease: %w", err)
-	}
-
-	recurringOpID, err := uuid.NewV7()
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("generate recurring operation id: %w", err)
-	}
-
-	recurringOp := domain.RecurringOperation{
-		ID:            recurringOpID,
-		OwnerID:       scope,
-		PropertyID:    created.PropertyID,
-		LeaseID:       created.ID,
-		Type:          domain.OperationTypeIncome,
-		CategoryID:    rentCategoryID,
-		Name:          "Арендная плата",
-		AmountKopecks: created.RentAmountKopecks,
-		StartDate:     created.StartDate,
-		PaymentDay:    created.PaymentDay,
-		EndDate:       created.EndDate,
-		Periodicity:   domain.RecurringOperationPeriodicityMonthly,
-		Status:        domain.RecurringOperationStatusActive,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
-
-	createdRecurring, err := txRecurring.Create(ctx, recurringOp)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("create recurring operation: %w", err)
-	}
-
-	ops, err := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, scope, rentCategoryID)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("generate rent operations: %w", err)
-	}
-	if len(ops) > 0 {
-		if err := txOps.BulkCreate(ctx, ops); err != nil {
-			return domain.Lease{}, fmt.Errorf("bulk create operations: %w", err)
+		// Lock the property row for the rest of the transaction so a concurrent
+		// DeleteProperty cannot remove it between the fast-path check above and
+		// the lease insert. A missing or non-active property is rejected the same
+		// way as in the fast-path check.
+		propertyStatus, err := stores.properties.GetByIDAndOwnerForUpdate(ctx, cmd.PropertyID, scope)
+		if err != nil {
+			return fmt.Errorf("lock property: %w", err)
 		}
-	}
+		if propertyStatus != "active" {
+			return ErrPropertyNotAvailable
+		}
 
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
-			ID:         created.ID,
-			OwnerID:    created.OwnerID,
-			PropertyID: created.PropertyID,
-			EndDate:    created.EndDate,
+		hasOpen, err := stores.properties.HasOpenLease(ctx, cmd.PropertyID)
+		if err != nil {
+			return fmt.Errorf("check open lease: %w", err)
+		}
+		if hasOpen {
+			return ErrOpenLeaseExists
+		}
+
+		created, err = stores.leases.Create(ctx, scope, lease)
+		if err != nil {
+			return fmt.Errorf("create lease: %w", err)
+		}
+
+		recurringOpID, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate recurring operation id: %w", err)
+		}
+
+		recurringOp := domain.RecurringOperation{
+			ID:            recurringOpID,
+			OwnerID:       scope,
+			PropertyID:    created.PropertyID,
+			LeaseID:       created.ID,
+			Type:          domain.OperationTypeIncome,
+			CategoryID:    rentCategoryID,
+			Name:          "Арендная плата",
+			AmountKopecks: created.RentAmountKopecks,
+			StartDate:     created.StartDate,
+			PaymentDay:    created.PaymentDay,
+			EndDate:       created.EndDate,
+			Periodicity:   domain.RecurringOperationPeriodicityMonthly,
+			Status:        domain.RecurringOperationStatusActive,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+
+		createdRecurring, err := stores.recurringOps.Create(ctx, recurringOp)
+		if err != nil {
+			return fmt.Errorf("create recurring operation: %w", err)
+		}
+
+		ops, err := txRentService.GenerateRentOperations(ctx, created, createdRecurring.ID, scope, rentCategoryID)
+		if err != nil {
+			return fmt.Errorf("generate rent operations: %w", err)
+		}
+		if len(ops) > 0 {
+			if err := stores.operations.BulkCreate(ctx, ops); err != nil {
+				return fmt.Errorf("bulk create operations: %w", err)
+			}
+		}
+
+		if stores.scheduler != nil {
+			if err := stores.scheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
+				ID:         created.ID,
+				OwnerID:    created.OwnerID,
+				PropertyID: created.PropertyID,
+				EndDate:    created.EndDate,
+			}); err != nil {
+				return fmt.Errorf("schedule lease reminders: %w", err)
+			}
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionLeaseCreated,
+			EntityType: auditdomain.EntityLease,
+			EntityID:   &created.ID,
+			Context: map[string]any{
+				"property_id":         domain.PropertyIDPtr(created.PropertyID),
+				"rent_amount_kopecks": created.RentAmountKopecks,
+			},
 		}); err != nil {
-			return domain.Lease{}, fmt.Errorf("schedule lease reminders: %w", err)
+			return fmt.Errorf("record audit: %w", err)
 		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionLeaseCreated,
-		EntityType: auditdomain.EntityLease,
-		EntityID:   &created.ID,
-		Context: map[string]any{
-			"property_id":         domain.PropertyIDPtr(created.PropertyID),
-			"rent_amount_kopecks": created.RentAmountKopecks,
-		},
-	}); err != nil {
-		return domain.Lease{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Lease{}, fmt.Errorf("commit tx: %w", err)
+		return nil
+	})
+	if err != nil {
+		return domain.Lease{}, err
 	}
 
 	return created, nil
@@ -413,7 +385,7 @@ func (s *LeaseService) applyLeaseUpdate(
 // lease reminders when the end date moved.
 func (s *LeaseService) resyncLeaseSchedule(
 	ctx context.Context,
-	tx transaction.Tx,
+	stores *txStores,
 	txRentService *RentService,
 	updated domain.Lease,
 	originalStartDate time.Time,
@@ -431,37 +403,32 @@ func (s *LeaseService) resyncLeaseSchedule(
 		}
 	}
 
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		txRecurring := s.recurringOps.WithTx(tx)
-		txOps := s.operations.WithTx(tx)
-
+	if stores.scheduler != nil {
 		if patch.scheduleRebuilt || patch.scheduleChanged {
-			rec, err := txRecurring.GetByLeaseID(ctx, scope, updated.ID)
+			rec, err := stores.recurringOps.GetByLeaseID(ctx, scope, updated.ID)
 			if err != nil && !errors.Is(err, ErrNotFound) {
 				return fmt.Errorf("get recurring operation for lease: %w", err)
 			}
 			if err == nil {
 				if endDateChanged {
 					rec.EndDate = updated.EndDate
-					if _, err := txRecurring.Update(ctx, rec); err != nil {
+					if _, err := stores.recurringOps.Update(ctx, rec); err != nil {
 						return fmt.Errorf("update recurring operation end date: %w", err)
 					}
 				}
 				if rec.ReminderOffsetDays != nil && rec.Status == domain.RecurringOperationStatusActive {
-					if err := txScheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
+					if err := stores.scheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
 						return fmt.Errorf("cancel recurring reminders: %w", err)
 					}
-					ops, err := txOps.ListByRecurringOperation(ctx, rec.ID)
+					ops, err := stores.operations.ListByRecurringOperation(ctx, rec.ID)
 					if err != nil {
 						return fmt.Errorf("list operations for scheduling: %w", err)
 					}
-					txCategories := s.categories.WithTx(tx)
-					categoryNames, err := buildCategoryNamesMap(ctx, txCategories, scope)
+					categoryNames, err := buildCategoryNamesMap(ctx, stores.categories, scope)
 					if err != nil {
 						return err
 					}
-					if err := scheduleRemindersForOperations(ctx, txScheduler, rec, ops, categoryNames, patch.now); err != nil {
+					if err := scheduleRemindersForOperations(ctx, stores.scheduler, rec, ops, categoryNames, patch.now); err != nil {
 						return fmt.Errorf("schedule recurring reminders: %w", err)
 					}
 				}
@@ -469,11 +436,11 @@ func (s *LeaseService) resyncLeaseSchedule(
 		}
 
 		if endDateChanged {
-			if err := txScheduler.CancelByLease(ctx, scope, updated.ID); err != nil {
+			if err := stores.scheduler.CancelByLease(ctx, scope, updated.ID); err != nil {
 				return fmt.Errorf("cancel lease reminders: %w", err)
 			}
 			if updated.EndDate != nil {
-				if err := txScheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
+				if err := stores.scheduler.ScheduleForLease(ctx, notificationsapp.LeaseInfo{
 					ID:         updated.ID,
 					OwnerID:    updated.OwnerID,
 					PropertyID: updated.PropertyID,
@@ -504,66 +471,59 @@ func (s *LeaseService) UpdateLease(ctx context.Context, actor, id uuid.UUID, cmd
 	}
 	scope := lease.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var updated domain.Lease
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		txRentService := NewRentService(stores.operations, stores.recurringOps, stores.categories, s.clock, s.tzResolver)
 
-	txLeases := s.leases.WithTx(tx)
-	txTenantContacts := s.tenantContacts.WithTx(tx)
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-	txRentService := NewRentService(txOps, txRecurring, s.categories.WithTx(tx), s.clock, s.tzResolver)
-
-	lease, err = txLeases.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Lease{}, ErrNotFound
+		lease, err := stores.leases.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get lease: %w", err)
 		}
-		return domain.Lease{}, fmt.Errorf("get lease: %w", err)
-	}
 
-	if lease.Status == domain.LeaseStatusCompleted {
-		return domain.Lease{}, ErrAlreadyCompleted
-	}
-	if lease.Status == domain.LeaseStatusArchived {
-		return domain.Lease{}, ErrArchivedLease
-	}
+		if lease.Status == domain.LeaseStatusCompleted {
+			return ErrAlreadyCompleted
+		}
+		if lease.Status == domain.LeaseStatusArchived {
+			return ErrArchivedLease
+		}
 
-	patch, err := s.applyLeaseUpdate(ctx, txTenantContacts, lease, cmd, scope)
+		patch, err := s.applyLeaseUpdate(ctx, stores.tenantContacts, lease, cmd, scope)
+		if err != nil {
+			return err
+		}
+		originalStartDate := lease.StartDate
+		originalEndDate := lease.EndDate
+
+		updated, err = stores.leases.Update(ctx, scope, patch.lease)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("update lease: %w", err)
+		}
+		endDateChanged := !endDatesEqual(originalEndDate, updated.EndDate)
+
+		if err := s.resyncLeaseSchedule(ctx, stores, txRentService, updated, originalStartDate, patch, endDateChanged); err != nil {
+			return err
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionLeaseUpdated,
+			EntityType: auditdomain.EntityLease,
+			EntityID:   &id,
+			Context:    map[string]any{"fields": updatedLeaseFields(cmd)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return domain.Lease{}, err
-	}
-	originalStartDate := lease.StartDate
-	originalEndDate := lease.EndDate
-
-	updated, err := txLeases.Update(ctx, scope, patch.lease)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Lease{}, ErrNotFound
-		}
-		return domain.Lease{}, fmt.Errorf("update lease: %w", err)
-	}
-	endDateChanged := !endDatesEqual(originalEndDate, updated.EndDate)
-
-	if err := s.resyncLeaseSchedule(ctx, tx, txRentService, updated, originalStartDate, patch, endDateChanged); err != nil {
-		return domain.Lease{}, err
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionLeaseUpdated,
-		EntityType: auditdomain.EntityLease,
-		EntityID:   &id,
-		Context:    map[string]any{"fields": updatedLeaseFields(cmd)},
-	}); err != nil {
-		return domain.Lease{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Lease{}, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return updated, nil
@@ -624,80 +584,72 @@ func (s *LeaseService) CompleteLease(ctx context.Context, actor, id uuid.UUID) (
 	}
 	scope := lease.OwnerID
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Lease{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txLeases := s.leases.WithTx(tx)
-	txRecurring := s.recurringOps.WithTx(tx)
-	txOps := s.operations.WithTx(tx)
-
-	lease, err = txLeases.GetByIDAndOwnerForUpdate(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Lease{}, ErrNotFound
+	var completed domain.Lease
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		lease, err := stores.leases.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("get lease: %w", err)
 		}
-		return domain.Lease{}, fmt.Errorf("get lease: %w", err)
-	}
 
-	if lease.Status == domain.LeaseStatusCompleted {
-		return domain.Lease{}, ErrAlreadyCompleted
-	}
-	if lease.Status == domain.LeaseStatusArchived {
-		return domain.Lease{}, ErrArchivedLease
-	}
-	if !lease.IsOpen() {
-		return domain.Lease{}, &InvalidStatusTransitionError{From: lease.Status, To: domain.LeaseStatusCompleted}
-	}
-
-	completed, err := txLeases.Complete(ctx, id, scope)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Lease{}, ErrNotFound
+		if lease.Status == domain.LeaseStatusCompleted {
+			return ErrAlreadyCompleted
 		}
-		return domain.Lease{}, fmt.Errorf("complete lease: %w", err)
-	}
-
-	now := s.clock.Now()
-	if err := txOps.DeleteUneditedFutureOperationsByLease(ctx, id, now); err != nil {
-		return domain.Lease{}, fmt.Errorf("delete future operations: %w", err)
-	}
-
-	if err := txRecurring.UpdateStatusByLeaseID(ctx, id, scope, string(domain.RecurringOperationStatusPaused)); err != nil {
-		return domain.Lease{}, fmt.Errorf("pause recurring operation: %w", err)
-	}
-
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.CancelByLease(ctx, scope, id); err != nil {
-			return domain.Lease{}, fmt.Errorf("cancel lease reminders: %w", err)
+		if lease.Status == domain.LeaseStatusArchived {
+			return ErrArchivedLease
 		}
-		rec, err := txRecurring.GetByLeaseID(ctx, scope, id)
-		if err != nil && !errors.Is(err, ErrNotFound) {
-			return domain.Lease{}, fmt.Errorf("get recurring operation for lease: %w", err)
+		if !lease.IsOpen() {
+			return &InvalidStatusTransitionError{From: lease.Status, To: domain.LeaseStatusCompleted}
 		}
-		if err == nil {
-			if err := txScheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
-				return domain.Lease{}, fmt.Errorf("cancel recurring operation reminders: %w", err)
+
+		completed, err = stores.leases.Complete(ctx, id, scope)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("complete lease: %w", err)
+		}
+
+		now := s.clock.Now()
+		if err := stores.operations.DeleteUneditedFutureOperationsByLease(ctx, id, now); err != nil {
+			return fmt.Errorf("delete future operations: %w", err)
+		}
+
+		if err := stores.recurringOps.UpdateStatusByLeaseID(ctx, id, scope, string(domain.RecurringOperationStatusPaused)); err != nil {
+			return fmt.Errorf("pause recurring operation: %w", err)
+		}
+
+		if stores.scheduler != nil {
+			if err := stores.scheduler.CancelByLease(ctx, scope, id); err != nil {
+				return fmt.Errorf("cancel lease reminders: %w", err)
+			}
+			rec, err := stores.recurringOps.GetByLeaseID(ctx, scope, id)
+			if err != nil && !errors.Is(err, ErrNotFound) {
+				return fmt.Errorf("get recurring operation for lease: %w", err)
+			}
+			if err == nil {
+				if err := stores.scheduler.CancelByRecurringOperation(ctx, scope, rec.ID); err != nil {
+					return fmt.Errorf("cancel recurring operation reminders: %w", err)
+				}
 			}
 		}
-	}
 
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionLeaseCompleted,
-		EntityType: auditdomain.EntityLease,
-		EntityID:   &id,
-		Context:    map[string]any{"property_id": domain.PropertyIDPtr(lease.PropertyID)},
-	}); err != nil {
-		return domain.Lease{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Lease{}, fmt.Errorf("commit tx: %w", err)
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  actorRoleFromPolicyRole(role),
+			Action:     auditdomain.ActionLeaseCompleted,
+			EntityType: auditdomain.EntityLease,
+			EntityID:   &id,
+			Context:    map[string]any{"property_id": domain.PropertyIDPtr(lease.PropertyID)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Lease{}, err
 	}
 
 	return completed, nil
@@ -717,58 +669,47 @@ func (s *LeaseService) ListOpenLeasesWithPastEndDate(ctx context.Context, asOf t
 // idempotent: repeated calls with the same lease are no-ops once the status
 // and reminder are in place.
 func (s *LeaseService) ReconcileRequiresAction(ctx context.Context, leaseID uuid.UUID, asOf time.Time) error {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		lease, err := stores.leases.GetByIDForUpdate(ctx, leaseID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil
+			}
+			return fmt.Errorf("get lease: %w", err)
+		}
 
-	txLeases := s.leases.WithTx(tx)
-
-	lease, err := txLeases.GetByIDForUpdate(ctx, leaseID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		if !lease.Status.IsOpen() || lease.EndDate == nil {
 			return nil
 		}
-		return fmt.Errorf("get lease: %w", err)
-	}
 
-	if !lease.Status.IsOpen() || lease.EndDate == nil {
-		return nil
-	}
-
-	loc, err := s.tzResolver.Resolve(ctx, lease.OwnerID)
-	if err != nil {
-		return fmt.Errorf("resolve owner timezone: %w", err)
-	}
-
-	expected := lease.CalculateStatus(timeutil.DateIn(asOf, loc))
-	if expected != domain.LeaseStatusRequiresAction {
-		return nil
-	}
-
-	if lease.Status != domain.LeaseStatusRequiresAction {
-		lease.Status = domain.LeaseStatusRequiresAction
-		lease.UpdatedAt = s.clock.Now()
-		if _, err := txLeases.Update(ctx, lease.OwnerID, lease); err != nil {
-			return fmt.Errorf("update lease status: %w", err)
+		loc, err := s.tzResolver.Resolve(ctx, lease.OwnerID)
+		if err != nil {
+			return fmt.Errorf("resolve owner timezone: %w", err)
 		}
-	}
 
-	if s.scheduler != nil {
-		txScheduler := s.scheduler.WithTx(tx)
-		if err := txScheduler.EnsureRequiresActionReminder(ctx, notificationsapp.LeaseInfo{
-			ID:         lease.ID,
-			OwnerID:    lease.OwnerID,
-			PropertyID: lease.PropertyID,
-			EndDate:    lease.EndDate,
-		}); err != nil {
-			return fmt.Errorf("ensure requires_action reminder: %w", err)
+		expected := lease.CalculateStatus(timeutil.DateIn(asOf, loc))
+		if expected != domain.LeaseStatusRequiresAction {
+			return nil
 		}
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
+		if lease.Status != domain.LeaseStatusRequiresAction {
+			lease.Status = domain.LeaseStatusRequiresAction
+			lease.UpdatedAt = s.clock.Now()
+			if _, err := stores.leases.Update(ctx, lease.OwnerID, lease); err != nil {
+				return fmt.Errorf("update lease status: %w", err)
+			}
+		}
+
+		if stores.scheduler != nil {
+			if err := stores.scheduler.EnsureRequiresActionReminder(ctx, notificationsapp.LeaseInfo{
+				ID:         lease.ID,
+				OwnerID:    lease.OwnerID,
+				PropertyID: lease.PropertyID,
+				EndDate:    lease.EndDate,
+			}); err != nil {
+				return fmt.Errorf("ensure requires_action reminder: %w", err)
+			}
+		}
+		return nil
+	})
 }
