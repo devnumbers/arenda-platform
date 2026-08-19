@@ -136,9 +136,11 @@ func TestUoW_Do_PanicsRollsBackAndRepanics(t *testing.T) {
 		}
 	}()
 
-	_ = u.Do(t.Context(), func(tx transaction.Tx) error {
+	if err := u.Do(t.Context(), func(tx transaction.Tx) error {
 		panic(panicVal)
-	})
+	}); err != nil {
+		t.Errorf("Do returned %v before re-panic, want panic", err)
+	}
 	t.Fatal("expected Do to re-panic")
 }
 

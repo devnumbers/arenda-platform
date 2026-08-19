@@ -39,7 +39,9 @@ func TestInstrumentedRowScanReleasesConnection(t *testing.T) {
 
 	// Subsequent Close/Scan calls must be idempotent.
 	row.Close()
-	_ = row.Scan(new(int))
+	if err := row.Scan(new(int)); err != nil {
+		t.Errorf("idempotent Scan error: %v", err)
+	}
 	if got := releases.Load(); got != 1 {
 		t.Fatalf("release called %d times after idempotent calls, want 1", got)
 	}

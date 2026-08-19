@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
@@ -130,17 +131,17 @@ func (w *ReminderWorker) dispatchDue(ctx context.Context, now time.Time) error {
 		txRepo := w.repo.WithTx(tx1)
 		reminders, err := txRepo.ListDue(ctx, now, 1)
 		if err != nil {
-			_ = tx1.Rollback(ctx)
+			w.rollbackClaimTx(ctx, tx1)
 			return fmt.Errorf("list due reminders: %w", err)
 		}
 		if len(reminders) == 0 {
-			_ = tx1.Rollback(ctx)
+			w.rollbackClaimTx(ctx, tx1)
 			break
 		}
 
 		r := reminders[0]
 		if _, err := txRepo.MarkReminderSending(ctx, r.ID); err != nil {
-			_ = tx1.Rollback(ctx)
+			w.rollbackClaimTx(ctx, tx1)
 			if errors.Is(err, application.ErrNotFound) {
 				continue
 			}
@@ -456,12 +457,12 @@ pushSubs:
 	return true
 }
 
-func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, providerResponse string, channel application.Channel) error {
+func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, providerResponse string, channel application.Channel) (err error) {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer w.rollbackOnReturn(ctx, tx, &err)
 
 	txRepo := w.repo.WithTx(tx)
 
@@ -481,12 +482,12 @@ func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder,
 	return nil
 }
 
-func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder, now time.Time) error {
+func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder, now time.Time) (err error) {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer w.rollbackOnReturn(ctx, tx, &err)
 
 	txRepo := w.repo.WithTx(tx)
 
@@ -508,12 +509,12 @@ func (w *ReminderWorker) finalizeFailure(ctx context.Context, r domain.Reminder,
 	return nil
 }
 
-func (w *ReminderWorker) finalizeCancel(ctx context.Context, r domain.Reminder) error {
+func (w *ReminderWorker) finalizeCancel(ctx context.Context, r domain.Reminder) (err error) {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer w.rollbackOnReturn(ctx, tx, &err)
 
 	txRepo := w.repo.WithTx(tx)
 	if _, err := txRepo.CancelByIDAndOwner(ctx, r.OwnerID, r.ID); err != nil {
@@ -528,12 +529,12 @@ func (w *ReminderWorker) finalizeCancel(ctx context.Context, r domain.Reminder) 
 
 // finalizeSkipped marks a reminder as skipped: every recipient revoked
 // permission for its event type, so it must not be sent or retried.
-func (w *ReminderWorker) finalizeSkipped(ctx context.Context, r domain.Reminder) error {
+func (w *ReminderWorker) finalizeSkipped(ctx context.Context, r domain.Reminder) (err error) {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer w.rollbackOnReturn(ctx, tx, &err)
 
 	txRepo := w.repo.WithTx(tx)
 	if err := txRepo.MarkReminderSkipped(ctx, r.ID); err != nil {
@@ -546,12 +547,12 @@ func (w *ReminderWorker) finalizeSkipped(ctx context.Context, r domain.Reminder)
 	return nil
 }
 
-func (w *ReminderWorker) recoverFinalizeFailure(ctx context.Context, id uuid.UUID) error {
+func (w *ReminderWorker) recoverFinalizeFailure(ctx context.Context, id uuid.UUID) (err error) {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize recovery transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer w.rollbackOnReturn(ctx, tx, &err)
 
 	txRepo := w.repo.WithTx(tx)
 	r, err := txRepo.GetByIDUnscoped(ctx, id)
@@ -569,6 +570,23 @@ func (w *ReminderWorker) recoverFinalizeFailure(ctx context.Context, id uuid.UUI
 	return nil
 }
 
+// rollbackClaimTx rolls back an open claim-loop transaction. The rollback
+// error is logged, not returned: the triggering cause takes precedence.
+func (w *ReminderWorker) rollbackClaimTx(ctx context.Context, tx transaction.Tx) {
+	if err := tx.Rollback(ctx); err != nil {
+		w.logger.WarnContext(ctx, "rollback reminder transaction", "error", sanitize.Error(err))
+	}
+}
+
+// rollbackOnReturn is deferred by the finalize* transactions: the rollback
+// is a pgx v5 no-op (ErrTxClosed) once work committed; any other failure is
+// folded into the named return error without masking it.
+func (w *ReminderWorker) rollbackOnReturn(ctx context.Context, tx transaction.Tx, err *error) {
+	if rbErr := tx.Rollback(ctx); rbErr != nil && *err == nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+		*err = fmt.Errorf("rollback finalize transaction: %w", rbErr)
+	}
+}
+
 func (w *ReminderWorker) recoverStaleSending(ctx context.Context, now time.Time) error {
 	staleBefore := now.Add(-staleSendingTimeout)
 
@@ -581,17 +599,17 @@ func (w *ReminderWorker) recoverStaleSending(ctx context.Context, now time.Time)
 		txRepo := w.repo.WithTx(tx)
 		reminders, err := txRepo.ListStaleSendingReminders(ctx, staleBefore, 1)
 		if err != nil {
-			_ = tx.Rollback(ctx)
+			w.rollbackClaimTx(ctx, tx)
 			return fmt.Errorf("list stale sending reminders: %w", err)
 		}
 		if len(reminders) == 0 {
-			_ = tx.Rollback(ctx)
+			w.rollbackClaimTx(ctx, tx)
 			break
 		}
 
 		r := reminders[0]
 		if err := txRepo.ResetReminderSending(ctx, r.ID); err != nil {
-			_ = tx.Rollback(ctx)
+			w.rollbackClaimTx(ctx, tx)
 			if errors.Is(err, application.ErrConcurrentUpdate) {
 				w.logger.InfoContext(ctx, "stale sending reminder changed concurrently, skipping", "reminder_id", r.ID)
 				continue

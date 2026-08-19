@@ -44,7 +44,7 @@ func NewSender(cfg Config) *Sender {
 }
 
 // Send transmits the message to all recipients via SMTP.
-func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
+func (s *Sender) Send(ctx context.Context, msg mailer.Message) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -67,7 +67,6 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	dialer := &net.Dialer{Timeout: s.cfg.Timeout}
 
 	var conn net.Conn
-	var err error
 	switch s.cfg.Port {
 	case "465":
 		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: tlsConfig(s.cfg.Host)}
@@ -78,7 +77,14 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	if err != nil {
 		return fmt.Errorf("dial smtp server: %w", err)
 	}
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		// The client (or Quit) may have closed the connection already —
+		// that is the benign success path; any other close failure is
+		// folded in, never masking the send error.
+		if closeErr := conn.Close(); err == nil && closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			err = fmt.Errorf("close smtp connection: %w", closeErr)
+		}
+	}()
 
 	if err := conn.SetDeadline(time.Now().Add(s.cfg.Timeout)); err != nil {
 		return fmt.Errorf("set smtp deadline: %w", err)
@@ -88,7 +94,14 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	if err != nil {
 		return fmt.Errorf("create smtp client: %w", err)
 	}
-	defer func() { _ = client.Close() }()
+	defer func() {
+		// Quit sends the farewell and closes the connection — the deferred
+		// close then reports ErrClosed, which is the benign success path;
+		// any other close failure is folded in, never masking the send error.
+		if closeErr := client.Close(); err == nil && closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			err = fmt.Errorf("close smtp client: %w", closeErr)
+		}
+	}()
 
 	if s.cfg.Port == "587" {
 		if err := client.StartTLS(tlsConfig(s.cfg.Host)); err != nil {

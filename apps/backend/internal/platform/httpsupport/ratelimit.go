@@ -72,7 +72,12 @@ func (rl *RateLimiter) Stop() {
 
 func (rl *RateLimiter) shardFor(key string) *rateLimiterShard {
 	h := fnv.New32a()
-	_, _ = h.Write([]byte(key))
+	// hash.Hash documents that Write never returns an error; a violation
+	// cannot be handled here (the caller needs a shard), so it panics
+	// (must-style, research #321 policy).
+	if _, err := h.Write([]byte(key)); err != nil {
+		panic("httpsupport: shard key hash write: " + err.Error())
+	}
 	return rl.shards[h.Sum32()%shardCount]
 }
 

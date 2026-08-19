@@ -374,7 +374,12 @@ func isLoggableQueryError(err error) bool {
 
 func sqlHash(sql string) string {
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(normalizeSQL(sql)))
+	// hash.Hash documents that Write never returns an error; the value only
+	// feeds a log attribute, so a contract violation panics (must-style,
+	// research #321 policy).
+	if _, err := h.Write([]byte(normalizeSQL(sql))); err != nil {
+		panic("database: sql hash write: " + err.Error())
+	}
 	return fmt.Sprintf("%016x", h.Sum64())
 }
 

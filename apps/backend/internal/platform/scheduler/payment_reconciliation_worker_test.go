@@ -155,7 +155,11 @@ func TestPaymentReconciliationWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing
 	if !acquired {
 		t.Fatal("advisory lock should be released after tick completes")
 	}
-	_, _ = testConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", paymentReconciliationWorkerLockKey)
+	// The unlock returns the advisory lock held only by this test; a failure
+	// would leak it to sibling integration tests sharing the database.
+	if _, err := testConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", paymentReconciliationWorkerLockKey); err != nil {
+		t.Errorf("unlock advisory lock after tick: %v", err)
+	}
 }
 
 type delayedPaymentReconciliationService struct {

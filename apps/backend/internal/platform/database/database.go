@@ -75,12 +75,19 @@ func NewPoolWithConfig(ctx context.Context, databaseURL string, poolConfig PoolC
 	return pool, nil
 }
 
-func MigrateUp(databaseURL, migrationsDir string) error {
+func MigrateUp(databaseURL, migrationsDir string) (err error) {
 	m, err := newMigrate(databaseURL, migrationsDir)
 	if err != nil {
 		return err
 	}
-	defer func() { _, _ = m.Close() }()
+	defer func() {
+		// Close returns two halves (source, database); Join drops nils. The
+		// close error is folded in only when migration succeeded, so it
+		// never masks the original failure.
+		if closeErr := errors.Join(m.Close()); err == nil && closeErr != nil {
+			err = fmt.Errorf("close migrate: %w", closeErr)
+		}
+	}()
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("migrate up: %w", err)
 	}
@@ -90,12 +97,19 @@ func MigrateUp(databaseURL, migrationsDir string) error {
 // MigrateDownAll rolls the schema back to zero by applying every down
 // migration, newest first. It mirrors the CI "Backend migrations" job contract:
 // the full chain must stay executable in both directions.
-func MigrateDownAll(databaseURL, migrationsDir string) error {
+func MigrateDownAll(databaseURL, migrationsDir string) (err error) {
 	m, err := newMigrate(databaseURL, migrationsDir)
 	if err != nil {
 		return err
 	}
-	defer func() { _, _ = m.Close() }()
+	defer func() {
+		// Close returns two halves (source, database); Join drops nils. The
+		// close error is folded in only when migration succeeded, so it
+		// never masks the original failure.
+		if closeErr := errors.Join(m.Close()); err == nil && closeErr != nil {
+			err = fmt.Errorf("close migrate: %w", closeErr)
+		}
+	}()
 	if err := m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("migrate down all: %w", err)
 	}

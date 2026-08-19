@@ -5,6 +5,7 @@ package testdb
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 
@@ -74,7 +75,9 @@ func terminateContainer() {
 	if err := testcontainers.TerminateContainer(ctr); err != nil {
 		// A teardown error is non-fatal: the container will be reaped by
 		// Ryuk (testcontainers' cleanup sidecar) or Docker garbage collection.
-		_, _ = fmt.Fprintf(os.Stderr, "testdb: terminate container: %v\n", err)
+		// The explicit stderr handler replaces the old Fprintf write.
+		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+		logger.ErrorContext(context.Background(), "testdb: terminate container", "error", err)
 	}
 }
 

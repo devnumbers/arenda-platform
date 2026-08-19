@@ -4,6 +4,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +94,12 @@ func migrateToVersion(t *testing.T, databaseURL, dir string, version int) {
 	if err != nil {
 		t.Fatalf("create migrate: %v", err)
 	}
-	defer func() { _, _ = m.Close() }()
+	defer func() {
+		// Close returns two halves (source, database); Join drops nils.
+		if err := errors.Join(m.Close()); err != nil {
+			t.Errorf("close migrate: %v", err)
+		}
+	}()
 	if err := m.Migrate(uint(version)); err != nil {
 		t.Fatalf("migrate to version %d: %v", version, err)
 	}

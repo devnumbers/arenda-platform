@@ -2,8 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -29,11 +32,16 @@ func (u *uow) Do(ctx context.Context, work func(tx transaction.Tx) error) (err e
 	}
 
 	// A panic in work rolls back the transaction and re-panics so a tx never
-	// leaks to GC. The deferred rollback is a pgx v5 no-op once work committed.
+	// leaks to GC. The deferred rollback is a pgx v5 no-op (ErrTxClosed) once
+	// work committed; any other rollback failure is folded into the named
+	// return, never masking the work error or the re-panicked value.
 	defer func() {
-		_ = tx.Rollback(ctx)
+		rollbackErr := tx.Rollback(ctx)
 		if r := recover(); r != nil {
 			panic(r)
+		}
+		if rollbackErr != nil && err == nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			err = fmt.Errorf("rollback tx: %w", rollbackErr)
 		}
 	}()
 

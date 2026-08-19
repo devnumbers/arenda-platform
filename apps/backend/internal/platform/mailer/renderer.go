@@ -21,7 +21,7 @@ type Renderer struct {
 
 // NewRenderer walks dir and parses all .html and .txt email templates.
 // HTML templates are wrapped with layout.html; text templates are standalone.
-func NewRenderer(dir string) (*Renderer, error) {
+func NewRenderer(dir string) (_ *Renderer, err error) {
 	base, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("resolve template directory: %w", err)
@@ -32,7 +32,13 @@ func NewRenderer(dir string) (*Renderer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open template directory: %w", err)
 	}
-	defer func() { _ = root.Close() }()
+	defer func() {
+		// The close error is folded in only when parsing succeeded, so it
+		// never masks the original failure.
+		if closeErr := root.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close template directory: %w", closeErr)
+		}
+	}()
 
 	layoutBytes, err := readRootFile(root, "layout.html")
 	if err != nil {
@@ -105,12 +111,18 @@ func NewRenderer(dir string) (*Renderer, error) {
 }
 
 // readRootFile reads a file by a path relative to the template root.
-func readRootFile(root *os.Root, name string) ([]byte, error) {
+func readRootFile(root *os.Root, name string) (data []byte, err error) {
 	f, err := root.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		// The close error is folded in only when the read succeeded, so it
+		// never masks the read failure.
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+	}()
 	return io.ReadAll(f)
 }
 

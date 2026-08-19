@@ -147,7 +147,11 @@ func TestWithAdvisoryTickLock_RunsWorkAndReleasesLock(t *testing.T) {
 	if !acquired {
 		t.Fatal("advisory lock should be released after work returns")
 	}
-	_, _ = probe.Exec(ctx, "SELECT pg_advisory_unlock($1)", workerLoopRunTestLockKey)
+	// The unlock returns the advisory lock held only by this test; a failure
+	// would leak it to sibling integration tests sharing the database.
+	if _, err := probe.Exec(ctx, "SELECT pg_advisory_unlock($1)", workerLoopRunTestLockKey); err != nil {
+		t.Errorf("unlock advisory lock after work: %v", err)
+	}
 }
 
 func TestWithAdvisoryTickLock_SkipsWhenAnotherInstanceHoldsLock(t *testing.T) {
@@ -174,7 +178,11 @@ func TestWithAdvisoryTickLock_SkipsWhenAnotherInstanceHoldsLock(t *testing.T) {
 		t.Fatalf("hold advisory lock: %v", err)
 	}
 	defer func() {
-		_, _ = holder.Exec(ctx, "SELECT pg_advisory_unlock($1)", workerLoopSkipTestLockKey)
+		// A leaked session-level advisory lock would poison sibling tests on
+		// the shared integration database.
+		if _, err := holder.Exec(ctx, "SELECT pg_advisory_unlock($1)", workerLoopSkipTestLockKey); err != nil {
+			t.Errorf("unlock advisory lock: %v", err)
+		}
 	}()
 
 	var logBuf bytes.Buffer

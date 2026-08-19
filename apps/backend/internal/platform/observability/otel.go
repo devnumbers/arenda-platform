@@ -71,8 +71,12 @@ func NewSDK(ctx context.Context, cfg Config) (*SDK, error) {
 	}
 	metricExp, err := otlpmetricgrpc.New(ctx, metricOpts...)
 	if err != nil {
-		_ = traceExp.Shutdown(ctx)
-		return nil, fmt.Errorf("observability metric exporter: %w", err)
+		// The trace exporter must not leak; its shutdown failure joins the
+		// metric exporter error instead of being discarded.
+		return nil, errors.Join(
+			fmt.Errorf("observability metric exporter: %w", err),
+			fmt.Errorf("shutdown trace exporter: %w", traceExp.Shutdown(ctx)),
+		)
 	}
 
 	tp := sdktrace.NewTracerProvider(

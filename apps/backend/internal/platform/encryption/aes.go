@@ -113,18 +113,26 @@ func (e *aesEncryptor) Encrypt(ctx context.Context, plaintext string) (string, e
 // phone-number plaintexts cannot be replayed against other deterministic
 // encryption contexts that may be added later.
 func (e *aesEncryptor) DeterministicEncrypt(ctx context.Context, plaintext string) (string, error) {
-	nonce := deterministicNonce(e.macKey, plaintext)
+	nonce, err := deterministicNonce(e.macKey, plaintext)
+	if err != nil {
+		return "", err
+	}
 	ciphertext := e.detGCM.Seal(nonce, nonce, []byte(plaintext), nil)
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-func deterministicNonce(macKey []byte, plaintext string) []byte {
+func deterministicNonce(macKey []byte, plaintext string) ([]byte, error) {
 	mac := hmac.New(sha256.New, macKey)
-	// hmac.Write never returns an error for the hash.Hash contract.
-	_, _ = mac.Write([]byte(plaintext))
+	// hash.Hash documents that Write never returns an error; the check keeps
+	// the contract explicit instead of silently discarding it.
+	if _, err := mac.Write([]byte(plaintext)); err != nil {
+		return nil, fmt.Errorf("hmac nonce write: %w", err)
+	}
 	// Domain separator for phone-number deterministic encryption.
-	_, _ = mac.Write([]byte("\x00phone"))
-	return mac.Sum(nil)[:12]
+	if _, err := mac.Write([]byte("\x00phone")); err != nil {
+		return nil, fmt.Errorf("hmac nonce write: %w", err)
+	}
+	return mac.Sum(nil)[:12], nil
 }
 
 func (e *aesEncryptor) Decrypt(ctx context.Context, ciphertext string) (string, error) {
@@ -168,8 +176,12 @@ func (noopEncryptor) HashToken(plaintext string) string {
 
 func hashToken(key []byte, plaintext string) string {
 	h := hmac.New(sha256.New, key)
-	// hmac.Write never returns an error for the hash.Hash contract.
-	_, _ = h.Write([]byte(plaintext))
+	// hash.Hash documents that Write never returns an error; the Encryptor
+	// port fixes the return to string, so a contract violation panics
+	// (must-style, research #321 policy).
+	if _, err := h.Write([]byte(plaintext)); err != nil {
+		panic("encryption: hash token write: " + err.Error())
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
