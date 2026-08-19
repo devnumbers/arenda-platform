@@ -20,14 +20,14 @@ Rules that no linter can check:
 
 - **Ports are declared by consumers, not providers.** The application package declares the interface it needs (repository, storage, clock); the adapter implements it. Do not declare an interface next to an implementation "just in case" — grow ports from a real second implementation or test fake.
 - **Time arrives through the `clock.Clock` port** (`internal/shared/clock`), injected into services. Domain and application code never call `time.Now()` themselves; they receive the instant. Tests fake the clock (`fakeClock` precedent in identity).
-- **Transactions go through `internal/transaction`** — `UoW.Do(ctx, work)` or `runInTx` (ADR 0033). In contexts already migrated (identity, billing, access, properties, notifications, leases) manual `Begin` is blocked by forbidigo; a context finishing its migration narrows the `path-except` in `.golangci.yml`. Audit records join the business operation's transaction (ADR 0020).
+- **Transactions go through `internal/transaction`** — `UoW.Do(ctx, work)` or `runInTx` (ADR 0033). Manual `Begin` in production code is blocked module-wide by forbidigo; the only exempt production path is `internal/platform` (the transaction layer itself), test fixtures are exempt per ADR 0033 («Test fixtures»). Audit records join the business operation's transaction (ADR 0020).
 - **Shared kernel before new packages**: `internal/shared/` already carries `actor`, `clock`, `policy`, `pgerr`, `sanitize`, `timeutil`, `tzresolver`. Check these before inventing a parallel helper.
 
 Adding a new bounded context — checklist:
 
 1. `internal/<context>/{domain,application,adapters}` + `CONTEXT.md` (via `/domain-modeling`).
 2. Add the context to **both** `domain-clean` and `application-clean` deny lists in `.golangci.yml` (they enumerate contexts explicitly; a missed entry silently disables the guard).
-3. Decide the transaction story: UoW from the start, or the adapters' `Begin` path with a migration ticket — and reflect it in the forbidigo `path-except`.
+3. Decide the transaction story: UoW from the start — a production `Begin` outside `internal/platform` fails `make backend-lint` with no migration-ticket escape hatch (test fixtures are exempt, ADR 0033).
 
 ## Errors
 

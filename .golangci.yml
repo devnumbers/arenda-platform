@@ -308,19 +308,16 @@ linters:
         - pattern: ^(fmt\.Print(|f|ln)|print|println)$   # дефолтный паттерн, сохранён явно
         - pattern: ^log\.                                 # логируем только через log/slog
           msg: use log/slog instead of stdlib log
-        # ADR 0033: identity, billing, access, properties, notifications and
-        # leases use cases open transactions through runInTx/UoW, not by hand.
-        # forbidigo keeps a new use case from silently reintroducing the manual
-        # Begin/WithTx/Commit pattern while UoW is available. Scoped to
-        # identity/application (тикетов #210–#212), billing/application
-        # (перезапись модуля, issue #245), access/application (тикет #346),
-        # properties/application (тикет #347), notifications/application
-        # (тикет #348) and leases/application (тикет #349) — the six contexts
-        # fully migrated to UoW. The rule is
-        # suppressed everywhere else
-        # via linters.exclusions.rules (path-except) until each remaining context
-        # completes its own UoW migration; then it is added to the except list so
-        # the rule starts protecting it too.
+        # ADR 0033: все шесть мутирующих контекстов (identity, billing, access,
+        # properties, notifications, leases; сетка #325, тикеты #346–#349)
+        # открывают транзакции только через runInTx/UoW. Финал миграции
+        # (тикет #350): правило защищает весь модуль — новый ручной Begin в
+        # прод-коде вне internal/platform является нарушением. Platform —
+        # единственное легитимное прод-место (реализация transaction-слоя:
+        # postgres/transaction, postgres/uow, database/instrumentation,
+        # scheduler); тест-фикстуры контролируют границу транзакции сами — легитимировано
+        # ADR 0033, раздел «Test fixtures». Оба исключения — явные path-правила
+        # в linters.exclusions.rules ниже, без path-except.
         #
         # The pattern matches the selector `.Begin` (forbidigo renders a
         # SelectorExpr without its arguments, so b.Begin(ctx) is seen as
@@ -382,44 +379,26 @@ linters:
     # каждое несёт ADR-обоснование и точечный lint+text+path-фильтр, warn-unused
     # выше ловит гнилые правила.
     rules:
-      # ADR 0033 (forbidigo на ручной Begin): identity, billing, access,
-      # properties, notifications и leases — контексты, полностью мигрировавшие
-      # на UoW (billing — с перезаписи модуля, issue #245; access — тикет #346;
-      # properties — тикет #347; notifications — тикет #348, после удаления
-      # FreeReminder по спеке #380, тикеты #381–#383; leases — тикет #349).
-      # Begin легитимно используется
-      # в platform (реализация transaction
-      # layer: postgres/transaction, postgres/uow, instrumentation, scheduler)
-      # и в adapters остальных контекстов — их миграция на UoW отдельные тикеты.
-      # Правило ниже подавляет forbidigo-паттерн Begin ВЕЗДЕ, кроме
-      # identity/application, billing/application, access/application,
-      # properties/application, notifications/application и
-      # leases/application (path-except). Когда
-      # новый контекст мигрирует на UoW, сузьте path-except, добавив его в
-      # разрешённые.
-      # Правила для *_test.go подавляют тот же паттерн в тест-фикстурах
-      # (они легитимно вызывают transaction.Beginner.Begin); text должен совпадать
-      # с msg forbidigo-паттерна выше.
+      # ADR 0033 (forbidigo на ручной Begin): правило действует на весь модуль
+      # (финал UoW-миграции, тикет #350, сетка #325). Легитимных исключений
+      # ровно два, оба — явные path-правила (path-except удалён вместе с
+      # инкрементальной стадией миграции):
+      # 1. internal/platform — реализация transaction-слоя (postgres/transaction,
+      #    postgres/uow, database/instrumentation, scheduler): этот слой сам
+      #    открывает транзакции — его и оборачивает UoW.
+      # 2. *_test.go — тест-фикстуры контролируют границу транзакции сами:
+      #    fakeUoW в application-юнит-тестах воспроизводит семантику UoW.Do
+      #    (Begin → work → Commit/Rollback → re-panic), чтобы проверять её без
+      #    базы; adapter-интеграционники изолируются roll-back-транзакцией над
+      #    реальным Postgres и проверяют WithTx-биндинг в транзакции вызывающего.
+      #    Легитимировано ADR 0033, раздел «Test fixtures». Новые контексты
+      #    наследуют оба исключения автоматически — конфиг править не нужно.
+      # text должен совпадать с msg forbidigo-паттерна выше.
       - linters: [forbidigo]
-        path-except: internal/(identity|billing|access|properties|notifications|leases)/application
+        path: ^apps/backend/internal/platform/
         text: 'use runInTx/UoW instead of manual Begin'
       - linters: [forbidigo]
-        path: internal/identity/application/.*_test\.go
-        text: 'use runInTx/UoW instead of manual Begin'
-      - linters: [forbidigo]
-        path: internal/billing/application/.*_test\.go
-        text: 'use runInTx/UoW instead of manual Begin'
-      - linters: [forbidigo]
-        path: internal/access/application/.*_test\.go
-        text: 'use runInTx/UoW instead of manual Begin'
-      - linters: [forbidigo]
-        path: internal/properties/application/.*_test\.go
-        text: 'use runInTx/UoW instead of manual Begin'
-      - linters: [forbidigo]
-        path: internal/notifications/application/.*_test\.go
-        text: 'use runInTx/UoW instead of manual Begin'
-      - linters: [forbidigo]
-        path: internal/leases/application/.*_test\.go
+        path: _test\.go$
         text: 'use runInTx/UoW instead of manual Begin'
       # Exit-политика (бар #323, тикет #336): os.Exit/log.Fatal* легитимны только
       # в композиционном корне cmd/ (завершение при фатальных startup-ошибках и

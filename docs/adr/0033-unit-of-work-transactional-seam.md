@@ -73,9 +73,9 @@ Implementation rules:
 
   Use cases describe only the business logic; they cannot forget `WithTx` or record audit out of tx, because `txStores` is the only handle they get.
 
-### Migration: identity first, then by context
+### Migration: identity first, then by context — completed
 
-The 75 existing call sites are **not** migrated in one shot. Identity is migrated first (this effort); the remaining contexts migrate as they are touched, context by context. Both patterns remain valid during the transition — `Beginner`/`WithTx` is not removed. A future cleanup, once every context is on `UoW`, may retire the manual path.
+The 75 existing call sites were not migrated in one shot. Identity migrated first (this effort, tickets #210–#212); the remaining contexts followed the same pattern, smallest first: access (#346), properties (#347), notifications (#348, unblocked by the FreeReminder removal #380), leases (#349 — the largest block, 18 manual `Begin`s across three services); billing arrived already on UoW with its module rewrite (#245). The remediation grid #325 tracked the chain, and its closing ticket #350 removed the transitional `path-except` from `.golangci.yml`: the forbidigo rule now makes a manual `Begin` a lint failure in production code module-wide. `transaction.Beginner`/`Tx` remain the primitives the platform layer — and UoW itself — is built on; no application use case calls them anymore.
 
 Migration order within identity (bottom-up, each step compiles and tests green):
 
@@ -87,14 +87,28 @@ Migration order within identity (bottom-up, each step compiles and tests green):
 
 ### Lint enforcement
 
-`forbidigo` in `.golangci.yml` forbids direct `Begin(ctx)` calls in `**/application/*.go` outside the `runInTx`/`transaction` packages, so new use cases cannot silently reintroduce the manual pattern while `UoW` is available. The rule is scoped to the application layer and carries an explanatory comment.
+`forbidigo` in `.golangci.yml` forbids direct `Begin(ctx)` calls **module-wide** (final state, ticket #350): a manual `Begin` in production code outside `internal/platform` is a lint failure. Two explicit path exclusions carry the whole policy:
+
+- `internal/platform` — the transaction layer itself (`postgres/transaction`, `postgres/uow`, `database/instrumentation`, `scheduler`) opens transactions directly; that is the layer UoW wraps.
+- `*_test.go` — test fixtures, legitimized in the next section.
+
+The transitional `path-except` (suppress everywhere except the contexts migrated so far, narrowed by each UoW ticket) was removed with the migration's completion. New contexts inherit the rule automatically — no config edit per context.
+
+### Test fixtures (supplement, ticket #350)
+
+Test fixtures are legitimate controllers of transaction boundaries: the transaction is what they isolate or verify, so routing them through `runInTx` would test the harness instead of the behavior. Two fixture families call `Begin` directly:
+
+- **`fakeUoW` in application unit tests.** Each migrated context's `stores_test.go` implements a `fakeUoW` reproducing `UoW.Do` semantics (Begin → work → Commit on nil, Rollback on error, rollback + re-panic on panic) so commit/rollback/panic behavior is asserted without a database. The fixture must call `Begin` — that code path is the behavior under test.
+- **Adapter integration tests.** They open a rolled-back transaction over a real Postgres (`TEST_DATABASE_URL`-gated) as an isolation fixture — every test's data vanishes on rollback — and they assert repository `WithTx` binding inside a caller-controlled transaction (e.g. the access slot-coordinator visibility regression, issue #158: a pool-backed port must see the caller's uncommitted writes through `WithTx`, not through a separate connection).
+
+Production code keeps the absolute rule: a new production `Begin` outside platform fails `make backend-lint` regardless of context.
 
 ## Consequences
 
 - (+) A use case can no longer forget `WithTx` or record audit outside the transaction: `txStores` is the only handle, and audit lives next to the repositories it shares the tx with. ADR 0020's in-tx guarantee becomes structural rather than convention-based.
 - (+) The early-Commit-on-error in `VerifyCode` — the most fragile piece of identity transaction code — is eliminated.
 - (+) One canonical transactional shape, readable by agents and humans: "open tx, get stores, run business, UoW handles the rest."
-- (-) Two patterns coexist until every context migrates. This is intentional and time-bounded; the `forbidigo` rule prevents new manual call sites while the old ones are retired incrementally.
+- (-) Two patterns coexisted until every context migrated — time-boxed by design; the transition closed with ticket #350 (the forbidigo rule went module-wide, the manual path is retired for production code), so the coexistence cost no longer accrues.
 - (-) One extra layer of indirection (`runInTx` → `uow.Do` → `tx`) over the manual path. Justified by the correctness gains above.
 - `internal/transaction` gains a concrete `UoW` type alongside the existing `Beginner`/`Tx`.
 
