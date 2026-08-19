@@ -20,6 +20,61 @@ import (
 // feeds (ListByOwner, calendar) intentionally stay actor-scoped and are not
 // covered here.
 
+var (
+	policyOwnerID     = uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000001")
+	policyMemberID    = uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000002")
+	policyOperationID = uuid.MustParse("bbbbbbbb-0000-0000-0000-000000000001")
+	policyReminderID  = uuid.MustParse("cccccccc-0000-0000-0000-000000000001")
+)
+
+type policyRoleCase struct {
+	name string
+	role sharedpolicy.Role
+}
+
+var policyRoleCases = []policyRoleCase{
+	{name: "owner", role: sharedpolicy.RoleOwner},
+	{name: "full access", role: sharedpolicy.RoleFullAccess},
+	{name: "viewer", role: sharedpolicy.RoleViewer},
+	{name: "none", role: sharedpolicy.RoleNone},
+	{name: "suspended", role: sharedpolicy.RoleSuspended},
+}
+
+// fakePolicy maps (actor, scope) -> role. RoleForProperty is not used by the
+// reminder use cases under test and defaults to RoleOwner. Implements
+// sharedpolicy.Policy.
+type fakePolicy struct {
+	roles map[[2]uuid.UUID]sharedpolicy.Role
+}
+
+func (f fakePolicy) Role(_ context.Context, actor, scope uuid.UUID) (sharedpolicy.Role, error) {
+	if actor == scope {
+		return sharedpolicy.RoleOwner, nil
+	}
+	if r, ok := f.roles[[2]uuid.UUID{actor, scope}]; ok {
+		return r, nil
+	}
+	return sharedpolicy.RoleNone, nil
+}
+
+func (fakePolicy) RoleForProperty(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
+	return sharedpolicy.RoleOwner, nil
+}
+
+var _ sharedpolicy.Policy = fakePolicy{}
+
+type fakeClock struct{ now time.Time }
+
+func (c fakeClock) Now() time.Time { return c.now }
+
+type fakeTzResolver struct{}
+
+func (fakeTzResolver) Resolve(context.Context, uuid.UUID) (*time.Location, error) {
+	return time.UTC, nil
+}
+
+var policyClock = fakeClock{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)}
+
 // reminderActorAndPolicy returns the actor and the policy fake for a role
 // case. The owner acts on their own data (the fake policy maps actor == scope
 // to RoleOwner); other roles act as a member with the owner-wide role seeded
@@ -99,10 +154,6 @@ func (r *fakeReminderRepo) ListDue(context.Context, time.Time, int) ([]domain.Re
 }
 
 func (r *fakeReminderRepo) ListStaleSendingReminders(context.Context, time.Time, int) ([]domain.Reminder, error) {
-	return nil, nil
-}
-
-func (r *fakeReminderRepo) ListUpcomingFreeRemindersByProperty(context.Context, uuid.UUID, uuid.UUID, time.Time, int) ([]domain.UpcomingFreeReminder, error) {
 	return nil, nil
 }
 
@@ -209,8 +260,9 @@ func policyTestReminder() domain.Reminder {
 	return domain.Reminder{
 		ID:           policyReminderID,
 		OwnerID:      policyOwnerID,
-		TargetType:   domain.TargetFree,
-		EventType:    domain.EventFreeReminder,
+		TargetType:   domain.TargetOperation,
+		OperationID:  &policyOperationID,
+		EventType:    domain.EventOperationDue,
 		Status:       domain.ReminderPending,
 		ScheduledAt:  policyClock.now.Add(24 * time.Hour),
 		MessageTitle: "test",

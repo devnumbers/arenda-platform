@@ -378,22 +378,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/free-reminders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listPropertyFreeReminders"];
-        put?: never;
-        post: operations["createFreeReminder"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/properties/{propertyId}/access/invitations": {
         parameters: {
             query?: never;
@@ -443,22 +427,6 @@ export interface paths {
         put?: never;
         /** Resend the invite email (24-hour cooldown) */
         post: operations["resendPropertyAccessInvitation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{propertyId}/free-reminders/upcoming": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listUpcomingFreeReminders"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -815,38 +783,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateReminder"];
-        trace?: never;
-    };
-    "/free-reminders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listFreeReminders"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/free-reminders/{freeReminderId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getFreeReminder"];
-        put?: never;
-        post?: never;
-        delete: operations["deleteFreeReminder"];
-        options?: never;
-        head?: never;
-        patch: operations["updateFreeReminder"];
         trace?: never;
     };
     "/notification-preferences": {
@@ -2653,7 +2589,7 @@ export interface components {
             /** Format: uuid */
             owner_id: string;
             /** @enum {string} */
-            target_type: "operation" | "recurring_operation" | "lease" | "free";
+            target_type: "operation" | "recurring_operation" | "lease";
             /** Format: uuid */
             operation_id?: string | null;
             /** Format: uuid */
@@ -2661,11 +2597,9 @@ export interface components {
             /** Format: uuid */
             lease_id?: string | null;
             /** Format: uuid */
-            free_reminder_id?: string | null;
-            /** Format: uuid */
             property_id?: string | null;
             /** @enum {string} */
-            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | "subscription_grace";
+            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "subscription_grace";
             /** @enum {string} */
             status: "pending" | "sent" | "failed" | "cancelled" | "skipped";
             /** Format: date-time */
@@ -2685,15 +2619,15 @@ export interface components {
         CalendarRemindersResponse: {
             items: components["schemas"]["CalendarReminderItem"][];
         };
-        /** @description One calendar entry — a free, operation, or system reminder projected into the requested date range. Free reminders are expanded from their template on read (independent of materialization horizon) and carry no status; operation/lease reminders come from the reminders table with a status. Orphan reminders (property deleted in detach mode) have property_id = null and has_property = false. */
+        /** @description One calendar entry — an operation or system reminder projected into the requested date range. Orphan reminders (property deleted in detach mode) have property_id = null and has_property = false. */
         CalendarReminderItem: {
             /**
              * Format: uuid
-             * @description For free reminders — the free_reminder template id (same id repeats for each occurrence of a periodic reminder). For operation/system — the concrete reminder row id.
+             * @description The concrete reminder row id.
              */
             id: string;
             /** @enum {string} */
-            type: "free" | "operation" | "system";
+            type: "operation" | "system";
             /** Format: date-time */
             scheduled_at: string;
             title: string;
@@ -2702,24 +2636,14 @@ export interface components {
             /** @description Resolved property name; null means "Без объекта" (orphan). */
             property_name?: string | null;
             has_property: boolean;
-            /**
-             * @description Present only for operation/system; null for free.
-             * @enum {string|null}
-             */
+            /** @enum {string|null} */
             status?: "pending" | "sent" | null;
             /** @enum {string|null} */
-            event_type?: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | "subscription_grace" | null;
+            event_type?: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "subscription_grace" | null;
             /** Format: uuid */
             operation_id?: string | null;
             /** Format: uuid */
             lease_id?: string | null;
-            /** Format: uuid */
-            free_reminder_id?: string | null;
-            /**
-             * @description Present only for free reminders.
-             * @enum {string|null}
-             */
-            periodicity?: "once" | "daily" | "weekly" | "monthly" | "yearly" | null;
         };
         ReminderCreateRequest: {
             /** Format: date */
@@ -2732,58 +2656,9 @@ export interface components {
         RemindersResponse: {
             items: components["schemas"]["ReminderResponse"][];
         };
-        FreeReminderResponse: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            owner_id: string;
-            /** Format: uuid */
-            property_id: string;
-            title: string;
-            /** Format: date-time */
-            trigger_at: string;
-            /** @enum {string} */
-            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        FreeReminderCreateRequest: {
-            title: string;
-            /** Format: date-time */
-            trigger_at: string;
-            /** @enum {string} */
-            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
-        };
-        FreeReminderUpdateRequest: {
-            title?: string;
-            /** Format: date-time */
-            trigger_at?: string;
-            /** @enum {string} */
-            periodicity?: "once" | "daily" | "weekly" | "monthly" | "yearly";
-        };
-        FreeRemindersResponse: {
-            items: components["schemas"]["FreeReminderResponse"][];
-        };
-        /** @description A single nearest upcoming occurrence of a periodic (or one-shot) free reminder. Unlike FreeReminderResponse (a template), this represents one projected fire time — trigger_at is the instant of this occurrence. */
-        UpcomingFreeReminderResponse: {
-            /** Format: uuid */
-            free_reminder_id: string;
-            title: string;
-            /** Format: uuid */
-            property_id: string;
-            /** Format: date-time */
-            trigger_at: string;
-            /** @enum {string} */
-            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
-        };
-        UpcomingFreeRemindersResponse: {
-            items: components["schemas"]["UpcomingFreeReminderResponse"][];
-        };
         NotificationPreference: {
             /** @enum {string} */
-            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | "subscription_grace";
+            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "subscription_grace";
             /** @description Permission to deliver this event type over email. */
             email_allowed: boolean;
             /** @description Permission to deliver this event type over Web Push. */
@@ -3838,62 +3713,6 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    listPropertyFreeReminders: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Up to limit upcoming free reminders for the property */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreeRemindersResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createFreeReminder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FreeReminderCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Free reminder created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreeReminderResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
     createPropertyAccessInvitation: {
         parameters: {
             query?: never;
@@ -4011,32 +3830,6 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-        };
-    };
-    listUpcomingFreeReminders: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Up to limit nearest upcoming free reminder occurrences for the property */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UpcomingFreeRemindersResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
         };
     };
     listOperationsByProperty: {
@@ -4935,106 +4728,6 @@ export interface operations {
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
-        };
-    };
-    listFreeReminders: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Free reminders list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreeRemindersResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    getFreeReminder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                freeReminderId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Free reminder */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreeReminderResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteFreeReminder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                freeReminderId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Free reminder deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateFreeReminder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                freeReminderId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FreeReminderUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Free reminder updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreeReminderResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
         };
     };
     getNotificationPreferences: {

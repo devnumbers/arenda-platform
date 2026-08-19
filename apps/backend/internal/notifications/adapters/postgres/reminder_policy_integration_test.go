@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
@@ -17,33 +18,31 @@ import (
 )
 
 // These integration tests run against a real Postgres via TEST_DATABASE_URL
-// and are skipped when it is unset (same convention as the free-reminder
-// policy integration tests). They exercise the T3 policy enforcement (issue
-// #166) in the reminder write use cases Reschedule and Cancel end-to-end:
-// real MembershipPolicy over the real repository, with the service called as
+// and are skipped when it is unset (same convention as the other policy
+// integration tests). They exercise the T3 policy enforcement (issue #166) in
+// the reminder write use cases Reschedule and Cancel end-to-end: real
+// MembershipPolicy over the real repository, with the service called as
 // owner, full-access member, viewer, outsider and suspended member.
 
 // reminderPolicyFixture wires the reminder service with the real repository
 // bound to the test transaction and the real membership policy.
 type reminderPolicyFixture struct {
-	q        *genpostgres.Queries
-	tx       pgx.Tx
-	policy   *accessapp.MembershipPolicy
-	members  *accesspg.MembershipRepository
-	repo     *ReminderRepository
-	freeRepo *FreeReminderRepository
-	clock    policyTestClock
+	q       *genpostgres.Queries
+	tx      pgx.Tx
+	policy  *accessapp.MembershipPolicy
+	members *accesspg.MembershipRepository
+	repo    *ReminderRepository
+	clock   policyTestClock
 }
 
 func newReminderPolicyFixture(tx pgx.Tx) *reminderPolicyFixture {
 	return &reminderPolicyFixture{
-		q:        genpostgres.New(tx),
-		tx:       tx,
-		policy:   accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(tx), accesspg.NewMembershipRepository(tx)),
-		members:  accesspg.NewMembershipRepository(tx),
-		repo:     NewReminderRepository(tx),
-		freeRepo: NewFreeReminderRepository(tx),
-		clock:    policyTestClock{now: time.Now()},
+		q:       genpostgres.New(tx),
+		tx:      tx,
+		policy:  accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(tx), accesspg.NewMembershipRepository(tx)),
+		members: accesspg.NewMembershipRepository(tx),
+		repo:    NewReminderRepository(tx),
+		clock:   policyTestClock{now: time.Now()},
 	}
 }
 
@@ -60,29 +59,39 @@ func (f *reminderPolicyFixture) serviceWithShared() *application.ReminderService
 	return svc
 }
 
-// seedReminder inserts a pending free-target reminder on the owner's scope
-// directly through the repositories — the lightest seeding path, as the write
-// gate under test does not depend on how the row was created. The
-// exactly_one_target constraint requires a target row, so a one-off free
-// reminder template is created first.
+// seedReminder inserts a pending operation reminder on the owner's scope
+// directly through the generated queries — the lightest seeding path, as the
+// write gate under test does not depend on how the row was created. The
+// exactly_one_target constraint requires a target row, so a one-off operation
+// (with its category) is created first.
 func (f *reminderPolicyFixture) seedReminder(t *testing.T, ctx context.Context, owner, property uuid.UUID) domain.Reminder {
 	t.Helper()
-	templateID, err := uuid.NewV7()
+	categoryID, err := uuid.NewV7()
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	template, err := f.freeRepo.Create(ctx, domain.FreeReminder{
-		ID:          templateID,
-		OwnerID:     owner,
-		PropertyID:  property,
-		Title:       "policy test",
-		TriggerAt:   f.clock.now.Add(48 * time.Hour),
-		Periodicity: domain.PeriodicityOnce,
-		CreatedAt:   f.clock.now,
-		UpdatedAt:   f.clock.now,
-	})
+	if _, err := f.q.CreateOperationCategory(ctx, genpostgres.CreateOperationCategoryParams{
+		ID: pgUUID(categoryID), OwnerID: pgUUID(owner),
+		Type: "expense", Name: "policy test",
+	}); err != nil {
+		t.Fatalf("seed operation category: %v", err)
+	}
+
+	operationID, err := uuid.NewV7()
 	if err != nil {
-		t.Fatalf("seed free reminder template: %v", err)
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := f.q.CreateOperation(ctx, genpostgres.CreateOperationParams{
+		ID: pgUUID(operationID), OwnerID: pgUUID(owner),
+		PropertyID: pgUUID(property), Type: "expense",
+		CategoryID:          pgUUID(categoryID),
+		Name:                "policy test",
+		AmountKopecks:       1000,
+		OperationDate:       pgtype.Date{Time: f.clock.now.Add(72 * time.Hour), Valid: true},
+		SourceOperationDate: pgtype.Date{Time: f.clock.now.Add(72 * time.Hour), Valid: true},
+		Status:              "pending",
+	}); err != nil {
+		t.Fatalf("seed operation: %v", err)
 	}
 
 	reminderID, err := uuid.NewV7()
@@ -90,20 +99,20 @@ func (f *reminderPolicyFixture) seedReminder(t *testing.T, ctx context.Context, 
 		t.Fatalf("new uuid: %v", err)
 	}
 	rm := domain.Reminder{
-		ID:             reminderID,
-		OwnerID:        owner,
-		TargetType:     domain.TargetFree,
-		FreeReminderID: &template.ID,
-		PropertyID:     &property,
-		EventType:      domain.EventFreeReminder,
-		Status:         domain.ReminderPending,
-		ScheduledAt:    f.clock.now.Add(24 * time.Hour),
-		MessageTitle:   "policy test",
-		MessageBody:    "policy test",
-		CreatedAt:      f.clock.now,
-		UpdatedAt:      f.clock.now,
+		ID:           reminderID,
+		OwnerID:      owner,
+		TargetType:   domain.TargetOperation,
+		OperationID:  &operationID,
+		PropertyID:   &property,
+		EventType:    domain.EventOperationDue,
+		Status:       domain.ReminderPending,
+		ScheduledAt:  f.clock.now.Add(24 * time.Hour),
+		MessageTitle: "policy test",
+		MessageBody:  "policy test",
+		CreatedAt:    f.clock.now,
+		UpdatedAt:    f.clock.now,
 	}
-	if err := f.freeRepo.SaveFreeReminder(ctx, rm); err != nil {
+	if err := f.repo.Save(ctx, rm); err != nil {
 		t.Fatalf("seed reminder: %v", err)
 	}
 	return rm

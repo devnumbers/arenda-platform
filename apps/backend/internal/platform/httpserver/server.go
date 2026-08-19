@@ -68,7 +68,6 @@ type Deps struct {
 	Categories               *leasesapp.CategoryService
 	Reminders                *notificationsapp.ReminderService
 	Calendar                 *notificationsapp.CalendarService
-	FreeReminders            *notificationsapp.FreeReminderService
 	NotificationPreferences  *notificationsapp.PreferenceService
 	PushSubscriptions        *notificationsapp.PushSubscriptionService
 	VAPIDPublicKey           string
@@ -153,7 +152,6 @@ func New(deps Deps) http.Handler {
 	recurringOperationHandlers := leaseshttp.NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
 	categoryHandlers := leaseshttp.NewCategoryHandlers(deps.Categories, deps.Logger)
 	reminderHandlers := notificationshttp.NewReminderHandlers(deps.Reminders, deps.Calendar, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
-	freeReminderHandlers := notificationshttp.NewFreeReminderHandlers(deps.FreeReminders, deps.Reminders, deps.Properties, deps.Clock, deps.Logger)
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
@@ -171,7 +169,6 @@ func New(deps Deps) http.Handler {
 		OperationHandlers:              operationHandlers,
 		RecurringOperationHandlers:     recurringOperationHandlers,
 		ReminderHandlers:               reminderHandlers,
-		FreeReminderHandlers:           freeReminderHandlers,
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
 		PushSubscriptionHandlers:       pushSubscriptionHandlers,
 		PopupHandlers:                  popupHandlers,
@@ -305,7 +302,6 @@ type composedHandler struct {
 	*leaseshttp.OperationHandlers
 	*leaseshttp.RecurringOperationHandlers
 	*notificationshttp.ReminderHandlers
-	*notificationshttp.FreeReminderHandlers
 	*notificationshttp.NotificationPreferenceHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*popupshttp.PopupHandlers

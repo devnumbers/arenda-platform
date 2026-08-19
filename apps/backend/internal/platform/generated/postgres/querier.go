@@ -17,7 +17,6 @@ type Querier interface {
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
 	CancelByIDAndOwner(ctx context.Context, arg CancelByIDAndOwnerParams) (int64, error)
 	CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error)
-	CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error)
 	CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error)
 	CompleteLease(ctx context.Context, arg CompleteLeaseParams) (Lease, error)
 	// Occupied recipient tariff slots: memberships on archived properties do not
@@ -52,7 +51,6 @@ type Querier interface {
 	// the request key is unique per provider, and open sessions are resolved by
 	// status polling or the add-card webhook before the TTL expires.
 	CreateCardBindingSession(ctx context.Context, arg CreateCardBindingSessionParams) (CardBindingSession, error)
-	CreateFreeReminder(ctx context.Context, arg CreateFreeReminderParams) (FreeReminder, error)
 	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
 	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error
 	CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error)
@@ -86,7 +84,6 @@ type Querier interface {
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
 	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
-	DeleteFreeReminderByIDAndOwner(ctx context.Context, arg DeleteFreeReminderByIDAndOwnerParams) (int64, error)
 	DeleteFutureGeneratedOperations(ctx context.Context, arg DeleteFutureGeneratedOperationsParams) error
 	DeleteFutureOperationsByLease(ctx context.Context, arg DeleteFutureOperationsByLeaseParams) error
 	DeleteFutureUneditedOperationsByProperty(ctx context.Context, arg DeleteFutureUneditedOperationsByPropertyParams) error
@@ -126,8 +123,6 @@ type Querier interface {
 	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
 	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
 	GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error)
-	GetFreeReminderByIDAndOwner(ctx context.Context, arg GetFreeReminderByIDAndOwnerParams) (FreeReminder, error)
-	GetFreeReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (FreeReminder, error)
 	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
 	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
 	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
@@ -248,7 +243,6 @@ type Querier interface {
 	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
-	ListAllFreeRemindersByOwner(ctx context.Context, arg ListAllFreeRemindersByOwnerParams) ([]ListAllFreeRemindersByOwnerRow, error)
 	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
 	// Admin tariff listing: every tariff including hidden ones (issue #247).
 	ListAllTariffs(ctx context.Context) ([]Tariff, error)
@@ -256,12 +250,11 @@ type Querier interface {
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
 	ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error)
 	ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error)
-	// target_type <> 'free' is the eternal filter of the FreeReminder removal
-	// (ticket #381): orphaned materialized free rows stay in the table until the
-	// drop migration, but the worker must never dispatch them again.
+	// target_type <> 'free' is the eternal filter guarding the dead enum value
+	// left by the free-reminders removal (issues #381/#382): orphaned rows stay
+	// in the table until the drop migration, and the worker must never dispatch
+	// them again.
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
-	ListFreeRemindersByOwner(ctx context.Context, arg ListFreeRemindersByOwnerParams) ([]FreeReminder, error)
-	ListFreeRemindersByProperty(ctx context.Context, arg ListFreeRemindersByPropertyParams) ([]FreeReminder, error)
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]ListFutureOperationsByLeaseRow, error)
 	ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error)
 	ListLeasesByOwner(ctx context.Context, arg ListLeasesByOwnerParams) ([]Lease, error)
@@ -351,7 +344,6 @@ type Querier interface {
 	ListTenantContactsByIDs(ctx context.Context, arg ListTenantContactsByIDsParams) ([]TenantContact, error)
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID pgtype.UUID) ([]ListTenantContactsWithLeaseStatusRow, error)
-	ListUpcomingFreeRemindersByProperty(ctx context.Context, arg ListUpcomingFreeRemindersByPropertyParams) ([]ListUpcomingFreeRemindersByPropertyRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
 	// Serializes activation switches per user: the deactivate-all / activate-one
 	// pair must not interleave with a concurrent switch, or the one-active
@@ -374,7 +366,6 @@ type Querier interface {
 	// to an absolute value rather than incremented.
 	ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error
 	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
-	SaveFreeReminder(ctx context.Context, arg SaveFreeReminderParams) (int64, error)
 	SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error)
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error)
 	SaveSentPushReminder(ctx context.Context, arg SaveSentPushReminderParams) (int64, error)
@@ -383,7 +374,6 @@ type Querier interface {
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error)
-	UpdateFreeReminder(ctx context.Context, arg UpdateFreeReminderParams) (FreeReminder, error)
 	UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, arg UpdateFutureGeneratedOperationReminderOffsetsParams) (int64, error)
 	UpdateLease(ctx context.Context, arg UpdateLeaseParams) (Lease, error)
 	UpdateOperation(ctx context.Context, arg UpdateOperationParams) (Operation, error)

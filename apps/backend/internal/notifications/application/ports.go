@@ -29,12 +29,6 @@ type ReminderRepository interface {
 	ListByRecurringOperation(ctx context.Context, scope, recurringOpID uuid.UUID, filter ListFilter) ([]domain.Reminder, error)
 	ListDue(ctx context.Context, before time.Time, limit int) ([]domain.Reminder, error)
 	ListStaleSendingReminders(ctx context.Context, staleBefore time.Time, limit int) ([]domain.Reminder, error)
-	// ListUpcomingFreeRemindersByProperty returns the nearest pending
-	// occurrences of free-reminder templates for a property, ordered by
-	// scheduled time ascending. It reads from the materialized reminders table,
-	// so periodic occurrences are included. 'from' bounds the lower edge of the
-	// window (typically now).
-	ListUpcomingFreeRemindersByProperty(ctx context.Context, scope, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error)
 	// ListCalendarByOwner returns non-cancelled, non-skipped operation and
 	// system reminders for an owner in the half-open time window [from, to),
 	// each with its resolved property name (nil for orphans). Ordered by
@@ -89,41 +83,6 @@ type ReminderRepository interface {
 	// given event type over the given channel. A missing row means allowed.
 	IsChannelAllowed(ctx context.Context, userID uuid.UUID, eventType domain.EventType, channel domain.NotificationChannel) (bool, error)
 	WithTx(tx transaction.Tx) ReminderRepository
-}
-
-// FreeReminderRepository persists free reminder templates and materializes
-// concrete reminders from them. It is a separate responsibility from
-// ReminderRepository, which deals with operation/lease reminders.
-type FreeReminderRepository interface {
-	Create(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
-	GetByID(ctx context.Context, id, scope uuid.UUID) (domain.FreeReminder, error)
-	// GetByIDUnscoped returns a free reminder by id without owner scoping. Used
-	// to resolve the entity's owner (scope) before applying the policy gate
-	// (T3, issue #166); callers must not expose the result without a role check.
-	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (domain.FreeReminder, error)
-	Update(ctx context.Context, fr domain.FreeReminder) (domain.FreeReminder, error)
-	Delete(ctx context.Context, scope, id uuid.UUID) error
-	// ListByOwner returns paginated free reminders for the scope owner plus,
-	// when accessiblePropertyIDs is non-empty, free reminders of properties
-	// shared with the actor via property membership (issue #157, T3), excluding
-	// archived shared properties. When empty, only the owner's own free
-	// reminders are returned.
-	ListByOwner(ctx context.Context, scope uuid.UUID, limit, offset int, accessiblePropertyIDs []uuid.UUID) ([]domain.FreeReminder, error)
-	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, limit int) ([]domain.FreeReminder, error)
-	// ListTemplatesByOwner returns all free reminder templates for an owner
-	// with their resolved property name (nullable for orphans), ordered by
-	// trigger_at ascending. Used by the calendar read to expand occurrences.
-	// accessiblePropertyIDs extends the result with templates of properties
-	// shared with the actor (issue #157, T3), restricted to active/maintenance
-	// properties; when empty, only the owner's own templates are returned.
-	ListTemplatesByOwner(ctx context.Context, scope uuid.UUID, accessiblePropertyIDs []uuid.UUID) ([]domain.FreeReminderTemplate, error)
-	// SaveFreeReminder inserts a concrete reminder row materialized from a free
-	// reminder template.
-	SaveFreeReminder(ctx context.Context, rm domain.Reminder) error
-	// CancelRemindersByFreeReminderID cancels pending/sending concrete reminders
-	// linked to a free reminder template.
-	CancelRemindersByFreeReminderID(ctx context.Context, scope, freeReminderID uuid.UUID) error
-	WithTx(tx transaction.Tx) FreeReminderRepository
 }
 
 // PushSubscriptionRepository persists Web Push subscriptions keyed by their
@@ -292,20 +251,4 @@ type LeaseInfo struct {
 	OwnerID    uuid.UUID
 	PropertyID uuid.UUID
 	EndDate    *time.Time
-}
-
-// CreateFreeReminderInput is the user-supplied data for creating a free reminder.
-type CreateFreeReminderInput struct {
-	PropertyID  uuid.UUID
-	Title       string
-	TriggerAt   time.Time // local instant (date + time-of-day) in the owner's timezone
-	Periodicity domain.FreeReminderPeriodicity
-}
-
-// UpdateFreeReminderInput is the user-supplied data for updating a free reminder.
-// All fields are optional (partial update semantics).
-type UpdateFreeReminderInput struct {
-	Title       *string
-	TriggerAt   *time.Time
-	Periodicity *domain.FreeReminderPeriodicity
 }

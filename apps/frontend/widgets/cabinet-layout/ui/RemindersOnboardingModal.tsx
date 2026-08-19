@@ -21,7 +21,7 @@ import {
 import {NotificationPreferencesFields} from '@/features/notification-preferences';
 import {useSubscribePush} from '@/features/push-notifications';
 import {isPushSupported} from '@/features/push-notifications';
-import type {CarriedNotificationPreference, NotificationEventType, NotificationPreference,} from '@/entities/user';
+import type {NotificationEventType, NotificationPreference,} from '@/entities/user';
 import styles from './RemindersOnboardingModal.module.css';
 
 const MOBILE_MEDIA_QUERY = '(max-width: 767px)';
@@ -152,12 +152,10 @@ function PushContent({isBusy, onAllow, onSkip}: PushContentProps): JSX.Element {
 
 type RemindersOnboardingModalContentProps = {
     readonly preferences: NotificationPreference[];
-    readonly carried: readonly CarriedNotificationPreference[];
 };
 
 function RemindersOnboardingModalContent({
                                              preferences,
-                                             carried,
                                          }: RemindersOnboardingModalContentProps): JSX.Element | null {
     const updateNotificationPreferences = useUpdateNotificationPreferences();
     const markPopupSeen = useMarkPopupSeen();
@@ -197,13 +195,7 @@ function RemindersOnboardingModalContent({
     }, [markPopupSeen]);
 
     const handleNext = useCallback(async () => {
-        // carried: выведенные из продукта события сервер требует в PUT
-        // полным набором (тикет #381) — переносятся как есть.
-        const payload = buildPreferencePayload(
-            notificationPrefs,
-            preferences,
-            carried,
-        );
+        const payload = buildPreferencePayload(notificationPrefs, preferences);
 
         try {
             await updateNotificationPreferences.mutateAsync(payload);
@@ -220,7 +212,7 @@ function RemindersOnboardingModalContent({
         }
 
         setStep('push');
-    }, [closeWithPopupSeen, notificationPrefs, preferences, carried, updateNotificationPreferences]);
+    }, [closeWithPopupSeen, notificationPrefs, preferences, updateNotificationPreferences]);
 
     const handleAllowPush = useCallback(async () => {
         setIsPushBusy(true);
@@ -318,9 +310,6 @@ export function RemindersOnboardingModal(): JSX.Element | null {
     }
 
     return (
-        <RemindersOnboardingModalContent
-            preferences={preferencesData.preferences}
-            carried={preferencesData.carried}
-        />
+        <RemindersOnboardingModalContent preferences={preferencesData} />
     );
 }

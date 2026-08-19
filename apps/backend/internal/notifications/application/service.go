@@ -62,6 +62,20 @@ func (s *ReminderService) SetPolicy(p sharedpolicy.Policy) {
 	s.policy = p
 }
 
+// writeRoleGate maps a resolved role to the T3 shared-access write-gate
+// outcome (issue #166), mirroring the leases write paths: RoleNone and
+// RoleSuspended map to ErrNotFound (object privacy); a role that can view but
+// not edit (viewer) maps to ErrForbidden.
+func writeRoleGate(role sharedpolicy.Role) error {
+	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
+		return ErrNotFound
+	}
+	if !sharedpolicy.CanEdit(role) {
+		return ErrForbidden
+	}
+	return nil
+}
+
 // resolveWriteScope applies the T3 shared-access write gate (issue #166) for a
 // reminder addressed by its own id and returns the data owner (scope) for
 // repository calls. The owner acts on their own data directly; any other actor
@@ -189,18 +203,6 @@ func (s *ReminderService) ListByRecurringOperation(ctx context.Context, actor, r
 	reminders, err := s.repo.ListByRecurringOperation(ctx, actor, recurringOpID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list reminders: %w", err)
-	}
-	return reminders, nil
-}
-
-// ListUpcomingFreeRemindersByProperty returns the nearest pending free-reminder
-// occurrences for a property, including periodic occurrences (which are
-// materialized at write time). The caller resolves the property's data owner
-// and passes it as scope. 'from' is the lower bound of the window.
-func (s *ReminderService) ListUpcomingFreeRemindersByProperty(ctx context.Context, scope, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
-	reminders, err := s.repo.ListUpcomingFreeRemindersByProperty(ctx, scope, propertyID, from, limit)
-	if err != nil {
-		return nil, fmt.Errorf("list upcoming free reminders by property: %w", err)
 	}
 	return reminders, nil
 }

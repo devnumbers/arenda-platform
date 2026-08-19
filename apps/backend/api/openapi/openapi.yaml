@@ -831,69 +831,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-  /properties/{propertyId}/free-reminders:
-    post:
-      operationId: createFreeReminder
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FreeReminderCreateRequest'
-      responses:
-        '201':
-          description: Free reminder created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FreeReminderResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/SubscriptionBlocked'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    get:
-      operationId: listPropertyFreeReminders
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 3
-      responses:
-        '200':
-          description: Up to limit upcoming free reminders for the property
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FreeRemindersResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/access/invitations:
     post:
       operationId: createPropertyAccessInvitation
@@ -1019,37 +956,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
-  /properties/{propertyId}/free-reminders/upcoming:
-    get:
-      operationId: listUpcomingFreeReminders
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 3
-      responses:
-        '200':
-          description: Up to limit nearest upcoming free reminder occurrences for the property
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UpcomingFreeRemindersResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/operations:
     get:
       operationId: listOperationsByProperty
@@ -2064,109 +1970,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
-  /free-reminders:
-    get:
-      operationId: listFreeReminders
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 1000
-            default: 100
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-      responses:
-        '200':
-          description: Free reminders list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FreeRemindersResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /free-reminders/{freeReminderId}:
-    get:
-      operationId: getFreeReminder
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: freeReminderId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Free reminder
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FreeReminderResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    patch:
-      operationId: updateFreeReminder
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: freeReminderId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FreeReminderUpdateRequest'
-      responses:
-        '200':
-          description: Free reminder updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FreeReminderResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/SubscriptionBlocked'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    delete:
-      operationId: deleteFreeReminder
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: freeReminderId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Free reminder deleted
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /notification-preferences:
     get:
       operationId: getNotificationPreferences
@@ -6036,7 +5839,7 @@ components:
           format: uuid
         target_type:
           type: string
-          enum: [operation, recurring_operation, lease, free]
+          enum: [operation, recurring_operation, lease]
         operation_id:
           type: string
           format: uuid
@@ -6049,17 +5852,13 @@ components:
           type: string
           format: uuid
           nullable: true
-        free_reminder_id:
-          type: string
-          format: uuid
-          nullable: true
         property_id:
           type: string
           format: uuid
           nullable: true
         event_type:
           type: string
-          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder, subscription_grace]
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, subscription_grace]
         status:
           type: string
           enum: [pending, sent, failed, cancelled, skipped]
@@ -6100,24 +5899,18 @@ components:
     CalendarReminderItem:
       type: object
       description: >
-        One calendar entry — a free, operation, or system reminder projected
-        into the requested date range. Free reminders are expanded from their
-        template on read (independent of materialization horizon) and carry no
-        status; operation/lease reminders come from the reminders table with a
-        status. Orphan reminders (property deleted in detach mode) have
-        property_id = null and has_property = false.
+        One calendar entry — an operation or system reminder projected into the
+        requested date range. Orphan reminders (property deleted in detach
+        mode) have property_id = null and has_property = false.
       required: [id, type, scheduled_at, title, has_property]
       properties:
         id:
           type: string
           format: uuid
-          description: >
-            For free reminders — the free_reminder template id (same id repeats
-            for each occurrence of a periodic reminder). For operation/system —
-            the concrete reminder row id.
+          description: The concrete reminder row id.
         type:
           type: string
-          enum: [free, operation, system]
+          enum: [operation, system]
         scheduled_at:
           type: string
           format: date-time
@@ -6137,10 +5930,9 @@ components:
           type: string
           enum: [pending, sent]
           nullable: true
-          description: Present only for operation/system; null for free.
         event_type:
           type: string
-          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder, subscription_grace]
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, subscription_grace]
           nullable: true
         operation_id:
           type: string
@@ -6150,15 +5942,6 @@ components:
           type: string
           format: uuid
           nullable: true
-        free_reminder_id:
-          type: string
-          format: uuid
-          nullable: true
-        periodicity:
-          type: string
-          enum: [once, daily, weekly, monthly, yearly]
-          nullable: true
-          description: Present only for free reminders.
 
     ReminderCreateRequest:
       type: object
@@ -6185,111 +5968,13 @@ components:
           items:
             $ref: '#/components/schemas/ReminderResponse'
 
-    FreeReminderResponse:
-      type: object
-      required: [id, owner_id, property_id, title, trigger_at, periodicity, created_at, updated_at]
-      properties:
-        id:
-          type: string
-          format: uuid
-        owner_id:
-          type: string
-          format: uuid
-        property_id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        trigger_at:
-          type: string
-          format: date-time
-        periodicity:
-          type: string
-          enum: [once, daily, weekly, monthly, yearly]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    FreeReminderCreateRequest:
-      type: object
-      required: [title, trigger_at, periodicity]
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 50
-        trigger_at:
-          type: string
-          format: date-time
-        periodicity:
-          type: string
-          enum: [once, daily, weekly, monthly, yearly]
-
-    FreeReminderUpdateRequest:
-      type: object
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 50
-        trigger_at:
-          type: string
-          format: date-time
-        periodicity:
-          type: string
-          enum: [once, daily, weekly, monthly, yearly]
-
-    FreeRemindersResponse:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/FreeReminderResponse'
-
-    UpcomingFreeReminderResponse:
-      type: object
-      description: >
-        A single nearest upcoming occurrence of a periodic (or one-shot) free
-        reminder. Unlike FreeReminderResponse (a template), this represents one
-        projected fire time — trigger_at is the instant of this occurrence.
-      required: [free_reminder_id, title, property_id, trigger_at, periodicity]
-      properties:
-        free_reminder_id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        property_id:
-          type: string
-          format: uuid
-        trigger_at:
-          type: string
-          format: date-time
-        periodicity:
-          type: string
-          enum: [once, daily, weekly, monthly, yearly]
-
-    UpcomingFreeRemindersResponse:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/UpcomingFreeReminderResponse'
-
     NotificationPreference:
       type: object
       required: [event_type, email_allowed, push_allowed]
       properties:
         event_type:
           type: string
-          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, free_reminder, subscription_grace]
+          enum: [operation_due, operation_overdue, lease_expiring, lease_requires_action, subscription_grace]
         email_allowed:
           type: boolean
           description: Permission to deliver this event type over email.

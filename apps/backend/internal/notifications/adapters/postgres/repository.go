@@ -262,26 +262,6 @@ func (r *ReminderRepository) ListDue(ctx context.Context, before time.Time, limi
 	return out, nil
 }
 
-// ListUpcomingFreeRemindersByProperty returns the nearest pending free-reminder
-// occurrences for a property from the materialized reminders table. Periodic
-// occurrences are included because they are materialized at write time.
-func (r *ReminderRepository) ListUpcomingFreeRemindersByProperty(ctx context.Context, scope, propertyID uuid.UUID, from time.Time, limit int) ([]domain.UpcomingFreeReminder, error) {
-	rows, err := r.q().ListUpcomingFreeRemindersByProperty(ctx, postgres.ListUpcomingFreeRemindersByPropertyParams{
-		OwnerID:     pgconv.UUIDToPgtype(scope),
-		PropertyID:  pgconv.UUIDToPgtype(propertyID),
-		ScheduledAt: pgtype.Timestamptz{Time: from, Valid: true},
-		Limit:       shared.ToInt32Clamped(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list upcoming free reminders by property: %w", err)
-	}
-	out := make([]domain.UpcomingFreeReminder, len(rows))
-	for i, row := range rows {
-		out[i] = toUpcomingFreeReminder(row)
-	}
-	return out, nil
-}
-
 // ListCalendarByOwner returns non-cancelled, non-skipped operation and system
 // reminders for an owner in [from, to), each joined with its property name
 // (nil for orphans). Ordered by scheduled_at ascending.
@@ -302,18 +282,17 @@ func (r *ReminderRepository) ListCalendarByOwner(ctx context.Context, scope uuid
 		status := normalizeCalendarStatus(rem.Status)
 		eventType := rem.EventType
 		out[i] = domain.CalendarReminder{
-			ID:             rem.ID,
-			Type:           domain.CalendarReminderTypeFromTarget(rem.TargetType),
-			ScheduledAt:    rem.ScheduledAt,
-			Title:          rem.MessageTitle,
-			PropertyID:     rem.PropertyID,
-			PropertyName:   pgconv.TextToPtrString(row.PropertyName),
-			HasProperty:    row.PropertyName.Valid,
-			Status:         status,
-			EventType:      &eventType,
-			OperationID:    rem.OperationID,
-			LeaseID:        rem.LeaseID,
-			FreeReminderID: rem.FreeReminderID,
+			ID:           rem.ID,
+			Type:         domain.CalendarReminderTypeFromTarget(rem.TargetType),
+			ScheduledAt:  rem.ScheduledAt,
+			Title:        rem.MessageTitle,
+			PropertyID:   rem.PropertyID,
+			PropertyName: pgconv.TextToPtrString(row.PropertyName),
+			HasProperty:  row.PropertyName.Valid,
+			Status:       status,
+			EventType:    &eventType,
+			OperationID:  rem.OperationID,
+			LeaseID:      rem.LeaseID,
 		}
 	}
 	return out, nil
@@ -724,7 +703,6 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 		RecurringOperationID: pgconv.UUIDFromPgtypePtr(row.RecurringOperationID),
 		LeaseID:              pgconv.UUIDFromPgtypePtr(row.LeaseID),
 		PropertyID:           pgconv.UUIDFromPgtypePtr(row.PropertyID),
-		FreeReminderID:       pgconv.UUIDFromPgtypePtr(row.FreeReminderID),
 		EventType:            domain.EventType(row.EventType),
 		Status:               domain.ReminderStatus(row.Status),
 		ScheduledAt:          pgconv.TimestamptzToTime(row.ScheduledAt),
@@ -739,8 +717,7 @@ func toDomain(row postgres.Reminder) domain.Reminder {
 }
 
 // normalizeCalendarStatus collapses 'sending' to 'pending' for the calendar
-// view and returns nil for terminal/hidden statuses. It returns a pointer so
-// the caller can distinguish "no status" (free) from a concrete value.
+// view and returns nil for terminal/hidden statuses.
 func normalizeCalendarStatus(s domain.ReminderStatus) *domain.ReminderStatus {
 	switch s {
 	case domain.ReminderPending, domain.ReminderSending:
@@ -751,17 +728,5 @@ func normalizeCalendarStatus(s domain.ReminderStatus) *domain.ReminderStatus {
 		return &v
 	default:
 		return nil
-	}
-}
-
-// toUpcomingFreeReminder maps a JOIN row (materialized reminder + parent
-// template periodicity) to the read projection domain.UpcomingFreeReminder.
-func toUpcomingFreeReminder(row postgres.ListUpcomingFreeRemindersByPropertyRow) domain.UpcomingFreeReminder {
-	return domain.UpcomingFreeReminder{
-		FreeReminderID: pgconv.UUIDFromPgtype(row.Reminder.FreeReminderID),
-		Title:          row.Reminder.MessageTitle,
-		PropertyID:     pgconv.UUIDFromPgtype(row.Reminder.PropertyID),
-		TriggerAt:      pgconv.TimestamptzToTime(row.Reminder.ScheduledAt),
-		Periodicity:    domain.FreeReminderPeriodicity(row.FreeReminderPeriodicity),
 	}
 }

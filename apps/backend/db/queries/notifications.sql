@@ -45,9 +45,10 @@ ORDER BY scheduled_at ASC
 LIMIT $3 OFFSET $4;
 
 -- name: ListDueReminders :many
--- target_type <> 'free' is the eternal filter of the FreeReminder removal
--- (ticket #381): orphaned materialized free rows stay in the table until the
--- drop migration, but the worker must never dispatch them again.
+-- target_type <> 'free' is the eternal filter guarding the dead enum value
+-- left by the free-reminders removal (issues #381/#382): orphaned rows stay
+-- in the table until the drop migration, and the worker must never dispatch
+-- them again.
 SELECT * FROM reminders
 WHERE status = 'pending'
   AND scheduled_at <= $1
@@ -203,32 +204,6 @@ DELETE FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2;
 UPDATE reminders
 SET status = 'skipped'
 WHERE id = $1 AND status IN ('pending', 'sending');
-
--- name: SaveFreeReminder :execrows
-INSERT INTO reminders (
-    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
-    property_id, free_reminder_id, event_type, status, scheduled_at,
-    message_title, message_body, created_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-);
-
--- name: CancelRemindersByFreeReminderID :execrows
-UPDATE reminders
-SET status = 'cancelled'
-WHERE free_reminder_id = $1 AND owner_id = $2 AND status IN ('pending', 'sending');
-
--- name: ListUpcomingFreeRemindersByProperty :many
-SELECT sqlc.embed(r), fr.periodicity AS free_reminder_periodicity
-FROM reminders r
-JOIN free_reminders fr ON fr.id = r.free_reminder_id
-WHERE r.owner_id = $1
-  AND r.property_id = $2
-  AND r.target_type = 'free'
-  AND r.status = 'pending'
-  AND r.scheduled_at >= $3
-ORDER BY r.scheduled_at ASC
-LIMIT $4;
 
 -- name: ListCalendarRemindersByOwner :many
 SELECT sqlc.embed(r), p.name AS property_name

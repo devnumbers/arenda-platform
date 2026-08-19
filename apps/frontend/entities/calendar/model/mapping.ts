@@ -25,29 +25,21 @@ export const calendarEntryStatusLabels: Record<CalendarEntryEventType, string> =
   lease_requires_action: 'Требует действия',
 };
 
-const KNOWN_ENTRY_TYPES = new Set<string>(['operation', 'system']);
-
-// Свободные напоминания выведены из продукта (тикет #381), но сгенерированный
-// API-клиент их union ещё содержит — регенерация контрактного клиента едет
-// следующим тикетом набора. Поэтому записи неизвестных типов молча
-// отбрасываются на границе маппинга, а не роняют календарь.
 export function mapCalendarEntries(
   dtos: readonly CalendarReminderItem[],
 ): CalendarEntry[] {
-  return dtos
-    .filter((dto) => KNOWN_ENTRY_TYPES.has(dto.type))
-    .map((dto) => ({
-      id: dto.id,
-      type: dto.type as CalendarEntryType,
-      scheduledAt: dto.scheduled_at,
-      title: dto.title,
-      hasProperty: dto.has_property,
-      propertyName: dto.property_name ?? null,
-      status: (dto.status as CalendarEntryStatus | null | undefined) ?? null,
-      eventType: (dto.event_type as CalendarEntryEventType | null | undefined) ?? null,
-      operationId: dto.operation_id ?? null,
-      leaseId: dto.lease_id ?? null,
-    }));
+  return dtos.map((dto) => ({
+    id: dto.id,
+    type: dto.type,
+    scheduledAt: dto.scheduled_at,
+    title: dto.title,
+    hasProperty: dto.has_property,
+    propertyName: dto.property_name ?? null,
+    status: (dto.status as CalendarEntryStatus | null | undefined) ?? null,
+    eventType: (dto.event_type as CalendarEntryEventType | null | undefined) ?? null,
+    operationId: dto.operation_id ?? null,
+    leaseId: dto.lease_id ?? null,
+  }));
 }
 
 export function propertyDisplayName(entry: CalendarEntry): string {

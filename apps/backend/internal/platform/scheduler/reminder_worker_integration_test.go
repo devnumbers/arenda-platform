@@ -30,6 +30,62 @@ import (
 // inside a rolled-back transaction. Only the Notifier and the ContactResolver
 // are fakes — they are not the integration seam under test.
 
+// seedOperationReminder creates the operation category and a one-off
+// operation on the owner's property (the reminders CHECK exactly_one_target
+// requires a target row), then saves a sending reminder attached to it. The
+// fan-out/push tests dispatch that reminder.
+func seedOperationReminder(t *testing.T, ctx context.Context, q *genpostgres.Queries, repo *notificationspg.ReminderRepository, ownerID, propertyID uuid.UUID, title, body string) domain.Reminder {
+	t.Helper()
+
+	categoryID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := q.CreateOperationCategory(ctx, genpostgres.CreateOperationCategoryParams{
+		ID: pgtype.UUID{Bytes: categoryID, Valid: true}, OwnerID: pgtype.UUID{Bytes: ownerID, Valid: true},
+		Type: "expense", Name: "utilities",
+	}); err != nil {
+		t.Fatalf("create operation category: %v", err)
+	}
+	operationID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := q.CreateOperation(ctx, genpostgres.CreateOperationParams{
+		ID: pgtype.UUID{Bytes: operationID, Valid: true}, OwnerID: pgtype.UUID{Bytes: ownerID, Valid: true},
+		PropertyID: pgtype.UUID{Bytes: propertyID, Valid: true}, Type: "expense",
+		CategoryID: pgtype.UUID{Bytes: categoryID, Valid: true},
+		Name:       "Utilities", AmountKopecks: 1000,
+		OperationDate:       pgtype.Date{Time: workerTestNow, Valid: true},
+		SourceOperationDate: pgtype.Date{Time: workerTestNow, Valid: true},
+		Status:              "pending",
+	}); err != nil {
+		t.Fatalf("create operation: %v", err)
+	}
+
+	reminderID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	reminder := domain.Reminder{
+		ID:           reminderID,
+		OwnerID:      ownerID,
+		TargetType:   domain.TargetOperation,
+		OperationID:  &operationID,
+		PropertyID:   &propertyID,
+		EventType:    domain.EventOperationDue,
+		Status:       domain.ReminderSending,
+		ScheduledAt:  workerTestNow,
+		MessageTitle: title,
+		MessageBody:  body,
+		CreatedAt:    workerTestNow,
+	}
+	if err := repo.Save(ctx, reminder); err != nil {
+		t.Fatalf("save reminder: %v", err)
+	}
+	return reminder
+}
+
 // noCommitTx wraps a real pgx transaction so the worker's finalize step does
 // not commit it (the test rolls the outer transaction back in cleanup). The
 // embedded pgx.Tx still satisfies postgres.DBTX, so real repositories can bind
@@ -106,7 +162,7 @@ func createWorkerTestProperty(t *testing.T, ctx context.Context, q *genpostgres.
 
 // reminderFanoutFixture bundles a real reminder worker wired to the test
 // transaction together with the fixture ids of an owner, one member and a
-// sending free reminder bound to their property.
+// sending operation reminder bound to their property.
 type reminderFanoutFixture struct {
 	worker   *ReminderWorker
 	repo     *notificationspg.ReminderRepository
@@ -117,7 +173,7 @@ type reminderFanoutFixture struct {
 }
 
 // newReminderFanoutFixture creates the owner, the property, the member (with
-// the given membership status) and a sending free reminder, then builds a
+// the given membership status) and a sending operation reminder, then builds a
 // real ReminderWorker over the real notifications and access repositories.
 func newReminderFanoutFixture(t *testing.T, ctx context.Context, tx pgx.Tx, memberStatus accessdomain.MemberStatus) reminderFanoutFixture {
 	t.Helper()
@@ -140,43 +196,7 @@ func newReminderFanoutFixture(t *testing.T, ctx context.Context, tx pgx.Tx, memb
 	}
 
 	repo := notificationspg.NewReminderRepository(tx)
-
-	// A 'free' target requires a concrete reminder linked to its template
-	// (CHECK exactly_one_target), so create the template first and save the
-	// materialized reminder through SaveFreeReminder.
-	freeRepo := notificationspg.NewFreeReminderRepository(tx)
-	templateID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	if _, err := freeRepo.Create(ctx, domain.FreeReminder{
-		ID: templateID, OwnerID: ownerID, PropertyID: propertyID,
-		Title: "title", TriggerAt: workerTestNow, Periodicity: domain.PeriodicityOnce,
-		CreatedAt: workerTestNow, UpdatedAt: workerTestNow,
-	}); err != nil {
-		t.Fatalf("create free reminder template: %v", err)
-	}
-
-	reminderID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	reminder := domain.Reminder{
-		ID:             reminderID,
-		OwnerID:        ownerID,
-		TargetType:     domain.TargetFree,
-		PropertyID:     &propertyID,
-		FreeReminderID: &templateID,
-		EventType:      domain.EventFreeReminder,
-		Status:         domain.ReminderSending,
-		ScheduledAt:    workerTestNow,
-		MessageTitle:   "title",
-		MessageBody:    "body",
-		CreatedAt:      workerTestNow,
-	}
-	if err := freeRepo.SaveFreeReminder(ctx, reminder); err != nil {
-		t.Fatalf("save reminder: %v", err)
-	}
+	reminder := seedOperationReminder(t, ctx, q, repo, ownerID, propertyID, "title", "body")
 
 	renderer, err := mailer.NewRenderer("../../../templates/email")
 	if err != nil {
@@ -217,7 +237,7 @@ func (f reminderFanoutFixture) optOut(t *testing.T, ctx context.Context, userID 
 	// The worker checks per-channel preferences (ADR 0030) on the email channel,
 	// so the opt-out must write to the channel preferences table.
 	if err := f.repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
-		EventType: domain.EventFreeReminder,
+		EventType: domain.EventOperationDue,
 		Channel:   domain.ChannelEmail,
 		Allowed:   false,
 	}); err != nil {
@@ -420,7 +440,7 @@ func TestReminderWorker_Integration_ListDueSkipsFreeTargetRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByIDUnscoped(free): %v", err)
 	}
-	if free.Status != domain.ReminderPending || free.TargetType != domain.TargetFree {
-		t.Fatalf("free row = (%s, %s), want (pending, free) — seed broken", free.TargetType, free.Status)
+	if free.Status != domain.ReminderPending || string(free.TargetType) != "free" {
+		t.Fatalf("planted row = (%s, %s), want (pending, free) — seed broken", free.TargetType, free.Status)
 	}
 }

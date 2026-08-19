@@ -57,7 +57,7 @@ func run() error {
 	// 2. Event dispatcher (shared by identity publisher and subscribers).
 	eventDispatcher := events.NewInProcessDispatcher()
 
-	// 3. Notifications: reminder/free-reminder/calendar/preference services +
+	// 3. Notifications: reminder/calendar/preference services +
 	//    reminder scheduler. Built before identity because Profile depends on
 	//    the reminder service, and before leases because the reminder scheduler
 	//    feeds the property billing lifecycle and lease/operation services.
@@ -95,12 +95,11 @@ func run() error {
 	}
 	p.Policy = accessMod.Policy
 
-	// Wire the membership-aware policy into the notifications services so
-	// reminder/free-reminder write gates resolve the actor's role correctly.
-	// These services are built before the access module (they feed identity and
-	// leases), so they captured the T2 owner-only stub and must be re-injected
-	// here (issue #166, mirrors CategoryService.SetPolicy).
-	notificationsMod.FreeReminderService.SetPolicy(accessMod.Policy)
+	// Wire the membership-aware policy into the notifications services so the
+	// reminder write gates resolve the actor's role correctly. These services
+	// are built before the access module (they feed identity and leases), so
+	// they captured the T2 owner-only stub and must be re-injected here (issue
+	// #166, mirrors CategoryService.SetPolicy).
 	notificationsMod.ReminderService.SetPolicy(accessMod.Policy)
 
 	// The category service is built before the access module (it is needed for
@@ -252,11 +251,10 @@ func run() error {
 	// shared with the actor (issue #157, T3).
 	leasesMod.LeaseService.SetSharedPropertyIDs(accessMod.SharedProperties)
 	// Wire the same adapter into the remaining aggregate-read services so the
-	// recurring-operations list, the reminders list, and the free-reminders
-	// list all include the actor's shared-property data (issue #157, T3).
+	// recurring-operations list and the reminders list include the actor's
+	// shared-property data (issue #157, T3).
 	leasesMod.RecurringOperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
 	notificationsMod.ReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	notificationsMod.FreeReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
 
 	// 13. Popups service.
 	popupsMod := wire.WirePopups(p)
@@ -323,7 +321,6 @@ func run() error {
 		Categories:               leasesRepos.CategoryService,
 		Reminders:                notificationsMod.ReminderService,
 		Calendar:                 notificationsMod.CalendarService,
-		FreeReminders:            notificationsMod.FreeReminderService,
 		NotificationPreferences:  notificationsMod.PreferenceService,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,

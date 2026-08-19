@@ -18,7 +18,7 @@ import (
 )
 
 // These integration tests run against a real Postgres via TEST_DATABASE_URL and
-// are skipped when it is unset (same convention as the free-reminder policy
+// are skipped when it is unset (same convention as the reminder policy
 // tests). They cover the acceptance criteria for the push-subscriptions
 // infrastructure (issue #180): upsert idempotency by endpoint, update on
 // re-subscribe, delete (and 404 mapping), and list-by-user.

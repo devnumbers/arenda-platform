@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { CarriedNotificationPreference } from '@/entities/user';
 import {
   buildChannelPreferencePayload,
   buildInitialChannelPreferences,
@@ -9,10 +8,6 @@ import {
   type NotificationChannelState,
   type NotificationPreferencesState,
 } from './preferences';
-
-const carried: readonly CarriedNotificationPreference[] = [
-  { eventType: 'free_reminder', emailAllowed: false, pushAllowed: true },
-];
 
 describe('NOTIFICATION_OPTIONS', () => {
   it('no longer lists the removed Свои напоминания row (ticket #381)', () => {
@@ -32,7 +27,7 @@ describe('buildInitialPreferences / buildInitialChannelPreferences', () => {
 });
 
 describe('buildPreferencePayload', () => {
-  it('appends carried rows unchanged so the removed event keeps its server values', () => {
+  it('builds one payload item per live event type', () => {
     const state: NotificationPreferencesState = {
       operation_due: false,
       operation_overdue: true,
@@ -41,10 +36,9 @@ describe('buildPreferencePayload', () => {
       subscription_grace: true,
     };
 
-    const payload = buildPreferencePayload(state, [], carried);
+    const payload = buildPreferencePayload(state, []);
 
-    expect(payload).toHaveLength(NOTIFICATION_OPTIONS.length + carried.length);
-    expect(payload[payload.length - 1]).toEqual(carried[0]);
+    expect(payload).toHaveLength(NOTIFICATION_OPTIONS.length);
     expect(payload[0]).toEqual({
       eventType: 'operation_due',
       emailAllowed: false,
@@ -54,7 +48,7 @@ describe('buildPreferencePayload', () => {
 });
 
 describe('buildChannelPreferencePayload', () => {
-  it('appends carried rows unchanged so the PUT keeps the full event set', () => {
+  it('builds one payload item per live event type from the matrix flags', () => {
     const state: NotificationChannelState = {
       operation_due: { email: false, push: true },
       operation_overdue: { email: true, push: true },
@@ -63,10 +57,9 @@ describe('buildChannelPreferencePayload', () => {
       subscription_grace: { email: true, push: true },
     };
 
-    const payload = buildChannelPreferencePayload(state, carried);
+    const payload = buildChannelPreferencePayload(state);
 
-    expect(payload).toHaveLength(NOTIFICATION_OPTIONS.length + carried.length);
-    expect(payload[payload.length - 1]).toEqual(carried[0]);
+    expect(payload).toHaveLength(NOTIFICATION_OPTIONS.length);
     expect(payload[0]).toEqual({
       eventType: 'operation_due',
       emailAllowed: false,

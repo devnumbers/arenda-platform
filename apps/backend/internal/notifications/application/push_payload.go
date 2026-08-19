@@ -62,19 +62,13 @@ func pushTargetID(r domain.Reminder) uuid.UUID {
 	if r.LeaseID != nil {
 		return *r.LeaseID
 	}
-	if r.FreeReminderID != nil {
-		return *r.FreeReminderID
-	}
 	return uuid.Nil
 }
 
 // pushURL builds the relative cabinet path the user lands on when they tap the
 // push. Operations and leases point at the property card (their detail is
-// visible there); free reminders point at the reminder detail page.
+// visible there).
 func pushURL(r domain.Reminder) string {
-	if r.FreeReminderID != nil {
-		return fmt.Sprintf("/reminders/%s", r.FreeReminderID)
-	}
 	if r.PropertyID != nil {
 		return fmt.Sprintf("/properties/%s", r.PropertyID)
 	}

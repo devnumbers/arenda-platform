@@ -20,7 +20,6 @@ import { usePushSubscriptionStatus } from '@/features/push-notifications';
 import { useSubscribePush } from '@/features/push-notifications';
 import { isPushSupported } from '@/features/push-notifications';
 import type {
-  CarriedNotificationPreference,
   NotificationEventType,
   NotificationPreference,
 } from '@/entities/user';
@@ -28,10 +27,9 @@ import styles from './NotificationSettings.module.css';
 
 type NotificationSettingsViewProps = {
   readonly preferences: NotificationPreference[];
-  readonly carried: readonly CarriedNotificationPreference[];
 };
 
-function NotificationSettingsView({ preferences, carried }: NotificationSettingsViewProps): JSX.Element {
+function NotificationSettingsView({ preferences }: NotificationSettingsViewProps): JSX.Element {
   const updateNotificationPreferences = useUpdateNotificationPreferences();
   const { refresh: refreshPushStatus, ...pushStatus } = usePushSubscriptionStatus();
   const { subscribe: subscribePush } = useSubscribePush();
@@ -69,10 +67,9 @@ function NotificationSettingsView({ preferences, carried }: NotificationSettings
       const run = async (): Promise<void> => {
         let current = snapshot;
         for (;;) {
-          // Every save sends the full preference set (live matrix flags plus
-          // the carried removed-event rows passed through unchanged); there is
-          // no submit button and no success toast.
-          const payload = buildChannelPreferencePayload(current, carried);
+          // Every save sends the full preference set; there is no submit
+          // button and no success toast.
+          const payload = buildChannelPreferencePayload(current);
 
           try {
             await updateNotificationPreferences.mutateAsync(payload);
@@ -108,7 +105,7 @@ function NotificationSettingsView({ preferences, carried }: NotificationSettings
 
       void run();
     },
-    [updateNotificationPreferences, carried],
+    [updateNotificationPreferences],
   );
 
   const updateChannel = useCallback(
@@ -245,10 +242,7 @@ export function NotificationSettings(): JSX.Element {
         </div>
       )}
       {!isError && !isPending && data && (
-        <NotificationSettingsView
-          preferences={data.preferences}
-          carried={data.carried}
-        />
+        <NotificationSettingsView preferences={data} />
       )}
     </>
   );

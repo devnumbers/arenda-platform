@@ -25,7 +25,7 @@
 Реальный `pgxpool` поверх test-БД.
 
 - Гейт по `TEST_DATABASE_URL`; пропуск через `t.Skip`, если не задана (существующая конвенция).
-- Эталон: `apps/backend/internal/notifications/adapters/postgres/free_reminder_policy_integration_test.go`.
+- Эталон: `apps/backend/internal/notifications/adapters/postgres/reminder_policy_integration_test.go`.
 - Mapper-функции (`propertyFromRow`, `subscriptionFromRow` и т.п.) покрыты round-trip integration-тестом через БД.
 
 ### 3. Composition-root / wiring-тесты (новый шов)
@@ -40,7 +40,7 @@
 
 Матрица (role × action → outcome).
 
-- Эталон: `apps/backend/internal/notifications/application/free_reminder_policy_enforcement_test.go`.
+- Эталон: `apps/backend/internal/notifications/application/reminder_policy_enforcement_test.go`.
 - Каждое изменение access-seam расширяет или сохраняет coverage матрицы.
 
 ### 5. Property-based тесты (где есть инварианты-свойства)

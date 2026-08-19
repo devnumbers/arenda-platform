@@ -44,9 +44,9 @@ var (
 	_ propertiesapp.OwnerDisplayNameResolver = (*accessapp.AccessService)(nil)
 	// The SharedProperties adapter also serves the leases context (operation
 	// list, finance report, lease list, recurring-operations list) and the
-	// notifications context (calendar agenda, reminders list, free-reminders
-	// list): both consume the ids of properties shared with the actor to fold
-	// shared data into aggregate reads (issue #157, T3).
+	// notifications context (calendar agenda, reminders list): both consume
+	// the ids of properties shared with the actor to fold shared data into
+	// aggregate reads (issue #157, T3).
 	_ leasesapp.SharedPropertyIDs        = (*accesspg.SharedProperties)(nil)
 	_ notificationsapp.SharedPropertyIDs = (*accesspg.SharedProperties)(nil)
 	// The OwnerResolver doubles as the archived-status resolver of the access

@@ -15,7 +15,6 @@ const (
 	TargetOperation          TargetType = "operation"
 	TargetRecurringOperation TargetType = "recurring_operation"
 	TargetLease              TargetType = "lease"
-	TargetFree               TargetType = "free"
 )
 
 type EventType string
@@ -25,7 +24,6 @@ const (
 	EventOperationOverdue    EventType = "operation_overdue"
 	EventLeaseExpiring       EventType = "lease_expiring"
 	EventLeaseRequiresAction EventType = "lease_requires_action"
-	EventFreeReminder        EventType = "free_reminder"
 	// EventSubscriptionGrace covers the billing subscription grace lifecycle
 	// notices (issue #253): the failed-renewal alert when the subscription
 	// enters grace and the reminder before the grace window ends. One event
@@ -68,7 +66,6 @@ type Reminder struct {
 	OperationID          *uuid.UUID
 	RecurringOperationID *uuid.UUID
 	LeaseID              *uuid.UUID
-	FreeReminderID       *uuid.UUID
 	PropertyID           *uuid.UUID
 	EventType            EventType
 	Status               ReminderStatus
@@ -86,15 +83,6 @@ type Reminder struct {
 // owner's timezone and returns the corresponding UTC instant.
 func ScheduledAtForDate(date time.Time, loc *time.Location, hour int) time.Time {
 	d := time.Date(date.In(loc).Year(), date.In(loc).Month(), date.In(loc).Day(), hour, 0, 0, 0, loc)
-	return d.UTC()
-}
-
-// ScheduledAtForDateTime combines a user-selected date with a specific hour and
-// minute in the owner's timezone and returns the corresponding UTC instant.
-// Unlike ScheduledAtForDate (which uses a fixed dispatch hour), this preserves
-// the exact time-of-day chosen by the user for free reminders.
-func ScheduledAtForDateTime(date time.Time, loc *time.Location, hour, minute int) time.Time {
-	d := time.Date(date.In(loc).Year(), date.In(loc).Month(), date.In(loc).Day(), hour, minute, 0, 0, loc)
 	return d.UTC()
 }
 

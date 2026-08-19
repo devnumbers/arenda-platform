@@ -7,7 +7,6 @@ func AllEventTypes() []EventType {
 		EventOperationOverdue,
 		EventLeaseExpiring,
 		EventLeaseRequiresAction,
-		EventFreeReminder,
 		EventSubscriptionGrace,
 	}
 }
@@ -15,7 +14,7 @@ func AllEventTypes() []EventType {
 // IsValid reports whether the event type is a known notification event type.
 func (e EventType) IsValid() bool {
 	switch e {
-	case EventOperationDue, EventOperationOverdue, EventLeaseExpiring, EventLeaseRequiresAction, EventFreeReminder, EventSubscriptionGrace:
+	case EventOperationDue, EventOperationOverdue, EventLeaseExpiring, EventLeaseRequiresAction, EventSubscriptionGrace:
 		return true
 	default:
 		return false

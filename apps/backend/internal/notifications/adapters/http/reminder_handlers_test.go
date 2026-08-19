@@ -223,10 +223,6 @@ func (r *handlerFakeReminderRepo) ListStaleSendingReminders(context.Context, tim
 	return nil, nil
 }
 
-func (r *handlerFakeReminderRepo) ListUpcomingFreeRemindersByProperty(context.Context, uuid.UUID, uuid.UUID, time.Time, int) ([]notificationsdomain.UpcomingFreeReminder, error) {
-	return nil, nil
-}
-
 func (r *handlerFakeReminderRepo) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID) ([]notificationsdomain.CalendarReminder, error) {
 	return nil, nil
 }

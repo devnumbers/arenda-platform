@@ -233,16 +233,15 @@ func reminderResponse(r notificationsdomain.Reminder) openapi.ReminderResponse {
 
 func calendarReminderResponse(item notificationsdomain.CalendarReminder) openapi.CalendarReminderItem {
 	resp := openapi.CalendarReminderItem{
-		Id:             item.ID,
-		Type:           openapi.CalendarReminderItemType(item.Type),
-		ScheduledAt:    item.ScheduledAt,
-		Title:          item.Title,
-		PropertyId:     item.PropertyID,
-		PropertyName:   item.PropertyName,
-		HasProperty:    item.HasProperty,
-		OperationId:    item.OperationID,
-		LeaseId:        item.LeaseID,
-		FreeReminderId: item.FreeReminderID,
+		Id:           item.ID,
+		Type:         openapi.CalendarReminderItemType(item.Type),
+		ScheduledAt:  item.ScheduledAt,
+		Title:        item.Title,
+		PropertyId:   item.PropertyID,
+		PropertyName: item.PropertyName,
+		HasProperty:  item.HasProperty,
+		OperationId:  item.OperationID,
+		LeaseId:      item.LeaseID,
 	}
 
 	if item.Status != nil {
@@ -252,10 +251,6 @@ func calendarReminderResponse(item notificationsdomain.CalendarReminder) openapi
 	if item.EventType != nil {
 		e := openapi.CalendarReminderItemEventType(*item.EventType)
 		resp.EventType = &e
-	}
-	if item.Periodicity != nil {
-		p := openapi.CalendarReminderItemPeriodicity(*item.Periodicity)
-		resp.Periodicity = &p
 	}
 
 	return resp

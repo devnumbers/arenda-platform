@@ -49,19 +49,12 @@ describe('mapCalendarEntries', () => {
     });
   });
 
-  it('drops free entries — the generated client still carries the dead type (ticket #381)', () => {
+  it('maps nullable status and event type to null', () => {
     const entries = mapCalendarEntries([
-      makeDto({
-        id: 'free-1',
-        type: 'free',
-        event_type: 'free_reminder',
-        operation_id: null,
-        periodicity: 'weekly',
-        free_reminder_id: 'template-1',
-      }),
-      makeDto(),
+      makeDto({ status: null, event_type: null }),
     ]);
 
-    expect(entries.map((entry) => entry.id)).toEqual(['reminder-1']);
+    expect(entries[0]?.status).toBeNull();
+    expect(entries[0]?.eventType).toBeNull();
   });
 });

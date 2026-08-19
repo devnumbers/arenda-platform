@@ -276,7 +276,7 @@ func TestUrgencyForEventType(t *testing.T) {
 		{domain.EventOperationOverdue, "high"},
 		{domain.EventLeaseExpiring, "normal"},
 		{domain.EventLeaseRequiresAction, "high"},
-		{domain.EventFreeReminder, "normal"},
+		{domain.EventSubscriptionGrace, "normal"},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.eventType), func(t *testing.T) {

@@ -11,7 +11,7 @@ import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import {
   mapNotificationPreferencesResponse,
-  type NotificationPreferencesData,
+  type NotificationPreference,
 } from '@/entities/user';
 import type { components } from '@/shared/api/dto';
 import type { NotificationPreferencePayloadItem } from '../lib/preferences';
@@ -28,7 +28,7 @@ export const notificationPreferencesKeys = {
 };
 
 export function useNotificationPreferences(): UseQueryResult<
-  NotificationPreferencesData,
+  NotificationPreference[],
   ApiError
 > {
   return useQuery({
@@ -43,7 +43,7 @@ export function useNotificationPreferences(): UseQueryResult<
 }
 
 export function useUpdateNotificationPreferences(): UseMutationResult<
-  NotificationPreferencesData,
+  NotificationPreference[],
   ApiError,
   NotificationPreferencePayloadItem[]
 > {

@@ -64,25 +64,6 @@ func (q *Queries) CancelReminderByTarget(ctx context.Context, arg CancelReminder
 	return result.RowsAffected(), nil
 }
 
-const cancelRemindersByFreeReminderID = `-- name: CancelRemindersByFreeReminderID :execrows
-UPDATE reminders
-SET status = 'cancelled'
-WHERE free_reminder_id = $1 AND owner_id = $2 AND status IN ('pending', 'sending')
-`
-
-type CancelRemindersByFreeReminderIDParams struct {
-	FreeReminderID pgtype.UUID `json:"free_reminder_id"`
-	OwnerID        pgtype.UUID `json:"owner_id"`
-}
-
-func (q *Queries) CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cancelRemindersByFreeReminderID, arg.FreeReminderID, arg.OwnerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const cancelRemindersByRecurringOperationID = `-- name: CancelRemindersByRecurringOperationID :execrows
 UPDATE reminders
 SET status = 'cancelled'
@@ -468,9 +449,10 @@ type ListDueRemindersParams struct {
 	Limit       int32              `json:"limit"`
 }
 
-// target_type <> 'free' is the eternal filter of the FreeReminder removal
-// (ticket #381): orphaned materialized free rows stay in the table until the
-// drop migration, but the worker must never dispatch them again.
+// target_type <> 'free' is the eternal filter guarding the dead enum value
+// left by the free-reminders removal (issues #381/#382): orphaned rows stay
+// in the table until the drop migration, and the worker must never dispatch
+// them again.
 func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error) {
 	rows, err := q.db.Query(ctx, listDueReminders, arg.ScheduledAt, arg.Limit)
 	if err != nil {
@@ -806,76 +788,6 @@ func (q *Queries) ListStaleSendingReminders(ctx context.Context, arg ListStaleSe
 	return items, nil
 }
 
-const listUpcomingFreeRemindersByProperty = `-- name: ListUpcomingFreeRemindersByProperty :many
-SELECT r.id, r.owner_id, r.target_type, r.operation_id, r.recurring_operation_id, r.lease_id, r.property_id, r.event_type, r.status, r.scheduled_at, r.sent_at, r.failed_attempts, r.next_attempt_at, r.message_title, r.message_body, r.created_at, r.updated_at, r.free_reminder_id, fr.periodicity AS free_reminder_periodicity
-FROM reminders r
-JOIN free_reminders fr ON fr.id = r.free_reminder_id
-WHERE r.owner_id = $1
-  AND r.property_id = $2
-  AND r.target_type = 'free'
-  AND r.status = 'pending'
-  AND r.scheduled_at >= $3
-ORDER BY r.scheduled_at ASC
-LIMIT $4
-`
-
-type ListUpcomingFreeRemindersByPropertyParams struct {
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-	PropertyID  pgtype.UUID        `json:"property_id"`
-	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
-	Limit       int32              `json:"limit"`
-}
-
-type ListUpcomingFreeRemindersByPropertyRow struct {
-	Reminder                Reminder `json:"reminder"`
-	FreeReminderPeriodicity string   `json:"free_reminder_periodicity"`
-}
-
-func (q *Queries) ListUpcomingFreeRemindersByProperty(ctx context.Context, arg ListUpcomingFreeRemindersByPropertyParams) ([]ListUpcomingFreeRemindersByPropertyRow, error) {
-	rows, err := q.db.Query(ctx, listUpcomingFreeRemindersByProperty,
-		arg.OwnerID,
-		arg.PropertyID,
-		arg.ScheduledAt,
-		arg.Limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListUpcomingFreeRemindersByPropertyRow{}
-	for rows.Next() {
-		var i ListUpcomingFreeRemindersByPropertyRow
-		if err := rows.Scan(
-			&i.Reminder.ID,
-			&i.Reminder.OwnerID,
-			&i.Reminder.TargetType,
-			&i.Reminder.OperationID,
-			&i.Reminder.RecurringOperationID,
-			&i.Reminder.LeaseID,
-			&i.Reminder.PropertyID,
-			&i.Reminder.EventType,
-			&i.Reminder.Status,
-			&i.Reminder.ScheduledAt,
-			&i.Reminder.SentAt,
-			&i.Reminder.FailedAttempts,
-			&i.Reminder.NextAttemptAt,
-			&i.Reminder.MessageTitle,
-			&i.Reminder.MessageBody,
-			&i.Reminder.CreatedAt,
-			&i.Reminder.UpdatedAt,
-			&i.Reminder.FreeReminderID,
-			&i.FreeReminderPeriodicity,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const markReminderFailed = `-- name: MarkReminderFailed :execrows
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
@@ -1032,56 +944,6 @@ WHERE id = $1 AND status = 'sending'
 
 func (q *Queries) ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, resetReminderSending, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const saveFreeReminder = `-- name: SaveFreeReminder :execrows
-INSERT INTO reminders (
-    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
-    property_id, free_reminder_id, event_type, status, scheduled_at,
-    message_title, message_body, created_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-)
-`
-
-type SaveFreeReminderParams struct {
-	ID                   pgtype.UUID            `json:"id"`
-	OwnerID              pgtype.UUID            `json:"owner_id"`
-	TargetType           NotificationTargetType `json:"target_type"`
-	OperationID          pgtype.UUID            `json:"operation_id"`
-	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
-	LeaseID              pgtype.UUID            `json:"lease_id"`
-	PropertyID           pgtype.UUID            `json:"property_id"`
-	FreeReminderID       pgtype.UUID            `json:"free_reminder_id"`
-	EventType            NotificationEventType  `json:"event_type"`
-	Status               NotificationStatus     `json:"status"`
-	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
-	MessageTitle         string                 `json:"message_title"`
-	MessageBody          string                 `json:"message_body"`
-	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
-}
-
-func (q *Queries) SaveFreeReminder(ctx context.Context, arg SaveFreeReminderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, saveFreeReminder,
-		arg.ID,
-		arg.OwnerID,
-		arg.TargetType,
-		arg.OperationID,
-		arg.RecurringOperationID,
-		arg.LeaseID,
-		arg.PropertyID,
-		arg.FreeReminderID,
-		arg.EventType,
-		arg.Status,
-		arg.ScheduledAt,
-		arg.MessageTitle,
-		arg.MessageBody,
-		arg.CreatedAt,
-	)
 	if err != nil {
 		return 0, err
 	}

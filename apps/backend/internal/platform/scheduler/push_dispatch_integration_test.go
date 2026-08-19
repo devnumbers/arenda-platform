@@ -65,7 +65,7 @@ type pushDispatchFixture struct {
 // newPushDispatchFixture wires a real ReminderWorker with push enabled: a real
 // ReminderRepository, a real PushSubscriptionRepository, a fake PushSender, and
 // the email notifiers as fakes. It seeds an owner, a property, an active member
-// and a sending free reminder attached to the property.
+// and a sending operation reminder attached to the property.
 func newPushDispatchFixture(t *testing.T, ctx context.Context, tx pgx.Tx) pushDispatchFixture {
 	t.Helper()
 
@@ -89,39 +89,7 @@ func newPushDispatchFixture(t *testing.T, ctx context.Context, tx pgx.Tx) pushDi
 	repo := notificationspg.NewReminderRepository(tx)
 	pushSubRepo := notificationspg.NewPushSubscriptionRepository(tx)
 
-	freeRepo := notificationspg.NewFreeReminderRepository(tx)
-	templateID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	if _, err := freeRepo.Create(ctx, domain.FreeReminder{
-		ID: templateID, OwnerID: ownerID, PropertyID: propertyID,
-		Title: "Test reminder", TriggerAt: workerTestNow, Periodicity: domain.PeriodicityOnce,
-		CreatedAt: workerTestNow, UpdatedAt: workerTestNow,
-	}); err != nil {
-		t.Fatalf("create free reminder template: %v", err)
-	}
-
-	reminderID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	reminder := domain.Reminder{
-		ID:             reminderID,
-		OwnerID:        ownerID,
-		TargetType:     domain.TargetFree,
-		PropertyID:     &propertyID,
-		FreeReminderID: &templateID,
-		EventType:      domain.EventFreeReminder,
-		Status:         domain.ReminderSending,
-		ScheduledAt:    workerTestNow,
-		MessageTitle:   "Test reminder",
-		MessageBody:    "Body text",
-		CreatedAt:      workerTestNow,
-	}
-	if err := freeRepo.SaveFreeReminder(ctx, reminder); err != nil {
-		t.Fatalf("save reminder: %v", err)
-	}
+	reminder := seedOperationReminder(t, ctx, q, repo, ownerID, propertyID, "Test reminder", "Body text")
 
 	renderer, err := mailer.NewRenderer("../../../templates/email")
 	if err != nil {
@@ -195,7 +163,7 @@ func (f *pushDispatchFixture) dispatch(t *testing.T, ctx context.Context) {
 func (f *pushDispatchFixture) disableEmail(t *testing.T, ctx context.Context, userID uuid.UUID) {
 	t.Helper()
 	if err := f.repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
-		EventType: domain.EventFreeReminder,
+		EventType: domain.EventOperationDue,
 		Channel:   domain.ChannelEmail,
 		Allowed:   false,
 	}); err != nil {
@@ -206,7 +174,7 @@ func (f *pushDispatchFixture) disableEmail(t *testing.T, ctx context.Context, us
 func (f *pushDispatchFixture) disablePush(t *testing.T, ctx context.Context, userID uuid.UUID) {
 	t.Helper()
 	if err := f.repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
-		EventType: domain.EventFreeReminder,
+		EventType: domain.EventOperationDue,
 		Channel:   domain.ChannelPush,
 		Allowed:   false,
 	}); err != nil {
@@ -267,8 +235,8 @@ func TestPushDispatch_Integration_DeliversToRecipientWithSubscription(t *testing
 	if call.Payload.Title != "Test reminder" {
 		t.Errorf("payload title = %q, want %q", call.Payload.Title, "Test reminder")
 	}
-	if call.Payload.EventType != domain.EventFreeReminder {
-		t.Errorf("payload eventType = %q, want %q", call.Payload.EventType, domain.EventFreeReminder)
+	if call.Payload.EventType != domain.EventOperationDue {
+		t.Errorf("payload eventType = %q, want %q", call.Payload.EventType, domain.EventOperationDue)
 	}
 	if call.Payload.URL == "" {
 		t.Errorf("payload url should not be empty")

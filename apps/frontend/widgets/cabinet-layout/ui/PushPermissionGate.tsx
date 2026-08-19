@@ -27,10 +27,9 @@ export function PushPermissionGate(): JSX.Element | null {
   const { vapidKey, postSubscription } = useEnsureSubscriptionTools();
 
   useEffect(() => {
-    const preferences = data?.preferences;
-    if (!preferences) return;
+    if (!data) return;
 
-    const anyPushAllowed = preferences.some((preference) => preference.pushAllowed);
+    const anyPushAllowed = data.some((preference) => preference.pushAllowed);
     if (!anyPushAllowed) return;
 
     if (readNotificationPermission() !== 'granted') return;
