@@ -23,7 +23,8 @@ func parseOptionalEmail(w http.ResponseWriter, r *http.Request, raw *string) (*d
 	}
 	parsed, err := domain.NewEmail(*raw)
 	if err != nil {
-		httpsupport.LoggerFromContext(r.Context()).WarnContext(r.Context(), "invalid email in request body", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.LoggerFromContext(r.Context()).WarnContext(r.Context(), "invalid email in request body",
+			slog.String("error", httpsupport.SanitizeError(err)))
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Invalid email", "Некорректная почта"))
 		return nil, false
 	}

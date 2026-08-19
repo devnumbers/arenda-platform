@@ -40,11 +40,23 @@ type UserRepository interface {
 
 type LoginCodeRepository interface {
 	Save(ctx context.Context, code domain.LoginCode) error
-	GetLatestByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, now time.Time) (domain.LoginCode, error)
+	GetLatestByPhoneAndEmail(
+		ctx context.Context,
+		phone domain.Phone,
+		email domain.Email,
+		purpose domain.LoginCodePurpose,
+		now time.Time,
+	) (domain.LoginCode, error)
 	MarkUsedByID(ctx context.Context, id uuid.UUID) error
 	DeleteByID(ctx context.Context, id uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
-	DeleteExpiredByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, before time.Time) error
+	DeleteExpiredByPhoneAndEmail(
+		ctx context.Context,
+		phone domain.Phone,
+		email domain.Email,
+		purpose domain.LoginCodePurpose,
+		before time.Time,
+	) error
 	DeleteUnusedByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error
 	WithTx(tx transaction.Tx) (LoginCodeRepository, error)
 }

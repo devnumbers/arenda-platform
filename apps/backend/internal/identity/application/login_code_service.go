@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	// minSendInterval throttles repeated code issuance for the same
+	// The minSendInterval throttles repeated code issuance for the same
 	// phone+email+purpose triple. A code requested sooner is rejected with
 	// ErrCodeSentTooRecently without invalidating the in-flight code.
 	minSendInterval = 1 * time.Minute
-	// codeSpace is the size of the numeric code space (000000–999999).
+	// The codeSpace is the size of the numeric code space (000000–999999).
 	codeSpace = 1_000_000
 )
 
@@ -97,7 +97,13 @@ func (s *LoginCodeService) hashCode(purpose domain.LoginCodePurpose, phone domai
 // delivers it after the transaction commits. It enforces the not-blocked check,
 // purges expired and unused prior codes, and throttles re-issuance within
 // minSendInterval of a live code.
-func (s *LoginCodeService) Send(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, userID *uuid.UUID) error {
+func (s *LoginCodeService) Send(
+	ctx context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	userID *uuid.UUID,
+) error {
 	var loginCode domain.LoginCode
 	var plaintextCode string
 
@@ -171,7 +177,14 @@ func (s *LoginCodeService) Send(ctx context.Context, phone domain.Phone, email d
 // path transaction will roll back on this error, and recording inside it would
 // be rolled back with it. The orchestrator records the failure via RecordFailure
 // in a separate transaction so the rate-limit mutation survives (ADR 0033).
-func (s *LoginCodeService) Verify(ctx context.Context, stores *txStores, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, code string) (domain.LoginCode, error) {
+func (s *LoginCodeService) Verify(
+	ctx context.Context,
+	stores *txStores,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	code string,
+) (domain.LoginCode, error) {
 	if err := checkNotBlocked(ctx, stores.attempts, s.clock, phone); err != nil {
 		return domain.LoginCode{}, err
 	}

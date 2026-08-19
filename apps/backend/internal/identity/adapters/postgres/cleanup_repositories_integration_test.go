@@ -162,7 +162,14 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 	}
 }
 
-func mustLoginCode(t *testing.T, phone domain.Phone, email domain.Email, codeHash string, userID *uuid.UUID, createdAt time.Time) domain.LoginCode {
+func mustLoginCode(
+	t *testing.T,
+	phone domain.Phone,
+	email domain.Email,
+	codeHash string,
+	userID *uuid.UUID,
+	createdAt time.Time,
+) domain.LoginCode {
 	t.Helper()
 	code, err := domain.NewLoginCode(phone, email, codeHash, domain.LoginCodePurposeLogin, userID, createdAt)
 	if err != nil {

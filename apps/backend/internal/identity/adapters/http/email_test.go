@@ -47,7 +47,7 @@ func TestParseOptionalEmail(t *testing.T) {
 		t.Parallel()
 		w := httptest.NewRecorder()
 		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
-		raw := "owner@example.com"
+		raw := testOwnerEmail
 
 		got, ok := parseOptionalEmail(w, r, &raw)
 		if !ok {
@@ -56,8 +56,8 @@ func TestParseOptionalEmail(t *testing.T) {
 		if got == nil {
 			t.Fatal("email = nil, want parsed value")
 		}
-		if got.String() != "owner@example.com" {
-			t.Fatalf("email = %q, want %q", got.String(), "owner@example.com")
+		if got.String() != testOwnerEmail {
+			t.Fatalf("email = %q, want %q", got.String(), testOwnerEmail)
 		}
 		if w.Code != http.StatusOK || w.Body.Len() != 0 {
 			t.Fatalf("response was written: code=%d body=%q, want untouched", w.Code, w.Body.String())
@@ -74,7 +74,7 @@ func TestParseOptionalEmail(t *testing.T) {
 		if !ok || got == nil {
 			t.Fatalf("ok=%v got=%v", ok, got)
 		}
-		if got.String() != "owner@example.com" {
+		if got.String() != testOwnerEmail {
 			t.Fatalf("email = %q, want lowercased", got.String())
 		}
 	})

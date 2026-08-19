@@ -164,7 +164,7 @@ func newFakeStores() *fakeStores {
 	}
 }
 
-// factory builds a txStoreFactory from the fakes plus a fakeUoW. audit defaults
+// factory builds a txStoreFactory from the fakes plus a fakeUoW. Audit defaults
 // to nil (NewTxStoreFactory substitutes Noop); pass a non-nil recorder (e.g.
 // *recordingRecorder) when the test checks audit output.
 func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
@@ -330,7 +330,7 @@ func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
 		attempts: &countingAttemptRepo{fakeAttemptRepo: newFakeAttemptRepo()},
 		sessions: &countingSessionRepo{fakeSessionRepo: newFakeSessionRepo()},
 		audit:    &countingRecorder{},
-		// uow intentionally nil
+		// UoW intentionally nil.
 	}
 
 	workCalled := false

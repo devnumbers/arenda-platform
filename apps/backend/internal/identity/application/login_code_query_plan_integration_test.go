@@ -15,12 +15,14 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 )
 
-// latestLoginCodeQuery is the exact SQL produced by sqlc for
-// GetLatestLoginCodeByPhoneAndEmailAndPurpose (see identity.sql.go). It is
-// duplicated here as a string because sqlc emits it as an unexported const and
-// EXPLAIN needs a literal. If the query text drifts, the matching sqlc const
+// latestLoginCodeQuery is the SQL produced by sqlc for
+// GetLatestLoginCodeByPhoneAndEmailAndPurpose (see identity.sql.go), with
+// line breaks added for lll — SQL is whitespace-insensitive. It is duplicated
+// here as a string because sqlc emits it as an unexported const and EXPLAIN
+// needs a literal. If the query text drifts, the matching sqlc const
 // (getLatestLoginCodeByPhoneAndEmailAndPurpose) must be updated too.
-const latestLoginCodeQuery = `SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM login_codes
+const latestLoginCodeQuery = `SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose,
+phone_encrypted FROM login_codes
 WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at > $4
 ORDER BY created_at DESC
 LIMIT 1
@@ -90,8 +92,8 @@ func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
 	}
 
 	// Forced index (enable_seqscan=off): confirm the expression-index column
-	// (COALESCE(email, ...)) cannot serve the email predicate — email appears in
-	// Filter, not Index Cond. This documents *why* the prefix is phone+purpose only.
+	// (COALESCE(email, '')) cannot serve the email predicate — email appears
+	// in Filter, not Index Cond. This documents *why* the prefix is phone+purpose only.
 	t.Run("forced_index_reveals_email_filter", func(t *testing.T) {
 		conn, err := pool.Acquire(ctx)
 		if err != nil {
@@ -108,8 +110,8 @@ func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
 		if !planUsesIndex(forced, "idx_login_codes_unique_unused") {
 			t.Errorf("forced plan does not use idx_login_codes_unique_unused:\n%s", forced)
 		}
-		// email must be a post-scan Filter, never an Index Cond, because the index
-		// column is COALESCE(email, ...) and cannot match a raw email = $2 equality.
+		// The email must be a post-scan Filter, never an Index Cond, because the
+		// index column is COALESCE(email, '') and cannot match a raw email = $2 equality.
 		if strings.Contains(forced, "Index Cond:") &&
 			strings.Contains(extractIndexCond(forced), "email") {
 			t.Errorf("email appeared in Index Cond — unexpected; the index column is "+

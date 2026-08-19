@@ -22,7 +22,7 @@ import (
 // NOT by itself prove the SQL increment is atomic without the lock. That narrower
 // property is covered by TestAttemptWindowRace_SaveWithoutLockIsAtomic.
 func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
-	const concurrentAttempts = 10 // < domain.MaxLoginFailures (15)
+	const concurrentAttempts = 10 // < domain.MaxLoginFailures (15).
 
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000200")

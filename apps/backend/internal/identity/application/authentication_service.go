@@ -72,7 +72,12 @@ func NewAuthenticationService(
 // transaction commits. It validates the email preconditions for the phone
 // before delegating issuance to LoginCodeService, which authoritatively checks
 // the not-blocked rule inside its own transaction (#239).
-func (s *AuthenticationService) SendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error {
+func (s *AuthenticationService) SendCode(
+	ctx context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+) error {
 	user, err := s.users.GetByPhone(ctx, phone)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get user: %w", err)
@@ -125,7 +130,12 @@ func (s *AuthenticationService) SendCodeByPhone(ctx context.Context, phone domai
 // that transaction back, then a separate short runInTx records the failed
 // attempt and the failed-login audit so rate-limiting survives the rollback —
 // replacing the pre-refactor early-Commit-on-error (ADR 0033).
-func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Phone, email *domain.Email, code string) (domain.RawSession, domain.User, error) {
+func (s *AuthenticationService) VerifyCode(
+	ctx context.Context,
+	phone domain.Phone,
+	email *domain.Email,
+	code string,
+) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
 
 	resolvedEmail, err := s.resolveEmail(ctx, phone, email)
@@ -218,7 +228,8 @@ func (s *AuthenticationService) VerifyCode(ctx context.Context, phone domain.Pho
 	}
 
 	if isNewUser {
-		if err := s.publisher.PublishUserRegistered(ctx, UserRegistered{UserID: user.ID, Phone: phone, Email: resolvedEmail, At: now}); err != nil {
+		if err := s.publisher.PublishUserRegistered(ctx,
+			UserRegistered{UserID: user.ID, Phone: phone, Email: resolvedEmail, At: now}); err != nil {
 			s.logger.ErrorContext(ctx, "failed to publish user registered event", slog.String("error", sanitize.Error(err)))
 		}
 	}

@@ -42,7 +42,7 @@ func newValidCode(t *testing.T, codeHash string, now time.Time) LoginCode {
 func TestLoginCode_Verify(t *testing.T) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	hash := validHexHash("123456")
-	otherHash := validHexHash("999999") // different value, same length
+	otherHash := validHexHash("999999") // Different value, same length.
 
 	tests := []struct {
 		name     string
@@ -97,7 +97,7 @@ func TestLoginCode_Verify(t *testing.T) {
 		{
 			name:    "hash length mismatch (short input decodes, wrong length)",
 			mutate:  func(c *LoginCode) {},
-			input:   validHexHash("x")[:8], // 4 bytes vs 32 bytes expected
+			input:   validHexHash("x")[:8], // 4 bytes vs 32 bytes expected.
 			now:     now,
 			wantErr: ErrLoginCodeInvalid,
 		},

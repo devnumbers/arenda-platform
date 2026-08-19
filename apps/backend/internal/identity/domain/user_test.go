@@ -93,8 +93,8 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 			new("Ivan"),
 			new("Petrov"),
 			new("Sergeevich"),
-			nil, // email untouched
-			new("Europe/Moscow"),
+			nil, // Email untouched.
+			new(testTimezone),
 		)
 		if err != nil {
 			t.Fatalf("UpdatePersonalData error = %v", err)
@@ -108,8 +108,8 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 		if u.Patronymic == nil || *u.Patronymic != "Sergeevich" {
 			t.Fatalf("Patronymic = %v, want Sergeevich", u.Patronymic)
 		}
-		if u.Timezone.String() != "Europe/Moscow" {
-			t.Fatalf("Timezone = %q, want Europe/Moscow", u.Timezone.String())
+		if u.Timezone.String() != testTimezone {
+			t.Fatalf("Timezone = %q, want %s", u.Timezone.String(), testTimezone)
 		}
 	})
 

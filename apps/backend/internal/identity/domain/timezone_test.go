@@ -5,6 +5,9 @@ import (
 	"testing"
 )
 
+// testTimezone is the canonical IANA id shared by the domain timezone tests.
+const testTimezone = "Europe/Moscow"
+
 func TestNewTimezone(t *testing.T) {
 	t.Parallel()
 
@@ -14,10 +17,10 @@ func TestNewTimezone(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"valid IANA id Europe/Moscow", "Europe/Moscow", "Europe/Moscow", false},
+		{"valid IANA id Europe/Moscow", testTimezone, testTimezone, false},
 		{"valid IANA id Asia/Yekaterinburg", "Asia/Yekaterinburg", "Asia/Yekaterinburg", false},
 		{"valid IANA id UTC", "UTC", "UTC", false},
-		{"surrounding whitespace is trimmed", "  Europe/Moscow  ", "Europe/Moscow", false},
+		{"surrounding whitespace is trimmed", "  Europe/Moscow  ", testTimezone, false},
 		{"empty after trim", "   ", "", true},
 		{"unknown identifier", "Mars/Olympus", "", true},
 		{"garbage", "not-a-timezone", "", true},
@@ -48,12 +51,12 @@ func TestTimezoneFrom(t *testing.T) {
 
 	t.Run("accepts a valid trusted identifier", func(t *testing.T) {
 		t.Parallel()
-		got, err := TimezoneFrom("Europe/Moscow")
+		got, err := TimezoneFrom(testTimezone)
 		if err != nil {
 			t.Fatalf("TimezoneFrom error = %v", err)
 		}
-		if got.String() != "Europe/Moscow" {
-			t.Fatalf("TimezoneFrom = %q, want Europe/Moscow", got.String())
+		if got.String() != testTimezone {
+			t.Fatalf("TimezoneFrom = %q, want %s", got.String(), testTimezone)
 		}
 	})
 

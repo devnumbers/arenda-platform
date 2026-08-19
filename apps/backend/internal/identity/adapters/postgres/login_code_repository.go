@@ -58,7 +58,13 @@ func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) e
 	return nil
 }
 
-func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, now time.Time) (domain.LoginCode, error) {
+func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(
+	ctx context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	now time.Time,
+) (domain.LoginCode, error) {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
 	if err != nil {
 		return domain.LoginCode{}, err
@@ -78,7 +84,13 @@ func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(ctx context.Context, phon
 	return r.mapLoginCode(ctx, toLoginCodeRowPhoneEmail(row))
 }
 
-func (r *LoginCodeRepository) DeleteExpiredByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, before time.Time) error {
+func (r *LoginCodeRepository) DeleteExpiredByPhoneAndEmail(
+	ctx context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	before time.Time,
+) error {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
 	if err != nil {
 		return err
@@ -94,7 +106,12 @@ func (r *LoginCodeRepository) DeleteExpiredByPhoneAndEmail(ctx context.Context, 
 	return nil
 }
 
-func (r *LoginCodeRepository) DeleteUnusedByPhoneAndEmail(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error {
+func (r *LoginCodeRepository) DeleteUnusedByPhoneAndEmail(
+	ctx context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+) error {
 	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
 	if err != nil {
 		return err

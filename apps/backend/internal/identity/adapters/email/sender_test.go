@@ -10,16 +10,20 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 )
 
+// ttlFiveMinutes is the genitive-plural rendering of five minutes shared by
+// the TTL tests (both the domain TTL and the plain 5m duration render it).
+const ttlFiveMinutes = "5 минут"
+
 func TestFormatLoginCodeTTL(t *testing.T) {
 	tests := []struct {
 		name string
 		d    time.Duration
 		want string
 	}{
-		{name: "actual domain TTL", d: domain.LoginCodeTTL, want: "5 минут"},
+		{name: "actual domain TTL", d: domain.LoginCodeTTL, want: ttlFiveMinutes},
 		{name: "1 minute", d: 1 * time.Minute, want: "1 минута"},
 		{name: "2 minutes", d: 2 * time.Minute, want: "2 минуты"},
-		{name: "5 minutes", d: 5 * time.Minute, want: "5 минут"},
+		{name: "5 minutes", d: 5 * time.Minute, want: ttlFiveMinutes},
 		{name: "11 minutes", d: 11 * time.Minute, want: "11 минут"},
 		{name: "21 minute", d: 21 * time.Minute, want: "21 минута"},
 		{name: "22 minutes", d: 22 * time.Minute, want: "22 минуты"},
@@ -108,8 +112,8 @@ func TestSender_Send_RendersAndSends(t *testing.T) {
 	if !ok {
 		t.Fatalf("render data TTL type = %T, want string", data["TTL"])
 	}
-	if ttl != "5 минут" {
-		t.Fatalf("render data TTL = %q, want 5 минут", ttl)
+	if ttl != ttlFiveMinutes {
+		t.Fatalf("render data TTL = %q, want %s", ttl, ttlFiveMinutes)
 	}
 
 	// The message was sent to the email with the rendered bodies and subject.

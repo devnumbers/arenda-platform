@@ -169,7 +169,7 @@ func TestCleaner_Clean_DelegateErrorDoesNotAbortRemainingDeleters(t *testing.T) 
 	c := NewCleaner(sessions, codes, attempts, &fakeClock{now: time.Now()},
 		time.Minute, time.Hour, slog.New(slog.DiscardHandler))
 
-	// clean itself must not return the error (it is logged inside cleanExpired).
+	// The clean method itself must not return the error (it is logged inside cleanExpired).
 	c.clean(t.Context())
 
 	if sessions.calls.Load() != 1 {

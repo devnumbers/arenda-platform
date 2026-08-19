@@ -90,8 +90,8 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 }
 
 // ChangePhone verifies the code and updates the user's phone number.
-// currentToken is the raw session token of the current session; it is used to
-// keep the current session alive when deleting all other sessions.
+// The currentToken is the raw session token of the current session; it is
+// used to keep the current session alive when deleting all other sessions.
 //
 // The whole flow runs inside a single runInTx: verify → mark-used → update-phone
 // → delete other sessions → clear codes/attempts → audit. A verification failure
@@ -101,7 +101,12 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 // The not-blocked check is not duplicated here: LoginCodeService.Verify runs
 // inside the runInTx below and authoritatively returns ErrUserBlocked for a
 // blocked phone before any code is read (#237, #239).
-func (s *PhoneChangeService) ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, currentToken string) (domain.User, error) {
+func (s *PhoneChangeService) ChangePhone(
+	ctx context.Context,
+	userID uuid.UUID,
+	newPhone domain.Phone,
+	code, currentToken string,
+) (domain.User, error) {
 	var updated domain.User
 	var oldPhone domain.Phone
 

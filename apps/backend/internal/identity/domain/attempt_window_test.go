@@ -125,7 +125,7 @@ func TestAttemptWindow_WasReset(t *testing.T) {
 	})
 
 	t.Run("true for a freshly created window", func(t *testing.T) {
-		var prev AttemptWindow // zero value: Failures == 0, FirstFailureAt zero
+		var prev AttemptWindow // Zero value: Failures == 0, FirstFailureAt zero.
 		next := AttemptWindow{Failures: 1, FirstFailureAt: start}
 
 		if !next.WasReset(prev) {

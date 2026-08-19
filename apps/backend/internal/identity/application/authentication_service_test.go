@@ -23,7 +23,7 @@ func (c *fakeClock) Now() time.Time { return c.now }
 
 func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
-// --- transaction fake ---
+// Transaction fake.
 
 type fakeTx struct {
 	b    *fakeBeginner
@@ -63,7 +63,7 @@ func (b *fakeBeginner) Begin(context.Context) (transaction.Tx, error) {
 	return &fakeTx{b: b}, nil
 }
 
-// --- hasher fake ---
+// Hasher fake.
 
 // fakeHasher produces deterministic hex output, mirroring
 // encryption.hashToken, so domain.LoginCode.Verify can hex-decode it.
@@ -74,7 +74,7 @@ func (fakeHasher) HashToken(plaintext string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// --- repository fakes ---
+// Repository fakes.
 
 type fakeUserRepo struct {
 	byPhone map[string]domain.User
@@ -137,7 +137,12 @@ func (r *fakeUserRepo) UpdatePhone(ctx context.Context, id uuid.UUID, phone doma
 	return u, nil
 }
 
-func (r *fakeUserRepo) UpdateEmailVerified(ctx context.Context, id uuid.UUID, email *domain.Email, verifiedAt *time.Time) (domain.User, error) {
+func (r *fakeUserRepo) UpdateEmailVerified(
+	ctx context.Context,
+	id uuid.UUID,
+	email *domain.Email,
+	verifiedAt *time.Time,
+) (domain.User, error) {
 	u, err := r.GetByID(ctx, id)
 	if err != nil {
 		return domain.User{}, err
@@ -161,7 +166,13 @@ func (r *fakeCodeRepo) Save(_ context.Context, code domain.LoginCode) error {
 	return nil
 }
 
-func (r *fakeCodeRepo) GetLatestByPhoneAndEmail(_ context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, now time.Time) (domain.LoginCode, error) {
+func (r *fakeCodeRepo) GetLatestByPhoneAndEmail(
+	_ context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	now time.Time,
+) (domain.LoginCode, error) {
 	var latest domain.LoginCode
 	found := false
 	for _, c := range r.codes {
@@ -203,7 +214,13 @@ func (r *fakeCodeRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error
 	return nil
 }
 
-func (r *fakeCodeRepo) DeleteExpiredByPhoneAndEmail(_ context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose, before time.Time) error {
+func (r *fakeCodeRepo) DeleteExpiredByPhoneAndEmail(
+	_ context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	before time.Time,
+) error {
 	for id, c := range r.codes {
 		if c.Phone == phone && c.Email == email && c.Purpose == purpose && !c.ExpiresAt.After(before) {
 			delete(r.codes, id)
@@ -212,7 +229,12 @@ func (r *fakeCodeRepo) DeleteExpiredByPhoneAndEmail(_ context.Context, phone dom
 	return nil
 }
 
-func (r *fakeCodeRepo) DeleteUnusedByPhoneAndEmail(_ context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error {
+func (r *fakeCodeRepo) DeleteUnusedByPhoneAndEmail(
+	_ context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+) error {
 	for id, c := range r.codes {
 		if c.Phone == phone && c.Email == email && c.Purpose == purpose && !c.Used {
 			delete(r.codes, id)
@@ -312,7 +334,7 @@ func (r *fakeSessionRepo) DeleteByUserIDExcept(_ context.Context, userID uuid.UU
 
 func (r *fakeSessionRepo) WithTx(transaction.Tx) (SessionRepository, error) { return r, nil }
 
-// --- sender and publisher fakes ---
+// Sender and publisher fakes.
 
 type sentCode struct {
 	phone domain.Phone
@@ -342,7 +364,7 @@ func (p *fakePublisher) PublishUserRegistered(_ context.Context, event UserRegis
 	return nil
 }
 
-// --- harness ---
+// Harness.
 
 type authServiceHarness struct {
 	*fakeStores
@@ -776,7 +798,7 @@ func TestAuthenticationService_SendCode_GetByEmailError(t *testing.T) {
 	})
 
 	err := svc.SendCode(t.Context(),
-		mustPhone(t, "+79150000031"), // new phone, not seeded
+		mustPhone(t, "+79150000031"), // New phone, not seeded.
 		mustEmail(t, "owner@example.com"),
 		domain.LoginCodePurposeLogin,
 	)

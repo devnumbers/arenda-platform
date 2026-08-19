@@ -193,7 +193,12 @@ func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone do
 	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
 }
 
-func (r *UserRepository) UpdateEmailVerified(ctx context.Context, id uuid.UUID, email *domain.Email, verifiedAt *time.Time) (domain.User, error) {
+func (r *UserRepository) UpdateEmailVerified(
+	ctx context.Context,
+	id uuid.UUID,
+	email *domain.Email,
+	verifiedAt *time.Time,
+) (domain.User, error) {
 	row, err := r.q().UpdateUserEmailVerified(ctx, pgen.UpdateUserEmailVerifiedParams{
 		ID:              pgconv.UUIDToPgtype(id),
 		Email:           emailPtrToPgtype(email),

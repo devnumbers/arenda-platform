@@ -6,15 +6,18 @@ import (
 	"testing"
 )
 
+// testUserEmail is the canonical fixture address shared by the email tests.
+const testUserEmail = "user@example.com"
+
 func TestNormalizeEmail(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
 		want  string
 	}{
-		{"simple", "user@example.com", "user@example.com"},
+		{"simple", testUserEmail, testUserEmail},
 		{"uppercased is lowercased", "User.Name@Example.COM", "user.name@example.com"},
-		{"surrounding spaces trimmed", "  user@example.com  ", "user@example.com"},
+		{"surrounding spaces trimmed", "  user@example.com  ", testUserEmail},
 		{"plus addressing", "user.name+tag@example.co.uk", "user.name+tag@example.co.uk"},
 	}
 
@@ -122,7 +125,7 @@ func TestNormalizeEmail_LengthBoundaries(t *testing.T) {
 	})
 
 	t.Run("total length of exactly 254 chars is accepted", func(t *testing.T) {
-		// local=64, '@'=1, domain=189 → 254 total. Domain has a dot so the
+		// Local=64, '@'=1, domain=189 → 254 total. Domain has a dot so the
 		// shape regex (TLD present) is satisfied.
 		domain := strings.Repeat("b", 187) + ".c"
 		addr := strings.Repeat("a", maxEmailLocalLen) + "@" + domain

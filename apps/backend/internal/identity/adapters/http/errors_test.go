@@ -20,7 +20,7 @@ func TestUserFacingDetail(t *testing.T) {
 		{
 			name: "ErrUserBlocked",
 			err:  application.ErrUserBlocked,
-			want: "Пользователь временно заблокирован",
+			want: detailUserBlocked,
 		},
 		{
 			name: "ErrCodeSentTooRecently",
@@ -50,12 +50,12 @@ func TestUserFacingDetail(t *testing.T) {
 		{
 			name: "ErrEmailAlreadyTaken",
 			err:  application.ErrEmailAlreadyTaken,
-			want: "Эта почта уже используется",
+			want: detailEmailTaken,
 		},
 		{
 			name: "wrapped error resolves via errors.Is",
 			err:  fmt.Errorf("send failed: %w", application.ErrUserBlocked),
-			want: "Пользователь временно заблокирован",
+			want: detailUserBlocked,
 		},
 	}
 
@@ -91,7 +91,7 @@ func TestUserFacingDetailOrDefault(t *testing.T) {
 	t.Run("known error returns its detail", func(t *testing.T) {
 		t.Parallel()
 		got := userFacingDetailOrDefault(application.ErrEmailAlreadyTaken, "fallback")
-		if got != "Эта почта уже используется" {
+		if got != detailEmailTaken {
 			t.Fatalf("got %q, want known error detail", got)
 		}
 	})

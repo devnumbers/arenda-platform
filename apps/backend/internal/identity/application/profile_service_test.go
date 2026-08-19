@@ -197,7 +197,8 @@ func TestProfileService_UpdateProfile_RecordsAuditInTx(t *testing.T) {
 	h := newProfileHarness(t)
 	user := seedProfileUser(t, h.users)
 
-	if _, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Name: new("Ivan"), Surname: new("Petrov")}); err != nil {
+	if _, err := h.svc.UpdateProfile(context.Background(), user.ID,
+		UpdateProfileCommand{Name: new("Ivan"), Surname: new("Petrov")}); err != nil {
 		t.Fatalf("UpdateProfile error = %v", err)
 	}
 	if len(h.audit.entries) != 1 {
@@ -301,7 +302,8 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 	)
 	seedProfileUser(t, users.fakeUserRepo)
 
-	if _, err := svc.UpdateProfile(context.Background(), users.fakeUserRepo.byPhone["+79160000001"].ID, UpdateProfileCommand{Name: new("Ivan")}); err != nil {
+	if _, err := svc.UpdateProfile(context.Background(),
+		users.fakeUserRepo.byPhone["+79160000001"].ID, UpdateProfileCommand{Name: new("Ivan")}); err != nil {
 		t.Fatalf("UpdateProfile error = %v", err)
 	}
 	if users.withTxCalls != 1 {

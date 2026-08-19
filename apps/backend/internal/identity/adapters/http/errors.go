@@ -35,7 +35,8 @@ func writeSharedIdentityError(w http.ResponseWriter, r *http.Request, err error,
 		return true
 	case errors.Is(err, application.ErrEmailAlreadyTaken),
 		errors.Is(err, application.ErrEmailDoesNotMatch):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Некорректные учётные данные")))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Некорректные учётные данные")))
 		return true
 	case errors.Is(err, application.ErrNotFound):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", notFoundDetail))
@@ -43,6 +44,13 @@ func writeSharedIdentityError(w http.ResponseWriter, r *http.Request, err error,
 	}
 	return false
 }
+
+// User-facing messages that recur outside this switch — the http tests assert
+// them as fixtures — so they are named constants instead of inline literals.
+const (
+	detailUserBlocked = "Пользователь временно заблокирован"
+	detailEmailTaken  = "Эта почта уже используется"
+)
 
 // userFacingDetail maps known identity domain/application errors to fixed,
 // non-sensitive messages suitable for RFC 7807 problem details. It is the
@@ -53,7 +61,7 @@ func writeSharedIdentityError(w http.ResponseWriter, r *http.Request, err error,
 func userFacingDetail(err error) (string, bool) {
 	switch {
 	case errors.Is(err, application.ErrUserBlocked):
-		return "Пользователь временно заблокирован", true
+		return detailUserBlocked, true
 	case errors.Is(err, application.ErrCodeSentTooRecently):
 		return "Код отправлен слишком недавно", true
 	case errors.Is(err, application.ErrPhoneAlreadyTaken):
@@ -65,7 +73,7 @@ func userFacingDetail(err error) (string, bool) {
 	case errors.Is(err, application.ErrEmailDoesNotMatch):
 		return "Некорректные учётные данные", true
 	case errors.Is(err, application.ErrEmailAlreadyTaken):
-		return "Эта почта уже используется", true
+		return detailEmailTaken, true
 	}
 	return "", false
 }

@@ -54,12 +54,12 @@ func newSessionSvcForLoader(t *testing.T, sessions *fakeSessionRepoForLoader) id
 	// SessionService interface, so we hold it via := and return it as the
 	// interface type.
 	factory := identityapp.NewTxStoreFactory(
-		nil, // users — not needed for Load/Update
-		nil, // codes
-		nil, // attempts
+		nil, // Users — not needed for Load/Update.
+		nil, // Codes.
+		nil, // Attempts.
 		sessions,
-		nil, // audit
-		nil, // uow — not needed for Load/Update (they don't use runInTx)
+		nil, // Audit.
+		nil, // UoW — not needed for Load/Update (they don't use runInTx).
 	)
 	return identityapp.NewSessionService(factory, identityapp.SessionServiceConfig{
 		Hasher: passThroughHasher{},
@@ -86,27 +86,27 @@ func TestSessionLoader_Load_SuccessMapsSessionAndUser(t *testing.T) {
 	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 	userID := uuid.Must(uuid.NewV7())
 	wantSession := domain.Session{
-		TokenHash:  "raw-token", // passThroughHasher is pass-through
+		TokenHash:  testRawToken, // Pass-through hasher: TokenHash equals the raw token.
 		ExpiresAt:  now.Add(time.Hour),
 		CreatedAt:  now,
 		LastUsedAt: now,
 	}
 	repo := &fakeSessionRepoForLoader{
 		getByTokenHash: func(hash string, _ time.Time) (domain.Session, domain.User, error) {
-			if hash != "raw-token" {
-				t.Errorf("repo received hash = %q, want raw-token", hash)
+			if hash != testRawToken {
+				t.Errorf("repo received hash = %q, want %s", hash, testRawToken)
 			}
 			return wantSession, domain.User{ID: userID, Role: domain.RoleOwner}, nil
 		},
 	}
 	loader := NewSessionLoader(newSessionSvcForLoader(t, repo))
 
-	gotSession, gotUserID, gotRole, err := loader.Load(t.Context(), "raw-token", now)
+	gotSession, gotUserID, gotRole, err := loader.Load(t.Context(), testRawToken, now)
 	if err != nil {
 		t.Fatalf("Load error = %v", err)
 	}
-	if gotSession.TokenHash != "raw-token" {
-		t.Fatalf("TokenHash = %q, want raw-token", gotSession.TokenHash)
+	if gotSession.TokenHash != testRawToken {
+		t.Fatalf("TokenHash = %q, want %s", gotSession.TokenHash, testRawToken)
 	}
 	if !gotSession.ExpiresAt.Equal(wantSession.ExpiresAt) {
 		t.Fatalf("ExpiresAt = %v, want %v", gotSession.ExpiresAt, wantSession.ExpiresAt)
@@ -121,7 +121,7 @@ func TestSessionLoader_Load_SuccessMapsSessionAndUser(t *testing.T) {
 
 func TestSessionLoader_Load_NotFoundMapsToSessionNotFound(t *testing.T) {
 	t.Parallel()
-	repo := &fakeSessionRepoForLoader{} // default returns ErrNotFound
+	repo := &fakeSessionRepoForLoader{} // Defaults to ErrNotFound.
 	loader := NewSessionLoader(newSessionSvcForLoader(t, repo))
 
 	session, userID, role, err := loader.Load(t.Context(), "dead-token", time.Now())

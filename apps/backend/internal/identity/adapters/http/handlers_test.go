@@ -18,7 +18,15 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 )
 
-// --- fakes for the remaining service interfaces ---
+// Shared fixture strings of the identity http tests: the canonical owner
+// email, the raw session token, and the profile name.
+const (
+	testOwnerEmail = "owner@example.com"
+	testRawToken   = "raw-token"
+	testUserName   = "Ivan"
+)
+
+// Fakes for the remaining service interfaces.
 
 type fakeProfiler struct {
 	me     func(ctx context.Context, userID uuid.UUID) (domain.User, error)
@@ -77,7 +85,7 @@ func (f *fakePhoneChanger) ChangePhone(ctx context.Context, userID uuid.UUID, ph
 	return domain.User{}, errors.New("unexpected ChangePhone call")
 }
 
-// --- helpers ---
+// Helpers.
 
 // sessionCookie builds a test session cookie with secure attributes so gosec
 // G124 does not flag it. The handler only reads Name and Value.
@@ -125,9 +133,7 @@ func mustPhoneHandler(t *testing.T, raw string) domain.Phone {
 	return p
 }
 
-// =============================================================================
-// Logout
-// =============================================================================
+// Logout.
 
 func TestLogout_NoTokenReturns401(t *testing.T) {
 	t.Parallel()
@@ -153,13 +159,13 @@ func TestLogout_SuccessDeletesAndClearsCookie(t *testing.T) {
 
 	// Inject a session cookie into the request.
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/auth/logout", nil)
-	r.AddCookie(sessionCookie("raw-token"))
+	r.AddCookie(sessionCookie(testRawToken))
 	rr := doHandler(t, h.Logout, r)
 
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rr.Code)
 	}
-	if gotToken != "raw-token" {
+	if gotToken != testRawToken {
 		t.Fatalf("Logout received token = %q, want raw-token", gotToken)
 	}
 	if cookie := rr.Header().Get("Set-Cookie"); !strings.Contains(cookie, "session_id=") || !strings.Contains(cookie, "Max-Age=0") {
@@ -200,9 +206,7 @@ func TestLogout_OtherErrorReturns500(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// LogoutAll
-// =============================================================================
+// LogoutAll.
 
 func TestLogoutAll_NoUserIDReturns401(t *testing.T) {
 	t.Parallel()
@@ -253,9 +257,7 @@ func TestLogoutAll_ErrorReturns500(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// GetMe
-// =============================================================================
+// GetMe.
 
 func TestGetMe_NoUserIDReturns401(t *testing.T) {
 	t.Parallel()
@@ -272,8 +274,8 @@ func TestGetMe_Success(t *testing.T) {
 	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
 	phone := mustPhoneHandler(t, "+79160000800")
-	email := mustEmailHandler(t, "owner@example.com")
-	name := "Ivan"
+	email := mustEmailHandler(t, testOwnerEmail)
+	name := testUserName
 	profile := &fakeProfiler{
 		me: func(_ context.Context, uid uuid.UUID) (domain.User, error) {
 			if uid != userID {
@@ -303,7 +305,7 @@ func TestGetMe_Success(t *testing.T) {
 	if resp.Phone != phone.String() {
 		t.Fatalf("phone = %s, want %s", resp.Phone, phone.String())
 	}
-	if resp.Name == nil || *resp.Name != "Ivan" {
+	if resp.Name == nil || *resp.Name != testUserName {
 		t.Fatalf("name = %v, want Ivan", resp.Name)
 	}
 }
@@ -386,9 +388,7 @@ func TestGetMe_EnricherErrorReturns500(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// UpdateMe
-// =============================================================================
+// UpdateMe.
 
 func TestUpdateMe_NoUserIDReturns401(t *testing.T) {
 	t.Parallel()
@@ -432,7 +432,7 @@ func TestUpdateMe_Success(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rr.Code, rr.Body.String())
 	}
-	if gotCmd.Name == nil || *gotCmd.Name != "Ivan" {
+	if gotCmd.Name == nil || *gotCmd.Name != testUserName {
 		t.Fatalf("cmd.Name = %v, want Ivan", gotCmd.Name)
 	}
 	if gotCmd.Timezone == nil || *gotCmd.Timezone != "Europe/Moscow" {
@@ -491,9 +491,7 @@ func TestUpdateMe_NotFoundReturns401(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// SendPhoneChangeCode
-// =============================================================================
+// SendPhoneChangeCode.
 
 func TestSendPhoneChangeCode_NoUserIDReturns401(t *testing.T) {
 	t.Parallel()
@@ -571,9 +569,7 @@ func TestSendPhoneChangeCode_TakenReturns409(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// ChangePhone
-// =============================================================================
+// ChangePhone.
 
 func TestChangePhone_NoUserIDReturns401(t *testing.T) {
 	t.Parallel()
@@ -672,9 +668,7 @@ func TestChangePhone_TakenReturns409(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// Pure functions
-// =============================================================================
+// Pure functions.
 
 func TestMeResponse_NilEmail(t *testing.T) {
 	t.Parallel()
@@ -683,7 +677,7 @@ func TestMeResponse_NilEmail(t *testing.T) {
 		ID:    uuid.Must(uuid.NewV7()),
 		Phone: phone,
 		Role:  domain.RoleOwner,
-		// Email intentionally nil
+		// Email intentionally nil.
 	}
 	resp := meResponse(user)
 	if resp.Email != nil {
@@ -696,7 +690,7 @@ func TestMeResponse_NilEmail(t *testing.T) {
 
 func TestRateLimitKey(t *testing.T) {
 	t.Parallel()
-	email := mustEmailHandler(t, "owner@example.com")
+	email := mustEmailHandler(t, testOwnerEmail)
 
 	t.Run("email wins when present", func(t *testing.T) {
 		t.Parallel()
@@ -715,7 +709,7 @@ func TestRateLimitKey(t *testing.T) {
 
 func TestAuthRateLimits_NilLimiterAllowsAll(t *testing.T) {
 	t.Parallel()
-	limits := AuthRateLimits{} // all nil
+	limits := AuthRateLimits{} // All limiters nil.
 
 	if !limits.AllowSend("k") {
 		t.Error("AllowSend with nil limiter = false, want true")

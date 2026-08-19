@@ -71,13 +71,13 @@ func NewTxStoreFactory(
 // back otherwise; a panic in work rolls back and re-panics (see transaction.UoW).
 //
 // WithTx errors are wrapped so a repository that fails to bind aborts the
-// transaction with a clear cause rather than a silent fallthrough. audit is
-// bound last: its WithTx is infallible (auditapp.Recorder.WithTx returns no
-// error), so it cannot mask a prior repository-bind failure.
+// transaction with a clear cause rather than a silent fallthrough. The audit
+// recorder is bound last: its WithTx is infallible (auditapp.Recorder.WithTx
+// returns no error), so it cannot mask a prior repository-bind failure.
 //
-// runInTx returns an error if the factory's UoW was not configured — a service
-// without a UoW has no business calling it. This keeps the call sites free of
-// nil checks while making a wiring mistake loud and immediate.
+// The runInTx call returns an error if the factory's UoW was not configured —
+// a service without a UoW has no business calling it. This keeps the call
+// sites free of nil checks while making a wiring mistake loud and immediate.
 func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error) error {
 	if f.uow == nil {
 		return errors.New("identity runInTx: Unit-of-Work is not configured")

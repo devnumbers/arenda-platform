@@ -22,7 +22,13 @@ type SessionService interface {
 	// user row was inserted; a create that races an concurrent insert and ends
 	// up loading the existing row reports isNew=false. Audit and the
 	// UserRegistered event stay the orchestrator's responsibility.
-	Issue(ctx context.Context, stores *txStores, phone domain.Phone, email domain.Email, now time.Time) (domain.RawSession, domain.User, bool, error)
+	Issue(
+		ctx context.Context,
+		stores *txStores,
+		phone domain.Phone,
+		email domain.Email,
+		now time.Time,
+	) (domain.RawSession, domain.User, bool, error)
 }
 
 type sessionService struct {
@@ -64,7 +70,13 @@ func (s *sessionService) Update(ctx context.Context, session domain.Session) err
 // and persists a new session. It operates inside the caller's transaction via
 // stores. Returns the raw session token, the user, and isNew (true only when a
 // new user row was inserted).
-func (s *sessionService) Issue(ctx context.Context, stores *txStores, phone domain.Phone, email domain.Email, now time.Time) (domain.RawSession, domain.User, bool, error) {
+func (s *sessionService) Issue(
+	ctx context.Context,
+	stores *txStores,
+	phone domain.Phone,
+	email domain.Email,
+	now time.Time,
+) (domain.RawSession, domain.User, bool, error) {
 	user, err := stores.users.GetByPhone(ctx, phone)
 	isNewUser := false
 	if err != nil {

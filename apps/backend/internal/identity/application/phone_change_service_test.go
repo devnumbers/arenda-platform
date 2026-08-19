@@ -53,7 +53,12 @@ func newPhoneChangeHarness() *phoneChangeHarness {
 // SendChangeCode and ChangePhone have a user to act on. It also opens a session
 // with a known token hash so ChangePhone's "keep current, delete others" logic
 // can be asserted.
-func (h *phoneChangeHarness) seedPhoneChangeUser(t *testing.T, phone domain.Phone, email domain.Email, sessionToken string) (user domain.User, tokenHash string) {
+func (h *phoneChangeHarness) seedPhoneChangeUser(
+	t *testing.T,
+	phone domain.Phone,
+	email domain.Email,
+	sessionToken string,
+) (user domain.User, tokenHash string) {
 	t.Helper()
 	var err error
 	user, err = domain.NewOwner(phone)

@@ -37,7 +37,12 @@ func (f *fakeAuthenticator) SendCodeByPhone(ctx context.Context, phone domain.Ph
 	return false, nil
 }
 
-func (f *fakeAuthenticator) VerifyCode(ctx context.Context, phone domain.Phone, email *domain.Email, code string) (domain.RawSession, domain.User, error) {
+func (f *fakeAuthenticator) VerifyCode(
+	ctx context.Context,
+	phone domain.Phone,
+	email *domain.Email,
+	code string,
+) (domain.RawSession, domain.User, error) {
 	if f.verifyCode != nil {
 		return f.verifyCode(ctx, phone, email, code)
 	}
@@ -146,7 +151,7 @@ func TestSendCode_WithEmail_MismatchReturns409(t *testing.T) {
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409: %s", rr.Code, rr.Body.String())
 	}
-	if gotEmail.String() != "owner@example.com" {
+	if gotEmail.String() != testOwnerEmail {
 		t.Fatalf("SendCode email = %s, want owner@example.com", gotEmail)
 	}
 }
@@ -172,8 +177,8 @@ func TestSendCode_WithEmail_EmailAlreadyTakenReturns409(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Detail == nil || *resp.Detail != "Эта почта уже используется" {
-		t.Fatalf("detail = %v, want %q", resp.Detail, "Эта почта уже используется")
+	if resp.Detail == nil || *resp.Detail != detailEmailTaken {
+		t.Fatalf("detail = %v, want %q", resp.Detail, detailEmailTaken)
 	}
 }
 
@@ -187,7 +192,7 @@ func TestVerifyCode_WithoutEmail_PassesNilEmailAndSetsCookie(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 	raw := domain.RawSession{
-		Token:   "raw-token",
+		Token:   testRawToken,
 		Session: domain.Session{UserID: user.ID, ExpiresAt: time.Now().Add(time.Hour)},
 	}
 

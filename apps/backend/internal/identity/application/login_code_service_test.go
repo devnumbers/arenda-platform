@@ -325,7 +325,7 @@ func TestAttemptDelta(t *testing.T) {
 
 	t.Run("reset path returns zero", func(t *testing.T) {
 		t.Parallel()
-		// prev has a different FirstFailureAt → WasReset is true.
+		// The prev window has a different FirstFailureAt → WasReset is true.
 		prev := domain.AttemptWindow{Failures: 3, FirstFailureAt: start}
 		next := domain.AttemptWindow{Failures: 1, FirstFailureAt: start.Add(domain.LoginAttemptWindowTTL)}
 		if got := attemptDelta(prev, next); got != 0 {

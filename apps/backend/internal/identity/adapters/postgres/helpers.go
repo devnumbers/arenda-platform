@@ -25,10 +25,14 @@ const defaultDeleteBatchSize = 1000
 // reports zero rows affected (completeness), and returns the total number of
 // rows removed. It hides the ctid-batching SQL dialect from the application
 // port: the port says "delete everything older than before", the adapter
-// decides how to chunk the work. Cancellation policy (swallow ctx.Canceled
-// vs. log) is left to the caller, so any error — including context.Canceled —
-// is returned as-is.
-func deleteBatched(ctx context.Context, before time.Time, deleteBatch func(ctx context.Context, before time.Time, limit int32) (int64, error)) (int64, error) {
+// decides how to chunk the work. The cancellation policy (swallowing or
+// logging ctx.Canceled) is left to the caller, so any error — including
+// context.Canceled — is returned as-is.
+func deleteBatched(
+	ctx context.Context,
+	before time.Time,
+	deleteBatch func(ctx context.Context, before time.Time, limit int32) (int64, error),
+) (int64, error) {
 	var total int64
 	for {
 		n, err := deleteBatch(ctx, before, defaultDeleteBatchSize)

@@ -5,6 +5,13 @@ import (
 	"testing"
 )
 
+// Wire values of the canonical roles, shared by the NewRole/String tables so
+// the raw literals live in one place.
+const (
+	wireRoleOwner = "owner"
+	wireRoleAdmin = "admin"
+)
+
 func TestNewRole(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -12,8 +19,8 @@ func TestNewRole(t *testing.T) {
 		want    Role
 		wantErr bool
 	}{
-		{"owner", "owner", RoleOwner, false},
-		{"admin", "admin", RoleAdmin, false},
+		{"owner", wireRoleOwner, RoleOwner, false},
+		{"admin", wireRoleAdmin, RoleAdmin, false},
 		{"unknown role", "superuser", "", true},
 		{"empty", "", "", true},
 		{"case sensitive owner", "Owner", "", true},
@@ -43,8 +50,8 @@ func TestRole_String(t *testing.T) {
 		role Role
 		want string
 	}{
-		{RoleOwner, "owner"},
-		{RoleAdmin, "admin"},
+		{RoleOwner, wireRoleOwner},
+		{RoleAdmin, wireRoleAdmin},
 	}
 
 	for _, tc := range tests {
