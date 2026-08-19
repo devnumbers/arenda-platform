@@ -90,10 +90,12 @@ func TestLoginCodeService_Send_RejectsWhenBlocked(t *testing.T) {
 	phone := mustPhone(t, "+79150000003")
 	email := mustEmail(t, "owner@example.com")
 
-	// Seed a blocked attempt window.
-	window := domain.NewAttemptWindow(testNow)
-	for range domain.MaxLoginFailures {
-		_ = window.RecordFailure(testNow)
+	// Seed a blocked attempt window — the persisted state after MaxLoginFailures
+	// recorded failures (the transition itself is covered by the domain tests).
+	window := domain.AttemptWindow{
+		Failures:       domain.MaxLoginFailures,
+		FirstFailureAt: testNow,
+		LastFailureAt:  testNow,
 	}
 	h.attempts.windows[phone.String()] = window
 
@@ -182,10 +184,12 @@ func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
 	}
 	plaintext := h.sender.sent[0].code
 
-	// Seed a blocked attempt window.
-	window := domain.NewAttemptWindow(testNow)
-	for range domain.MaxLoginFailures {
-		_ = window.RecordFailure(testNow)
+	// Seed a blocked attempt window — the persisted state after MaxLoginFailures
+	// recorded failures (the transition itself is covered by the domain tests).
+	window := domain.AttemptWindow{
+		Failures:       domain.MaxLoginFailures,
+		FirstFailureAt: testNow,
+		LastFailureAt:  testNow,
 	}
 	h.attempts.windows[phone.String()] = window
 

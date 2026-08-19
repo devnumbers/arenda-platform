@@ -210,8 +210,10 @@ func bulkSeedLoginCodes(t *testing.T, pool *pgxpool.Pool, n int, usedRows bool, 
 				sb.WriteByte(',')
 			}
 			base := j * 9
-			_, _ = fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-				base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9)
+			if _, err := fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+				base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9); err != nil {
+				t.Fatalf("append placeholder row %d: %v", j, err)
+			}
 		}
 		if _, err := pool.Exec(ctx, sb.String(), args...); err != nil {
 			t.Fatalf("bulk seed login_codes (used=%v batch %d): %v", usedRows, offset, err)

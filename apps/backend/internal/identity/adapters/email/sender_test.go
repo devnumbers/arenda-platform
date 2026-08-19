@@ -63,15 +63,27 @@ func (s *fakeMailerSender) Send(_ context.Context, msg mailer.Message) error {
 	return s.err
 }
 
-func TestSender_Send_RendersAndSends(t *testing.T) {
-	phone, err := domain.NewPhone("+79160005000")
+func mustPhone(t *testing.T, raw string) domain.Phone {
+	t.Helper()
+	phone, err := domain.NewPhone(raw)
 	if err != nil {
 		t.Fatalf("parse phone: %v", err)
 	}
-	emailAddr, err := domain.NewEmail("owner@example.com")
+	return phone
+}
+
+func mustEmail(t *testing.T, raw string) domain.Email {
+	t.Helper()
+	email, err := domain.NewEmail(raw)
 	if err != nil {
 		t.Fatalf("parse email: %v", err)
 	}
+	return email
+}
+
+func TestSender_Send_RendersAndSends(t *testing.T) {
+	phone := mustPhone(t, "+79160005000")
+	emailAddr := mustEmail(t, "owner@example.com")
 
 	renderer := &fakeRenderer{plain: "Your code: 123456", html: "<p>123456</p>"}
 	sender := &fakeMailerSender{}
@@ -116,8 +128,8 @@ func TestSender_Send_RendersAndSends(t *testing.T) {
 }
 
 func TestSender_Send_RenderErrorIsWrapped(t *testing.T) {
-	phone, _ := domain.NewPhone("+79160005001")
-	emailAddr, _ := domain.NewEmail("owner@example.com")
+	phone := mustPhone(t, "+79160005001")
+	emailAddr := mustEmail(t, "owner@example.com")
 
 	renderErr := errors.New("template not found")
 	renderer := &fakeRenderer{err: renderErr}
@@ -130,8 +142,8 @@ func TestSender_Send_RenderErrorIsWrapped(t *testing.T) {
 }
 
 func TestSender_Send_SenderErrorIsWrapped(t *testing.T) {
-	phone, _ := domain.NewPhone("+79160005002")
-	emailAddr, _ := domain.NewEmail("owner@example.com")
+	phone := mustPhone(t, "+79160005002")
+	emailAddr := mustEmail(t, "owner@example.com")
 
 	sendErr := errors.New("smtp refused")
 	renderer := &fakeRenderer{plain: "plain", html: "html"}

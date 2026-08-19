@@ -35,7 +35,9 @@ func TestAttemptWindow_RecordFailure(t *testing.T) {
 		now := start
 
 		for i := 1; i < MaxLoginFailures; i++ {
-			_ = w.RecordFailure(now)
+			if err := w.RecordFailure(now); err != nil {
+				t.Fatalf("RecordFailure #%d error = %v, want nil", i, err)
+			}
 		}
 		// The 15th failure trips the threshold.
 		err := w.RecordFailure(now)
@@ -51,9 +53,7 @@ func TestAttemptWindow_RecordFailure(t *testing.T) {
 		w := AttemptWindow{}
 		now := start
 
-		for range MaxLoginFailures {
-			_ = w.RecordFailure(now)
-		}
+		fillWindowPastThreshold(t, &w, now)
 		// A subsequent failure inside the window still trips the threshold.
 		err := w.RecordFailure(now.Add(time.Second))
 		if !errors.Is(err, ErrTooManyAttempts) {
@@ -67,9 +67,7 @@ func TestAttemptWindow_RecordFailure(t *testing.T) {
 	t.Run("resets the window once LoginAttemptWindowTTL has elapsed", func(t *testing.T) {
 		w := AttemptWindow{}
 		// Fill the window past the threshold.
-		for range MaxLoginFailures {
-			_ = w.RecordFailure(start)
-		}
+		fillWindowPastThreshold(t, &w, start)
 		// After the TTL, the first failure starts a fresh window.
 		afterTTL := start.Add(LoginAttemptWindowTTL)
 
@@ -87,6 +85,21 @@ func TestAttemptWindow_RecordFailure(t *testing.T) {
 			t.Fatalf("LastFailureAt = %v, want %v", w.LastFailureAt, afterTTL)
 		}
 	})
+}
+
+// fillWindowPastThreshold records MaxLoginFailures failures: the first
+// MaxLoginFailures-1 return nil, the final one trips the threshold and returns
+// ErrTooManyAttempts.
+func fillWindowPastThreshold(t *testing.T, w *AttemptWindow, at time.Time) {
+	t.Helper()
+	for i := 1; i < MaxLoginFailures; i++ {
+		if err := w.RecordFailure(at); err != nil {
+			t.Fatalf("RecordFailure #%d error = %v, want nil", i, err)
+		}
+	}
+	if err := w.RecordFailure(at); !errors.Is(err, ErrTooManyAttempts) {
+		t.Fatalf("RecordFailure #%d error = %v, want ErrTooManyAttempts", MaxLoginFailures, err)
+	}
 }
 
 func TestAttemptWindow_WasReset(t *testing.T) {

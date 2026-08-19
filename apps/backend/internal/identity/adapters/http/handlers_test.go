@@ -604,8 +604,7 @@ func TestChangePhone_Success(t *testing.T) {
 	phone := mustPhoneHandler(t, "+79160002000")
 	pc := &fakePhoneChanger{
 		changePhone: func(_ context.Context, _ uuid.UUID, _ domain.Phone, _, _ string) (domain.User, error) {
-			u, _ := domain.NewOwner(phone)
-			return u, nil
+			return domain.NewOwner(phone)
 		},
 	}
 	h := newHandlers(nil, nil, pc)

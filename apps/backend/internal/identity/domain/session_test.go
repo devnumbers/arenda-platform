@@ -164,7 +164,10 @@ func TestNewSession(t *testing.T) {
 		t.Fatalf("Token length = %d, want 64", len(raw.Token))
 	}
 	// Two consecutive calls must produce different tokens.
-	other, _ := NewSession(userID, now)
+	other, err := NewSession(userID, now)
+	if err != nil {
+		t.Fatalf("second NewSession error = %v", err)
+	}
 	if other.Token == raw.Token {
 		t.Fatal("two NewSession calls produced identical tokens")
 	}

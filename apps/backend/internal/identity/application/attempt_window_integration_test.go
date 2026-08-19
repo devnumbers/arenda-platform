@@ -62,8 +62,12 @@ func TestAttemptWindowIntegration_UnblocksAfterTTL(t *testing.T) {
 		t.Fatalf("SendCode: %v", err)
 	}
 
+	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, _ = h.auth.VerifyCode(ctx, phone, &email, "000000")
+		_, _, lastErr = h.auth.VerifyCode(ctx, phone, &email, "000000")
+	}
+	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
+		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
 	}
 	// Confirm the block is active.
 	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); !errors.Is(err, application.ErrUserBlocked) {

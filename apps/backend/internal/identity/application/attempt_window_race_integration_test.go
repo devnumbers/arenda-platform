@@ -3,6 +3,7 @@
 package application_test
 
 import (
+	"errors"
 	"sync"
 	"testing"
 
@@ -37,19 +38,27 @@ func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
 
 	// A barrier so every goroutine races VerifyCode at the same instant.
 	start := make(chan struct{})
+	errs := make(chan error, concurrentAttempts)
 	var wg sync.WaitGroup
 	for range concurrentAttempts {
 		wg.Go(func() {
 			<-start
 			// An invalid code always yields ErrLoginCodeInvalid (or
 			// ErrTooManyAttempts near the threshold), both of which record a
-			// failure via recordFailedLogin. We ignore the per-goroutine error;
-			// the assertion is on the final persisted count.
-			_, _, _ = h.auth.VerifyCode(ctx, phone, &email, "000000")
+			// failure via recordFailedLogin; anything else would break the
+			// count assertion below.
+			_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000")
+			errs <- err
 		})
 	}
 	close(start)
 	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if !errors.Is(err, domain.ErrLoginCodeInvalid) && !errors.Is(err, domain.ErrTooManyAttempts) {
+			t.Fatalf("racing VerifyCode error = %v, want ErrLoginCodeInvalid or ErrTooManyAttempts", err)
+		}
+	}
 
 	// Every concurrent increment must have been persisted: no lost update.
 	got := h.countFailedAttempts(t, phone)
@@ -90,11 +99,12 @@ func TestAttemptWindowRace_SaveWithoutLockIsAtomic(t *testing.T) {
 	// Each goroutine saves a single-failure window with delta=1, racing on the
 	// same phone with no preceding GetForUpdate and no shared transaction.
 	start := make(chan struct{})
+	errs := make(chan error, concurrentAttempts)
 	var wg sync.WaitGroup
 	for range concurrentAttempts {
 		wg.Go(func() {
 			<-start
-			_ = h.attempts.Save(ctx, phone, uuid.Nil, domain.AttemptWindow{
+			errs <- h.attempts.Save(ctx, phone, uuid.Nil, domain.AttemptWindow{
 				FirstFailureAt: now,
 				LastFailureAt:  now,
 			}, 1)
@@ -102,6 +112,12 @@ func TestAttemptWindowRace_SaveWithoutLockIsAtomic(t *testing.T) {
 	}
 	close(start)
 	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("racing Save error = %v, want nil", err)
+		}
+	}
 
 	got := h.countFailedAttempts(t, phone)
 	if got != concurrentAttempts {

@@ -293,7 +293,10 @@ func TestPhoneChangeService_ChangePhone(t *testing.T) {
 			t.Fatalf("window failures = %d, want 1", window.Failures)
 		}
 		// Phone not updated.
-		got, _ := h.users.GetByPhone(ctx, oldPhone)
+		got, err := h.users.GetByPhone(ctx, oldPhone)
+		if err != nil {
+			t.Fatalf("GetByPhone after failed change: %v", err)
+		}
 		if got.Phone != oldPhone {
 			t.Fatalf("phone = %s, want unchanged %s", got.Phone, oldPhone)
 		}
