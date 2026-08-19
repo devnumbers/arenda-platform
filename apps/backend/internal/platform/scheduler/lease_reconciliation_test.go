@@ -44,7 +44,7 @@ func TestLeaseReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
-	sensitive := "token=secret123 card 1234-5678-9012-3456 phone +79991234567"
+	sensitive := testSensitivePayload
 	leaseID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	svc := &fakeLeaseService{
 		leases:       []leasesdomain.Lease{{ID: leaseID}},
@@ -60,9 +60,9 @@ func TestLeaseReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 
 	logs := logBuf.String()
 	forbidden := []string{
-		"token=secret123",
-		"1234-5678-9012-3456",
-		"+79991234567",
+		testSecretToken,
+		testCardNumber,
+		testUserPhone,
 	}
 	for _, s := range forbidden {
 		if strings.Contains(logs, s) {

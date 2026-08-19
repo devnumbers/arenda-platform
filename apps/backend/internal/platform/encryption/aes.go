@@ -123,8 +123,8 @@ func (e *aesEncryptor) DeterministicEncrypt(ctx context.Context, plaintext strin
 
 func deterministicNonce(macKey []byte, plaintext string) ([]byte, error) {
 	mac := hmac.New(sha256.New, macKey)
-	// hash.Hash documents that Write never returns an error; the check keeps
-	// the contract explicit instead of silently discarding it.
+	// The hash.Hash contract documents that Write never returns an error; the
+	// check keeps the contract explicit instead of silently discarding it.
 	if _, err := mac.Write([]byte(plaintext)); err != nil {
 		return nil, fmt.Errorf("hmac nonce write: %w", err)
 	}
@@ -176,8 +176,8 @@ func (noopEncryptor) HashToken(plaintext string) string {
 
 func hashToken(key []byte, plaintext string) string {
 	h := hmac.New(sha256.New, key)
-	// hash.Hash documents that Write never returns an error; the Encryptor
-	// port fixes the return to string, so a contract violation panics
+	// The hash.Hash contract documents that Write never returns an error; the
+	// Encryptor port fixes the return to string, so a contract violation panics
 	// (must-style, research #321 policy).
 	if _, err := h.Write([]byte(plaintext)); err != nil {
 		panic("encryption: hash token write: " + err.Error())

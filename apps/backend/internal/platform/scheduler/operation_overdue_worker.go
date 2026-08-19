@@ -35,8 +35,8 @@ type OperationOverdueWorker struct {
 	batchSize        int
 	logger           *slog.Logger
 	tzResolver       sharedtz.OwnerTimezoneResolver
-	// nextRun maps "now" to the next scheduled scan instant. Production
-	// default is nextDailyRun; tests override it to shrink the delay.
+	// The nextRun field maps "now" to the next scheduled scan instant.
+	// Production default is nextDailyRun; tests override it to shrink the delay.
 	nextRun func(time.Time) time.Time
 }
 

@@ -7,13 +7,16 @@ import (
 	"testing"
 )
 
+// testPlaintext is the round-trip fixture shared by the encryptor tests.
+const testPlaintext = "sensitive-token"
+
 func TestNoopEncryptor_RoundTrip(t *testing.T) {
 	enc, err := NewEncryptor("")
 	if err != nil {
 		t.Fatalf("NewEncryptor(\"\") error = %v", err)
 	}
 
-	plaintext := "sensitive-token"
+	plaintext := testPlaintext
 	ciphertext, err := enc.Encrypt(context.Background(), plaintext)
 	if err != nil {
 		t.Fatalf("Encrypt error = %v", err)
@@ -38,7 +41,7 @@ func TestAESEncryptor_HexKey_RoundTrip(t *testing.T) {
 		t.Fatalf("NewEncryptor error = %v", err)
 	}
 
-	plaintext := "sensitive-token"
+	plaintext := testPlaintext
 	ciphertext, err := enc.Encrypt(context.Background(), plaintext)
 	if err != nil {
 		t.Fatalf("Encrypt error = %v", err)
@@ -63,7 +66,7 @@ func TestAESEncryptor_Base64Key_RoundTrip(t *testing.T) {
 		t.Fatalf("NewEncryptor error = %v", err)
 	}
 
-	plaintext := "sensitive-token"
+	plaintext := testPlaintext
 	ciphertext, err := enc.Encrypt(context.Background(), plaintext)
 	if err != nil {
 		t.Fatalf("Encrypt error = %v", err)

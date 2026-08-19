@@ -183,7 +183,7 @@ func messageIDDomain(from, fallback string) string {
 }
 
 // writeMIMEPart appends one multipart/alternative part to the message.
-// strings.Builder writes never fail, so no error handling is needed.
+// The strings.Builder writes never fail, so no error handling is needed.
 func writeMIMEPart(b *strings.Builder, boundary, contentType, body string) {
 	b.WriteString("--" + boundary + "\r\n")
 	b.WriteString("Content-Type: " + contentType + "\r\n")
@@ -202,8 +202,8 @@ func (s *Sender) buildMessage(msg mailer.Message) []byte {
 	}
 	encodedName := encodeHeader(fromName)
 	// RFC 5322 requires quoting display names that contain spaces.
-	// mime.QEncoding.Encode returns the raw string for ASCII, so we add quotes
-	// ourselves; RFC 2047 encoded-words must not be wrapped in quotes.
+	// The mime.QEncoding.Encode call returns the raw string for ASCII, so we
+	// add quotes ourselves; RFC 2047 encoded-words must not be wrapped in quotes.
 	fromHeader := fmt.Sprintf("%s <%s>", quoteDisplayName(encodedName), s.cfg.From)
 
 	var buf strings.Builder

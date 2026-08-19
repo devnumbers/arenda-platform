@@ -187,10 +187,11 @@ func TestWithAdvisoryTickLock_SkipsWhenAnotherInstanceHoldsLock(t *testing.T) {
 
 	var logBuf bytes.Buffer
 	var ran atomic.Bool
-	err = withAdvisoryTickLock(ctx, pool, workerLoopSkipTestLockKey, "test", slog.New(slog.NewTextHandler(&logBuf, nil)), func(context.Context) error {
-		ran.Store(true)
-		return nil
-	})
+	err = withAdvisoryTickLock(ctx, pool, workerLoopSkipTestLockKey, "test",
+		slog.New(slog.NewTextHandler(&logBuf, nil)), func(context.Context) error {
+			ran.Store(true)
+			return nil
+		})
 	if err != nil {
 		t.Fatalf("expected nil error when the lock is held elsewhere, got %v", err)
 	}

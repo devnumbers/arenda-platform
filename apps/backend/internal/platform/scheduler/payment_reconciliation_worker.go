@@ -37,7 +37,13 @@ type PaymentReconciliationWorker struct {
 }
 
 // NewPaymentReconciliationWorker creates a new payment reconciliation worker.
-func NewPaymentReconciliationWorker(payments PaymentReconciler, pool *pgxpool.Pool, clk clock.Clock, interval time.Duration, logger *slog.Logger) *PaymentReconciliationWorker {
+func NewPaymentReconciliationWorker(
+	payments PaymentReconciler,
+	pool *pgxpool.Pool,
+	clk clock.Clock,
+	interval time.Duration,
+	logger *slog.Logger,
+) *PaymentReconciliationWorker {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}

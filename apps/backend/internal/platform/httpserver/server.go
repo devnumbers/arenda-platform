@@ -109,7 +109,8 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 // New builds the HTTP handler with routing and middleware wired.
 func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
-	r.Use(otelhttp.NewMiddleware("arenda-api", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + r.URL.Path })))
+	r.Use(otelhttp.NewMiddleware("arenda-api",
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + r.URL.Path })))
 	r.Use(httpsupport.RequestIDMiddleware)
 	r.Use(httpsupport.RealIPMiddleware(deps.TrustedProxies))
 	r.Use(httpsupport.RequestLoggerWithOptions(deps.Logger, httpsupport.RequestLoggerOptions{
@@ -144,18 +145,34 @@ func New(deps Deps) http.Handler {
 		},
 		deps.MeEnricher,
 	)
-	propertyHandlers := propertieshttp.NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock, deps.TZResolver)
+	propertyHandlers := propertieshttp.NewPropertyHandlers(
+		deps.Properties,
+		deps.AddressSuggester,
+		deps.TenantContacts,
+		deps.Operations,
+		deps.Leases,
+		deps.Export,
+		deps.PropertyContacts,
+		deps.Logger,
+		deps.Clock,
+		deps.TZResolver,
+	)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
 	leaseHandlers := leaseshttp.NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock, deps.TZResolver)
 	operationHandlers := leaseshttp.NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
 	recurringOperationHandlers := leaseshttp.NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
 	categoryHandlers := leaseshttp.NewCategoryHandlers(deps.Categories, deps.Logger)
-	reminderHandlers := notificationshttp.NewReminderHandlers(deps.Reminders, deps.Calendar, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
+	reminderHandlers := notificationshttp.NewReminderHandlers(
+		deps.Reminders, deps.Calendar, deps.Operations,
+		deps.RecurringOperations, deps.Leases, deps.Logger)
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	billingHandlers := billinghttp.NewBillingHandlers(deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers, deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments, deps.AdminSubscriptions, deps.Logger)
+	billingHandlers := billinghttp.NewBillingHandlers(
+		deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers,
+		deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments,
+		deps.AdminSubscriptions, deps.Logger)
 	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
@@ -272,7 +289,8 @@ func rateLimitMiddleware(limiter *httpsupport.RateLimiter) func(http.Handler) ht
 			}
 			if !limiter.Allow(ip) {
 				w.Header().Set("Retry-After", "60")
-				httpsupport.WriteProblem(r.Context(), w, http.StatusTooManyRequests, httpsupport.Problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
+				httpsupport.WriteProblem(r.Context(), w, http.StatusTooManyRequests,
+					httpsupport.Problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -34,8 +34,8 @@ type pushSendCall struct {
 // call and returns the configured error (nil by default = success).
 type fakePushSender struct {
 	calls     []pushSendCall
-	errByUser map[uuid.UUID]error // per-recipient error override
-	err       error               // default error (nil = success)
+	errByUser map[uuid.UUID]error // Per-recipient error override.
+	err       error               // Default error (nil = success).
 }
 
 func (s *fakePushSender) Send(_ context.Context, sub domain.PushSubscription, payload application.PushPayload) error {
@@ -131,7 +131,12 @@ func newPushDispatchFixture(t *testing.T, ctx context.Context, tx pgx.Tx) pushDi
 }
 
 // addPushSubscription seeds a push subscription for a user and returns it.
-func (f *pushDispatchFixture) addPushSubscription(t *testing.T, ctx context.Context, userID uuid.UUID, endpoint string) domain.PushSubscription {
+func (f *pushDispatchFixture) addPushSubscription(
+	t *testing.T,
+	ctx context.Context,
+	userID uuid.UUID,
+	endpoint string,
+) domain.PushSubscription {
 	t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -221,7 +226,7 @@ func TestPushDispatch_Integration_DeliversToRecipientWithSubscription(t *testing
 	defer cleanup()
 
 	f := newPushDispatchFixture(t, ctx, tx)
-	f.disableEmail(t, ctx, f.ownerID) // owner uses push only
+	f.disableEmail(t, ctx, f.ownerID) // Owner uses push only.
 	f.addPushSubscription(t, ctx, f.ownerID, "https://fcm.googleapis.com/fcm/send/owner-1")
 	f.dispatch(t, ctx)
 
@@ -325,7 +330,7 @@ func TestPushDispatch_Integration_EmailAndPushBothDelivered(t *testing.T) {
 	defer cleanup()
 
 	f := newPushDispatchFixture(t, ctx, tx)
-	// email is allowed by default (opt-out model); push is allowed by default.
+	// Email is allowed by default (opt-out model); push is allowed by default.
 	f.addPushSubscription(t, ctx, f.ownerID, "https://fcm.googleapis.com/fcm/send/owner-both")
 	f.dispatch(t, ctx)
 

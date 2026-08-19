@@ -32,13 +32,13 @@ func clearPhotoStorageEnv(t *testing.T) {
 func TestPhotoStorageProviderFakeAllowedInProduction(t *testing.T) {
 	setRequiredProductionEnv(t)
 	clearPhotoStorageEnv(t)
-	t.Setenv("PHOTO_STORAGE_PROVIDER", "fake")
+	t.Setenv("PHOTO_STORAGE_PROVIDER", providerFake)
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
-	if cfg.PhotoStorageProvider != "fake" {
+	if cfg.PhotoStorageProvider != providerFake {
 		t.Fatalf("expected photo storage provider fake, got %q", cfg.PhotoStorageProvider)
 	}
 	if cfg.PhotoStorageS3Enabled {

@@ -15,6 +15,27 @@ import (
 	"time"
 )
 
+// APP_ENV values: local and dev keep relaxed defaults (fake providers, optional
+// T-Kassa base URL, pretty logs); staging and production validate fully.
+const (
+	envLocal = "local"
+	envDev   = "dev"
+)
+
+// URL schemes accepted by outbound base-URL validation.
+const (
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
+)
+
+// providerFake is the shared no-integration value accepted by EMAIL_SENDER,
+// PAYMENT_PROVIDER, and PHOTO_STORAGE_PROVIDER; senderSMTP is the real
+// EMAIL_SENDER backend.
+const (
+	providerFake = "fake"
+	senderSMTP   = "smtp"
+)
+
 type Config struct {
 	AppEnv                              string
 	AppVersion                          string
@@ -176,7 +197,9 @@ func (c *Config) loadObservability() error {
 	c.OTelTraceSampler = sampler
 
 	if c.OTelEnabled && c.OTelOTLPEndpoint == "" {
-		return errors.New("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or OTEL_METRICS_EXPORTER is set to a value other than 'none'")
+		return errors.New(
+			"OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_TRACES_EXPORTER or " +
+				"OTEL_METRICS_EXPORTER is set to a value other than 'none'")
 	}
 	return nil
 }
@@ -185,7 +208,7 @@ func (c *Config) loadAppEnv() error {
 	if c.AppEnv == "" {
 		return errors.New("APP_ENV is required")
 	}
-	allowedEnvs := map[string]bool{"local": true, "dev": true, "staging": true, "production": true}
+	allowedEnvs := map[string]bool{envLocal: true, envDev: true, "staging": true, "production": true}
 	if !allowedEnvs[c.AppEnv] {
 		return fmt.Errorf("invalid APP_ENV %q: must be one of local, dev, staging, production", c.AppEnv)
 	}
@@ -198,7 +221,7 @@ func (c *Config) loadDaData() error {
 	}
 	if dadataURL, err := url.Parse(c.DaDataBaseURL); err != nil {
 		return fmt.Errorf("invalid DADATA_BASE_URL %q: %w", c.DaDataBaseURL, err)
-	} else if dadataURL.Scheme != "http" && dadataURL.Scheme != "https" {
+	} else if dadataURL.Scheme != schemeHTTP && dadataURL.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid DADATA_BASE_URL %q: scheme must be http or https", c.DaDataBaseURL)
 	}
 
@@ -237,7 +260,7 @@ func (c *Config) loadLogging() error {
 
 	if c.LogFormat == "" {
 		switch c.AppEnv {
-		case "local", "dev":
+		case envLocal, envDev:
 			c.LogFormat = "pretty"
 		default:
 			c.LogFormat = "json"
@@ -281,13 +304,13 @@ func (c *Config) loadServer() error {
 	}
 	if !cookieSecureExplicit {
 		switch c.AppEnv {
-		case "local":
+		case envLocal:
 			c.CookieSecure = false
 		default:
 			c.CookieSecure = true
 		}
 	}
-	if !c.CookieSecure && c.AppEnv != "local" && cookieSecureExplicit {
+	if !c.CookieSecure && c.AppEnv != envLocal && cookieSecureExplicit {
 		return fmt.Errorf("COOKIE_SECURE=false is not allowed for APP_ENV=%s", c.AppEnv)
 	}
 	return nil
@@ -454,28 +477,28 @@ func (c *Config) loadDatabase() error {
 }
 
 func (c *Config) loadEmail() error {
-	allowedEmailSenders := map[string]bool{"": true, "fake": true, "smtp": true}
+	allowedEmailSenders := map[string]bool{"": true, providerFake: true, senderSMTP: true}
 	if !allowedEmailSenders[c.EmailSender] {
 		return fmt.Errorf("invalid EMAIL_SENDER %q: must be empty, fake, or smtp", c.EmailSender)
 	}
 	if c.EmailSender == "" {
-		if c.AppEnv != "local" && c.AppEnv != "dev" {
+		if c.AppEnv != envLocal && c.AppEnv != envDev {
 			return fmt.Errorf("EMAIL_SENDER is required for APP_ENV=%s", c.AppEnv)
 		}
-		c.EmailSender = "fake"
+		c.EmailSender = providerFake
 	}
-	if c.EmailSender == "fake" && c.AppEnv != "local" && c.AppEnv != "dev" {
+	if c.EmailSender == providerFake && c.AppEnv != envLocal && c.AppEnv != envDev {
 		return fmt.Errorf("EMAIL_SENDER=fake is not allowed for APP_ENV=%s", c.AppEnv)
 	}
 	if c.EmailTemplatesDir == "" {
 		c.EmailTemplatesDir = "apps/backend/templates/email"
 	}
-	if c.EmailSender == "smtp" && c.AppEnv != "local" && c.AppEnv != "dev" {
+	if c.EmailSender == senderSMTP && c.AppEnv != envLocal && c.AppEnv != envDev {
 		if !filepath.IsAbs(c.EmailTemplatesDir) {
 			return fmt.Errorf("EMAIL_TEMPLATES_DIR must be an absolute path in %s environment", c.AppEnv)
 		}
 	}
-	if c.EmailSender == "smtp" {
+	if c.EmailSender == senderSMTP {
 		if c.SMTPHost == "" {
 			return errors.New("SMTP_HOST is required when EMAIL_SENDER=smtp")
 		}
@@ -501,19 +524,19 @@ func (c *Config) loadEmail() error {
 
 func (c *Config) loadPaymentProvider() error {
 	if c.PaymentProvider == "" {
-		if c.AppEnv != "local" {
+		if c.AppEnv != envLocal {
 			return fmt.Errorf("PAYMENT_PROVIDER is required for APP_ENV=%s", c.AppEnv)
 		}
-		c.PaymentProvider = "fake"
+		c.PaymentProvider = providerFake
 	}
-	allowedPaymentProviders := map[string]bool{"fake": true, "tkassa": true}
+	allowedPaymentProviders := map[string]bool{providerFake: true, "tkassa": true}
 	if !allowedPaymentProviders[c.PaymentProvider] {
 		return fmt.Errorf("invalid PAYMENT_PROVIDER %q: must be fake or tkassa", c.PaymentProvider)
 	}
-	if c.AppEnv != "local" && c.AppEnv != "dev" && c.PaymentProvider == "fake" {
+	if c.AppEnv != envLocal && c.AppEnv != envDev && c.PaymentProvider == providerFake {
 		return fmt.Errorf("PAYMENT_PROVIDER=fake is not allowed for APP_ENV=%s", c.AppEnv)
 	}
-	if c.PaymentProvider == "fake" {
+	if c.PaymentProvider == providerFake {
 		if err := c.loadFakeProviderBaseURL(); err != nil {
 			return err
 		}
@@ -524,7 +547,7 @@ func (c *Config) loadPaymentProvider() error {
 		}
 	}
 
-	if c.AppEnv != "local" && c.EncryptionKey == "" {
+	if c.AppEnv != envLocal && c.EncryptionKey == "" {
 		return fmt.Errorf("ENCRYPTION_KEY is required for APP_ENV=%s", c.AppEnv)
 	}
 	return nil
@@ -538,7 +561,7 @@ func (c *Config) loadFakeProviderBaseURL() error {
 	if err != nil {
 		return fmt.Errorf("invalid APP_BASE_URL %q: %w", c.AppBaseURL, err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", c.AppBaseURL)
 	}
 	return nil
@@ -558,10 +581,10 @@ func (c *Config) loadTKassa() error {
 	if err != nil {
 		return fmt.Errorf("invalid APP_BASE_URL %q: %w", c.AppBaseURL, err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", c.AppBaseURL)
 	}
-	if c.AppEnv != "local" && c.AppEnv != "dev" && u.Scheme != "https" {
+	if c.AppEnv != envLocal && c.AppEnv != envDev && u.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid APP_BASE_URL %q: non-local/dev environments must use https", c.AppBaseURL)
 	}
 	if err := c.loadTKassaBaseURL(); err != nil {
@@ -620,7 +643,7 @@ func (c *Config) loadTKassa() error {
 
 func (c *Config) loadTKassaBaseURL() error {
 	if c.TKassaBaseURL == "" {
-		if c.AppEnv != "local" && c.AppEnv != "dev" {
+		if c.AppEnv != envLocal && c.AppEnv != envDev {
 			return fmt.Errorf("T_KASSA_BASE_URL is required when PAYMENT_PROVIDER=tkassa for APP_ENV=%s", c.AppEnv)
 		}
 		return nil
@@ -629,16 +652,19 @@ func (c *Config) loadTKassaBaseURL() error {
 	if err != nil {
 		return fmt.Errorf("invalid T_KASSA_BASE_URL %q: %w", c.TKassaBaseURL, err)
 	}
-	if tku.Scheme != "http" && tku.Scheme != "https" {
+	if tku.Scheme != schemeHTTP && tku.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid T_KASSA_BASE_URL %q: scheme must be http or https", c.TKassaBaseURL)
 	}
-	if c.AppEnv != "local" && c.AppEnv != "dev" {
+	if c.AppEnv != envLocal && c.AppEnv != envDev {
 		if tku.Scheme != "https" {
 			return fmt.Errorf("invalid T_KASSA_BASE_URL %q: non-local/dev environments must use https", c.TKassaBaseURL)
 		}
 		host := strings.ToLower(tku.Hostname())
 		if host != "securepay.tinkoff.ru" && host != "rest-api-test.tinkoff.ru" {
-			return fmt.Errorf("invalid T_KASSA_BASE_URL %q: production T-Kassa base URL must be https://securepay.tinkoff.ru/v2/ or https://rest-api-test.tinkoff.ru/v2/", c.TKassaBaseURL)
+			return fmt.Errorf(
+				"invalid T_KASSA_BASE_URL %q: production T-Kassa base URL must be "+
+					"https://securepay.tinkoff.ru/v2/ or https://rest-api-test.tinkoff.ru/v2/",
+				c.TKassaBaseURL)
 		}
 		if strings.TrimSuffix(tku.Path, "/") != "/v2" {
 			return fmt.Errorf("invalid T_KASSA_BASE_URL %q: path must be /v2/", c.TKassaBaseURL)
@@ -674,19 +700,23 @@ func (c *Config) loadPhotoStorage() error {
 	}
 	s3Complete := !slices.Contains(s3Fields, "")
 	if c.PhotoStorageProvider == "" {
-		if c.AppEnv == "local" && !s3Complete {
-			c.PhotoStorageProvider = "fake"
+		if c.AppEnv == envLocal && !s3Complete {
+			c.PhotoStorageProvider = providerFake
 		} else {
 			c.PhotoStorageProvider = "s3"
 		}
 	}
 	switch c.PhotoStorageProvider {
-	case "fake":
+	case providerFake:
 		c.PhotoStorageS3Enabled = false
 		c.PhotoStoragePublicBaseURL = strings.TrimRight(c.AppBaseURL, "/") + "/uploads"
 	case "s3":
 		if !s3Complete {
-			return fmt.Errorf("REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY and REGRU_S3_PUBLIC_BASE_URL are required for PHOTO_STORAGE_PROVIDER=s3 and APP_ENV=%s; set PHOTO_STORAGE_PROVIDER=fake only for temporary launches without photo uploads", c.AppEnv)
+			return fmt.Errorf(
+				"REGRU_S3_ENDPOINT, REGRU_S3_BUCKET, REGRU_S3_ACCESS_KEY, REGRU_S3_SECRET_KEY "+
+					"and REGRU_S3_PUBLIC_BASE_URL are required for PHOTO_STORAGE_PROVIDER=s3 "+
+					"and APP_ENV=%s; set PHOTO_STORAGE_PROVIDER=fake only for temporary "+
+					"launches without photo uploads", c.AppEnv)
 		}
 		c.PhotoStorageS3Enabled = true
 	default:

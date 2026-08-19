@@ -22,6 +22,9 @@ import (
 const (
 	defaultSlowAcquireThreshold = 25 * time.Millisecond
 	defaultSlowQueryThreshold   = 50 * time.Millisecond
+	// Fallback db_operation label for SQL whose verb or sqlc query name
+	// cannot be recovered.
+	operationUnknown = "unknown"
 )
 
 type queryExecutor interface {
@@ -129,9 +132,10 @@ func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...an
 
 	queryStart := time.Now()
 	row := conn.QueryRow(ctx, sql, args...)
-	// instrumentedRow acquires a connection from the pool. Callers must either
-	// Scan the row or Close it to release the connection. A runtime finalizer
-	// provides a best-effort fallback if the row is discarded without Scan/Close.
+	// The instrumentedRow acquires a connection from the pool. Callers must
+	// either Scan the row or Close it to release the connection. A runtime
+	// finalizer provides a best-effort fallback if the row is discarded without
+	// Scan/Close.
 	ir := &instrumentedRow{
 		row:             row,
 		inst:            db.inst,
@@ -146,7 +150,12 @@ func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...an
 	return ir
 }
 
-func (db *InstrumentedPool) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+func (db *InstrumentedPool) CopyFrom(
+	ctx context.Context,
+	tableName pgx.Identifier,
+	columnNames []string,
+	rowSrc pgx.CopyFromSource,
+) (int64, error) {
 	return db.pool.CopyFrom(ctx, tableName, columnNames, rowSrc)
 }
 
@@ -190,7 +199,12 @@ func (tx *InstrumentedTx) QueryRow(ctx context.Context, sql string, args ...any)
 	}
 }
 
-func (tx *InstrumentedTx) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+func (tx *InstrumentedTx) CopyFrom(
+	ctx context.Context,
+	tableName pgx.Identifier,
+	columnNames []string,
+	rowSrc pgx.CopyFromSource,
+) (int64, error) {
 	return tx.tx.CopyFrom(ctx, tableName, columnNames, rowSrc)
 }
 
@@ -214,7 +228,15 @@ type instrumentedRows struct {
 	closeOnce       sync.Once
 }
 
-func newInstrumentedRows(rows pgx.Rows, inst dbInstrumenter, ctx context.Context, sql string, acquireDuration time.Duration, queryStart time.Time, release func()) *instrumentedRows {
+func newInstrumentedRows(
+	rows pgx.Rows,
+	inst dbInstrumenter,
+	ctx context.Context,
+	sql string,
+	acquireDuration time.Duration,
+	queryStart time.Time,
+	release func(),
+) *instrumentedRows {
 	return &instrumentedRows{
 		rows:            rows,
 		inst:            inst,
@@ -331,7 +353,13 @@ func (i dbInstrumenter) log(ctx context.Context, sql string, acquireDuration, qu
 // logWithIDs is log with the request-scoped correlation IDs already extracted.
 // The rows wrappers use it because pgx.Rows/pgx.Row callbacks have no access to
 // the original query context; they capture the IDs at construction time.
-func (i dbInstrumenter) logWithIDs(ctx context.Context, sql string, acquireDuration, queryDuration time.Duration, err error, requestID, traceID string) {
+func (i dbInstrumenter) logWithIDs(
+	ctx context.Context,
+	sql string,
+	acquireDuration, queryDuration time.Duration,
+	err error,
+	requestID, traceID string,
+) {
 	if !i.shouldLog(acquireDuration, queryDuration, err) {
 		return
 	}
@@ -374,9 +402,9 @@ func isLoggableQueryError(err error) bool {
 
 func sqlHash(sql string) string {
 	h := fnv.New64a()
-	// hash.Hash documents that Write never returns an error; the value only
-	// feeds a log attribute, so a contract violation panics (must-style,
-	// research #321 policy).
+	// The hash.Hash contract documents that Write never returns an error; the
+	// value only feeds a log attribute, so a contract violation panics
+	// (must-style, research #321 policy).
 	if _, err := h.Write([]byte(normalizeSQL(sql))); err != nil {
 		panic("database: sql hash write: " + err.Error())
 	}
@@ -390,7 +418,7 @@ func sqlOperation(sql string) string {
 
 	fields := strings.Fields(strings.ToLower(sql))
 	if len(fields) == 0 {
-		return "unknown"
+		return operationUnknown
 	}
 
 	verb := fields[0]
@@ -449,7 +477,7 @@ func sqlcQueryName(sql string) string {
 func sanitizeSQLOperationName(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "unknown"
+		return operationUnknown
 	}
 
 	var b strings.Builder
@@ -489,7 +517,7 @@ func sanitizeSQLOperationName(value string) string {
 
 	result := strings.Trim(b.String(), "_")
 	if result == "" {
-		return "unknown"
+		return operationUnknown
 	}
 	return result
 }
@@ -498,7 +526,7 @@ func sanitizeSQLIdent(value string) string {
 	value = strings.Trim(value, `"(),;`)
 	value = strings.TrimPrefix(value, "public.")
 	if value == "" {
-		return "unknown"
+		return operationUnknown
 	}
 
 	var b strings.Builder
@@ -515,7 +543,7 @@ func sanitizeSQLIdent(value string) string {
 		}
 	}
 	if b.Len() == 0 {
-		return "unknown"
+		return operationUnknown
 	}
 	return b.String()
 }

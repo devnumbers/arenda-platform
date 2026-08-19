@@ -56,6 +56,10 @@ func InternalError(ctx context.Context, err error) openapi.Problem {
 	return Problem(ctx, "Internal Server Error", "Произошла внутренняя ошибка. Попробуйте позже.")
 }
 
+// detailNotFound is the RFC 7807 detail shared by the ErrNotFound mapping of
+// every context.
+const detailNotFound = "Не найдено"
+
 // userFacingDetails maps known domain errors to fixed, non-sensitive messages
 // for RFC 7807 problem details. Entries are checked in order, so the table
 // preserves the previous switch's precedence exactly.
@@ -66,7 +70,7 @@ var userFacingDetails = []struct {
 	// Properties.
 	{propertiesapp.ErrInvalidInput, "Некорректные данные объекта"},
 	{propertiesapp.ErrInvalidTransition, "Некорректный переход статуса объекта"},
-	{propertiesapp.ErrNotFound, "Не найдено"},
+	{propertiesapp.ErrNotFound, detailNotFound},
 	{propertiesapp.ErrLimitExceeded, "Превышен лимит активных объектов"},
 	{propertiesapp.ErrArchivedProperty, "Нельзя изменить архивный объект"},
 	{propertiesapp.ErrAlreadyArchived, "Объект уже в архиве"},
@@ -76,7 +80,7 @@ var userFacingDetails = []struct {
 	// Leases.
 	{leasesapp.ErrInvalidInput, "Некорректные данные"},
 	{leasesapp.ErrInvalidTransition, "Некорректный переход статуса аренды"},
-	{leasesapp.ErrNotFound, "Не найдено"},
+	{leasesapp.ErrNotFound, detailNotFound},
 	{leasesapp.ErrPropertyNotAvailable, "Объект недоступен для аренды"},
 	{leasesapp.ErrOpenLeaseExists, "У объекта уже есть открытая аренда"},
 	{leasesapp.ErrAlreadyCompleted, "Аренда уже завершена"},
@@ -109,7 +113,7 @@ var userFacingDetails = []struct {
 	{notificationsapp.ErrReminderNotPending, "Напоминание не в статусе ожидания"},
 	{notificationsapp.ErrConcurrentUpdate, "Напоминание изменено одновременно"},
 	{notificationsapp.ErrDuplicateSMSReminder, "SMS-напоминание уже отправлено"},
-	{notificationsapp.ErrNotFound, "Не найдено"},
+	{notificationsapp.ErrNotFound, detailNotFound},
 }
 
 // UserFacingDetail maps known domain errors to fixed, non-sensitive messages

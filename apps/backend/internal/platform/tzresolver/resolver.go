@@ -15,7 +15,7 @@ import (
 // OwnerTimezone resolves owner timezones from the users table with an in-process cache.
 type OwnerTimezone struct {
 	db    postgres.DBTX
-	cache sync.Map // map[uuid.UUID]*time.Location
+	cache sync.Map // Keyed by owner UUID; values are *time.Location.
 }
 
 // NewOwnerTimezone creates an OwnerTimezone resolver backed by the given DB handle.

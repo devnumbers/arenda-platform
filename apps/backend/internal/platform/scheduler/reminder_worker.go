@@ -33,11 +33,12 @@ type ReminderWorker struct {
 	notifiers  map[application.Channel]application.Notifier
 	resolver   application.ContactResolver
 	recipients application.PropertyRecipientLister
-	// pushSender dispatches Web Push messages. When nil, push delivery is
-	// disabled (e.g. local dev without VAPID keys); the worker still delivers
-	// email and manages the reminder lifecycle.
+	// The pushSender field dispatches Web Push messages. When nil, push
+	// delivery is disabled (e.g. local dev without VAPID keys); the worker
+	// still delivers email and manages the reminder lifecycle.
 	pushSender application.PushSender
-	// pushSubRepo reads per-user push subscriptions for fan-out to all devices.
+	// The pushSubRepo field reads per-user push subscriptions for fan-out to
+	// all devices.
 	pushSubRepo     application.PushSubscriptionRepository
 	db              transaction.Beginner
 	clock           clock.Clock
@@ -178,7 +179,8 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 	if r.PropertyID != nil {
 		memberIDs, err := w.recipients.ListActiveRecipientIDs(dispatchCtx, *r.PropertyID)
 		if err != nil {
-			w.logger.ErrorContext(dispatchCtx, "list property reminder recipients failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+			w.logger.ErrorContext(dispatchCtx, "list property reminder recipients failed",
+				"reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 			return w.finalizeFailure(dispatchCtx, r, now)
 		}
 		for _, id := range memberIDs {
@@ -194,7 +196,8 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 	for _, recipientID := range recipientIDs {
 		emailAllowed, err := w.repo.IsChannelAllowed(dispatchCtx, recipientID, r.EventType, domain.ChannelEmail)
 		if err != nil {
-			w.logger.ErrorContext(dispatchCtx, "check email notification permission failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+			w.logger.ErrorContext(dispatchCtx, "check email notification permission failed",
+				"reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 			failures++
 			continue
 		}
@@ -210,7 +213,8 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		}
 
 		if !emailAllowed {
-			w.logger.InfoContext(dispatchCtx, "reminder recipient skipped: email not allowed by user preferences", "reminder_id", r.ID, "event_type", r.EventType)
+			w.logger.InfoContext(dispatchCtx, "reminder recipient skipped: email not allowed by user preferences",
+				"reminder_id", r.ID, "event_type", r.EventType)
 			skippedByPrefs++
 			continue
 		}
@@ -221,14 +225,16 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 				w.logger.InfoContext(dispatchCtx, "reminder recipient skipped: no contact", "reminder_id", r.ID, "event_type", r.EventType)
 				continue
 			}
-			w.logger.ErrorContext(dispatchCtx, "resolve contact failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+			w.logger.ErrorContext(dispatchCtx, "resolve contact failed",
+				"reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 			failures++
 			continue
 		}
 
 		notifier, ok := w.notifiers[contact.Channel]
 		if !ok {
-			w.logger.ErrorContext(dispatchCtx, "unsupported contact channel", "reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
+			w.logger.ErrorContext(dispatchCtx, "unsupported contact channel",
+				"reminder_id", r.ID, "event_type", r.EventType, "channel", contact.Channel)
 			failures++
 			continue
 		}
@@ -260,7 +266,8 @@ func (w *ReminderWorker) dispatchReminder(ctx context.Context, r domain.Reminder
 		w.logger.InfoContext(dispatchCtx, "reminder delivered via push only", "reminder_id", r.ID, "event_type", r.EventType)
 		return w.finalizeSuccess(dispatchCtx, r, now, "", application.ChannelPush)
 	case skippedByPrefs == len(recipientIDs):
-		// skipped = every recipient revoked permission for the event type.
+		// The skipped outcome means every recipient revoked permission for the
+		// event type.
 		return w.finalizeSkipped(dispatchCtx, r)
 	default:
 		// No recipient has a resolvable contact: cancel the reminder.
@@ -280,13 +287,21 @@ const (
 // dispatchEmailReminder delivers the reminder to a single recipient. It does
 // not finalize the reminder: the caller aggregates per-recipient outcomes and
 // finalizes once after the fan-out loop.
-func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Reminder, now time.Time, recipientID uuid.UUID, contact application.Contact, notifier application.Notifier) (outcome emailDispatchOutcome, providerResponse string) {
+func (w *ReminderWorker) dispatchEmailReminder(
+	ctx context.Context,
+	r domain.Reminder,
+	now time.Time,
+	recipientID uuid.UUID,
+	contact application.Contact,
+	notifier application.Notifier,
+) (outcome emailDispatchOutcome, providerResponse string) {
 	// Defensive check: the worker-level sending status already ensures a single
 	// processing attempt, but this guards against duplicate sends after
 	// stale-sending recovery, failed-run retries or concurrent dispatch races.
 	alreadySent, err := w.repo.IsEmailReminderSent(ctx, r.ID, recipientID)
 	if err != nil {
-		w.logger.ErrorContext(ctx, "check sent email reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		w.logger.ErrorContext(ctx, "check sent email reminder failed",
+			"reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 		return emailDispatchFailed, ""
 	}
 	if alreadySent {
@@ -322,7 +337,8 @@ func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Rem
 		w.logger.InfoContext(ctx, "reminder already sent to recipient, skipping notification", "reminder_id", r.ID, "event_type", r.EventType)
 		return emailDispatchDuplicate, ""
 	} else if err != nil {
-		w.logger.ErrorContext(ctx, "save sent email reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		w.logger.ErrorContext(ctx, "save sent email reminder failed",
+			"reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 		return emailDispatchFailed, ""
 	}
 
@@ -337,7 +353,8 @@ func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Rem
 	if err != nil {
 		w.logger.ErrorContext(ctx, "notify reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 		if delErr := w.repo.DeleteSentEmailReminder(ctx, r.ID, recipientID); delErr != nil {
-			w.logger.ErrorContext(ctx, "failed to delete email audit row after send failure", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(delErr))
+			w.logger.ErrorContext(ctx, "failed to delete email audit row after send failure",
+				"reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(delErr))
 		}
 		return emailDispatchFailed, ""
 	}
@@ -358,7 +375,8 @@ func (w *ReminderWorker) dispatchEmailReminder(ctx context.Context, r domain.Rem
 func (w *ReminderWorker) dispatchPushReminder(ctx context.Context, r domain.Reminder, now time.Time, recipientID uuid.UUID) bool {
 	pushAllowed, err := w.repo.IsChannelAllowed(ctx, recipientID, r.EventType, domain.ChannelPush)
 	if err != nil {
-		w.logger.ErrorContext(ctx, "check push notification permission failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		w.logger.ErrorContext(ctx, "check push notification permission failed",
+			"reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 		return false
 	}
 	if !pushAllowed {
@@ -371,7 +389,8 @@ func (w *ReminderWorker) dispatchPushReminder(ctx context.Context, r domain.Remi
 	// finalize decision accounts for the prior delivery.
 	alreadySent, err := w.repo.IsPushReminderSent(ctx, r.ID, recipientID)
 	if err != nil {
-		w.logger.ErrorContext(ctx, "check sent push reminder failed", "reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
+		w.logger.ErrorContext(ctx, "check sent push reminder failed",
+			"reminder_id", r.ID, "event_type", r.EventType, "error", sanitize.Error(err))
 		return false
 	}
 	if alreadySent {
@@ -380,7 +399,8 @@ func (w *ReminderWorker) dispatchPushReminder(ctx context.Context, r domain.Remi
 
 	subs, err := w.pushSubRepo.ListByUser(ctx, recipientID)
 	if err != nil {
-		w.logger.ErrorContext(ctx, "list push subscriptions failed", "reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(err))
+		w.logger.ErrorContext(ctx, "list push subscriptions failed",
+			"reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(err))
 		return false
 	}
 	if len(subs) == 0 {
@@ -406,7 +426,8 @@ func (w *ReminderWorker) dispatchPushReminder(ctx context.Context, r domain.Remi
 		if errors.Is(err, application.ErrDuplicatePushReminder) {
 			return true
 		}
-		w.logger.ErrorContext(ctx, "save sent push reminder failed", "reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(err))
+		w.logger.ErrorContext(ctx, "save sent push reminder failed",
+			"reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(err))
 		return false
 	}
 
@@ -422,7 +443,8 @@ pushSubs:
 			// §7.3): delete it so future dispatches do not waste attempts.
 			// The adapter already recorded the "gone" outcome metric.
 			if delErr := w.pushSubRepo.Delete(ctx, sub.UserID, sub.Endpoint); delErr != nil {
-				w.logger.ErrorContext(ctx, "delete dead push subscription failed", "reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(delErr))
+				w.logger.ErrorContext(ctx, "delete dead push subscription failed",
+					"reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(delErr))
 			} else {
 				w.logger.InfoContext(ctx, "push subscription removed (gone)", "reminder_id", r.ID, "recipient_id", recipientID)
 			}
@@ -435,7 +457,8 @@ pushSubs:
 			// The push audit row is rolled back below so the recipient is
 			// retried on the next poll cycle (the worker's natural ~1-min
 			// backoff for best-effort side channels).
-			w.logger.WarnContext(ctx, "push rate limited, skipping remaining devices for recipient", "reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(sendErr))
+			w.logger.WarnContext(ctx, "push rate limited, skipping remaining devices for recipient",
+				"reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(sendErr))
 			break pushSubs
 		default:
 			// Transient (5xx) or fatal (400/403) failure. Fatal errors are not
@@ -450,14 +473,21 @@ pushSubs:
 		// will be retried on the next dispatch cycle (or the reminder will be
 		// finalized based on email outcome).
 		if delErr := w.repo.DeleteSentPushReminder(ctx, r.ID, recipientID); delErr != nil {
-			w.logger.ErrorContext(ctx, "delete push audit row after send failure", "reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(delErr))
+			w.logger.ErrorContext(ctx, "delete push audit row after send failure",
+				"reminder_id", r.ID, "recipient_id", recipientID, "error", sanitize.Error(delErr))
 		}
 		return false
 	}
 	return true
 }
 
-func (w *ReminderWorker) finalizeSuccess(ctx context.Context, r domain.Reminder, now time.Time, providerResponse string, channel application.Channel) (err error) {
+func (w *ReminderWorker) finalizeSuccess(
+	ctx context.Context,
+	r domain.Reminder,
+	now time.Time,
+	providerResponse string,
+	channel application.Channel,
+) (err error) {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin finalize transaction: %w", err)

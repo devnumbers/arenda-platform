@@ -61,7 +61,8 @@ func NewPoolWithConfig(ctx context.Context, databaseURL string, poolConfig PoolC
 		cfg.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%.0f", poolConfig.StatementTimeout.Seconds()*1000)
 	}
 	if poolConfig.IdleInTransactionSessionTimeout > 0 {
-		cfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = fmt.Sprintf("%.0f", poolConfig.IdleInTransactionSessionTimeout.Seconds()*1000)
+		idleTxTimeoutMs := fmt.Sprintf("%.0f", poolConfig.IdleInTransactionSessionTimeout.Seconds()*1000)
+		cfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = idleTxTimeoutMs
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -121,7 +122,7 @@ func newMigrate(databaseURL, migrationsDir string) (*migrate.Migrate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve migrations dir: %w", err)
 	}
-	// pgx/v5 driver registers itself as "pgx5", so we rewrite the scheme
+	// The pgx/v5 driver registers itself as "pgx5", so we rewrite the scheme
 	// while keeping the rest of the URL intact.
 	migrateURL := databaseURL
 	if after, ok := strings.CutPrefix(migrateURL, "postgres://"); ok {

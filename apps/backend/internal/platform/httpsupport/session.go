@@ -115,7 +115,8 @@ func (s *Session) Refresh(now time.Time) bool {
 // session/user aggregate onto (Session, userID, actor.Role) (ADR 0034).
 type SessionLoader interface {
 	// Load resolves a raw session token to the platform-neutral session together
-	// with the actor identity (user ID and role). now seeds the sliding window.
+	// with the actor identity (user ID and role). The now argument seeds the
+	// sliding window.
 	Load(ctx context.Context, token string, now time.Time) (Session, uuid.UUID, actor.Role, error)
 	// Update persists a refreshed session's sliding-window fields.
 	Update(ctx context.Context, session Session) error

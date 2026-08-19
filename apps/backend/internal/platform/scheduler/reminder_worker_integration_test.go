@@ -30,11 +30,21 @@ import (
 // inside a rolled-back transaction. Only the Notifier and the ContactResolver
 // are fakes — they are not the integration seam under test.
 
+// testExpenseType is the operation type of the seeded utility-expense fixture.
+const testExpenseType = "expense"
+
 // seedOperationReminder creates the operation category and a one-off
 // operation on the owner's property (the reminders CHECK exactly_one_target
 // requires a target row), then saves a sending reminder attached to it. The
 // fan-out/push tests dispatch that reminder.
-func seedOperationReminder(t *testing.T, ctx context.Context, q *genpostgres.Queries, repo *notificationspg.ReminderRepository, ownerID, propertyID uuid.UUID, title, body string) domain.Reminder {
+func seedOperationReminder(
+	t *testing.T,
+	ctx context.Context,
+	q *genpostgres.Queries,
+	repo *notificationspg.ReminderRepository,
+	ownerID, propertyID uuid.UUID,
+	title, body string,
+) domain.Reminder {
 	t.Helper()
 
 	categoryID, err := uuid.NewV7()
@@ -43,7 +53,7 @@ func seedOperationReminder(t *testing.T, ctx context.Context, q *genpostgres.Que
 	}
 	if _, err := q.CreateOperationCategory(ctx, genpostgres.CreateOperationCategoryParams{
 		ID: pgtype.UUID{Bytes: categoryID, Valid: true}, OwnerID: pgtype.UUID{Bytes: ownerID, Valid: true},
-		Type: "expense", Name: "utilities",
+		Type: testExpenseType, Name: "utilities",
 	}); err != nil {
 		t.Fatalf("create operation category: %v", err)
 	}
@@ -53,7 +63,7 @@ func seedOperationReminder(t *testing.T, ctx context.Context, q *genpostgres.Que
 	}
 	if _, err := q.CreateOperation(ctx, genpostgres.CreateOperationParams{
 		ID: pgtype.UUID{Bytes: operationID, Valid: true}, OwnerID: pgtype.UUID{Bytes: ownerID, Valid: true},
-		PropertyID: pgtype.UUID{Bytes: propertyID, Valid: true}, Type: "expense",
+		PropertyID: pgtype.UUID{Bytes: propertyID, Valid: true}, Type: testExpenseType,
 		CategoryID: pgtype.UUID{Bytes: categoryID, Valid: true},
 		Name:       "Utilities", AmountKopecks: 1000,
 		OperationDate:       pgtype.Date{Time: workerTestNow, Valid: true},
@@ -217,8 +227,8 @@ func newReminderFanoutFixture(t *testing.T, ctx context.Context, tx pgx.Tx, memb
 		},
 		fakeContactResolver{},
 		accesspg.NewMemberRecipientAdapter(memberRepo),
-		nil, // pushSender — disabled in email-only fan-out tests
-		nil, // pushSubRepo
+		nil, // PushSender disabled in email-only fan-out tests.
+		nil, // PushSubRepo is nil alongside pushSender.
 		beginnerOverTx{tx: tx},
 		fakeClockForWorker{now: workerTestNow},
 		fakeBackoff{},
@@ -368,14 +378,14 @@ func TestReminderWorker_Integration_ListDueSelection(t *testing.T) {
 	}
 	if _, err := q.CreateOperationCategory(ctx, genpostgres.CreateOperationCategoryParams{
 		ID: pgtype.UUID{Bytes: categoryID, Valid: true}, OwnerID: pgOwner,
-		Type: "expense", Name: "utilities",
+		Type: testExpenseType, Name: "utilities",
 	}); err != nil {
 		t.Fatalf("create operation category: %v", err)
 	}
 
-	// seedReminder plants a pending operation reminder scheduled at the given
-	// time; every variant shares the property's category and operation, so
-	// only the selection semantics under test differ.
+	// The seedReminder closure plants a pending operation reminder scheduled
+	// at the given time; every variant shares the property's category and
+	// operation, so only the selection semantics under test differ.
 	seedReminder := func(scheduledAt time.Time) uuid.UUID {
 		t.Helper()
 		operationID, err := uuid.NewV7()
@@ -384,7 +394,7 @@ func TestReminderWorker_Integration_ListDueSelection(t *testing.T) {
 		}
 		if _, err := q.CreateOperation(ctx, genpostgres.CreateOperationParams{
 			ID: pgtype.UUID{Bytes: operationID, Valid: true}, OwnerID: pgOwner,
-			PropertyID: pgProperty, Type: "expense",
+			PropertyID: pgProperty, Type: testExpenseType,
 			CategoryID: pgtype.UUID{Bytes: categoryID, Valid: true},
 			Name:       "Utilities", AmountKopecks: 1000,
 			OperationDate:       pgtype.Date{Time: workerTestNow, Valid: true},
@@ -416,7 +426,7 @@ func TestReminderWorker_Integration_ListDueSelection(t *testing.T) {
 	dueID := seedReminder(workerTestNow.Add(-time.Hour))
 	seedReminder(workerTestNow.Add(time.Hour))
 
-	// A sent row scheduled in the past must not be re-claimed…
+	// A sent row scheduled in the past must not be re-claimed...
 	sentID := seedReminder(workerTestNow.Add(-time.Hour))
 	if _, err := tx.Exec(ctx,
 		`UPDATE reminders SET status = 'sent' WHERE id = $1`, sentID,

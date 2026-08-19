@@ -8,7 +8,13 @@ import (
 // listAdminItems runs a paginated admin list use case and maps the resulting
 // views to API items. On error it delegates to handleError and reports ok as
 // false.
-func listAdminItems[V, I any](w http.ResponseWriter, r *http.Request, list func(ctx context.Context) ([]V, int64, error), handleError func(w http.ResponseWriter, r *http.Request, err error), toItem func(V) I) (items []I, total int, ok bool) {
+func listAdminItems[V, I any](
+	w http.ResponseWriter,
+	r *http.Request,
+	list func(ctx context.Context) ([]V, int64, error),
+	handleError func(w http.ResponseWriter, r *http.Request, err error),
+	toItem func(V) I,
+) (items []I, total int, ok bool) {
 	views, totalCount, err := list(r.Context())
 	if err != nil {
 		handleError(w, r, err)
@@ -35,7 +41,13 @@ type adminListEnvelope[I any] struct {
 // RespondAdminList runs a paginated admin list use case, maps the resulting
 // views to API items, and writes the {items, total} response body. On error
 // the response is delegated to handleError.
-func RespondAdminList[V, I any](w http.ResponseWriter, r *http.Request, list func(ctx context.Context) ([]V, int64, error), handleError func(w http.ResponseWriter, r *http.Request, err error), toItem func(V) I) {
+func RespondAdminList[V, I any](
+	w http.ResponseWriter,
+	r *http.Request,
+	list func(ctx context.Context) ([]V, int64, error),
+	handleError func(w http.ResponseWriter, r *http.Request, err error),
+	toItem func(V) I,
+) {
 	items, total, ok := listAdminItems(w, r, list, handleError, toItem)
 	if !ok {
 		return

@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-const MaxRequestBodySize = 16 << 10 // 16 KiB
+const MaxRequestBodySize = 16 << 10 // 16 KiB.
 
 // RetryAfterSeconds is the cooldown clients should wait before retrying a
 // rate-limited auth request. It matches the service-layer minSendInterval.

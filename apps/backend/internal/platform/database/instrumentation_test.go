@@ -16,6 +16,9 @@ type fakeRow struct {
 	scanErr error
 }
 
+// testPingQuery is the SQL fixture shared by the instrumented-row tests.
+const testPingQuery = "SELECT 1"
+
 func (r *fakeRow) Scan(dest ...any) error { return r.scanErr }
 
 func TestInstrumentedRowScanReleasesConnection(t *testing.T) {
@@ -25,7 +28,7 @@ func TestInstrumentedRowScanReleasesConnection(t *testing.T) {
 	row := &instrumentedRow{
 		row:        &fakeRow{},
 		inst:       newDBInstrumenter(slog.New(slog.NewTextHandler(os.Stdout, nil))),
-		sql:        "SELECT 1",
+		sql:        testPingQuery,
 		queryStart: time.Now(),
 		release:    func() { releases.Add(1) },
 	}
@@ -54,7 +57,7 @@ func TestInstrumentedRowCloseReleasesConnection(t *testing.T) {
 	row := &instrumentedRow{
 		row:        &fakeRow{scanErr: errors.New("scan failed")},
 		inst:       newDBInstrumenter(slog.New(slog.NewTextHandler(os.Stdout, nil))),
-		sql:        "SELECT 1",
+		sql:        testPingQuery,
 		queryStart: time.Now(),
 		release:    func() { releases.Add(1) },
 	}
@@ -78,7 +81,7 @@ func TestInstrumentedRowFinalizerReleasesDiscardedRow(t *testing.T) {
 		return &instrumentedRow{
 			row:        &fakeRow{},
 			inst:       newDBInstrumenter(slog.New(slog.NewTextHandler(os.Stdout, nil))),
-			sql:        "SELECT 1",
+			sql:        testPingQuery,
 			queryStart: time.Now(),
 			release:    func() { releases.Add(1) },
 		}

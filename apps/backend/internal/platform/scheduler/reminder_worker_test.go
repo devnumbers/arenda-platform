@@ -16,6 +16,15 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
+// Shared sanitize fixtures of the worker tests: a provider error payload with
+// secret-shaped tokens and the substrings the sanitizer must redact from logs.
+const (
+	testSensitivePayload = "token=secret123 card 1234-5678-9012-3456 phone +79991234567"
+	testSecretToken      = "token=secret123"
+	testCardNumber       = "1234-5678-9012-3456"
+	testUserPhone        = "+79991234567"
+)
+
 type fakeReminderRepoForWorker struct {
 	reminders          []domain.Reminder
 	isSMSReminderSent  bool
@@ -24,8 +33,8 @@ type fakeReminderRepoForWorker struct {
 	markFailedErr      error
 	getByIDUnscoped    domain.Reminder
 	markSendingPending error
-	channelAllowed     map[uuid.UUID]bool // nil or missing entry means allowed
-	sentEmailAudit     map[uuid.UUID]bool // recipientID → audit row exists
+	channelAllowed     map[uuid.UUID]bool // Nil or missing entry means allowed.
+	sentEmailAudit     map[uuid.UUID]bool // RecipientID → audit row exists.
 	savedEmails        []application.SaveSentEmailReminderParams
 	deletedEmailAudit  []uuid.UUID
 	markSentCalls      int
@@ -55,11 +64,15 @@ func (r *fakeReminderRepoForWorker) GetByIDUnscoped(context.Context, uuid.UUID) 
 	return r.getByIDUnscoped, nil
 }
 
-func (r *fakeReminderRepoForWorker) ListByOwner(context.Context, uuid.UUID, application.ListFilter, []uuid.UUID) ([]domain.Reminder, error) {
+func (r *fakeReminderRepoForWorker) ListByOwner(
+	context.Context, uuid.UUID, application.ListFilter, []uuid.UUID,
+) ([]domain.Reminder, error) {
 	return nil, nil
 }
 
-func (r *fakeReminderRepoForWorker) ListByOperation(context.Context, uuid.UUID, uuid.UUID, application.ListFilter) ([]domain.Reminder, error) {
+func (r *fakeReminderRepoForWorker) ListByOperation(
+	context.Context, uuid.UUID, uuid.UUID, application.ListFilter,
+) ([]domain.Reminder, error) {
 	return nil, nil
 }
 
@@ -67,7 +80,9 @@ func (r *fakeReminderRepoForWorker) ListByLease(context.Context, uuid.UUID, uuid
 	return nil, nil
 }
 
-func (r *fakeReminderRepoForWorker) ListByRecurringOperation(context.Context, uuid.UUID, uuid.UUID, application.ListFilter) ([]domain.Reminder, error) {
+func (r *fakeReminderRepoForWorker) ListByRecurringOperation(
+	context.Context, uuid.UUID, uuid.UUID, application.ListFilter,
+) ([]domain.Reminder, error) {
 	return nil, nil
 }
 
@@ -79,7 +94,9 @@ func (r *fakeReminderRepoForWorker) ListStaleSendingReminders(context.Context, t
 	return nil, nil
 }
 
-func (r *fakeReminderRepoForWorker) ListCalendarByOwner(context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID) ([]domain.CalendarReminder, error) {
+func (r *fakeReminderRepoForWorker) ListCalendarByOwner(
+	context.Context, uuid.UUID, time.Time, time.Time, []uuid.UUID,
+) ([]domain.CalendarReminder, error) {
 	return nil, nil
 }
 
@@ -102,7 +119,9 @@ func (r *fakeReminderRepoForWorker) MarkFailed(context.Context, uuid.UUID, *time
 	return r.markFailedErr
 }
 
-func (r *fakeReminderRepoForWorker) SaveSentSMSReminder(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, time.Time) error {
+func (r *fakeReminderRepoForWorker) SaveSentSMSReminder(
+	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, time.Time,
+) error {
 	return r.saveSentSMSErr
 }
 
@@ -172,7 +191,9 @@ func (r *fakeReminderRepoForWorker) UpsertChannelPreference(context.Context, uui
 	return nil
 }
 
-func (r *fakeReminderRepoForWorker) IsChannelAllowed(_ context.Context, userID uuid.UUID, _ domain.EventType, _ domain.NotificationChannel) (bool, error) {
+func (r *fakeReminderRepoForWorker) IsChannelAllowed(
+	_ context.Context, userID uuid.UUID, _ domain.EventType, _ domain.NotificationChannel,
+) (bool, error) {
 	if r.channelAllowed != nil {
 		if allowed, ok := r.channelAllowed[userID]; ok {
 			return allowed, nil
@@ -205,7 +226,7 @@ func (r *fakeReminderRepoForWorker) WithTx(transaction.Tx) application.ReminderR
 
 type fakeNotifier struct {
 	notifyErr error
-	failFor   map[uuid.UUID]bool // when set, only these recipients fail with notifyErr
+	failFor   map[uuid.UUID]bool // When set, only these recipients fail with notifyErr.
 	calls     []uuid.UUID
 }
 
@@ -264,7 +285,14 @@ func (fakeBackoff) Next(int) time.Duration { return time.Minute }
 
 var workerTestNow = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 
-func newWorkerForTest(t *testing.T, repo *fakeReminderRepoForWorker, notifier *fakeNotifier, resolver application.ContactResolver, recipients application.PropertyRecipientLister, logger *slog.Logger) *ReminderWorker {
+func newWorkerForTest(
+	t *testing.T,
+	repo *fakeReminderRepoForWorker,
+	notifier *fakeNotifier,
+	resolver application.ContactResolver,
+	recipients application.PropertyRecipientLister,
+	logger *slog.Logger,
+) *ReminderWorker {
 	t.Helper()
 	renderer, err := mailer.NewRenderer("../../../templates/email")
 	if err != nil {
@@ -281,8 +309,8 @@ func newWorkerForTest(t *testing.T, repo *fakeReminderRepoForWorker, notifier *f
 		},
 		resolver,
 		recipients,
-		nil, // pushSender — disabled in email-only unit tests
-		nil, // pushSubRepo
+		nil, // PushSender disabled in email-only unit tests.
+		nil, // PushSubRepo is nil alongside pushSender.
 		fakeBeginnerForWorker{},
 		fakeClockForWorker{now: workerTestNow},
 		fakeBackoff{},
@@ -316,7 +344,7 @@ func TestReminderWorker_DispatchReminder_SanitizesProviderError(t *testing.T) {
 
 	repo := &fakeReminderRepoForWorker{}
 	notifier := &fakeNotifier{
-		notifyErr: errors.New("smtp provider error: token=secret123 card 1234-5678-9012-3456 phone +79991234567"),
+		notifyErr: errors.New("smtp provider error: " + testSensitivePayload),
 	}
 
 	w := newWorkerForTest(t, repo, notifier, fakeContactResolver{}, fakePropertyRecipientLister{}, logger)
@@ -329,8 +357,8 @@ func TestReminderWorker_DispatchReminder_SanitizesProviderError(t *testing.T) {
 
 	logs := logBuf.String()
 	forbidden := []string{
-		"token=secret123",
-		"1234-5678-9012-3456",
+		testSecretToken,
+		testCardNumber,
 		"owner@example.com",
 	}
 	for _, s := range forbidden {
@@ -433,8 +461,8 @@ func runOptOutDispatch(t *testing.T, optedOut, wantNotified uuid.UUID) {
 func TestReminderWorker_DispatchReminder_MemberOptOut(t *testing.T) {
 	t.Parallel()
 	runOptOutDispatch(t,
-		uuid.MustParse("33333333-3333-3333-3333-333333333333"), // member opted out
-		uuid.MustParse("22222222-2222-2222-2222-222222222222")) // owner notified
+		uuid.MustParse("33333333-3333-3333-3333-333333333333"), // Member opted out.
+		uuid.MustParse("22222222-2222-2222-2222-222222222222")) // Owner notified.
 }
 
 // Per-recipient preferences: an opted-out owner is skipped while an active
@@ -442,8 +470,8 @@ func TestReminderWorker_DispatchReminder_MemberOptOut(t *testing.T) {
 func TestReminderWorker_DispatchReminder_OwnerOptOutMemberAllowed(t *testing.T) {
 	t.Parallel()
 	runOptOutDispatch(t,
-		uuid.MustParse("22222222-2222-2222-2222-222222222222"), // owner opted out
-		uuid.MustParse("33333333-3333-3333-3333-333333333333")) // member notified
+		uuid.MustParse("22222222-2222-2222-2222-222222222222"), // Owner opted out.
+		uuid.MustParse("33333333-3333-3333-3333-333333333333")) // Member notified.
 }
 
 // When every recipient opted out of the event type, the reminder is finalized

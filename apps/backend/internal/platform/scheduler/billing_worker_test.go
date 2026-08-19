@@ -87,7 +87,7 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
-	sensitive := "token=secret123 card 1234-5678-9012-3456 phone +79991234567"
+	sensitive := testSensitivePayload
 	svc := &fakeBillingRunner{
 		scheduledErr:    errors.New("scheduled changes failed: " + sensitive),
 		renewalErr:      errors.New("renewals failed: " + sensitive),
@@ -105,9 +105,9 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 
 	logs := logBuf.String()
 	forbidden := []string{
-		"token=secret123",
-		"1234-5678-9012-3456",
-		"+79991234567",
+		testSecretToken,
+		testCardNumber,
+		testUserPhone,
 	}
 	for _, s := range forbidden {
 		if strings.Contains(logs, s) {

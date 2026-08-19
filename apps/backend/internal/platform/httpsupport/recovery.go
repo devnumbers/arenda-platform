@@ -27,7 +27,8 @@ func RecoveryMiddleware(next http.Handler) http.Handler {
 					slog.String("error", SanitizeError(fmt.Errorf("%v", rec))),
 					slog.String("stack", stack),
 				)
-				WriteProblem(ctx, w, http.StatusInternalServerError, Problem(ctx, "Internal Server Error", "Произошла внутренняя ошибка. Попробуйте позже."))
+				WriteProblem(ctx, w, http.StatusInternalServerError,
+					Problem(ctx, "Internal Server Error", "Произошла внутренняя ошибка. Попробуйте позже."))
 			}
 		}(r.Context())
 		next.ServeHTTP(w, r)

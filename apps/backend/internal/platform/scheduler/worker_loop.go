@@ -48,7 +48,14 @@ func runTickerLoop(ctx context.Context, worker string, interval time.Duration, l
 // instance already holds the lock, work is skipped without error (logged at
 // info). The lock is released on a context detached from the caller's
 // cancellation, so a cancelled tick still returns its connection and lock.
-func withAdvisoryTickLock(ctx context.Context, pool *pgxpool.Pool, key int64, worker string, logger *slog.Logger, work func(context.Context) error) error {
+func withAdvisoryTickLock(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	key int64,
+	worker string,
+	logger *slog.Logger,
+	work func(context.Context) error,
+) error {
 	acquired, release, err := tryAcquireAdvisoryLock(ctx, pool, key, worker, logger)
 	if err != nil {
 		return err
@@ -75,7 +82,13 @@ func releaseWithTimeout(ctx context.Context, release func(context.Context)) {
 // pool connection. The returned release function releases the lock and returns
 // the connection to the pool; it must be called exactly once when the caller no
 // longer needs the lock.
-func tryAcquireAdvisoryLock(ctx context.Context, pool *pgxpool.Pool, key int64, worker string, logger *slog.Logger) (acquired bool, release func(context.Context), err error) {
+func tryAcquireAdvisoryLock(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	key int64,
+	worker string,
+	logger *slog.Logger,
+) (acquired bool, release func(context.Context), err error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return false, nil, fmt.Errorf("acquire db connection for lock: %w", err)

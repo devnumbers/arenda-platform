@@ -145,8 +145,9 @@ func constraintDef(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 
 	var def string
-	if err := pool.QueryRow(context.Background(), `SELECT pg_get_constraintdef(oid) FROM pg_constraint
-	                                               WHERE conrelid = 'reminders'::regclass AND conname = 'exactly_one_target'`).Scan(&def); err != nil {
+	constraintDefQuery := `SELECT pg_get_constraintdef(oid) FROM pg_constraint
+		WHERE conrelid = 'reminders'::regclass AND conname = 'exactly_one_target'`
+	if err := pool.QueryRow(context.Background(), constraintDefQuery).Scan(&def); err != nil {
 		t.Fatalf("read exactly_one_target definition: %v", err)
 	}
 	return def

@@ -47,15 +47,22 @@ type BillingWorker struct {
 	clock     clock.Clock
 	interval  time.Duration
 	logger    *slog.Logger
-	// lockKey elects the tick leader through a PostgreSQL advisory lock; the
-	// production default is billingWorkerLockKey, tests override it so parallel
-	// DB-backed tick tests do not elect each other's leader (same pattern as
-	// OperationOverdueWorker.nextRun).
+	// The lockKey field elects the tick leader through a PostgreSQL advisory
+	// lock; the production default is billingWorkerLockKey, tests override it
+	// so parallel DB-backed tick tests do not elect each other's leader (same
+	// pattern as OperationOverdueWorker.nextRun).
 	lockKey int64
 }
 
 // NewBillingWorker creates a new billing lifecycle worker.
-func NewBillingWorker(renewals RenewalProcessor, scheduled ScheduledChangeProcessor, pool *pgxpool.Pool, clk clock.Clock, interval time.Duration, logger *slog.Logger) *BillingWorker {
+func NewBillingWorker(
+	renewals RenewalProcessor,
+	scheduled ScheduledChangeProcessor,
+	pool *pgxpool.Pool,
+	clk clock.Clock,
+	interval time.Duration,
+	logger *slog.Logger,
+) *BillingWorker {
 	if interval <= 0 {
 		interval = time.Hour
 	}
