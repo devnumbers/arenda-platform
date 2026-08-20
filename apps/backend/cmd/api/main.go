@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
@@ -22,6 +23,7 @@ import (
 	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpserver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 )
 
 func main() {
@@ -39,7 +41,8 @@ func main() {
 // registers the cross-module event subscribers, builds the HTTP handler and
 // runs the server with graceful shutdown. The construction order, event
 // subscriptions, worker goroutines and server lifecycle are unchanged from the
-// previous monolithic version — only the construction bodies moved into wire.
+// previous monolithic version — only the construction bodies moved into wire
+// and the cross-module wiring steps into the named functions below.
 func run() error {
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
 		return runMigrate()
@@ -94,19 +97,7 @@ func run() error {
 		return err
 	}
 	p.Policy = accessMod.Policy
-
-	// Wire the membership-aware policy into the notifications services so the
-	// reminder write gates resolve the actor's role correctly. These services
-	// are built before the access module (they feed identity and leases), so
-	// they captured the T2 owner-only stub and must be re-injected here (issue
-	// #166, mirrors CategoryService.SetPolicy).
-	notificationsMod.ReminderService.SetPolicy(accessMod.Policy)
-
-	// The category service is built before the access module (it is needed for
-	// the user_registered subscriber), so wire the membership-aware policy and
-	// the accessible-scopes adapter into it now that both exist (issue #157).
-	leasesRepos.CategoryService.SetPolicy(accessMod.Policy)
-	leasesRepos.CategoryService.SetAccessibleScopes(accessMod.AccessibleScopes)
+	injectAccessPolicy(notificationsMod, leasesRepos, accessMod)
 
 	// 8. Properties: repos, subscription limiter, photo storage, property and
 	//    property-contact services, dadata suggester.
@@ -114,147 +105,29 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	// Wire the shared-memberships adapter from the access context into the
-	// property service so list endpoints include properties shared with the
-	// actor and expose the actor's access role (issues #156 T3, T11).
-	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
-	// Wire the owner display-name resolver so the property detail response can
-	// carry the owner's public name for the sharing banner (issue T11).
-	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
-	// Wire the recipient slot policy (access SlotCoordinator) into the property
-	// service so archive/unarchive/delete recover or suspend shared memberships
-	// of recipients (issue #158, T4).
-	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
-	// Wire the suspended-shared counter so the active properties list can report
-	// how many shared objects are hidden from the recipient by a slot shortage
-	// (issue #158, T4).
-	propertiesMod.PropertyService.SetSuspendedSharedCounter(accessMod.SuspendedCounter)
-	// Wire the shared-members delete mailer so deleting a shared object emails
-	// its former members (issue #162, T6).
-	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
+	injectPropertyServiceAccess(propertiesMod, accessMod)
+	setBillingLifecycleBridges(billingMod, propertiesMod, accessMod)
 
-	// Wire the billing worker's cross-context lifecycle bridges (issue #252):
-	// the expiry and downgrade phases archive excess properties (open leases
-	// force-completed) and suspend excess shared memberships in the same
-	// transaction as the subscription change. Billing is built before the
-	// properties and access modules, so the bridges land here.
-	// The workers, the payment service and the subscription service share the
-	// same bridges: the expiry and downgrade phases (issue #252), the refund's
-	// downgrade to basic (issue #254) and the admin operations that can lower a
-	// tariff limit (issue #255) all archive excess properties and suspend excess
-	// shared memberships in the same transaction as the subscription change.
-	archiverSource := wire.NewPropertyArchiverSource(propertiesMod.PropertyService)
-	slotSource := wire.NewRecipientSlotSource(accessMod.SlotCoordinator)
-	billingMod.Services.Workers.SetLifecycleBridges(archiverSource, slotSource)
-	billingMod.Services.Payments.SetLifecycleBridges(archiverSource, slotSource)
-	billingMod.Services.Subscriptions.SetLifecycleBridges(archiverSource, slotSource)
-
-	// 9. Cross-module event subscribers: billing onboarding and default-category
-	//    seeding both react to user_registered. Kept here (not in wire) because
-	//    they reference types from identity, billing and leases.
-	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
-		e, ok := event.(identityapp.UserRegistered)
-		if !ok {
-			return fmt.Errorf("unexpected event type %T", event)
-		}
-		return billingMod.Services.Onboarding.OnUserRegistered(ctx, e.UserID)
-	})
-	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
-		e, ok := event.(identityapp.UserRegistered)
-		if !ok {
-			return fmt.Errorf("unexpected event type %T", event)
-		}
-		return leasesRepos.CategoryService.SeedDefaultCategories(ctx, e.UserID)
-	})
-	// Email invitation activation (issue #161, T5): a registration with an
-	// invited email activates the pending invitations FIFO. An empty email is
-	// skipped by the service.
-	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
-		e, ok := event.(identityapp.UserRegistered)
-		if !ok {
-			return fmt.Errorf("unexpected event type %T", event)
-		}
-		return accessMod.InvitationService.ActivatePendingInvitations(ctx, e.UserID, e.Email.String())
-	})
+	// 9. Cross-module user_registered subscribers.
+	subscribeUserRegistered(eventDispatcher, billingMod, leasesRepos, accessMod)
 
 	// 10. Grace notifications (issue #253): the billing grace events deliver
-	//    through the notifications context over push and email, honouring the
-	//    per-channel preferences (ADR 0030). The Web Push sender is built when
-	//    VAPID keys are configured (RFC 8292); without them delivery is
-	//    email-only (same guard as the reminder worker below). Subscribers are
-	//    registered before the workers start so no grace event fires unwired.
-	var pushSender notificationsapp.PushSender
-	if p.Cfg.VAPIDPublicKey != "" && p.Cfg.VAPIDPrivateKey != "" {
-		pushMetrics, err := webpush.NewMetrics()
-		if err != nil {
-			return fmt.Errorf("wire push metrics: %w", err)
-		}
-		s, err := webpush.NewSender(p.Cfg.VAPIDSubject, p.Cfg.VAPIDPublicKey, p.Cfg.VAPIDPrivateKey, pushMetrics, p.Logger)
-		if err != nil {
-			return fmt.Errorf("wire webpush sender: %w", err)
-		}
-		pushSender = s
-		p.Logger.InfoContext(ctx, "web push delivery enabled")
-	} else {
-		p.Logger.WarnContext(ctx, "VAPID keys not configured; web push delivery disabled (email-only)")
+	//     through the notifications context over push and email, honouring the
+	//     per-channel preferences (ADR 0030). Subscribers are registered before
+	//     the workers start so no grace event fires unwired.
+	pushSender, err := newPushSender(ctx, p.Cfg, p.Logger)
+	if err != nil {
+		return err
 	}
-	queries := platformgenerated.New(p.DB)
-	graceNotifier := notificationsapp.NewDirectNotificationService(
-		notificationsMod.ReminderRepo,
-		notificationspg.NewContactResolver(queries),
-		emailnotifier.NewNotifier(identityMod.EmailMailer, p.Renderer),
-		pushSender,
-		notificationsMod.PushSubscriptionRepo,
-		p.Cfg.AppBaseURL,
-		p.Logger,
-	)
-	eventDispatcher.Subscribe(events.EventType("subscription_grace_entered"), func(ctx context.Context, event any) error {
-		e, ok := event.(billingapp.GraceEntered)
-		if !ok {
-			return fmt.Errorf("unexpected event type %T", event)
-		}
-		return graceNotifier.NotifyGraceEntered(ctx, e.UserID, e.GraceUntil)
-	})
-	eventDispatcher.Subscribe(events.EventType("subscription_grace_expiring"), func(ctx context.Context, event any) error {
-		e, ok := event.(billingapp.GraceExpiring)
-		if !ok {
-			return fmt.Errorf("unexpected event type %T", event)
-		}
-		return graceNotifier.NotifyGraceExpiring(ctx, e.UserID, e.GraceUntil)
-	})
+	graceNotifier := newGraceNotifier(p.DB, p.Renderer, p.Cfg, p.Logger, notificationsMod, identityMod, pushSender)
+	subscribeGraceEvents(eventDispatcher, graceNotifier)
 
 	// 11. Admin service (depends on billing subscriptions + occupancy provider).
 	adminMod := wire.WireAdmin(p, billingMod.Services.Subscriptions, propertiesMod.OccupancyProvider)
 
 	// 12. Leases services: lease/operation/recurring/tenant-contact/export.
 	leasesMod := wire.WireLeasesServices(p, leasesRepos, notificationsMod.ReminderScheduler, notificationsMod.ReminderService)
-	// Wire the membership-aware policy and the accessible-scopes adapter into
-	// the tenant contact service so list endpoints include owner-wide data the
-	// actor may read via property memberships (issue #157, T2a).
-	leasesMod.TenantContactService.SetPolicy(accessMod.Policy)
-	leasesMod.TenantContactService.SetAccessibleScopes(accessMod.AccessibleScopes)
-	// Wire the membership-aware policy into the property contact service so
-	// members with the view/edit capability read and write the contacts of the
-	// property's data owner (Property Sharing follow-up).
-	propertiesMod.PropertyContactService.SetPolicy(accessMod.Policy)
-	// Wire the shared-property-ids adapter into the operation service so the
-	// finance report includes the actor's own operations plus operations of
-	// properties shared with the actor via property membership (issue #157, T3).
-	leasesMod.OperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	// Wire the same adapter into the calendar service so the reminders agenda
-	// includes the actor's own reminders plus reminders of properties shared
-	// with the actor (issue #157, T3), excluding archived shared properties.
-	notificationsMod.CalendarService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	// Wire the same adapter into the lease service so the lease payment schedule
-	// (overdue / next payment, shown on the lease card and property card) is
-	// computed from the actor's own rent operations plus those of properties
-	// shared with the actor (issue #157, T3).
-	leasesMod.LeaseService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	// Wire the same adapter into the remaining aggregate-read services so the
-	// recurring-operations list and the reminders list include the actor's
-	// shared-property data (issue #157, T3).
-	leasesMod.RecurringOperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	notificationsMod.ReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	injectCrossContextScopes(leasesMod, propertiesMod, notificationsMod, accessMod)
 
 	// 13. Popups service.
 	popupsMod := wire.WirePopups(p)
@@ -282,10 +155,7 @@ func run() error {
 	limiters := wire.WireRateLimiters(p.Cfg)
 	defer limiters.Stop()
 
-	var poolStats func() httpsupport.DBPoolSnapshot
-	if p.Cfg.AppEnv == "local" {
-		poolStats = wire.DBPoolStats(p.Pool)
-	}
+	poolStats := newPoolStats(p.Cfg, p.Pool)
 
 	// 16. HTTP handler + server.
 	handler := httpserver.New(httpserver.Deps{
@@ -351,15 +221,205 @@ func run() error {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	return serveAndWait(ctx, server, workers, p.Logger, p.Cfg)
+}
+
+// injectAccessPolicy re-injects the membership-aware policy into the services
+// built before the access module: they captured the T2 owner-only stub
+// (notifications reminder service, issue #166, and the leases category
+// service, which is needed for the user_registered subscriber, issue #157).
+// The accessible-scopes adapter lands with the category service (issue #157).
+func injectAccessPolicy(
+	notificationsMod *wire.Notifications,
+	leasesRepos *wire.LeasesRepos,
+	accessMod *wire.Access,
+) {
+	notificationsMod.ReminderService.SetPolicy(accessMod.Policy)
+	leasesRepos.CategoryService.SetPolicy(accessMod.Policy)
+	leasesRepos.CategoryService.SetAccessibleScopes(accessMod.AccessibleScopes)
+}
+
+// injectPropertyServiceAccess wires the access-context adapters into the
+// property service: shared memberships for list endpoints (issues #156 T3,
+// T11), the owner display name for the sharing banner (T11), the recipient
+// slot policy and suspended-shared counter for archive/unarchive/delete
+// (issue #158, T4), and the shared-members delete mailer (issue #162, T6).
+func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire.Access) {
+	propertiesMod.PropertyService.SetSharedMemberships(accessMod.SharedProperties)
+	propertiesMod.PropertyService.SetOwnerDisplayNameResolver(accessMod.AccessService)
+	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
+	propertiesMod.PropertyService.SetSuspendedSharedCounter(accessMod.SuspendedCounter)
+	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
+}
+
+// setBillingLifecycleBridges wires the billing worker's cross-context
+// lifecycle bridges (issue #252): the expiry and downgrade phases archive
+// excess properties (open leases force-completed) and suspend excess shared
+// memberships in the same transaction as the subscription change. Billing is
+// built before the properties and access modules, so the bridges land here.
+// The workers, the payment service and the subscription service share the
+// same bridges: the expiry and downgrade phases (issue #252), the refund's
+// downgrade to basic (issue #254) and the admin operations that can lower a
+// tariff limit (issue #255) all archive excess properties and suspend excess
+// shared memberships in the same transaction as the subscription change.
+func setBillingLifecycleBridges(billingMod *wire.Billing, propertiesMod *wire.Properties, accessMod *wire.Access) {
+	archiverSource := wire.NewPropertyArchiverSource(propertiesMod.PropertyService)
+	slotSource := wire.NewRecipientSlotSource(accessMod.SlotCoordinator)
+	billingMod.Services.Workers.SetLifecycleBridges(archiverSource, slotSource)
+	billingMod.Services.Payments.SetLifecycleBridges(archiverSource, slotSource)
+	billingMod.Services.Subscriptions.SetLifecycleBridges(archiverSource, slotSource)
+}
+
+// subscribeUserRegistered registers the user_registered reactions: billing
+// onboarding and default-category seeding, plus the email invitation
+// activation (issue #161, T5; an empty email is skipped by the service). Kept
+// here (not in wire) because the subscribers reference types from identity,
+// billing and leases.
+func subscribeUserRegistered(
+	eventDispatcher *events.InProcessDispatcher,
+	billingMod *wire.Billing,
+	leasesRepos *wire.LeasesRepos,
+	accessMod *wire.Access,
+) {
+	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
+		e, ok := event.(identityapp.UserRegistered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return billingMod.Services.Onboarding.OnUserRegistered(ctx, e.UserID)
+	})
+	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
+		e, ok := event.(identityapp.UserRegistered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return leasesRepos.CategoryService.SeedDefaultCategories(ctx, e.UserID)
+	})
+	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
+		e, ok := event.(identityapp.UserRegistered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return accessMod.InvitationService.ActivatePendingInvitations(ctx, e.UserID, e.Email.String())
+	})
+}
+
+// newPushSender builds the Web Push sender when the VAPID keys are configured
+// (RFC 8292); without them it returns a nil sender, push delivery is disabled
+// and the reminder worker runs email-only.
+func newPushSender(ctx context.Context, cfg *config.Config, logger *slog.Logger) (notificationsapp.PushSender, error) {
+	var sender notificationsapp.PushSender
+	if cfg.VAPIDPublicKey == "" || cfg.VAPIDPrivateKey == "" {
+		logger.WarnContext(ctx, "VAPID keys not configured; web push delivery disabled (email-only)")
+		return sender, nil
+	}
+	pushMetrics, err := webpush.NewMetrics()
+	if err != nil {
+		return nil, fmt.Errorf("wire push metrics: %w", err)
+	}
+	s, err := webpush.NewSender(cfg.VAPIDSubject, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, pushMetrics, logger)
+	if err != nil {
+		return nil, fmt.Errorf("wire webpush sender: %w", err)
+	}
+	logger.InfoContext(ctx, "web push delivery enabled")
+	return s, nil
+}
+
+// newGraceNotifier builds the direct notification service the billing grace
+// events deliver through; push delivery is included only when the sender
+// could be built.
+func newGraceNotifier(
+	db *database.InstrumentedPool,
+	renderer *mailer.Renderer,
+	cfg *config.Config,
+	logger *slog.Logger,
+	notificationsMod *wire.Notifications,
+	identityMod *wire.Identity,
+	pushSender notificationsapp.PushSender,
+) *notificationsapp.DirectNotificationService {
+	queries := platformgenerated.New(db)
+	return notificationsapp.NewDirectNotificationService(
+		notificationsMod.ReminderRepo,
+		notificationspg.NewContactResolver(queries),
+		emailnotifier.NewNotifier(identityMod.EmailMailer, renderer),
+		pushSender,
+		notificationsMod.PushSubscriptionRepo,
+		cfg.AppBaseURL,
+		logger,
+	)
+}
+
+// subscribeGraceEvents registers the grace-entered and grace-expiring
+// subscribers on the shared event dispatcher.
+func subscribeGraceEvents(
+	eventDispatcher *events.InProcessDispatcher,
+	graceNotifier *notificationsapp.DirectNotificationService,
+) {
+	eventDispatcher.Subscribe(events.EventType("subscription_grace_entered"), func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.GraceEntered)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return graceNotifier.NotifyGraceEntered(ctx, e.UserID, e.GraceUntil)
+	})
+	eventDispatcher.Subscribe(events.EventType("subscription_grace_expiring"), func(ctx context.Context, event any) error {
+		e, ok := event.(billingapp.GraceExpiring)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		return graceNotifier.NotifyGraceExpiring(ctx, e.UserID, e.GraceUntil)
+	})
+}
+
+// injectCrossContextScopes wires the membership-aware policy and the
+// shared-property adapters into the aggregate-read services so lists and
+// schedules include the actor's shared-property data (issue #157, T2a/T3).
+func injectCrossContextScopes(
+	leasesMod *wire.Leases,
+	propertiesMod *wire.Properties,
+	notificationsMod *wire.Notifications,
+	accessMod *wire.Access,
+) {
+	leasesMod.TenantContactService.SetPolicy(accessMod.Policy)
+	leasesMod.TenantContactService.SetAccessibleScopes(accessMod.AccessibleScopes)
+	propertiesMod.PropertyContactService.SetPolicy(accessMod.Policy)
+	leasesMod.OperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	notificationsMod.CalendarService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	leasesMod.LeaseService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	leasesMod.RecurringOperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
+	notificationsMod.ReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
+}
+
+// newPoolStats exposes live pool statistics only in the local environment.
+func newPoolStats(cfg *config.Config, pool *pgxpool.Pool) func() httpsupport.DBPoolSnapshot {
+	if cfg.AppEnv != "local" {
+		return nil
+	}
+	return wire.DBPoolStats(pool)
+}
+
+// serveAndWait runs the HTTP server until the lifecycle context is cancelled
+// or the listener fails, then shuts down gracefully and waits for the
+// background workers.
+func serveAndWait(
+	ctx context.Context,
+	server *http.Server,
+	workers *wire.Workers,
+	logger *slog.Logger,
+	cfg *config.Config,
+) error {
 	errCh := make(chan error, 1)
 	go func() {
-		p.Logger.InfoContext(ctx, "backend listening", "addr", p.Cfg.HTTPAddr, "env", p.Cfg.AppEnv)
+		logger.InfoContext(ctx, "backend listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
 		errCh <- server.ListenAndServe()
 	}()
 
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// The lifecycle context is already cancelled, so the shutdown window
+		// derives from its value-bearing, cancellation-stripped view (same
+		// pattern as the platform cleanup in wire).
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			return err

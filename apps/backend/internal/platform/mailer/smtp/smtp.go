@@ -50,33 +50,15 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) (err error) {
 		return err
 	}
 
-	if len(msg.To) == 0 {
-		return errors.New("no recipients")
-	}
-
-	if msg.TextBody == "" && msg.HTMLBody == "" {
-		return errors.New("empty message body")
-	}
-
-	if msg.Subject == "" {
-		return errors.New("email subject is required")
+	if err := validateMessage(msg); err != nil {
+		return err
 	}
 
 	body := s.buildMessage(msg)
 
-	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
-	dialer := &net.Dialer{Timeout: s.cfg.Timeout}
-
-	var conn net.Conn
-	switch s.cfg.Port {
-	case "465":
-		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: tlsConfig(s.cfg.Host)}
-		conn, err = tlsDialer.DialContext(ctx, "tcp", addr)
-	default:
-		conn, err = dialer.DialContext(ctx, "tcp", addr)
-	}
+	conn, err := s.dial(ctx)
 	if err != nil {
-		return fmt.Errorf("dial smtp server: %w", err)
+		return err
 	}
 	defer func() {
 		// The client (or Quit) may have closed the connection already —
@@ -104,27 +86,72 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) (err error) {
 		}
 	}()
 
+	if err := s.startTLSAndAuth(client); err != nil {
+		return err
+	}
+	return s.deliver(client, msg.To, body)
+}
+
+// validateMessage rejects messages that cannot be transmitted.
+func validateMessage(msg mailer.Message) error {
+	if len(msg.To) == 0 {
+		return errors.New("no recipients")
+	}
+	if msg.TextBody == "" && msg.HTMLBody == "" {
+		return errors.New("empty message body")
+	}
+	if msg.Subject == "" {
+		return errors.New("email subject is required")
+	}
+	return nil
+}
+
+// dial opens the server connection: implicit TLS on port 465, plain TCP
+// otherwise.
+func (s *Sender) dial(ctx context.Context) (net.Conn, error) {
+	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
+	dialer := &net.Dialer{Timeout: s.cfg.Timeout}
+
+	var conn net.Conn
+	var err error
+	if s.cfg.Port == "465" {
+		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: tlsConfig(s.cfg.Host)}
+		conn, err = tlsDialer.DialContext(ctx, "tcp", addr)
+	} else {
+		conn, err = dialer.DialContext(ctx, "tcp", addr)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("dial smtp server: %w", err)
+	}
+	return conn, nil
+}
+
+// startTLSAndAuth upgrades the connection to TLS on the submission port and
+// authenticates when credentials are configured.
+func (s *Sender) startTLSAndAuth(client *smtp.Client) error {
 	if s.cfg.Port == "587" {
 		if err := client.StartTLS(tlsConfig(s.cfg.Host)); err != nil {
 			return fmt.Errorf("start tls: %w", err)
 		}
 	}
-
-	var auth smtp.Auth
-	if s.cfg.Username != "" && s.cfg.Password != "" {
-		auth = smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
+	if s.cfg.Username == "" || s.cfg.Password == "" {
+		return nil
 	}
-	if auth != nil {
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("smtp auth: %w", err)
-		}
+	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
+	if err := client.Auth(auth); err != nil {
+		return fmt.Errorf("smtp auth: %w", err)
 	}
+	return nil
+}
 
+// deliver runs the SMTP mail transaction: the envelope sender and every
+// recipient, then the message body, then the farewell.
+func (s *Sender) deliver(client *smtp.Client, to []string, body []byte) error {
 	if err := client.Mail(s.cfg.From); err != nil {
 		return fmt.Errorf("smtp mail: %w", err)
 	}
-	for _, to := range msg.To {
-		if err := client.Rcpt(to); err != nil {
+	for _, rcpt := range to {
+		if err := client.Rcpt(rcpt); err != nil {
 			// The recipient address is PII and must not leak into error logs.
 			return fmt.Errorf("smtp rcpt: %w", err)
 		}
@@ -143,7 +170,6 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) (err error) {
 	if err := client.Quit(); err != nil {
 		return fmt.Errorf("smtp quit: %w", err)
 	}
-
 	return nil
 }
 

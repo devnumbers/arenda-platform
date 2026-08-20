@@ -76,6 +76,30 @@ func (h *providerReferenceHarness) storedPayment(t *testing.T, paymentID uuid.UU
 	return payment
 }
 
+// assertReferenceShape checks one written payment against the expected
+// provider reference, URL presence, the pending status and the save's
+// timestamp.
+func (h *providerReferenceHarness) assertReferenceShape(
+	t *testing.T, payment domain.SubscriptionPayment, wantProviderID, wantURL string,
+) {
+	t.Helper()
+	if !payment.HasProviderReference() || *payment.ProviderPaymentID != wantProviderID {
+		t.Errorf("provider payment id = %v, want %q", payment.ProviderPaymentID, wantProviderID)
+	}
+	if wantURL == "" && payment.HasPaymentURL() {
+		t.Errorf("payment url = %v, want none for an initiation without one", payment.PaymentURL)
+	}
+	if wantURL != "" && (!payment.HasPaymentURL() || *payment.PaymentURL != wantURL) {
+		t.Errorf("payment url = %v, want %q", payment.PaymentURL, wantURL)
+	}
+	if payment.Status != domain.PaymentStatusPending {
+		t.Errorf("status = %q, want the pending unchanged", payment.Status)
+	}
+	if !payment.UpdatedAt.Equal(h.now) {
+		t.Errorf("updated at = %v, want the save's %v", payment.UpdatedAt, h.now)
+	}
+}
+
 // TestSaveProviderReference_CITAndMITShapes proves the two initiation shapes
 // flow through the same write as parameters: the CIT result carries the
 // payer's form URL and persists both the provider id and the URL, the MIT
@@ -108,21 +132,7 @@ func TestSaveProviderReference_CITAndMITShapes(t *testing.T) {
 			stored := h.storedPayment(t, seeded.ID)
 
 			for _, payment := range []domain.SubscriptionPayment{saved, stored} {
-				if !payment.HasProviderReference() || *payment.ProviderPaymentID != tc.initRes.ProviderPaymentID {
-					t.Errorf("provider payment id = %v, want %q", payment.ProviderPaymentID, tc.initRes.ProviderPaymentID)
-				}
-				if tc.wantURL == "" && payment.HasPaymentURL() {
-					t.Errorf("payment url = %v, want none for an initiation without one", payment.PaymentURL)
-				}
-				if tc.wantURL != "" && (!payment.HasPaymentURL() || *payment.PaymentURL != tc.wantURL) {
-					t.Errorf("payment url = %v, want %q", payment.PaymentURL, tc.wantURL)
-				}
-				if payment.Status != domain.PaymentStatusPending {
-					t.Errorf("status = %q, want the pending unchanged", payment.Status)
-				}
-				if !payment.UpdatedAt.Equal(h.now) {
-					t.Errorf("updated at = %v, want the save's %v", payment.UpdatedAt, h.now)
-				}
+				h.assertReferenceShape(t, payment, tc.initRes.ProviderPaymentID, tc.wantURL)
 			}
 		})
 	}

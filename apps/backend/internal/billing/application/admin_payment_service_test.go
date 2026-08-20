@@ -440,120 +440,164 @@ func TestRefundPayment_DuplicateOperationResolvesFromProvider(t *testing.T) {
 // TestSyncPayment applies the provider's status through the synchronous paths
 // and audits the admin action (issue #254).
 func TestSyncPayment(t *testing.T) {
-	t.Run("provider refunded applies the refund effects", func(t *testing.T) {
-		h := newRefundHarness(t)
-		payment := h.succeededUpgradePayment(t)
-		h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusRefunded}
+	t.Run("provider refunded applies the refund effects", syncAppliesRefundEffects)
+	t.Run("provider pending changes nothing", syncPendingChangesNothing)
+	t.Run("a stuck refund reservation resolves like the worker", syncResolvesStuckReservation)
+	t.Run("without a provider reference", syncWithoutProviderReferenceRejected)
+	t.Run("unknown payment", syncUnknownPaymentRejected)
+}
 
-		if err := h.payments.SyncPayment(t.Context(), h.adminID, payment.ID); err != nil {
-			t.Fatalf("SyncPayment() error = %v", err)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID() error = %v", err)
-		}
-		if stored.Status != domain.PaymentStatusRefunded {
-			t.Errorf("payment status = %q, want refunded", stored.Status)
-		}
-		subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), payment.UserID)
-		if err != nil {
-			t.Fatalf("GetByUserID() error = %v", err)
-		}
-		if subStored.TariffID != h.tariffID(t, domain.TariffBasic) {
-			t.Errorf("tariff = %v, want basic after the synced refund", subStored.TariffID)
-		}
+// syncAppliesRefundEffects covers the refunded sync outcome: the payment
+// finalizes with the refund effects on the subscription and the admin-attributed
+// synced audit entry.
+func syncAppliesRefundEffects(t *testing.T) {
+	h := newRefundHarness(t)
+	payment := h.succeededUpgradePayment(t)
+	h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusRefunded}
 
-		var synced *auditdomain.Entry
-		for _, entry := range h.audit.recorded() {
-			if entry.Action == auditdomain.ActionSubscriptionPaymentSynced {
-				synced = &entry
-			}
-		}
-		if synced == nil {
-			t.Fatalf("audit contains no synced entry: %+v", h.audit.recorded())
-		}
-		if synced.ActorRole != auditdomain.ActorRoleAdmin || synced.ActorID == nil || *synced.ActorID != h.adminID {
-			t.Errorf("sync audit actor = %q/%v, want the acting admin", synced.ActorRole, synced.ActorID)
-		}
-	})
+	if err := h.payments.SyncPayment(t.Context(), h.adminID, payment.ID); err != nil {
+		t.Fatalf("SyncPayment() error = %v", err)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.Status != domain.PaymentStatusRefunded {
+		t.Errorf("payment status = %q, want refunded", stored.Status)
+	}
+	subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), payment.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if subStored.TariffID != h.tariffID(t, domain.TariffBasic) {
+		t.Errorf("tariff = %v, want basic after the synced refund", subStored.TariffID)
+	}
 
-	t.Run("provider pending changes nothing", func(t *testing.T) {
-		h := newRefundHarness(t)
-		payment := h.succeededUpgradePayment(t)
-		h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusPending}
+	var synced *auditdomain.Entry
+	for _, entry := range h.audit.recorded() {
+		if entry.Action == auditdomain.ActionSubscriptionPaymentSynced {
+			synced = &entry
+		}
+	}
+	if synced == nil {
+		t.Fatalf("audit contains no synced entry: %+v", h.audit.recorded())
+	}
+	if synced.ActorRole != auditdomain.ActorRoleAdmin || synced.ActorID == nil || *synced.ActorID != h.adminID {
+		t.Errorf("sync audit actor = %q/%v, want the acting admin", synced.ActorRole, synced.ActorID)
+	}
+}
 
-		if err := h.payments.SyncPayment(t.Context(), h.adminID, payment.ID); err != nil {
-			t.Fatalf("SyncPayment() error = %v", err)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID() error = %v", err)
-		}
-		if stored.Status != domain.PaymentStatusSucceeded {
-			t.Errorf("payment status = %q, want succeeded untouched", stored.Status)
-		}
-	})
+// syncPendingChangesNothing covers the pending sync outcome: a provider-pending
+// answer leaves the succeeded payment untouched.
+func syncPendingChangesNothing(t *testing.T) {
+	h := newRefundHarness(t)
+	payment := h.succeededUpgradePayment(t)
+	h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusPending}
 
-	t.Run("a stuck refund reservation resolves like the worker", func(t *testing.T) {
-		h := newRefundHarness(t)
-		payment := h.succeededUpgradePayment(t)
-		// Reserve the payment the way the saga does, then have the provider
-		// settle the refund.
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID() error = %v", err)
-		}
-		if err := stored.BeginRefund(h.now); err != nil {
-			t.Fatalf("BeginRefund() error = %v", err)
-		}
-		if err := h.stores.payments.Update(t.Context(), stored); err != nil {
-			t.Fatalf("Update() error = %v", err)
-		}
-		h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusRefunded}
+	if err := h.payments.SyncPayment(t.Context(), h.adminID, payment.ID); err != nil {
+		t.Fatalf("SyncPayment() error = %v", err)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("payment status = %q, want succeeded untouched", stored.Status)
+	}
+}
 
-		if err := h.payments.SyncPayment(t.Context(), h.adminID, payment.ID); err != nil {
-			t.Fatalf("SyncPayment() error = %v", err)
-		}
-		resolved, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID(resolved) error = %v", err)
-		}
-		if resolved.Status != domain.PaymentStatusRefunded {
-			t.Errorf("payment status = %q, want refunded", resolved.Status)
-		}
-		subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), payment.UserID)
-		if err != nil {
-			t.Fatalf("GetByUserID() error = %v", err)
-		}
-		if subStored.TariffID != h.tariffID(t, domain.TariffBasic) {
-			t.Errorf("tariff = %v, want basic after the synced refund", subStored.TariffID)
-		}
-	})
+// syncResolvesStuckReservation covers the stuck-reservation sync outcome: a
+// reserved refund the provider reports refunded finalizes like the worker
+// reconciliation would.
+func syncResolvesStuckReservation(t *testing.T) {
+	h := newRefundHarness(t)
+	payment := h.succeededUpgradePayment(t)
+	// Reserve the payment the way the saga does, then have the provider
+	// settle the refund.
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if err := stored.BeginRefund(h.now); err != nil {
+		t.Fatalf("BeginRefund() error = %v", err)
+	}
+	if err := h.stores.payments.Update(t.Context(), stored); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusRefunded}
 
-	t.Run("without a provider reference", func(t *testing.T) {
-		h := newRefundHarness(t)
-		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(
-			sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
-			domain.PeriodMonth, 99000, testProviderFake, h.now)
-		if err != nil {
-			t.Fatalf("NewSubscriptionPayment() error = %v", err)
-		}
-		created, err := h.stores.payments.Create(t.Context(), payment)
-		if err != nil {
-			t.Fatalf("Create() error = %v", err)
-		}
-		if err := h.payments.SyncPayment(t.Context(), h.adminID, created.ID); !errors.Is(err, domain.ErrInvalidPaymentStatus) {
-			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
-		}
-	})
+	if err := h.payments.SyncPayment(t.Context(), h.adminID, payment.ID); err != nil {
+		t.Fatalf("SyncPayment() error = %v", err)
+	}
+	resolved, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID(resolved) error = %v", err)
+	}
+	if resolved.Status != domain.PaymentStatusRefunded {
+		t.Errorf("payment status = %q, want refunded", resolved.Status)
+	}
+	subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), payment.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if subStored.TariffID != h.tariffID(t, domain.TariffBasic) {
+		t.Errorf("tariff = %v, want basic after the synced refund", subStored.TariffID)
+	}
+}
 
-	t.Run("unknown payment", func(t *testing.T) {
-		h := newRefundHarness(t)
-		if err := h.payments.SyncPayment(t.Context(), h.adminID, uuid.Must(uuid.NewV7())); !errors.Is(err, ErrPaymentNotFound) {
-			t.Errorf("err = %v, want ErrPaymentNotFound", err)
+// syncWithoutProviderReferenceRejected covers the guard: a payment without a
+// provider reference cannot be synced.
+func syncWithoutProviderReferenceRejected(t *testing.T) {
+	h := newRefundHarness(t)
+	sub := h.seedSubscription(t, nil)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+		domain.PeriodMonth, 99000, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("NewSubscriptionPayment() error = %v", err)
+	}
+	created, err := h.stores.payments.Create(t.Context(), payment)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := h.payments.SyncPayment(t.Context(), h.adminID, created.ID); !errors.Is(err, domain.ErrInvalidPaymentStatus) {
+		t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+	}
+}
+
+// syncUnknownPaymentRejected covers the unknown-payment guard.
+func syncUnknownPaymentRejected(t *testing.T) {
+	h := newRefundHarness(t)
+	if err := h.payments.SyncPayment(t.Context(), h.adminID, uuid.Must(uuid.NewV7())); !errors.Is(err, ErrPaymentNotFound) {
+		t.Errorf("err = %v, want ErrPaymentNotFound", err)
+	}
+}
+
+// seedStuckRefundReservation stores a stuck refunding payment with the given
+// pre-refund origin status and a provider reference — the row the refund
+// reconciliation picks up once it goes stale.
+func seedStuckRefundReservation(t *testing.T, h *workersHarness, origin domain.PaymentStatus) domain.SubscriptionPayment {
+	t.Helper()
+	sub := h.seedSubscription(t, nil)
+	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, 49000, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("NewSubscriptionPayment() error = %v", err)
+	}
+	providerPaymentID := "prov_" + payment.ID.String()
+	payment.ProviderPaymentID = &providerPaymentID
+	if origin == domain.PaymentStatusSucceeded {
+		if err := payment.MarkSucceeded(h.now); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
 		}
-	})
+	}
+	if err := payment.BeginRefund(h.now); err != nil {
+		t.Fatalf("BeginRefund() error = %v", err)
+	}
+	created, err := h.stores.payments.Create(t.Context(), payment)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	return created
 }
 
 // TestReconcileStaleRefunds proves the сторож of the refund saga (migrated
@@ -562,157 +606,154 @@ func TestSyncPayment(t *testing.T) {
 // effects, a still-captured charge reverts the reservation, and ambiguous or
 // unsettled outcomes stay for the next tick or manual review.
 func TestReconcileStaleRefunds(t *testing.T) {
-	seedStuckRefund := func(h *workersHarness, status domain.PaymentStatus) domain.SubscriptionPayment {
-		t.Helper()
-		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth, 49000, testProviderFake, h.now)
-		if err != nil {
-			t.Fatalf("NewSubscriptionPayment() error = %v", err)
-		}
-		providerPaymentID := "prov_" + payment.ID.String()
-		payment.ProviderPaymentID = &providerPaymentID
-		if status == domain.PaymentStatusSucceeded {
-			if err := payment.MarkSucceeded(h.now); err != nil {
-				t.Fatalf("MarkSucceeded() error = %v", err)
-			}
-		}
-		if err := payment.BeginRefund(h.now); err != nil {
-			t.Fatalf("BeginRefund() error = %v", err)
-		}
-		created, err := h.stores.payments.Create(t.Context(), payment)
-		if err != nil {
-			t.Fatalf("Create() error = %v", err)
-		}
-		return created
+	t.Run("provider refunded finalizes", reconcileProviderRefundedFinalizes)
+	t.Run("provider still captured reverts a succeeded origin", reconcileCapturedRevertsSucceededOrigin)
+	t.Run("provider still captured reverts a pending origin to pending", reconcileCapturedRevertsPendingOrigin)
+	t.Run("failed provider status stays for manual review", reconcileFailedStatusStaysForReview)
+	t.Run("unsettled refund waits for the next tick", reconcileUnsettledWaitsForNextTick)
+	t.Run("fresh reservations are not listed", reconcileFreshReservationsNotListed)
+}
+
+// reconcileProviderRefundedFinalizes covers the refunded outcome: the stuck
+// reservation finalizes with the subscription downgrade to basic.
+func reconcileProviderRefundedFinalizes(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusRefunded}, nil
 	}
 
-	t.Run("provider refunded finalizes", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStuckRefund(h, domain.PaymentStatusSucceeded)
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusRefunded}, nil
-		}
+	processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness))
+	if err != nil {
+		t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+	}
+	if processed != 1 {
+		t.Errorf("processed = %d, want 1", processed)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.Status != domain.PaymentStatusRefunded {
+		t.Errorf("payment status = %q, want refunded", stored.Status)
+	}
+	subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), payment.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if subStored.TariffID != h.basic.ID {
+		t.Errorf("tariff = %v, want basic after the finalized refund", subStored.TariffID)
+	}
+}
 
-		processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness))
-		if err != nil {
-			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
-		}
-		if processed != 1 {
-			t.Errorf("processed = %d, want 1", processed)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID() error = %v", err)
-		}
-		if stored.Status != domain.PaymentStatusRefunded {
-			t.Errorf("payment status = %q, want refunded", stored.Status)
-		}
-		subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), payment.UserID)
-		if err != nil {
-			t.Fatalf("GetByUserID() error = %v", err)
-		}
-		if subStored.TariffID != h.basic.ID {
-			t.Errorf("tariff = %v, want basic after the finalized refund", subStored.TariffID)
-		}
-	})
+// reconcileCapturedRevertsSucceededOrigin covers the still-captured outcome of
+// a succeeded origin: the reservation reverts and the subscription keeps the
+// paid plan.
+func reconcileCapturedRevertsSucceededOrigin(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
+	}
 
-	t.Run("provider still captured reverts a succeeded origin", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStuckRefund(h, domain.PaymentStatusSucceeded)
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
-		}
+	if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
+		t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("payment status = %q, want the succeeded status restored", stored.Status)
+	}
+	subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), payment.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if subStored.TariffID != h.pro.ID {
+		t.Errorf("tariff = %v, want pro untouched by the reverted refund", subStored.TariffID)
+	}
+}
 
-		if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
-			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID() error = %v", err)
-		}
-		if stored.Status != domain.PaymentStatusSucceeded {
-			t.Errorf("payment status = %q, want the succeeded status restored", stored.Status)
-		}
-		subStored, err := h.stores.subscriptions.GetByUserID(t.Context(), payment.UserID)
-		if err != nil {
-			t.Fatalf("GetByUserID() error = %v", err)
-		}
-		if subStored.TariffID != h.pro.ID {
-			t.Errorf("tariff = %v, want pro untouched by the reverted refund", subStored.TariffID)
-		}
-	})
+// reconcileCapturedRevertsPendingOrigin covers the still-captured outcome of a
+// pending origin: the reservation reverts to the pending origin.
+func reconcileCapturedRevertsPendingOrigin(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusPending)
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
+	}
 
-	t.Run("provider still captured reverts a pending origin to pending", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStuckRefund(h, domain.PaymentStatusPending)
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
-		}
+	if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
+		t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.Status != domain.PaymentStatusPending {
+		t.Errorf("payment status = %q, want pending restored for the pending reconciliation", stored.Status)
+	}
+}
 
-		if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
-			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID() error = %v", err)
-		}
-		if stored.Status != domain.PaymentStatusPending {
-			t.Errorf("payment status = %q, want pending restored for the pending reconciliation", stored.Status)
-		}
-	})
+// reconcileFailedStatusStaysForReview covers the failed-status outcome: an
+// ambiguous answer keeps the reservation for manual review, and the payment is
+// still counted as processed.
+func reconcileFailedStatusStaysForReview(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusFailed}, nil
+	}
 
-	t.Run("failed provider status stays for manual review", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStuckRefund(h, domain.PaymentStatusSucceeded)
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusFailed}, nil
-		}
+	processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness))
+	if err != nil {
+		t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+	}
+	if processed != 1 {
+		t.Errorf("processed = %d, want the payment checked", processed)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.Status != domain.PaymentStatusRefunding {
+		t.Errorf("payment status = %q, want the reservation kept", stored.Status)
+	}
+}
 
-		processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness))
-		if err != nil {
-			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
-		}
-		if processed != 1 {
-			t.Errorf("processed = %d, want the payment checked", processed)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID() error = %v", err)
-		}
-		if stored.Status != domain.PaymentStatusRefunding {
-			t.Errorf("payment status = %q, want the reservation kept", stored.Status)
-		}
-	})
+// reconcileUnsettledWaitsForNextTick covers the unsettled outcome: a refund
+// the provider has not settled yet keeps the reservation for the next tick.
+func reconcileUnsettledWaitsForNextTick(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusPending}, nil
+	}
 
-	t.Run("unsettled refund waits for the next tick", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStuckRefund(h, domain.PaymentStatusSucceeded)
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusPending}, nil
-		}
+	if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
+		t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.Status != domain.PaymentStatusRefunding {
+		t.Errorf("payment status = %q, want the reservation kept", stored.Status)
+	}
+}
 
-		if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
-			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("GetByID() error = %v", err)
-		}
-		if stored.Status != domain.PaymentStatusRefunding {
-			t.Errorf("payment status = %q, want the reservation kept", stored.Status)
-		}
-	})
+// reconcileFreshReservationsNotListed covers the freshness edge: a reservation
+// younger than the staleness threshold is not even listed.
+func reconcileFreshReservationsNotListed(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
 
-	t.Run("fresh reservations are not listed", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		seedStuckRefund(h, domain.PaymentStatusSucceeded)
-
-		processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now)
-		if err != nil {
-			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
-		}
-		if processed != 0 {
-			t.Errorf("processed = %d, want 0 before the staleness threshold", processed)
-		}
-	})
+	processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+	}
+	if processed != 0 {
+		t.Errorf("processed = %d, want 0 before the staleness threshold", processed)
+	}
 }

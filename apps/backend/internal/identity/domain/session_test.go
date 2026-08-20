@@ -38,94 +38,80 @@ func TestSession_IsExpired(t *testing.T) {
 func TestSession_Refresh(t *testing.T) {
 	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	t.Run("extends expiration by SessionBaseTTL", func(t *testing.T) {
-		s := Session{
-			ID:         uuid.Must(uuid.NewV7()),
-			ExpiresAt:  created.Add(SessionBaseTTL),
-			CreatedAt:  created,
-			LastUsedAt: created,
-		}
-		now := created.Add(1 * time.Hour)
-		wantExpires := now.Add(SessionBaseTTL)
+	// Single-refresh cases: each row seeds a session whose ExpiresAt sits at
+	// expiresOff from CreatedAt, refreshes it at nowOff from CreatedAt, and
+	// pins the whole post-refresh state. WantOff durations are relative to
+	// CreatedAt too; a zero wantLastUsedOff means LastUsedAt stays at CreatedAt
+	// (Refresh must not touch it on a no-op).
+	tests := []struct {
+		name            string
+		expiresOff      time.Duration
+		nowOff          time.Duration
+		want            bool
+		wantExpiresOff  time.Duration
+		wantLastUsedOff time.Duration
+	}{
+		{
+			name:            "extends expiration by SessionBaseTTL",
+			expiresOff:      SessionBaseTTL,
+			nowOff:          1 * time.Hour,
+			want:            true,
+			wantExpiresOff:  SessionBaseTTL + 1*time.Hour,
+			wantLastUsedOff: 1 * time.Hour,
+		},
+		{
+			// Session is still active but late in its lifetime: now is 6 days
+			// before the hard cap (so now + SessionBaseTTL exceeds it), and
+			// ExpiresAt is 3 days before the cap (still active). Refresh must
+			// clamp to CreatedAt + SessionMaxTTL.
+			name:            "caps expiration at CreatedAt + SessionMaxTTL",
+			expiresOff:      SessionMaxTTL - 3*24*time.Hour,
+			nowOff:          SessionMaxTTL - 6*24*time.Hour,
+			want:            true,
+			wantExpiresOff:  SessionMaxTTL,
+			wantLastUsedOff: SessionMaxTTL - 6*24*time.Hour,
+		},
+		{
+			name:            "expired session is never refreshed",
+			expiresOff:      SessionBaseTTL,
+			nowOff:          SessionBaseTTL + time.Second,
+			want:            false,
+			wantExpiresOff:  SessionBaseTTL,
+			wantLastUsedOff: 0,
+		},
+		{
+			// Session already at the hard cap: candidate equals the current
+			// ExpiresAt, so candidate.After(ExpiresAt) is false and neither
+			// field moves.
+			name:            "returns false when expiration does not move forward",
+			expiresOff:      SessionMaxTTL,
+			nowOff:          SessionMaxTTL - SessionBaseTTL + time.Hour,
+			want:            false,
+			wantExpiresOff:  SessionMaxTTL,
+			wantLastUsedOff: 0,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := Session{
+				ID:         uuid.Must(uuid.NewV7()),
+				ExpiresAt:  created.Add(tc.expiresOff),
+				CreatedAt:  created,
+				LastUsedAt: created,
+			}
+			now := created.Add(tc.nowOff)
 
-		if !s.Refresh(now) {
-			t.Fatal("Refresh = false, want true")
-		}
-		if !s.ExpiresAt.Equal(wantExpires) {
-			t.Fatalf("ExpiresAt = %v, want %v", s.ExpiresAt, wantExpires)
-		}
-		if !s.LastUsedAt.Equal(now) {
-			t.Fatalf("LastUsedAt = %v, want %v", s.LastUsedAt, now)
-		}
-	})
-
-	t.Run("caps expiration at CreatedAt + SessionMaxTTL", func(t *testing.T) {
-		maxExpires := created.Add(SessionMaxTTL)
-		// Session is still active but late in its lifetime: now is 6 days before
-		// the hard cap (so now + SessionBaseTTL exceeds it), and ExpiresAt is 3
-		// days before the cap (still active). Refresh must clamp to maxExpires.
-		now := maxExpires.Add(-6 * 24 * time.Hour)
-		s := Session{
-			ID:         uuid.Must(uuid.NewV7()),
-			ExpiresAt:  maxExpires.Add(-3 * 24 * time.Hour),
-			CreatedAt:  created,
-			LastUsedAt: created,
-		}
-
-		if !s.Refresh(now) {
-			t.Fatal("Refresh = false, want true")
-		}
-		if !s.ExpiresAt.Equal(maxExpires) {
-			t.Fatalf("ExpiresAt = %v, want cap %v", s.ExpiresAt, maxExpires)
-		}
-		if !s.LastUsedAt.Equal(now) {
-			t.Fatalf("LastUsedAt = %v, want %v", s.LastUsedAt, now)
-		}
-	})
-
-	t.Run("expired session is never refreshed", func(t *testing.T) {
-		expires := created.Add(SessionBaseTTL)
-		s := Session{
-			ID:         uuid.Must(uuid.NewV7()),
-			ExpiresAt:  expires,
-			CreatedAt:  created,
-			LastUsedAt: created,
-		}
-		now := expires.Add(time.Second)
-
-		if s.Refresh(now) {
-			t.Fatal("Refresh = true, want false for expired session")
-		}
-		if !s.ExpiresAt.Equal(expires) {
-			t.Fatalf("ExpiresAt = %v, want unchanged %v", s.ExpiresAt, expires)
-		}
-		if !s.LastUsedAt.Equal(created) {
-			t.Fatalf("LastUsedAt = %v, want unchanged %v", s.LastUsedAt, created)
-		}
-	})
-
-	t.Run("returns false when expiration does not move forward", func(t *testing.T) {
-		// Session already at the hard cap: candidate equals current ExpiresAt,
-		// so candidate.After(ExpiresAt) is false.
-		maxExpires := created.Add(SessionMaxTTL)
-		s := Session{
-			ID:         uuid.Must(uuid.NewV7()),
-			ExpiresAt:  maxExpires,
-			CreatedAt:  created,
-			LastUsedAt: created,
-		}
-		now := maxExpires.Add(-SessionBaseTTL + time.Hour)
-
-		if s.Refresh(now) {
-			t.Fatal("Refresh = true, want false when expiration does not advance")
-		}
-		if !s.ExpiresAt.Equal(maxExpires) {
-			t.Fatalf("ExpiresAt = %v, want unchanged cap %v", s.ExpiresAt, maxExpires)
-		}
-		if !s.LastUsedAt.Equal(created) {
-			t.Fatalf("LastUsedAt = %v, want unchanged %v (Refresh must not touch it on no-op)", s.LastUsedAt, created)
-		}
-	})
+			if got := s.Refresh(now); got != tc.want {
+				t.Fatalf("Refresh = %v, want %v", got, tc.want)
+			}
+			if !s.ExpiresAt.Equal(created.Add(tc.wantExpiresOff)) {
+				t.Fatalf("ExpiresAt = %v, want %v", s.ExpiresAt, created.Add(tc.wantExpiresOff))
+			}
+			if !s.LastUsedAt.Equal(created.Add(tc.wantLastUsedOff)) {
+				t.Fatalf("LastUsedAt = %v, want %v", s.LastUsedAt, created.Add(tc.wantLastUsedOff))
+			}
+		})
+	}
 
 	t.Run("updates LastUsedAt on every successful refresh", func(t *testing.T) {
 		s := Session{

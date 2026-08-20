@@ -53,6 +53,74 @@ func (h *paymentIntegrationHarness) seedPaidSubscription(t *testing.T, name doma
 	return created
 }
 
+// pendingUpgradePayment loads the started upgrade payment and proves it is a
+// pending, fully referenced payment for the full pro month price.
+func (h *paymentIntegrationHarness) pendingUpgradePayment(
+	t *testing.T, result billingapp.ChangeTariffResult,
+) domain.SubscriptionPayment {
+	t.Helper()
+	payment, err := h.payments.GetByID(h.ctx(), result.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if payment.Status != domain.PaymentStatusPending {
+		t.Fatalf("payment status = %q, want pending", payment.Status)
+	}
+	if !payment.HasProviderReference() || !payment.HasPaymentURL() {
+		t.Fatal("the provider reference and payment url must be persisted atomically")
+	}
+	if payment.AmountKopecks != 49000 {
+		t.Fatalf("amount = %d, want the full pro month price 49000", payment.AmountKopecks)
+	}
+	return payment
+}
+
+// requireAppliedProSubscription proves the subscription after a succeeded pro
+// payment: pro tariff, active, one month of validity from the payment moment,
+// auto-renew on, and the payment recorded as last applied.
+func (h *paymentIntegrationHarness) requireAppliedProSubscription(t *testing.T, userID, paymentID uuid.UUID) {
+	t.Helper()
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID: %v", err)
+	}
+	if stored.TariffID != h.tariffIDByName(t, domain.TariffPro) {
+		t.Errorf("tariff = %v, want pro", stored.TariffID)
+	}
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("status = %q, want active", stored.Status)
+	}
+	wantUntil := h.clock.Now().AddDate(0, 1, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("valid until = %v, want %v", stored.ValidUntil, wantUntil)
+	}
+	if !stored.AutoRenewEnabled {
+		t.Error("auto-renew = false, want true")
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != paymentID {
+		t.Errorf("last applied payment = %v, want %v", stored.LastAppliedPaymentID, paymentID)
+	}
+}
+
+// requirePaymentAppliedTransition proves the transition log carries a
+// payment_applied entry referencing the payment.
+func (h *paymentIntegrationHarness) requirePaymentAppliedTransition(t *testing.T, subscriptionID, paymentID uuid.UUID) {
+	t.Helper()
+	transitions, err := h.transitions.ListBySubscriptionID(h.ctx(), subscriptionID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID: %v", err)
+	}
+	found := false
+	for _, tr := range transitions {
+		if tr.Reason == domain.TransitionReasonPaymentApplied && tr.PaymentID != nil && *tr.PaymentID == paymentID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("transitions = %+v, want a payment_applied entry referencing the payment", transitions)
+	}
+}
+
 // TestPaymentFlow_UpgradeEndToEnd proves the headline acceptance criterion of
 // issue #250 against real PostgreSQL and the fake provider adapter: an
 // upgrade creates a pending payment with a payer URL, the confirmation
@@ -74,19 +142,7 @@ func TestPaymentFlow_UpgradeEndToEnd(t *testing.T) {
 		t.Fatalf("result = %+v, want a payment id and a payer url", result)
 	}
 
-	payment, err := h.payments.GetByID(h.ctx(), result.PaymentID)
-	if err != nil {
-		t.Fatalf("GetByID: %v", err)
-	}
-	if payment.Status != domain.PaymentStatusPending {
-		t.Fatalf("payment status = %q, want pending", payment.Status)
-	}
-	if !payment.HasProviderReference() || !payment.HasPaymentURL() {
-		t.Fatal("the provider reference and payment url must be persisted atomically")
-	}
-	if payment.AmountKopecks != 49000 {
-		t.Fatalf("amount = %d, want the full pro month price 49000", payment.AmountKopecks)
-	}
+	payment := h.pendingUpgradePayment(t, result)
 
 	// The user completes the payment at the provider; the webhook carries the
 	// provider's notification into the synchronous application path.
@@ -100,40 +156,8 @@ func TestPaymentFlow_UpgradeEndToEnd(t *testing.T) {
 		t.Fatalf("payment status = %q, want succeeded", finalized.Status)
 	}
 
-	stored, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
-	if err != nil {
-		t.Fatalf("GetByUserID: %v", err)
-	}
-	if stored.TariffID != h.tariffIDByName(t, domain.TariffPro) {
-		t.Errorf("tariff = %v, want pro", stored.TariffID)
-	}
-	if stored.Status != domain.SubscriptionStatusActive {
-		t.Errorf("status = %q, want active", stored.Status)
-	}
-	wantUntil := h.clock.Now().AddDate(0, 1, 0)
-	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
-		t.Errorf("valid until = %v, want %v", stored.ValidUntil, wantUntil)
-	}
-	if !stored.AutoRenewEnabled {
-		t.Error("auto-renew = false, want true")
-	}
-	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != payment.ID {
-		t.Errorf("last applied payment = %v, want %v", stored.LastAppliedPaymentID, payment.ID)
-	}
-
-	transitions, err := h.transitions.ListBySubscriptionID(h.ctx(), sub.ID)
-	if err != nil {
-		t.Fatalf("ListBySubscriptionID: %v", err)
-	}
-	found := false
-	for _, tr := range transitions {
-		if tr.Reason == domain.TransitionReasonPaymentApplied && tr.PaymentID != nil && *tr.PaymentID == payment.ID {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("transitions = %+v, want a payment_applied entry referencing the payment", transitions)
-	}
+	h.requireAppliedProSubscription(t, sub.UserID, payment.ID)
+	h.requirePaymentAppliedTransition(t, sub.ID, payment.ID)
 
 	// The payments list serves the finalized payment with its tariff.
 	views, err := h.paymentsSvc.ListPayments(h.ctx(), sub.UserID)

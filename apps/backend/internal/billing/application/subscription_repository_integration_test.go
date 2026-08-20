@@ -157,6 +157,101 @@ func TestSubscriptionRepository_Integration_ExpiryWindowRespectedBySchema(t *tes
 	}
 }
 
+// seedLifecycleSelectionRow onboards a fresh user, applies the mutation to
+// their subscription and persists it — one labelled row of the ListSelection
+// state matrix.
+func seedLifecycleSelectionRow(
+	t *testing.T, h *integrationHarness, name string, mutate func(*domain.Subscription),
+) domain.Subscription {
+	t.Helper()
+	userID := h.seedUser()
+	if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
+		t.Fatalf("OnUserRegistered(%s) error = %v", name, err)
+	}
+	sub, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID(%s) error = %v", name, err)
+	}
+	if mutate != nil {
+		mutate(&sub)
+	}
+	if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
+		t.Fatalf("Update(%s) error = %v", name, err)
+	}
+	return sub
+}
+
+// requireSelectionUserIDs asserts the selection lists exactly the wanted
+// users in order.
+func requireSelectionUserIDs(t *testing.T, h *integrationHarness, sel billingapp.SubscriptionSelection, want []uuid.UUID) {
+	t.Helper()
+	found, err := h.subscriptions.List(h.ctx(), sel)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	got := make([]uuid.UUID, 0, len(found))
+	for _, sub := range found {
+		got = append(got, sub.UserID)
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("List() = %v, want %v", got, want)
+	}
+}
+
+// requireNarrowedSelectionIsMembershipRecheck proves the user-narrowed
+// selection is the under-lock membership re-check: the listed row is still in
+// the batch, any other state is not.
+func requireNarrowedSelectionIsMembershipRecheck(
+	t *testing.T, h *integrationHarness, renewSel billingapp.SubscriptionSelection,
+	listed, foreign domain.Subscription,
+) {
+	t.Helper()
+	narrowed := renewSel
+	narrowed.UserID = &listed.UserID
+	found, err := h.subscriptions.List(h.ctx(), narrowed)
+	if err != nil {
+		t.Fatalf("List(narrowed) error = %v", err)
+	}
+	if len(found) != 1 || found[0].UserID != listed.UserID {
+		t.Errorf("List(narrowed to the listed row) = %+v, want the row itself", found)
+	}
+	narrowed.UserID = &foreign.UserID
+	found, err = h.subscriptions.List(h.ctx(), narrowed)
+	if err != nil {
+		t.Fatalf("List(narrowed to foreign state) error = %v", err)
+	}
+	if len(found) != 0 {
+		t.Errorf("List(narrowed to a subscription outside the selection) = %d rows, want 0", len(found))
+	}
+}
+
+// requireReminderFlagDropsRow proves marking the grace window reminded removes
+// it from the reminder selection and the flag persists through a re-read.
+func requireReminderFlagDropsRow(
+	t *testing.T, h *integrationHarness, sub domain.Subscription, reminderSel billingapp.SubscriptionSelection, now time.Time,
+) {
+	t.Helper()
+	reminded := sub
+	reminded.MarkGraceReminded(now)
+	if err := h.subscriptions.Update(h.ctx(), reminded); err != nil {
+		t.Fatalf("Update() after MarkGraceReminded: %v", err)
+	}
+	reread, err := h.subscriptions.GetByUserID(h.ctx(), reminded.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if reread.GraceRemindedAt == nil || !reread.GraceRemindedAt.Equal(now) {
+		t.Fatalf("GraceRemindedAt = %v, want %v", reread.GraceRemindedAt, now)
+	}
+	after, err := h.subscriptions.List(h.ctx(), reminderSel)
+	if err != nil {
+		t.Fatalf("List(reminder) after reminder: %v", err)
+	}
+	if len(after) != 0 {
+		t.Errorf("List(reminder) after reminder = %d rows, want 0", len(after))
+	}
+}
+
 // TestSubscriptionRepository_Integration_ListSelection proves the
 // parameterized worker selection (issue #286) against the real schema: every
 // phase's selection picks exactly its batch from a state matrix, the batch
@@ -166,24 +261,9 @@ func TestSubscriptionRepository_Integration_ExpiryWindowRespectedBySchema(t *tes
 func TestSubscriptionRepository_Integration_ListSelection(t *testing.T) {
 	h := newIntegrationHarness(t)
 	now := h.clock.Now()
-
 	seed := func(name string, mutate func(*domain.Subscription)) domain.Subscription {
 		t.Helper()
-		userID := h.seedUser()
-		if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
-			t.Fatalf("OnUserRegistered(%s) error = %v", name, err)
-		}
-		sub, err := h.subscriptions.GetByUserID(h.ctx(), userID)
-		if err != nil {
-			t.Fatalf("GetByUserID(%s) error = %v", name, err)
-		}
-		if mutate != nil {
-			mutate(&sub)
-		}
-		if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
-			t.Fatalf("Update(%s) error = %v", name, err)
-		}
-		return sub
+		return seedLifecycleSelectionRow(t, h, name, mutate)
 	}
 
 	basic, err := h.tariffs.GetByName(h.ctx(), domain.TariffBasic)
@@ -316,59 +396,10 @@ func TestSubscriptionRepository_Integration_ListSelection(t *testing.T) {
 		{name: "pending changes due", sel: pendingSel, want: []uuid.UUID{pendingDue.UserID}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			found, err := h.subscriptions.List(h.ctx(), tc.sel)
-			if err != nil {
-				t.Fatalf("List() error = %v", err)
-			}
-			got := make([]uuid.UUID, 0, len(found))
-			for _, sub := range found {
-				got = append(got, sub.UserID)
-			}
-			if !slices.Equal(got, tc.want) {
-				t.Errorf("List() = %v, want %v", got, tc.want)
-			}
+			requireSelectionUserIDs(t, h, tc.sel, tc.want)
 		})
 	}
 
-	// The user-narrowed selection is the under-lock membership re-check: the
-	// listed row is still in the batch, any other state is not.
-	narrowed := renewSel
-	narrowed.UserID = &renewExpired.UserID
-	found, err := h.subscriptions.List(h.ctx(), narrowed)
-	if err != nil {
-		t.Fatalf("List(narrowed) error = %v", err)
-	}
-	if len(found) != 1 || found[0].UserID != renewExpired.UserID {
-		t.Errorf("List(narrowed to the listed row) = %+v, want the row itself", found)
-	}
-	narrowed.UserID = &graceInWindow.UserID
-	found, err = h.subscriptions.List(h.ctx(), narrowed)
-	if err != nil {
-		t.Fatalf("List(narrowed to foreign state) error = %v", err)
-	}
-	if len(found) != 0 {
-		t.Errorf("List(narrowed to a subscription outside the selection) = %d rows, want 0", len(found))
-	}
-
-	// Marking the window reminded removes it from the reminder selection, and
-	// the flag persists through a re-read.
-	reminded := graceInWindow
-	reminded.MarkGraceReminded(now)
-	if err := h.subscriptions.Update(h.ctx(), reminded); err != nil {
-		t.Fatalf("Update() after MarkGraceReminded: %v", err)
-	}
-	reread, err := h.subscriptions.GetByUserID(h.ctx(), reminded.UserID)
-	if err != nil {
-		t.Fatalf("GetByUserID() error = %v", err)
-	}
-	if reread.GraceRemindedAt == nil || !reread.GraceRemindedAt.Equal(now) {
-		t.Fatalf("GraceRemindedAt = %v, want %v", reread.GraceRemindedAt, now)
-	}
-	after, err := h.subscriptions.List(h.ctx(), reminderSel)
-	if err != nil {
-		t.Fatalf("List(reminder) after reminder: %v", err)
-	}
-	if len(after) != 0 {
-		t.Errorf("List(reminder) after reminder = %d rows, want 0", len(after))
-	}
+	requireNarrowedSelectionIsMembershipRecheck(t, h, renewSel, renewExpired, graceInWindow)
+	requireReminderFlagDropsRow(t, h, graceInWindow, reminderSel, now)
 }

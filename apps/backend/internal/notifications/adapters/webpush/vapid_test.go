@@ -136,13 +136,26 @@ func TestSignJWT_ClaimsAndSignature(t *testing.T) {
 		t.Fatalf("sign jwt: %v", err)
 	}
 
+	parts := splitJWTSegments(t, jwt)
+	assertJWTHeader(t, parts[0])
+	assertJWTClaims(t, parts[1], origin, fixedNow)
+	assertJWTSignature(t, parts, pubB64)
+}
+
+// splitJWTSegments splits the token into its three dot-separated segments.
+func splitJWTSegments(t *testing.T, jwt string) []string {
+	t.Helper()
 	parts := strings.Split(jwt, ".")
 	if len(parts) != 3 {
 		t.Fatalf("JWT must have 3 segments, got %d", len(parts))
 	}
+	return parts
+}
 
-	// Decode and verify header.
-	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+// assertJWTHeader decodes and verifies the JOSE header.
+func assertJWTHeader(t *testing.T, segment string) {
+	t.Helper()
+	headerJSON, err := base64.RawURLEncoding.DecodeString(segment)
 	if err != nil {
 		t.Fatalf("decode header: %v", err)
 	}
@@ -153,9 +166,13 @@ func TestSignJWT_ClaimsAndSignature(t *testing.T) {
 	if header["alg"] != "ES256" || header["typ"] != "JWT" {
 		t.Errorf("unexpected header: %v", header)
 	}
+}
 
-	// Decode and verify claims.
-	claimsJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
+// assertJWTClaims decodes and verifies the audience, subject and expiry
+// claims.
+func assertJWTClaims(t *testing.T, segment, origin string, fixedNow time.Time) {
+	t.Helper()
+	claimsJSON, err := base64.RawURLEncoding.DecodeString(segment)
 	if err != nil {
 		t.Fatalf("decode claims: %v", err)
 	}
@@ -173,8 +190,11 @@ func TestSignJWT_ClaimsAndSignature(t *testing.T) {
 	if exp, ok := claims["exp"].(float64); !ok || int64(exp) != wantExp {
 		t.Errorf("exp = %v, want %d", claims["exp"], wantExp)
 	}
+}
 
-	// Verify the ES256 signature.
+// assertJWTSignature verifies the ES256 signature with the stdlib verifier.
+func assertJWTSignature(t *testing.T, parts []string, pubB64 string) {
+	t.Helper()
 	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
 		t.Fatalf("decode signature: %v", err)

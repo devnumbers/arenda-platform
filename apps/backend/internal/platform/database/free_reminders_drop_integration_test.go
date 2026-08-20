@@ -233,7 +233,18 @@ func seedFreeRemindersFixture(t *testing.T, pool *pgxpool.Pool) freeRemindersFix
 // enum values stay in the PostgreSQL types forever (#277).
 func assertFreeRemindersDropped(t *testing.T, pool *pgxpool.Pool, f freeRemindersFixture) {
 	t.Helper()
-	ctx := context.Background()
+
+	assertFreeRemindersRowsDropped(t, pool, f)
+	assertFreeRemindersSchemaDropped(t, pool)
+	assertFreeRemindersCheckRebuilt(t, pool, f)
+	assertFreeRemindersEnumsKept(t, pool)
+}
+
+// assertFreeRemindersRowsDropped checks the data effects: the free channel
+// settings, the concrete free row and its delivery rows are erased while the
+// neighbour operation rows survive.
+func assertFreeRemindersRowsDropped(t *testing.T, pool *pgxpool.Pool, f freeRemindersFixture) {
+	t.Helper()
 
 	if got := countRows(t, pool, `SELECT count(*) FROM user_notification_channel_preferences
 	                             WHERE user_id = $1 AND event_type = 'free_reminder'`, f.ownerID); got != 0 {
@@ -256,6 +267,12 @@ func assertFreeRemindersDropped(t *testing.T, pool *pgxpool.Pool, f freeReminder
 	if got := countRows(t, pool, `SELECT count(*) FROM sent_push_reminders WHERE reminder_id = $1`, f.freeReminderID); got != 0 {
 		t.Errorf("push delivery rows after up = %d, want 0 (cascade)", got)
 	}
+}
+
+// assertFreeRemindersSchemaDropped checks the schema effects: the table, the
+// reminders column and the dedicated index are gone.
+func assertFreeRemindersSchemaDropped(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
 
 	if tableExists(t, pool, "free_reminders") {
 		t.Errorf("free_reminders table after up still exists")
@@ -268,6 +285,13 @@ func assertFreeRemindersDropped(t *testing.T, pool *pgxpool.Pool, f freeReminder
 	                             WHERE tablename = 'reminders' AND indexname = 'idx_reminders_free_reminder'`); got != 0 {
 		t.Errorf("idx_reminders_free_reminder after up still exists")
 	}
+}
+
+// assertFreeRemindersCheckRebuilt checks the rebuilt exactly_one_target
+// constraint: the 'free' branch is gone and a free row is rejected.
+func assertFreeRemindersCheckRebuilt(t *testing.T, pool *pgxpool.Pool, f freeRemindersFixture) {
+	t.Helper()
+	ctx := context.Background()
 
 	if def := constraintDef(t, pool); strings.Contains(def, `'free'`) {
 		t.Errorf("exactly_one_target after up still has the 'free' branch: %s", def)
@@ -288,6 +312,12 @@ func assertFreeRemindersDropped(t *testing.T, pool *pgxpool.Pool, f freeReminder
 	} else if !strings.Contains(err.Error(), "exactly_one_target") {
 		t.Errorf("insert target_type='free' after up: want exactly_one_target violation, got %v", err)
 	}
+}
+
+// assertFreeRemindersEnumsKept checks the dead enum values stay in the
+// PostgreSQL types forever (#277).
+func assertFreeRemindersEnumsKept(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
 
 	for _, v := range []struct{ typ, label string }{
 		{"notification_target_type", "free"},

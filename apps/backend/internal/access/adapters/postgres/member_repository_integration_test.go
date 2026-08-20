@@ -281,6 +281,57 @@ func TestOwnerResolver_ReturnsOwner(t *testing.T) {
 	}
 }
 
+// setAccessPropertyStatus flips the property's lifecycle through the sqlc
+// queries the property service uses (archive or unarchive).
+func setAccessPropertyStatus(
+	t *testing.T, ctx context.Context, q *genpostgres.Queries, archive bool, owner uuid.UUID, props ...uuid.UUID,
+) {
+	t.Helper()
+	for _, prop := range props {
+		var err error
+		if archive {
+			_, err = q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)})
+		} else {
+			_, err = q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)})
+		}
+		if err != nil {
+			t.Fatalf("property status flip %s: %v", prop, err)
+		}
+	}
+}
+
+// assertSlotAccounting checks the recipient's slot accounting: the number of
+// used slots, which properties occupy them, and how many suspended memberships
+// wait in the FIFO recovery queue. The stage argument names the assertion phase.
+func assertSlotAccounting(
+	t *testing.T, ctx context.Context, repo *MembershipRepository,
+	recipient uuid.UUID, stage string, wantActive []uuid.UUID, wantSuspended int,
+) {
+	t.Helper()
+	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != len(wantActive) {
+		t.Errorf("CountActiveByUser %s = %d, %v; want %d", stage, count, err, len(wantActive))
+	}
+	rows, err := repo.ListActiveByUser(ctx, recipient)
+	if err != nil {
+		t.Fatalf("ListActiveByUser %s: %v", stage, err)
+	}
+	got := make(map[uuid.UUID]bool, len(rows))
+	for _, m := range rows {
+		got[m.PropertyID] = true
+	}
+	for _, prop := range wantActive {
+		if !got[prop] {
+			t.Errorf("ListActiveByUser %s = %+v, want %s among the active slots", stage, rows, prop)
+		}
+	}
+	if len(rows) != len(wantActive) {
+		t.Errorf("ListActiveByUser %s = %d rows, want %d", stage, len(rows), len(wantActive))
+	}
+	if suspended, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(suspended) != wantSuspended {
+		t.Errorf("ListSuspendedByUser %s = %d, %v; want %d", stage, len(suspended), err, wantSuspended)
+	}
+}
+
 // TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries verifies the
 // issue #163 slot-accounting rule: memberships on archived properties occupy no
 // recipient tariff slot — they are excluded from ListActiveByUser,
@@ -327,44 +378,13 @@ func TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries(t *testing
 		t.Fatalf("ListSuspendedByUser before archive = %d, %v; want 1", len(rows), err)
 	}
 
-	// Archive two of the three properties.
-	for _, prop := range []uuid.UUID{archivedActiveProp, archivedSuspendedProp} {
-		if _, err := q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)}); err != nil {
-			t.Fatalf("ArchiveProperty %s: %v", prop, err)
-		}
-	}
-
-	// The active membership on the archived property occupies no slot.
-	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != 1 {
-		t.Errorf("CountActiveByUser after archive = %d, %v; want 1", count, err)
-	}
-	rows, err := repo.ListActiveByUser(ctx, recipient)
-	if err != nil {
-		t.Fatalf("ListActiveByUser after archive: %v", err)
-	}
-	if len(rows) != 1 || rows[0].PropertyID != activeProp {
-		t.Errorf("ListActiveByUser after archive = %+v, want only the active property", rows)
-	}
-
-	// The suspended membership on the archived property must not waste a free
-	// slot of the FIFO recovery queue.
-	if rows, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(rows) != 0 {
-		t.Errorf("ListSuspendedByUser after archive = %+v, %v; want empty", rows, err)
-	}
+	// Archive two of the three properties: the memberships on them occupy no
+	// slot and leave the FIFO recovery queue.
+	setAccessPropertyStatus(t, ctx, q, true, owner, archivedActiveProp, archivedSuspendedProp)
+	assertSlotAccounting(t, ctx, repo, recipient, "after archive", []uuid.UUID{activeProp}, 0)
 
 	// Unarchive: both memberships re-enter the selection.
-	for _, prop := range []uuid.UUID{archivedActiveProp, archivedSuspendedProp} {
-		if _, err := q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)}); err != nil {
-			t.Fatalf("UnarchiveProperty %s: %v", prop, err)
-		}
-	}
-	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != 2 {
-		t.Errorf("CountActiveByUser after unarchive = %d, %v; want 2", count, err)
-	}
-	if rows, err := repo.ListActiveByUser(ctx, recipient); err != nil || len(rows) != 2 {
-		t.Errorf("ListActiveByUser after unarchive = %d, %v; want 2", len(rows), err)
-	}
-	if rows, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(rows) != 1 {
-		t.Errorf("ListSuspendedByUser after unarchive = %d, %v; want 1", len(rows), err)
-	}
+	setAccessPropertyStatus(t, ctx, q, false, owner, archivedActiveProp, archivedSuspendedProp)
+	assertSlotAccounting(t, ctx, repo, recipient, "after unarchive",
+		[]uuid.UUID{activeProp, archivedActiveProp}, 1)
 }

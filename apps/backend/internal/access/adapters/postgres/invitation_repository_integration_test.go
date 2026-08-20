@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -18,6 +19,26 @@ import (
 // inviteeEmail is the canonical invitee address of the invitation fixtures.
 const inviteeEmail = "invitee@example.com"
 
+// createInvitationFixture inserts an invitation row and fails the test on any
+// error, returning the created invitation.
+func createInvitationFixture(
+	t *testing.T, ctx context.Context, repo *InvitationRepository,
+	propertyID, invitedBy uuid.UUID, email string, role domain.Role, lastSentAt time.Time,
+) domain.Invitation {
+	t.Helper()
+	id, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	created, err := repo.Create(ctx, domain.Invitation{
+		ID: id, PropertyID: propertyID, Email: email, Role: role, InvitedBy: invitedBy, LastSentAt: lastSentAt,
+	})
+	if err != nil {
+		t.Fatalf("create invitation %s: %v", email, err)
+	}
+	return created
+}
+
 func TestInvitationRepository_CreateGetList(t *testing.T) {
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
@@ -28,27 +49,14 @@ func TestInvitationRepository_CreateGetList(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 	repo := NewInvitationRepository(tx)
 
-	invID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	created, err := repo.Create(ctx, domain.Invitation{
-		ID:         invID,
-		PropertyID: property,
-		Email:      inviteeEmail,
-		Role:       domain.RoleViewer,
-		InvitedBy:  owner,
-		LastSentAt: time.Now().UTC(),
-	})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	created := createInvitationFixture(t, ctx, repo, property, owner, inviteeEmail, domain.RoleViewer, time.Now().UTC())
 	if created.Role != domain.RoleViewer || created.Email != inviteeEmail {
 		t.Errorf("created = %+v", created)
 	}
 	if created.CreatedAt.IsZero() || created.LastSentAt.IsZero() {
 		t.Errorf("timestamps must be set: %+v", created)
 	}
+	invID := created.ID
 
 	// GetByID round-trip.
 	got, err := repo.GetByID(ctx, invID, property)

@@ -1734,6 +1734,33 @@ func subscriptionTransitionView(t *testing.T) billingapp.SubscriptionTransitionV
 	}
 }
 
+// assertAdminTransitionItem checks one mapped contract item against the
+// transition view it must round-trip (issue #255).
+func assertAdminTransitionItem(t *testing.T, item openapi.AdminSubscriptionTransition, view billingapp.SubscriptionTransitionView) {
+	t.Helper()
+	if item.Id != view.Transition.ID {
+		t.Errorf("id = %v, want %v", item.Id, view.Transition.ID)
+	}
+	if item.ToTariffName != "business" || item.FromTariffName == nil || *item.FromTariffName != "pro" {
+		t.Errorf("tariff names = %q/%v, want business/pro", item.ToTariffName, item.FromTariffName)
+	}
+	if item.Reason != string(domain.TransitionReasonServiceAssigned) {
+		t.Errorf("reason = %q, want service_assigned", item.Reason)
+	}
+	if item.Initiator != openapi.AdminSubscriptionTransitionInitiatorAdmin {
+		t.Errorf("initiator = %q, want admin", item.Initiator)
+	}
+	if item.InitiatorId == nil || *item.InitiatorId != *view.Transition.InitiatorID {
+		t.Errorf("initiatorId = %v, want %v", item.InitiatorId, *view.Transition.InitiatorID)
+	}
+	if item.PaymentId == nil || *item.PaymentId != *view.Transition.PaymentID {
+		t.Errorf("paymentId = %v, want the referenced payment", item.PaymentId)
+	}
+	if item.FromStatus == nil || *item.FromStatus != openapi.SubscriptionStatusActive {
+		t.Errorf("fromStatus = %v, want active", item.FromStatus)
+	}
+}
+
 // TestAssignAdminServiceSubscription_MapsBodyAndAttributesAdmin proves POST
 // /admin/users/{id}/subscription/service answers 204, forwards the acting
 // admin and maps the contract body to the application input (issue #255).
@@ -1918,26 +1945,5 @@ func TestListAdminSubscriptionTransitions_MapsView(t *testing.T) {
 	if resp.Total != 1 || len(resp.Items) != 1 {
 		t.Fatalf("total/items = %d/%d, want 1/1", resp.Total, len(resp.Items))
 	}
-	item := resp.Items[0]
-	if item.Id != view.Transition.ID {
-		t.Errorf("id = %v, want %v", item.Id, view.Transition.ID)
-	}
-	if item.ToTariffName != "business" || item.FromTariffName == nil || *item.FromTariffName != "pro" {
-		t.Errorf("tariff names = %q/%v, want business/pro", item.ToTariffName, item.FromTariffName)
-	}
-	if item.Reason != string(domain.TransitionReasonServiceAssigned) {
-		t.Errorf("reason = %q, want service_assigned", item.Reason)
-	}
-	if item.Initiator != openapi.AdminSubscriptionTransitionInitiatorAdmin {
-		t.Errorf("initiator = %q, want admin", item.Initiator)
-	}
-	if item.InitiatorId == nil || *item.InitiatorId != *view.Transition.InitiatorID {
-		t.Errorf("initiatorId = %v, want %v", item.InitiatorId, *view.Transition.InitiatorID)
-	}
-	if item.PaymentId == nil || *item.PaymentId != *view.Transition.PaymentID {
-		t.Errorf("paymentId = %v, want the referenced payment", item.PaymentId)
-	}
-	if item.FromStatus == nil || *item.FromStatus != openapi.SubscriptionStatusActive {
-		t.Errorf("fromStatus = %v, want active", item.FromStatus)
-	}
+	assertAdminTransitionItem(t, resp.Items[0], view)
 }

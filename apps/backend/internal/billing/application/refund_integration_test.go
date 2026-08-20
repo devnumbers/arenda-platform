@@ -65,31 +65,9 @@ func (h *refundIntegrationHarness) transitionsOf(t *testing.T, subscriptionID uu
 	return transitions
 }
 
-// TestRefundFlow_SucceedsAndDowngradesToBasic proves the full saga against
-// real PostgreSQL (issue #254): the succeeded payment is refunded in full,
-// the subscription falls to the basic tariff with its excess objects handled
-// by the lifecycle bridges, and both the transition log and the audit log
-// attribute the refund to the acting admin.
-func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
-	h := newRefundIntegrationHarness(t)
-	sub := h.seedPaidSubscription(t, domain.TariffBasic)
-	result, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), sub.UserID, billingapp.ChangeTariffRequest{
-		TariffName: domain.TariffBusiness,
-		Period:     domain.PeriodMonth,
-	})
-	if err != nil {
-		t.Fatalf("ChangeTariff(upgrade): %v", err)
-	}
-	h.confirmFakePayment(t, result.PaymentID)
-	payment, err := h.payments.GetByID(h.ctx(), result.PaymentID)
-	if err != nil {
-		t.Fatalf("GetByID: %v", err)
-	}
-
-	if err := h.paymentsSvc.RefundPayment(h.ctx(), h.adminID, payment.ID); err != nil {
-		t.Fatalf("RefundPayment: %v", err)
-	}
-
+// requireRefundedPaymentShape asserts the stored payment is refunded in full.
+func (h *refundIntegrationHarness) requireRefundedPaymentShape(t *testing.T, payment domain.SubscriptionPayment) {
+	t.Helper()
 	stored, err := h.payments.GetByID(h.ctx(), payment.ID)
 	if err != nil {
 		t.Fatalf("GetByID(refunded): %v", err)
@@ -100,8 +78,14 @@ func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if stored.RefundedAmountKopecks == nil || *stored.RefundedAmountKopecks != stored.AmountKopecks {
 		t.Fatalf("refunded amount = %v, want the full %d", stored.RefundedAmountKopecks, stored.AmountKopecks)
 	}
+}
 
-	subStored, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
+// requireRefundDowngradedSubscription asserts the payer's subscription fell to
+// the basic tariff with the validity window and auto-renew cleared, and
+// returns it for the transition check.
+func (h *refundIntegrationHarness) requireRefundDowngradedSubscription(t *testing.T, userID uuid.UUID) domain.Subscription {
+	t.Helper()
+	subStored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
 	if err != nil {
 		t.Fatalf("GetByUserID: %v", err)
 	}
@@ -111,7 +95,16 @@ func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if subStored.ValidUntil != nil || subStored.AutoRenewEnabled {
 		t.Fatalf("subscription = valid_until %v, auto-renew %t; want both cleared", subStored.ValidUntil, subStored.AutoRenewEnabled)
 	}
+	return subStored
+}
 
+// requireRefundTransitionAudit asserts the transition log's newest entry is
+// the refund with the admin initiator and the refunded payment, and the audit
+// log records the refund attributed to the admin.
+func (h *refundIntegrationHarness) requireRefundTransitionAudit(
+	t *testing.T, subStored domain.Subscription, payment domain.SubscriptionPayment,
+) {
+	t.Helper()
 	// The transition log records the downgrade with the admin initiator and
 	// the refunded payment.
 	transitions := h.transitionsOf(t, subStored.ID)
@@ -137,6 +130,36 @@ func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
 	if refundAudit != 1 {
 		t.Fatalf("refund audit entries = %d, want 1", refundAudit)
 	}
+}
+
+// TestRefundFlow_SucceedsAndDowngradesToBasic proves the full saga against
+// real PostgreSQL (issue #254): the succeeded payment is refunded in full,
+// the subscription falls to the basic tariff with its excess objects handled
+// by the lifecycle bridges, and both the transition log and the audit log
+// attribute the refund to the acting admin.
+func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
+	h := newRefundIntegrationHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffBasic)
+	result, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), sub.UserID, billingapp.ChangeTariffRequest{
+		TariffName: domain.TariffBusiness,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff(upgrade): %v", err)
+	}
+	h.confirmFakePayment(t, result.PaymentID)
+	payment, err := h.payments.GetByID(h.ctx(), result.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+
+	if err := h.paymentsSvc.RefundPayment(h.ctx(), h.adminID, payment.ID); err != nil {
+		t.Fatalf("RefundPayment: %v", err)
+	}
+
+	h.requireRefundedPaymentShape(t, payment)
+	subStored := h.requireRefundDowngradedSubscription(t, sub.UserID)
+	h.requireRefundTransitionAudit(t, subStored, payment)
 }
 
 // TestRefundFlow_DoubleRefundRejected proves the reservation guard on real
@@ -332,22 +355,12 @@ func (h *refundIntegrationHarness) refundedPayment(t *testing.T) domain.Subscrip
 	return stored
 }
 
-// TestAdminPayments_ListAndFilters proves the admin payment views (issue
-// #254): the listing resolves the payer's phone (plaintext and encrypted),
-// the subscription-status filter narrows by the payer's current subscription,
-// and a filter outside the whitelist answers ErrInvalidFilter.
-func TestAdminPayments_ListAndFilters(t *testing.T) {
-	h := newRefundIntegrationHarness(t)
-
-	// A refunded payer on the basic tariff (the post-refund shape).
-	refundedPayment := h.succeededUpgradePayment(t)
-	if err := h.paymentsSvc.RefundPayment(h.ctx(), h.adminID, refundedPayment.ID); err != nil {
-		t.Fatalf("RefundPayment: %v", err)
-	}
-	// A pending payment of another payer still on the paid tariff.
-	pendingPayment := h.seedPendingPayment(t)
-
-	// The full listing carries both payments with their tariffs resolved.
+// requireListingCarriesBothPayments asserts the unfiltered listing carries
+// both seeded payments with their tariffs resolved.
+func (h *refundIntegrationHarness) requireListingCarriesBothPayments(
+	t *testing.T, refundedPayment, pendingPayment domain.SubscriptionPayment,
+) {
+	t.Helper()
 	views, total, err := h.paymentsSvc.ListAdminPayments(h.ctx(), billingapp.AdminPaymentFilters{})
 	if err != nil {
 		t.Fatalf("ListAdminPayments: %v", err)
@@ -367,7 +380,12 @@ func TestAdminPayments_ListAndFilters(t *testing.T) {
 	if _, ok := byID[pendingPayment.ID]; !ok {
 		t.Fatal("the pending payment is missing from the listing")
 	}
+}
 
+// requireGraceFilterFindsNone asserts the subscription-status filter narrows
+// to none: both seeded payers are back on active subscriptions.
+func (h *refundIntegrationHarness) requireGraceFilterFindsNone(t *testing.T) {
+	t.Helper()
 	// The subscription-status filter: the refunded payer is back on the basic
 	// (active) subscription, the pending payer is still on the paid active
 	// one — both active, so grace narrows to none.
@@ -380,28 +398,51 @@ func TestAdminPayments_ListAndFilters(t *testing.T) {
 	if graceTotal != 0 {
 		t.Fatalf("grace-filtered total = %d, want 0", graceTotal)
 	}
+}
+
+// requireFilterReturnsExactly asserts the filter narrows the listing to
+// exactly the wanted payment: label names the filter, subject names the
+// payment in the failure message.
+func (h *refundIntegrationHarness) requireFilterReturnsExactly(
+	t *testing.T, label, subject string, filters billingapp.AdminPaymentFilters, wantID uuid.UUID,
+) {
+	t.Helper()
+	views, total, err := h.paymentsSvc.ListAdminPayments(h.ctx(), filters)
+	if err != nil {
+		t.Fatalf("ListAdminPayments(%s): %v", label, err)
+	}
+	if total != 1 || len(views) != 1 || views[0].Payment.ID != wantID {
+		t.Fatalf("%s filter = %d/%v, want exactly the %s payment", label, total, views, subject)
+	}
+}
+
+// TestAdminPayments_ListAndFilters proves the admin payment views (issue
+// #254): the listing resolves the payer's phone (plaintext and encrypted),
+// the subscription-status filter narrows by the payer's current subscription,
+// and a filter outside the whitelist answers ErrInvalidFilter.
+func TestAdminPayments_ListAndFilters(t *testing.T) {
+	h := newRefundIntegrationHarness(t)
+
+	// A refunded payer on the basic tariff (the post-refund shape).
+	refundedPayment := h.succeededUpgradePayment(t)
+	if err := h.paymentsSvc.RefundPayment(h.ctx(), h.adminID, refundedPayment.ID); err != nil {
+		t.Fatalf("RefundPayment: %v", err)
+	}
+	// A pending payment of another payer still on the paid tariff.
+	pendingPayment := h.seedPendingPayment(t)
+
+	h.requireListingCarriesBothPayments(t, refundedPayment, pendingPayment)
+	h.requireGraceFilterFindsNone(t)
 
 	// The status filter narrows to the refunded payment only.
-	refundViews, refundTotal, err := h.paymentsSvc.ListAdminPayments(h.ctx(), billingapp.AdminPaymentFilters{
+	h.requireFilterReturnsExactly(t, "refunded", "refunded", billingapp.AdminPaymentFilters{
 		Status: string(domain.PaymentStatusRefunded),
-	})
-	if err != nil {
-		t.Fatalf("ListAdminPayments(refunded): %v", err)
-	}
-	if refundTotal != 1 || len(refundViews) != 1 || refundViews[0].Payment.ID != refundedPayment.ID {
-		t.Fatalf("refunded filter = %d/%v, want exactly the refunded payment", refundTotal, refundViews)
-	}
+	}, refundedPayment.ID)
 
 	// The user filter narrows to the payer's own payments.
-	userViews, userTotal, err := h.paymentsSvc.ListAdminPayments(h.ctx(), billingapp.AdminPaymentFilters{
+	h.requireFilterReturnsExactly(t, "user", "pending", billingapp.AdminPaymentFilters{
 		UserID: &pendingPayment.UserID,
-	})
-	if err != nil {
-		t.Fatalf("ListAdminPayments(user): %v", err)
-	}
-	if userTotal != 1 || len(userViews) != 1 || userViews[0].Payment.ID != pendingPayment.ID {
-		t.Fatalf("user filter = %d/%v, want exactly the pending payment", userTotal, userViews)
-	}
+	}, pendingPayment.ID)
 
 	// The single-payment view and the filter whitelist are covered by
 	// TestAdminPayments_GetAdminPaymentAndInvalidFilters.

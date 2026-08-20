@@ -307,50 +307,49 @@ func TestPropertyLifecycle_InvitationActivationOnArchivedProperty(t *testing.T) 
 	}
 }
 
+// unarchiveSlotScenario seeds one recipient with an active membership on the
+// target property (plus one on a second, occupied property when withOccupied
+// is set), archives and unarchives the target, then runs the recipient slot
+// enforcement — the slot-significant steps of PropertyService.UnarchiveProperty
+// in their production order.
+func unarchiveSlotScenario(t *testing.T, limit int, withOccupied bool) (repo *MembershipRepository, recipient, target uuid.UUID) {
+	t.Helper()
+	f := newLifecycleMailFixture(t)
+	repo = NewMembershipRepository(f.tx)
+	owner := f.addUserWithEmail(t, "owner@example.com")
+	recipient = f.addUserWithEmail(t, "recipient@example.com")
+	target = f.addProperty(t, owner, "Квартира на Невском")
+	f.limiter.set(recipient, limit)
+
+	if withOccupied {
+		occupied := f.addProperty(t, owner, "Дача у моря")
+		addMembership(t, repo, occupied, recipient, owner)
+	}
+	addMembership(t, repo, target, recipient, owner)
+	ctx := f.bg()
+	if _, err := f.q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(target), OwnerID: pgUUID(owner)}); err != nil {
+		t.Fatalf("ArchiveProperty: %v", err)
+	}
+	if _, err := f.q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(target), OwnerID: pgUUID(owner)}); err != nil {
+		t.Fatalf("UnarchiveProperty: %v", err)
+	}
+	if err := f.slots.EnforceOnUnarchiveForProperty(ctx, lifecycleNoCommitTx{f.tx}, target); err != nil {
+		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+	return repo, recipient, target
+}
+
 // TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots covers AC: after the
 // property is unarchived (back to active), EnforceOnUnarchiveForProperty
 // suspends the membership when the recipient has no free slot and keeps it
 // active when a slot exists.
 func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
-	// Setup builds one recipient holding an active membership on an archived
-	// property (plus an active membership on a second, occupied property when
-	// withOccupied is set), then unarchives the archived one and runs the
-	// enforcement.
-	setup := func(t *testing.T, f *lifecycleMailFixture, limit int, withOccupied bool) (
-		repo *MembershipRepository, recipient, target uuid.UUID,
-	) {
-		t.Helper()
-		repo = NewMembershipRepository(f.tx)
-		owner := f.addUserWithEmail(t, "owner@example.com")
-		recipient = f.addUserWithEmail(t, "recipient@example.com")
-		target = f.addProperty(t, owner, "Квартира на Невском")
-		f.limiter.set(recipient, limit)
-
-		if withOccupied {
-			occupied := f.addProperty(t, owner, "Дача у моря")
-			addMembership(t, repo, occupied, recipient, owner)
-		}
-		addMembership(t, repo, target, recipient, owner)
-		ctx := f.bg()
-		if _, err := f.q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(target), OwnerID: pgUUID(owner)}); err != nil {
-			t.Fatalf("ArchiveProperty: %v", err)
-		}
-		if _, err := f.q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(target), OwnerID: pgUUID(owner)}); err != nil {
-			t.Fatalf("UnarchiveProperty: %v", err)
-		}
-		if err := f.slots.EnforceOnUnarchiveForProperty(ctx, lifecycleNoCommitTx{f.tx}, target); err != nil {
-			t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
-		}
-		return repo, recipient, target
-	}
-
 	t.Run("no free slot suspends the membership", func(t *testing.T) {
-		f := newLifecycleMailFixture(t)
 		// One slot, already occupied by the other property: the unarchived
 		// object does not fit and its membership is suspended.
-		repo, recipient, target := setup(t, f, 1, true)
+		repo, recipient, target := unarchiveSlotScenario(t, 1, true)
 
-		m, err := repo.GetByPropertyAndUser(f.bg(), target, recipient)
+		m, err := repo.GetByPropertyAndUser(context.Background(), target, recipient)
 		if err != nil {
 			t.Fatalf("GetByPropertyAndUser: %v", err)
 		}
@@ -363,12 +362,11 @@ func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
 	})
 
 	t.Run("free slot keeps the membership active", func(t *testing.T) {
-		f := newLifecycleMailFixture(t)
 		// Two slots, none otherwise occupied: the unarchived object fits and
 		// stays active.
-		repo, recipient, target := setup(t, f, 2, false)
+		repo, recipient, target := unarchiveSlotScenario(t, 2, false)
 
-		m, err := repo.GetByPropertyAndUser(f.bg(), target, recipient)
+		m, err := repo.GetByPropertyAndUser(context.Background(), target, recipient)
 		if err != nil {
 			t.Fatalf("GetByPropertyAndUser: %v", err)
 		}
@@ -381,13 +379,12 @@ func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
 	})
 
 	t.Run("pool exactly at limit keeps the membership active", func(t *testing.T) {
-		f := newLifecycleMailFixture(t)
 		// Two slots, one occupied by the other property: after the unarchive
 		// the pool is exactly at the limit — the object still fits and its
 		// membership must stay active (only strictly over the limit suspends).
-		repo, recipient, target := setup(t, f, 2, true)
+		repo, recipient, target := unarchiveSlotScenario(t, 2, true)
 
-		m, err := repo.GetByPropertyAndUser(f.bg(), target, recipient)
+		m, err := repo.GetByPropertyAndUser(context.Background(), target, recipient)
 		if err != nil {
 			t.Fatalf("GetByPropertyAndUser: %v", err)
 		}

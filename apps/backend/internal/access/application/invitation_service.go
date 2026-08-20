@@ -11,6 +11,7 @@ import (
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // InviteOutcome is the result of InviteByEmail: exactly one of the fields is
@@ -130,19 +131,7 @@ func (s *InvitationService) InviteByEmail(
 	user, err := s.users.GetByEmail(ctx, email)
 	switch {
 	case err == nil:
-		if user.ID == owner {
-			return InviteOutcome{}, domain.ErrCannotAddOwner
-		}
-		if user.ID == actor {
-			return InviteOutcome{}, domain.ErrCannotAddSelf
-		}
-		// Registered invitee: instant activation through the regular member
-		// flow, no invite email (issue #161, T5).
-		m, err := s.access.AddMember(ctx, actor, propertyID, user.ID, role)
-		if err != nil {
-			return InviteOutcome{}, err
-		}
-		return InviteOutcome{Member: &m}, nil
+		return s.inviteRegisteredUser(ctx, actor, propertyID, owner, user, role)
 	case errors.Is(err, domain.ErrUserNotFound):
 		// Unregistered invitee: fall through to the pending invitation path.
 	default:
@@ -162,9 +151,48 @@ func (s *InvitationService) InviteByEmail(
 		LastSentAt: s.clock.Now(),
 	}
 
+	created, err := s.createPendingInvitation(ctx, invitation, actor, actorRole)
+	if err != nil {
+		return InviteOutcome{}, err
+	}
+
+	// The invite email goes out after the commit; a send failure does not roll
+	// back the invitation (a manual resend is available).
+	if err := s.sendInviteEmail(ctx, email, propertyID, role); err != nil {
+		s.logger.ErrorContext(ctx, "access: invite email send failed",
+			slog.String("invitation_id", created.ID.String()),
+			slog.String("error", err.Error()))
+	}
+	return InviteOutcome{Invitation: &created}, nil
+}
+
+// inviteRegisteredUser activates a registered invitee instantly through the
+// regular member flow — no invite email is sent (issue #161, T5). The owner's
+// own email and the actor's own email are rejected exactly as in AddMember.
+func (s *InvitationService) inviteRegisteredUser(
+	ctx context.Context, actor, propertyID, owner uuid.UUID, user MemberUser, role domain.Role,
+) (InviteOutcome, error) {
+	if user.ID == owner {
+		return InviteOutcome{}, domain.ErrCannotAddOwner
+	}
+	if user.ID == actor {
+		return InviteOutcome{}, domain.ErrCannotAddSelf
+	}
+	m, err := s.access.AddMember(ctx, actor, propertyID, user.ID, role)
+	if err != nil {
+		return InviteOutcome{}, err
+	}
+	return InviteOutcome{Member: &m}, nil
+}
+
+// createPendingInvitation stores the invitation and its audit entry in one
+// transaction; a duplicate pending invitation is ErrInvitationAlreadyExists.
+func (s *InvitationService) createPendingInvitation(
+	ctx context.Context, invitation domain.Invitation, actor uuid.UUID, actorRole sharedpolicy.Role,
+) (domain.Invitation, error) {
 	var created domain.Invitation
-	err = s.runInTx(ctx, func(stores *txStores) error {
-		if _, err := stores.invitations.GetByPropertyAndEmail(ctx, propertyID, email); err == nil {
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		if _, err := stores.invitations.GetByPropertyAndEmail(ctx, invitation.PropertyID, invitation.Email); err == nil {
 			return domain.ErrInvitationAlreadyExists
 		} else if !errors.Is(err, domain.ErrInvitationNotFound) {
 			return fmt.Errorf("check existing invitation: %w", err)
@@ -185,8 +213,8 @@ func (s *InvitationService) InviteByEmail(
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &created.ID,
 			Context: map[string]any{
-				auditKeyPropertyID: propertyID,
-				auditKeyRole:       string(role),
+				auditKeyPropertyID: invitation.PropertyID,
+				auditKeyRole:       string(invitation.Role),
 			},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
@@ -194,17 +222,9 @@ func (s *InvitationService) InviteByEmail(
 		return nil
 	})
 	if err != nil {
-		return InviteOutcome{}, err
+		return domain.Invitation{}, err
 	}
-
-	// The invite email goes out after the commit; a send failure does not roll
-	// back the invitation (a manual resend is available).
-	if err := s.sendInviteEmail(ctx, email, propertyID, role); err != nil {
-		s.logger.ErrorContext(ctx, "access: invite email send failed",
-			slog.String("invitation_id", created.ID.String()),
-			slog.String("error", err.Error()))
-	}
-	return InviteOutcome{Invitation: &created}, nil
+	return created, nil
 }
 
 // ResendInvitation manually re-sends the invite email for a pending
@@ -373,87 +393,19 @@ func (s *InvitationService) ActivatePendingInvitations(ctx context.Context, user
 func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.UUID, invitation domain.Invitation) error {
 	suspend := false
 	err := s.runInTx(ctx, func(stores *txStores) error {
-		if _, err := stores.members.GetByPropertyAndUser(ctx, invitation.PropertyID, userID); err == nil {
-			// Already a member on this property (any status): drop the invitation
-			// silently and commit (return nil).
-			if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
-				return fmt.Errorf("delete invitation: %w", err)
-			}
+		dropped, err := s.dropInvitationIfAlreadyMember(ctx, stores, userID, invitation)
+		if err != nil {
+			return err
+		}
+		if dropped {
 			return nil
-		} else if !errors.Is(err, domain.ErrMemberNotFound) {
-			return fmt.Errorf("check existing membership: %w", err)
 		}
 
-		// Enforce the recipient tariff slot invariant (issue #158, T4): without a
-		// free slot the membership is created suspended until one frees up. An
-		// archived property does not occupy a recipient slot (issue #163), so the
-		// slot check is skipped and the membership activates read-only in the
-		// active status — with the archived object excluded from slot accounting it
-		// occupies nothing.
-		archived := false
-		if s.statuses != nil {
-			var err error
-			archived, err = s.statuses.IsArchived(ctx, invitation.PropertyID)
-			if err != nil {
-				return fmt.Errorf("check property archived: %w", err)
-			}
-		}
-		if !archived && s.slots != nil {
-			var err error
-			suspend, err = s.slots.EnforceOnActivation(ctx, stores.tx, userID)
-			if err != nil {
-				return fmt.Errorf("check recipient slot: %w", err)
-			}
-		}
-
-		id, err := uuid.NewV7()
+		suspend, err = s.resolveActivationSuspend(ctx, stores.tx, userID, invitation.PropertyID)
 		if err != nil {
-			return fmt.Errorf("generate membership id: %w", err)
+			return err
 		}
-		membership := domain.Membership{
-			ID:         id,
-			PropertyID: invitation.PropertyID,
-			UserID:     userID,
-			Role:       invitation.Role, // The role current at activation time.
-			GrantedBy:  invitation.InvitedBy,
-		}
-
-		var created domain.Membership
-		if suspend {
-			membership.Status = domain.MemberStatusSuspended
-			created, err = stores.members.CreateWithStatus(ctx, membership)
-		} else {
-			created, err = stores.members.Create(ctx, membership)
-		}
-		if err != nil {
-			return fmt.Errorf("create membership: %w", err)
-		}
-
-		if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
-			return fmt.Errorf("delete invitation: %w", err)
-		}
-
-		// Audit in the same transaction; the invitee email is PII and must never
-		// appear in context (ADR 0020).
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			// System action at registration: actor_id is NULL (ADR 0020); the
-			// activated user is carried in context, not as the actor.
-			ActorRole:  auditdomain.ActorRoleSystem,
-			Action:     auditdomain.ActionPropertyMemberInvitationActivated,
-			EntityType: auditdomain.EntityPropertyMemberInvitation,
-			EntityID:   &invitation.ID,
-			Context: map[string]any{
-				auditKeyTrigger:    "registration",
-				auditKeyPropertyID: invitation.PropertyID,
-				auditKeyUserID:     userID,
-				"membership_id":    created.ID,
-				auditKeyRole:       string(created.Role),
-				"status":           string(created.Status),
-			},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
+		return s.insertActivationMembership(ctx, stores, userID, invitation, suspend)
 	})
 	if err != nil {
 		return err
@@ -474,6 +426,105 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 	}
 	if suspend {
 		s.lifecycle.SendAccessSuspended(ctx, userID, invitation.PropertyID)
+	}
+	return nil
+}
+
+// dropInvitationIfAlreadyMember drops the invitation silently when the invitee
+// already holds a membership on the property (any status): a duplicate
+// membership must not be created. The dropped result reports that the
+// activation is complete.
+func (s *InvitationService) dropInvitationIfAlreadyMember(
+	ctx context.Context, stores *txStores, userID uuid.UUID, invitation domain.Invitation,
+) (bool, error) {
+	if _, err := stores.members.GetByPropertyAndUser(ctx, invitation.PropertyID, userID); err == nil {
+		if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
+			return false, fmt.Errorf("delete invitation: %w", err)
+		}
+		return true, nil
+	} else if !errors.Is(err, domain.ErrMemberNotFound) {
+		return false, fmt.Errorf("check existing membership: %w", err)
+	}
+	return false, nil
+}
+
+// resolveActivationSuspend decides whether the activated membership must be
+// created suspended: without a free recipient tariff slot it is (issue #158,
+// T4). An archived property occupies no recipient slot (issue #163), so the
+// check is skipped and the membership activates read-only in the active
+// status.
+func (s *InvitationService) resolveActivationSuspend(
+	ctx context.Context, tx transaction.Tx, userID, propertyID uuid.UUID,
+) (bool, error) {
+	archived := false
+	if s.statuses != nil {
+		var err error
+		archived, err = s.statuses.IsArchived(ctx, propertyID)
+		if err != nil {
+			return false, fmt.Errorf("check property archived: %w", err)
+		}
+	}
+	if archived || s.slots == nil {
+		return false, nil
+	}
+	suspend, err := s.slots.EnforceOnActivation(ctx, tx, userID)
+	if err != nil {
+		return false, fmt.Errorf("check recipient slot: %w", err)
+	}
+	return suspend, nil
+}
+
+// insertActivationMembership creates the activated membership, consumes the
+// invitation and records the audit entry in the same transaction.
+func (s *InvitationService) insertActivationMembership(
+	ctx context.Context, stores *txStores, userID uuid.UUID, invitation domain.Invitation, suspend bool,
+) error {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("generate membership id: %w", err)
+	}
+	membership := domain.Membership{
+		ID:         id,
+		PropertyID: invitation.PropertyID,
+		UserID:     userID,
+		Role:       invitation.Role, // The role current at activation time.
+		GrantedBy:  invitation.InvitedBy,
+	}
+
+	var created domain.Membership
+	if suspend {
+		membership.Status = domain.MemberStatusSuspended
+		created, err = stores.members.CreateWithStatus(ctx, membership)
+	} else {
+		created, err = stores.members.Create(ctx, membership)
+	}
+	if err != nil {
+		return fmt.Errorf("create membership: %w", err)
+	}
+
+	if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
+		return fmt.Errorf("delete invitation: %w", err)
+	}
+
+	// Audit in the same transaction; the invitee email is PII and must never
+	// appear in context (ADR 0020).
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		// System action at registration: actor_id is NULL (ADR 0020); the
+		// activated user is carried in context, not as the actor.
+		ActorRole:  auditdomain.ActorRoleSystem,
+		Action:     auditdomain.ActionPropertyMemberInvitationActivated,
+		EntityType: auditdomain.EntityPropertyMemberInvitation,
+		EntityID:   &invitation.ID,
+		Context: map[string]any{
+			auditKeyTrigger:    "registration",
+			auditKeyPropertyID: invitation.PropertyID,
+			auditKeyUserID:     userID,
+			"membership_id":    created.ID,
+			auditKeyRole:       string(created.Role),
+			"status":           string(created.Status),
+		},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
 	}
 	return nil
 }

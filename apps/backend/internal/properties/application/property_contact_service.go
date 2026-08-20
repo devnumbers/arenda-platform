@@ -226,59 +226,23 @@ func (s *PropertyContactService) readScope(ctx context.Context, actor, propertyI
 func (s *PropertyContactService) UpdatePropertyContact(
 	ctx context.Context, actor, propertyID, contactID uuid.UUID, cmd UpdatePropertyContactCommand,
 ) (domain.PropertyContact, error) {
-	role := sharedpolicy.RoleOwner
-	if s.policy != nil {
-		r, err := s.policy.RoleForProperty(ctx, actor, propertyID)
-		if err != nil {
-			return domain.PropertyContact{}, fmt.Errorf("resolve role: %w", err)
-		}
-		if err := propertyContactWriteGate(r); err != nil {
-			return domain.PropertyContact{}, err
-		}
-		role = r
+	role, err := s.resolveWritableContactRole(ctx, actor, propertyID)
+	if err != nil {
+		return domain.PropertyContact{}, err
 	}
 
 	var updated domain.PropertyContact
-	err := s.runInTx(ctx, func(stores *txStores) error {
-		property, err := s.propertyForUpdate(ctx, stores.repo, actor, propertyID)
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		contact, err := s.loadContactForUpdate(ctx, stores, actor, propertyID, contactID)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get property: %w", err)
-		}
-		scope := property.OwnerID
-		if property.Status == domain.PropertyStatusArchived {
-			return ErrArchivedProperty
+			return err
 		}
 
-		contact, err := stores.contacts.GetByIDAndOwner(ctx, contactID, scope)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get property contact: %w", err)
-		}
-		if contact.PropertyID != propertyID {
-			return ErrNotFound
+		if err := applyContactUpdate(contact, cmd); err != nil {
+			return err
 		}
 
-		if cmd.Name != nil {
-			name := strings.TrimSpace(*cmd.Name)
-			if name == "" || len(name) > 255 {
-				return ErrInvalidInput
-			}
-			contact.Name = name
-		}
-		if cmd.Phone != nil {
-			normalized, err := domain.NormalizePhone(*cmd.Phone)
-			if err != nil {
-				return ErrInvalidInput
-			}
-			contact.Phone = normalized
-		}
-
-		updated, err = stores.contacts.Update(ctx, scope, contact)
+		updated, err = stores.contacts.Update(ctx, contact.OwnerID, *contact)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return ErrNotFound
@@ -303,6 +267,76 @@ func (s *PropertyContactService) UpdatePropertyContact(
 		return domain.PropertyContact{}, err
 	}
 	return updated, nil
+}
+
+// resolveWritableContactRole applies the write gate for property contacts: with
+// the policy wired, the actor needs the edit capability on the object
+// (propertyContactWriteGate); without it, only the owner can write contacts
+// (the historical behaviour).
+func (s *PropertyContactService) resolveWritableContactRole(
+	ctx context.Context, actor, propertyID uuid.UUID,
+) (sharedpolicy.Role, error) {
+	if s.policy == nil {
+		return sharedpolicy.RoleOwner, nil
+	}
+	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+	if err != nil {
+		return "", fmt.Errorf("resolve role: %w", err)
+	}
+	if err := propertyContactWriteGate(role); err != nil {
+		return "", err
+	}
+	return role, nil
+}
+
+// loadContactForUpdate loads the property and the contact for a write use case
+// inside the transaction: the property must exist and not be archived, and the
+// contact must exist on the data owner's scope and belong to the property.
+func (s *PropertyContactService) loadContactForUpdate(
+	ctx context.Context, stores *txStores, actor, propertyID, contactID uuid.UUID,
+) (*domain.PropertyContact, error) {
+	property, err := s.propertyForUpdate(ctx, stores.repo, actor, propertyID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get property: %w", err)
+	}
+	if property.Status == domain.PropertyStatusArchived {
+		return nil, ErrArchivedProperty
+	}
+
+	contact, err := stores.contacts.GetByIDAndOwner(ctx, contactID, property.OwnerID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get property contact: %w", err)
+	}
+	if contact.PropertyID != propertyID {
+		return nil, ErrNotFound
+	}
+	return &contact, nil
+}
+
+// applyContactUpdate applies the command's diff to the contact; only provided
+// fields change, and each is validated exactly as at creation.
+func applyContactUpdate(contact *domain.PropertyContact, cmd UpdatePropertyContactCommand) error {
+	if cmd.Name != nil {
+		name := strings.TrimSpace(*cmd.Name)
+		if name == "" || len(name) > 255 {
+			return ErrInvalidInput
+		}
+		contact.Name = name
+	}
+	if cmd.Phone != nil {
+		normalized, err := domain.NormalizePhone(*cmd.Phone)
+		if err != nil {
+			return ErrInvalidInput
+		}
+		contact.Phone = normalized
+	}
+	return nil
 }
 
 // DeletePropertyContact removes a property contact. The property must exist

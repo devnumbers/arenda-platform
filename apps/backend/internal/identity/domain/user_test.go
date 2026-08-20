@@ -66,104 +66,146 @@ func TestNewOwner(t *testing.T) {
 	}
 }
 
+// verifiedOwnerEmail is the seeded address of the baseline aggregate and the
+// identical-resubmit input of the email-verification cases.
+const verifiedOwnerEmail = "owner@example.com"
+
+// newOwnerWithVerifiedEmail builds an owner whose email was verified at the
+// given timestamp — the baseline aggregate for UpdatePersonalData cases.
+func newOwnerWithVerifiedEmail(t *testing.T, at time.Time) User {
+	t.Helper()
+	email, err := NewEmail(verifiedOwnerEmail)
+	if err != nil {
+		t.Fatalf("NewEmail: %v", err)
+	}
+	u, err := NewOwner(mustPhoneTest(t, "+79150000001"))
+	if err != nil {
+		t.Fatalf("NewOwner: %v", err)
+	}
+	u.VerifyEmail(email, at)
+	return u
+}
+
+// assertStringPtr checks an optional string field: want == "" expects a nil
+// pointer (blank input collapses to nil via nonEmptyPtr), otherwise a pointer
+// to exactly want.
+func assertStringPtr(t *testing.T, label string, got *string, want string) {
+	t.Helper()
+	if want == "" {
+		if got != nil {
+			t.Fatalf("%s = %v, want nil", label, got)
+		}
+		return
+	}
+	if got == nil || *got != want {
+		t.Fatalf("%s = %v, want %s", label, got, want)
+	}
+}
+
+// assertEmailVerification checks the email-verification contract of
+// UpdatePersonalData: the stored address matches wantEmail, and the
+// verified-at timestamp survives only when wantVerified is set (an identical
+// resubmit keeps it, a real change resets it).
+func assertEmailVerification(t *testing.T, u User, wantEmail string, wantVerified bool, verifiedAt time.Time) {
+	t.Helper()
+	if u.Email == nil || u.Email.String() != wantEmail {
+		t.Fatalf("Email = %v, want %s", u.Email, wantEmail)
+	}
+	if wantVerified {
+		if u.EmailVerifiedAt == nil || !u.EmailVerifiedAt.Equal(verifiedAt) {
+			t.Fatalf("EmailVerifiedAt = %v, want %v (preserved on identical email)", u.EmailVerifiedAt, verifiedAt)
+		}
+		return
+	}
+	if u.EmailVerifiedAt != nil {
+		t.Fatalf("EmailVerifiedAt = %v, want nil after email change", u.EmailVerifiedAt)
+	}
+}
+
 func TestUser_UpdatePersonalData(t *testing.T) {
 	t.Parallel()
 
 	verifiedAt := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 
-	newOwnerWithVerifiedEmail := func(t *testing.T) User {
-		t.Helper()
-		email, err := NewEmail("owner@example.com")
-		if err != nil {
-			t.Fatalf("NewEmail: %v", err)
-		}
-		u, err := NewOwner(mustPhoneTest(t, "+79150000001"))
-		if err != nil {
-			t.Fatalf("NewOwner: %v", err)
-		}
-		u.VerifyEmail(email, verifiedAt)
-		return u
+	fieldCases := []struct {
+		name string
+		// Update args; nil leaves the field untouched.
+		nameArg, surnameArg, patronymicArg, timezoneArg *string
+		// Wants; "" on a name field expects a nil pointer, "" on the timezone
+		// leaves it unasserted.
+		wantName, wantSurname, wantPatronymic, wantTimezone string
+	}{
+		{
+			name:           "sets each field individually",
+			nameArg:        new("Ivan"),
+			surnameArg:     new("Petrov"),
+			patronymicArg:  new("Sergeevich"),
+			timezoneArg:    new(testTimezone), // Email untouched.
+			wantName:       "Ivan",
+			wantSurname:    "Petrov",
+			wantPatronymic: "Sergeevich",
+			wantTimezone:   testTimezone,
+		},
+		{
+			name:          "blank strings become nil via nonEmptyPtr",
+			nameArg:       new("  "),
+			surnameArg:    new(""),
+			patronymicArg: new("\t"),
+		},
+	}
+	for _, tc := range fieldCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			u := newOwnerWithVerifiedEmail(t, verifiedAt)
+
+			err := u.UpdatePersonalData(tc.nameArg, tc.surnameArg, tc.patronymicArg, nil, tc.timezoneArg)
+			if err != nil {
+				t.Fatalf("UpdatePersonalData error = %v", err)
+			}
+			assertStringPtr(t, "Name", u.Name, tc.wantName)
+			assertStringPtr(t, "Surname", u.Surname, tc.wantSurname)
+			assertStringPtr(t, "Patronymic", u.Patronymic, tc.wantPatronymic)
+			if tc.wantTimezone != "" && u.Timezone.String() != tc.wantTimezone {
+				t.Fatalf("Timezone = %q, want %s", u.Timezone.String(), tc.wantTimezone)
+			}
+		})
 	}
 
-	t.Run("sets each field individually", func(t *testing.T) {
-		t.Parallel()
-		u := newOwnerWithVerifiedEmail(t)
+	emailCases := []struct {
+		name              string
+		email             string
+		wantEmail         string
+		wantStillVerified bool
+	}{
+		{
+			name:              "email change resets verification",
+			email:             "new@example.com",
+			wantEmail:         "new@example.com",
+			wantStillVerified: false,
+		},
+		{
+			name:              "identical email keeps verification",
+			email:             verifiedOwnerEmail,
+			wantEmail:         verifiedOwnerEmail,
+			wantStillVerified: true,
+		},
+	}
+	for _, tc := range emailCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			u := newOwnerWithVerifiedEmail(t, verifiedAt)
 
-		err := u.UpdatePersonalData(
-			new("Ivan"),
-			new("Petrov"),
-			new("Sergeevich"),
-			nil, // Email untouched.
-			new(testTimezone),
-		)
-		if err != nil {
-			t.Fatalf("UpdatePersonalData error = %v", err)
-		}
-		if u.Name == nil || *u.Name != "Ivan" {
-			t.Fatalf("Name = %v, want Ivan", u.Name)
-		}
-		if u.Surname == nil || *u.Surname != "Petrov" {
-			t.Fatalf("Surname = %v, want Petrov", u.Surname)
-		}
-		if u.Patronymic == nil || *u.Patronymic != "Sergeevich" {
-			t.Fatalf("Patronymic = %v, want Sergeevich", u.Patronymic)
-		}
-		if u.Timezone.String() != testTimezone {
-			t.Fatalf("Timezone = %q, want %s", u.Timezone.String(), testTimezone)
-		}
-	})
-
-	t.Run("email change resets verification", func(t *testing.T) {
-		t.Parallel()
-		u := newOwnerWithVerifiedEmail(t)
-
-		err := u.UpdatePersonalData(nil, nil, nil, new("new@example.com"), nil)
-		if err != nil {
-			t.Fatalf("UpdatePersonalData error = %v", err)
-		}
-		if u.EmailVerifiedAt != nil {
-			t.Fatalf("EmailVerifiedAt = %v, want nil after email change", u.EmailVerifiedAt)
-		}
-		if u.Email == nil || u.Email.String() != "new@example.com" {
-			t.Fatalf("Email = %v, want new@example.com", u.Email)
-		}
-	})
-
-	t.Run("identical email keeps verification", func(t *testing.T) {
-		t.Parallel()
-		u := newOwnerWithVerifiedEmail(t)
-
-		err := u.UpdatePersonalData(nil, nil, nil, new("owner@example.com"), nil)
-		if err != nil {
-			t.Fatalf("UpdatePersonalData error = %v", err)
-		}
-		if u.EmailVerifiedAt == nil || !u.EmailVerifiedAt.Equal(verifiedAt) {
-			t.Fatalf("EmailVerifiedAt = %v, want %v (preserved on identical email)", u.EmailVerifiedAt, verifiedAt)
-		}
-	})
-
-	t.Run("blank strings become nil via nonEmptyPtr", func(t *testing.T) {
-		t.Parallel()
-		u := newOwnerWithVerifiedEmail(t)
-
-		err := u.UpdatePersonalData(new("  "), new(""), new("\t"), nil, nil)
-		if err != nil {
-			t.Fatalf("UpdatePersonalData error = %v", err)
-		}
-		if u.Name != nil {
-			t.Fatalf("Name = %v, want nil for blank string", u.Name)
-		}
-		if u.Surname != nil {
-			t.Fatalf("Surname = %v, want nil for empty string", u.Surname)
-		}
-		if u.Patronymic != nil {
-			t.Fatalf("Patronymic = %v, want nil for whitespace", u.Patronymic)
-		}
-	})
+			err := u.UpdatePersonalData(nil, nil, nil, new(tc.email), nil)
+			if err != nil {
+				t.Fatalf("UpdatePersonalData error = %v", err)
+			}
+			assertEmailVerification(t, u, tc.wantEmail, tc.wantStillVerified, verifiedAt)
+		})
+	}
 
 	t.Run("nil fields do not mutate the aggregate", func(t *testing.T) {
 		t.Parallel()
-		u := newOwnerWithVerifiedEmail(t)
+		u := newOwnerWithVerifiedEmail(t, verifiedAt)
 		emailBefore := u.Email
 		tzBefore := u.Timezone
 
@@ -179,23 +221,24 @@ func TestUser_UpdatePersonalData(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid email returns ErrInvalidEmail", func(t *testing.T) {
-		t.Parallel()
-		u := newOwnerWithVerifiedEmail(t)
+	errorCases := []struct {
+		name        string
+		emailArg    *string
+		timezoneArg *string
+		wantErr     error
+	}{
+		{"invalid email returns ErrInvalidEmail", new("not-an-email"), nil, ErrInvalidEmail},
+		{"invalid timezone returns ErrInvalidTimezone", nil, new("Mars/Olympus"), ErrInvalidTimezone},
+	}
+	for _, tc := range errorCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			u := newOwnerWithVerifiedEmail(t, verifiedAt)
 
-		err := u.UpdatePersonalData(nil, nil, nil, new("not-an-email"), nil)
-		if !errors.Is(err, ErrInvalidEmail) {
-			t.Fatalf("UpdatePersonalData(invalid email) error = %v, want ErrInvalidEmail", err)
-		}
-	})
-
-	t.Run("invalid timezone returns ErrInvalidTimezone", func(t *testing.T) {
-		t.Parallel()
-		u := newOwnerWithVerifiedEmail(t)
-
-		err := u.UpdatePersonalData(nil, nil, nil, nil, new("Mars/Olympus"))
-		if !errors.Is(err, ErrInvalidTimezone) {
-			t.Fatalf("UpdatePersonalData(invalid tz) error = %v, want ErrInvalidTimezone", err)
-		}
-	})
+			err := u.UpdatePersonalData(nil, nil, nil, tc.emailArg, tc.timezoneArg)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("UpdatePersonalData error = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
 }

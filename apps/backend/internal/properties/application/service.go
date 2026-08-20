@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/url"
 	"path"
+	"slices"
 	"sort"
 
 	"github.com/google/uuid"
@@ -242,52 +243,83 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		properties[i].AccessRole = sharedpolicy.RoleOwner
 	}
 
-	// Append properties shared with the actor (issues #156 T3, T11). Each
-	// shared property belongs to another owner; load it by id and dedupe
-	// against the owner's own set in case of an accidental self-membership.
-	if s.sharedMemberships != nil {
-		memberships, err := s.sharedMemberships.MembershipsWith(ctx, actor)
-		if err != nil {
-			return nil, fmt.Errorf("list shared memberships: %w", err)
-		}
-		seen := make(map[uuid.UUID]bool, len(properties))
-		for i := range properties {
-			seen[properties[i].ID] = true
-		}
-		for _, m := range memberships {
-			// Defensive filter for corrupt data: an unrecognized membership
-			// role degrades to RoleNone in the access adapter and must not
-			// leak into the API contract as access.role "none"; such a
-			// membership is unusable anyway, so skip it and log a warning.
-			if m.Role != sharedpolicy.RoleFullAccess && m.Role != sharedpolicy.RoleViewer {
-				s.logger.WarnContext(ctx, "skipping shared membership with unrecognized role",
-					slog.String("property_id", m.PropertyID.String()),
-					slog.String("user_id", actor.String()),
-				)
-				continue
-			}
-			if seen[m.PropertyID] {
-				continue
-			}
-			p, err := s.repo.GetByID(ctx, m.PropertyID)
-			if err != nil {
-				if errors.Is(err, ErrNotFound) {
-					continue
-				}
-				return nil, fmt.Errorf("load shared property: %w", err)
-			}
-			// Only active/maintenance properties belong in the main list.
-			if p.Status != domain.PropertyStatusActive && p.Status != domain.PropertyStatusMaintenance {
-				continue
-			}
-			p.AccessRole = m.Role
-			seen[m.PropertyID] = true
-			properties = append(properties, p)
-		}
+	// Only active and maintenance properties belong in the main list.
+	properties, err = s.appendSharedProperties(ctx, actor, properties,
+		domain.PropertyStatusActive, domain.PropertyStatusMaintenance)
+	if err != nil {
+		return nil, err
 	}
 
 	// Occupancy is resolved per owner (scope); for shared properties it reflects
 	// the data owner's leases, which the actor is entitled to see.
+	if err := s.applyOccupancy(ctx, properties); err != nil {
+		return nil, err
+	}
+
+	return s.withPhotos(ctx, properties...)
+}
+
+// appendSharedProperties appends the properties shared with the actor to the
+// actor's own list (issues #156 T3, T11). Each shared property belongs to
+// another owner: it is loaded by id, deduplicated against the own set in case
+// of an accidental self-membership, and kept only when its status is one of
+// the wanted list statuses.
+func (s *PropertyService) appendSharedProperties(
+	ctx context.Context, actor uuid.UUID, properties []domain.Property, wanted ...domain.PropertyStatus,
+) ([]domain.Property, error) {
+	if s.sharedMemberships == nil {
+		return properties, nil
+	}
+	memberships, err := s.sharedMemberships.MembershipsWith(ctx, actor)
+	if err != nil {
+		return nil, fmt.Errorf("list shared memberships: %w", err)
+	}
+	seen := make(map[uuid.UUID]bool, len(properties))
+	for i := range properties {
+		seen[properties[i].ID] = true
+	}
+	for _, m := range memberships {
+		if !isSharedAccessRole(m.Role) {
+			// Defensive filter for corrupt data: an unrecognized membership
+			// role degrades to RoleNone in the access adapter and must not
+			// leak into the API contract as access.role "none"; such a
+			// membership is unusable anyway, so skip it and log a warning.
+			s.logger.WarnContext(ctx, "skipping shared membership with unrecognized role",
+				slog.String("property_id", m.PropertyID.String()),
+				slog.String("user_id", actor.String()),
+			)
+			continue
+		}
+		if seen[m.PropertyID] {
+			continue
+		}
+		p, err := s.repo.GetByID(ctx, m.PropertyID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			return nil, fmt.Errorf("load shared property: %w", err)
+		}
+		if !slices.Contains(wanted, p.Status) {
+			continue
+		}
+		p.AccessRole = m.Role
+		seen[m.PropertyID] = true
+		properties = append(properties, p)
+	}
+	return properties, nil
+}
+
+// isSharedAccessRole reports whether a membership role is one of the two
+// recognizable shared-access roles; anything else is corrupt data.
+func isSharedAccessRole(role sharedpolicy.Role) bool {
+	return role == sharedpolicy.RoleFullAccess || role == sharedpolicy.RoleViewer
+}
+
+// applyOccupancy sets each property's occupancy from its data owner's open
+// leases. The occupied-id map is resolved once per owner so a list mixing
+// several owners (own + shared) queries each owner once.
+func (s *PropertyService) applyOccupancy(ctx context.Context, properties []domain.Property) error {
 	ownerOccupied := make(map[uuid.UUID]map[uuid.UUID]bool)
 	ensureOccupied := func(owner uuid.UUID) (map[uuid.UUID]bool, error) {
 		if m, ok := ownerOccupied[owner]; ok {
@@ -303,7 +335,7 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 	for i := range properties {
 		occupied, err := ensureOccupied(properties[i].OwnerID)
 		if err != nil {
-			return nil, fmt.Errorf("check occupancy: %w", err)
+			return fmt.Errorf("check occupancy: %w", err)
 		}
 		if occupied[properties[i].ID] {
 			properties[i].Occupancy = domain.OccupancyOccupied
@@ -311,13 +343,7 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 			properties[i].Occupancy = domain.OccupancyFree
 		}
 	}
-
-	properties, err = s.withPhotos(ctx, properties...)
-	if err != nil {
-		return nil, err
-	}
-
-	return properties, nil
+	return nil
 }
 
 func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid.UUID) ([]domain.Property, error) {
@@ -331,52 +357,13 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 		properties[i].AccessRole = sharedpolicy.RoleOwner
 	}
 
-	if s.sharedMemberships != nil {
-		memberships, err := s.sharedMemberships.MembershipsWith(ctx, actor)
-		if err != nil {
-			return nil, fmt.Errorf("list shared memberships: %w", err)
-		}
-		seen := make(map[uuid.UUID]bool, len(properties))
-		for i := range properties {
-			seen[properties[i].ID] = true
-		}
-		for _, m := range memberships {
-			// Defensive filter for corrupt data: an unrecognized membership
-			// role degrades to RoleNone in the access adapter and must not
-			// leak into the API contract as access.role "none"; such a
-			// membership is unusable anyway, so skip it and log a warning.
-			if m.Role != sharedpolicy.RoleFullAccess && m.Role != sharedpolicy.RoleViewer {
-				s.logger.WarnContext(ctx, "skipping shared membership with unrecognized role",
-					slog.String("property_id", m.PropertyID.String()),
-					slog.String("user_id", actor.String()),
-				)
-				continue
-			}
-			if seen[m.PropertyID] {
-				continue
-			}
-			p, err := s.repo.GetByID(ctx, m.PropertyID)
-			if err != nil {
-				if errors.Is(err, ErrNotFound) {
-					continue
-				}
-				return nil, fmt.Errorf("load shared property: %w", err)
-			}
-			if p.Status != domain.PropertyStatusArchived {
-				continue
-			}
-			p.AccessRole = m.Role
-			seen[m.PropertyID] = true
-			properties = append(properties, p)
-		}
-	}
-
-	properties, err = s.withPhotos(ctx, properties...)
+	// The archive list carries archived objects only.
+	properties, err = s.appendSharedProperties(ctx, actor, properties, domain.PropertyStatusArchived)
 	if err != nil {
 		return nil, err
 	}
 
-	return properties, nil
+	return s.withPhotos(ctx, properties...)
 }
 
 func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
@@ -484,82 +471,25 @@ func (s *PropertyService) ListPropertyLeases(ctx context.Context, actor, propert
 }
 
 func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {
-	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	role, err := s.resolveEditableProperty(ctx, actor, id)
 	if err != nil {
-		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
-	}
-	if role == sharedpolicy.RoleNone {
-		return domain.Property{}, ErrNotFound
-	}
-	if !sharedpolicy.CanEdit(role) {
-		return domain.Property{}, ErrForbidden
+		return domain.Property{}, err
 	}
 
 	var updated domain.Property
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		property, err := stores.repo.GetByIDForUpdate(ctx, id)
+		property, err := lockEditableProperty(ctx, stores.repo, id)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get property: %w", err)
-		}
-		scope := property.OwnerID
-
-		if property.Status == domain.PropertyStatusArchived {
-			return ErrArchivedProperty
+			return err
 		}
 
-		if cmd.Name != nil {
-			property.Name = *cmd.Name
-		}
-		if cmd.Address != nil {
-			property.Address = *cmd.Address
-		}
-		if cmd.Description != nil {
-			property.Description = *cmd.Description
-		}
-		if cmd.Type != nil {
-			propertyType, err := domain.ParsePropertyType(*cmd.Type)
-			if err != nil {
-				return fmt.Errorf("%w: invalid property type: %w", ErrInvalidInput, err)
-			}
-			property.Type = propertyType
-		}
-		if cmd.Status != nil {
-			status, err := domain.ParsePropertyStatus(*cmd.Status)
-			if err != nil {
-				return fmt.Errorf("%w: invalid property status: %w", ErrInvalidInput, err)
-			}
-			if !isUpdatableStatusTransition(property.Status, status) {
-				return &InvalidStatusTransitionError{From: property.Status, To: status}
-			}
-			if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
-				occupied, err := stores.occupancy.IsOccupied(ctx, scope, property.ID)
-				if err != nil {
-					return fmt.Errorf("check occupancy: %w", err)
-				}
-				if occupied {
-					return ErrPropertyHasOpenLease
-				}
-			}
-			property.Status = status
-		}
-		if cmd.Attributes != nil {
-			attrs := domain.Attributes(*cmd.Attributes)
-			if result := domain.ValidateAttributes(property.Type, attrs); !result.Valid() {
-				return &AttributesValidationError{Errors: result.Errors}
-			}
-			property.Attributes = attrs
-		}
-
-		if err := property.Validate(); err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		if err := applyPropertyUpdate(ctx, stores, &property, cmd); err != nil {
+			return err
 		}
 
 		property.UpdatedAt = s.clock.Now()
 
-		updated, err = stores.repo.Update(ctx, scope, property)
+		updated, err = stores.repo.Update(ctx, property.OwnerID, property)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return ErrNotFound
@@ -589,6 +519,111 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 	}
 	properties[0].AccessRole = role
 	return properties[0], nil
+}
+
+// resolveEditableProperty authorizes a property write (UpdateProperty,
+// AddPropertyPhoto): the actor needs the edit capability on the object. A
+// missing property or no access maps to ErrNotFound so the existence of an
+// object is never revealed (issue #156, T3); a view-only role is ErrForbidden.
+func (s *PropertyService) resolveEditableProperty(ctx context.Context, actor, id uuid.UUID) (sharedpolicy.Role, error) {
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return "", fmt.Errorf("resolve role: %w", err)
+	}
+	if role == sharedpolicy.RoleNone {
+		return "", ErrNotFound
+	}
+	if !sharedpolicy.CanEdit(role) {
+		return "", ErrForbidden
+	}
+	return role, nil
+}
+
+// lockEditableProperty loads the property row for update inside a write
+// transaction and rejects archived objects: an archived property is read-only
+// history.
+func lockEditableProperty(ctx context.Context, repo PropertyRepository, id uuid.UUID) (domain.Property, error) {
+	property, err := repo.GetByIDForUpdate(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Property{}, ErrNotFound
+		}
+		return domain.Property{}, fmt.Errorf("get property: %w", err)
+	}
+	if property.Status == domain.PropertyStatusArchived {
+		return domain.Property{}, ErrArchivedProperty
+	}
+	return property, nil
+}
+
+// applyPropertyUpdate applies the command's diff to the property and
+// re-validates the aggregate; only the provided fields change.
+func applyPropertyUpdate(ctx context.Context, stores *txStores, property *domain.Property, cmd UpdatePropertyCommand) error {
+	if cmd.Name != nil {
+		property.Name = *cmd.Name
+	}
+	if cmd.Address != nil {
+		property.Address = *cmd.Address
+	}
+	if cmd.Description != nil {
+		property.Description = *cmd.Description
+	}
+	if cmd.Type != nil {
+		propertyType, err := domain.ParsePropertyType(*cmd.Type)
+		if err != nil {
+			return fmt.Errorf("%w: invalid property type: %w", ErrInvalidInput, err)
+		}
+		property.Type = propertyType
+	}
+	if cmd.Status != nil {
+		if err := applyStatusUpdate(ctx, stores, property, *cmd.Status); err != nil {
+			return err
+		}
+	}
+	if cmd.Attributes != nil {
+		attrs := domain.Attributes(*cmd.Attributes)
+		if result := domain.ValidateAttributes(property.Type, attrs); !result.Valid() {
+			return &AttributesValidationError{Errors: result.Errors}
+		}
+		property.Attributes = attrs
+	}
+
+	if err := property.Validate(); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
+	return nil
+}
+
+// applyStatusUpdate parses and applies a requested status transition. Moving an
+// active property to maintenance is additionally refused while a lease is
+// open.
+func applyStatusUpdate(ctx context.Context, stores *txStores, property *domain.Property, rawStatus string) error {
+	status, err := domain.ParsePropertyStatus(rawStatus)
+	if err != nil {
+		return fmt.Errorf("%w: invalid property status: %w", ErrInvalidInput, err)
+	}
+	if !isUpdatableStatusTransition(property.Status, status) {
+		return &InvalidStatusTransitionError{From: property.Status, To: status}
+	}
+	if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
+		if err := ensureNoOpenLease(ctx, stores.occupancy, property.OwnerID, property.ID); err != nil {
+			return err
+		}
+	}
+	property.Status = status
+	return nil
+}
+
+// ensureNoOpenLease rejects a mutation while the property has an open lease.
+func ensureNoOpenLease(ctx context.Context, occupancy OccupancyProvider, scope, id uuid.UUID) error {
+	occupied, err := occupancy.IsOccupied(ctx, scope, id)
+	if err != nil {
+		return fmt.Errorf("check occupancy: %w", err)
+	}
+	if occupied {
+		return ErrPropertyHasOpenLease
+	}
+	return nil
 }
 
 func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
@@ -667,15 +702,8 @@ func (s *PropertyService) DeleteProperty(
 		return fmt.Errorf("%w: invalid delete mode %q", ErrInvalidInput, mode)
 	}
 
-	role, err := s.policy.RoleForProperty(ctx, actor, id)
-	if err != nil {
-		return fmt.Errorf("resolve role: %w", err)
-	}
-	if role == sharedpolicy.RoleNone {
-		return ErrNotFound
-	}
-	if !sharedpolicy.CanLifecycle(role) {
-		return ErrForbidden
+	if _, err := s.resolveLifecycleProperty(ctx, actor, id); err != nil {
+		return err
 	}
 
 	// The deleted property's name and photos, plus the former members'
@@ -685,22 +713,11 @@ func (s *PropertyService) DeleteProperty(
 		photos             []domain.Photo
 		formerMemberEmails []string
 	)
-	err = s.runInTx(ctx, func(stores *txStores) error {
+	err := s.runInTx(ctx, func(stores *txStores) error {
 		var err error
-		property, err = stores.repo.GetByIDAndOwnerForUpdate(ctx, id, actor)
+		property, err = lockDeletableProperty(ctx, stores, actor, id)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get property: %w", err)
-		}
-
-		occupied, err := stores.occupancy.IsOccupied(ctx, actor, id)
-		if err != nil {
-			return fmt.Errorf("check occupancy: %w", err)
-		}
-		if occupied {
-			return ErrPropertyHasOpenLease
+			return err
 		}
 
 		photos, err = stores.photos.GetByPropertyID(ctx, id)
@@ -712,31 +729,12 @@ func (s *PropertyService) DeleteProperty(
 			return err
 		}
 
-		// Former shared members are collected before the slot policy drops their
-		// memberships, so the "object deleted" email can reach them after the
-		// commit (issue #162, T6).
-		if s.sharedDeleteMailer != nil {
-			formerMemberEmails, err = s.sharedDeleteMailer.CollectFormerMemberEmails(ctx, stores.tx, id)
-			if err != nil {
-				return fmt.Errorf("collect former shared members: %w", err)
-			}
+		if formerMemberEmails, err = s.collectFormerMemberEmails(ctx, stores, id); err != nil {
+			return err
 		}
 
-		// Dropping the shared object frees one tariff slot for each recipient:
-		// the access context drops their memberships and recovers the oldest
-		// suspended ones FIFO in the same transaction, before the property row is
-		// removed (issue #158, T4).
-		if s.slots != nil {
-			if err := s.slots.RecoverAfterPropertyDelete(ctx, stores.tx, id); err != nil {
-				return fmt.Errorf("recover suspended memberships before delete: %w", err)
-			}
-			// Deleting one of the owner's OWN objects also freed one of the owner's
-			// own tariff slots: the owner is never a member row of their own object,
-			// so RecoverAfterPropertyDelete above did not visit them. Recover their
-			// own suspended shared queue FIFO in the same transaction.
-			if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
-				return fmt.Errorf("recover owner suspended memberships after delete: %w", err)
-			}
+		if err := s.recoverSlotsAfterDelete(ctx, stores, actor, id); err != nil {
+			return err
 		}
 
 		if err := stores.repo.Delete(ctx, id, actor); err != nil {
@@ -763,6 +761,75 @@ func (s *PropertyService) DeleteProperty(
 	s.notifyPropertyDeleted(ctx, id, property.Name, formerMemberEmails)
 	s.cleanupPropertyPhotos(ctx, id, photos)
 
+	return nil
+}
+
+// resolveLifecycleProperty authorizes a property lifecycle change
+// (ArchiveProperty, UnarchiveProperty, DeleteProperty): only the owner may
+// perform one (CanLifecycle). A missing property or no access maps to
+// ErrNotFound so the existence of an object is never revealed (issue #156, T3).
+func (s *PropertyService) resolveLifecycleProperty(ctx context.Context, actor, id uuid.UUID) (sharedpolicy.Role, error) {
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return "", fmt.Errorf("resolve role: %w", err)
+	}
+	if role == sharedpolicy.RoleNone {
+		return "", ErrNotFound
+	}
+	if !sharedpolicy.CanLifecycle(role) {
+		return "", ErrForbidden
+	}
+	return role, nil
+}
+
+// lockDeletableProperty loads the property row for update inside the delete
+// transaction and rejects a property with an open lease: deletion is
+// forbidden while a lease is open (ADR 0025).
+func lockDeletableProperty(ctx context.Context, stores *txStores, owner, id uuid.UUID) (domain.Property, error) {
+	property, err := stores.repo.GetByIDAndOwnerForUpdate(ctx, id, owner)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Property{}, ErrNotFound
+		}
+		return domain.Property{}, fmt.Errorf("get property: %w", err)
+	}
+	if err := ensureNoOpenLease(ctx, stores.occupancy, owner, id); err != nil {
+		return domain.Property{}, err
+	}
+	return property, nil
+}
+
+// collectFormerMemberEmails gathers the emails of the property's shared
+// members before the slot policy drops their memberships, so the "object
+// deleted" email can reach them after the commit (issue #162, T6).
+func (s *PropertyService) collectFormerMemberEmails(ctx context.Context, stores *txStores, id uuid.UUID) ([]string, error) {
+	if s.sharedDeleteMailer == nil {
+		return nil, nil
+	}
+	emails, err := s.sharedDeleteMailer.CollectFormerMemberEmails(ctx, stores.tx, id)
+	if err != nil {
+		return nil, fmt.Errorf("collect former shared members: %w", err)
+	}
+	return emails, nil
+}
+
+// recoverSlotsAfterDelete frees the recipients' tariff slots dropped by the
+// delete: the access context drops their memberships and recovers the oldest
+// suspended ones FIFO in the same transaction, before the property row is
+// removed (issue #158, T4). Deleting one of the owner's OWN objects also freed
+// one of the owner's own tariff slots: the owner is never a member row of
+// their own object, so RecoverAfterPropertyDelete above did not visit them.
+// Their own suspended shared queue is recovered FIFO as well.
+func (s *PropertyService) recoverSlotsAfterDelete(ctx context.Context, stores *txStores, actor, id uuid.UUID) error {
+	if s.slots == nil {
+		return nil
+	}
+	if err := s.slots.RecoverAfterPropertyDelete(ctx, stores.tx, id); err != nil {
+		return fmt.Errorf("recover suspended memberships before delete: %w", err)
+	}
+	if err := s.slots.RecoverSuspended(ctx, stores.tx, actor); err != nil {
+		return fmt.Errorf("recover owner suspended memberships after delete: %w", err)
+	}
 	return nil
 }
 
@@ -971,57 +1038,29 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 }
 
 func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
-	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	role, err := s.resolveLifecycleProperty(ctx, actor, id)
 	if err != nil {
-		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
-	}
-	if role == sharedpolicy.RoleNone {
-		return domain.Property{}, ErrNotFound
-	}
-	if !sharedpolicy.CanLifecycle(role) {
-		return domain.Property{}, ErrForbidden
+		return domain.Property{}, err
 	}
 
 	var unarchived domain.Property
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		property, err := stores.repo.GetByIDAndOwnerForUpdate(ctx, id, actor)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get property: %w", err)
+		if err := ensurePropertyArchived(ctx, stores, actor, id); err != nil {
+			return err
 		}
-
-		if property.Status != domain.PropertyStatusArchived {
-			return ErrNotArchived
-		}
-
-		limit, err := stores.limiter.ActivePropertyLimit(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("get active property limit: %w", err)
-		}
-
-		count, err := stores.repo.CountActiveByOwner(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("count active properties: %w", err)
-		}
-		if count >= limit {
-			return ErrLimitExceeded
+		if err := ensureActivePropertySlot(ctx, stores, actor); err != nil {
+			return err
 		}
 
 		if err := stores.repo.Unarchive(ctx, id, actor); err != nil {
 			return fmt.Errorf("unarchive property: %w", err)
 		}
 
-		resumeLoc, err := s.tzResolver.Resolve(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("resolve owner timezone: %w", err)
-		}
-		resumeAsOf := timeutil.DateIn(s.clock.Now(), resumeLoc)
-		if err := stores.billing.Resume(ctx, id, actor, resumeAsOf); err != nil {
-			return fmt.Errorf("resume billing: %w", err)
+		if err := s.resumePropertyBilling(ctx, stores.billing, actor, id); err != nil {
+			return err
 		}
 
+		var err error
 		unarchived, err = stores.repo.GetByIDAndOwner(ctx, id, actor)
 		if err != nil {
 			return fmt.Errorf("reload unarchived property: %w", err)
@@ -1069,6 +1108,58 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 	return properties[0], nil
 }
 
+// ensurePropertyArchived loads the property row for update inside the
+// unarchive transaction and requires the archived status: unarchiving a
+// non-archived object is ErrNotArchived.
+func ensurePropertyArchived(ctx context.Context, stores *txStores, owner, id uuid.UUID) error {
+	property, err := stores.repo.GetByIDAndOwnerForUpdate(ctx, id, owner)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get property: %w", err)
+	}
+	if property.Status != domain.PropertyStatusArchived {
+		return ErrNotArchived
+	}
+	return nil
+}
+
+// ensureActivePropertySlot enforces the tariff limit on active objects: the
+// owner's active property count must stay under the subscription limit
+// (CreateProperty, UnarchiveProperty).
+func ensureActivePropertySlot(ctx context.Context, stores *txStores, owner uuid.UUID) error {
+	limit, err := stores.limiter.ActivePropertyLimit(ctx, owner)
+	if err != nil {
+		return fmt.Errorf("get active property limit: %w", err)
+	}
+
+	count, err := stores.repo.CountActiveByOwner(ctx, owner)
+	if err != nil {
+		return fmt.Errorf("count active properties: %w", err)
+	}
+	if count >= limit {
+		return ErrLimitExceeded
+	}
+	return nil
+}
+
+// resumePropertyBilling resumes the property's billing lifecycle from today in
+// the owner's timezone.
+func (s *PropertyService) resumePropertyBilling(
+	ctx context.Context, billing PropertyBillingLifecycle, scope, id uuid.UUID,
+) error {
+	loc, err := s.tzResolver.Resolve(ctx, scope)
+	if err != nil {
+		return fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	resumeAsOf := timeutil.DateIn(s.clock.Now(), loc)
+	if err := billing.Resume(ctx, id, scope, resumeAsOf); err != nil {
+		return fmt.Errorf("resume billing: %w", err)
+	}
+	return nil
+}
+
 // NewPhotoTooLargeError reports a photo upload whose byte size exceeds
 // MaxPhotoSize. The service size validation and the HTTP adapter's streaming
 // bound share it so the message is identical wherever the check fires.
@@ -1080,63 +1171,30 @@ func NewPhotoTooLargeError(size int64) error {
 func (s *PropertyService) AddPropertyPhoto(
 	ctx context.Context, actor, propertyID uuid.UUID, file io.Reader, filename, contentType string, size int64,
 ) (domain.Property, error) {
-	if _, ok := allowedPhotoContentTypes[contentType]; !ok {
-		return domain.Property{}, fmt.Errorf("%w: unsupported content type %q", ErrInvalidInput, contentType)
-	}
-	if size > MaxPhotoSize {
-		return domain.Property{}, NewPhotoTooLargeError(size)
+	if err := validatePhotoUpload(contentType, size); err != nil {
+		return domain.Property{}, err
 	}
 
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+	role, err := s.resolveEditableProperty(ctx, actor, propertyID)
 	if err != nil {
-		return domain.Property{}, fmt.Errorf("resolve role: %w", err)
-	}
-	if role == sharedpolicy.RoleNone {
-		return domain.Property{}, ErrNotFound
-	}
-	if !sharedpolicy.CanEdit(role) {
-		return domain.Property{}, ErrForbidden
+		return domain.Property{}, err
 	}
 
 	var property domain.Property
-	var photoID uuid.UUID
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
-		property, err = stores.repo.GetByIDForUpdate(ctx, propertyID)
+		property, err = lockEditableProperty(ctx, stores.repo, propertyID)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get property: %w", err)
+			return err
 		}
 
-		if property.Status == domain.PropertyStatusArchived {
-			return ErrArchivedProperty
+		if err := ensurePhotoSlotAvailable(ctx, stores, propertyID); err != nil {
+			return err
 		}
 
-		count, err := stores.photos.CountByPropertyID(ctx, propertyID)
+		photoID, err := s.storePropertyPhoto(ctx, stores, propertyID, file, contentType, size)
 		if err != nil {
-			return fmt.Errorf("count photos: %w", err)
-		}
-		if count >= maxPhotoCount {
-			return ErrPhotoLimitReached
-		}
-
-		photoID, err = uuid.NewV7()
-		if err != nil {
-			return fmt.Errorf("generate photo id: %w", err)
-		}
-
-		ext := allowedPhotoContentTypes[contentType]
-		key := fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext)
-
-		photoURL, err := s.photoStorage.Upload(ctx, key, contentType, size, file)
-		if err != nil {
-			return fmt.Errorf("upload photo: %w", err)
-		}
-
-		if _, err := stores.photos.Create(ctx, photoID, propertyID, photoURL); err != nil {
-			return fmt.Errorf("create photo record: %w", err)
+			return err
 		}
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -1162,6 +1220,55 @@ func (s *PropertyService) AddPropertyPhoto(
 	property.Photos = photos
 
 	return property, nil
+}
+
+// validatePhotoUpload checks the upload's content type and byte size against
+// the photo constraints before any authorization or transaction work.
+func validatePhotoUpload(contentType string, size int64) error {
+	if _, ok := allowedPhotoContentTypes[contentType]; !ok {
+		return fmt.Errorf("%w: unsupported content type %q", ErrInvalidInput, contentType)
+	}
+	if size > MaxPhotoSize {
+		return NewPhotoTooLargeError(size)
+	}
+	return nil
+}
+
+// ensurePhotoSlotAvailable enforces the per-property photo limit.
+func ensurePhotoSlotAvailable(ctx context.Context, stores *txStores, propertyID uuid.UUID) error {
+	count, err := stores.photos.CountByPropertyID(ctx, propertyID)
+	if err != nil {
+		return fmt.Errorf("count photos: %w", err)
+	}
+	if count >= maxPhotoCount {
+		return ErrPhotoLimitReached
+	}
+	return nil
+}
+
+// storePropertyPhoto uploads the photo bytes to storage and persists the photo
+// row, returning the new photo id. The storage key is derived from the id and
+// the content-type extension, never from the client-supplied filename.
+func (s *PropertyService) storePropertyPhoto(
+	ctx context.Context, stores *txStores, propertyID uuid.UUID,
+	file io.Reader, contentType string, size int64,
+) (uuid.UUID, error) {
+	photoID, err := uuid.NewV7()
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("generate photo id: %w", err)
+	}
+
+	ext := allowedPhotoContentTypes[contentType]
+	key := fmt.Sprintf("%s/%s/%s%s", photoKeyPrefix, propertyID.String(), photoID.String(), ext)
+	photoURL, err := s.photoStorage.Upload(ctx, key, contentType, size, file)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("upload photo: %w", err)
+	}
+
+	if _, err := stores.photos.Create(ctx, photoID, propertyID, photoURL); err != nil {
+		return uuid.Nil, fmt.Errorf("create photo record: %w", err)
+	}
+	return photoID, nil
 }
 
 // DeletePropertyPhoto removes a photo record from the database and then deletes

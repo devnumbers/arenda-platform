@@ -206,6 +206,55 @@ func TestNewProviderTrimsTrailingSlash(t *testing.T) {
 	}
 }
 
+// assertInitRequestMap checks the raw Init body at map level: the payment
+// identity fields, the CIT-only Recurrent flag, every callback URL built from
+// the app base URL, the rendered description, and the DATA initiator type.
+func assertInitRequestMap(t *testing.T, data map[string]any, paymentID uuid.UUID) {
+	t.Helper()
+	if got, want := data[fieldTerminalKey], any(testTerminalKey); got != want {
+		t.Fatalf("TerminalKey: got %v, want %v", got, want)
+	}
+	if got, want := data[fieldOrderID], any(paymentID.String()); got != want {
+		t.Fatalf("OrderId: got %v, want %v", got, want)
+	}
+	if got, want := data[fieldAmount], any(float64(10000)); got != want {
+		t.Fatalf("Amount: got %v, want %v", got, want)
+	}
+	if got, want := data["Recurrent"], any("Y"); got != want {
+		t.Fatalf("Recurrent: got %v, want %v", got, want)
+	}
+	if got, want := data["PayType"], any("O"); got != want {
+		t.Fatalf("PayType: got %v, want %v", got, want)
+	}
+	if got, want := data["CustomerKey"], any(testCustomerRef); got != want {
+		t.Fatalf("CustomerKey: got %v, want %v", got, want)
+	}
+	// The adapter builds every callback URL from the configured app base
+	// URL (issue #248): the application layer no longer passes them.
+	if got, want := data["NotificationURL"], any(testAppBaseURL+"/webhooks/payment/tkassa"); got != want {
+		t.Fatalf("NotificationURL: got %v, want %v", got, want)
+	}
+	if got, want := data["SuccessURL"], any(testAppBaseURL+"/subscription/payments/"+paymentID.String()+"/success"); got != want {
+		t.Fatalf("SuccessURL: got %v, want %v", got, want)
+	}
+	if got, want := data["FailURL"], any(testAppBaseURL+"/subscription/payments/"+paymentID.String()+"/fail"); got != want {
+		t.Fatalf("FailURL: got %v, want %v", got, want)
+	}
+	if got, want := data["Description"], any(testProMonthDescription); got != want {
+		t.Fatalf("Description: got %v, want %v", got, want)
+	}
+	dataObj, ok := data["DATA"].(map[string]any)
+	if !ok {
+		t.Fatalf("DATA missing or not object")
+	}
+	if got, want := dataObj["OperationInitiatorType"], any("1"); got != want {
+		t.Fatalf("OperationInitiatorType: got %v, want %v", got, want)
+	}
+	if _, ok := data["Token"]; !ok {
+		t.Fatalf("Token missing from DATA exclusion test")
+	}
+}
+
 func TestProviderInitPayment(t *testing.T) {
 	paymentID := uuid.MustParse(testPaymentUUID)
 
@@ -213,50 +262,7 @@ func TestProviderInitPayment(t *testing.T) {
 		if r.URL.Path != "/v2/"+methodInit {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		data := verifyRequestToken(t, r)
-
-		if got, want := data[fieldTerminalKey], any(testTerminalKey); got != want {
-			t.Fatalf("TerminalKey: got %v, want %v", got, want)
-		}
-		if got, want := data[fieldOrderID], any(paymentID.String()); got != want {
-			t.Fatalf("OrderId: got %v, want %v", got, want)
-		}
-		if got, want := data[fieldAmount], any(float64(10000)); got != want {
-			t.Fatalf("Amount: got %v, want %v", got, want)
-		}
-		if got, want := data["Recurrent"], any("Y"); got != want {
-			t.Fatalf("Recurrent: got %v, want %v", got, want)
-		}
-		if got, want := data["PayType"], any("O"); got != want {
-			t.Fatalf("PayType: got %v, want %v", got, want)
-		}
-		if got, want := data["CustomerKey"], any(testCustomerRef); got != want {
-			t.Fatalf("CustomerKey: got %v, want %v", got, want)
-		}
-		// The adapter builds every callback URL from the configured app base
-		// URL (issue #248): the application layer no longer passes them.
-		if got, want := data["NotificationURL"], any(testAppBaseURL+"/webhooks/payment/tkassa"); got != want {
-			t.Fatalf("NotificationURL: got %v, want %v", got, want)
-		}
-		if got, want := data["SuccessURL"], any(testAppBaseURL+"/subscription/payments/"+paymentID.String()+"/success"); got != want {
-			t.Fatalf("SuccessURL: got %v, want %v", got, want)
-		}
-		if got, want := data["FailURL"], any(testAppBaseURL+"/subscription/payments/"+paymentID.String()+"/fail"); got != want {
-			t.Fatalf("FailURL: got %v, want %v", got, want)
-		}
-		if got, want := data["Description"], any(testProMonthDescription); got != want {
-			t.Fatalf("Description: got %v, want %v", got, want)
-		}
-		dataObj, ok := data["DATA"].(map[string]any)
-		if !ok {
-			t.Fatalf("DATA missing or not object")
-		}
-		if got, want := dataObj["OperationInitiatorType"], any("1"); got != want {
-			t.Fatalf("OperationInitiatorType: got %v, want %v", got, want)
-		}
-		if _, ok := data["Token"]; !ok {
-			t.Fatalf("Token missing from DATA exclusion test")
-		}
+		assertInitRequestMap(t, verifyRequestToken(t, r), paymentID)
 
 		writeJSON(t, w, initResponse{
 			baseResponse: baseResponse{Success: true, Status: statusNew},
@@ -796,110 +802,123 @@ func TestProviderBindPaymentMethodOtherAPIErrorPropagated(t *testing.T) {
 	}
 }
 
+// bindingCompletedCarriesMethod proves a completed GetAddCardState response
+// maps to the completed binding state carrying the card fields.
+func bindingCompletedCarriesMethod(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/GetAddCardState" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		data := verifyRequestToken(t, r)
+		if got, want := data[fieldRequestKey], any("rk-1"); got != want {
+			t.Fatalf("RequestKey: got %v, want %v", got, want)
+		}
+		writeJSON(t, w, getAddCardStateResponse{
+			baseResponse: baseResponse{Success: true, ErrorCode: "0", Status: statusCompleted},
+			CardID:       testCardID,
+			RebillID:     testRebillID,
+			CustomerKey:  testCustomerRef,
+			RequestKey:   "rk-1",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL)
+	state, err := p.PaymentMethodBinding(context.Background(), "rk-1")
+	if err != nil {
+		t.Fatalf("PaymentMethodBinding failed: %v", err)
+	}
+	if state.Status != application.MethodBindingCompleted {
+		t.Fatalf("Status: got %q, want %q", state.Status, application.MethodBindingCompleted)
+	}
+	if state.Method == nil {
+		t.Fatal("Method must be set on completed binding")
+	}
+	if state.Method.ProviderMethodID != testCardID || state.Method.ChargeToken != testRebillID {
+		t.Fatalf("Method: got %+v", *state.Method)
+	}
+}
+
+// bindingIntermediateStatesArePending proves every non-terminal add-card
+// status maps to the pending binding state without a method.
+func bindingIntermediateStatesArePending(t *testing.T) {
+	for _, status := range []string{
+		statusNew, statusFormShowed, status3DSChecking, status3DSChecked, statusAuthorizing, statusAuthorized,
+	} {
+		t.Run(status, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				writeJSON(t, w, getAddCardStateResponse{
+					baseResponse: baseResponse{Success: true, Status: status},
+					RequestKey:   "rk-2",
+				})
+			}))
+			defer server.Close()
+
+			p := newTestProvider(server.URL)
+			state, err := p.PaymentMethodBinding(context.Background(), "rk-2")
+			if err != nil {
+				t.Fatalf("PaymentMethodBinding failed: %v", err)
+			}
+			if state.Status != application.MethodBindingPending {
+				t.Fatalf("Status: got %q, want pending", state.Status)
+			}
+			if state.Method != nil {
+				t.Fatalf("Method must be nil while pending, got %+v", *state.Method)
+			}
+		})
+	}
+}
+
+// bindingRejectedIsFailedWithErrorCode proves a rejected add-card state maps
+// to the failed binding state carrying the provider error code.
+func bindingRejectedIsFailedWithErrorCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, getAddCardStateResponse{
+			baseResponse: baseResponse{Success: true, ErrorCode: "7", Status: statusRejected},
+			RequestKey:   "rk-3",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL)
+	state, err := p.PaymentMethodBinding(context.Background(), "rk-3")
+	if err != nil {
+		t.Fatalf("PaymentMethodBinding failed: %v", err)
+	}
+	if state.Status != application.MethodBindingFailed {
+		t.Fatalf("Status: got %q, want %q", state.Status, application.MethodBindingFailed)
+	}
+	if state.ErrorCode != "7" {
+		t.Fatalf("ErrorCode: got %q, want %q", state.ErrorCode, "7")
+	}
+}
+
+// bindingUnknownStatusErrors proves an unmapped add-card status surfaces as
+// an error instead of a guessed state.
+func bindingUnknownStatusErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, getAddCardStateResponse{
+			baseResponse: baseResponse{Success: true, Status: "TOTALLY_NEW_STATUS"},
+			RequestKey:   "rk-4",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server.URL)
+	_, err := p.PaymentMethodBinding(context.Background(), "rk-4")
+	if err == nil {
+		t.Fatal("expected an error for an unknown add card status")
+	}
+	if !strings.Contains(err.Error(), "unknown add card status") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestProviderPaymentMethodBinding(t *testing.T) {
-	t.Run("completed carries method", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/v2/GetAddCardState" {
-				t.Fatalf("unexpected path: %s", r.URL.Path)
-			}
-			data := verifyRequestToken(t, r)
-			if got, want := data[fieldRequestKey], any("rk-1"); got != want {
-				t.Fatalf("RequestKey: got %v, want %v", got, want)
-			}
-			writeJSON(t, w, getAddCardStateResponse{
-				baseResponse: baseResponse{Success: true, ErrorCode: "0", Status: statusCompleted},
-				CardID:       testCardID,
-				RebillID:     testRebillID,
-				CustomerKey:  testCustomerRef,
-				RequestKey:   "rk-1",
-			})
-		}))
-		defer server.Close()
-
-		p := newTestProvider(server.URL)
-		state, err := p.PaymentMethodBinding(context.Background(), "rk-1")
-		if err != nil {
-			t.Fatalf("PaymentMethodBinding failed: %v", err)
-		}
-		if state.Status != application.MethodBindingCompleted {
-			t.Fatalf("Status: got %q, want %q", state.Status, application.MethodBindingCompleted)
-		}
-		if state.Method == nil {
-			t.Fatal("Method must be set on completed binding")
-		}
-		if state.Method.ProviderMethodID != testCardID || state.Method.ChargeToken != testRebillID {
-			t.Fatalf("Method: got %+v", *state.Method)
-		}
-	})
-
-	t.Run("intermediate states are pending", func(t *testing.T) {
-		for _, status := range []string{
-			statusNew, statusFormShowed, status3DSChecking, status3DSChecked, statusAuthorizing, statusAuthorized,
-		} {
-			t.Run(status, func(t *testing.T) {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					writeJSON(t, w, getAddCardStateResponse{
-						baseResponse: baseResponse{Success: true, Status: status},
-						RequestKey:   "rk-2",
-					})
-				}))
-				defer server.Close()
-
-				p := newTestProvider(server.URL)
-				state, err := p.PaymentMethodBinding(context.Background(), "rk-2")
-				if err != nil {
-					t.Fatalf("PaymentMethodBinding failed: %v", err)
-				}
-				if state.Status != application.MethodBindingPending {
-					t.Fatalf("Status: got %q, want pending", state.Status)
-				}
-				if state.Method != nil {
-					t.Fatalf("Method must be nil while pending, got %+v", *state.Method)
-				}
-			})
-		}
-	})
-
-	t.Run("rejected is failed with error code", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(t, w, getAddCardStateResponse{
-				baseResponse: baseResponse{Success: true, ErrorCode: "7", Status: statusRejected},
-				RequestKey:   "rk-3",
-			})
-		}))
-		defer server.Close()
-
-		p := newTestProvider(server.URL)
-		state, err := p.PaymentMethodBinding(context.Background(), "rk-3")
-		if err != nil {
-			t.Fatalf("PaymentMethodBinding failed: %v", err)
-		}
-		if state.Status != application.MethodBindingFailed {
-			t.Fatalf("Status: got %q, want %q", state.Status, application.MethodBindingFailed)
-		}
-		if state.ErrorCode != "7" {
-			t.Fatalf("ErrorCode: got %q, want %q", state.ErrorCode, "7")
-		}
-	})
-
-	t.Run("unknown status errors", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(t, w, getAddCardStateResponse{
-				baseResponse: baseResponse{Success: true, Status: "TOTALLY_NEW_STATUS"},
-				RequestKey:   "rk-4",
-			})
-		}))
-		defer server.Close()
-
-		p := newTestProvider(server.URL)
-		_, err := p.PaymentMethodBinding(context.Background(), "rk-4")
-		if err == nil {
-			t.Fatal("expected an error for an unknown add card status")
-		}
-		if !strings.Contains(err.Error(), "unknown add card status") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
+	t.Run("completed carries method", bindingCompletedCarriesMethod)
+	t.Run("intermediate states are pending", bindingIntermediateStatesArePending)
+	t.Run("rejected is failed with error code", bindingRejectedIsFailedWithErrorCode)
+	t.Run("unknown status errors", bindingUnknownStatusErrors)
 }
 
 func TestProviderRemovePaymentMethod(t *testing.T) {

@@ -108,6 +108,154 @@ func TestSharingAudit_RecurringOperations_IncludesShared(t *testing.T) {
 	}
 }
 
+// multiOwnerWorld is the seeded multi-owner sharing fixture: two owners
+// sharing their properties with the member, a stranger owner with no
+// membership, and each owner's expense category.
+type multiOwnerWorld struct {
+	owner1, owner2, stranger, member uuid.UUID
+	prop1, prop2, foreign            uuid.UUID
+	cat1, cat2, catForeign           uuid.UUID
+}
+
+// seedMultiOwnerWorld seeds the multi-owner fixture: the member gets full
+// access to owner1's property, viewer access to owner2's property, and no
+// access to the stranger's property.
+func seedMultiOwnerWorld(t *testing.T, ctx context.Context, f *policyFixture) multiOwnerWorld {
+	t.Helper()
+	w := multiOwnerWorld{
+		owner1:   createPolicyTestUser(t, ctx, f.q),
+		owner2:   createPolicyTestUser(t, ctx, f.q),
+		stranger: createPolicyTestUser(t, ctx, f.q), // Owner the member has NO access to.
+		member:   createPolicyTestUser(t, ctx, f.q),
+	}
+	w.prop1 = createPolicyTestProperty(t, ctx, f.q, w.owner1)
+	w.prop2 = createPolicyTestProperty(t, ctx, f.q, w.owner2)
+	w.foreign = createPolicyTestProperty(t, ctx, f.q, w.stranger)
+
+	addPolicyMembership(t, ctx, f.members, w.prop1, w.member, w.owner1, accessdomain.RoleFullAccess)
+	addPolicyMembership(t, ctx, f.members, w.prop2, w.member, w.owner2, accessdomain.RoleViewer)
+	// No membership on `foreign`.
+
+	if err := f.cats.CreateDefaultCategories(ctx, w.owner1); err != nil {
+		t.Fatalf("seed o1 categories: %v", err)
+	}
+	if err := f.cats.CreateDefaultCategories(ctx, w.owner2); err != nil {
+		t.Fatalf("seed o2 categories: %v", err)
+	}
+	if err := f.cats.CreateDefaultCategories(ctx, w.stranger); err != nil {
+		t.Fatalf("seed stranger categories: %v", err)
+	}
+	w.cat1 = f.expenseCategoryID(t, ctx, w.owner1)
+	w.cat2 = f.expenseCategoryID(t, ctx, w.owner2)
+	w.catForeign = f.expenseCategoryID(t, ctx, w.stranger)
+	return w
+}
+
+// seedOwnerOperation seeds one operation acting as the given owner and returns
+// it.
+func seedOwnerOperation(t *testing.T, ctx context.Context, f *policyFixture, owner, propertyID, categoryID uuid.UUID) domain.Operation {
+	t.Helper()
+	op, err := f.operationService().CreateOperation(ctx, owner, f.createOperationCmd(propertyID, categoryID))
+	if err != nil {
+		t.Fatalf("seed operation on property %s: %v", propertyID, err)
+	}
+	if op.PropertyID != propertyID {
+		t.Fatalf("operation property: want %s, got %s — test seed broken", propertyID, op.PropertyID)
+	}
+	return op
+}
+
+// seedOwnerLease seeds one lease acting as the given owner and returns it.
+func seedOwnerLease(t *testing.T, ctx context.Context, f *policyFixture, owner, propertyID uuid.UUID) domain.Lease {
+	t.Helper()
+	lease, err := f.leaseService().CreateLease(ctx, owner, f.createLeaseCmd(propertyID))
+	if err != nil {
+		t.Fatalf("seed lease on property %s: %v", propertyID, err)
+	}
+	return lease
+}
+
+// memberOperations runs the operations aggregate for the member with the
+// property and category filter isolating one owner's rows in the shared test
+// database.
+func memberOperations(t *testing.T, ctx context.Context, f *policyFixture, member, propertyID, categoryID uuid.UUID) []domain.Operation {
+	t.Helper()
+	ops, err := f.operationServiceWithShared().ListOperations(ctx, member,
+		application.OperationFilter{PropertyID: propertyID, CategoryIDs: []uuid.UUID{categoryID}, Limit: 100})
+	if err != nil {
+		t.Fatalf("ListOperations (property %s) as member: %v", propertyID, err)
+	}
+	return ops
+}
+
+// containsLease reports whether the lease id is in the list.
+func containsLease(leases []domain.Lease, id uuid.UUID) bool {
+	for _, l := range leases {
+		if l.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// assertMemberOperationsVisibility checks the operations aggregate: the member
+// sees both shared owners' operations and never the stranger's.
+func assertMemberOperationsVisibility(
+	t *testing.T,
+	ctx context.Context,
+	f *policyFixture,
+	w multiOwnerWorld,
+	op1, op2, opForeign domain.Operation,
+) {
+	t.Helper()
+	memberOps1 := memberOperations(t, ctx, f, w.member, w.prop1, w.cat1)
+	memberOps2 := memberOperations(t, ctx, f, w.member, w.prop2, w.cat2)
+	memberOpsForeign := memberOperations(t, ctx, f, w.member, w.foreign, w.catForeign)
+
+	if !containsOp(memberOps1, op1.ID) {
+		t.Errorf("member missing op1 (owner1 shared) in prop1+cat1-filtered list; got %d ops", len(memberOps1))
+	}
+	if !containsOp(memberOps2, op2.ID) {
+		t.Errorf("member missing op2 (owner2 shared) in prop2-filtered list; got %d ops", len(memberOps2))
+	}
+	if containsOp(memberOpsForeign, opForeign.ID) {
+		t.Errorf("member saw foreign op (no membership) — over-exposure leak")
+	}
+}
+
+// assertMemberLeasesVisibility checks the leases aggregate: the member sees
+// both shared owners' leases.
+func assertMemberLeasesVisibility(t *testing.T, ctx context.Context, f *policyFixture, w multiOwnerWorld, lease1, lease2 domain.Lease) {
+	t.Helper()
+	memberLeases, err := f.leaseServiceWithShared().ListLeases(ctx, w.member)
+	if err != nil {
+		t.Fatalf("ListLeases as member: %v", err)
+	}
+	if !containsLease(memberLeases, lease1.ID) {
+		t.Errorf("member missing lease1 (owner1 shared); got %d leases", len(memberLeases))
+	}
+	if !containsLease(memberLeases, lease2.ID) {
+		t.Errorf("member missing lease2 (owner2 shared); got %d leases", len(memberLeases))
+	}
+}
+
+// assertFinanceReportHidesForeign checks that the member's finance report runs
+// without error and never includes the stranger's property. Seeded operations
+// are pending/planned (not paid/received), so the report may be empty by
+// property — the meaningful assertions are no-error and no-foreign-leak.
+func assertFinanceReportHidesForeign(t *testing.T, ctx context.Context, f *policyFixture, w multiOwnerWorld) {
+	t.Helper()
+	report, err := f.operationServiceWithShared().GetFinanceReport(ctx, w.member, nil, nil)
+	if err != nil {
+		t.Fatalf("GetFinanceReport as member: %v", err)
+	}
+	for _, row := range report.ByProperty {
+		if row.PropertyID == w.foreign {
+			t.Errorf("finance report included foreign property (no membership) — over-exposure leak")
+		}
+	}
+}
+
 // TestSharingAudit_MultiOwner_AggregatesMerge verifies that a member with
 // shared access to properties owned by two DIFFERENT owners sees data from both
 // on every aggregate read: operations, leases, recurring operations, and the
@@ -119,128 +267,24 @@ func TestSharingAudit_MultiOwner_AggregatesMerge(t *testing.T) {
 	defer cleanup()
 
 	f := newPolicyFixture(tx)
-	owner1 := createPolicyTestUser(t, ctx, f.q)
-	owner2 := createPolicyTestUser(t, ctx, f.q)
-	stranger := createPolicyTestUser(t, ctx, f.q) // Owner the member has NO access to.
-	member := createPolicyTestUser(t, ctx, f.q)
+	w := seedMultiOwnerWorld(t, ctx, f)
 
-	prop1 := createPolicyTestProperty(t, ctx, f.q, owner1)
-	prop2 := createPolicyTestProperty(t, ctx, f.q, owner2)
-	foreign := createPolicyTestProperty(t, ctx, f.q, stranger)
-
-	addPolicyMembership(t, ctx, f.members, prop1, member, owner1, accessdomain.RoleFullAccess)
-	addPolicyMembership(t, ctx, f.members, prop2, member, owner2, accessdomain.RoleViewer)
-	// No membership on `foreign`.
-
-	if err := f.cats.CreateDefaultCategories(ctx, owner1); err != nil {
-		t.Fatalf("seed o1 categories: %v", err)
-	}
-	if err := f.cats.CreateDefaultCategories(ctx, owner2); err != nil {
-		t.Fatalf("seed o2 categories: %v", err)
-	}
-	if err := f.cats.CreateDefaultCategories(ctx, stranger); err != nil {
-		t.Fatalf("seed stranger categories: %v", err)
-	}
-	cat1 := f.expenseCategoryID(t, ctx, owner1)
-	cat2 := f.expenseCategoryID(t, ctx, owner2)
-	catForeign := f.expenseCategoryID(t, ctx, stranger)
-
-	// Seed one operation on each property (owner acts).
-	op1, err := f.operationService().CreateOperation(ctx, owner1, f.createOperationCmd(prop1, cat1))
-	if err != nil {
-		t.Fatalf("seed op1: %v", err)
-	}
-	if op1.PropertyID != prop1 {
-		t.Fatalf("op1 property: want %s, got %s — test seed broken", prop1, op1.PropertyID)
-	}
-	op2, err := f.operationService().CreateOperation(ctx, owner2, f.createOperationCmd(prop2, cat2))
-	if err != nil {
-		t.Fatalf("seed op2: %v", err)
-	}
-	opForeign, err := f.operationService().CreateOperation(ctx, stranger, f.createOperationCmd(foreign, catForeign))
-	if err != nil {
-		t.Fatalf("seed opForeign: %v", err)
-	}
-
-	// Leases on prop1 and prop2.
-	lease1, err := f.leaseService().CreateLease(ctx, owner1, f.createLeaseCmd(prop1))
-	if err != nil {
-		t.Fatalf("seed lease1: %v", err)
-	}
-	lease2, err := f.leaseService().CreateLease(ctx, owner2, f.createLeaseCmd(prop2))
-	if err != nil {
-		t.Fatalf("seed lease2: %v", err)
-	}
+	// Seed one operation and (for the shared owners) one lease per property.
+	op1 := seedOwnerOperation(t, ctx, f, w.owner1, w.prop1, w.cat1)
+	op2 := seedOwnerOperation(t, ctx, f, w.owner2, w.prop2, w.cat2)
+	opForeign := seedOwnerOperation(t, ctx, f, w.stranger, w.foreign, w.catForeign)
+	lease1 := seedOwnerLease(t, ctx, f, w.owner1, w.prop1)
+	lease2 := seedOwnerLease(t, ctx, f, w.owner2, w.prop2)
 
 	// 1. Operations aggregate: member sees op1 + op2, not opForeign.
-	// Use a property filter scoped to prop1 to isolate from unrelated rows in
-	// the shared test database, then prop2 separately.
-	memberOps1, err := f.operationServiceWithShared().ListOperations(ctx, member,
-		application.OperationFilter{PropertyID: prop1, CategoryIDs: []uuid.UUID{cat1}, Limit: 100})
-	if err != nil {
-		t.Fatalf("ListOperations (prop1) as member: %v", err)
-	}
-	memberOps2, err := f.operationServiceWithShared().ListOperations(ctx, member,
-		application.OperationFilter{PropertyID: prop2, CategoryIDs: []uuid.UUID{cat2}, Limit: 100})
-	if err != nil {
-		t.Fatalf("ListOperations (prop2) as member: %v", err)
-	}
-	memberOpsForeign, err := f.operationServiceWithShared().ListOperations(ctx, member,
-		application.OperationFilter{PropertyID: foreign, CategoryIDs: []uuid.UUID{catForeign}, Limit: 100})
-	if err != nil {
-		t.Fatalf("ListOperations (foreign) as member: %v", err)
-	}
-	hasOp := func(ops []domain.Operation, id uuid.UUID) bool {
-		for _, o := range ops {
-			if o.ID == id {
-				return true
-			}
-		}
-		return false
-	}
-	if !hasOp(memberOps1, op1.ID) {
-		t.Errorf("member missing op1 (owner1 shared) in prop1+cat1-filtered list; got %d ops", len(memberOps1))
-	}
-	if !hasOp(memberOps2, op2.ID) {
-		t.Errorf("member missing op2 (owner2 shared) in prop2-filtered list; got %d ops", len(memberOps2))
-	}
-	if hasOp(memberOpsForeign, opForeign.ID) {
-		t.Errorf("member saw foreign op (no membership) — over-exposure leak")
-	}
+	assertMemberOperationsVisibility(t, ctx, f, w, op1, op2, opForeign)
 
 	// 2. Leases aggregate: member sees lease1 + lease2.
-	memberLeases, err := f.leaseServiceWithShared().ListLeases(ctx, member)
-	if err != nil {
-		t.Fatalf("ListLeases as member: %v", err)
-	}
-	hasLease := func(id uuid.UUID) bool {
-		for _, l := range memberLeases {
-			if l.ID == id {
-				return true
-			}
-		}
-		return false
-	}
-	if !hasLease(lease1.ID) {
-		t.Errorf("member missing lease1 (owner1 shared); got %d leases", len(memberLeases))
-	}
-	if !hasLease(lease2.ID) {
-		t.Errorf("member missing lease2 (owner2 shared); got %d leases", len(memberLeases))
-	}
+	assertMemberLeasesVisibility(t, ctx, f, w, lease1, lease2)
 
-	// 3. Finance report: runs without error for the member and never includes
-	// the foreign property (over-exposure guard). Seeded operations are
-	// pending/planned (not paid/received), so the report may be empty by
-	// property — the meaningful assertions are no-error and no-foreign-leak.
-	report, err := f.operationServiceWithShared().GetFinanceReport(ctx, member, nil, nil)
-	if err != nil {
-		t.Fatalf("GetFinanceReport as member: %v", err)
-	}
-	for _, row := range report.ByProperty {
-		if row.PropertyID == foreign {
-			t.Errorf("finance report included foreign property (no membership) — over-exposure leak")
-		}
-	}
+	// 3. Finance report: runs without error and never includes the foreign
+	// property (over-exposure guard).
+	assertFinanceReportHidesForeign(t, ctx, f, w)
 }
 
 // TestSharingAudit_SuspendedMember_ExcludedFromAggregates verifies that when a

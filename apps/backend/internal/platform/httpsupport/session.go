@@ -142,6 +142,15 @@ func isPublicSessionSkippedPath(path string) bool {
 	return false
 }
 
+// sessionMiddleware carries the wired session dependencies so each step of
+// the request path (load, validate, refresh) is a named method.
+type sessionMiddleware struct {
+	logger *slog.Logger
+	loader SessionLoader
+	secure bool
+	clock  clock.Clock
+}
+
 // SessionMiddleware loads the authenticated actor from the session cookie into
 // the request context. It depends only on the platform-neutral SessionLoader
 // seam, not on any bounded context's domain (ADR 0034).
@@ -149,55 +158,78 @@ func SessionMiddleware(logger *slog.Logger, loader SessionLoader, secure bool, c
 	if clk == nil {
 		clk = fallbackClock{}
 	}
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if isPublicSessionSkippedPath(r.URL.Path) {
-				next.ServeHTTP(w, r)
-				return
-			}
+	m := sessionMiddleware{logger: logger, loader: loader, secure: secure, clock: clk}
+	return m.wrap
+}
 
-			token := SessionTokenFromRequest(r, secure)
-			if token == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			now := clk.Now()
-			session, userID, role, err := loader.Load(r.Context(), token, now)
-			if err != nil {
-				if errors.Is(err, errSessionNotFound) {
-					ClearSessionCookie(w, secure)
-					next.ServeHTTP(w, r)
-					return
-				}
-				if logger != nil {
-					logger.ErrorContext(r.Context(), "session lookup failed", slog.String("error", SanitizeError(err)))
-				}
-				WriteProblem(r.Context(), w, http.StatusInternalServerError, InternalError(r.Context(), err))
-				return
-			}
-			if session.IsExpired(now) {
-				ClearSessionCookie(w, secure)
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			if session.Refresh(now) {
-				if err := loader.Update(r.Context(), session); err != nil {
-					if logger != nil {
-						logger.ErrorContext(r.Context(), "failed to refresh session", slog.String("error", SanitizeError(err)))
-					}
-				} else {
-					SetSessionCookie(w, token, session.ExpiresAt, secure)
-				}
-			}
-
-			ctx := WithUserID(r.Context(), userID)
-			ctx = WithActor(ctx, userID, role)
-			r = r.WithContext(ctx)
+func (m sessionMiddleware) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isPublicSessionSkippedPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
-		})
+			return
+		}
+
+		token := SessionTokenFromRequest(r, m.secure)
+		if token == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		now := m.clock.Now()
+		session, userID, role, err := m.loader.Load(r.Context(), token, now)
+		if err != nil {
+			m.serveLoadError(w, r, next, err)
+			return
+		}
+		if session.IsExpired(now) {
+			m.serveWithClearedCookie(w, r, next)
+			return
+		}
+
+		m.refreshSession(w, r, token, session, now)
+
+		ctx := WithUserID(r.Context(), userID)
+		ctx = WithActor(ctx, userID, role)
+		r = r.WithContext(ctx)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// serveLoadError maps a session lookup failure: the not-found sentinel keeps
+// the request anonymous with the cookie cleared, anything else is a 500
+// problem response.
+func (m sessionMiddleware) serveLoadError(w http.ResponseWriter, r *http.Request, next http.Handler, err error) {
+	if IsSessionNotFound(err) {
+		m.serveWithClearedCookie(w, r, next)
+		return
 	}
+	if m.logger != nil {
+		m.logger.ErrorContext(r.Context(), "session lookup failed", slog.String("error", SanitizeError(err)))
+	}
+	WriteProblem(r.Context(), w, http.StatusInternalServerError, InternalError(r.Context(), err))
+}
+
+// serveWithClearedCookie clears the session cookie and continues the request
+// anonymously.
+func (m sessionMiddleware) serveWithClearedCookie(w http.ResponseWriter, r *http.Request, next http.Handler) {
+	ClearSessionCookie(w, m.secure)
+	next.ServeHTTP(w, r)
+}
+
+// refreshSession extends the sliding window, persists it and re-issues the
+// cookie when the expiration actually moved forward. A persistence failure is
+// logged once and leaves the previous cookie in place.
+func (m sessionMiddleware) refreshSession(w http.ResponseWriter, r *http.Request, token string, session Session, now time.Time) {
+	if !session.Refresh(now) {
+		return
+	}
+	if err := m.loader.Update(r.Context(), session); err != nil {
+		if m.logger != nil {
+			m.logger.ErrorContext(r.Context(), "failed to refresh session", slog.String("error", SanitizeError(err)))
+		}
+		return
+	}
+	SetSessionCookie(w, token, session.ExpiresAt, m.secure)
 }
 
 // errSessionNotFound is the sentinel the SessionLoader seam uses to signal that

@@ -93,10 +93,11 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 // The currentToken is the raw session token of the current session; it is
 // used to keep the current session alive when deleting all other sessions.
 //
-// The whole flow runs inside a single runInTx: verify → mark-used → update-phone
-// → delete other sessions → clear codes/attempts → audit. A verification failure
-// rolls back, then a separate short runInTx records the failed attempt so
-// rate-limiting survives the rollback — mirroring AuthenticationService.
+// The whole flow runs inside a single runInTx (the success path lives in
+// changePhoneInTx): verify → mark-used → update-phone → delete other sessions
+// → clear codes/attempts → audit. A verification failure rolls back, then a
+// separate short runInTx records the failed attempt so rate-limiting survives
+// the rollback — mirroring AuthenticationService.
 //
 // The not-blocked check is not duplicated here: LoginCodeService.Verify runs
 // inside the runInTx below and authoritatively returns ErrUserBlocked for a
@@ -108,73 +109,11 @@ func (s *PhoneChangeService) ChangePhone(
 	code, currentToken string,
 ) (domain.User, error) {
 	var updated domain.User
-	var oldPhone domain.Phone
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
-		user, err := stores.users.GetByIDForUpdate(ctx, userID)
-		if err != nil {
-			return fmt.Errorf("get user: %w", err)
-		}
-		if user.Phone == newPhone {
-			return ErrPhoneUnchanged
-		}
-		oldPhone = user.Phone
-
-		existing, err := stores.users.GetByPhoneForUpdate(ctx, newPhone)
-		if err != nil && !errors.Is(err, ErrNotFound) {
-			return fmt.Errorf("check phone: %w", err)
-		}
-		if existing.ID != uuid.Nil && existing.ID != userID {
-			return ErrPhoneAlreadyTaken
-		}
-
-		email, err := userEmail(user)
-		if err != nil {
-			return err
-		}
-
-		loginCode, vErr := s.loginCodes.Verify(ctx, stores, newPhone, email, domain.LoginCodePurposePhoneChange, code)
-		if vErr != nil {
-			return vErr
-		}
-
-		if err := stores.codes.MarkUsedByID(ctx, loginCode.ID); err != nil {
-			return fmt.Errorf("mark code used: %w", err)
-		}
-
-		updated, err = stores.users.UpdatePhone(ctx, userID, newPhone)
-		if err != nil {
-			return fmt.Errorf("update phone: %w", err)
-		}
-
-		if err := stores.sessions.DeleteByUserIDExcept(ctx, userID, s.hasher.HashToken(currentToken)); err != nil {
-			return fmt.Errorf("delete other sessions: %w", err)
-		}
-
-		if err := stores.codes.DeleteByUserID(ctx, userID); err != nil {
-			return fmt.Errorf("clear login codes: %w", err)
-		}
-
-		if err := stores.attempts.DeleteByUserID(ctx, userID); err != nil {
-			return fmt.Errorf("clear login attempts: %w", err)
-		}
-		if err := stores.attempts.DeleteByPhone(ctx, newPhone); err != nil {
-			return fmt.Errorf("reset new phone attempts: %w", err)
-		}
-		if err := stores.attempts.DeleteByPhone(ctx, oldPhone); err != nil {
-			return fmt.Errorf("reset old phone attempts: %w", err)
-		}
-
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &userID,
-			ActorRole:  auditdomain.ActorRoleFromRole(updated.Role),
-			Action:     auditdomain.ActionAuthPhoneChanged,
-			EntityType: auditdomain.EntityUser,
-			EntityID:   &userID,
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
+		var err error
+		updated, err = s.changePhoneInTx(ctx, stores, userID, newPhone, code, currentToken)
+		return err
 	})
 
 	if errors.Is(err, domain.ErrLoginCodeInvalid) {
@@ -211,4 +150,123 @@ func (s *PhoneChangeService) ChangePhone(
 	}
 
 	return updated, nil
+}
+
+// changePhoneInTx runs the success path of ChangePhone inside the caller's
+// transaction: lock and validate the user, verify and burn the phone-change
+// code, apply the new phone with the session cleanup, clear the login state,
+// and record the audit entry — one commit covers the whole change (ADR 0033).
+func (s *PhoneChangeService) changePhoneInTx(
+	ctx context.Context,
+	stores *txStores,
+	userID uuid.UUID,
+	newPhone domain.Phone,
+	code, currentToken string,
+) (domain.User, error) {
+	user, email, err := userForPhoneChange(ctx, stores, userID, newPhone)
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	loginCode, err := s.loginCodes.Verify(ctx, stores, newPhone, email, domain.LoginCodePurposePhoneChange, code)
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	if err := stores.codes.MarkUsedByID(ctx, loginCode.ID); err != nil {
+		return domain.User{}, fmt.Errorf("mark code used: %w", err)
+	}
+
+	updated, err := s.applyPhoneChange(ctx, stores, userID, newPhone, currentToken)
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	if err := clearLoginState(ctx, stores, userID, user.Phone, newPhone); err != nil {
+		return domain.User{}, err
+	}
+
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &userID,
+		ActorRole:  auditdomain.ActorRoleFromRole(updated.Role),
+		Action:     auditdomain.ActionAuthPhoneChanged,
+		EntityType: auditdomain.EntityUser,
+		EntityID:   &userID,
+	}); err != nil {
+		return domain.User{}, fmt.Errorf("record audit: %w", err)
+	}
+	return updated, nil
+}
+
+// userForPhoneChange locks the user row and runs the pre-verification guards:
+// the phone must actually change, must not belong to another user, and the user
+// must have a delivery email. It returns the locked user with that email.
+func userForPhoneChange(
+	ctx context.Context,
+	stores *txStores,
+	userID uuid.UUID,
+	newPhone domain.Phone,
+) (domain.User, domain.Email, error) {
+	user, err := stores.users.GetByIDForUpdate(ctx, userID)
+	if err != nil {
+		return domain.User{}, domain.Email{}, fmt.Errorf("get user: %w", err)
+	}
+	if user.Phone == newPhone {
+		return domain.User{}, domain.Email{}, ErrPhoneUnchanged
+	}
+
+	existing, err := stores.users.GetByPhoneForUpdate(ctx, newPhone)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return domain.User{}, domain.Email{}, fmt.Errorf("check phone: %w", err)
+	}
+	if existing.ID != uuid.Nil && existing.ID != userID {
+		return domain.User{}, domain.Email{}, ErrPhoneAlreadyTaken
+	}
+
+	email, err := userEmail(user)
+	if err != nil {
+		return domain.User{}, domain.Email{}, err
+	}
+	return user, email, nil
+}
+
+// applyPhoneChange persists the new phone and closes every session except the
+// current one, identified by the hashed currentToken.
+func (s *PhoneChangeService) applyPhoneChange(
+	ctx context.Context,
+	stores *txStores,
+	userID uuid.UUID,
+	newPhone domain.Phone,
+	currentToken string,
+) (domain.User, error) {
+	updated, err := stores.users.UpdatePhone(ctx, userID, newPhone)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("update phone: %w", err)
+	}
+
+	if err := stores.sessions.DeleteByUserIDExcept(ctx, userID, s.hasher.HashToken(currentToken)); err != nil {
+		return domain.User{}, fmt.Errorf("delete other sessions: %w", err)
+	}
+	return updated, nil
+}
+
+// clearLoginState removes the user's outstanding login codes and resets the
+// attempt windows of the user, the new phone, and the old phone, so neither
+// number keeps stale rate-limit state after the change (CONTEXT.md: "при смене
+// телефона окна и старого, и нового номеров сбрасываются").
+func clearLoginState(ctx context.Context, stores *txStores, userID uuid.UUID, oldPhone, newPhone domain.Phone) error {
+	if err := stores.codes.DeleteByUserID(ctx, userID); err != nil {
+		return fmt.Errorf("clear login codes: %w", err)
+	}
+
+	if err := stores.attempts.DeleteByUserID(ctx, userID); err != nil {
+		return fmt.Errorf("clear login attempts: %w", err)
+	}
+	if err := stores.attempts.DeleteByPhone(ctx, newPhone); err != nil {
+		return fmt.Errorf("reset new phone attempts: %w", err)
+	}
+	if err := stores.attempts.DeleteByPhone(ctx, oldPhone); err != nil {
+		return fmt.Errorf("reset old phone attempts: %w", err)
+	}
+	return nil
 }

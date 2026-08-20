@@ -140,55 +140,108 @@ func (r *fakeOperationRepo) GetPropertyOperationsSummary(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	monthStart := time.Date(asOf.Year(), asOf.Month(), 1, 0, 0, 0, 0, time.UTC)
-	monthEnd := monthStart.AddDate(0, 1, 0)
-	var allTimeProfit, monthlyProfit int64
-	overdueRentCount := 0
-	overdueTotalCount := 0
-	var nextPaymentDate *time.Time
+	acc := newSummaryAccumulator(monthStart)
 	for _, op := range r.ops {
 		if op.OwnerID != ownerID || op.PropertyID != propertyID || op.DeletedAt != nil {
 			continue
 		}
-		opDate := timeutil.Date(op.OperationDate)
-		switch op.Type {
-		case domain.OperationTypeIncome:
-			if op.Status == domain.OperationStatusReceived {
-				allTimeProfit += op.AmountKopecks
-				if !opDate.Before(monthStart) && opDate.Before(monthEnd) {
-					monthlyProfit += op.AmountKopecks
-				}
-			}
-			if op.Status == domain.OperationStatusOverdue {
-				overdueTotalCount++
-				if op.CategoryID == testRentCategoryID {
-					overdueRentCount++
-				}
-			}
-			if (op.Status == domain.OperationStatusPending || op.Status == domain.OperationStatusOverdue) && op.CategoryID == testRentCategoryID {
-				if nextPaymentDate == nil || opDate.Before(*nextPaymentDate) {
-					d := opDate
-					nextPaymentDate = &d
-				}
-			}
-		case domain.OperationTypeExpense:
-			if op.Status == domain.OperationStatusPaid {
-				allTimeProfit -= op.AmountKopecks
-				if !opDate.Before(monthStart) && opDate.Before(monthEnd) {
-					monthlyProfit -= op.AmountKopecks
-				}
-			}
-			if op.Status == domain.OperationStatusOverdue {
-				overdueTotalCount++
-			}
-		}
+		acc.add(op)
 	}
+	return acc.summary(), nil
+}
+
+// summaryAccumulator folds live operations into the property summary the same
+// way the SQL summary query aggregates them: all-time and current-month
+// profit, overdue counts, and the next rent payment date.
+type summaryAccumulator struct {
+	monthStart, monthEnd time.Time
+	allTimeProfit        int64
+	monthlyProfit        int64
+	overdueRentCount     int
+	overdueTotalCount    int
+	nextPaymentDate      *time.Time
+}
+
+// newSummaryAccumulator starts folding at the given month start.
+func newSummaryAccumulator(monthStart time.Time) *summaryAccumulator {
+	return &summaryAccumulator{
+		monthStart: monthStart,
+		monthEnd:   monthStart.AddDate(0, 1, 0),
+	}
+}
+
+// add folds one operation into the summary by its type.
+func (a *summaryAccumulator) add(op domain.Operation) {
+	switch op.Type {
+	case domain.OperationTypeIncome:
+		a.addIncome(op)
+	case domain.OperationTypeExpense:
+		a.addExpense(op)
+	}
+}
+
+// addIncome folds an income operation: received payments add to the profit
+// totals, overdue income counts toward the overdue totals, and a pending or
+// overdue rent operation can become the next payment date.
+func (a *summaryAccumulator) addIncome(op domain.Operation) {
+	if op.Status == domain.OperationStatusReceived {
+		a.addProfit(op.OperationDate, op.AmountKopecks)
+	}
+	if op.Status == domain.OperationStatusOverdue {
+		a.countOverdue(op.CategoryID)
+	}
+	if (op.Status == domain.OperationStatusPending || op.Status == domain.OperationStatusOverdue) && op.CategoryID == testRentCategoryID {
+		a.trackNextPayment(op.OperationDate)
+	}
+}
+
+// addExpense folds an expense operation: paid expenses subtract from the
+// profit totals and overdue expenses count toward the overdue total.
+func (a *summaryAccumulator) addExpense(op domain.Operation) {
+	if op.Status == domain.OperationStatusPaid {
+		a.addProfit(op.OperationDate, -op.AmountKopecks)
+	}
+	if op.Status == domain.OperationStatusOverdue {
+		a.countOverdue(uuid.Nil)
+	}
+}
+
+// addProfit adds a signed kopecks amount to the all-time profit and, when the
+// operation falls in the current month, to the monthly profit.
+func (a *summaryAccumulator) addProfit(operationDate time.Time, amountKopecks int64) {
+	a.allTimeProfit += amountKopecks
+	opDate := timeutil.Date(operationDate)
+	if !opDate.Before(a.monthStart) && opDate.Before(a.monthEnd) {
+		a.monthlyProfit += amountKopecks
+	}
+}
+
+// countOverdue counts an overdue operation, additionally as rent when its
+// category is the rent category.
+func (a *summaryAccumulator) countOverdue(categoryID uuid.UUID) {
+	a.overdueTotalCount++
+	if categoryID == testRentCategoryID {
+		a.overdueRentCount++
+	}
+}
+
+// trackNextPayment keeps the earliest rent payment date seen.
+func (a *summaryAccumulator) trackNextPayment(operationDate time.Time) {
+	opDate := timeutil.Date(operationDate)
+	if a.nextPaymentDate == nil || opDate.Before(*a.nextPaymentDate) {
+		a.nextPaymentDate = &opDate
+	}
+}
+
+// summary returns the folded summary.
+func (a *summaryAccumulator) summary() OperationsSummary {
 	return OperationsSummary{
-		AllTimeProfitKopecks: allTimeProfit,
-		MonthlyProfitKopecks: monthlyProfit,
-		OverdueRentCount:     overdueRentCount,
-		OverdueTotalCount:    overdueTotalCount,
-		NextPaymentDate:      nextPaymentDate,
-	}, nil
+		AllTimeProfitKopecks: a.allTimeProfit,
+		MonthlyProfitKopecks: a.monthlyProfit,
+		OverdueRentCount:     a.overdueRentCount,
+		OverdueTotalCount:    a.overdueTotalCount,
+		NextPaymentDate:      a.nextPaymentDate,
+	}
 }
 
 func (r *fakeOperationRepo) ListOverdueRentOperations(_ context.Context, ownerID uuid.UUID, _ []uuid.UUID) ([]OverdueRentOperation, error) {

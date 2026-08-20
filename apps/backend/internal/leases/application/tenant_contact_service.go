@@ -207,78 +207,17 @@ func (s *TenantContactService) UpdateTenantContact(
 		return domain.TenantContact{}, fmt.Errorf("get tenant contact: %w", err)
 	}
 
-	role := sharedpolicy.RoleOwner
-	if s.policy == nil {
-		if actor != contact.OwnerID {
-			return domain.TenantContact{}, ErrNotFound
-		}
-	} else {
-		role, err = s.policy.Role(ctx, actor, contact.OwnerID)
-		if err != nil {
-			return domain.TenantContact{}, fmt.Errorf("resolve role: %w", err)
-		}
-		if err := writeRoleGate(role); err != nil {
-			return domain.TenantContact{}, err
-		}
-	}
-	scope := contact.OwnerID
-
-	if cmd.Name != nil {
-		name := strings.TrimSpace(*cmd.Name)
-		if name == "" {
-			return domain.TenantContact{}, ErrInvalidInput
-		}
-		contact.Name = name
-	}
-	if cmd.Surname != nil {
-		surname := strings.TrimSpace(*cmd.Surname)
-		if surname == "" {
-			contact.Surname = nil
-		} else {
-			contact.Surname = &surname
-		}
-	}
-	if cmd.Patronymic != nil {
-		patronymic := strings.TrimSpace(*cmd.Patronymic)
-		if patronymic == "" {
-			contact.Patronymic = nil
-		} else {
-			contact.Patronymic = &patronymic
-		}
-	}
-	if cmd.Phone != nil {
-		phone := strings.TrimSpace(*cmd.Phone)
-		if phone == "" {
-			contact.Phone = nil
-		} else {
-			normalized, err := domain.NormalizePhone(phone)
-			if err != nil {
-				return domain.TenantContact{}, ErrInvalidInput
-			}
-			contact.Phone = &normalized
-		}
-	}
-	if cmd.Email != nil {
-		email := strings.TrimSpace(*cmd.Email)
-		if email == "" {
-			contact.Email = nil
-		} else {
-			if err := domain.ValidateEmail(email); err != nil {
-				return domain.TenantContact{}, ErrInvalidInput
-			}
-			contact.Email = &email
-		}
-	}
-	if cmd.Comment != nil {
-		comment := strings.TrimSpace(*cmd.Comment)
-		if comment == "" {
-			contact.Comment = nil
-		} else {
-			contact.Comment = &comment
-		}
+	role, err := s.gateTenantContactWrite(ctx, actor, contact)
+	if err != nil {
+		return domain.TenantContact{}, err
 	}
 
-	updated, err := s.repo.Update(ctx, scope, contact)
+	contact, err = applyTenantContactUpdate(contact, cmd)
+	if err != nil {
+		return domain.TenantContact{}, err
+	}
+
+	updated, err := s.repo.Update(ctx, contact.OwnerID, contact)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return domain.TenantContact{}, ErrNotFound
@@ -299,6 +238,104 @@ func (s *TenantContactService) UpdateTenantContact(
 		return domain.TenantContact{}, fmt.Errorf("record audit: %w", err)
 	}
 	return updated, nil
+}
+
+// gateTenantContactWrite resolves the actor's owner-wide write role for a
+// tenant contact and gates it: without a policy wired the historical
+// owner-only behaviour applies (only the owner, ErrNotFound for anyone else).
+func (s *TenantContactService) gateTenantContactWrite(
+	ctx context.Context,
+	actor uuid.UUID,
+	contact domain.TenantContact,
+) (sharedpolicy.Role, error) {
+	if s.policy == nil {
+		if actor != contact.OwnerID {
+			return sharedpolicy.RoleOwner, ErrNotFound
+		}
+		return sharedpolicy.RoleOwner, nil
+	}
+	role, err := s.policy.Role(ctx, actor, contact.OwnerID)
+	if err != nil {
+		return sharedpolicy.RoleOwner, fmt.Errorf("resolve role: %w", err)
+	}
+	if err := writeRoleGate(role); err != nil {
+		return sharedpolicy.RoleOwner, err
+	}
+	return role, nil
+}
+
+// applyTenantContactUpdate applies the command's field patches to the contact:
+// a present field replaces the value (validated for name, phone, and email),
+// an empty string clears it.
+func applyTenantContactUpdate(contact domain.TenantContact, cmd UpdateTenantContactCommand) (domain.TenantContact, error) {
+	if cmd.Name != nil {
+		name := strings.TrimSpace(*cmd.Name)
+		if name == "" {
+			return domain.TenantContact{}, ErrInvalidInput
+		}
+		contact.Name = name
+	}
+	if cmd.Surname != nil {
+		contact.Surname = optionalTrimmedString(cmd.Surname)
+	}
+	if cmd.Patronymic != nil {
+		contact.Patronymic = optionalTrimmedString(cmd.Patronymic)
+	}
+	if cmd.Phone != nil {
+		if err := applyPhonePatch(&contact, cmd.Phone); err != nil {
+			return domain.TenantContact{}, err
+		}
+	}
+	if cmd.Email != nil {
+		if err := applyEmailPatch(&contact, cmd.Email); err != nil {
+			return domain.TenantContact{}, err
+		}
+	}
+	if cmd.Comment != nil {
+		contact.Comment = optionalTrimmedString(cmd.Comment)
+	}
+	return contact, nil
+}
+
+// optionalTrimmedString trims an optional string patch: an empty value clears
+// the field (nil), a non-empty value is returned trimmed.
+func optionalTrimmedString(v *string) *string {
+	trimmed := strings.TrimSpace(*v)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+// applyPhonePatch applies an optional phone patch to the contact: an empty
+// value clears the phone, a non-empty value must normalize to a valid phone.
+func applyPhonePatch(contact *domain.TenantContact, v *string) error {
+	phone := strings.TrimSpace(*v)
+	if phone == "" {
+		contact.Phone = nil
+		return nil
+	}
+	normalized, err := domain.NormalizePhone(phone)
+	if err != nil {
+		return ErrInvalidInput
+	}
+	contact.Phone = &normalized
+	return nil
+}
+
+// applyEmailPatch applies an optional email patch to the contact: an empty
+// value clears the email, a non-empty value must be a valid email address.
+func applyEmailPatch(contact *domain.TenantContact, v *string) error {
+	email := strings.TrimSpace(*v)
+	if email == "" {
+		contact.Email = nil
+		return nil
+	}
+	if err := domain.ValidateEmail(email); err != nil {
+		return ErrInvalidInput
+	}
+	contact.Email = &email
+	return nil
 }
 
 // ListTenantContacts returns all tenant contacts for the owner, plus the

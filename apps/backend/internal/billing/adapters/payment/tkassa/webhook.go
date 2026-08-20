@@ -43,45 +43,53 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		return application.WebhookEvent{}, errors.New("tkassa: webhook terminal key mismatch")
 	}
 
-	notificationType := getString(data, fieldNotificationType)
-	// The official NotificationAddCard payload omits NotificationType and
-	// OrderId: discriminate by RequestKey (present on add-card notifications,
-	// absent on payment notifications) so it does not fall into the payment
-	// branch and fail OrderId parsing with a 500. Normalize the type so
-	// downstream handling is uniform.
-	if notificationType == "" && getString(data, fieldRequestKey) != "" && getString(data, fieldOrderID) == "" {
-		notificationType = notificationTypeAddCard
-	}
-	switch notificationType {
+	switch kind := notificationType(data); kind {
 	case notificationTypeAddCard, notificationTypeAddCardLegacy:
-		if !isAddCardSuccessful(data) {
-			return application.WebhookEvent{}, errors.New("tkassa: add card webhook ignored: binding not successful")
-		}
-		return application.WebhookEvent{
-			MethodBound: &application.MethodBoundNotification{
-				BindingID: getString(data, fieldRequestKey),
-				Method:    savedMethodFromWebhook(data),
-			},
-		}, nil
+		return parseAddCardNotification(data)
 	case "", "NotificationPayment":
 		// Payment notifications either omit NotificationType or explicitly set
-		// it to NotificationPayment. Continue parsing as a payment webhook
-		// below.
+		// it to NotificationPayment.
+		return parsePaymentNotification(data)
 	default:
-		return application.WebhookEvent{}, fmt.Errorf("tkassa: unknown notification type %q", notificationType)
+		return application.WebhookEvent{}, fmt.Errorf("tkassa: unknown notification type %q", kind)
 	}
+}
 
+// notificationType returns the payload's notification type. The official
+// NotificationAddCard payload omits NotificationType and OrderId: discriminate
+// by RequestKey (present on add-card notifications, absent on payment
+// notifications) so it does not fall into the payment branch and fail OrderId
+// parsing with a 500. The type is normalized so downstream handling is uniform.
+func notificationType(data map[string]any) string {
+	kind := getString(data, fieldNotificationType)
+	if kind == "" && getString(data, fieldRequestKey) != "" && getString(data, fieldOrderID) == "" {
+		return notificationTypeAddCard
+	}
+	return kind
+}
+
+// parseAddCardNotification maps a completed add-card notification to the
+// method-bound event; anything short of a completed binding is rejected so the
+// application never stores a dead charge token.
+func parseAddCardNotification(data map[string]any) (application.WebhookEvent, error) {
+	if !isAddCardSuccessful(data) {
+		return application.WebhookEvent{}, errors.New("tkassa: add card webhook ignored: binding not successful")
+	}
+	return application.WebhookEvent{
+		MethodBound: &application.MethodBoundNotification{
+			BindingID: getString(data, fieldRequestKey),
+			Method:    savedMethodFromWebhook(data),
+		},
+	}, nil
+}
+
+// parsePaymentNotification maps a payment notification to the payment event,
+// including the saved method of a save-method parent payment.
+func parsePaymentNotification(data map[string]any) (application.WebhookEvent, error) {
 	orderID := getString(data, fieldOrderID)
 	internalPaymentID, err := uuid.Parse(orderID)
 	if err != nil {
 		return application.WebhookEvent{}, fmt.Errorf("tkassa: parse OrderId %q: %w", orderID, err)
-	}
-
-	status := mapStatus(getString(data, "Status"))
-	errorCode := getString(data, fieldErrorCode)
-	var errorCodePtr *string
-	if errorCode != "" && errorCode != "0" {
-		errorCodePtr = &errorCode
 	}
 
 	amount, err := getAmount(data)
@@ -93,8 +101,8 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		Payment: &application.PaymentNotification{
 			InternalPaymentID: internalPaymentID,
 			ProviderPaymentID: getString(data, fieldPaymentID),
-			Status:            status,
-			ErrorCode:         errorCodePtr,
+			Status:            mapStatus(getString(data, "Status")),
+			ErrorCode:         paymentErrorCode(data),
 			AmountKopecks:     amount,
 		},
 	}
@@ -107,6 +115,16 @@ func (p *Provider) ParseWebhook(ctx context.Context, payload []byte) (applicatio
 		event.Payment.SavedMethod = &method
 	}
 	return event, nil
+}
+
+// paymentErrorCode returns the ErrorCode pointer of a payment notification:
+// absent, empty and "0" codes carry no error and stay nil.
+func paymentErrorCode(data map[string]any) *string {
+	code := getString(data, fieldErrorCode)
+	if code == "" || code == "0" {
+		return nil
+	}
+	return &code
 }
 
 // savedMethodFromWebhook collects the neutral saved-method fields shared by

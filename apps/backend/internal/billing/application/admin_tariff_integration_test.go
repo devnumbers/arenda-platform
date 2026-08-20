@@ -94,17 +94,11 @@ func TestTariffRepository_Integration_UpdateEditsAndMissNarrows(t *testing.T) {
 	}
 }
 
-// TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible
-// proves why the service invalidates after a committed write: writes go
-// through a transaction-bound repository instance, and the shared instance's
-// TTL cache would keep serving the pre-write values. Invalidate drops them
-// and the next read observes the write. The clock stays fixed, so the fresh
-// read can only come from the invalidation, not the TTL.
-func TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible(t *testing.T) {
-	h := newIntegrationHarness(t)
-	// Prime the shared instance's caches with the seeded plans: both List
-	// entries and the byName map must hold the pre-write row for the staleness
-	// half of the test to be meaningful.
+// primeTariffCaches primes the shared repository's caches with the seeded
+// plans — both List entries and the byName map must hold the pre-write row for
+// a staleness check to be meaningful — and returns the pro plan.
+func (h *integrationHarness) primeTariffCaches(t *testing.T) domain.Tariff {
+	t.Helper()
 	if _, err := h.tariffs.List(h.ctx()); err != nil {
 		t.Fatalf("List() prime: %v", err)
 	}
@@ -115,9 +109,16 @@ func TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible(t *te
 	if err != nil {
 		t.Fatalf("GetByName(pro): %v", err)
 	}
+	return pro
+}
 
+// commitRepricingThroughTx writes the repriced pro plan through a
+// transaction-bound repository instance and commits, the way a committed
+// service write does.
+func (h *integrationHarness) commitRepricingThroughTx(t *testing.T, pro domain.Tariff) {
+	t.Helper()
 	uow := pgdb.NewUoW(h.pool, slog.New(slog.DiscardHandler))
-	err = uow.Do(h.ctx(), func(tx transaction.Tx) error {
+	err := uow.Do(h.ctx(), func(tx transaction.Tx) error {
 		bound, err := h.tariffs.WithTx(tx)
 		if err != nil {
 			return err
@@ -130,10 +131,14 @@ func TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible(t *te
 	if err != nil {
 		t.Fatalf("committed update: %v", err)
 	}
+}
 
-	// The shared instance still serves its pre-write cached row: the
-	// transaction-bound instance updated only its own cache, and the fixed
-	// clock keeps the shared cache inside its TTL.
+// requireStaleCachedProPrice asserts the shared instance still serves its
+// pre-write cached pro row through both reads — the transaction-bound instance
+// updated only its own cache, and the fixed clock keeps the shared cache
+// inside its TTL.
+func (h *integrationHarness) requireStaleCachedProPrice(t *testing.T, proID uuid.UUID) {
+	t.Helper()
 	cached, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
 	if err != nil {
 		t.Fatalf("GetByName(pro) before invalidate: %v", err)
@@ -146,14 +151,16 @@ func TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible(t *te
 		t.Fatalf("ListAll() before invalidate: %v", err)
 	}
 	for _, tariff := range listed {
-		if tariff.ID == pro.ID && tariff.MonthlyPriceKopecks != 49000 {
+		if tariff.ID == proID && tariff.MonthlyPriceKopecks != 49000 {
 			t.Fatalf("list price before Invalidate = %d, want the stale 49000", tariff.MonthlyPriceKopecks)
 		}
 	}
+}
 
-	if err := h.tariffs.Invalidate(h.ctx()); err != nil {
-		t.Fatalf("Invalidate() error = %v", err)
-	}
+// requireFreshProPrice asserts both reads observe the committed write — only
+// the invalidation can produce this under the fixed clock.
+func (h *integrationHarness) requireFreshProPrice(t *testing.T, proID uuid.UUID) {
+	t.Helper()
 	fresh, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
 	if err != nil {
 		t.Fatalf("GetByName(pro) after invalidate: %v", err)
@@ -166,10 +173,28 @@ func TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible(t *te
 		t.Fatalf("ListAll() after invalidate: %v", err)
 	}
 	for _, tariff := range freshList {
-		if tariff.ID == pro.ID && tariff.MonthlyPriceKopecks != 59000 {
+		if tariff.ID == proID && tariff.MonthlyPriceKopecks != 59000 {
 			t.Errorf("list price after Invalidate = %d, want 59000", tariff.MonthlyPriceKopecks)
 		}
 	}
+}
+
+// TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible
+// proves why the service invalidates after a committed write: writes go
+// through a transaction-bound repository instance, and the shared instance's
+// TTL cache would keep serving the pre-write values. Invalidate drops them
+// and the next read observes the write. The clock stays fixed, so the fresh
+// read can only come from the invalidation, not the TTL.
+func TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible(t *testing.T) {
+	h := newIntegrationHarness(t)
+	pro := h.primeTariffCaches(t)
+	h.commitRepricingThroughTx(t, pro)
+	h.requireStaleCachedProPrice(t, pro.ID)
+
+	if err := h.tariffs.Invalidate(h.ctx()); err != nil {
+		t.Fatalf("Invalidate() error = %v", err)
+	}
+	h.requireFreshProPrice(t, pro.ID)
 }
 
 // TestAdminTariff_Integration_UpdatePersistsWithAudit proves the service edit
@@ -220,13 +245,11 @@ func TestAdminTariff_Integration_UpdatePersistsWithAudit(t *testing.T) {
 	}
 }
 
-// TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice proves the
-// second half of the pricing criterion of issue #256: a deferred change to a
-// paid target charges the price current at apply time, not at schedule time
-// (the paid target is applied by the renewal phase, ADR 0008).
-func TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice(t *testing.T) {
-	h := newPaymentIntegrationHarness(t)
-	adminID := h.seedUser()
+// seedAutoRenewingBusinessPayer onboards a fresh user, lifts them onto an
+// auto-renewing month of the business plan and binds an active payment method
+// — the state a scheduled paid downgrade starts from. It returns the payer.
+func (h *paymentIntegrationHarness) seedAutoRenewingBusinessPayer(t *testing.T) uuid.UUID {
+	t.Helper()
 	userID := h.seedUser()
 	if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
 		t.Fatalf("OnUserRegistered() error = %v", err)
@@ -249,6 +272,57 @@ func TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice(t *testing.T)
 		t.Fatalf("seed Update() error = %v", err)
 	}
 	seedActiveMethod(t, h.integrationHarness, userID, "tok_deferred_price")
+	return userID
+}
+
+// expirePaidSubscription re-reads the subscription and moves its validity an
+// hour into the past so the renewal phase picks it up (the clock itself stays
+// fixed; the re-read keeps the payment-method binding).
+func (h *paymentIntegrationHarness) expirePaidSubscription(t *testing.T, userID uuid.UUID) {
+	t.Helper()
+	expired := h.clock.Now().Add(-time.Hour)
+	fresh, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID(): %v", err)
+	}
+	fresh.ValidUntil = &expired
+	if err := h.subscriptions.Update(h.ctx(), fresh); err != nil {
+		t.Fatalf("expire subscription: %v", err)
+	}
+}
+
+// requireApplyTimeCharge asserts the deferred change was charged exactly once
+// at apply time for the updated price and the subscription now runs on the
+// target tariff.
+func (h *paymentIntegrationHarness) requireApplyTimeCharge(t *testing.T, userID, wantTariffID uuid.UUID) {
+	t.Helper()
+	payments, err := h.payments.ListByUserID(h.ctx(), userID)
+	if err != nil || len(payments) != 1 {
+		t.Fatalf("payments = %d (err %v), want the single apply-time charge", len(payments), err)
+	}
+	if payments[0].AmountKopecks != 59000 {
+		t.Errorf("apply-time amount = %d, want the updated 59000", payments[0].AmountKopecks)
+	}
+	if payments[0].TariffID != wantTariffID {
+		t.Errorf("payment tariff = %v, want the deferred target pro", payments[0].TariffID)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() after renewal: %v", err)
+	}
+	if stored.TariffID != wantTariffID {
+		t.Errorf("subscription tariff = %v, want the applied pro", stored.TariffID)
+	}
+}
+
+// TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice proves the
+// second half of the pricing criterion of issue #256: a deferred change to a
+// paid target charges the price current at apply time, not at schedule time
+// (the paid target is applied by the renewal phase, ADR 0008).
+func TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice(t *testing.T) {
+	h := newPaymentIntegrationHarness(t)
+	adminID := h.seedUser()
+	userID := h.seedAutoRenewingBusinessPayer(t)
 
 	// Schedule the business → pro downgrade; it defers to the paid period end.
 	if _, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), userID, billingapp.ChangeTariffRequest{
@@ -273,37 +347,12 @@ func TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice(t *testing.T)
 	}
 
 	// The paid period ended an hour ago; the deferred change is due.
-	fresh, err := h.subscriptions.GetByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("GetByUserID(): %v", err)
-	}
-	expired := h.clock.Now().Add(-time.Hour)
-	fresh.ValidUntil = &expired
-	if err := h.subscriptions.Update(h.ctx(), fresh); err != nil {
-		t.Fatalf("expire subscription: %v", err)
-	}
+	h.expirePaidSubscription(t, userID)
 
 	if count, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil || count != 1 {
 		t.Fatalf("ProcessRenewals() = %d (err %v), want 1", count, err)
 	}
-
-	payments, err := h.payments.ListByUserID(h.ctx(), userID)
-	if err != nil || len(payments) != 1 {
-		t.Fatalf("payments = %d (err %v), want the single apply-time charge", len(payments), err)
-	}
-	if payments[0].AmountKopecks != 59000 {
-		t.Errorf("apply-time amount = %d, want the updated 59000", payments[0].AmountKopecks)
-	}
-	if payments[0].TariffID != pro.ID {
-		t.Errorf("payment tariff = %v, want the deferred target pro", payments[0].TariffID)
-	}
-	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("GetByUserID() after renewal: %v", err)
-	}
-	if stored.TariffID != pro.ID {
-		t.Errorf("subscription tariff = %v, want the applied pro", stored.TariffID)
-	}
+	h.requireApplyTimeCharge(t, userID, pro.ID)
 }
 
 // TestAdminTariff_Integration_HiddenTariffSubscriptionStillRenews proves the

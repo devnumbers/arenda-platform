@@ -102,20 +102,9 @@ func NewAccessService(
 // another full member — full members are equal in member management. Adding a
 // member to an archived property is rejected (issue #163).
 func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID uuid.UUID, role domain.Role) (domain.Membership, error) {
-	owner, actorRole, err := s.requireManage(ctx, actor, propertyID)
+	_, actorRole, err := s.authorizeNewMember(ctx, actor, propertyID, userID)
 	if err != nil {
 		return domain.Membership{}, err
-	}
-	if err := requireNotArchived(ctx, s.statuses, propertyID); err != nil {
-		return domain.Membership{}, err
-	}
-	if userID == owner {
-		return domain.Membership{}, domain.ErrCannotAddOwner
-	}
-	if userID == actor {
-		// A user cannot grant themselves access via the member API; ownership
-		// is the only self-granted access.
-		return domain.Membership{}, domain.ErrCannotAddSelf
 	}
 
 	id, err := uuid.NewV7()
@@ -133,54 +122,9 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 	var created domain.Membership
 	suspend := false
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		if _, err := stores.members.GetByPropertyAndUser(ctx, propertyID, userID); err == nil {
-			return domain.ErrMemberAlreadyExists
-		} else if !errors.Is(err, domain.ErrMemberNotFound) {
-			return fmt.Errorf("check existing membership: %w", err)
-		}
-
-		// Enforce the recipient tariff slot invariant (issue #158, T4): when the
-		// recipient has no free slot, the membership is created suspended so it does
-		// not occupy a slot until one frees up and is recovered FIFO.
-		if s.slots != nil {
-			var err2 error
-			suspend, err2 = s.slots.EnforceOnActivation(ctx, stores.tx, userID)
-			if err2 != nil {
-				return fmt.Errorf("check recipient slot: %w", err2)
-			}
-		}
-		if suspend {
-			membership.Status = domain.MemberStatusSuspended
-		}
-
 		var err error
-		if suspend {
-			created, err = stores.members.CreateWithStatus(ctx, membership)
-		} else {
-			created, err = stores.members.Create(ctx, membership)
-		}
-		if err != nil {
-			return fmt.Errorf("create membership: %w", err)
-		}
-
-		// Audit in the same transaction. Only ids and the role are recorded; the
-		// member's email/phone are PII and must never appear in context (ADR 0020).
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(actorRole),
-			Action:     auditdomain.ActionPropertyMemberAdded,
-			EntityType: auditdomain.EntityPropertyMember,
-			EntityID:   &created.ID,
-			Context: map[string]any{
-				auditKeyPropertyID: propertyID,
-				auditKeyUserID:     userID,
-				auditKeyRole:       string(role),
-				"status":           string(created.Status),
-			},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
+		created, suspend, err = s.createMembershipInTx(ctx, stores, actor, membership, actorRole)
+		return err
 	})
 	if err != nil {
 		return domain.Membership{}, err
@@ -193,6 +137,78 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 		s.lifecycle.SendAccessSuspended(ctx, userID, propertyID)
 	}
 	return created, nil
+}
+
+// authorizeNewMember applies the AddMember gates: the actor needs the
+// manage-members capability and the property must not be archived (issue #163),
+// and the target user must be neither the property owner nor the actor
+// themselves — ownership is the only self-granted access.
+func (s *AccessService) authorizeNewMember(ctx context.Context, actor, propertyID, userID uuid.UUID) (uuid.UUID, sharedpolicy.Role, error) {
+	owner, actorRole, err := s.requireManage(ctx, actor, propertyID)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	if err := requireNotArchived(ctx, s.statuses, propertyID); err != nil {
+		return uuid.Nil, "", err
+	}
+	if userID == owner {
+		return uuid.Nil, "", domain.ErrCannotAddOwner
+	}
+	if userID == actor {
+		return uuid.Nil, "", domain.ErrCannotAddSelf
+	}
+	return owner, actorRole, nil
+}
+
+// createMembershipInTx performs the transactional core of AddMember: duplicate
+// rejection, the recipient slot decision (issue #158, T4 — without a free slot
+// the membership is created suspended so it does not occupy a slot until one
+// frees up and is recovered FIFO) and the audited insert. The returned flag
+// reports the suspended outcome for the post-commit notification.
+func (s *AccessService) createMembershipInTx(
+	ctx context.Context, stores *txStores, actor uuid.UUID, membership domain.Membership, actorRole sharedpolicy.Role,
+) (created domain.Membership, suspend bool, err error) {
+	if _, err := stores.members.GetByPropertyAndUser(ctx, membership.PropertyID, membership.UserID); err == nil {
+		return domain.Membership{}, false, domain.ErrMemberAlreadyExists
+	} else if !errors.Is(err, domain.ErrMemberNotFound) {
+		return domain.Membership{}, false, fmt.Errorf("check existing membership: %w", err)
+	}
+
+	if s.slots != nil {
+		var err error
+		suspend, err = s.slots.EnforceOnActivation(ctx, stores.tx, membership.UserID)
+		if err != nil {
+			return domain.Membership{}, false, fmt.Errorf("check recipient slot: %w", err)
+		}
+	}
+	if suspend {
+		membership.Status = domain.MemberStatusSuspended
+		created, err = stores.members.CreateWithStatus(ctx, membership)
+	} else {
+		created, err = stores.members.Create(ctx, membership)
+	}
+	if err != nil {
+		return domain.Membership{}, false, fmt.Errorf("create membership: %w", err)
+	}
+
+	// Audit in the same transaction. Only ids and the role are recorded; the
+	// member's email/phone are PII and must never appear in context (ADR 0020).
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  actorRoleFromPolicyRole(actorRole),
+		Action:     auditdomain.ActionPropertyMemberAdded,
+		EntityType: auditdomain.EntityPropertyMember,
+		EntityID:   &created.ID,
+		Context: map[string]any{
+			auditKeyPropertyID: membership.PropertyID,
+			auditKeyUserID:     membership.UserID,
+			auditKeyRole:       string(membership.Role),
+			"status":           string(created.Status),
+		},
+	}); err != nil {
+		return domain.Membership{}, false, fmt.Errorf("record audit: %w", err)
+	}
+	return created, suspend, nil
 }
 
 // ChangeMemberRole changes the role of an existing member. The owner is never a

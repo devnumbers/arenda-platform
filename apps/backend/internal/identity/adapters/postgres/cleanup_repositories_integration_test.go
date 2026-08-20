@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 )
@@ -52,11 +53,23 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 	codes := NewLoginCodeRepository(pool, enc)
 	attempts := NewAttemptRepository(pool, enc)
 
-	// Sessions: two expired, one live. Seeded with direct SQL because the
-	// repository's Create pins created_at to now(), and the schema check
-	// chk_sessions_expires_after_created forbids a session created already
-	// expired — only time passing makes a session expire.
+	seedCleanupSessions(t, ctx, pool, user.ID, now)
+	seedCleanupLoginCodes(t, ctx, pool, codes, user.ID, now)
+	seedCleanupAttemptWindows(t, ctx, attempts, user.ID, now)
+
+	assertSessionDeleteCounts(t, ctx, sessions, now)
+	assertCodeDeleteCount(t, ctx, codes, now)
+	assertAttemptDeleteCount(t, ctx, attempts, now)
+}
+
+// seedCleanupSessions inserts two expired sessions and one live session.
+// Seeded with direct SQL because the repository's Create pins created_at to
+// now(), and the schema check chk_sessions_expires_after_created forbids a
+// session created already expired — only time passing makes a session expire.
+func seedCleanupSessions(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, now time.Time) {
+	t.Helper()
 	insertSession := func(expiresAt time.Time) {
+		t.Helper()
 		id, err := uuid.NewV7()
 		if err != nil {
 			t.Fatalf("new session id: %v", err)
@@ -65,7 +78,7 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 		_, err = pool.Exec(ctx,
 			`INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_used_at)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			id, user.ID, "count-test-"+uuid.Must(uuid.NewV7()).String(), expiresAt, createdAt, now)
+			id, userID, "count-test-"+uuid.Must(uuid.NewV7()).String(), expiresAt, createdAt, now)
 		if err != nil {
 			t.Fatalf("insert session (expires %v): %v", expiresAt, err)
 		}
@@ -73,8 +86,23 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 	insertSession(now.Add(-2 * time.Hour))
 	insertSession(now.Add(-time.Hour))
 	insertSession(now.Add(24 * time.Hour))
+}
 
-	// Login codes: one expired (phone A), one live (phone B).
+// seedCleanupLoginCodes stores one expired login code (phone A) and one live
+// code (phone B). The expired code is seeded with direct SQL for the same
+// reason as the sessions above: Save pins created_at to the DB now() while
+// expiry comes from the domain object, and chk_login_codes_expires_after_created
+// forbids a code created already expired — only time passing makes a code
+// expire.
+func seedCleanupLoginCodes(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	codes *LoginCodeRepository,
+	userID uuid.UUID,
+	now time.Time,
+) {
+	t.Helper()
 	expiredPhone, err := domain.NewPhone("+79990001143")
 	if err != nil {
 		t.Fatalf("new expired phone: %v", err)
@@ -91,12 +119,6 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new live email: %v", err)
 	}
-	userID := user.ID
-	// The expired code is seeded with direct SQL for the same reason as the
-	// sessions above: Save pins created_at to the DB now() while expiry comes
-	// from the domain object, and chk_login_codes_expires_after_created
-	// forbids a code created already expired — only time passing makes a
-	// code expire.
 	expiredCodeID, err := uuid.NewV7()
 	if err != nil {
 		t.Fatalf("new expired code id: %v", err)
@@ -112,8 +134,18 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 	if err := codes.Save(ctx, mustLoginCode(t, livePhone, liveEmail, "livehash", &userID, now)); err != nil {
 		t.Fatalf("save live code: %v", err)
 	}
+}
 
-	// Attempt windows: one stale (last failure an hour ago), one fresh.
+// seedCleanupAttemptWindows stores one stale window (last failure an hour ago)
+// and one fresh window.
+func seedCleanupAttemptWindows(
+	t *testing.T,
+	ctx context.Context,
+	attempts *AttemptRepository,
+	userID uuid.UUID,
+	now time.Time,
+) {
+	t.Helper()
 	stalePhone, err := domain.NewPhone("+79990001145")
 	if err != nil {
 		t.Fatalf("new stale phone: %v", err)
@@ -124,14 +156,18 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 	}
 	staleWindow := domain.AttemptWindow{Failures: 1, FirstFailureAt: now.Add(-2 * time.Hour), LastFailureAt: now.Add(-time.Hour)}
 	freshWindow := domain.AttemptWindow{Failures: 1, FirstFailureAt: now.Add(-time.Minute), LastFailureAt: now}
-	if err := attempts.Save(ctx, stalePhone, user.ID, staleWindow, 0); err != nil {
+	if err := attempts.Save(ctx, stalePhone, userID, staleWindow, 0); err != nil {
 		t.Fatalf("save stale attempt: %v", err)
 	}
-	if err := attempts.Save(ctx, freshPhone, user.ID, freshWindow, 0); err != nil {
+	if err := attempts.Save(ctx, freshPhone, userID, freshWindow, 0); err != nil {
 		t.Fatalf("save fresh attempt: %v", err)
 	}
+}
 
-	// Expired sessions: exactly the two expired rows, then completeness.
+// assertSessionDeleteCounts checks that DeleteExpiredBefore removes exactly the
+// two expired sessions and reports 0 on the completeness second pass.
+func assertSessionDeleteCounts(t *testing.T, ctx context.Context, sessions *SessionRepository, now time.Time) {
+	t.Helper()
 	deleted, err := sessions.DeleteExpiredBefore(ctx, now)
 	if err != nil {
 		t.Fatalf("delete expired sessions: %v", err)
@@ -142,18 +178,25 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 	if deleted, err = sessions.DeleteExpiredBefore(ctx, now); err != nil || deleted != 0 {
 		t.Fatalf("second pass: deleted = %d, err = %v; want 0, nil", deleted, err)
 	}
+}
 
-	// Expired login codes: only the expired one goes.
-	deleted, err = codes.DeleteExpiredBefore(ctx, now)
+// assertCodeDeleteCount checks that only the expired login code is removed.
+func assertCodeDeleteCount(t *testing.T, ctx context.Context, codes *LoginCodeRepository, now time.Time) {
+	t.Helper()
+	deleted, err := codes.DeleteExpiredBefore(ctx, now)
 	if err != nil {
 		t.Fatalf("delete expired codes: %v", err)
 	}
 	if deleted != 1 {
 		t.Fatalf("codes deleted = %d, want 1", deleted)
 	}
+}
 
-	// Stale attempt windows: only the stale one, cutoff now.
-	deleted, err = attempts.DeleteStaleBefore(ctx, now)
+// assertAttemptDeleteCount checks that only the stale attempt window is
+// removed, with cutoff now.
+func assertAttemptDeleteCount(t *testing.T, ctx context.Context, attempts *AttemptRepository, now time.Time) {
+	t.Helper()
+	deleted, err := attempts.DeleteStaleBefore(ctx, now)
 	if err != nil {
 		t.Fatalf("delete stale attempts: %v", err)
 	}

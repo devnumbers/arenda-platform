@@ -339,6 +339,176 @@ func (h *workersHarness) storedSubscription(t *testing.T, sub domain.Subscriptio
 	return stored
 }
 
+// requireRenewedPayment asserts the user's only payment is the succeeded fake
+// renewal charge on the active method for the pro tariff and returns it.
+func (h *workersHarness) requireRenewedPayment(t *testing.T, userID, methodID uuid.UUID) *domain.SubscriptionPayment {
+	t.Helper()
+	payment := h.singlePaymentOf(t, userID)
+	if payment.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("payment status = %q, want succeeded", payment.Status)
+	}
+	if payment.TariffID != h.pro.ID || payment.AmountKopecks != h.pro.MonthlyPriceKopecks {
+		t.Errorf("payment = tariff %s amount %d, want pro %d", payment.TariffID, payment.AmountKopecks, h.pro.MonthlyPriceKopecks)
+	}
+	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != methodID {
+		t.Errorf("payment method = %v, want the active method", payment.PaymentMethodID)
+	}
+	if payment.Provider != testProviderFake {
+		t.Errorf("payment provider = %q, want fake", payment.Provider)
+	}
+	return payment
+}
+
+// requireRenewedSubscription asserts the subscription renewed to active for a
+// month from now with the applied renewal payment linked.
+func (h *workersHarness) requireRenewedSubscription(t *testing.T, sub domain.Subscription, paymentID uuid.UUID) {
+	t.Helper()
+	stored := h.storedSubscription(t, sub)
+	wantUntil := h.now.AddDate(0, 1, 0)
+	if stored.Status != domain.SubscriptionStatusActive || stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("subscription = %s until %v, want active until %v", stored.Status, stored.ValidUntil, wantUntil)
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != paymentID {
+		t.Errorf("LastAppliedPaymentID = %v, want the renewal payment", stored.LastAppliedPaymentID)
+	}
+}
+
+// requirePaymentAppliedTransition asserts the log holds exactly one transition
+// — the renewal's payment_applied entry referencing the payment.
+func (h *workersHarness) requirePaymentAppliedTransition(t *testing.T, sub domain.Subscription, paymentID uuid.UUID) {
+	t.Helper()
+	transitions := h.transitionsOf(t, sub)
+	if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonPaymentApplied {
+		t.Fatalf("transitions = %+v, want one payment_applied", transitions)
+	}
+	if transitions[0].PaymentID == nil || *transitions[0].PaymentID != paymentID {
+		t.Error("transition does not reference the renewal payment")
+	}
+}
+
+// requireGraceEnteredOverNothingChargeable asserts the renewal with nothing to
+// charge moved the subscription into a fresh grace window: the scheduled
+// change dropped, the system's grace_entered transition logged, no charge and
+// no payment initiated.
+func (h *workersHarness) requireGraceEnteredOverNothingChargeable(t *testing.T, sub domain.Subscription) {
+	t.Helper()
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusGrace {
+		t.Fatalf("status = %q, want grace", stored.Status)
+	}
+	wantUntil := h.now.Add(7 * 24 * time.Hour)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("ValidUntil = %v, want grace window end %v", stored.ValidUntil, wantUntil)
+	}
+	if stored.HasPendingChange() {
+		t.Error("scheduled change survived grace entry, want dropped")
+	}
+
+	transitions := h.transitionsOf(t, sub)
+	if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonGraceEntered {
+		t.Fatalf("transitions = %+v, want one grace_entered", transitions)
+	}
+	if transitions[0].Initiator != domain.InitiatorSystem {
+		t.Errorf("initiator = %q, want system", transitions[0].Initiator)
+	}
+
+	if _, _, charges := h.provider.calls(); charges != 0 {
+		t.Errorf("charge calls = %d, want 0", charges)
+	}
+	pending, err := h.stores.payments.ListPendingByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("ListPendingByUserID: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Errorf("pending payments = %d, want 0 (nothing was initiated)", len(pending))
+	}
+}
+
+// requireFreeChangeApplied asserts the free scheduled change applied: basic
+// tariff with a free month of the target period, no pending change left, the
+// scheduled_change_applied transition, and both bridges in the same
+// transaction.
+func (h *workersHarness) requireFreeChangeApplied(
+	t *testing.T, sub domain.Subscription, archiver *fakeArchiverSource, slots *fakeSlotSource,
+) {
+	t.Helper()
+	stored := h.storedSubscription(t, sub)
+	if stored.TariffID != h.basic.ID {
+		t.Errorf("TariffID = %s, want basic", stored.TariffID)
+	}
+	wantUntil := h.now.AddDate(0, 1, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("ValidUntil = %v, want %v (a free month of the target period)", stored.ValidUntil, wantUntil)
+	}
+	if stored.HasPendingChange() {
+		t.Error("pending change survived the apply")
+	}
+	transitions := h.transitionsOf(t, sub)
+	if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonScheduledChangeApplied {
+		t.Fatalf("transitions = %+v, want one scheduled_change_applied", transitions)
+	}
+	if got := archiver.recorded(); len(got) != 1 || got[0].limit != h.basic.ActivePropertyLimit || got[0].ownerID != sub.UserID {
+		t.Errorf("archive calls = %+v, want one at the basic limit", got)
+	}
+	if got := slots.recorded(); len(got) != 1 || got[0] != "scheduled_downgrade" {
+		t.Errorf("slot calls = %v, want one scheduled_downgrade", got)
+	}
+}
+
+// seedStalePendingUpgrade stores the subscription's stale pending
+// business-upgrade payment carrying the given provider reference.
+func (h *workersHarness) seedStalePendingUpgrade(t *testing.T, sub domain.Subscription, ref string) domain.SubscriptionPayment {
+	t.Helper()
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
+		h.business.MonthlyPriceKopecks, testProviderFake, h.now.Add(-10*time.Minute))
+	if err != nil {
+		t.Fatalf("new payment: %v", err)
+	}
+	if err := payment.SaveProviderReference(ref, "http://pay", h.now.Add(-10*time.Minute)); err != nil {
+		t.Fatalf("save reference: %v", err)
+	}
+	stored, err := h.stores.payments.Create(t.Context(), payment)
+	if err != nil {
+		t.Fatalf("seed payment: %v", err)
+	}
+	return stored
+}
+
+// seedStuckRefundPayment stores a succeeded pro renewal payment already stuck
+// in refunding with a provider reference.
+func (h *workersHarness) seedStuckRefundPayment(t *testing.T) domain.SubscriptionPayment {
+	t.Helper()
+	sub := h.seedSubscription(t, nil)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+		h.pro.MonthlyPriceKopecks, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("new payment: %v", err)
+	}
+	providerPaymentID := "prov_stuck_port"
+	payment.ProviderPaymentID = &providerPaymentID
+	if err := payment.MarkSucceeded(h.now); err != nil {
+		t.Fatalf("mark succeeded: %v", err)
+	}
+	if err := payment.BeginRefund(h.now); err != nil {
+		t.Fatalf("begin refund: %v", err)
+	}
+	stored, err := h.stores.payments.Create(t.Context(), payment)
+	if err != nil {
+		t.Fatalf("seed payment: %v", err)
+	}
+	return stored
+}
+
+// swapLifecyclePort mounts a scripted PaymentLifecycle in place of the real
+// payment service and returns it for call inspection.
+func (h *workersHarness) swapLifecyclePort() *scriptedLifecycle {
+	lifecycle := &scriptedLifecycle{}
+	h.workers.payments = lifecycle
+	return lifecycle
+}
+
 // TestWorkers_RenewalChargesActiveMethodAndRenews proves the happy path: the
 // expired auto-renewing subscription is charged on its active method, the
 // payment succeeds, and the subscription renews from now with the transition
@@ -356,36 +526,9 @@ func TestWorkers_RenewalChargesActiveMethodAndRenews(t *testing.T) {
 		t.Fatalf("ProcessRenewals() = %d, want 1", count)
 	}
 
-	payment := h.singlePaymentOf(t, sub.UserID)
-	if payment.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("payment status = %q, want succeeded", payment.Status)
-	}
-	if payment.TariffID != h.pro.ID || payment.AmountKopecks != h.pro.MonthlyPriceKopecks {
-		t.Errorf("payment = tariff %s amount %d, want pro %d", payment.TariffID, payment.AmountKopecks, h.pro.MonthlyPriceKopecks)
-	}
-	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != method.ID {
-		t.Errorf("payment method = %v, want the active method", payment.PaymentMethodID)
-	}
-	if payment.Provider != testProviderFake {
-		t.Errorf("payment provider = %q, want fake", payment.Provider)
-	}
-
-	stored := h.storedSubscription(t, sub)
-	wantUntil := h.now.AddDate(0, 1, 0)
-	if stored.Status != domain.SubscriptionStatusActive || stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
-		t.Errorf("subscription = %s until %v, want active until %v", stored.Status, stored.ValidUntil, wantUntil)
-	}
-	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != payment.ID {
-		t.Errorf("LastAppliedPaymentID = %v, want the renewal payment", stored.LastAppliedPaymentID)
-	}
-
-	transitions := h.transitionsOf(t, sub)
-	if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonPaymentApplied {
-		t.Fatalf("transitions = %+v, want one payment_applied", transitions)
-	}
-	if transitions[0].PaymentID == nil || *transitions[0].PaymentID != payment.ID {
-		t.Error("transition does not reference the renewal payment")
-	}
+	payment := h.requireRenewedPayment(t, sub.UserID, method.ID)
+	h.requireRenewedSubscription(t, sub, payment.ID)
+	h.requirePaymentAppliedTransition(t, sub, payment.ID)
 
 	inits, charges, _ := h.provider.calls()
 	if inits != 1 || charges != 1 {
@@ -431,37 +574,7 @@ func TestWorkers_RenewalWithoutChargeableMethodEntersGrace(t *testing.T) {
 			if count != 1 {
 				t.Fatalf("ProcessRenewals() = %d, want 1", count)
 			}
-
-			stored := h.storedSubscription(t, sub)
-			if stored.Status != domain.SubscriptionStatusGrace {
-				t.Fatalf("status = %q, want grace", stored.Status)
-			}
-			wantUntil := h.now.Add(7 * 24 * time.Hour)
-			if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
-				t.Errorf("ValidUntil = %v, want grace window end %v", stored.ValidUntil, wantUntil)
-			}
-			if stored.HasPendingChange() {
-				t.Error("scheduled change survived grace entry, want dropped")
-			}
-
-			transitions := h.transitionsOf(t, sub)
-			if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonGraceEntered {
-				t.Fatalf("transitions = %+v, want one grace_entered", transitions)
-			}
-			if transitions[0].Initiator != domain.InitiatorSystem {
-				t.Errorf("initiator = %q, want system", transitions[0].Initiator)
-			}
-
-			if _, _, charges := h.provider.calls(); charges != 0 {
-				t.Errorf("charge calls = %d, want 0", charges)
-			}
-			pending, err := h.stores.payments.ListPendingByUserID(t.Context(), sub.UserID)
-			if err != nil {
-				t.Fatalf("ListPendingByUserID: %v", err)
-			}
-			if len(pending) != 0 {
-				t.Errorf("pending payments = %d, want 0 (nothing was initiated)", len(pending))
-			}
+			h.requireGraceEnteredOverNothingChargeable(t, sub)
 		})
 	}
 }
@@ -856,28 +969,7 @@ func TestWorkers_ScheduledChangesApplyFreeTarget(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("ProcessScheduledChanges() = %d, want 1", count)
 	}
-
-	stored := h.storedSubscription(t, sub)
-	if stored.TariffID != h.basic.ID {
-		t.Errorf("TariffID = %s, want basic", stored.TariffID)
-	}
-	wantUntil := h.now.AddDate(0, 1, 0)
-	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
-		t.Errorf("ValidUntil = %v, want %v (a free month of the target period)", stored.ValidUntil, wantUntil)
-	}
-	if stored.HasPendingChange() {
-		t.Error("pending change survived the apply")
-	}
-	transitions := h.transitionsOf(t, sub)
-	if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonScheduledChangeApplied {
-		t.Fatalf("transitions = %+v, want one scheduled_change_applied", transitions)
-	}
-	if got := archiver.recorded(); len(got) != 1 || got[0].limit != h.basic.ActivePropertyLimit || got[0].ownerID != sub.UserID {
-		t.Errorf("archive calls = %+v, want one at the basic limit", got)
-	}
-	if got := slots.recorded(); len(got) != 1 || got[0] != "scheduled_downgrade" {
-		t.Errorf("slot calls = %v, want one scheduled_downgrade", got)
-	}
+	h.requireFreeChangeApplied(t, sub, archiver, slots)
 
 	// A second run has nothing left to apply.
 	again, err := h.workers.ProcessScheduledChanges(t.Context(), h.now)
@@ -1057,108 +1149,104 @@ func TestWorkers_ProcessRenewalsRequiresProvider(t *testing.T) {
 // synchronous notification path; a provider-pending payment is left alone
 // (ported from TestBilling_ProcessPendingUpgradePayments_*).
 func TestWorkers_ReconcileStalePendingPayments(t *testing.T) {
-	newStaleUpgrade := func(t *testing.T, h *workersHarness, sub domain.Subscription, ref string) domain.SubscriptionPayment {
-		t.Helper()
-		payment, err := domain.NewSubscriptionPayment(
-			sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
-			h.business.MonthlyPriceKopecks, testProviderFake, h.now.Add(-10*time.Minute))
-		if err != nil {
-			t.Fatalf("new payment: %v", err)
-		}
-		if err := payment.SaveProviderReference(ref, "http://pay", h.now.Add(-10*time.Minute)); err != nil {
-			t.Fatalf("save reference: %v", err)
-		}
-		stored, err := h.stores.payments.Create(t.Context(), payment)
-		if err != nil {
-			t.Fatalf("seed payment: %v", err)
-		}
-		return stored
+	t.Run("succeeded finalizes upgrade", reconcileUpgradeSucceededFinalizes)
+	t.Run("failed marks failed without subscription damage", reconcileUpgradeFailedKeepsSubscription)
+	t.Run("provider pending is left alone", reconcileProviderPendingLeftAlone)
+	t.Run("fresh pending payments are not stale", reconcileFreshPendingNotStale)
+}
+
+// reconcileUpgradeSucceededFinalizes covers the succeeded stale outcome: the
+// upgrade payment finalizes and the business tariff applies.
+func reconcileUpgradeSucceededFinalizes(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	sub := h.seedSubscription(t, nil) // Still on pro; the payment buys business.
+	payment := h.seedStalePendingUpgrade(t, sub, "prov_stale_1")
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
 	}
 
-	t.Run("succeeded finalizes upgrade", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		sub := h.seedSubscription(t, nil) // Still on pro; the payment buys business.
-		payment := newStaleUpgrade(t, h, sub, "prov_stale_1")
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
-		}
+	count, err := h.workers.ProcessPendingUpgradePayments(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessPendingUpgradePayments() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil || stored.Status != domain.PaymentStatusSucceeded {
+		t.Fatalf("payment = %s (err %v), want succeeded", stored.Status, err)
+	}
+	if got := h.storedSubscription(t, sub); got.TariffID != h.business.ID {
+		t.Errorf("TariffID = %s, want business applied", got.TariffID)
+	}
+}
 
-		count, err := h.workers.ProcessPendingUpgradePayments(t.Context(), h.now)
-		if err != nil {
-			t.Fatalf("ProcessPendingUpgradePayments() error = %v", err)
-		}
-		if count != 1 {
-			t.Fatalf("count = %d, want 1", count)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil || stored.Status != domain.PaymentStatusSucceeded {
-			t.Fatalf("payment = %s (err %v), want succeeded", stored.Status, err)
-		}
-		if got := h.storedSubscription(t, sub); got.TariffID != h.business.ID {
-			t.Errorf("TariffID = %s, want business applied", got.TariffID)
-		}
-	})
+// reconcileUpgradeFailedKeepsSubscription covers the failed stale outcome: the
+// payment fails with no subscription damage.
+func reconcileUpgradeFailedKeepsSubscription(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	sub := h.seedSubscription(t, nil)
+	payment := h.seedStalePendingUpgrade(t, sub, "prov_stale_2")
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusFailed, ErrorCode: "53"}, nil
+	}
 
-	t.Run("failed marks failed without subscription damage", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		sub := h.seedSubscription(t, nil)
-		payment := newStaleUpgrade(t, h, sub, "prov_stale_2")
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusFailed, ErrorCode: "53"}, nil
-		}
+	if _, err := h.workers.ProcessPendingUpgradePayments(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessPendingUpgradePayments() error = %v", err)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil || stored.Status != domain.PaymentStatusFailed {
+		t.Fatalf("payment = %s (err %v), want failed", stored.Status, err)
+	}
+	if got := h.storedSubscription(t, sub); got.Status != domain.SubscriptionStatusActive || got.TariffID != h.pro.ID {
+		t.Errorf("subscription = %s/%s, want untouched active/pro", got.Status, got.TariffID)
+	}
+}
 
-		if _, err := h.workers.ProcessPendingUpgradePayments(t.Context(), h.now); err != nil {
-			t.Fatalf("ProcessPendingUpgradePayments() error = %v", err)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil || stored.Status != domain.PaymentStatusFailed {
-			t.Fatalf("payment = %s (err %v), want failed", stored.Status, err)
-		}
-		if got := h.storedSubscription(t, sub); got.Status != domain.SubscriptionStatusActive || got.TariffID != h.pro.ID {
-			t.Errorf("subscription = %s/%s, want untouched active/pro", got.Status, got.TariffID)
-		}
-	})
+// reconcileProviderPendingLeftAlone covers the provider-pending outcome: the
+// reconciliation leaves the stale payment pending.
+func reconcileProviderPendingLeftAlone(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	sub := h.seedSubscription(t, nil)
+	payment := h.seedStalePendingUpgrade(t, sub, "prov_stale_3")
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusPending}, nil
+	}
 
-	t.Run("provider pending is left alone", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		sub := h.seedSubscription(t, nil)
-		payment := newStaleUpgrade(t, h, sub, "prov_stale_3")
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusPending}, nil
-		}
+	if _, err := h.workers.ReconcilePendingPayments(t.Context(), h.now); err != nil {
+		t.Fatalf("ReconcilePendingPayments() error = %v", err)
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil || stored.Status != domain.PaymentStatusPending {
+		t.Fatalf("payment = %s (err %v), want still pending", stored.Status, err)
+	}
+}
 
-		if _, err := h.workers.ReconcilePendingPayments(t.Context(), h.now); err != nil {
-			t.Fatalf("ReconcilePendingPayments() error = %v", err)
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil || stored.Status != domain.PaymentStatusPending {
-			t.Fatalf("payment = %s (err %v), want still pending", stored.Status, err)
-		}
-	})
-
-	t.Run("fresh pending payments are not stale", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(
-			sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
-			h.business.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
-		if err != nil {
-			t.Fatalf("new payment: %v", err)
-		}
-		if err := payment.SaveProviderReference("prov_fresh", "http://pay", h.now.Add(-time.Minute)); err != nil {
-			t.Fatalf("save reference: %v", err)
-		}
-		if _, err := h.stores.payments.Create(t.Context(), payment); err != nil {
-			t.Fatalf("seed payment: %v", err)
-		}
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			t.Error("the provider must not be queried for a fresh payment")
-			return PaymentStatusResult{}, nil
-		}
-		if _, err := h.workers.ReconcilePendingPayments(t.Context(), h.now); err != nil {
-			t.Fatalf("ReconcilePendingPayments() error = %v", err)
-		}
-	})
+// reconcileFreshPendingNotStale covers the freshness edge: a payment younger
+// than the staleness threshold is never reconciled, the provider is not even
+// queried.
+func reconcileFreshPendingNotStale(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	sub := h.seedSubscription(t, nil)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
+		h.business.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("new payment: %v", err)
+	}
+	if err := payment.SaveProviderReference("prov_fresh", "http://pay", h.now.Add(-time.Minute)); err != nil {
+		t.Fatalf("save reference: %v", err)
+	}
+	if _, err := h.stores.payments.Create(t.Context(), payment); err != nil {
+		t.Fatalf("seed payment: %v", err)
+	}
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		t.Error("the provider must not be queried for a fresh payment")
+		return PaymentStatusResult{}, nil
+	}
+	if _, err := h.workers.ReconcilePendingPayments(t.Context(), h.now); err != nil {
+		t.Fatalf("ReconcilePendingPayments() error = %v", err)
+	}
 }
 
 // TestWorkers_ReconciliationRoutesThroughLifecyclePort proves the
@@ -1168,163 +1256,130 @@ func TestWorkers_ReconcileStalePendingPayments(t *testing.T) {
 // refund as one resolution whose answer drives the batch progress. The
 // workers hold no reference to the payment service behind the port.
 func TestWorkers_ReconciliationRoutesThroughLifecyclePort(t *testing.T) {
-	seedStalePending := func(t *testing.T, h *workersHarness, ref string) domain.SubscriptionPayment {
-		t.Helper()
-		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(
-			sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
-			h.business.MonthlyPriceKopecks, testProviderFake, h.now.Add(-10*time.Minute))
-		if err != nil {
-			t.Fatalf("new payment: %v", err)
-		}
-		if err := payment.SaveProviderReference(ref, "http://pay", h.now.Add(-10*time.Minute)); err != nil {
-			t.Fatalf("save reference: %v", err)
-		}
-		stored, err := h.stores.payments.Create(t.Context(), payment)
-		if err != nil {
-			t.Fatalf("seed payment: %v", err)
-		}
-		return stored
-	}
-	seedStuckRefund := func(t *testing.T, h *workersHarness) domain.SubscriptionPayment {
-		t.Helper()
-		sub := h.seedSubscription(t, nil)
-		payment, err := domain.NewSubscriptionPayment(
-			sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
-			h.pro.MonthlyPriceKopecks, testProviderFake, h.now)
-		if err != nil {
-			t.Fatalf("new payment: %v", err)
-		}
-		providerPaymentID := "prov_stuck_port"
-		payment.ProviderPaymentID = &providerPaymentID
-		if err := payment.MarkSucceeded(h.now); err != nil {
-			t.Fatalf("mark succeeded: %v", err)
-		}
-		if err := payment.BeginRefund(h.now); err != nil {
-			t.Fatalf("begin refund: %v", err)
-		}
-		stored, err := h.stores.payments.Create(t.Context(), payment)
-		if err != nil {
-			t.Fatalf("seed payment: %v", err)
-		}
-		return stored
-	}
-	swapPort := func(t *testing.T, h *workersHarness) *scriptedLifecycle {
-		t.Helper()
-		lifecycle := &scriptedLifecycle{}
-		h.workers.payments = lifecycle
-		return lifecycle
+	t.Run("succeeded outcome arrives as one applied notification", portAppliesSucceededOutcome)
+	t.Run("failed outcome keeps the provider error code", portKeepsProviderErrorCode)
+	t.Run("stuck refund resolves through the port", portResolvesStuckRefund)
+	t.Run("unresolved answer leaves the reservation untouched", portKeepsUnresolvedReservation)
+}
+
+// portAppliesSucceededOutcome covers the succeeded outcome: exactly one
+// notification application with the provider status translated.
+func portAppliesSucceededOutcome(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	sub := h.seedSubscription(t, nil)
+	payment := h.seedStalePendingUpgrade(t, sub, "prov_port_1")
+	lifecycle := h.swapLifecyclePort()
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
 	}
 
-	t.Run("succeeded outcome arrives as one applied notification", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStalePending(t, h, "prov_port_1")
-		lifecycle := swapPort(t, h)
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
-		}
+	count, err := h.workers.ReconcilePendingPayments(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ReconcilePendingPayments() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+	applied := lifecycle.applications()
+	if len(applied) != 1 {
+		t.Fatalf("port applications = %d, want 1", len(applied))
+	}
+	want := PaymentNotification{
+		InternalPaymentID: payment.ID,
+		ProviderPaymentID: "prov_port_1",
+		Status:            domain.PaymentStatusSucceeded,
+		AmountKopecks:     payment.AmountKopecks,
+	}
+	if applied[0] != want {
+		t.Errorf("notification = %+v, want %+v", applied[0], want)
+	}
+	if got := lifecycle.resolutions(); len(got) != 0 {
+		t.Errorf("port resolutions = %d, want 0", len(got))
+	}
+}
 
-		count, err := h.workers.ReconcilePendingPayments(t.Context(), h.now)
-		if err != nil {
-			t.Fatalf("ReconcilePendingPayments() error = %v", err)
-		}
-		if count != 1 {
-			t.Fatalf("count = %d, want 1", count)
-		}
-		applied := lifecycle.applications()
-		if len(applied) != 1 {
-			t.Fatalf("port applications = %d, want 1", len(applied))
-		}
-		want := PaymentNotification{
-			InternalPaymentID: payment.ID,
-			ProviderPaymentID: "prov_port_1",
-			Status:            domain.PaymentStatusSucceeded,
-			AmountKopecks:     payment.AmountKopecks,
-		}
-		if applied[0] != want {
-			t.Errorf("notification = %+v, want %+v", applied[0], want)
-		}
-		if got := lifecycle.resolutions(); len(got) != 0 {
-			t.Errorf("port resolutions = %d, want 0", len(got))
-		}
-	})
+// portKeepsProviderErrorCode covers the failed outcome: the notification
+// carries the provider's error code and the payment identity.
+func portKeepsProviderErrorCode(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	sub := h.seedSubscription(t, nil)
+	payment := h.seedStalePendingUpgrade(t, sub, "prov_port_2")
+	lifecycle := h.swapLifecyclePort()
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusFailed, ErrorCode: "53"}, nil
+	}
 
-	t.Run("failed outcome keeps the provider error code", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStalePending(t, h, "prov_port_2")
-		lifecycle := swapPort(t, h)
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusFailed, ErrorCode: "53"}, nil
-		}
+	if _, err := h.workers.ReconcilePendingPayments(t.Context(), h.now); err != nil {
+		t.Fatalf("ReconcilePendingPayments() error = %v", err)
+	}
+	applied := lifecycle.applications()
+	if len(applied) != 1 {
+		t.Fatalf("port applications = %d, want 1", len(applied))
+	}
+	if applied[0].Status != domain.PaymentStatusFailed || applied[0].ErrorCode == nil || *applied[0].ErrorCode != "53" {
+		t.Errorf("notification = %s/%v, want failed with code 53", applied[0].Status, applied[0].ErrorCode)
+	}
+	if applied[0].InternalPaymentID != payment.ID {
+		t.Errorf("notification payment = %s, want %s", applied[0].InternalPaymentID, payment.ID)
+	}
+}
 
-		if _, err := h.workers.ReconcilePendingPayments(t.Context(), h.now); err != nil {
-			t.Fatalf("ReconcilePendingPayments() error = %v", err)
-		}
-		applied := lifecycle.applications()
-		if len(applied) != 1 {
-			t.Fatalf("port applications = %d, want 1", len(applied))
-		}
-		if applied[0].Status != domain.PaymentStatusFailed || applied[0].ErrorCode == nil || *applied[0].ErrorCode != "53" {
-			t.Errorf("notification = %s/%v, want failed with code 53", applied[0].Status, applied[0].ErrorCode)
-		}
-		if applied[0].InternalPaymentID != payment.ID {
-			t.Errorf("notification payment = %s, want %s", applied[0].InternalPaymentID, payment.ID)
-		}
-	})
+// portResolvesStuckRefund covers a stuck refund the provider reports refunded:
+// one resolution through the port drives the batch progress.
+func portResolvesStuckRefund(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	payment := h.seedStuckRefundPayment(t)
+	lifecycle := h.swapLifecyclePort()
+	lifecycle.resolveOut = true
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusRefunded}, nil
+	}
 
-	t.Run("stuck refund resolves through the port", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStuckRefund(t, h)
-		lifecycle := swapPort(t, h)
-		lifecycle.resolveOut = true
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusRefunded}, nil
-		}
+	processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness))
+	if err != nil {
+		t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+	}
+	if processed != 1 {
+		t.Fatalf("processed = %d, want 1", processed)
+	}
+	resolutions := lifecycle.resolutions()
+	if len(resolutions) != 1 {
+		t.Fatalf("port resolutions = %d, want 1", len(resolutions))
+	}
+	if resolutions[0].payment.ID != payment.ID {
+		t.Errorf("resolution payment = %s, want %s", resolutions[0].payment.ID, payment.ID)
+	}
+	if resolutions[0].status.Status != domain.PaymentStatusRefunded {
+		t.Errorf("resolution status = %q, want refunded", resolutions[0].status.Status)
+	}
+	if got := lifecycle.applications(); len(got) != 0 {
+		t.Errorf("port applications = %d, want 0", len(got))
+	}
+}
 
-		processed, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness))
-		if err != nil {
-			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
-		}
-		if processed != 1 {
-			t.Fatalf("processed = %d, want 1", processed)
-		}
-		resolutions := lifecycle.resolutions()
-		if len(resolutions) != 1 {
-			t.Fatalf("port resolutions = %d, want 1", len(resolutions))
-		}
-		if resolutions[0].payment.ID != payment.ID {
-			t.Errorf("resolution payment = %s, want %s", resolutions[0].payment.ID, payment.ID)
-		}
-		if resolutions[0].status.Status != domain.PaymentStatusRefunded {
-			t.Errorf("resolution status = %q, want refunded", resolutions[0].status.Status)
-		}
-		if got := lifecycle.applications(); len(got) != 0 {
-			t.Errorf("port applications = %d, want 0", len(got))
-		}
-	})
+// portKeepsUnresolvedReservation covers an unresolved port answer: the refund
+// reservation survives untouched.
+func portKeepsUnresolvedReservation(t *testing.T) {
+	h := newWorkersHarness(t, Config{})
+	payment := h.seedStuckRefundPayment(t)
+	lifecycle := h.swapLifecyclePort()
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		return PaymentStatusResult{Status: domain.PaymentStatusRefunded}, nil
+	}
 
-	t.Run("unresolved answer leaves the reservation untouched", func(t *testing.T) {
-		h := newWorkersHarness(t, Config{})
-		payment := seedStuckRefund(t, h)
-		lifecycle := swapPort(t, h)
-		h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
-			return PaymentStatusResult{Status: domain.PaymentStatusRefunded}, nil
-		}
-
-		if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
-			t.Fatalf("ReconcileStaleRefunds() error = %v", err)
-		}
-		if got := lifecycle.resolutions(); len(got) != 1 {
-			t.Fatalf("port resolutions = %d, want 1", len(got))
-		}
-		stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-		if err != nil {
-			t.Fatalf("get payment: %v", err)
-		}
-		if stored.Status != domain.PaymentStatusRefunding {
-			t.Errorf("payment status = %q, want the reservation kept when the port reports no resolution", stored.Status)
-		}
-	})
+	if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now.Add(2*h.cfg.PendingPaymentStaleness)); err != nil {
+		t.Fatalf("ReconcileStaleRefunds() error = %v", err)
+	}
+	if got := lifecycle.resolutions(); len(got) != 1 {
+		t.Fatalf("port resolutions = %d, want 1", len(got))
+	}
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+	if err != nil {
+		t.Fatalf("get payment: %v", err)
+	}
+	if stored.Status != domain.PaymentStatusRefunding {
+		t.Errorf("payment status = %q, want the reservation kept when the port reports no resolution", stored.Status)
+	}
 }
 
 // TestWorkers_ReconcileStaleRefundsRequiresLifecycle proves the refund

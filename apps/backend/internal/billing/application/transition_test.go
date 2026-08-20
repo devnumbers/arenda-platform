@@ -119,6 +119,65 @@ func (h *transitionHarness) appendedTransitions(t *testing.T, subscriptionID uui
 	return transitions
 }
 
+// requireCancelledSubscription asserts the stored aggregate is cancelled with
+// auto-renew off.
+func (h *transitionHarness) requireCancelledSubscription(t *testing.T, userID uuid.UUID) {
+	t.Helper()
+	stored := h.storedSubscription(t, userID)
+	if stored.Status != domain.SubscriptionStatusCancelled || stored.AutoRenewEnabled {
+		t.Errorf("stored subscription = %q/auto-renew %t, want cancelled with auto-renew off", stored.Status, stored.AutoRenewEnabled)
+	}
+}
+
+// requireCancelledTransitionEntry asserts the log holds exactly the returned
+// transition and it captures the cancellation shape: the pre-change active
+// from-side, an unchanged tariff, and the cancelled reason by the user
+// initiator.
+func (h *transitionHarness) requireCancelledTransitionEntry(
+	t *testing.T, applied domain.Transition, sub domain.Subscription,
+) {
+	t.Helper()
+	entries := h.appendedTransitions(t, sub.ID)
+	if len(entries) != 1 {
+		t.Fatalf("appended transitions = %d, want 1", len(entries))
+	}
+	if entries[0].ID != applied.ID {
+		t.Errorf("returned transition id = %v, want the appended %v", applied.ID, entries[0].ID)
+	}
+	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusActive {
+		t.Errorf("from status = %v, want the pre-change active", applied.FromStatus)
+	}
+	if applied.ToStatus != domain.SubscriptionStatusCancelled {
+		t.Errorf("to status = %q, want cancelled", applied.ToStatus)
+	}
+	if applied.FromTariffID == nil || *applied.FromTariffID != sub.TariffID || applied.ToTariffID != sub.TariffID {
+		t.Errorf("tariff side = %v→%v, want unchanged %v", applied.FromTariffID, applied.ToTariffID, sub.TariffID)
+	}
+	if applied.Reason != domain.TransitionReasonCancelled || applied.Initiator != domain.InitiatorUser {
+		t.Errorf("reason/initiator = %q/%q, want cancelled/user", applied.Reason, applied.Initiator)
+	}
+}
+
+// requireUserCancellationAudit asserts the audit entry attributes the
+// cancellation to the owning user on the subscription entity.
+func (h *transitionHarness) requireUserCancellationAudit(t *testing.T, userID, subscriptionID uuid.UUID) {
+	t.Helper()
+	records := h.audit.recorded()
+	if len(records) != 1 {
+		t.Fatalf("audit entries = %d, want 1", len(records))
+	}
+	entry := records[0]
+	if entry.ActorRole != auditdomain.ActorRoleOwner || entry.ActorID == nil || *entry.ActorID != userID {
+		t.Errorf("audit actor = %q/%v, want the owning user", entry.ActorRole, entry.ActorID)
+	}
+	if entry.Action != auditdomain.ActionSubscriptionCancelled || entry.EntityType != auditdomain.EntitySubscription {
+		t.Errorf("audit action/entity = %q/%q, want subscription cancelled", entry.Action, entry.EntityType)
+	}
+	if entry.EntityID == nil || *entry.EntityID != subscriptionID {
+		t.Errorf("audit entity id = %v, want the subscription", entry.EntityID)
+	}
+}
+
 // TestApplyTransition_StatusChange proves the status-only shape through the
 // user's cancellation: the aggregate is persisted, the log entry captures the
 // from-side, and the audit entry attributes the change to the user.
@@ -140,45 +199,9 @@ func TestApplyTransition_StatusChange(t *testing.T) {
 		t.Fatalf("applyTransition() error = %v", err)
 	}
 
-	stored := h.storedSubscription(t, userID)
-	if stored.Status != domain.SubscriptionStatusCancelled || stored.AutoRenewEnabled {
-		t.Errorf("stored subscription = %q/auto-renew %t, want cancelled with auto-renew off", stored.Status, stored.AutoRenewEnabled)
-	}
-
-	entries := h.appendedTransitions(t, sub.ID)
-	if len(entries) != 1 {
-		t.Fatalf("appended transitions = %d, want 1", len(entries))
-	}
-	if entries[0].ID != applied.ID {
-		t.Errorf("returned transition id = %v, want the appended %v", applied.ID, entries[0].ID)
-	}
-	if applied.FromStatus == nil || *applied.FromStatus != domain.SubscriptionStatusActive {
-		t.Errorf("from status = %v, want the pre-change active", applied.FromStatus)
-	}
-	if applied.ToStatus != domain.SubscriptionStatusCancelled {
-		t.Errorf("to status = %q, want cancelled", applied.ToStatus)
-	}
-	if applied.FromTariffID == nil || *applied.FromTariffID != sub.TariffID || applied.ToTariffID != sub.TariffID {
-		t.Errorf("tariff side = %v→%v, want unchanged %v", applied.FromTariffID, applied.ToTariffID, sub.TariffID)
-	}
-	if applied.Reason != domain.TransitionReasonCancelled || applied.Initiator != domain.InitiatorUser {
-		t.Errorf("reason/initiator = %q/%q, want cancelled/user", applied.Reason, applied.Initiator)
-	}
-
-	records := h.audit.recorded()
-	if len(records) != 1 {
-		t.Fatalf("audit entries = %d, want 1", len(records))
-	}
-	entry := records[0]
-	if entry.ActorRole != auditdomain.ActorRoleOwner || entry.ActorID == nil || *entry.ActorID != userID {
-		t.Errorf("audit actor = %q/%v, want the owning user", entry.ActorRole, entry.ActorID)
-	}
-	if entry.Action != auditdomain.ActionSubscriptionCancelled || entry.EntityType != auditdomain.EntitySubscription {
-		t.Errorf("audit action/entity = %q/%q, want subscription cancelled", entry.Action, entry.EntityType)
-	}
-	if entry.EntityID == nil || *entry.EntityID != sub.ID {
-		t.Errorf("audit entity id = %v, want the subscription", entry.EntityID)
-	}
+	h.requireCancelledSubscription(t, userID)
+	h.requireCancelledTransitionEntry(t, applied, sub)
+	h.requireUserCancellationAudit(t, userID, sub.ID)
 }
 
 // TestApplyTransition_TariffChange proves the tariff-only shape through the
@@ -273,6 +296,31 @@ func TestApplyTransition_StatusAndTariffChange(t *testing.T) {
 	}
 }
 
+// requireInitiatorAudit asserts the audit entry derives its actor from the
+// transition initiator: the expected role, the initiator's id for user and
+// admin initiators, and no actor id for the system.
+func (h *transitionHarness) requireInitiatorAudit(
+	t *testing.T, initiator domain.TransitionInitiator, wantRole auditdomain.ActorRole, initiatorID uuid.UUID,
+) {
+	t.Helper()
+	records := h.audit.recorded()
+	if len(records) != 1 {
+		t.Fatalf("audit entries = %d, want 1", len(records))
+	}
+	if records[0].ActorRole != wantRole {
+		t.Errorf("audit actor role = %q, want %q", records[0].ActorRole, wantRole)
+	}
+	if initiator == domain.InitiatorSystem {
+		if records[0].ActorID != nil {
+			t.Errorf("audit actor id = %v, want nil for the system initiator", records[0].ActorID)
+		}
+		return
+	}
+	if records[0].ActorID == nil || *records[0].ActorID != initiatorID {
+		t.Errorf("audit actor id = %v, want the initiator id", records[0].ActorID)
+	}
+}
+
 // TestApplyTransition_Initiators proves the three initiators of the transition
 // vocabulary and the audit actor each of them derives: the user audits as the
 // owner, the admin as the admin, the system as the system without an actor
@@ -311,20 +359,7 @@ func TestApplyTransition_Initiators(t *testing.T) {
 				t.Fatalf("transition initiator = %q/%v, want %q/%v", applied.Initiator, applied.InitiatorID, tc.initiator, initiatorID)
 			}
 
-			records := h.audit.recorded()
-			if len(records) != 1 {
-				t.Fatalf("audit entries = %d, want 1", len(records))
-			}
-			if records[0].ActorRole != tc.wantAuditRole {
-				t.Errorf("audit actor role = %q, want %q", records[0].ActorRole, tc.wantAuditRole)
-			}
-			if tc.initiator == domain.InitiatorSystem {
-				if records[0].ActorID != nil {
-					t.Errorf("audit actor id = %v, want nil for the system initiator", records[0].ActorID)
-				}
-			} else if records[0].ActorID == nil || *records[0].ActorID != sub.UserID {
-				t.Errorf("audit actor id = %v, want the initiator id", records[0].ActorID)
-			}
+			h.requireInitiatorAudit(t, tc.initiator, tc.wantAuditRole, sub.UserID)
 		})
 	}
 }

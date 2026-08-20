@@ -54,18 +54,12 @@ func (h *methodIntegrationHarness) rawColumn(t *testing.T, methodID uuid.UUID, c
 	return value
 }
 
-// TestCardBindingFlow_EndToEndOnFakeProvider proves the headline acceptance
-// criterion of issue #251 against real PostgreSQL and the fake provider
-// adapter: AddPaymentMethod starts a binding session (request key + TTL), the
-// local confirmation — the payer completing the provider form — flows through
-// the same synchronous path as the add-card webhook, and the payment method is
-// created, active, linked to the subscription and encrypted at rest.
-func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
-	h := newMethodIntegrationHarness(t)
-	userID := h.seedMethodUser(t)
-
-	// 1. The binding session is initiated: the answer is the form URL and the
-	// session row carries the provider's request key with its TTL.
+// startBinding initiates a card binding for the user and returns the answer
+// together with the single open session row it created.
+func (h *methodIntegrationHarness) startBinding(
+	t *testing.T, userID uuid.UUID,
+) (billingapp.AddPaymentMethodResult, domain.CardBindingSession) {
+	t.Helper()
 	result, err := h.paymentMethodsSvc.AddPaymentMethod(h.ctx(), userID, billingapp.AddPaymentMethodRequest{})
 	if err != nil {
 		t.Fatalf("AddPaymentMethod(binding): %v", err)
@@ -80,21 +74,35 @@ func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
 	if len(sessions) != 1 {
 		t.Fatalf("open sessions = %d, want 1", len(sessions))
 	}
-	session := sessions[0]
-	if session.RequestKey == "" {
-		t.Fatal("session carries no request key")
-	}
-	wantExpiry := h.clock.Now().Add(billingapp.DefaultConfig().CardBindingTTL)
-	if !session.ExpiresAt.Equal(wantExpiry) {
-		t.Errorf("expires at = %v, want %v", session.ExpiresAt, wantExpiry)
-	}
+	return result, sessions[0]
+}
 
-	// 2. The payer completes the form: the local confirmation drives the
-	// method-bound event through the synchronous webhook path.
-	h.confirmFakeCardBinding(t, session.RequestKey)
+// openBindingSessions lists the user's open binding sessions.
+func (h *methodIntegrationHarness) openBindingSessions(t *testing.T, userID uuid.UUID) []domain.CardBindingSession {
+	t.Helper()
+	sessions, err := h.bindings.ListOpenByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("ListOpenByUserID(): %v", err)
+	}
+	return sessions
+}
 
-	// 3. The method exists, is the single active one and the subscription
-	// charges it.
+// bindingByRequestKey locks and loads the binding session by its request key.
+func (h *methodIntegrationHarness) bindingByRequestKey(
+	t *testing.T, requestKey string,
+) domain.CardBindingSession {
+	t.Helper()
+	session, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), testProviderFake, requestKey)
+	if err != nil {
+		t.Fatalf("GetByRequestKeyForUpdate(): %v", err)
+	}
+	return session
+}
+
+// activeMethodOf requires the user to have exactly one payment method and
+// returns it charged and displayed.
+func (h *methodIntegrationHarness) activeMethodOf(t *testing.T, userID uuid.UUID) domain.PaymentMethod {
+	t.Helper()
 	methods, err := h.methods.ListByUserID(h.ctx(), userID)
 	if err != nil {
 		t.Fatalf("ListByUserID(): %v", err)
@@ -109,40 +117,88 @@ func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
 	if method.ProviderToken == "" || method.DisplayMask == "" {
 		t.Errorf("method = %+v, want charge token and display mask", method)
 	}
+	return method
+}
+
+// requireMethodChargesSubscription requires the subscription to charge the
+// given method.
+func (h *methodIntegrationHarness) requireMethodChargesSubscription(t *testing.T, userID, methodID uuid.UUID) {
+	t.Helper()
 	sub, err := h.subscriptions.GetByUserID(h.ctx(), userID)
 	if err != nil {
 		t.Fatalf("GetByUserID(): %v", err)
 	}
-	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != method.ID {
-		t.Fatalf("subscription active method = %v, want %v", sub.ActivePaymentMethodID, method.ID)
+	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != methodID {
+		t.Fatalf("subscription active method = %v, want %v", sub.ActivePaymentMethodID, methodID)
 	}
+}
 
-	// 4. The token is encrypted at rest: the raw column is ciphertext, the
-	// hash column is the HMAC, and the plaintext appears nowhere.
+// requireTokenEncryptedAtRest proves the stored token columns are ciphertext
+// and HMAC, never the plaintext charge token.
+func (h *methodIntegrationHarness) requireTokenEncryptedAtRest(t *testing.T, method domain.PaymentMethod) {
+	t.Helper()
 	if raw := h.rawColumn(t, method.ID, "provider_token"); raw == method.ProviderToken {
 		t.Errorf("provider_token stored as plaintext: %q", raw)
 	}
 	if raw := h.rawColumn(t, method.ID, "token_hash"); raw != h.encryptor.HashToken(method.ProviderToken) {
 		t.Errorf("token_hash = %q, want the HMAC of the charge token", raw)
 	}
+}
 
-	// 5. The session is completed and a repeated confirmation changes
-	// nothing.
-	closed, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), testProviderFake, session.RequestKey)
-	if err != nil {
-		t.Fatalf("GetByRequestKeyForUpdate(): %v", err)
-	}
-	if closed.Status != domain.CardBindingCompleted {
-		t.Errorf("session status = %q, want completed", closed.Status)
-	}
-	h.confirmFakeCardBinding(t, session.RequestKey)
-	methods, err = h.methods.ListByUserID(h.ctx(), userID)
+// requireSingleMethod requires the user to own exactly one payment method row.
+func (h *methodIntegrationHarness) requireSingleMethod(t *testing.T, userID uuid.UUID) {
+	t.Helper()
+	methods, err := h.methods.ListByUserID(h.ctx(), userID)
 	if err != nil {
 		t.Fatalf("ListByUserID(redelivery): %v", err)
 	}
 	if len(methods) != 1 {
 		t.Fatalf("methods after redelivery = %d, want 1", len(methods))
 	}
+}
+
+// TestCardBindingFlow_EndToEndOnFakeProvider proves the headline acceptance
+// criterion of issue #251 against real PostgreSQL and the fake provider
+// adapter: AddPaymentMethod starts a binding session (request key + TTL), the
+// local confirmation — the payer completing the provider form — flows through
+// the same synchronous path as the add-card webhook, and the payment method is
+// created, active, linked to the subscription and encrypted at rest.
+func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
+	h := newMethodIntegrationHarness(t)
+	userID := h.seedMethodUser(t)
+
+	// 1. The binding session is initiated: the answer is the form URL and the
+	// session row carries the provider's request key with its TTL.
+	_, session := h.startBinding(t, userID)
+	if session.RequestKey == "" {
+		t.Fatal("session carries no request key")
+	}
+	wantExpiry := h.clock.Now().Add(billingapp.DefaultConfig().CardBindingTTL)
+	if !session.ExpiresAt.Equal(wantExpiry) {
+		t.Errorf("expires at = %v, want %v", session.ExpiresAt, wantExpiry)
+	}
+
+	// 2. The payer completes the form: the local confirmation drives the
+	// method-bound event through the synchronous webhook path.
+	h.confirmFakeCardBinding(t, session.RequestKey)
+
+	// 3. The method exists, is the single active one and the subscription
+	// charges it.
+	method := h.activeMethodOf(t, userID)
+	h.requireMethodChargesSubscription(t, userID, method.ID)
+
+	// 4. The token is encrypted at rest: the raw column is ciphertext, the
+	// hash column is the HMAC, and the plaintext appears nowhere.
+	h.requireTokenEncryptedAtRest(t, method)
+
+	// 5. The session is completed and a repeated confirmation changes
+	// nothing.
+	closed := h.bindingByRequestKey(t, session.RequestKey)
+	if closed.Status != domain.CardBindingCompleted {
+		t.Errorf("session status = %q, want completed", closed.Status)
+	}
+	h.confirmFakeCardBinding(t, session.RequestKey)
+	h.requireSingleMethod(t, userID)
 }
 
 // TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook proves the sync
@@ -156,10 +212,7 @@ func TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook(t *testing.T) {
 	if _, err := h.paymentMethodsSvc.AddPaymentMethod(h.ctx(), userID, billingapp.AddPaymentMethodRequest{}); err != nil {
 		t.Fatalf("AddPaymentMethod(binding): %v", err)
 	}
-	sessions, err := h.bindings.ListOpenByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("ListOpenByUserID(): %v", err)
-	}
+	sessions := h.openBindingSessions(t, userID)
 	if len(sessions) != 1 {
 		t.Fatalf("open sessions = %d, want 1", len(sessions))
 	}
@@ -173,10 +226,7 @@ func TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook(t *testing.T) {
 	if len(methods) != 0 {
 		t.Fatalf("methods = %d, want 0 while the binding is pending", len(methods))
 	}
-	open, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), testProviderFake, requestKey)
-	if err != nil {
-		t.Fatalf("GetByRequestKeyForUpdate(): %v", err)
-	}
+	open := h.bindingByRequestKey(t, requestKey)
 	if open.Status != domain.CardBindingNew {
 		t.Fatalf("session status = %q, want still new", open.Status)
 	}
@@ -204,17 +254,8 @@ func TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook(t *testing.T) {
 	if methods[0].ProviderToken != "token_healed" {
 		t.Errorf("charge token = %q, want the polled method's", methods[0].ProviderToken)
 	}
-	sub, err := h.subscriptions.GetByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("GetByUserID(): %v", err)
-	}
-	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != methods[0].ID {
-		t.Fatalf("subscription active method = %v, want %v", sub.ActivePaymentMethodID, methods[0].ID)
-	}
-	closed, err := h.bindings.GetByRequestKeyForUpdate(h.ctx(), testProviderFake, requestKey)
-	if err != nil {
-		t.Fatalf("GetByRequestKeyForUpdate(): %v", err)
-	}
+	h.requireMethodChargesSubscription(t, userID, methods[0].ID)
+	closed := h.bindingByRequestKey(t, requestKey)
 	if closed.Status != domain.CardBindingCompleted {
 		t.Errorf("session status = %q, want completed", closed.Status)
 	}
@@ -338,6 +379,23 @@ func TestPaymentMethodRepository_OneActivePerUserAndDeleteGuards(t *testing.T) {
 	}
 }
 
+// seedBindingSession stores a fresh open session with a 24h TTL under the
+// given request key.
+func (h *methodIntegrationHarness) seedBindingSession(
+	t *testing.T, userID uuid.UUID, requestKey string,
+) domain.CardBindingSession {
+	t.Helper()
+	now := h.clock.Now()
+	session, err := domain.NewCardBindingSession(userID, testProviderFake, requestKey, now.Add(24*time.Hour), now)
+	if err != nil {
+		t.Fatalf("NewCardBindingSession(): %v", err)
+	}
+	if _, err := h.bindings.Create(h.ctx(), session); err != nil {
+		t.Fatalf("Create(): %v", err)
+	}
+	return session
+}
+
 // TestCardBindingSessionRepository_RoundTrip proves the session persistence
 // port against real PostgreSQL: create with TTL, lock by request key, list
 // open sessions per user, and the status transition (issue #251).
@@ -347,13 +405,7 @@ func TestCardBindingSessionRepository_RoundTrip(t *testing.T) {
 	other := h.seedMethodUser(t)
 	now := h.clock.Now()
 
-	session, err := domain.NewCardBindingSession(userID, testProviderFake, "req_key_1", now.Add(24*time.Hour), now)
-	if err != nil {
-		t.Fatalf("NewCardBindingSession(): %v", err)
-	}
-	if _, err := h.bindings.Create(h.ctx(), session); err != nil {
-		t.Fatalf("Create(): %v", err)
-	}
+	h.seedBindingSession(t, userID, "req_key_1")
 
 	// The request key is unique per provider.
 	dup, err := domain.NewCardBindingSession(other, testProviderFake, "req_key_1", now.Add(24*time.Hour), now)
@@ -372,10 +424,7 @@ func TestCardBindingSessionRepository_RoundTrip(t *testing.T) {
 		t.Fatalf("loaded = %+v, want the created session", loaded)
 	}
 
-	open, err := h.bindings.ListOpenByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("ListOpenByUserID(): %v", err)
-	}
+	open := h.openBindingSessions(t, userID)
 	if len(open) != 1 || open[0].RequestKey != "req_key_1" {
 		t.Fatalf("open sessions = %+v, want the created one", open)
 	}

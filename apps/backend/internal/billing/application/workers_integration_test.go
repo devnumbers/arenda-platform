@@ -97,6 +97,71 @@ func seedActiveMethod(t *testing.T, h *integrationHarness, userID uuid.UUID, tok
 	}
 }
 
+// seedExpiredProSubscription seeds a paid pro subscription whose period ended
+// the given duration ago, so the renewal phases select it on the next tick.
+func seedExpiredProSubscription(t *testing.T, h *integrationHarness, ago time.Duration) (uuid.UUID, domain.Subscription) {
+	t.Helper()
+	userID, sub := seedPaidProSubscription(t, h)
+	expired := h.clock.Now().Add(-ago)
+	sub.ValidUntil = &expired
+	if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
+		t.Fatalf("expire subscription: %v", err)
+	}
+	return userID, sub
+}
+
+// requireSucceededRenewalPayment asserts the user's only payment is the
+// succeeded fake renewal for the given tariff at the canonical pro price and
+// returns it.
+func requireSucceededRenewalPayment(t *testing.T, h *integrationHarness, userID, tariffID uuid.UUID) domain.SubscriptionPayment {
+	t.Helper()
+	payments, err := h.payments.ListByUserID(h.ctx(), userID)
+	if err != nil || len(payments) != 1 {
+		t.Fatalf("payments = %d (err %v), want the single renewal", len(payments), err)
+	}
+	payment := payments[0]
+	if payment.Status != domain.PaymentStatusSucceeded || payment.Provider != testProviderFake {
+		t.Errorf("payment = %s/%s, want succeeded/fake", payment.Status, payment.Provider)
+	}
+	if payment.TariffID != tariffID || payment.AmountKopecks != 49000 {
+		t.Errorf("payment = tariff %s amount %d, want pro/49000", payment.TariffID, payment.AmountKopecks)
+	}
+	if !payment.HasProviderReference() {
+		t.Error("renewal payment has no provider reference")
+	}
+	return payment
+}
+
+// requireRenewedActiveSubscription asserts the subscription is active, renewed
+// for a month from now, and pointing at the applied renewal payment.
+func requireRenewedActiveSubscription(t *testing.T, h *integrationHarness, userID, paymentID uuid.UUID) {
+	t.Helper()
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	wantUntil := h.clock.Now().AddDate(0, 1, 0)
+	if stored.Status != domain.SubscriptionStatusActive || stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("subscription = %s until %v, want active until %v", stored.Status, stored.ValidUntil, wantUntil)
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != paymentID {
+		t.Errorf("LastAppliedPaymentID = %v, want the renewal payment", stored.LastAppliedPaymentID)
+	}
+}
+
+// requireRegisteredAndAppliedTransitions asserts the transition log holds the
+// onboarding registration plus the renewal's payment_applied entry.
+func requireRegisteredAndAppliedTransitions(t *testing.T, h *integrationHarness, subscriptionID uuid.UUID) {
+	t.Helper()
+	transitions, err := h.transitions.ListBySubscriptionID(h.ctx(), subscriptionID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID() error = %v", err)
+	}
+	if len(transitions) != 2 || transitions[0].Reason != domain.TransitionReasonPaymentApplied {
+		t.Fatalf("transitions = %+v, want registered + payment_applied", transitions)
+	}
+}
+
 // TestWorkers_Integration_RenewalChargesActiveMethod proves the auto-renewal
 // acceptance scenario on the real schema: an expired auto-renewing
 // subscription is charged on its active method through the MIT init+charge
@@ -104,13 +169,7 @@ func seedActiveMethod(t *testing.T, h *integrationHarness, userID uuid.UUID, tok
 // records the applied payment.
 func TestWorkers_Integration_RenewalChargesActiveMethod(t *testing.T) {
 	h := newIntegrationHarness(t)
-	userID, sub := seedPaidProSubscription(t, h)
-	// The paid period ended an hour ago.
-	expired := h.clock.Now().Add(-time.Hour)
-	sub.ValidUntil = &expired
-	if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
-		t.Fatalf("expire subscription: %v", err)
-	}
+	userID, sub := seedExpiredProSubscription(t, h, time.Hour)
 	seedActiveMethod(t, h, userID, "tok_renew_ok")
 
 	count, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now())
@@ -121,40 +180,9 @@ func TestWorkers_Integration_RenewalChargesActiveMethod(t *testing.T) {
 		t.Fatalf("ProcessRenewals() = %d, want 1", count)
 	}
 
-	payments, err := h.payments.ListByUserID(h.ctx(), userID)
-	if err != nil || len(payments) != 1 {
-		t.Fatalf("payments = %d (err %v), want the single renewal", len(payments), err)
-	}
-	payment := payments[0]
-	if payment.Status != domain.PaymentStatusSucceeded || payment.Provider != testProviderFake {
-		t.Errorf("payment = %s/%s, want succeeded/fake", payment.Status, payment.Provider)
-	}
-	if payment.TariffID != sub.TariffID || payment.AmountKopecks != 49000 {
-		t.Errorf("payment = tariff %s amount %d, want pro/49000", payment.TariffID, payment.AmountKopecks)
-	}
-	if !payment.HasProviderReference() {
-		t.Error("renewal payment has no provider reference")
-	}
-
-	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("GetByUserID() error = %v", err)
-	}
-	wantUntil := h.clock.Now().AddDate(0, 1, 0)
-	if stored.Status != domain.SubscriptionStatusActive || stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
-		t.Errorf("subscription = %s until %v, want active until %v", stored.Status, stored.ValidUntil, wantUntil)
-	}
-	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != payment.ID {
-		t.Errorf("LastAppliedPaymentID = %v, want the renewal payment", stored.LastAppliedPaymentID)
-	}
-
-	transitions, err := h.transitions.ListBySubscriptionID(h.ctx(), sub.ID)
-	if err != nil {
-		t.Fatalf("ListBySubscriptionID() error = %v", err)
-	}
-	if len(transitions) != 2 || transitions[0].Reason != domain.TransitionReasonPaymentApplied {
-		t.Fatalf("transitions = %+v, want registered + payment_applied", transitions)
-	}
+	payment := requireSucceededRenewalPayment(t, h, userID, sub.TariffID)
+	requireRenewedActiveSubscription(t, h, userID, payment.ID)
+	requireRegisteredAndAppliedTransitions(t, h, sub.ID)
 	if got := h.countRows(
 		`SELECT count(*) FROM audit_log WHERE action = 'subscription_payment.succeeded' AND entity_id = $1`,
 		payment.ID); got != 1 {
@@ -162,25 +190,11 @@ func TestWorkers_Integration_RenewalChargesActiveMethod(t *testing.T) {
 	}
 }
 
-// TestWorkers_Integration_FailedChargeGraceThenBasic proves the grace
-// acceptance scenario end to end: a declined charge enters grace for the
-// configured window, the window's expiry downgrades to basic, and the
-// lifecycle bridges run inside the same transaction as the downgrade.
-func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
-	h := newIntegrationHarness(t)
-	archiver, slots := wireBridges(h)
-	userID, sub := seedPaidProSubscription(t, h)
-	expired := h.clock.Now().Add(-time.Hour)
-	sub.ValidUntil = &expired
-	if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
-		t.Fatalf("expire subscription: %v", err)
-	}
-	seedActiveMethod(t, h, userID, "fake_fail_card")
-
-	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
-		t.Fatalf("ProcessRenewals() error = %v", err)
-	}
-
+// requireGraceEnteredAfterFailedCharge asserts the subscription sits in a
+// fresh grace window after the declined charge, with the grace_entered
+// transition logged, and returns the grace window end.
+func requireGraceEnteredAfterFailedCharge(t *testing.T, h *integrationHarness, userID, subID uuid.UUID) time.Time {
+	t.Helper()
 	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
 	if err != nil {
 		t.Fatalf("GetByUserID() error = %v", err)
@@ -194,9 +208,45 @@ func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
 	}
 	if got := h.countRows(
 		`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'grace_entered'`,
-		sub.ID); got != 1 {
+		subID); got != 1 {
 		t.Fatalf("grace_entered transitions = %d, want 1", got)
 	}
+	return graceEnd
+}
+
+// requireBasicDowngrade asserts the subscription fell back to the permanent
+// basic state — basic tariff, active, no validity, no auto-renew — and returns
+// the basic tariff for follow-up bridge checks.
+func requireBasicDowngrade(t *testing.T, h *integrationHarness, userID uuid.UUID) domain.Tariff {
+	t.Helper()
+	basic, err := h.tariffs.GetByName(h.ctx(), domain.TariffBasic)
+	if err != nil {
+		t.Fatalf("GetByName(basic) error = %v", err)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() after grace expiry error = %v", err)
+	}
+	if stored.TariffID != basic.ID || stored.Status != domain.SubscriptionStatusActive || stored.ValidUntil != nil || stored.AutoRenewEnabled {
+		t.Errorf("subscription = %+v, want basic/no validity/no auto-renew/active", stored)
+	}
+	return basic
+}
+
+// TestWorkers_Integration_FailedChargeGraceThenBasic proves the grace
+// acceptance scenario end to end: a declined charge enters grace for the
+// configured window, the window's expiry downgrades to basic, and the
+// lifecycle bridges run inside the same transaction as the downgrade.
+func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
+	h := newIntegrationHarness(t)
+	archiver, slots := wireBridges(h)
+	userID, sub := seedExpiredProSubscription(t, h, time.Hour)
+	seedActiveMethod(t, h, userID, "fake_fail_card")
+
+	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	graceEnd := requireGraceEnteredAfterFailedCharge(t, h, userID, sub.ID)
 
 	// The grace window passes; the phase downgrades to basic with archiving.
 	h.clock.now = graceEnd.Add(time.Hour)
@@ -208,17 +258,7 @@ func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
 		t.Fatalf("ProcessExpiredGrace() = %d, want 1", count)
 	}
 
-	basic, err := h.tariffs.GetByName(h.ctx(), domain.TariffBasic)
-	if err != nil {
-		t.Fatalf("GetByName(basic) error = %v", err)
-	}
-	stored, err = h.subscriptions.GetByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("GetByUserID() after grace expiry error = %v", err)
-	}
-	if stored.TariffID != basic.ID || stored.Status != domain.SubscriptionStatusActive || stored.ValidUntil != nil || stored.AutoRenewEnabled {
-		t.Errorf("subscription = %+v, want basic/no validity/no auto-renew/active", stored)
-	}
+	basic := requireBasicDowngrade(t, h, userID)
 	if got := archiver.recorded(); len(got) != 1 || got[0].limit != basic.ActivePropertyLimit || got[0].ownerID != userID {
 		t.Errorf("archive calls = %+v, want one at the basic limit for the user", got)
 	}
@@ -276,21 +316,13 @@ func TestWorkers_Integration_NoChargeableMethodEntersGrace(t *testing.T) {
 	}
 }
 
-// TestWorkers_Integration_ScheduledChangesFreeAndPaid proves the deferred
-// change acceptance scenario on the real schema: a free target applies
-// directly in the scheduled phase, a paid target is charged and applied by
-// the renewal phase of the same tick.
-func TestWorkers_Integration_ScheduledChangesFreeAndPaid(t *testing.T) {
-	h := newIntegrationHarness(t)
-	archiver, _ := wireBridges(h)
-
+// applyFreeScheduledChange covers the free half of the deferred-change
+// scenario: a pro subscription expired two hours ago schedules a downgrade to
+// basic, and the scheduled phase applies it directly, with the archive bridge.
+func applyFreeScheduledChange(t *testing.T, h *integrationHarness, archiver *capturingArchiver) {
+	t.Helper()
 	// Free target: pro -> basic, due now.
-	freeUser, freeSub := seedPaidProSubscription(t, h)
-	expired := h.clock.Now().Add(-2 * time.Hour)
-	freeSub.ValidUntil = &expired
-	if err := h.subscriptions.Update(h.ctx(), freeSub); err != nil {
-		t.Fatalf("expire subscription: %v", err)
-	}
+	freeUser, _ := seedExpiredProSubscription(t, h, 2*time.Hour)
 	if _, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), freeUser, billingapp.ChangeTariffRequest{
 		TariffName: domain.TariffBasic,
 		Period:     domain.PeriodMonth,
@@ -319,13 +351,43 @@ func TestWorkers_Integration_ScheduledChangesFreeAndPaid(t *testing.T) {
 	if got := archiver.recorded(); len(got) != 1 || got[0].limit != basic.ActivePropertyLimit {
 		t.Errorf("archive calls = %+v, want one at the basic limit", got)
 	}
+}
 
+// requirePaidChangeCharged asserts the paid deferred change landed through the
+// renewal charge: the target tariff applied, the pending change cleared, and
+// exactly one succeeded payment for the target.
+func requirePaidChangeCharged(t *testing.T, h *integrationHarness, paidUser uuid.UUID) {
+	t.Helper()
+	pro, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
+	if err != nil {
+		t.Fatalf("GetByName(pro) error = %v", err)
+	}
+	storedPaid, err := h.subscriptions.GetByUserID(h.ctx(), paidUser)
+	if err != nil {
+		t.Fatalf("GetByUserID() paid error = %v", err)
+	}
+	if storedPaid.TariffID != pro.ID || storedPaid.HasPendingChange() {
+		t.Errorf("subscription = tariff %v pending %v, want pro applied by the charge", storedPaid.TariffID, storedPaid.PendingTariffID)
+	}
+	payments, err := h.payments.ListByUserID(h.ctx(), paidUser)
+	if err != nil || len(payments) != 1 || payments[0].Status != domain.PaymentStatusSucceeded || payments[0].TariffID != pro.ID {
+		t.Fatalf("payments = %+v (err %v), want one succeeded pro charge", payments, err)
+	}
+}
+
+// chargePaidScheduledChange covers the paid half of the deferred-change
+// scenario: a business subscription expired two hours ago schedules an upgrade
+// to pro, the scheduled phase skips it, and the renewal phase of the same tick
+// charges and applies it.
+func chargePaidScheduledChange(t *testing.T, h *integrationHarness) {
+	t.Helper()
 	// Paid target: business -> pro, due now; charged at apply time.
 	paidUser, paidSub := seedPaidProSubscription(t, h)
 	business, err := h.tariffs.GetByName(h.ctx(), domain.TariffBusiness)
 	if err != nil {
 		t.Fatalf("GetByName(business) error = %v", err)
 	}
+	expired := h.clock.Now().Add(-2 * time.Hour)
 	paidSub.TariffID = business.ID
 	paidSub.ValidUntil = &expired
 	if err := h.subscriptions.Update(h.ctx(), paidSub); err != nil {
@@ -349,21 +411,18 @@ func TestWorkers_Integration_ScheduledChangesFreeAndPaid(t *testing.T) {
 	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
 		t.Fatalf("ProcessRenewals() error = %v", err)
 	}
-	pro, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
-	if err != nil {
-		t.Fatalf("GetByName(pro) error = %v", err)
-	}
-	storedPaid, err := h.subscriptions.GetByUserID(h.ctx(), paidUser)
-	if err != nil {
-		t.Fatalf("GetByUserID() paid error = %v", err)
-	}
-	if storedPaid.TariffID != pro.ID || storedPaid.HasPendingChange() {
-		t.Errorf("subscription = tariff %v pending %v, want pro applied by the charge", storedPaid.TariffID, storedPaid.PendingTariffID)
-	}
-	payments, err := h.payments.ListByUserID(h.ctx(), paidUser)
-	if err != nil || len(payments) != 1 || payments[0].Status != domain.PaymentStatusSucceeded || payments[0].TariffID != pro.ID {
-		t.Fatalf("payments = %+v (err %v), want one succeeded pro charge", payments, err)
-	}
+	requirePaidChangeCharged(t, h, paidUser)
+}
+
+// TestWorkers_Integration_ScheduledChangesFreeAndPaid proves the deferred
+// change acceptance scenario on the real schema: a free target applies
+// directly in the scheduled phase, a paid target is charged and applied by
+// the renewal phase of the same tick.
+func TestWorkers_Integration_ScheduledChangesFreeAndPaid(t *testing.T) {
+	h := newIntegrationHarness(t)
+	archiver, _ := wireBridges(h)
+	applyFreeScheduledChange(t, h, archiver)
+	chargePaidScheduledChange(t, h)
 }
 
 // TestWorkers_Integration_NonRenewingAndCancelledExpireToBasic proves the
@@ -488,6 +547,40 @@ type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }
 
+// requireReconciledPaymentSucceeded asserts the stale payment was finalized as
+// succeeded from the provider's status.
+func requireReconciledPaymentSucceeded(t *testing.T, h *integrationHarness, paymentID uuid.UUID) {
+	t.Helper()
+	payment, err := h.payments.GetByID(h.ctx(), paymentID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if payment.Status != domain.PaymentStatusSucceeded {
+		t.Fatalf("payment status = %q, want succeeded from the provider status", payment.Status)
+	}
+}
+
+// requireReconciledUpgradeApplied asserts the reconciled upgrade landed: the
+// business tariff active with a month of validity from the reconciliation.
+func requireReconciledUpgradeApplied(t *testing.T, h *integrationHarness, userID uuid.UUID) {
+	t.Helper()
+	business, err := h.tariffs.GetByName(h.ctx(), domain.TariffBusiness)
+	if err != nil {
+		t.Fatalf("GetByName(business) error = %v", err)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.TariffID != business.ID || stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("subscription = %s/%s, want business applied and active", stored.TariffID, stored.Status)
+	}
+	wantUntil := h.clock.Now().AddDate(0, 1, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("ValidUntil = %v, want %v from the reconciliation moment", stored.ValidUntil, wantUntil)
+	}
+}
+
 // TestWorkers_Integration_ReconcileLostWebhook proves the reconciliation
 // acceptance scenario: a tariff-change payment the provider settled but whose
 // webhook was never delivered is finalized from the provider's status once it
@@ -527,27 +620,56 @@ func TestWorkers_Integration_ReconcileLostWebhook(t *testing.T) {
 		t.Fatalf("ReconcilePendingPayments() = %d (err %v), want 1 stale payment reconciled", count, err)
 	}
 
-	payment, err := h.payments.GetByID(h.ctx(), result.PaymentID)
+	requireReconciledPaymentSucceeded(t, h, result.PaymentID)
+	requireReconciledUpgradeApplied(t, h, userID)
+}
+
+// revertToCrashMoment rewinds the local rows to the crash moment: the payment
+// is pending again and the subscription still expired, while the provider
+// keeps the captured charge.
+func revertToCrashMoment(t *testing.T, h *integrationHarness, userID uuid.UUID, payment domain.SubscriptionPayment, expired time.Time) {
+	t.Helper()
+	reverted := payment
+	reverted.Status = domain.PaymentStatusPending
+	reverted.SucceededAt = nil
+	if err := h.payments.Update(h.ctx(), reverted); err != nil {
+		t.Fatalf("revert payment: %v", err)
+	}
+	subAgain, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	subAgain.ValidUntil = &expired
+	subAgain.LastAppliedPaymentID = nil
+	if err := h.subscriptions.Update(h.ctx(), subAgain); err != nil {
+		t.Fatalf("revert subscription: %v", err)
+	}
+}
+
+// requireRecoveredWithoutSecondCharge asserts the recovery tick finalized the
+// payment from the provider status, reactivated the subscription, and never
+// charged again nor duplicated the payment.
+func requireRecoveredWithoutSecondCharge(t *testing.T, h *integrationHarness, userID, paymentID uuid.UUID) {
+	t.Helper()
+	recovered, err := h.payments.GetByID(h.ctx(), paymentID)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
-	if payment.Status != domain.PaymentStatusSucceeded {
-		t.Fatalf("payment status = %q, want succeeded from the provider status", payment.Status)
-	}
-	business, err := h.tariffs.GetByName(h.ctx(), domain.TariffBusiness)
-	if err != nil {
-		t.Fatalf("GetByName(business) error = %v", err)
+	if recovered.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("payment status = %q, want succeeded recovered from the provider", recovered.Status)
 	}
 	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
 	if err != nil {
 		t.Fatalf("GetByUserID() error = %v", err)
 	}
-	if stored.TariffID != business.ID || stored.Status != domain.SubscriptionStatusActive {
-		t.Errorf("subscription = %s/%s, want business applied and active", stored.TariffID, stored.Status)
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("subscription status = %q, want active after the recovery", stored.Status)
 	}
-	wantUntil := h.clock.Now().AddDate(0, 1, 0)
-	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
-		t.Errorf("ValidUntil = %v, want %v from the reconciliation moment", stored.ValidUntil, wantUntil)
+	if got := h.countRows(`SELECT count(*) FROM subscription_payments WHERE user_id = $1`, userID); got != 1 {
+		t.Errorf("payments = %d, want 1 (no duplicate renewal)", got)
+	}
+	if charges := h.provider.ChargeCount(paymentID); charges != 1 {
+		t.Errorf("provider charge count = %d, want exactly 1 (no double charge)", charges)
 	}
 }
 
@@ -558,12 +680,7 @@ func TestWorkers_Integration_ReconcileLostWebhook(t *testing.T) {
 // provider records confirmed amounts, so a second charge would show).
 func TestWorkers_Integration_RenewalDoubleChargeGuardOnCrash(t *testing.T) {
 	h := newIntegrationHarness(t)
-	userID, sub := seedPaidProSubscription(t, h)
-	expired := h.clock.Now().Add(-time.Hour)
-	sub.ValidUntil = &expired
-	if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
-		t.Fatalf("expire subscription: %v", err)
-	}
+	userID, _ := seedExpiredProSubscription(t, h, time.Hour)
 	seedActiveMethod(t, h, userID, "tok_guard")
 
 	// First tick: the charge captures at the provider, but the local
@@ -583,21 +700,7 @@ func TestWorkers_Integration_RenewalDoubleChargeGuardOnCrash(t *testing.T) {
 
 	// Revert the local state to the crash moment: payment pending again,
 	// subscription still expired. The provider keeps the captured charge.
-	reverted := payment
-	reverted.Status = domain.PaymentStatusPending
-	reverted.SucceededAt = nil
-	if err := h.payments.Update(h.ctx(), reverted); err != nil {
-		t.Fatalf("revert payment: %v", err)
-	}
-	subAgain, err := h.subscriptions.GetByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("GetByUserID() error = %v", err)
-	}
-	subAgain.ValidUntil = &expired
-	subAgain.LastAppliedPaymentID = nil
-	if err := h.subscriptions.Update(h.ctx(), subAgain); err != nil {
-		t.Fatalf("revert subscription: %v", err)
-	}
+	revertToCrashMoment(t, h, userID, payment, h.clock.Now().Add(-time.Hour))
 
 	// The recovery tick must resolve from the provider status without
 	// charging again. The fake provider's confirmed amount for the internal
@@ -605,24 +708,5 @@ func TestWorkers_Integration_RenewalDoubleChargeGuardOnCrash(t *testing.T) {
 	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
 		t.Fatalf("ProcessRenewals() recovery error = %v", err)
 	}
-	recovered, err := h.payments.GetByID(h.ctx(), payment.ID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	if recovered.Status != domain.PaymentStatusSucceeded {
-		t.Errorf("payment status = %q, want succeeded recovered from the provider", recovered.Status)
-	}
-	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
-	if err != nil {
-		t.Fatalf("GetByUserID() error = %v", err)
-	}
-	if stored.Status != domain.SubscriptionStatusActive {
-		t.Errorf("subscription status = %q, want active after the recovery", stored.Status)
-	}
-	if got := h.countRows(`SELECT count(*) FROM subscription_payments WHERE user_id = $1`, userID); got != 1 {
-		t.Errorf("payments = %d, want 1 (no duplicate renewal)", got)
-	}
-	if charges := h.provider.ChargeCount(payment.ID); charges != 1 {
-		t.Errorf("provider charge count = %d, want exactly 1 (no double charge)", charges)
-	}
+	requireRecoveredWithoutSecondCharge(t, h, userID, payment.ID)
 }

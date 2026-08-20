@@ -69,69 +69,143 @@ func NewPropertyHandlers(
 	}
 }
 
+// problemTitle constants name the RFC 7807 titles reused by the static
+// property error mappings below (the mapping table literals are not function
+// calls, so the repeated titles need named constants).
+const (
+	problemTitleConflict  = "Conflict"
+	problemTitleForbidden = "Forbidden"
+	problemTitleNotFound  = "Not found"
+)
+
+// propertyProblem is the wire mapping of a property application error with a
+// fixed outcome: a status plus problem details. The code field carries the
+// extension code of the single coded mapping (the suspended membership, T9).
+type propertyProblem struct {
+	status int
+	title  string
+	detail string
+	code   string
+}
+
+// staticPropertyProblems maps the property application errors whose wire
+// outcome is fixed onto their status and problem details, grouped by outcome:
+// access outcomes (issue #156 T3, T9 — the privacy-preserving 404, the
+// edit-permission 403, and the suspended membership's distinguishable coded
+// 403), the tariff limit, and the domain lifecycle conflicts. Errors whose
+// details are derived at runtime (invalid input, transitions, tenant
+// contacts) are handled by handlePropertyError's dynamic branches instead.
+var staticPropertyProblems = []struct {
+	err  error
+	prob propertyProblem
+}{
+	// Access outcomes.
+	{propertiesapp.ErrNotFound, propertyProblem{
+		status: http.StatusNotFound, title: problemTitleNotFound, detail: "Объект не найден",
+	}},
+	{leasesapp.ErrNotFound, propertyProblem{
+		status: http.StatusNotFound, title: problemTitleNotFound, detail: "Объект не найден",
+	}},
+	{propertiesapp.ErrForbidden, propertyProblem{
+		status: http.StatusForbidden, title: problemTitleForbidden, detail: "Недостаточно прав для этого действия",
+	}},
+	{propertiesapp.ErrAccessSuspended, propertyProblem{
+		status: http.StatusForbidden, title: problemTitleForbidden,
+		detail: "Доступ к объекту приостановлен: превышен лимит объектов по тарифу", code: "membership_suspended",
+	}},
+	// Tariff limit.
+	{propertiesapp.ErrLimitExceeded, propertyProblem{
+		status: http.StatusPaymentRequired, title: "Limit exceeded", detail: "Превышен лимит активных объектов",
+	}},
+	// Domain lifecycle conflicts.
+	{propertiesapp.ErrArchivedProperty, propertyProblem{
+		status: http.StatusConflict, title: problemTitleConflict, detail: "Нельзя изменить архивный объект",
+	}},
+	{propertiesapp.ErrAlreadyArchived, propertyProblem{
+		status: http.StatusConflict, title: problemTitleConflict, detail: "Объект уже в архиве",
+	}},
+	{propertiesapp.ErrNotArchived, propertyProblem{
+		status: http.StatusConflict, title: problemTitleConflict, detail: "Объект не в архиве",
+	}},
+	{propertiesapp.ErrPropertyHasOpenLease, propertyProblem{
+		status: http.StatusConflict, title: problemTitleConflict, detail: "У объекта есть открытая аренда",
+	}},
+	{propertiesapp.ErrPhotoLimitReached, propertyProblem{
+		status: http.StatusConflict, title: problemTitleConflict, detail: "Достигнут лимит фотографий объекта",
+	}},
+}
+
+// handlePropertyError maps an application error of the property endpoints onto
+// the wire contract: a fixed mapping first, then the dynamic ones whose detail
+// derives from the error itself.
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
+	if prob, ok := lookupStaticPropertyProblem(err); ok {
+		writePropertyProblem(w, r, prob)
+		return
+	}
 	switch {
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
-		var attrErrs *propertiesapp.AttributesValidationError
-		if errors.As(err, &attrErrs) {
-			fieldErrors := make([]openapi.ProblemError, 0, len(attrErrs.Errors))
-			for _, e := range attrErrs.Errors {
-				fieldErrors = append(fieldErrors, openapi.ProblemError{Field: e.Field, Detail: e.Reason})
-			}
-			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-				httpsupport.ProblemWithFieldErrors(r.Context(), "Bad request", "Некорректные характеристики объекта", fieldErrors))
-			return
-		}
-		detail, ok := httpsupport.UserFacingDetail(err)
-		if !ok {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
-	case errors.Is(err, propertiesapp.ErrNotFound), errors.Is(err, leasesapp.ErrNotFound):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
-	case errors.Is(err, propertiesapp.ErrForbidden):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
-			httpsupport.Problem(r.Context(), "Forbidden", "Недостаточно прав для этого действия"))
-	case errors.Is(err, propertiesapp.ErrAccessSuspended):
-		// The suspended recipient gets a distinguishable 403 so the frontend
-		// can show the honest "tariff limit exceeded" screen (T9, issue #158).
-		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
-			httpsupport.ProblemWithCode(r.Context(), "Forbidden",
-				"Доступ к объекту приостановлен: превышен лимит объектов по тарифу", "membership_suspended"))
-	case errors.Is(err, propertiesapp.ErrLimitExceeded):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusPaymentRequired,
-			httpsupport.Problem(r.Context(), "Limit exceeded", "Превышен лимит активных объектов"))
-	case errors.Is(err, propertiesapp.ErrArchivedProperty):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-			httpsupport.Problem(r.Context(), "Conflict", "Нельзя изменить архивный объект"))
-	case errors.Is(err, propertiesapp.ErrAlreadyArchived):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Объект уже в архиве"))
-	case errors.Is(err, propertiesapp.ErrNotArchived):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Объект не в архиве"))
-	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-			httpsupport.Problem(r.Context(), "Conflict", "У объекта есть открытая аренда"))
-	case errors.Is(err, propertiesapp.ErrPhotoLimitReached):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-			httpsupport.Problem(r.Context(), "Conflict", "Достигнут лимит фотографий объекта"))
+		writeInvalidInputProblem(w, r, err)
 	case isInvalidStatusTransition(err), errors.Is(err, propertiesapp.ErrInvalidTransition):
-		detail, ok := httpsupport.UserFacingDetail(err)
-		if !ok {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
+		writeUserFacingProblem(w, r, err, http.StatusConflict, "Conflict")
 	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
-		detail, ok := httpsupport.UserFacingDetail(err)
-		if !ok {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		writeUserFacingProblem(w, r, err, http.StatusBadRequest, "Bad request")
 	default:
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
+}
+
+// lookupStaticPropertyProblem resolves an error to its fixed wire outcome. The
+// table is walked with errors.Is so wrapped sentinels keep matching; ok is
+// false for the errors whose details are derived dynamically.
+func lookupStaticPropertyProblem(err error) (propertyProblem, bool) {
+	for _, m := range staticPropertyProblems {
+		if errors.Is(err, m.err) {
+			return m.prob, true
+		}
+	}
+	return propertyProblem{}, false
+}
+
+// writePropertyProblem writes a fixed property outcome; the coded variant (the
+// suspended membership, T9, issue #158) is the only one carrying an extension
+// code.
+func writePropertyProblem(w http.ResponseWriter, r *http.Request, prob propertyProblem) {
+	if prob.code != "" {
+		httpsupport.WriteProblem(r.Context(), w, prob.status,
+			httpsupport.ProblemWithCode(r.Context(), prob.title, prob.detail, prob.code))
+		return
+	}
+	httpsupport.WriteProblem(r.Context(), w, prob.status, httpsupport.Problem(r.Context(), prob.title, prob.detail))
+}
+
+// writeUserFacingProblem maps an error whose user-facing message comes from
+// httpsupport.UserFacingDetail; without a user-facing detail the response
+// degrades to the opaque internal-error 500.
+func writeUserFacingProblem(w http.ResponseWriter, r *http.Request, err error, status int, title string) {
+	detail, ok := httpsupport.UserFacingDetail(err)
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+	httpsupport.WriteProblem(r.Context(), w, status, httpsupport.Problem(r.Context(), title, detail))
+}
+
+// writeInvalidInputProblem maps invalid input: catalog attribute failures
+// become per-field problem errors, other invalid-input errors carry their
+// user-facing detail.
+func writeInvalidInputProblem(w http.ResponseWriter, r *http.Request, err error) {
+	var attrErrs *propertiesapp.AttributesValidationError
+	if !errors.As(err, &attrErrs) {
+		writeUserFacingProblem(w, r, err, http.StatusBadRequest, "Bad request")
+		return
+	}
+	fieldErrors := make([]openapi.ProblemError, 0, len(attrErrs.Errors))
+	for _, e := range attrErrs.Errors {
+		fieldErrors = append(fieldErrors, openapi.ProblemError{Field: e.Field, Detail: e.Reason})
+	}
+	httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+		httpsupport.ProblemWithFieldErrors(r.Context(), "Bad request", "Некорректные характеристики объекта", fieldErrors))
 }
 
 // CreateProperty implements POST /properties.

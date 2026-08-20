@@ -55,24 +55,11 @@ func (h *subscriptionHarness) auditEntries(action auditdomain.Action) []auditdom
 	return found
 }
 
-// TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit
-// proves the assignment (issue #255): a paid subscription is overwritten by
-// the service one — source flips, auto-renew switches off, the paid remainder
-// does not stack — and both the transition log and the audit trail attribute
-// the change to the acting admin.
-func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t *testing.T) {
-	h := newSubscriptionHarness(t)
-	sub := h.seedPaidSubscription(t, domain.TariffPro)
-	adminID := uuid.Must(uuid.NewV7())
-
-	req := AssignServiceSubscriptionRequest{
-		TariffName: domain.TariffBusiness,
-		TermType:   ServiceTermMonth,
-	}
-	if err := h.svc.AssignServiceSubscription(t.Context(), adminID, sub.UserID, req); err != nil {
-		t.Fatalf("AssignServiceSubscription() error = %v", err)
-	}
-
+// requireOverwrittenByService asserts the assignment overwrote the paid
+// subscription: the source flips to service, auto-renew switches off, the paid
+// remainder does not stack, and the plan is the assigned one for its term.
+func (h *subscriptionHarness) requireOverwrittenByService(t *testing.T, sub domain.Subscription) {
+	t.Helper()
 	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID() error = %v", err)
@@ -96,7 +83,12 @@ func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t 
 	if stored.TariffID != h.tariffID(t, domain.TariffBusiness) {
 		t.Errorf("TariffID = %v, want business", stored.TariffID)
 	}
+}
 
+// requireServiceAssignedTransition asserts the transition log's newest entry
+// is the admin-initiated service assignment from the overwritten paid state.
+func (h *subscriptionHarness) requireServiceAssignedTransition(t *testing.T, sub domain.Subscription, adminID uuid.UUID) {
+	t.Helper()
 	transitions := h.transitionsOfSubscription(t, sub.UserID)
 	if len(transitions) == 0 {
 		t.Fatal("no transitions recorded")
@@ -114,7 +106,12 @@ func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t 
 	if assignment.FromTariffID == nil || *assignment.FromTariffID != sub.TariffID {
 		t.Errorf("from tariff = %v, want the overwritten pro", assignment.FromTariffID)
 	}
+}
 
+// requireServiceAssignedAudit asserts the audit trail holds exactly the
+// service assignment attributed to the acting admin.
+func (h *subscriptionHarness) requireServiceAssignedAudit(t *testing.T, adminID uuid.UUID) {
+	t.Helper()
 	entries := h.auditEntries(auditdomain.ActionSubscriptionServiceAssigned)
 	if len(entries) != 1 {
 		t.Fatalf("service_assigned audit entries = %d, want 1", len(entries))
@@ -122,6 +119,29 @@ func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t 
 	if entries[0].ActorRole != auditdomain.ActorRoleAdmin || entries[0].ActorID == nil || *entries[0].ActorID != adminID {
 		t.Errorf("audit actor = %v/%v, want the acting admin", entries[0].ActorRole, entries[0].ActorID)
 	}
+}
+
+// TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit
+// proves the assignment (issue #255): a paid subscription is overwritten by
+// the service one — source flips, auto-renew switches off, the paid remainder
+// does not stack — and both the transition log and the audit trail attribute
+// the change to the acting admin.
+func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t *testing.T) {
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffPro)
+	adminID := uuid.Must(uuid.NewV7())
+
+	req := AssignServiceSubscriptionRequest{
+		TariffName: domain.TariffBusiness,
+		TermType:   ServiceTermMonth,
+	}
+	if err := h.svc.AssignServiceSubscription(t.Context(), adminID, sub.UserID, req); err != nil {
+		t.Fatalf("AssignServiceSubscription() error = %v", err)
+	}
+
+	h.requireOverwrittenByService(t, sub)
+	h.requireServiceAssignedTransition(t, sub, adminID)
+	h.requireServiceAssignedAudit(t, adminID)
 }
 
 // TestAdminAssignServiceSubscription_TermResolution proves the three term
@@ -220,22 +240,11 @@ func TestAdminAssignServiceSubscription_TariffNotFound(t *testing.T) {
 	}
 }
 
-// TestAdminForceChangeTariff_AppliesWithoutPayment proves the force change
-// (issue #255): the new tariff applies immediately for the chosen period, the
-// source and auto-renew setting keep their value, and the transition log and
-// audit trail attribute the change to the acting admin.
-func TestAdminForceChangeTariff_AppliesWithoutPayment(t *testing.T) {
-	h := newSubscriptionHarness(t)
-	sub := h.seedServiceSubscription(t, domain.TariffBusiness)
-	adminID := uuid.Must(uuid.NewV7())
-
-	if err := h.svc.ForceChangeTariff(t.Context(), adminID, sub.UserID, ForceChangeTariffRequest{
-		TariffName: domain.TariffPro,
-		Period:     domain.PeriodYear,
-	}); err != nil {
-		t.Fatalf("ForceChangeTariff() error = %v", err)
-	}
-
+// requireForceChangedSubscription asserts the force change applied the new
+// tariff for the chosen period while the source, the auto-renew setting and
+// the period kept their value.
+func (h *subscriptionHarness) requireForceChangedSubscription(t *testing.T, sub domain.Subscription) {
+	t.Helper()
 	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID() error = %v", err)
@@ -256,8 +265,14 @@ func TestAdminForceChangeTariff_AppliesWithoutPayment(t *testing.T) {
 	if stored.CurrentPeriod == nil || *stored.CurrentPeriod != domain.PeriodYear {
 		t.Errorf("CurrentPeriod = %v, want year", stored.CurrentPeriod)
 	}
+}
 
-	transitions := h.transitionsOfSubscription(t, sub.UserID)
+// requireForcedChangeTransitionAudit asserts the transition log's newest entry
+// is the admin-initiated forced change and the audit trail holds exactly its
+// admin-acted entry.
+func (h *subscriptionHarness) requireForcedChangeTransitionAudit(t *testing.T, userID, adminID uuid.UUID) {
+	t.Helper()
+	transitions := h.transitionsOfSubscription(t, userID)
 	if len(transitions) == 0 {
 		t.Fatal("no transitions recorded")
 	}
@@ -276,6 +291,26 @@ func TestAdminForceChangeTariff_AppliesWithoutPayment(t *testing.T) {
 	if entries[0].ActorRole != auditdomain.ActorRoleAdmin {
 		t.Errorf("audit actor role = %v, want admin", entries[0].ActorRole)
 	}
+}
+
+// TestAdminForceChangeTariff_AppliesWithoutPayment proves the force change
+// (issue #255): the new tariff applies immediately for the chosen period, the
+// source and auto-renew setting keep their value, and the transition log and
+// audit trail attribute the change to the acting admin.
+func TestAdminForceChangeTariff_AppliesWithoutPayment(t *testing.T) {
+	h := newSubscriptionHarness(t)
+	sub := h.seedServiceSubscription(t, domain.TariffBusiness)
+	adminID := uuid.Must(uuid.NewV7())
+
+	if err := h.svc.ForceChangeTariff(t.Context(), adminID, sub.UserID, ForceChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	}); err != nil {
+		t.Fatalf("ForceChangeTariff() error = %v", err)
+	}
+
+	h.requireForceChangedSubscription(t, sub)
+	h.requireForcedChangeTransitionAudit(t, sub.UserID, adminID)
 }
 
 // TestAdminForceChangeTariff_Rejections proves the force-change guards: the

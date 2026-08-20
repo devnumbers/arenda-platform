@@ -88,16 +88,16 @@ linters:
     - dogsled              # 3+ подчёркивания в присваивании — скрытые результаты
     - gochecksumtype       # 0 нарушений; страховка sealed-интерфейсов (Go sum types)
     - godox                 # TODO/FIXME в комментариях → issue tracker
-    - gocyclo              # цикломатическая сложность, порог 30 (settings)
     - iface                # идентичные интерфейсы — случайный дубль контракта
     - intrange             # for i := range n — modernize этот случай не ловит
     - testableexamples     # 0; Example-функции обязаны быть runnable
     # --- ЭТАП 2, волны механики goconst/godot/lll закрыты (сетка #325, тикеты #360–#367) ---
     - goconst              # повторяющиеся строки → константы (волна 314 → 0)
     - lll                  # длина строки ≤140 (волна 605 → 0)
+    # --- ЭТАП 2, структурная волна закрыта (сетка #325, тикет #369) ---
+    - cyclop               # цикломатическая сложность ≤15 (волна 52 → 0); замещает gocyclo@30
+    - gocognit             # когнитивная сложность ≤25 (волна 75 → 0)
     # REMEDIATION (этап 2, волны сетки #325):
-    # - cyclop           # 57 при max-complexity 15
-    # - gocognit         # 64 при min-complexity 25
     # - paralleltest     # 994: t.Parallel() поэтапно с юнит-пакетов
   settings:
     depguard:
@@ -272,8 +272,15 @@ linters:
       static-msg: true       # ЭТАП 1: сообщения — константы, не интерполяция переменных
     errchkjson:
       check-error-free-encoding: true   # ЭТАП 1: Marshal в error-free контекстах без проверки
-    gocyclo:
-      min-complexity: 30     # ЭТАП 1: только аномалии; планка 15 — этап 2 (cyclop, #369)
+    cyclop:
+      # Флип структурной волны (сетка #325, тикет #369): глобальный счётчик
+      # функций сложнее 15 доведён до 0. Замещает gocyclo@30 этапа 1 — та же
+      # цикломатическая метрика, но на целевой планке этапа 2.
+      max-complexity: 15
+    gocognit:
+      # Флип структурной волны (сетка #325, тикет #369): когнитивная сложность
+      # (вложенность) — порог этапа 2, глобальный счётчик доведён до 0.
+      min-complexity: 25
     gocritic:
       # Теги НЕ включать: прогоны style/performance/opinionated/experimental дали 50/367/48/18 шумовых.
       enabled-checks:
@@ -442,8 +449,9 @@ issues:
 #   интерфейсов — суть hexagonal), interfacebloat (9 — осознанные порты 12-31
 #   метода), nonamedreturns (11 — named return в defer-идиоме метрик tkassa).
 # - Внешний контракт: tagliatelle (50 — T-Bank PascalCase + openapi смешанный).
-# - Метрики: funlen 37 / nestif 19 — тема рефакторинга #369; cyclop/gocognit/
-#   lll/paralleltest — этап 2 (REMEDIATION-блок в enable).
+# - Метрики: funlen 37 / nestif 19 — осознанно вне гейта (после структурной
+#   волны #369 их сигнатура дублирует cyclop/gocognit); paralleltest — этап 2
+#   (REMEDIATION-блок в enable).
 # - govet shadow (341 — идиома if err :=) и fieldalignment (269 — переупаковка
 #   полей против читаемости DDD-доменов); gocritic performance-тег
 #   (hugeParam 381 + rangeValCopy 221 — осознанная семантика передачи

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
@@ -198,142 +199,209 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 // service subscription takes the payment path too (issue #255): the applied
 // payment converts the subscription into a paid one from the new period.
 func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResult, error) {
-	// State captured by the planning transaction for the payment orchestration
-	// that runs after it commits.
-	var (
-		needsPayment    bool
-		paymentPurpose  PaymentPurposeKind
-		paymentTariff   domain.Tariff
-		createdPayment  *domain.SubscriptionPayment
-		existingPayment *domain.SubscriptionPayment
-	)
-
-	err := s.runInTx(ctx, func(stores *txStores) error {
-		newTariff, err := stores.tariffs.GetByName(ctx, req.TariffName)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrTariffNotFound
-			}
-			return fmt.Errorf("get tariff: %w", err)
-		}
-		// A hidden plan is not selectable by users (issue #256); it answers
-		// like a miss. Subscriptions already on it keep renewing — the guard
-		// only blocks new selection.
-		if !newTariff.IsActive {
-			return ErrTariffInactive
-		}
-
-		sub, err := stores.subscriptionForUpdate(ctx, userID)
+	var plan changeTariffPlan
+	if err := s.runInTx(ctx, func(stores *txStores) error {
+		p, err := s.planTariffChange(ctx, stores, userID, req)
 		if err != nil {
 			return err
 		}
-
-		now := s.clock.Now().UTC()
-		// A same-tariff request is a manual renewal while the subscription is
-		// in grace; it shares the payment path with upgrades (issue #250).
-		sameTariffGraceRenewal := false
-		if sub.TariffID == newTariff.ID {
-			switch {
-			case sub.IsInGrace(now):
-				sameTariffGraceRenewal = true
-			case sub.Status == domain.SubscriptionStatusGrace:
-				// The grace window has expired; the worker downgrade to basic
-				// is due and no payment can be initiated anymore.
-				return domain.ErrInvalidSubscriptionState
-			default:
-				return domain.ErrAlreadyOnTariff
-			}
-		}
-
-		currentTariff, err := stores.tariffs.GetByID(ctx, sub.TariffID)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
-			}
-			return fmt.Errorf("get current tariff: %w", err)
-		}
-
-		changeType := domain.ClassifyTariffChange(currentTariff, newTariff)
-		needsPayment = sameTariffGraceRenewal || changeType == domain.TariffChangeUpgrade
-		if !sub.IsPaidSource() && !needsPayment {
-			// Service subscriptions are assigned and withdrawn by an admin
-			// (#255): the user controls neither their deferred changes nor
-			// their cancellation. The payment path stays open — an upgrade on
-			// top of a service subscription converts it into a paid one.
-			return domain.ErrInvalidSubscriptionState
-		}
-		if needsPayment {
-			if sameTariffGraceRenewal {
-				paymentPurpose = PaymentPurposeRenewal
-			} else {
-				paymentPurpose = PaymentPurposeSubscription
-			}
-			// Payments are initiated from a live subscription or as the
-			// recovery-upgrade of a cancelled one (ADR 0008: restoration goes
-			// through paying for a tariff).
-			recoveryUpgrade := changeType == domain.TariffChangeUpgrade &&
-				sub.Status == domain.SubscriptionStatusCancelled
-			if !sub.CanInitiatePayment(now) && !recoveryUpgrade {
-				return domain.ErrInvalidSubscriptionState
-			}
-			if s.provider == nil {
-				// No provider wired (pre-#250 construction): refuse before any
-				// payment is planned, so no pending row is left behind.
-				return ErrPaymentUnavailable
-			}
-			paymentTariff = newTariff
-			created, existing, planErr := s.planPayment(ctx, stores, sub, currentTariff, newTariff, req.Period)
-			if planErr != nil {
-				return planErr
-			}
-			createdPayment, existingPayment = created, existing
-			return nil
-		}
-		// A deferred change needs a paid period to defer to; the domain
-		// rejects the same condition, but the valid_until read below must not
-		// dereference a nil pointer first.
-		if sub.ValidUntil == nil {
-			return domain.ErrInvalidTariffChange
-		}
-		if _, err := stores.applyTransition(ctx, &sub,
-			func(s *domain.Subscription) error {
-				return s.ScheduleDowngrade(currentTariff, newTariff, req.Period, *s.ValidUntil)
-			},
-			transitionSpec{
-				reason:            domain.TransitionReasonDowngradeScheduled,
-				initiator:         domain.InitiatorUser,
-				initiatorID:       &userID,
-				scheduledTariffID: &newTariff.ID,
-				auditAction:       auditdomain.ActionSubscriptionTariffChanged,
-				auditContext: func(_ domain.Subscription, transition domain.Transition) map[string]any {
-					return map[string]any{auditKeyFromTariffID: *transition.FromTariffID, auditKeyToTariffID: transition.ToTariffID}
-				},
-			},
-		); err != nil {
-			return err
-		}
+		plan = p
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return ChangeTariffResult{}, err
 	}
-	if !needsPayment {
+	if !plan.needsPayment {
 		return ChangeTariffResult{}, nil
 	}
+	return s.executePlannedPayment(ctx, plan)
+}
 
-	// Payment orchestration runs outside the planning transaction: no row
-	// locks are held across the external provider call.
-	payment := createdPayment
-	if existingPayment != nil {
-		if existingPayment.HasProviderReference() && existingPayment.HasPaymentURL() {
-			return ChangeTariffResult{PaymentID: existingPayment.ID, ConfirmURL: *existingPayment.PaymentURL}, nil
+// changeTariffPlan is the state captured by the planning transaction for the
+// payment orchestration that runs after it commits.
+type changeTariffPlan struct {
+	needsPayment    bool
+	paymentPurpose  PaymentPurposeKind
+	paymentTariff   domain.Tariff
+	createdPayment  *domain.SubscriptionPayment
+	existingPayment *domain.SubscriptionPayment
+}
+
+// planTariffChange is the transactional half of ChangeTariff: it loads the
+// requested tariff and the subscription, classifies the change and either
+// schedules the deferred downgrade or plans the payment whose provider
+// initiation runs after commit.
+func (s *SubscriptionService) planTariffChange(
+	ctx context.Context, stores *txStores, userID uuid.UUID, req ChangeTariffRequest,
+) (changeTariffPlan, error) {
+	newTariff, err := selectableTariff(ctx, stores, req.TariffName)
+	if err != nil {
+		return changeTariffPlan{}, err
+	}
+
+	sub, err := stores.subscriptionForUpdate(ctx, userID)
+	if err != nil {
+		return changeTariffPlan{}, err
+	}
+
+	now := s.clock.Now().UTC()
+	// A same-tariff request is a manual renewal while the subscription is
+	// in grace; it shares the payment path with upgrades (issue #250).
+	graceRenewal, err := sameTariffGraceRenewal(sub, newTariff, now)
+	if err != nil {
+		return changeTariffPlan{}, err
+	}
+
+	currentTariff, err := currentTariffOf(ctx, stores, sub)
+	if err != nil {
+		return changeTariffPlan{}, err
+	}
+
+	changeType := domain.ClassifyTariffChange(currentTariff, newTariff)
+	needsPayment := graceRenewal || changeType == domain.TariffChangeUpgrade
+	if !sub.IsPaidSource() && !needsPayment {
+		// Service subscriptions are assigned and withdrawn by an admin
+		// (#255): the user controls neither their deferred changes nor
+		// their cancellation. The payment path stays open — an upgrade on
+		// top of a service subscription converts it into a paid one.
+		return changeTariffPlan{}, domain.ErrInvalidSubscriptionState
+	}
+	if !needsPayment {
+		return changeTariffPlan{}, scheduleDeferredDowngrade(ctx, stores, userID, sub, currentTariff, newTariff, req.Period)
+	}
+
+	if err := s.checkPaymentInitiable(sub, changeType, now); err != nil {
+		return changeTariffPlan{}, err
+	}
+	created, existing, err := s.planPayment(ctx, stores, sub, currentTariff, newTariff, req.Period)
+	if err != nil {
+		return changeTariffPlan{}, err
+	}
+	paymentPurpose := PaymentPurposeSubscription
+	if graceRenewal {
+		paymentPurpose = PaymentPurposeRenewal
+	}
+	return changeTariffPlan{
+		needsPayment:    true,
+		paymentPurpose:  paymentPurpose,
+		paymentTariff:   newTariff,
+		createdPayment:  created,
+		existingPayment: existing,
+	}, nil
+}
+
+// selectableTariff loads a tariff by name for user selection: a miss and a
+// hidden plan (issue #256) answer alike — subscriptions already on a hidden
+// plan keep renewing, the guard only blocks new selection.
+func selectableTariff(ctx context.Context, stores *txStores, name domain.TariffName) (domain.Tariff, error) {
+	tariff, err := stores.tariffs.GetByName(ctx, name)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Tariff{}, ErrTariffNotFound
+		}
+		return domain.Tariff{}, fmt.Errorf("get tariff: %w", err)
+	}
+	if !tariff.IsActive {
+		return domain.Tariff{}, ErrTariffInactive
+	}
+	return tariff, nil
+}
+
+// sameTariffGraceRenewal reports whether a same-tariff request is a manual
+// renewal of a subscription currently in its grace window (issue #250). The
+// expired window and the active same-tariff state are rejections.
+func sameTariffGraceRenewal(sub domain.Subscription, newTariff domain.Tariff, now time.Time) (bool, error) {
+	if sub.TariffID != newTariff.ID {
+		return false, nil
+	}
+	switch {
+	case sub.IsInGrace(now):
+		return true, nil
+	case sub.Status == domain.SubscriptionStatusGrace:
+		// The grace window has expired; the worker downgrade to basic
+		// is due and no payment can be initiated anymore.
+		return false, domain.ErrInvalidSubscriptionState
+	default:
+		return false, domain.ErrAlreadyOnTariff
+	}
+}
+
+// currentTariffOf loads the tariff the subscription is on, mapping a missing
+// row to the tariff sentinel.
+func currentTariffOf(ctx context.Context, stores *txStores, sub domain.Subscription) (domain.Tariff, error) {
+	tariff, err := stores.tariffs.GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Tariff{}, fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
+		}
+		return domain.Tariff{}, fmt.Errorf("get current tariff: %w", err)
+	}
+	return tariff, nil
+}
+
+// checkPaymentInitiable guards the payment path: payments start from a live
+// subscription or as the recovery-upgrade of a cancelled one (ADR 0008:
+// restoration goes through paying for a tariff), and a provider must be wired
+// before any payment is planned (no pending row is left behind).
+func (s *SubscriptionService) checkPaymentInitiable(sub domain.Subscription, changeType domain.TariffChangeType, now time.Time) error {
+	recoveryUpgrade := changeType == domain.TariffChangeUpgrade &&
+		sub.Status == domain.SubscriptionStatusCancelled
+	if !sub.CanInitiatePayment(now) && !recoveryUpgrade {
+		return domain.ErrInvalidSubscriptionState
+	}
+	if s.provider == nil {
+		// No provider wired (pre-#250 construction): refuse before any
+		// payment is planned, so no pending row is left behind.
+		return ErrPaymentUnavailable
+	}
+	return nil
+}
+
+// scheduleDeferredDowngrade schedules a downgrade for the end of the paid
+// period with auto-renew on, so the new tariff renews on the normal cycle
+// (ADR 0008 §3), recording the transition and its audit entry.
+func scheduleDeferredDowngrade(
+	ctx context.Context, stores *txStores, userID uuid.UUID, sub domain.Subscription,
+	currentTariff, newTariff domain.Tariff, period domain.SubscriptionPeriod,
+) error {
+	// A deferred change needs a paid period to defer to; the domain
+	// rejects the same condition, but the valid_until read below must not
+	// dereference a nil pointer first.
+	if sub.ValidUntil == nil {
+		return domain.ErrInvalidTariffChange
+	}
+	_, err := stores.applyTransition(ctx, &sub,
+		func(s *domain.Subscription) error {
+			return s.ScheduleDowngrade(currentTariff, newTariff, period, *s.ValidUntil)
+		},
+		transitionSpec{
+			reason:            domain.TransitionReasonDowngradeScheduled,
+			initiator:         domain.InitiatorUser,
+			initiatorID:       &userID,
+			scheduledTariffID: &newTariff.ID,
+			auditAction:       auditdomain.ActionSubscriptionTariffChanged,
+			auditContext: func(_ domain.Subscription, transition domain.Transition) map[string]any {
+				return map[string]any{auditKeyFromTariffID: *transition.FromTariffID, auditKeyToTariffID: transition.ToTariffID}
+			},
+		},
+	)
+	return err
+}
+
+// executePlannedPayment runs the provider initiation planned by the planning
+// transaction. It runs outside it: no row locks are held across the external
+// provider call.
+func (s *SubscriptionService) executePlannedPayment(ctx context.Context, plan changeTariffPlan) (ChangeTariffResult, error) {
+	payment := plan.createdPayment
+	if plan.existingPayment != nil {
+		if plan.existingPayment.HasProviderReference() && plan.existingPayment.HasPaymentURL() {
+			return ChangeTariffResult{PaymentID: plan.existingPayment.ID, ConfirmURL: *plan.existingPayment.PaymentURL}, nil
 		}
 		// A previous initiation crashed before its provider reference was
 		// persisted. Re-run the idempotent provider initiation and save the
 		// reference, keeping the retry path idempotent.
-		payment = existingPayment
+		payment = plan.existingPayment
 	}
-	return s.initiatePaymentAtProvider(ctx, *payment, paymentTariff, paymentPurpose)
+	return s.initiatePaymentAtProvider(ctx, *payment, plan.paymentTariff, plan.paymentPurpose)
 }
 
 // planPayment is the transactional half of the payment path: it returns an

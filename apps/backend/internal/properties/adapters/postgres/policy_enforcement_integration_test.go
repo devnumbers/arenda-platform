@@ -86,25 +86,21 @@ func createContactPolicyTestProperty(t *testing.T, ctx context.Context, q *genpo
 	return id
 }
 
-// TestPolicyIntegration_PropertyContacts exercises the shared-access
-// enforcement on property contacts (Property Sharing follow-up) end-to-end: a
-// full-access member manages the owner's contacts, a viewer reads but cannot
-// write, and an outsider or a suspended member gets ErrNotFound.
-func TestPolicyIntegration_PropertyContacts(t *testing.T) {
-	pool := setupPropertiesIntegrationDB(t)
-	ctx := t.Context()
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	defer func() {
-		// Rollback failure means test isolation broke: rows written in the
-		// aborted test transaction would persist in the shared database.
-		if err := tx.Rollback(ctx); err != nil {
-			t.Errorf("rollback properties test tx: %v", err)
-		}
-	}()
+// contactPolicyScenario is the seeded shared-access fixture of the property
+// contact policy test: five users, one property, and the contact service wired
+// with the real MembershipPolicy.
+type contactPolicyScenario struct {
+	owner, member, viewer, outsider, suspended uuid.UUID
+	property                                   uuid.UUID
+	svc                                        *application.PropertyContactService
+}
 
+// seedContactPolicyScenario seeds the shared-access scenario: the owner, a
+// full-access member, a viewer, an outsider and a suspended member, their
+// membership rows, and the contact service wired with the real policy over the
+// test transaction.
+func seedContactPolicyScenario(t *testing.T, ctx context.Context, tx pgx.Tx) contactPolicyScenario {
+	t.Helper()
 	q := genpostgres.New(tx)
 	owner := createContactPolicyTestUser(t, ctx, q)
 	member := createContactPolicyTestUser(t, ctx, q)
@@ -148,60 +144,99 @@ func TestPolicyIntegration_PropertyContacts(t *testing.T) {
 	svc := application.NewPropertyContactService(contactRepo, propertyRepo, factory, nil)
 	svc.SetPolicy(policy)
 
-	// The member creates a contact: it lands on the owner's scope.
-	created, err := svc.CreatePropertyContact(ctx, member, property, application.CreatePropertyContactCommand{
-		Name: "Plumber", Phone: "+79160000021",
-	})
-	if err != nil {
-		t.Fatalf("CreatePropertyContact as member: %v", err)
+	return contactPolicyScenario{
+		owner: owner, member: member, viewer: viewer, outsider: outsider, suspended: suspended,
+		property: property,
+		svc:      svc,
 	}
-	if created.OwnerID != owner {
-		t.Errorf("created OwnerID: want owner %s, got %s", owner, created.OwnerID)
-	}
+}
 
-	// Reads: owner, member and viewer see the contact; the outsider and the
-	// suspended member get ErrNotFound.
-	for name, actor := range map[string]uuid.UUID{"owner": owner, "member": member, "viewer": viewer} {
-		if _, err := svc.GetPropertyContact(ctx, actor, property, created.ID); err != nil {
+// assertContactReadAccess checks the read outcomes: the owner, the member and
+// the viewer see the contact, while the outsider and the suspended member get
+// ErrNotFound (object privacy) even on write.
+func assertContactReadAccess(t *testing.T, ctx context.Context, s contactPolicyScenario, contactID uuid.UUID) {
+	t.Helper()
+	for name, actor := range map[string]uuid.UUID{"owner": s.owner, "member": s.member, "viewer": s.viewer} {
+		if _, err := s.svc.GetPropertyContact(ctx, actor, s.property, contactID); err != nil {
 			t.Errorf("GetPropertyContact as %s: %v", name, err)
 		}
-		if _, err := svc.ListPropertyContacts(ctx, actor, property); err != nil {
+		if _, err := s.svc.ListPropertyContacts(ctx, actor, s.property); err != nil {
 			t.Errorf("ListPropertyContacts as %s: %v", name, err)
 		}
 	}
-	for name, actor := range map[string]uuid.UUID{"outsider": outsider, "suspended": suspended} {
-		if _, err := svc.GetPropertyContact(ctx, actor, property, created.ID); !errors.Is(err, application.ErrNotFound) {
+	for name, actor := range map[string]uuid.UUID{"outsider": s.outsider, "suspended": s.suspended} {
+		if _, err := s.svc.GetPropertyContact(ctx, actor, s.property, contactID); !errors.Is(err, application.ErrNotFound) {
 			t.Errorf("GetPropertyContact as %s: want ErrNotFound, got %v", name, err)
 		}
-		if _, err := svc.ListPropertyContacts(ctx, actor, property); !errors.Is(err, application.ErrNotFound) {
+		if _, err := s.svc.ListPropertyContacts(ctx, actor, s.property); !errors.Is(err, application.ErrNotFound) {
 			t.Errorf("ListPropertyContacts as %s: want ErrNotFound, got %v", name, err)
 		}
-		if _, err := svc.CreatePropertyContact(ctx, actor, property, application.CreatePropertyContactCommand{
+		if _, err := s.svc.CreatePropertyContact(ctx, actor, s.property, application.CreatePropertyContactCommand{
 			Name: "Intruder", Phone: "+79160000022",
 		}); !errors.Is(err, application.ErrNotFound) {
 			t.Errorf("CreatePropertyContact as %s: want ErrNotFound, got %v", name, err)
 		}
 	}
+}
 
-	// Writes: the member updates and deletes the owner's contact; the viewer
-	// gets ErrForbidden.
+// assertContactWriteAccess checks the write outcomes: the member updates and
+// deletes the owner's contact, while the viewer gets ErrForbidden.
+func assertContactWriteAccess(t *testing.T, ctx context.Context, s contactPolicyScenario, contactID uuid.UUID) {
+	t.Helper()
 	newName := "Senior Plumber"
-	updated, err := svc.UpdatePropertyContact(ctx, member, property, created.ID, application.UpdatePropertyContactCommand{Name: &newName})
+	updated, err := s.svc.UpdatePropertyContact(ctx, s.member, s.property, contactID,
+		application.UpdatePropertyContactCommand{Name: &newName})
 	if err != nil {
 		t.Fatalf("UpdatePropertyContact as member: %v", err)
 	}
-	if updated.OwnerID != owner {
-		t.Errorf("updated OwnerID: want owner %s, got %s", owner, updated.OwnerID)
+	if updated.OwnerID != s.owner {
+		t.Errorf("updated OwnerID: want owner %s, got %s", s.owner, updated.OwnerID)
 	}
 	viewerName := "Viewer Rename"
-	if _, err := svc.UpdatePropertyContact(ctx, viewer, property, created.ID,
+	if _, err := s.svc.UpdatePropertyContact(ctx, s.viewer, s.property, contactID,
 		application.UpdatePropertyContactCommand{Name: &viewerName}); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("UpdatePropertyContact as viewer: want ErrForbidden, got %v", err)
 	}
-	if err := svc.DeletePropertyContact(ctx, viewer, property, created.ID); !errors.Is(err, application.ErrForbidden) {
+	if err := s.svc.DeletePropertyContact(ctx, s.viewer, s.property, contactID); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("DeletePropertyContact as viewer: want ErrForbidden, got %v", err)
 	}
-	if err := svc.DeletePropertyContact(ctx, member, property, created.ID); err != nil {
+	if err := s.svc.DeletePropertyContact(ctx, s.member, s.property, contactID); err != nil {
 		t.Fatalf("DeletePropertyContact as member: %v", err)
 	}
+}
+
+// TestPolicyIntegration_PropertyContacts exercises the shared-access
+// enforcement on property contacts (Property Sharing follow-up) end-to-end: a
+// full-access member manages the owner's contacts, a viewer reads but cannot
+// write, and an outsider or a suspended member gets ErrNotFound.
+func TestPolicyIntegration_PropertyContacts(t *testing.T) {
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	defer func() {
+		// Rollback failure means test isolation broke: rows written in the
+		// aborted test transaction would persist in the shared database.
+		if err := tx.Rollback(ctx); err != nil {
+			t.Errorf("rollback properties test tx: %v", err)
+		}
+	}()
+
+	s := seedContactPolicyScenario(t, ctx, tx)
+
+	// The member creates a contact: it lands on the owner's scope.
+	created, err := s.svc.CreatePropertyContact(ctx, s.member, s.property, application.CreatePropertyContactCommand{
+		Name: "Plumber", Phone: "+79160000021",
+	})
+	if err != nil {
+		t.Fatalf("CreatePropertyContact as member: %v", err)
+	}
+	if created.OwnerID != s.owner {
+		t.Errorf("created OwnerID: want owner %s, got %s", s.owner, created.OwnerID)
+	}
+
+	assertContactReadAccess(t, ctx, s, created.ID)
+	assertContactWriteAccess(t, ctx, s, created.ID)
 }

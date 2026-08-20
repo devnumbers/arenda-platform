@@ -318,7 +318,23 @@ func (c *Config) loadServer() error {
 }
 
 func (c *Config) loadRateLimit() error {
-	c.RateLimit = RateLimit{
+	c.RateLimit = defaultRateLimit()
+	if err := c.overrideRateLimitIP(); err != nil {
+		return err
+	}
+	if err := c.overrideRateLimitEmail(); err != nil {
+		return err
+	}
+	if err := c.overrideRateLimitPhoneChange(); err != nil {
+		return err
+	}
+	return c.validateRateLimit()
+}
+
+// defaultRateLimit returns the built-in rate-limit defaults every env
+// override is applied on top of.
+func defaultRateLimit() RateLimit {
+	return RateLimit{
 		IPRPS:                     20,
 		IPBurst:                   40,
 		EmailSendPerHour:          60,
@@ -326,6 +342,10 @@ func (c *Config) loadRateLimit() error {
 		PhoneChangeSendPerHour:    5,
 		PhoneChangeVerifyPer15Min: 10,
 	}
+}
+
+// overrideRateLimitIP applies the per-IP request-rate overrides.
+func (c *Config) overrideRateLimitIP() error {
 	if v := os.Getenv("RATE_LIMIT_IP_RPS"); v != "" {
 		rps, err := strconv.ParseFloat(v, 64)
 		if err != nil {
@@ -340,6 +360,11 @@ func (c *Config) loadRateLimit() error {
 		}
 		c.RateLimit.IPBurst = burst
 	}
+	return nil
+}
+
+// overrideRateLimitEmail applies the email send/verify overrides.
+func (c *Config) overrideRateLimitEmail() error {
 	if v := os.Getenv("RATE_LIMIT_EMAIL_SEND_PER_HOUR"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
@@ -354,6 +379,12 @@ func (c *Config) loadRateLimit() error {
 		}
 		c.RateLimit.EmailVerifyPer15Min = n
 	}
+	return nil
+}
+
+// overrideRateLimitPhoneChange applies the phone-change send/verify overrides,
+// keeping the built-in defaults when a value arrives unset or non-positive.
+func (c *Config) overrideRateLimitPhoneChange() error {
 	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
@@ -372,6 +403,11 @@ func (c *Config) loadRateLimit() error {
 	} else if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
 		c.RateLimit.PhoneChangeVerifyPer15Min = 10
 	}
+	return nil
+}
+
+// validateRateLimit rejects non-positive limits in the fixed section order.
+func (c *Config) validateRateLimit() error {
 	if c.RateLimit.IPRPS <= 0 {
 		return errors.New("RATE_LIMIT_IP_RPS must be positive")
 	}
@@ -394,6 +430,24 @@ func (c *Config) loadRateLimit() error {
 }
 
 func (c *Config) loadDatabase() error {
+	if err := c.validateDatabaseURL(); err != nil {
+		return err
+	}
+	c.DBPool = defaultDBPool()
+	if err := c.overrideDBPoolSizes(); err != nil {
+		return err
+	}
+	if err := c.overrideDBPoolTimeouts(); err != nil {
+		return err
+	}
+	if err := c.overrideDBPoolHealthCheck(); err != nil {
+		return err
+	}
+	return c.validateDBPool()
+}
+
+// validateDatabaseURL checks the required connection URL and migrations dir.
+func (c *Config) validateDatabaseURL() error {
 	if c.DatabaseURL == "" {
 		return errors.New("DATABASE_URL is required")
 	}
@@ -403,8 +457,13 @@ func (c *Config) loadDatabase() error {
 	if c.MigrationsDir == "" {
 		return errors.New("MIGRATIONS_DIR is required")
 	}
+	return nil
+}
 
-	c.DBPool = DBPoolConfig{
+// defaultDBPool returns the built-in pool settings every env override is
+// applied on top of.
+func defaultDBPool() DBPoolConfig {
+	return DBPoolConfig{
 		MaxConns:                        64,
 		MinConns:                        16,
 		MaxConnLifetime:                 30 * time.Minute,
@@ -413,6 +472,10 @@ func (c *Config) loadDatabase() error {
 		StatementTimeout:                30 * time.Second,
 		IdleInTransactionSessionTimeout: 60 * time.Second,
 	}
+}
+
+// overrideDBPoolSizes applies the connection-count overrides.
+func (c *Config) overrideDBPoolSizes() error {
 	if v := os.Getenv("DB_MAX_CONNS"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil {
@@ -427,34 +490,27 @@ func (c *Config) loadDatabase() error {
 		}
 		c.DBPool.MinConns = int32(n)
 	}
-	if v := os.Getenv("DB_MAX_CONN_LIFETIME"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid DB_MAX_CONN_LIFETIME %q: %w", v, err)
-		}
-		c.DBPool.MaxConnLifetime = d
+	return nil
+}
+
+// overrideDBPoolTimeouts applies the statement and lifetime timeout
+// overrides; zero or negative values stay allowed here.
+func (c *Config) overrideDBPoolTimeouts() error {
+	if err := overrideDurationEnv(&c.DBPool.MaxConnLifetime, "DB_MAX_CONN_LIFETIME"); err != nil {
+		return err
 	}
-	if v := os.Getenv("DB_MAX_CONN_IDLE_TIME"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid DB_MAX_CONN_IDLE_TIME %q: %w", v, err)
-		}
-		c.DBPool.MaxConnIdleTime = d
+	if err := overrideDurationEnv(&c.DBPool.MaxConnIdleTime, "DB_MAX_CONN_IDLE_TIME"); err != nil {
+		return err
 	}
-	if v := os.Getenv("DB_STATEMENT_TIMEOUT"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid DB_STATEMENT_TIMEOUT %q: %w", v, err)
-		}
-		c.DBPool.StatementTimeout = d
+	if err := overrideDurationEnv(&c.DBPool.StatementTimeout, "DB_STATEMENT_TIMEOUT"); err != nil {
+		return err
 	}
-	if v := os.Getenv("DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT %q: %w", v, err)
-		}
-		c.DBPool.IdleInTransactionSessionTimeout = d
-	}
+	return overrideDurationEnv(&c.DBPool.IdleInTransactionSessionTimeout, "DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT")
+}
+
+// overrideDBPoolHealthCheck applies the health-check period override, which
+// must stay positive.
+func (c *Config) overrideDBPoolHealthCheck() error {
 	if v := os.Getenv("DB_HEALTH_CHECK_PERIOD"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
@@ -465,6 +521,11 @@ func (c *Config) loadDatabase() error {
 		}
 		c.DBPool.HealthCheckPeriod = d
 	}
+	return nil
+}
+
+// validateDBPool rejects pool sizes that cannot serve traffic.
+func (c *Config) validateDBPool() error {
 	if c.DBPool.MaxConns <= 0 {
 		return errors.New("DB_MAX_CONNS must be positive")
 	}
@@ -478,6 +539,19 @@ func (c *Config) loadDatabase() error {
 }
 
 func (c *Config) loadEmail() error {
+	if err := c.validateEmailSender(); err != nil {
+		return err
+	}
+	if err := c.loadSMTPSettings(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateEmailSender pins EMAIL_SENDER to the allowed values and the
+// environment profile: empty defaults to fake in local/dev only and fake is
+// rejected in every stricter environment.
+func (c *Config) validateEmailSender() error {
 	allowedEmailSenders := map[string]bool{"": true, providerFake: true, senderSMTP: true}
 	if !allowedEmailSenders[c.EmailSender] {
 		return fmt.Errorf("invalid EMAIL_SENDER %q: must be empty, fake, or smtp", c.EmailSender)
@@ -491,6 +565,12 @@ func (c *Config) loadEmail() error {
 	if c.EmailSender == providerFake && c.AppEnv != envLocal && c.AppEnv != envDev {
 		return fmt.Errorf("EMAIL_SENDER=fake is not allowed for APP_ENV=%s", c.AppEnv)
 	}
+	return nil
+}
+
+// loadSMTPSettings resolves the templates dir and validates the SMTP_* fields
+// required when EMAIL_SENDER=smtp.
+func (c *Config) loadSMTPSettings() error {
 	if c.EmailTemplatesDir == "" {
 		c.EmailTemplatesDir = "apps/backend/templates/email"
 	}
@@ -499,26 +579,26 @@ func (c *Config) loadEmail() error {
 			return fmt.Errorf("EMAIL_TEMPLATES_DIR must be an absolute path in %s environment", c.AppEnv)
 		}
 	}
-	if c.EmailSender == senderSMTP {
-		if c.SMTPHost == "" {
-			return errors.New("SMTP_HOST is required when EMAIL_SENDER=smtp")
-		}
-		if c.SMTPPort == "" {
-			return errors.New("SMTP_PORT is required when EMAIL_SENDER=smtp")
-		}
-		if c.SMTPFrom == "" {
-			return errors.New("SMTP_FROM is required when EMAIL_SENDER=smtp")
-		}
-		if v := os.Getenv("SMTP_TIMEOUT"); v != "" {
-			d, err := time.ParseDuration(v)
-			if err != nil {
-				return fmt.Errorf("invalid SMTP_TIMEOUT %q: %w", v, err)
-			}
-			if d <= 0 {
-				return errors.New("SMTP_TIMEOUT must be positive")
-			}
-			c.SMTPTimeout = d
-		}
+	if c.EmailSender != senderSMTP {
+		return nil
+	}
+	if err := c.validateSMTPFields(); err != nil {
+		return err
+	}
+	return overridePositiveDurationEnv(&c.SMTPTimeout, "SMTP_TIMEOUT")
+}
+
+// validateSMTPFields checks the required connection and envelope fields of
+// the smtp sender.
+func (c *Config) validateSMTPFields() error {
+	if c.SMTPHost == "" {
+		return errors.New("SMTP_HOST is required when EMAIL_SENDER=smtp")
+	}
+	if c.SMTPPort == "" {
+		return errors.New("SMTP_PORT is required when EMAIL_SENDER=smtp")
+	}
+	if c.SMTPFrom == "" {
+		return errors.New("SMTP_FROM is required when EMAIL_SENDER=smtp")
 	}
 	return nil
 }
@@ -569,6 +649,33 @@ func (c *Config) loadFakeProviderBaseURL() error {
 }
 
 func (c *Config) loadTKassa() error {
+	if err := c.validateTKassaCredentials(); err != nil {
+		return err
+	}
+	if err := c.validateTKassaAppBaseURL(); err != nil {
+		return err
+	}
+	if err := c.loadTKassaBaseURL(); err != nil {
+		return err
+	}
+	c.TKassaTimeout = 30 * time.Second
+	if err := overridePositiveDurationEnv(&c.TKassaTimeout, "T_KASSA_TIMEOUT"); err != nil {
+		return err
+	}
+	if err := c.overrideTKassaMaxRetries(); err != nil {
+		return err
+	}
+	c.TKassaRetryBaseDelay = 500 * time.Millisecond
+	if err := overridePositiveDurationEnv(&c.TKassaRetryBaseDelay, "T_KASSA_RETRY_BASE_DELAY"); err != nil {
+		return err
+	}
+	c.TKassaRetryMaxDelay = 5 * time.Second
+	return overridePositiveDurationEnv(&c.TKassaRetryMaxDelay, "T_KASSA_RETRY_MAX_DELAY")
+}
+
+// validateTKassaCredentials checks the terminal credentials and that an app
+// base URL is present to redirect payments back to.
+func (c *Config) validateTKassaCredentials() error {
 	if c.TKassaTerminalKey == "" {
 		return errors.New("T_KASSA_TERMINAL_KEY is required when PAYMENT_PROVIDER=tkassa")
 	}
@@ -578,6 +685,12 @@ func (c *Config) loadTKassa() error {
 	if c.AppBaseURL == "" {
 		return errors.New("APP_BASE_URL is required when PAYMENT_PROVIDER=tkassa")
 	}
+	return nil
+}
+
+// validateTKassaAppBaseURL checks the app base URL scheme; non-local/dev
+// environments must run behind https.
+func (c *Config) validateTKassaAppBaseURL() error {
 	u, err := url.Parse(c.AppBaseURL)
 	if err != nil {
 		return fmt.Errorf("invalid APP_BASE_URL %q: %w", c.AppBaseURL, err)
@@ -588,57 +701,25 @@ func (c *Config) loadTKassa() error {
 	if c.AppEnv != envLocal && c.AppEnv != envDev && u.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid APP_BASE_URL %q: non-local/dev environments must use https", c.AppBaseURL)
 	}
-	if err := c.loadTKassaBaseURL(); err != nil {
-		return err
-	}
+	return nil
+}
 
-	c.TKassaTimeout = 30 * time.Second
-	if v := os.Getenv("T_KASSA_TIMEOUT"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid T_KASSA_TIMEOUT %q: %w", v, err)
-		}
-		if d <= 0 {
-			return errors.New("T_KASSA_TIMEOUT must be positive")
-		}
-		c.TKassaTimeout = d
-	}
-
+// overrideTKassaMaxRetries applies the retry-count override on top of the
+// built-in default.
+func (c *Config) overrideTKassaMaxRetries() error {
 	c.TKassaMaxRetries = 3
-	if v := os.Getenv("T_KASSA_MAX_RETRIES"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("invalid T_KASSA_MAX_RETRIES %q: %w", v, err)
-		}
-		if n < 0 {
-			return errors.New("T_KASSA_MAX_RETRIES must be non-negative")
-		}
-		c.TKassaMaxRetries = n
+	v := os.Getenv("T_KASSA_MAX_RETRIES")
+	if v == "" {
+		return nil
 	}
-
-	c.TKassaRetryBaseDelay = 500 * time.Millisecond
-	if v := os.Getenv("T_KASSA_RETRY_BASE_DELAY"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid T_KASSA_RETRY_BASE_DELAY %q: %w", v, err)
-		}
-		if d <= 0 {
-			return errors.New("T_KASSA_RETRY_BASE_DELAY must be positive")
-		}
-		c.TKassaRetryBaseDelay = d
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fmt.Errorf("invalid T_KASSA_MAX_RETRIES %q: %w", v, err)
 	}
-
-	c.TKassaRetryMaxDelay = 5 * time.Second
-	if v := os.Getenv("T_KASSA_RETRY_MAX_DELAY"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid T_KASSA_RETRY_MAX_DELAY %q: %w", v, err)
-		}
-		if d <= 0 {
-			return errors.New("T_KASSA_RETRY_MAX_DELAY must be positive")
-		}
-		c.TKassaRetryMaxDelay = d
+	if n < 0 {
+		return errors.New("T_KASSA_MAX_RETRIES must be non-negative")
 	}
+	c.TKassaMaxRetries = n
 	return nil
 }
 
@@ -805,6 +886,40 @@ func (c *Config) loadTariffCacheTTL() error {
 		}
 		c.TariffCacheTTL = d
 	}
+	return nil
+}
+
+// overrideDurationEnv overrides dst from the KEY env var when set; zero and
+// negative values stay allowed (callers that need positivity validate
+// separately).
+func overrideDurationEnv(dst *time.Duration, key string) error {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return fmt.Errorf("invalid %s %q: %w", key, v, err)
+	}
+	*dst = d
+	return nil
+}
+
+// overridePositiveDurationEnv overrides dst from the KEY env var when set and
+// rejects zero or negative values.
+func overridePositiveDurationEnv(dst *time.Duration, key string) error {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return fmt.Errorf("invalid %s %q: %w", key, v, err)
+	}
+	if d <= 0 {
+		return errors.New(key + " must be positive")
+	}
+	*dst = d
 	return nil
 }
 

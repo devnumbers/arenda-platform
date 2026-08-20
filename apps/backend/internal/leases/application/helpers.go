@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
+	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 )
 
 // Property statuses mirror the properties module vocabulary. The leases module
@@ -233,4 +237,28 @@ func actorRoleFromPolicyRole(role sharedpolicy.Role) auditdomain.ActorRole {
 	default:
 		return auditdomain.ActorRoleOwner
 	}
+}
+
+// ownerTodayFor normalizes the given instant to the owner-local calendar
+// "today", so date comparisons run in the data owner's timezone.
+func ownerTodayFor(ctx context.Context, tzResolver sharedtz.OwnerTimezoneResolver, scope uuid.UUID, now time.Time) (time.Time, error) {
+	loc, err := tzResolver.Resolve(ctx, scope)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("resolve owner timezone: %w", err)
+	}
+	return timeutil.DateIn(now, loc), nil
+}
+
+// ownerNowAndToday returns the current instant and the owner-local calendar
+// "today" derived from it, so entity timestamps and date comparisons share a
+// single clock reading.
+func ownerNowAndToday(
+	ctx context.Context,
+	tzResolver sharedtz.OwnerTimezoneResolver,
+	clk clock.Clock,
+	scope uuid.UUID,
+) (now, today time.Time, err error) {
+	now = clk.Now()
+	today, err = ownerTodayFor(ctx, tzResolver, scope, now)
+	return now, today, err
 }

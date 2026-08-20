@@ -108,51 +108,119 @@ func (s *LoginCodeService) Send(
 	var plaintextCode string
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
-		now := s.clock.Now()
-
-		if err := checkNotBlocked(ctx, stores.attempts, s.clock, phone); err != nil {
-			return err
-		}
-
-		if err := stores.codes.DeleteExpiredByPhoneAndEmail(ctx, phone, email, purpose, now); err != nil {
-			return fmt.Errorf("delete expired login codes: %w", err)
-		}
-
-		latest, err := stores.codes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)
-		if err != nil && !errors.Is(err, ErrNotFound) {
-			return fmt.Errorf("get latest code: %w", err)
-		}
-		if !errors.Is(err, ErrNotFound) && !latest.Used && latest.ExpiresAt.After(now) && now.Sub(latest.CreatedAt) < minSendInterval {
-			return ErrCodeSentTooRecently
-		}
-
-		if err := stores.codes.DeleteUnusedByPhoneAndEmail(ctx, phone, email, purpose); err != nil {
-			return fmt.Errorf("delete unused login codes: %w", err)
-		}
-
-		var genErr error
-		plaintextCode, genErr = generateCode()
-		if genErr != nil {
-			return fmt.Errorf("generate code: %w", genErr)
-		}
-
-		loginCode, genErr = domain.NewLoginCode(phone, email, s.hashCode(purpose, phone, email, plaintextCode), purpose, userID, now)
-		if genErr != nil {
-			return fmt.Errorf("create login code: %w", genErr)
-		}
-
-		if err := stores.codes.Save(ctx, loginCode); err != nil {
-			return fmt.Errorf("save code: %w", err)
-		}
-		return nil
+		var err error
+		loginCode, plaintextCode, err = s.issueCodeInTx(ctx, stores, phone, email, purpose, userID)
+		return err
 	})
 	if err != nil {
 		return err
 	}
 
-	// Delivery runs post-commit: the code is already persisted, so a delivery
-	// failure cleans up the unsent row rather than leaving a code the user
-	// never received.
+	return s.deliverCode(ctx, phone, email, purpose, loginCode, plaintextCode)
+}
+
+// issueCodeInTx is the transactional half of Send: it guards the phone against
+// the attempt-window block, clears the way past superseded codes and the send
+// throttle, and persists a freshly generated code for the triple. It returns
+// the persisted code together with its plaintext for post-commit delivery.
+func (s *LoginCodeService) issueCodeInTx(
+	ctx context.Context,
+	stores *txStores,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	userID *uuid.UUID,
+) (domain.LoginCode, string, error) {
+	now := s.clock.Now()
+
+	if err := s.purgeAndThrottle(ctx, stores, phone, email, purpose, now); err != nil {
+		return domain.LoginCode{}, "", err
+	}
+	return s.persistNewCode(ctx, stores, phone, email, purpose, userID, now)
+}
+
+// purgeAndThrottle clears the way for a new code inside the caller's
+// transaction: a blocked phone is refused outright, expired codes are purged
+// first, the send throttle then rejects a live code issued within
+// minSendInterval, and only then are the remaining unused codes deleted. The
+// order matters: the latest code must still be readable when the throttle is
+// checked (CONTEXT.md, "Throttle отправки").
+func (s *LoginCodeService) purgeAndThrottle(
+	ctx context.Context,
+	stores *txStores,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	now time.Time,
+) error {
+	if err := checkNotBlocked(ctx, stores.attempts, s.clock, phone); err != nil {
+		return err
+	}
+
+	if err := stores.codes.DeleteExpiredByPhoneAndEmail(ctx, phone, email, purpose, now); err != nil {
+		return fmt.Errorf("delete expired login codes: %w", err)
+	}
+
+	latest, err := stores.codes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("get latest code: %w", err)
+	}
+	if sendThrottled(latest, !errors.Is(err, ErrNotFound), now) {
+		return ErrCodeSentTooRecently
+	}
+
+	if err := stores.codes.DeleteUnusedByPhoneAndEmail(ctx, phone, email, purpose); err != nil {
+		return fmt.Errorf("delete unused login codes: %w", err)
+	}
+	return nil
+}
+
+// sendThrottled reports whether the latest stored code is still live and was
+// issued within minSendInterval, so re-issuance must wait. Found is false when
+// no code is stored for the triple.
+func sendThrottled(latest domain.LoginCode, found bool, now time.Time) bool {
+	return found && !latest.Used && latest.ExpiresAt.After(now) && now.Sub(latest.CreatedAt) < minSendInterval
+}
+
+// persistNewCode generates the plaintext code, builds the domain LoginCode for
+// the triple, and saves it inside the caller's transaction.
+func (s *LoginCodeService) persistNewCode(
+	ctx context.Context,
+	stores *txStores,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	userID *uuid.UUID,
+	now time.Time,
+) (domain.LoginCode, string, error) {
+	plaintextCode, err := generateCode()
+	if err != nil {
+		return domain.LoginCode{}, "", fmt.Errorf("generate code: %w", err)
+	}
+
+	loginCode, err := domain.NewLoginCode(phone, email, s.hashCode(purpose, phone, email, plaintextCode), purpose, userID, now)
+	if err != nil {
+		return domain.LoginCode{}, "", fmt.Errorf("create login code: %w", err)
+	}
+
+	if err := stores.codes.Save(ctx, loginCode); err != nil {
+		return domain.LoginCode{}, "", fmt.Errorf("save code: %w", err)
+	}
+	return loginCode, plaintextCode, nil
+}
+
+// deliverCode sends the plaintext after the issuing transaction has committed.
+// Delivery runs post-commit: the code is already persisted, so a delivery
+// failure cleans up the unsent row rather than leaving a code the user never
+// received.
+func (s *LoginCodeService) deliverCode(
+	ctx context.Context,
+	phone domain.Phone,
+	email domain.Email,
+	purpose domain.LoginCodePurpose,
+	loginCode domain.LoginCode,
+	plaintextCode string,
+) error {
 	s.logger.InfoContext(ctx, "sending login code", slog.String("purpose", purpose.String()))
 	if err := s.sender.Send(ctx, phone, email, plaintextCode); err != nil {
 		s.logger.ErrorContext(ctx, "failed to send login code", slog.String("error", sanitize.Error(err)))

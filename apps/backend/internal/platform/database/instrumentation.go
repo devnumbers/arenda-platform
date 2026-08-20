@@ -479,47 +479,75 @@ func sanitizeSQLOperationName(value string) string {
 	if value == "" {
 		return operationUnknown
 	}
-
-	var b strings.Builder
-	var lastUnderscore bool
-	var prevWasLowerOrDigit bool
-	for _, r := range value {
-		switch {
-		case r >= 'A' && r <= 'Z':
-			if b.Len() > 0 && prevWasLowerOrDigit && !lastUnderscore {
-				b.WriteByte('_')
-			}
-			b.WriteRune(r + ('a' - 'A'))
-			lastUnderscore = false
-			prevWasLowerOrDigit = false
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-			lastUnderscore = false
-			prevWasLowerOrDigit = true
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-			lastUnderscore = false
-			prevWasLowerOrDigit = true
-		case r == '_':
-			if b.Len() > 0 && !lastUnderscore {
-				b.WriteByte('_')
-				lastUnderscore = true
-			}
-			prevWasLowerOrDigit = false
-		default:
-			if b.Len() > 0 && !lastUnderscore {
-				b.WriteByte('_')
-				lastUnderscore = true
-			}
-			prevWasLowerOrDigit = false
-		}
-	}
-
-	result := strings.Trim(b.String(), "_")
+	result := strings.Trim(sanitizeSQLNameRunes(value), "_")
 	if result == "" {
 		return operationUnknown
 	}
 	return result
+}
+
+// sanitizeSQLNameRunes rewrites value's runes into the span-label alphabet:
+// ASCII upper case starts a new word, letters and digits pass through, and
+// every other rune collapses into a single underscore separator.
+func sanitizeSQLNameRunes(value string) string {
+	var b sqlNameBuilder
+	for _, r := range value {
+		b.writeRune(r)
+	}
+	return b.String()
+}
+
+// sqlNameBuilder folds runes into a sanitized name while remembering the
+// separator and letter state, so underscores never double and camel-case word
+// boundaries stay single.
+type sqlNameBuilder struct {
+	b                   strings.Builder
+	lastUnderscore      bool
+	prevWasLowerOrDigit bool
+}
+
+// String returns the name accumulated so far.
+func (s *sqlNameBuilder) String() string {
+	return s.b.String()
+}
+
+func (s *sqlNameBuilder) writeRune(r rune) {
+	switch {
+	case r >= 'A' && r <= 'Z':
+		s.writeWordStart(r + ('a' - 'A'))
+	case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+		s.writeLetterOrDigit(r)
+	default:
+		s.writeSeparator()
+	}
+}
+
+// writeWordStart emits the underscore before a camel-case word boundary (the
+// previous rune was a letter or digit) and then the lower-cased rune.
+func (s *sqlNameBuilder) writeWordStart(lower rune) {
+	if s.b.Len() > 0 && s.prevWasLowerOrDigit && !s.lastUnderscore {
+		s.b.WriteByte('_')
+	}
+	s.b.WriteRune(lower)
+	s.lastUnderscore = false
+	s.prevWasLowerOrDigit = false
+}
+
+// writeLetterOrDigit passes an accepted rune through unchanged.
+func (s *sqlNameBuilder) writeLetterOrDigit(r rune) {
+	s.b.WriteRune(r)
+	s.lastUnderscore = false
+	s.prevWasLowerOrDigit = true
+}
+
+// writeSeparator collapses any non-name rune (including '_') into a single
+// underscore, never leading and never doubling.
+func (s *sqlNameBuilder) writeSeparator() {
+	if s.b.Len() > 0 && !s.lastUnderscore {
+		s.b.WriteByte('_')
+		s.lastUnderscore = true
+	}
+	s.prevWasLowerOrDigit = false
 }
 
 func sanitizeSQLIdent(value string) string {

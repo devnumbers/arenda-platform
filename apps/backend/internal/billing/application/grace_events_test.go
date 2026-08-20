@@ -487,6 +487,29 @@ func TestWebhook_FailedRenewalChargePublishesGraceEntered(t *testing.T) {
 // The grace-expiry reminder phase (issue #253): the reminder fires inside the
 // window [valid_until - lead, valid_until), exactly once per window.
 
+// requireGraceReminderPublished asserts the publisher emitted exactly one
+// GraceExpiring event identifying the subscription with its window, and the
+// window is marked reminded at the given tick.
+func requireGraceReminderPublished(
+	t *testing.T, h *workersHarness, pub *capturePublisher, sub domain.Subscription, graceUntil, remindedAt time.Time,
+) {
+	t.Helper()
+	if len(pub.expiring) != 1 {
+		t.Fatalf("GraceExpiring published %d times, want 1", len(pub.expiring))
+	}
+	event := pub.expiring[0]
+	if event.SubscriptionID != sub.ID || event.UserID != sub.UserID {
+		t.Errorf("event identifies user %s subscription %s, want user %s subscription %s", event.UserID, event.SubscriptionID, sub.UserID, sub.ID)
+	}
+	if !event.GraceUntil.Equal(graceUntil) {
+		t.Errorf("event GraceUntil = %v, want %v", event.GraceUntil, graceUntil)
+	}
+	reminded := h.storedSubscription(t, sub)
+	if reminded.GraceRemindedAt == nil || !reminded.GraceRemindedAt.Equal(remindedAt) {
+		t.Errorf("GraceRemindedAt = %v, want %v", reminded.GraceRemindedAt, remindedAt)
+	}
+}
+
 // TestWorkers_GraceExpiryReminderWindow proves the window edges: no reminder
 // before the lead time arrives, one reminder inside the window, no second
 // reminder on the next tick, and no reminder after the window has ended.
@@ -510,20 +533,7 @@ func TestWorkers_GraceExpiryReminderWindow(t *testing.T) {
 	} else if n != 1 {
 		t.Fatalf("ProcessGraceExpiryReminders() = %d, want 1 inside the window", n)
 	}
-	if len(pub.expiring) != 1 {
-		t.Fatalf("GraceExpiring published %d times, want 1", len(pub.expiring))
-	}
-	event := pub.expiring[0]
-	if event.SubscriptionID != sub.ID || event.UserID != sub.UserID {
-		t.Errorf("event identifies user %s subscription %s, want user %s subscription %s", event.UserID, event.SubscriptionID, sub.UserID, sub.ID)
-	}
-	if !event.GraceUntil.Equal(graceUntil) {
-		t.Errorf("event GraceUntil = %v, want %v", event.GraceUntil, graceUntil)
-	}
-	reminded := h.storedSubscription(t, sub)
-	if reminded.GraceRemindedAt == nil || !reminded.GraceRemindedAt.Equal(inside) {
-		t.Errorf("GraceRemindedAt = %v, want %v", reminded.GraceRemindedAt, inside)
-	}
+	requireGraceReminderPublished(t, h, pub, sub, graceUntil, inside)
 
 	// Next tick inside the same window: already reminded, no second event.
 	if n, err := h.workers.ProcessGraceExpiryReminders(t.Context(), inside.Add(time.Hour)); err != nil || n != 0 {

@@ -141,12 +141,9 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 		return domain.Operation{}, err
 	}
 
-	name := strings.TrimSpace(cmd.Name)
-	if name == "" {
-		return domain.Operation{}, newInvalidInputError("name is required")
-	}
-	if len([]rune(name)) > 50 {
-		return domain.Operation{}, newInvalidInputError("name must be at most 50 characters")
+	name, err := validateOperationName(cmd.Name)
+	if err != nil {
+		return domain.Operation{}, err
 	}
 
 	if err := s.validateAmountAndDate(cmd.AmountKopecks, cmd.OperationDate); err != nil {
@@ -168,17 +165,10 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 		return domain.Operation{}, fmt.Errorf("generate operation id: %w", err)
 	}
 
-	loc, err := s.tzResolver.Resolve(ctx, scope)
+	now, today, err := ownerNowAndToday(ctx, s.tzResolver, s.clock, scope)
 	if err != nil {
-		return domain.Operation{}, fmt.Errorf("resolve owner timezone: %w", err)
+		return domain.Operation{}, err
 	}
-	now := s.clock.Now()
-	today := timeutil.DateIn(now, loc)
-	var comment string
-	if cmd.Comment != nil {
-		comment = *cmd.Comment
-	}
-
 	op := domain.Operation{
 		ID:                 id,
 		OwnerID:            scope,
@@ -190,7 +180,7 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 		Name:               name,
 		AmountKopecks:      cmd.AmountKopecks,
 		OperationDate:      cmd.OperationDate,
-		Comment:            comment,
+		Comment:            stringOrEmpty(cmd.Comment),
 		ReminderOffsetDays: cmd.ReminderOffsetDays,
 		IsException:        true,
 		CreatedAt:          now,
@@ -202,44 +192,15 @@ func (s *OperationService) CreateOperation(ctx context.Context, actor uuid.UUID,
 
 	var created domain.Operation
 	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
 		created, err = stores.operations.Create(ctx, op)
 		if err != nil {
 			return fmt.Errorf("create operation: %w", err)
 		}
-
-		if stores.scheduler != nil && created.ReminderOffsetDays != nil {
-			cat, err := stores.categories.GetByIDAndOwner(ctx, created.CategoryID, scope)
-			if err != nil {
-				return fmt.Errorf("get category for reminder: %w", err)
-			}
-			reminderDate := created.OperationDate.AddDate(0, 0, -(*created.ReminderOffsetDays))
-			if !reminderDate.Before(today) {
-				if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(created, cat.Name), reminderDate); err != nil {
-					return fmt.Errorf("schedule operation reminder: %w", err)
-				}
-			}
+		if err := scheduleNewOperationReminder(ctx, stores, created, scope, today); err != nil {
+			return err
 		}
-
-		opCtx := map[string]any{
-			auditKeyPropertyID: domain.PropertyIDPtr(created.PropertyID),
-			"type":             string(created.Type),
-			"amount_kopecks":   created.AmountKopecks,
-			"operation_date":   created.OperationDate.Format(time.DateOnly),
-		}
-		if created.LeaseID != uuid.Nil {
-			opCtx["lease_id"] = created.LeaseID
-		}
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(role),
-			Action:     auditdomain.ActionOperationCreated,
-			EntityType: auditdomain.EntityOperation,
-			EntityID:   &created.ID,
-			Context:    opCtx,
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
+		return recordOperationCreatedAudit(ctx, stores, actor, role, created)
 	})
 	if err != nil {
 		return domain.Operation{}, err
@@ -366,30 +327,16 @@ func (s *OperationService) GetOperation(ctx context.Context, actor, id uuid.UUID
 
 // UpdateOperation updates an operation after the T3 shared-access write gate.
 func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.UUID, cmd UpdateOperationCommand) (domain.Operation, error) {
-	op, err := s.operations.GetByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
-	}
-	role, err := roleForStandalone(ctx, s.policy, actor, op.PropertyID, op.OwnerID)
+	_, role, scope, err := s.gateStandaloneOperationWrite(ctx, actor, id)
 	if err != nil {
 		return domain.Operation{}, err
 	}
-	if err := writeRoleGate(role); err != nil {
-		return domain.Operation{}, err
-	}
-	scope := op.OwnerID
 
 	var updated domain.Operation
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		op, err := lockOperationForUpdate(ctx, stores, id, scope)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get operation: %w", err)
+			return err
 		}
 
 		if err := validatePropertyNotArchived(ctx, stores.properties, scope, op.PropertyID); err != nil {
@@ -404,12 +351,9 @@ func (s *OperationService) UpdateOperation(ctx context.Context, actor, id uuid.U
 			return err
 		}
 
-		updated, err = stores.operations.Update(ctx, op)
+		updated, err = updateOperationOrNotFound(ctx, stores, op)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("update operation: %w", err)
+			return err
 		}
 
 		offsetChanged := !reminderOffsetDaysEqual(originalOffset, updated.ReminderOffsetDays)
@@ -452,33 +396,15 @@ func (s *OperationService) applyOperationUpdate(
 	cmd UpdateOperationCommand,
 	scope uuid.UUID,
 ) (domain.Operation, time.Time, error) {
-	opType := op.Type
-	categoryID := op.CategoryID
-	if cmd.Type != nil {
-		parsedType, err := domain.ParseOperationType(*cmd.Type)
-		if err != nil {
-			return domain.Operation{}, time.Time{}, err
-		}
-		opType = parsedType
+	op, err := applyOperationTypeAndCategory(ctx, txCategories, op, cmd, scope)
+	if err != nil {
+		return domain.Operation{}, time.Time{}, err
 	}
-	if cmd.CategoryID != nil {
-		categoryID = *cmd.CategoryID
-	}
-	if cmd.Type != nil || cmd.CategoryID != nil {
-		if err := validateCategory(ctx, txCategories, scope, opType, categoryID); err != nil {
-			return domain.Operation{}, time.Time{}, err
-		}
-	}
-	op.Type = opType
-	op.CategoryID = categoryID
 
 	if cmd.Name != nil {
-		name := strings.TrimSpace(*cmd.Name)
-		if name == "" {
-			return domain.Operation{}, time.Time{}, newInvalidInputError("name is required")
-		}
-		if len([]rune(name)) > 50 {
-			return domain.Operation{}, time.Time{}, newInvalidInputError("name must be at most 50 characters")
+		name, err := validateOperationName(*cmd.Name)
+		if err != nil {
+			return domain.Operation{}, time.Time{}, err
 		}
 		op.Name = name
 	}
@@ -513,22 +439,59 @@ func (s *OperationService) applyOperationUpdate(
 	}
 
 	op.IsException = true
-	loc, err := s.tzResolver.Resolve(ctx, scope)
+	now, today, err := ownerNowAndToday(ctx, s.tzResolver, s.clock, scope)
 	if err != nil {
-		return domain.Operation{}, time.Time{}, fmt.Errorf("resolve owner timezone: %w", err)
+		return domain.Operation{}, time.Time{}, err
 	}
-	now := s.clock.Now()
-	today := timeutil.DateIn(now, loc)
 	if cmd.OperationDate != nil {
-		switch {
-		case op.Status == domain.OperationStatusOverdue && !op.OperationDate.Before(today):
-			op.Status = domain.OperationStatusPending
-		case op.Status == domain.OperationStatusPending && op.OperationDate.Before(today):
-			op.Status = domain.OperationStatusOverdue
-		}
+		op.Status = recomputePlannedStatus(op.Status, op.OperationDate, today)
 	}
 	op.UpdatedAt = now
 	return op, today, nil
+}
+
+// applyOperationTypeAndCategory patches the operation type and category from
+// the command and revalidates the category when either of them changed.
+func applyOperationTypeAndCategory(
+	ctx context.Context,
+	txCategories OperationCategoryRepository,
+	op domain.Operation,
+	cmd UpdateOperationCommand,
+	scope uuid.UUID,
+) (domain.Operation, error) {
+	opType := op.Type
+	categoryID := op.CategoryID
+	if cmd.Type != nil {
+		parsedType, err := domain.ParseOperationType(*cmd.Type)
+		if err != nil {
+			return domain.Operation{}, err
+		}
+		opType = parsedType
+	}
+	if cmd.CategoryID != nil {
+		categoryID = *cmd.CategoryID
+	}
+	if cmd.Type != nil || cmd.CategoryID != nil {
+		if err := validateCategory(ctx, txCategories, scope, opType, categoryID); err != nil {
+			return domain.Operation{}, err
+		}
+	}
+	op.Type = opType
+	op.CategoryID = categoryID
+	return op, nil
+}
+
+// recomputePlannedStatus flips a planned operation between pending and overdue
+// when its date moved across the owner-local today; every other status is kept.
+func recomputePlannedStatus(status domain.OperationStatus, operationDate, today time.Time) domain.OperationStatus {
+	switch {
+	case status == domain.OperationStatusOverdue && !operationDate.Before(today):
+		return domain.OperationStatusPending
+	case status == domain.OperationStatusPending && operationDate.Before(today):
+		return domain.OperationStatusOverdue
+	default:
+		return status
+	}
 }
 
 // rescheduleOperationReminders cancels the operation's pending and overdue
@@ -545,56 +508,29 @@ func (s *OperationService) rescheduleOperationReminders(
 	if stores.scheduler == nil {
 		return nil
 	}
-	cat, err := stores.categories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
+	categoryName, err := operationCategoryName(ctx, stores, updated.CategoryID, scope)
 	if err != nil {
-		return fmt.Errorf("get category for reminder: %w", err)
+		return err
 	}
-
-	if err := stores.scheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
-		return fmt.Errorf("cancel reminders: %w", err)
+	if err := cancelOperationReminders(ctx, stores, scope, updated.ID); err != nil {
+		return err
 	}
-	if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
-		return fmt.Errorf("cancel overdue reminders: %w", err)
-	}
-
-	if updated.ReminderOffsetDays != nil {
-		reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
-		if !reminderDate.Before(today) {
-			if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
-				return fmt.Errorf("schedule operation reminder: %w", err)
-			}
-		}
-	}
-	return nil
+	return scheduleOperationReminderIfDue(ctx, stores, updated, categoryName, today)
 }
 
 // CompleteOperation marks a pending, overdue, or unconfirmed operation as completed.
 // Expenses become paid, income becomes received, and future reminders are cancelled.
 func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOperationCommand) (domain.Operation, error) {
-	op, err := s.operations.GetByID(ctx, cmd.OperationID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
-	}
-	role, err := roleForStandalone(ctx, s.policy, cmd.Actor, op.PropertyID, op.OwnerID)
+	_, role, scope, err := s.gateStandaloneOperationWrite(ctx, cmd.Actor, cmd.OperationID)
 	if err != nil {
 		return domain.Operation{}, err
 	}
-	if err := writeRoleGate(role); err != nil {
-		return domain.Operation{}, err
-	}
-	scope := op.OwnerID
 
 	var updated domain.Operation
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, scope)
+		op, err := lockOperationForUpdate(ctx, stores, cmd.OperationID, scope)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get operation: %w", err)
+			return err
 		}
 
 		if err := validatePropertyNotArchived(ctx, stores.properties, scope, op.PropertyID); err != nil {
@@ -605,32 +541,21 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 			return fmt.Errorf("%w: operation is already completed", ErrOperationAlreadyCompleted)
 		}
 
-		switch op.Type {
-		case domain.OperationTypeExpense:
-			op.Status = domain.OperationStatusPaid
-		case domain.OperationTypeIncome:
-			op.Status = domain.OperationStatusReceived
-		}
+		op.Status = completedStatusForType(op.Type)
 		op.UpdatedAt = s.clock.Now()
 
 		if err := op.ValidateStatusForType(); err != nil {
 			return err
 		}
 
-		updated, err = stores.operations.Update(ctx, op)
+		updated, err = updateOperationOrNotFound(ctx, stores, op)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("update operation: %w", err)
+			return err
 		}
 
 		if stores.scheduler != nil {
-			if err := stores.scheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
-				return fmt.Errorf("cancel reminders: %w", err)
-			}
-			if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
-				return fmt.Errorf("cancel overdue reminders: %w", err)
+			if err := cancelOperationReminders(ctx, stores, scope, updated.ID); err != nil {
+				return err
 			}
 		}
 
@@ -653,32 +578,27 @@ func (s *OperationService) CompleteOperation(ctx context.Context, cmd CompleteOp
 	return updated, nil
 }
 
+// completedStatusForType maps an operation type to its completed status:
+// expenses become paid, income becomes received.
+func completedStatusForType(t domain.OperationType) domain.OperationStatus {
+	if t == domain.OperationTypeIncome {
+		return domain.OperationStatusReceived
+	}
+	return domain.OperationStatusPaid
+}
+
 // MarkOperationIncomplete marks a completed operation as planned again.
 func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd MarkOperationIncompleteCommand) (domain.Operation, error) {
-	op, err := s.operations.GetByID(ctx, cmd.OperationID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
-	}
-	role, err := roleForStandalone(ctx, s.policy, cmd.Actor, op.PropertyID, op.OwnerID)
+	_, role, scope, err := s.gateStandaloneOperationWrite(ctx, cmd.Actor, cmd.OperationID)
 	if err != nil {
 		return domain.Operation{}, err
 	}
-	if err := writeRoleGate(role); err != nil {
-		return domain.Operation{}, err
-	}
-	scope := op.OwnerID
 
 	var updated domain.Operation
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, cmd.OperationID, scope)
+		op, err := lockOperationForUpdate(ctx, stores, cmd.OperationID, scope)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get operation: %w", err)
+			return err
 		}
 
 		if err := validatePropertyNotArchived(ctx, stores.properties, scope, op.PropertyID); err != nil {
@@ -690,55 +610,24 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 			return nil
 		}
 
-		loc, err := s.tzResolver.Resolve(ctx, scope)
+		now, today, err := ownerNowAndToday(ctx, s.tzResolver, s.clock, scope)
 		if err != nil {
-			return fmt.Errorf("resolve owner timezone: %w", err)
+			return err
 		}
-		now := s.clock.Now()
-		today := timeutil.DateIn(now, loc)
-		status := domain.OperationStatusPending
-		if op.OperationDate.Before(today) {
-			status = domain.OperationStatusOverdue
-		}
-		op.Status = status
+		op.Status = plannedStatusForDate(op.OperationDate, today)
 		op.UpdatedAt = now
 
 		if err := op.ValidateStatusForType(); err != nil {
 			return err
 		}
 
-		updated, err = stores.operations.Update(ctx, op)
+		updated, err = updateOperationOrNotFound(ctx, stores, op)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("update operation: %w", err)
+			return err
 		}
 
-		if stores.scheduler != nil {
-			cat, err := stores.categories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
-			if err != nil {
-				return fmt.Errorf("get category for reminder: %w", err)
-			}
-			if err := stores.scheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
-				return fmt.Errorf("cancel reminders: %w", err)
-			}
-			if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
-				return fmt.Errorf("cancel overdue reminders: %w", err)
-			}
-
-			if updated.Status == domain.OperationStatusOverdue {
-				if err := stores.scheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated, cat.Name), now); err != nil {
-					return fmt.Errorf("schedule overdue reminder: %w", err)
-				}
-			} else if updated.ReminderOffsetDays != nil {
-				reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
-				if !reminderDate.Before(today) {
-					if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
-						return fmt.Errorf("schedule operation reminder: %w", err)
-					}
-				}
-			}
+		if err := s.rescheduleIncompleteOperationReminders(ctx, stores, updated, scope, now, today); err != nil {
+			return err
 		}
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -758,6 +647,46 @@ func (s *OperationService) MarkOperationIncomplete(ctx context.Context, cmd Mark
 	}
 
 	return updated, nil
+}
+
+// plannedStatusForDate returns the planned status for an operation planned
+// again: pending from today on, overdue when the date has already passed.
+func plannedStatusForDate(operationDate, today time.Time) domain.OperationStatus {
+	if operationDate.Before(today) {
+		return domain.OperationStatusOverdue
+	}
+	return domain.OperationStatusPending
+}
+
+// rescheduleIncompleteOperationReminders rebuilds the reminders of an
+// operation planned again: the completed operation's reminders are cancelled
+// and either an overdue reminder or the regular offset reminder is scheduled.
+// It is a no-op when no reminder scheduler is wired into the transactional
+// stores.
+func (s *OperationService) rescheduleIncompleteOperationReminders(
+	ctx context.Context,
+	stores *txStores,
+	updated domain.Operation,
+	scope uuid.UUID,
+	now, today time.Time,
+) error {
+	if stores.scheduler == nil {
+		return nil
+	}
+	categoryName, err := operationCategoryName(ctx, stores, updated.CategoryID, scope)
+	if err != nil {
+		return err
+	}
+	if err := cancelOperationReminders(ctx, stores, scope, updated.ID); err != nil {
+		return err
+	}
+	if updated.Status == domain.OperationStatusOverdue {
+		if err := stores.scheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(updated, categoryName), now); err != nil {
+			return fmt.Errorf("schedule overdue reminder: %w", err)
+		}
+		return nil
+	}
+	return scheduleOperationReminderIfDue(ctx, stores, updated, categoryName, today)
 }
 
 // ListOverdueCandidates returns pending operations with an operation_date before asOf.
@@ -822,11 +751,11 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, actor, o
 		}
 
 		if stores.scheduler != nil {
-			cat, err := stores.categories.GetByIDAndOwner(ctx, op.CategoryID, actor)
+			categoryName, err := operationCategoryName(ctx, stores, op.CategoryID, actor)
 			if err != nil {
-				return fmt.Errorf("get category for reminder: %w", err)
+				return err
 			}
-			if err := stores.scheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op, cat.Name), normalizedAsOf); err != nil {
+			if err := stores.scheduler.ScheduleOverdueReminder(ctx, ToOperationInfo(op, categoryName), normalizedAsOf); err != nil {
 				return fmt.Errorf("schedule overdue reminder: %w", err)
 			}
 		}
@@ -853,29 +782,15 @@ func (s *OperationService) ProcessOverdueOperation(ctx context.Context, actor, o
 // DeleteOperation soft-deletes an operation after the T3 shared-access write
 // gate.
 func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.UUID) error {
-	op, err := s.operations.GetByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("get operation: %w", err)
-	}
-	role, err := roleForStandalone(ctx, s.policy, actor, op.PropertyID, op.OwnerID)
+	_, role, scope, err := s.gateStandaloneOperationWrite(ctx, actor, id)
 	if err != nil {
 		return err
 	}
-	if err := writeRoleGate(role); err != nil {
-		return err
-	}
-	scope := op.OwnerID
 
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		op, err := lockOperationForUpdate(ctx, stores, id, scope)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get operation: %w", err)
+			return err
 		}
 
 		if err := validatePropertyNotArchived(ctx, stores.properties, scope, op.PropertyID); err != nil {
@@ -890,11 +805,8 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 		}
 
 		if stores.scheduler != nil {
-			if err := stores.scheduler.CancelByOperation(ctx, scope, id); err != nil {
-				return fmt.Errorf("cancel reminders: %w", err)
-			}
-			if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, id); err != nil {
-				return fmt.Errorf("cancel overdue reminders: %w", err)
+			if err := cancelOperationReminders(ctx, stores, scope, id); err != nil {
+				return err
 			}
 		}
 
@@ -924,51 +836,23 @@ func (s *OperationService) DeleteOperation(ctx context.Context, actor, id uuid.U
 // attached to an archived source/target property are rejected the same way.
 // Completed operations may be moved.
 func (s *OperationService) MoveOperation(ctx context.Context, actor, id uuid.UUID, cmd MoveOperationCommand) (domain.Operation, error) {
-	op, err := s.operations.GetByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return domain.Operation{}, ErrNotFound
-		}
-		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
-	}
-	role, err := roleForStandalone(ctx, s.policy, actor, op.PropertyID, op.OwnerID)
+	op, role, scope, err := s.gateStandaloneOperationWrite(ctx, actor, id)
 	if err != nil {
 		return domain.Operation{}, err
 	}
-	if err := writeRoleGate(role); err != nil {
-		return domain.Operation{}, err
-	}
-	scope := op.OwnerID
 
 	if err := validateMovableOperation(op, cmd.PropertyID); err != nil {
 		return domain.Operation{}, err
 	}
-
-	// The actor needs write access to the target property too, and the target
-	// must belong to the same data owner: cross-owner moves are rejected.
-	targetRole, err := s.policy.RoleForProperty(ctx, actor, cmd.PropertyID)
-	if err != nil {
-		return domain.Operation{}, fmt.Errorf("resolve role: %w", err)
-	}
-	if err := writeRoleGate(targetRole); err != nil {
+	if err := s.validateMoveTarget(ctx, actor, cmd.PropertyID, scope); err != nil {
 		return domain.Operation{}, err
-	}
-	targetOwner, err := propertyScope(ctx, s.properties, cmd.PropertyID)
-	if err != nil {
-		return domain.Operation{}, err
-	}
-	if targetOwner != scope {
-		return domain.Operation{}, newInvalidInputError("cannot move an operation to a property of another owner")
 	}
 
 	var updated domain.Operation
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		op, err := lockOperationForUpdate(ctx, stores, id, scope)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("get operation: %w", err)
+			return err
 		}
 
 		// Repeat the guards on the locked row.
@@ -992,31 +876,8 @@ func (s *OperationService) MoveOperation(ctx context.Context, actor, id uuid.UUI
 
 		// Recreate the reminders so their payloads point at the new property,
 		// mirroring the UpdateOperation reschedule flow.
-		if stores.scheduler != nil {
-			loc, err := s.tzResolver.Resolve(ctx, scope)
-			if err != nil {
-				return fmt.Errorf("resolve owner timezone: %w", err)
-			}
-			today := timeutil.DateIn(now, loc)
-
-			cat, err := stores.categories.GetByIDAndOwner(ctx, updated.CategoryID, scope)
-			if err != nil {
-				return fmt.Errorf("get category for reminder: %w", err)
-			}
-			if err := stores.scheduler.CancelByOperation(ctx, scope, updated.ID); err != nil {
-				return fmt.Errorf("cancel reminders: %w", err)
-			}
-			if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, updated.ID); err != nil {
-				return fmt.Errorf("cancel overdue reminders: %w", err)
-			}
-			if updated.ReminderOffsetDays != nil {
-				reminderDate := updated.OperationDate.AddDate(0, 0, -(*updated.ReminderOffsetDays))
-				if !reminderDate.Before(today) {
-					if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(updated, cat.Name), reminderDate); err != nil {
-						return fmt.Errorf("schedule operation reminder: %w", err)
-					}
-				}
-			}
+		if err := s.rescheduleMovedOperationReminders(ctx, stores, updated, scope, now); err != nil {
+			return err
 		}
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -1039,6 +900,190 @@ func (s *OperationService) MoveOperation(ctx context.Context, actor, id uuid.UUI
 	}
 
 	return updated, nil
+}
+
+// validateMoveTarget checks that the actor may write the target property and
+// that it belongs to the same data owner: cross-owner moves are rejected.
+func (s *OperationService) validateMoveTarget(ctx context.Context, actor, targetPropertyID, scope uuid.UUID) error {
+	targetRole, err := s.policy.RoleForProperty(ctx, actor, targetPropertyID)
+	if err != nil {
+		return fmt.Errorf("resolve role: %w", err)
+	}
+	if err := writeRoleGate(targetRole); err != nil {
+		return err
+	}
+	targetOwner, err := propertyScope(ctx, s.properties, targetPropertyID)
+	if err != nil {
+		return err
+	}
+	if targetOwner != scope {
+		return newInvalidInputError("cannot move an operation to a property of another owner")
+	}
+	return nil
+}
+
+// rescheduleMovedOperationReminders recreates the reminders of a moved
+// operation so their payloads point at the new property, mirroring the
+// UpdateOperation reschedule flow. It is a no-op when no reminder scheduler is
+// wired into the transactional stores.
+func (s *OperationService) rescheduleMovedOperationReminders(
+	ctx context.Context,
+	stores *txStores,
+	updated domain.Operation,
+	scope uuid.UUID,
+	now time.Time,
+) error {
+	if stores.scheduler == nil {
+		return nil
+	}
+	today, err := ownerTodayFor(ctx, s.tzResolver, scope, now)
+	if err != nil {
+		return err
+	}
+	categoryName, err := operationCategoryName(ctx, stores, updated.CategoryID, scope)
+	if err != nil {
+		return err
+	}
+	if err := cancelOperationReminders(ctx, stores, scope, updated.ID); err != nil {
+		return err
+	}
+	return scheduleOperationReminderIfDue(ctx, stores, updated, categoryName, today)
+}
+
+// gateStandaloneOperationWrite loads the operation by id, resolves the actor's
+// role through the T3 standalone write gate, and returns the operation, the
+// audit role, and the data-owner scope for the transactional phase.
+func (s *OperationService) gateStandaloneOperationWrite(
+	ctx context.Context, actor, id uuid.UUID,
+) (domain.Operation, sharedpolicy.Role, uuid.UUID, error) {
+	op, err := s.operations.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, "", uuid.Nil, ErrNotFound
+		}
+		return domain.Operation{}, "", uuid.Nil, fmt.Errorf("get operation: %w", err)
+	}
+	role, err := roleForStandalone(ctx, s.policy, actor, op.PropertyID, op.OwnerID)
+	if err != nil {
+		return domain.Operation{}, "", uuid.Nil, err
+	}
+	if err := writeRoleGate(role); err != nil {
+		return domain.Operation{}, "", uuid.Nil, err
+	}
+	return op, role, op.OwnerID, nil
+}
+
+// lockOperationForUpdate re-reads the operation row under the transaction lock.
+func lockOperationForUpdate(ctx context.Context, stores *txStores, id, scope uuid.UUID) (domain.Operation, error) {
+	op, err := stores.operations.GetByIDAndOwnerForUpdate(ctx, id, scope)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("get operation: %w", err)
+	}
+	return op, nil
+}
+
+// updateOperationOrNotFound persists the operation, mapping a missing row back
+// to ErrNotFound.
+func updateOperationOrNotFound(ctx context.Context, stores *txStores, op domain.Operation) (domain.Operation, error) {
+	updated, err := stores.operations.Update(ctx, op)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Operation{}, ErrNotFound
+		}
+		return domain.Operation{}, fmt.Errorf("update operation: %w", err)
+	}
+	return updated, nil
+}
+
+// scheduleNewOperationReminder schedules the reminder of a freshly created
+// operation when a reminder scheduler is wired, the offset is set, and the
+// reminder date has not already passed.
+func scheduleNewOperationReminder(ctx context.Context, stores *txStores, created domain.Operation, scope uuid.UUID, today time.Time) error {
+	if stores.scheduler == nil || created.ReminderOffsetDays == nil {
+		return nil
+	}
+	categoryName, err := operationCategoryName(ctx, stores, created.CategoryID, scope)
+	if err != nil {
+		return err
+	}
+	return scheduleOperationReminderIfDue(ctx, stores, created, categoryName, today)
+}
+
+// recordOperationCreatedAudit writes the operation-created audit entry with
+// the property, type, amount, and operation date as context.
+func recordOperationCreatedAudit(
+	ctx context.Context,
+	stores *txStores,
+	actor uuid.UUID,
+	role sharedpolicy.Role,
+	created domain.Operation,
+) error {
+	opCtx := map[string]any{
+		auditKeyPropertyID: domain.PropertyIDPtr(created.PropertyID),
+		"type":             string(created.Type),
+		"amount_kopecks":   created.AmountKopecks,
+		"operation_date":   created.OperationDate.Format(time.DateOnly),
+	}
+	if created.LeaseID != uuid.Nil {
+		opCtx["lease_id"] = created.LeaseID
+	}
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  actorRoleFromPolicyRole(role),
+		Action:     auditdomain.ActionOperationCreated,
+		EntityType: auditdomain.EntityOperation,
+		EntityID:   &created.ID,
+		Context:    opCtx,
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// operationCategoryName loads the category name used in reminder payloads.
+func operationCategoryName(ctx context.Context, stores *txStores, categoryID, scope uuid.UUID) (string, error) {
+	cat, err := stores.categories.GetByIDAndOwner(ctx, categoryID, scope)
+	if err != nil {
+		return "", fmt.Errorf("get category for reminder: %w", err)
+	}
+	return cat.Name, nil
+}
+
+// cancelOperationReminders cancels the operation's pending and overdue
+// reminders.
+func cancelOperationReminders(ctx context.Context, stores *txStores, scope, operationID uuid.UUID) error {
+	if err := stores.scheduler.CancelByOperation(ctx, scope, operationID); err != nil {
+		return fmt.Errorf("cancel reminders: %w", err)
+	}
+	if err := stores.scheduler.CancelOverdueReminderByOperation(ctx, scope, operationID); err != nil {
+		return fmt.Errorf("cancel overdue reminders: %w", err)
+	}
+	return nil
+}
+
+// scheduleOperationReminderIfDue schedules the operation reminder for the given
+// category name when the offset is set and the reminder date has not passed.
+func scheduleOperationReminderIfDue(
+	ctx context.Context,
+	stores *txStores,
+	op domain.Operation,
+	categoryName string,
+	today time.Time,
+) error {
+	if op.ReminderOffsetDays == nil {
+		return nil
+	}
+	reminderDate := op.OperationDate.AddDate(0, 0, -(*op.ReminderOffsetDays))
+	if reminderDate.Before(today) {
+		return nil
+	}
+	if err := stores.scheduler.ScheduleForOperation(ctx, ToOperationInfo(op, categoryName), reminderDate); err != nil {
+		return fmt.Errorf("schedule operation reminder: %w", err)
+	}
+	return nil
 }
 
 // validateMovableOperation rejects operations that cannot be moved between
@@ -1103,6 +1148,19 @@ func operationStatusForDate(operationDate, today time.Time) domain.OperationStat
 		return domain.OperationStatusUnconfirmed
 	}
 	return domain.OperationStatusPending
+}
+
+// validateOperationName trims the name and enforces its presence and the
+// 50-rune limit.
+func validateOperationName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", newInvalidInputError("name is required")
+	}
+	if len([]rune(name)) > 50 {
+		return "", newInvalidInputError("name must be at most 50 characters")
+	}
+	return name, nil
 }
 
 func validateReminderOffsetDays(v *int) error {

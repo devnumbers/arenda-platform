@@ -162,10 +162,17 @@ func assertInitMapBody(t *testing.T, capturedMap map[string]any, tt initContract
 	}
 }
 
-// assertInitSpecFields checks the strict-decoded spec.InitRequest core fields:
-// terminal, token, order id, amount, pay type, customer key, and the spec-level
-// Recurrent/RedirectDueDate presence.
+// assertInitSpecFields checks the strict-decoded spec.InitRequest core fields
+// and the conditional Recurrent/RedirectDueDate presence.
 func assertInitSpecFields(t *testing.T, reqBody spec.InitRequest, tt initContractCase) {
+	t.Helper()
+	assertInitSpecCoreFields(t, reqBody, tt)
+	assertInitSpecConditionalFields(t, reqBody, tt)
+}
+
+// assertInitSpecCoreFields checks the terminal, token, order id, amount, pay
+// type and customer key of the Init body.
+func assertInitSpecCoreFields(t *testing.T, reqBody spec.InitRequest, tt initContractCase) {
 	t.Helper()
 	if reqBody.TerminalKey != testTerminalKey {
 		t.Errorf("TerminalKey: got %q, want %q", reqBody.TerminalKey, testTerminalKey)
@@ -185,7 +192,12 @@ func assertInitSpecFields(t *testing.T, reqBody spec.InitRequest, tt initContrac
 	if reqBody.CustomerKey == nil || *reqBody.CustomerKey != tt.req.CustomerRef {
 		t.Errorf("CustomerKey: got %v, want %q", reqBody.CustomerKey, tt.req.CustomerRef)
 	}
+}
 
+// assertInitSpecConditionalFields checks the spec-level Recurrent flag (only
+// the save-method parent payment carries it) and the RedirectDueDate presence.
+func assertInitSpecConditionalFields(t *testing.T, reqBody spec.InitRequest, tt initContractCase) {
+	t.Helper()
 	if tt.wantRecurrent {
 		if reqBody.Recurrent == nil || *reqBody.Recurrent != spec.Y {
 			t.Errorf("Recurrent: got %v, want %v", reqBody.Recurrent, spec.Y)
@@ -438,6 +450,69 @@ func TestProviderCancelContract(t *testing.T) {
 	}
 }
 
+// assertAddCustomerContractBody strict-decodes and checks the AddCustomer body.
+func assertAddCustomerContractBody(t *testing.T, captured []byte) {
+	t.Helper()
+	var addCustomerBody spec.AddCustomerRequest
+	strictDecodeSpecRequest(t, captured, &addCustomerBody)
+	if addCustomerBody.TerminalKey != testTerminalKey {
+		t.Errorf("AddCustomer TerminalKey: got %q, want %q", addCustomerBody.TerminalKey, testTerminalKey)
+	}
+	if addCustomerBody.Token == "" {
+		t.Errorf("AddCustomer Token is empty")
+	}
+	if addCustomerBody.CustomerKey != testCustomerRef {
+		t.Errorf("AddCustomer CustomerKey: got %q, want %q", addCustomerBody.CustomerKey, testCustomerRef)
+	}
+}
+
+// stripAddCardExtras proves the AddCard extras ride along (undocumented
+// per-request redirect/notification URLs, ADR 0017) and returns the body with
+// them stripped, ready for the strict spec-schema decode.
+func stripAddCardExtras(t *testing.T, capturedMap map[string]any) []byte {
+	t.Helper()
+	wantExtras := map[string]string{
+		fieldRedirectURL:       testAppBaseURL + bindingReturnSuccessPath,
+		fieldFailRedirectURL:   testAppBaseURL + bindingReturnFailPath,
+		fieldSuccessAddCardURL: testAppBaseURL + bindingReturnSuccessPath,
+		fieldFailAddCardURL:    testAppBaseURL + bindingReturnFailPath,
+		fieldNotificationURL:   testAppBaseURL + notificationPath,
+	}
+	for field, want := range wantExtras {
+		if got := capturedMap[field]; got != want {
+			t.Fatalf("AddCard extra %s: got %v, want %v", field, got, want)
+		}
+	}
+	stripped := maps.Clone(capturedMap)
+	for _, field := range addCardExtraFieldsAllowlist {
+		delete(stripped, field)
+	}
+	strippedBody, err := json.Marshal(stripped)
+	if err != nil {
+		t.Fatalf("marshal stripped AddCard body: %v", err)
+	}
+	return strippedBody
+}
+
+// assertAddCardContractBody strict-decodes and checks the AddCard body.
+func assertAddCardContractBody(t *testing.T, strippedBody []byte) {
+	t.Helper()
+	var addCardBody spec.AddCardRequest
+	strictDecodeSpecRequest(t, strippedBody, &addCardBody)
+	if addCardBody.TerminalKey != testTerminalKey {
+		t.Errorf("AddCard TerminalKey: got %q, want %q", addCardBody.TerminalKey, testTerminalKey)
+	}
+	if addCardBody.Token == "" {
+		t.Errorf("AddCard Token is empty")
+	}
+	if addCardBody.CustomerKey != testCustomerRef {
+		t.Errorf("AddCard CustomerKey: got %q, want %q", addCardBody.CustomerKey, testCustomerRef)
+	}
+	if addCardBody.CheckType == nil || *addCardBody.CheckType != spec.N3DSHOLD {
+		t.Errorf("AddCard CheckType: got %v, want %v", addCardBody.CheckType, spec.N3DSHOLD)
+	}
+}
+
 func TestProviderAddCustomerAddCardContract(t *testing.T) {
 	var addCustomerCaptured []byte
 	var addCardCapturedMap map[string]any
@@ -484,55 +559,12 @@ func TestProviderAddCustomerAddCardContract(t *testing.T) {
 		t.Errorf("BindingID: got %q, want %q", result.BindingID, testRequestKey)
 	}
 
-	var addCustomerBody spec.AddCustomerRequest
-	strictDecodeSpecRequest(t, addCustomerCaptured, &addCustomerBody)
-	if addCustomerBody.TerminalKey != testTerminalKey {
-		t.Errorf("AddCustomer TerminalKey: got %q, want %q", addCustomerBody.TerminalKey, testTerminalKey)
-	}
-	if addCustomerBody.Token == "" {
-		t.Errorf("AddCustomer Token is empty")
-	}
-	if addCustomerBody.CustomerKey != testCustomerRef {
-		t.Errorf("AddCustomer CustomerKey: got %q, want %q", addCustomerBody.CustomerKey, testCustomerRef)
-	}
+	assertAddCustomerContractBody(t, addCustomerCaptured)
 
-	// The AddCard extras are outside the spec schema (undocumented per-request
-	// redirect/notification URLs, ADR 0017): assert them at map level, strip
-	// them, then strict-decode the remaining body into spec.AddCardRequest.
-	wantExtras := map[string]string{
-		fieldRedirectURL:       testAppBaseURL + bindingReturnSuccessPath,
-		fieldFailRedirectURL:   testAppBaseURL + bindingReturnFailPath,
-		fieldSuccessAddCardURL: testAppBaseURL + bindingReturnSuccessPath,
-		fieldFailAddCardURL:    testAppBaseURL + bindingReturnFailPath,
-		fieldNotificationURL:   testAppBaseURL + notificationPath,
-	}
-	for field, want := range wantExtras {
-		if got := addCardCapturedMap[field]; got != want {
-			t.Fatalf("AddCard extra %s: got %v, want %v", field, got, want)
-		}
-	}
-	stripped := maps.Clone(addCardCapturedMap)
-	for _, field := range addCardExtraFieldsAllowlist {
-		delete(stripped, field)
-	}
-	strippedBody, err := json.Marshal(stripped)
-	if err != nil {
-		t.Fatalf("marshal stripped AddCard body: %v", err)
-	}
-	var addCardBody spec.AddCardRequest
-	strictDecodeSpecRequest(t, strippedBody, &addCardBody)
-	if addCardBody.TerminalKey != testTerminalKey {
-		t.Errorf("AddCard TerminalKey: got %q, want %q", addCardBody.TerminalKey, testTerminalKey)
-	}
-	if addCardBody.Token == "" {
-		t.Errorf("AddCard Token is empty")
-	}
-	if addCardBody.CustomerKey != testCustomerRef {
-		t.Errorf("AddCard CustomerKey: got %q, want %q", addCardBody.CustomerKey, testCustomerRef)
-	}
-	if addCardBody.CheckType == nil || *addCardBody.CheckType != spec.N3DSHOLD {
-		t.Errorf("AddCard CheckType: got %v, want %v", addCardBody.CheckType, spec.N3DSHOLD)
-	}
+	// The AddCard extras are outside the spec schema: assert them at map
+	// level, strip them, then strict-decode the remaining body into
+	// spec.AddCardRequest.
+	assertAddCardContractBody(t, stripAddCardExtras(t, addCardCapturedMap))
 }
 
 func TestProviderRemoveCardContract(t *testing.T) {

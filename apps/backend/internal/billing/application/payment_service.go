@@ -338,15 +338,12 @@ func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment
 }
 
 // finalizePayment runs the finalizing transaction: it locks the payment,
-// verifies the notification against the persisted provider reference, moves
-// the payment to the notification's status and — for a success — applies the
-// tariff or renewal to the subscription with its transition-log entry and
-// audit record. AllowReconcile marks callers that verified an out-of-order
-// success against the provider; without it a failed payment is never
-// overwritten by this path. When a merchant-initiated renewal charge moves
-// the subscription into grace, the grace-entered event is captured by the
-// grace-events module and published strictly after the commit — best-effort
-// (issue #284).
+// verifies the notification against the persisted provider reference, captures
+// a missing reference, and moves the payment to the notification's status via
+// the per-status handlers below. AllowReconcile marks callers that verified an
+// out-of-order success against the provider; without it a failed payment is
+// never overwritten by this path. Grace events captured along the way are
+// published strictly after the commit — best-effort (issue #284).
 func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotification, allowReconcile bool) error {
 	grace := newGraceEvents(s.publisher, s.log)
 	return grace.run(ctx, s.runInTx, func(stores *txStores) error {
@@ -357,103 +354,135 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 		if err := s.checkProviderPaymentID(payment, n); err != nil {
 			return err
 		}
-		if !payment.HasProviderReference() && n.ProviderPaymentID != "" && payment.Status == domain.PaymentStatusPending {
-			if err := payment.SaveProviderReference(n.ProviderPaymentID, "", s.clock.Now().UTC()); err != nil {
-				return err
-			}
-			if err := stores.payments.Update(ctx, payment); err != nil {
-				return fmt.Errorf("persist provider reference: %w", err)
-			}
+		if err := s.captureProviderReference(ctx, stores, &payment, n); err != nil {
+			return err
 		}
 
 		now := s.clock.Now().UTC()
 		switch n.Status {
 		case domain.PaymentStatusFailed:
-			if payment.Status != domain.PaymentStatusPending {
-				// Duplicate delivery, or a terminal state that must not be
-				// overridden by a late failure.
-				return nil
-			}
-			if err := payment.MarkFailed(n.ErrorCode, now); err != nil {
-				return err
-			}
-			if err := stores.payments.Update(ctx, payment); err != nil {
-				return fmt.Errorf("mark payment failed: %w", err)
-			}
-			// A merchant-initiated renewal charge (it carries the charged
-			// method) that the provider declined asynchronously enters grace:
-			// the user gets the window to fix the payment method, and the next
-			// worker tick does not simply charge a fresh payment forever
-			// (ADR 0008). A customer-initiated payment has no method — its
-			// failure leaves the subscription untouched.
-			if payment.PaymentMethodID != nil {
-				sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
-				if err != nil {
-					return err
-				}
-				if err := grace.enterGrace(ctx, stores, sub, now, s.config.GraceDuration); err != nil {
-					return err
-				}
-			}
-			if err := stores.audit.Record(ctx, auditdomain.Entry{
-				ActorRole:  auditdomain.ActorRoleSystem,
-				Action:     auditdomain.ActionSubscriptionPaymentFailed,
-				EntityType: auditdomain.EntitySubscriptionPayment,
-				EntityID:   &payment.ID,
-				Context:    map[string]any{auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name())},
-			}); err != nil {
-				return fmt.Errorf("record audit: %w", err)
-			}
-			return nil
-
+			return s.finalizeFailedPayment(ctx, grace, stores, payment, n, now)
 		case domain.PaymentStatusSucceeded:
-			switch payment.Status {
-			case domain.PaymentStatusSucceeded:
-				return nil // Duplicate delivery.
-			case domain.PaymentStatusFailed:
-				if !allowReconcile {
-					// The payment became failed after the caller's check;
-					// refuse so the provider retries and the verified
-					// reconciliation path runs instead.
-					return fmt.Errorf("payment %s turned failed during webhook processing", payment.ID)
-				}
-				if err := payment.ReconcileToSucceeded(now); err != nil {
-					return err
-				}
-			case domain.PaymentStatusPending:
-				if err := payment.MarkSucceeded(now); err != nil {
-					return err
-				}
-			default:
-				// A refund (and the internal refunding reservation) is a
-				// later, deliberate state that a payment notification does
-				// not override.
-				return nil
-			}
-			if err := stores.payments.Update(ctx, payment); err != nil {
-				return fmt.Errorf("mark payment succeeded: %w", err)
-			}
-			if _, err := applySucceededPayment(ctx, stores, payment, now); err != nil {
-				return err
-			}
-			if err := stores.audit.Record(ctx, auditdomain.Entry{
-				ActorRole:  auditdomain.ActorRoleSystem,
-				Action:     auditdomain.ActionSubscriptionPaymentSucceeded,
-				EntityType: auditdomain.EntitySubscriptionPayment,
-				EntityID:   &payment.ID,
-				Context: map[string]any{
-					auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name()),
-					auditKeyAmountKopecks: payment.AmountKopecks,
-				},
-			}); err != nil {
-				return fmt.Errorf("record audit: %w", err)
-			}
-			return nil
-
+			return s.finalizeSucceededPayment(ctx, stores, payment, now, allowReconcile)
 		default:
 			return fmt.Errorf("%w: status %q", ErrWebhookUnsupported, n.Status)
 		}
 	})
+}
+
+// captureProviderReference persists the provider payment id carried by the
+// notification when the payment is still pending and has no reference yet —
+// the reference of the initiation response arrives with the first webhook.
+func (s *PaymentService) captureProviderReference(
+	ctx context.Context, stores *txStores, payment *domain.SubscriptionPayment, n *PaymentNotification,
+) error {
+	if payment.HasProviderReference() || n.ProviderPaymentID == "" || payment.Status != domain.PaymentStatusPending {
+		return nil
+	}
+	if err := payment.SaveProviderReference(n.ProviderPaymentID, "", s.clock.Now().UTC()); err != nil {
+		return err
+	}
+	if err := stores.payments.Update(ctx, *payment); err != nil {
+		return fmt.Errorf("persist provider reference: %w", err)
+	}
+	return nil
+}
+
+// finalizeFailedPayment marks a declined payment failed and — for a
+// merchant-initiated renewal charge, which carries the charged method — moves
+// the subscription into grace: the user gets the window to fix the payment
+// method, and the next worker tick does not simply charge a fresh payment
+// forever (ADR 0008). A customer-initiated payment has no method — its
+// failure leaves the subscription untouched. The grace-entered event is
+// captured by the grace-events module and published strictly after the commit
+// (issue #284).
+func (s *PaymentService) finalizeFailedPayment(
+	ctx context.Context, grace *graceEvents, stores *txStores,
+	payment domain.SubscriptionPayment, n *PaymentNotification, now time.Time,
+) error {
+	if payment.Status != domain.PaymentStatusPending {
+		// Duplicate delivery, or a terminal state that must not be
+		// overridden by a late failure.
+		return nil
+	}
+	if err := payment.MarkFailed(n.ErrorCode, now); err != nil {
+		return err
+	}
+	if err := stores.payments.Update(ctx, payment); err != nil {
+		return fmt.Errorf("mark payment failed: %w", err)
+	}
+	if payment.PaymentMethodID != nil {
+		sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
+		if err != nil {
+			return err
+		}
+		if err := grace.enterGrace(ctx, stores, sub, now, s.config.GraceDuration); err != nil {
+			return err
+		}
+	}
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorRole:  auditdomain.ActorRoleSystem,
+		Action:     auditdomain.ActionSubscriptionPaymentFailed,
+		EntityType: auditdomain.EntitySubscriptionPayment,
+		EntityID:   &payment.ID,
+		Context:    map[string]any{auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name())},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// finalizeSucceededPayment moves the payment to succeeded and applies the
+// subscription effects of the success: the tariff change or renewal with its
+// transition-log entry and audit record. The persisted-status switch keeps
+// duplicate deliveries idempotent and — without allowReconcile — refuses a
+// success that arrives after the payment was already marked failed, so the
+// provider retries and the verified reconciliation path runs instead.
+func (s *PaymentService) finalizeSucceededPayment(
+	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
+) error {
+	switch payment.Status {
+	case domain.PaymentStatusSucceeded:
+		return nil // Duplicate delivery.
+	case domain.PaymentStatusFailed:
+		if !allowReconcile {
+			// The payment became failed after the caller's check;
+			// refuse so the provider retries and the verified
+			// reconciliation path runs instead.
+			return fmt.Errorf("payment %s turned failed during webhook processing", payment.ID)
+		}
+		if err := payment.ReconcileToSucceeded(now); err != nil {
+			return err
+		}
+	case domain.PaymentStatusPending:
+		if err := payment.MarkSucceeded(now); err != nil {
+			return err
+		}
+	default:
+		// A refund (and the internal refunding reservation) is a
+		// later, deliberate state that a payment notification does
+		// not override.
+		return nil
+	}
+	if err := stores.payments.Update(ctx, payment); err != nil {
+		return fmt.Errorf("mark payment succeeded: %w", err)
+	}
+	if _, err := applySucceededPayment(ctx, stores, payment, now); err != nil {
+		return err
+	}
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorRole:  auditdomain.ActorRoleSystem,
+		Action:     auditdomain.ActionSubscriptionPaymentSucceeded,
+		EntityType: auditdomain.EntitySubscriptionPayment,
+		EntityID:   &payment.ID,
+		Context: map[string]any{
+			auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name()),
+			auditKeyAmountKopecks: payment.AmountKopecks,
+		},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
 }
 
 // applySucceededPayment applies the subscription effects of a succeeded

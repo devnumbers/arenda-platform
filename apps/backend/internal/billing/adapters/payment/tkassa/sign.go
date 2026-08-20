@@ -74,36 +74,13 @@ func stringifyValue(v any) string {
 	switch val := v.(type) {
 	case string:
 		return val
-	case int:
-		return strconv.FormatInt(int64(val), 10)
-	case int8:
-		return strconv.FormatInt(int64(val), 10)
-	case int16:
-		return strconv.FormatInt(int64(val), 10)
-	case int32:
-		return strconv.FormatInt(int64(val), 10)
-	case int64:
-		return strconv.FormatInt(val, 10)
-	case uint:
-		return strconv.FormatUint(uint64(val), 10)
-	case uint8:
-		return strconv.FormatUint(uint64(val), 10)
-	case uint16:
-		return strconv.FormatUint(uint64(val), 10)
-	case uint32:
-		return strconv.FormatUint(uint64(val), 10)
-	case uint64:
-		return strconv.FormatUint(val, 10)
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		// Every integer width renders as its plain decimal literal.
+		return fmt.Sprint(val)
 	case float64:
-		if val == math.Trunc(val) {
-			return strconv.FormatInt(int64(val), 10)
-		}
-		return strconv.FormatFloat(val, 'f', -1, 64)
+		return stringifyFloat(val)
 	case bool:
-		if val {
-			return "true"
-		}
-		return "false"
+		return strconv.FormatBool(val)
 	case json.Number:
 		return val.String()
 	case map[string]any, []any:
@@ -111,6 +88,16 @@ func stringifyValue(v any) string {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+// stringifyFloat renders a float the way the token concatenation expects it:
+// integral values collapse to their integer form, the rest keep the shortest
+// decimal representation.
+func stringifyFloat(val float64) string {
+	if val == math.Trunc(val) {
+		return strconv.FormatInt(int64(val), 10)
+	}
+	return strconv.FormatFloat(val, 'f', -1, 64)
 }
 
 // verifyToken checks the token of an incoming webhook payload. The comparison

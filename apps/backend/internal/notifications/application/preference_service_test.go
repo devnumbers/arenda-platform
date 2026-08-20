@@ -65,9 +65,24 @@ func TestReplaceChannelPreferences_UpsertsInTxAndAuditsChanges(t *testing.T) {
 		t.Fatalf("ReplaceChannelPreferences error = %v", err)
 	}
 
+	assertPreferenceUpserts(t, h, prefs)
+	assertPreferenceAuditEntry(t, h, userID, prefs)
+	assertEffectivePreferences(t, got, prefs)
+	assertTxCounters(t, h, 1, 0, 0)
+}
+
+// assertPreferenceUpserts proves every submitted pair was upserted.
+func assertPreferenceUpserts(t *testing.T, h *preferenceHarness, prefs []domain.NotificationChannelPreference) {
+	t.Helper()
 	if len(h.repo.upsertedPrefs) != len(prefs) {
 		t.Fatalf("upserts = %d, want %d (every submitted pair)", len(h.repo.upsertedPrefs), len(prefs))
 	}
+}
+
+// assertPreferenceAuditEntry proves exactly one audit entry landed, carrying
+// the actor and entity ids and the single flipped change pair.
+func assertPreferenceAuditEntry(t *testing.T, h *preferenceHarness, userID uuid.UUID, prefs []domain.NotificationChannelPreference) {
+	t.Helper()
 	if len(h.audit.entries) != 1 {
 		t.Fatalf("audit entries = %d, want 1", len(h.audit.entries))
 	}
@@ -91,17 +106,27 @@ func TestReplaceChannelPreferences_UpsertsInTxAndAuditsChanges(t *testing.T) {
 	if !changes[0].Old || changes[0].New {
 		t.Errorf("audit change old/new = %t/%t, want true/false", changes[0].Old, changes[0].New)
 	}
+}
 
-	// The effective set mirrors the submitted one.
+// assertEffectivePreferences proves the effective set mirrors the submitted
+// one, with the first pair denied.
+func assertEffectivePreferences(t *testing.T, got, prefs []domain.NotificationChannelPreference) {
+	t.Helper()
 	if len(got) != len(prefs) {
 		t.Fatalf("effective prefs = %d, want %d", len(got), len(prefs))
 	}
 	if got[0].Allowed {
 		t.Errorf("effective pair %s/%s still allowed, want denied", got[0].EventType, got[0].Channel)
 	}
+}
 
-	if h.b.committed != 1 || h.b.rolledBack != 0 || h.b.open != 0 {
-		t.Errorf("tx counters committed/rolledBack/open = %d/%d/%d, want 1/0/0", h.b.committed, h.b.rolledBack, h.b.open)
+// assertTxCounters proves the transaction counters match the expected
+// committed/rolledBack/open outcome.
+func assertTxCounters(t *testing.T, h *preferenceHarness, committed, rolledBack, open int) {
+	t.Helper()
+	if h.b.committed != committed || h.b.rolledBack != rolledBack || h.b.open != open {
+		t.Errorf("tx counters committed/rolledBack/open = %d/%d/%d, want %d/%d/%d",
+			h.b.committed, h.b.rolledBack, h.b.open, committed, rolledBack, open)
 	}
 }
 

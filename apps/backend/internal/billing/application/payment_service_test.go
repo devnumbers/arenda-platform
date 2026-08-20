@@ -212,45 +212,37 @@ func (h *paymentHarness) transitionCount(t *testing.T, subscriptionID uuid.UUID)
 	return len(transitions)
 }
 
-// TestChangeTariff_UpgradeCreatesPendingPaymentBeforeProviderCall proves the
-// crash-safety ordering of the payment flow (issue #250): the pending payment
-// row is committed before the provider is called, so a crash between the two
-// leaves a recoverable state instead of a payment the platform does not know
-// about. Migrated from the pre-rewrite test
-// TestBilling_ChangeTariff_UpgradeCreatesPaymentBeforeProviderCall.
-func TestChangeTariff_UpgradeCreatesPendingPaymentBeforeProviderCall(t *testing.T) {
-	h := newPaymentHarness(t)
-	sub := h.seedSubscription(t, nil)
-
-	var persistedBeforeInit bool
-	h.provider.initFn = func(req InitPaymentRequest) (InitPaymentResult, error) {
-		payment, err := h.stores.payments.GetByID(t.Context(), req.PaymentID)
-		if err != nil {
-			t.Errorf("provider.Init called before the payment record was committed: %v", err)
-			return InitPaymentResult{}, errors.New("payment not persisted")
-		}
-		if payment.Status != domain.PaymentStatusPending {
-			t.Errorf("payment status before init = %q, want pending", payment.Status)
-		}
-		if payment.HasProviderReference() {
-			t.Error("payment must not carry a provider reference before init")
-		}
-		persistedBeforeInit = true
-		return InitPaymentResult{
-			ProviderPaymentID: "stub_" + req.PaymentID.String(),
-			PaymentURL:        "https://pay.example/" + req.PaymentID.String(),
-			Status:            domain.PaymentStatusPending,
-		}, nil
+// paymentPersistedBeforeInit is the injected InitPayment hook proving the
+// pending payment row is committed before the provider call: it fails the
+// test when the record is missing, not pending, or already referenced.
+func (h *paymentHarness) paymentPersistedBeforeInit(
+	t *testing.T, req InitPaymentRequest,
+) (InitPaymentResult, error) {
+	t.Helper()
+	payment, err := h.stores.payments.GetByID(t.Context(), req.PaymentID)
+	if err != nil {
+		t.Errorf("provider.Init called before the payment record was committed: %v", err)
+		return InitPaymentResult{}, errors.New("payment not persisted")
 	}
-
-	result := h.initiateUpgrade(t, sub)
-
-	if !persistedBeforeInit {
-		t.Fatal("provider.Init was never called")
+	if payment.Status != domain.PaymentStatusPending {
+		t.Errorf("payment status before init = %q, want pending", payment.Status)
 	}
-	if result.PaymentID == uuid.Nil || result.ConfirmURL == "" {
-		t.Fatalf("result = %+v, want payment id and confirm url", result)
+	if payment.HasProviderReference() {
+		t.Error("payment must not carry a provider reference before init")
 	}
+	return InitPaymentResult{
+		ProviderPaymentID: "stub_" + req.PaymentID.String(),
+		PaymentURL:        "https://pay.example/" + req.PaymentID.String(),
+		Status:            domain.PaymentStatusPending,
+	}, nil
+}
+
+// requireUpgradedPaymentPersisted loads the started upgrade payment and proves
+// the init result was saved atomically with the full business-month price.
+func (h *paymentHarness) requireUpgradedPaymentPersisted(
+	t *testing.T, result ChangeTariffResult,
+) domain.SubscriptionPayment {
+	t.Helper()
 	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
@@ -267,6 +259,158 @@ func TestChangeTariff_UpgradeCreatesPendingPaymentBeforeProviderCall(t *testing.
 	if payment.Period != domain.PeriodMonth {
 		t.Errorf("period = %q, want month", payment.Period)
 	}
+	return payment
+}
+
+// seedSucceededUpgrade starts the business upgrade for the subscription and
+// finalizes it through a succeeded webhook, returning the payment.
+func (h *paymentHarness) seedSucceededUpgrade(t *testing.T, sub domain.Subscription) domain.SubscriptionPayment {
+	t.Helper()
+	result := h.initiateUpgrade(t, sub)
+	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if err := h.webhookSucceeded(t, payment); err != nil {
+		t.Fatalf("HandleWebhook() error = %v", err)
+	}
+	return payment
+}
+
+// deliverRefundNotification feeds the payment a refunded notification through
+// the webhook path.
+func (h *paymentHarness) deliverRefundNotification(t *testing.T, paymentID uuid.UUID) {
+	t.Helper()
+	h.setNotification(&PaymentNotification{
+		InternalPaymentID: paymentID,
+		ProviderPaymentID: "stub_" + paymentID.String(),
+		Status:            domain.PaymentStatusRefunded,
+	})
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook() error = %v", err)
+	}
+}
+
+// lastRefundTransition finds the refunded transition of the subscription,
+// failing when the log contains none.
+func (h *paymentHarness) lastRefundTransition(t *testing.T, subscriptionID uuid.UUID) domain.Transition {
+	t.Helper()
+	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), subscriptionID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID() error = %v", err)
+	}
+	var refundTransition *domain.Transition
+	for i := range transitions {
+		if transitions[i].Reason == domain.TransitionReasonRefunded {
+			refundTransition = &transitions[i]
+		}
+	}
+	if refundTransition == nil {
+		t.Fatalf("transitions contain no refunded entry: %+v", transitions)
+	}
+	return *refundTransition
+}
+
+// requireUpgradedSubscription proves the subscription shape after a succeeded
+// upgrade payment: business tariff, active, the period from the payment
+// moment, auto-renew on, and the payment recorded as last applied.
+func (h *paymentHarness) requireUpgradedSubscription(t *testing.T, userID, paymentID uuid.UUID) {
+	t.Helper()
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.TariffID != h.tariffID(t, domain.TariffBusiness) {
+		t.Errorf("tariff = %v, want business", stored.TariffID)
+	}
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("status = %q, want active", stored.Status)
+	}
+	wantUntil := h.now.AddDate(0, 1, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("valid until = %v, want %v (the period from the payment moment)", stored.ValidUntil, wantUntil)
+	}
+	if !stored.AutoRenewEnabled {
+		t.Error("auto-renew = false, want true")
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != paymentID {
+		t.Errorf("last applied payment = %v, want %v", stored.LastAppliedPaymentID, paymentID)
+	}
+	if stored.CurrentPeriod == nil || *stored.CurrentPeriod != domain.PeriodMonth {
+		t.Errorf("current period = %v, want month", stored.CurrentPeriod)
+	}
+}
+
+// requireFinalizedSucceeded proves the payment is stored succeeded with its
+// success timestamp.
+func (h *paymentHarness) requireFinalizedSucceeded(t *testing.T, paymentID uuid.UUID) {
+	t.Helper()
+	finalized, err := h.stores.payments.GetByID(t.Context(), paymentID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if finalized.Status != domain.PaymentStatusSucceeded || finalized.SucceededAt == nil {
+		t.Errorf("payment = %q/%v, want succeeded with a timestamp", finalized.Status, finalized.SucceededAt)
+	}
+}
+
+// requireAppliedTransition proves the single transition is the payment-applied
+// entry of the pro→business upgrade with the system initiator.
+func (h *paymentHarness) requireAppliedTransition(
+	t *testing.T, sub domain.Subscription, paymentID uuid.UUID,
+) domain.Transition {
+	t.Helper()
+	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID() error = %v", err)
+	}
+	if len(transitions) != 1 {
+		t.Fatalf("transitions = %d, want 1", len(transitions))
+	}
+	tr := transitions[0]
+	if tr.Reason != domain.TransitionReasonPaymentApplied {
+		t.Errorf("transition reason = %q, want payment_applied", tr.Reason)
+	}
+	if tr.PaymentID == nil || *tr.PaymentID != paymentID {
+		t.Errorf("transition payment = %v, want %v", tr.PaymentID, paymentID)
+	}
+	if tr.FromTariffID == nil || *tr.FromTariffID != sub.TariffID || tr.ToTariffID != h.tariffID(t, domain.TariffBusiness) {
+		t.Errorf("transition tariffs = %v→%v, want pro→business", tr.FromTariffID, tr.ToTariffID)
+	}
+	if tr.Initiator != domain.InitiatorSystem {
+		t.Errorf("transition initiator = %q, want system", tr.Initiator)
+	}
+	return tr
+}
+
+// TestChangeTariff_UpgradeCreatesPendingPaymentBeforeProviderCall proves the
+// crash-safety ordering of the payment flow (issue #250): the pending payment
+// row is committed before the provider is called, so a crash between the two
+// leaves a recoverable state instead of a payment the platform does not know
+// about. Migrated from the pre-rewrite test
+// TestBilling_ChangeTariff_UpgradeCreatesPaymentBeforeProviderCall.
+func TestChangeTariff_UpgradeCreatesPendingPaymentBeforeProviderCall(t *testing.T) {
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, nil)
+
+	var persistedBeforeInit bool
+	h.provider.initFn = func(req InitPaymentRequest) (InitPaymentResult, error) {
+		result, err := h.paymentPersistedBeforeInit(t, req)
+		if err == nil {
+			persistedBeforeInit = true
+		}
+		return result, err
+	}
+
+	result := h.initiateUpgrade(t, sub)
+
+	if !persistedBeforeInit {
+		t.Fatal("provider.Init was never called")
+	}
+	if result.PaymentID == uuid.Nil || result.ConfirmURL == "" {
+		t.Fatalf("result = %+v, want payment id and confirm url", result)
+	}
+	h.requireUpgradedPaymentPersisted(t, result)
 	// The subscription stays untouched until the payment succeeds.
 	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
 	if err != nil {
@@ -588,68 +732,11 @@ func (h *paymentHarness) webhookSucceeded(t *testing.T, payment domain.Subscript
 func TestWebhook_SucceededAppliesUpgrade(t *testing.T) {
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
-	result := h.initiateUpgrade(t, sub)
-	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
+	payment := h.seedSucceededUpgrade(t, sub)
 
-	if err := h.webhookSucceeded(t, payment); err != nil {
-		t.Fatalf("HandleWebhook() error = %v", err)
-	}
-
-	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
-	if err != nil {
-		t.Fatalf("GetByUserID() error = %v", err)
-	}
-	if stored.TariffID != h.tariffID(t, domain.TariffBusiness) {
-		t.Errorf("tariff = %v, want business", stored.TariffID)
-	}
-	if stored.Status != domain.SubscriptionStatusActive {
-		t.Errorf("status = %q, want active", stored.Status)
-	}
-	wantUntil := h.now.AddDate(0, 1, 0)
-	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
-		t.Errorf("valid until = %v, want %v (the period from the payment moment)", stored.ValidUntil, wantUntil)
-	}
-	if !stored.AutoRenewEnabled {
-		t.Error("auto-renew = false, want true")
-	}
-	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != payment.ID {
-		t.Errorf("last applied payment = %v, want %v", stored.LastAppliedPaymentID, payment.ID)
-	}
-	if stored.CurrentPeriod == nil || *stored.CurrentPeriod != domain.PeriodMonth {
-		t.Errorf("current period = %v, want month", stored.CurrentPeriod)
-	}
-
-	finalized, err := h.stores.payments.GetByID(t.Context(), payment.ID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	if finalized.Status != domain.PaymentStatusSucceeded || finalized.SucceededAt == nil {
-		t.Errorf("payment = %q/%v, want succeeded with a timestamp", finalized.Status, finalized.SucceededAt)
-	}
-
-	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
-	if err != nil {
-		t.Fatalf("ListBySubscriptionID() error = %v", err)
-	}
-	if len(transitions) != 1 {
-		t.Fatalf("transitions = %d, want 1", len(transitions))
-	}
-	tr := transitions[0]
-	if tr.Reason != domain.TransitionReasonPaymentApplied {
-		t.Errorf("transition reason = %q, want payment_applied", tr.Reason)
-	}
-	if tr.PaymentID == nil || *tr.PaymentID != payment.ID {
-		t.Errorf("transition payment = %v, want %v", tr.PaymentID, payment.ID)
-	}
-	if tr.FromTariffID == nil || *tr.FromTariffID != sub.TariffID || tr.ToTariffID != h.tariffID(t, domain.TariffBusiness) {
-		t.Errorf("transition tariffs = %v→%v, want pro→business", tr.FromTariffID, tr.ToTariffID)
-	}
-	if tr.Initiator != domain.InitiatorSystem {
-		t.Errorf("transition initiator = %q, want system", tr.Initiator)
-	}
+	h.requireUpgradedSubscription(t, sub.UserID, payment.ID)
+	h.requireFinalizedSucceeded(t, payment.ID)
+	h.requireAppliedTransition(t, sub, payment.ID)
 
 	entries := h.audit.recorded()
 	// One tariff_changed at initiation plus one payment.succeeded here.
@@ -1053,24 +1140,10 @@ func TestWebhook_FailedAfterSucceededIsNoOp(t *testing.T) {
 func TestWebhook_RefundedMarksPaymentRefunded(t *testing.T) {
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
-	result := h.initiateUpgrade(t, sub)
-	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	if err := h.webhookSucceeded(t, payment); err != nil {
-		t.Fatalf("HandleWebhook() error = %v", err)
-	}
+	payment := h.seedSucceededUpgrade(t, sub)
 
-	h.setNotification(&PaymentNotification{
-		InternalPaymentID: result.PaymentID,
-		ProviderPaymentID: "stub_" + result.PaymentID.String(),
-		Status:            domain.PaymentStatusRefunded,
-	})
-	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
-		t.Fatalf("HandleWebhook() error = %v", err)
-	}
-	stored, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
+	h.deliverRefundNotification(t, payment.ID)
+	stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
@@ -1096,24 +1169,12 @@ func TestWebhook_RefundedMarksPaymentRefunded(t *testing.T) {
 	}
 	// The transition log records the refund downgrade with the system
 	// initiator and the refunded payment.
-	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), subsStored.ID)
-	if err != nil {
-		t.Fatalf("ListBySubscriptionID() error = %v", err)
-	}
-	var refundTransition *domain.Transition
-	for i := range transitions {
-		if transitions[i].Reason == domain.TransitionReasonRefunded {
-			refundTransition = &transitions[i]
-		}
-	}
-	if refundTransition == nil {
-		t.Fatalf("transitions contain no refunded entry: %+v", transitions)
-	}
+	refundTransition := h.lastRefundTransition(t, subsStored.ID)
 	if refundTransition.Initiator != domain.InitiatorSystem || refundTransition.InitiatorID != nil {
 		t.Errorf("refund transition initiator = %q/%v, want system without an actor", refundTransition.Initiator, refundTransition.InitiatorID)
 	}
-	if refundTransition.PaymentID == nil || *refundTransition.PaymentID != result.PaymentID {
-		t.Errorf("refund transition payment = %v, want %v", refundTransition.PaymentID, result.PaymentID)
+	if refundTransition.PaymentID == nil || *refundTransition.PaymentID != payment.ID {
+		t.Errorf("refund transition payment = %v, want %v", refundTransition.PaymentID, payment.ID)
 	}
 }
 

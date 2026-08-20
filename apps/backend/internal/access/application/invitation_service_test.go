@@ -445,6 +445,44 @@ func TestInvitationService_ChangeRoleAndCancel(t *testing.T) {
 
 // Activation at registration.
 
+// seedInvitation stores a pending invitation fixture with explicit timestamps
+// so the FIFO activation order is deterministic.
+func (f *invitationFixture) seedInvitation(
+	t *testing.T, propertyID uuid.UUID, email string,
+	role domain.Role, invitedBy uuid.UUID, lastSentAt, createdAt time.Time,
+) domain.Invitation {
+	t.Helper()
+	inv, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: propertyID, Email: email,
+		Role: role, InvitedBy: invitedBy, LastSentAt: lastSentAt, CreatedAt: createdAt,
+	})
+	if err != nil {
+		t.Fatalf("create invitation on %s: %v", propertyID, err)
+	}
+	return inv
+}
+
+// assertMembership loads the membership on the property and checks its role,
+// grantor and active status.
+func (f *invitationFixture) assertMembership(t *testing.T, propertyID, userID, grantedBy uuid.UUID, wantRole domain.Role) {
+	t.Helper()
+	m, err := f.repo.GetByPropertyAndUser(t.Context(), propertyID, userID)
+	if err != nil {
+		t.Fatalf("membership on %s: %v", propertyID, err)
+	}
+	if m.Role != wantRole || m.GrantedBy != grantedBy || m.Status != domain.MemberStatusActive {
+		t.Errorf("membership on %s = %+v, want role %s granted by %s active", propertyID, m, wantRole, grantedBy)
+	}
+}
+
+// assertInvitationConsumed checks that an activation consumed the invitation.
+func (f *invitationFixture) assertInvitationConsumed(t *testing.T, invitationID, propertyID uuid.UUID) {
+	t.Helper()
+	if _, err := f.invitations.GetByID(t.Context(), invitationID, propertyID); !errors.Is(err, domain.ErrInvitationNotFound) {
+		t.Errorf("invitation %s must be deleted, got %v", invitationID, err)
+	}
+}
+
 func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
@@ -455,27 +493,9 @@ func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
 	// Two pending invitations on the same email (propA is older), one on
 	// another email.
 	base := time.Now().Add(-time.Hour)
-	invA, err := f.invitations.Create(t.Context(), domain.Invitation{
-		ID: uuid.Must(uuid.NewV7()), PropertyID: propA, Email: testNewUserEmail,
-		Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: base, CreatedAt: base,
-	})
-	if err != nil {
-		t.Fatalf("create A: %v", err)
-	}
-	invB, err := f.invitations.Create(t.Context(), domain.Invitation{
-		ID: uuid.Must(uuid.NewV7()), PropertyID: propB, Email: testNewUserEmail,
-		Role: domain.RoleFullAccess, InvitedBy: owner,
-		LastSentAt: base, CreatedAt: base.Add(time.Minute),
-	})
-	if err != nil {
-		t.Fatalf("create B: %v", err)
-	}
-	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
-		ID: uuid.Must(uuid.NewV7()), PropertyID: other, Email: "someone-else@example.com",
-		Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: base, CreatedAt: base,
-	}); err != nil {
-		t.Fatalf("create other: %v", err)
-	}
+	invA := f.seedInvitation(t, propA, testNewUserEmail, domain.RoleViewer, owner, base, base)
+	invB := f.seedInvitation(t, propB, testNewUserEmail, domain.RoleFullAccess, owner, base, base.Add(time.Minute))
+	f.seedInvitation(t, other, "someone-else@example.com", domain.RoleViewer, owner, base, base)
 
 	user := uuid.Must(uuid.NewV7())
 	f.limiter.set(user, 10)
@@ -484,13 +504,7 @@ func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
 	}
 
 	// Both invitations activated with their stored roles.
-	mA, err := f.repo.GetByPropertyAndUser(t.Context(), propA, user)
-	if err != nil {
-		t.Fatalf("membership A: %v", err)
-	}
-	if mA.Role != domain.RoleViewer || mA.GrantedBy != owner || mA.Status != domain.MemberStatusActive {
-		t.Errorf("membership A = %+v", mA)
-	}
+	f.assertMembership(t, propA, user, owner, domain.RoleViewer)
 	mB, err := f.repo.GetByPropertyAndUser(t.Context(), propB, user)
 	if err != nil {
 		t.Fatalf("membership B: %v", err)
@@ -500,12 +514,8 @@ func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
 	}
 
 	// Invitations are gone; the other email's invitation is untouched.
-	if _, err := f.invitations.GetByID(t.Context(), invA.ID, propA); !errors.Is(err, domain.ErrInvitationNotFound) {
-		t.Errorf("invitation A must be deleted, got %v", err)
-	}
-	if _, err := f.invitations.GetByID(t.Context(), invB.ID, propB); !errors.Is(err, domain.ErrInvitationNotFound) {
-		t.Errorf("invitation B must be deleted, got %v", err)
-	}
+	f.assertInvitationConsumed(t, invA.ID, propA)
+	f.assertInvitationConsumed(t, invB.ID, propB)
 	remaining, err := f.invitations.ListPendingByEmail(t.Context(), "someone-else@example.com")
 	if err != nil || len(remaining) != 1 {
 		t.Errorf("other email invitation must stay, got %v %v", remaining, err)

@@ -331,13 +331,10 @@ func TestProviderAddPaymentMethodFromToken(t *testing.T) {
 	}
 }
 
-// TestProviderBindingAPIs drives the binding lifecycle: a started binding is
-// pending until confirmed, its form URL points at the local confirmation
-// endpoint (issue #251), and confirming completes it idempotently.
-func TestProviderBindingAPIs(t *testing.T) {
-	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
-	ctx := context.Background()
-
+// startFakeBinding starts a binding and proves the form URL points at the
+// local confirmation endpoint (issue #251).
+func startFakeBinding(t *testing.T, p *Provider, ctx context.Context) application.BindMethodResult {
+	t.Helper()
 	bind, err := p.BindPaymentMethod(ctx, application.BindMethodRequest{CustomerRef: "c1"})
 	if err != nil {
 		t.Fatalf("BindPaymentMethod error: %v", err)
@@ -348,6 +345,47 @@ func TestProviderBindingAPIs(t *testing.T) {
 	if want := "http://localhost:8080/internal/fake-card-binding/" + bind.BindingID + "/confirm"; bind.FormURL != want {
 		t.Fatalf("FormURL: got %q, want %q", bind.FormURL, want)
 	}
+	return bind
+}
+
+// confirmFakeBinding confirms the binding and proves the add-card event shape.
+func confirmFakeBinding(t *testing.T, p *Provider, ctx context.Context, bindingID string) application.MethodBoundNotification {
+	t.Helper()
+	event, err := p.ConfirmCardBinding(ctx, bindingID)
+	if err != nil {
+		t.Fatalf("ConfirmCardBinding error: %v", err)
+	}
+	if event.MethodBound == nil || event.MethodBound.BindingID != bindingID {
+		t.Fatalf("confirm event: got %+v, want a method-bound notification", event.MethodBound)
+	}
+	if event.MethodBound.Method.ChargeToken == "" || event.MethodBound.Method.ProviderMethodID == "" {
+		t.Fatalf("bound method: got %+v, want card id and charge token", event.MethodBound.Method)
+	}
+	return *event.MethodBound
+}
+
+// requireFakeBindingCompleted polls the binding and proves the completed state
+// carries the bound method.
+func requireFakeBindingCompleted(t *testing.T, p *Provider, ctx context.Context, bindingID, chargeToken string) {
+	t.Helper()
+	state, err := p.PaymentMethodBinding(ctx, bindingID)
+	if err != nil {
+		t.Fatalf("PaymentMethodBinding after confirm: %v", err)
+	}
+	if state.Status != application.MethodBindingCompleted || state.Method == nil ||
+		state.Method.ChargeToken != chargeToken {
+		t.Fatalf("state after confirm: got %+v, want the completed binding", state)
+	}
+}
+
+// TestProviderBindingAPIs drives the binding lifecycle: a started binding is
+// pending until confirmed, its form URL points at the local confirmation
+// endpoint (issue #251), and confirming completes it idempotently.
+func TestProviderBindingAPIs(t *testing.T) {
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	ctx := context.Background()
+
+	bind := startFakeBinding(t, p, ctx)
 	state, err := p.PaymentMethodBinding(ctx, bind.BindingID)
 	if err != nil {
 		t.Fatalf("PaymentMethodBinding before confirm: %v", err)
@@ -358,24 +396,8 @@ func TestProviderBindingAPIs(t *testing.T) {
 
 	// Confirming completes the binding and yields the add-card event; the
 	// poll then reports the completed state with the bound method.
-	event, err := p.ConfirmCardBinding(ctx, bind.BindingID)
-	if err != nil {
-		t.Fatalf("ConfirmCardBinding error: %v", err)
-	}
-	if event.MethodBound == nil || event.MethodBound.BindingID != bind.BindingID {
-		t.Fatalf("confirm event: got %+v, want a method-bound notification", event.MethodBound)
-	}
-	if event.MethodBound.Method.ChargeToken == "" || event.MethodBound.Method.ProviderMethodID == "" {
-		t.Fatalf("bound method: got %+v, want card id and charge token", event.MethodBound.Method)
-	}
-	state, err = p.PaymentMethodBinding(ctx, bind.BindingID)
-	if err != nil {
-		t.Fatalf("PaymentMethodBinding after confirm: %v", err)
-	}
-	if state.Status != application.MethodBindingCompleted || state.Method == nil ||
-		state.Method.ChargeToken != event.MethodBound.Method.ChargeToken {
-		t.Fatalf("state after confirm: got %+v, want the completed binding", state)
-	}
+	bound := confirmFakeBinding(t, p, ctx, bind.BindingID)
+	requireFakeBindingCompleted(t, p, ctx, bind.BindingID, bound.Method.ChargeToken)
 
 	// Repeated confirmation returns the same notification (idempotent at the
 	// provider; the application session state makes reprocessing a no-op).
@@ -383,9 +405,9 @@ func TestProviderBindingAPIs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfirmCardBinding(repeat) error: %v", err)
 	}
-	if again.MethodBound.Method.ChargeToken != event.MethodBound.Method.ChargeToken {
+	if again.MethodBound.Method.ChargeToken != bound.Method.ChargeToken {
 		t.Fatalf("repeat confirm changed the charge token: %q vs %q",
-			again.MethodBound.Method.ChargeToken, event.MethodBound.Method.ChargeToken)
+			again.MethodBound.Method.ChargeToken, bound.Method.ChargeToken)
 	}
 }
 

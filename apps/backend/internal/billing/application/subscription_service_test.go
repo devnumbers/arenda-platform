@@ -93,14 +93,10 @@ func (h *subscriptionHarness) seedPaidSubscription(t *testing.T, name domain.Tar
 	return sub
 }
 
-func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t *testing.T) {
-	h := newSubscriptionHarness(t)
-	sub := h.seedPaidSubscription(t, domain.TariffPro)
-
-	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); err != nil {
-		t.Fatalf("CancelSubscription() error = %v", err)
-	}
-
+// requireCancelledSubscription asserts the cancelled subscription keeps the
+// paid period with auto-renew off and stays mutable until the period ends.
+func (h *subscriptionHarness) requireCancelledSubscription(t *testing.T, sub domain.Subscription) {
+	t.Helper()
 	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID() error = %v", err)
@@ -117,7 +113,12 @@ func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t 
 	if !stored.CanMutateData(h.now) {
 		t.Error("cancelled subscription must stay mutable until the paid period ends")
 	}
+}
 
+// requireCancelledTransitionLog asserts the transition log holds exactly one
+// user-initiated cancelled entry with the active from-side.
+func (h *subscriptionHarness) requireCancelledTransitionLog(t *testing.T, sub domain.Subscription) {
+	t.Helper()
 	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
 	if err != nil {
 		t.Fatalf("ListBySubscriptionID() error = %v", err)
@@ -138,7 +139,12 @@ func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t 
 	if tr.ToStatus != domain.SubscriptionStatusCancelled {
 		t.Errorf("ToStatus = %q, want cancelled", tr.ToStatus)
 	}
+}
 
+// requireCancelledAudit asserts the audit trail holds exactly the
+// user-attributed cancellation entry of the subscription.
+func (h *subscriptionHarness) requireCancelledAudit(t *testing.T, sub domain.Subscription) {
+	t.Helper()
 	entries := h.audit.recorded()
 	if len(entries) != 1 {
 		t.Fatalf("audit entries = %d, want 1", len(entries))
@@ -152,6 +158,19 @@ func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t 
 	if entries[0].EntityID == nil || *entries[0].EntityID != sub.ID {
 		t.Errorf("audit entity = %v, want %v", entries[0].EntityID, sub.ID)
 	}
+}
+
+func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t *testing.T) {
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffPro)
+
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); err != nil {
+		t.Fatalf("CancelSubscription() error = %v", err)
+	}
+
+	h.requireCancelledSubscription(t, sub)
+	h.requireCancelledTransitionLog(t, sub)
+	h.requireCancelledAudit(t, sub)
 }
 
 func TestSubscriptionService_CancelSubscription_NotFound(t *testing.T) {
@@ -308,21 +327,11 @@ func TestSubscriptionService_ToggleAutoRenew_NotFound(t *testing.T) {
 	}
 }
 
-func TestSubscriptionService_ChangeTariff_DowngradeIsScheduled(t *testing.T) {
-	h := newSubscriptionHarness(t)
-	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
-
-	result, err := h.svc.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
-		TariffName: domain.TariffPro,
-		Period:     domain.PeriodYear,
-	})
-	if err != nil {
-		t.Fatalf("ChangeTariff() error = %v", err)
-	}
-	if result.PaymentID != uuid.Nil || result.ConfirmURL != "" {
-		t.Errorf("result = %+v, want zero values (no payment on the free path)", result)
-	}
-
+// requireDowngradeScheduled asserts the stored subscription carries the
+// deferred change — target tariff, period, due date at the paid period end —
+// while the current tariff stays until the apply.
+func (h *subscriptionHarness) requireDowngradeScheduled(t *testing.T, sub domain.Subscription) {
+	t.Helper()
 	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID() error = %v", err)
@@ -342,7 +351,12 @@ func TestSubscriptionService_ChangeTariff_DowngradeIsScheduled(t *testing.T) {
 	if !stored.AutoRenewEnabled {
 		t.Error("AutoRenewEnabled = false, want true (ADR 0008: the new tariff renews)")
 	}
+}
 
+// requireDowngradeScheduledTransition asserts the transition log holds exactly
+// the user-initiated downgrade_scheduled entry naming the target tariff.
+func (h *subscriptionHarness) requireDowngradeScheduledTransition(t *testing.T, sub domain.Subscription) {
+	t.Helper()
 	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
 	if err != nil {
 		t.Fatalf("ListBySubscriptionID() error = %v", err)
@@ -360,7 +374,12 @@ func TestSubscriptionService_ChangeTariff_DowngradeIsScheduled(t *testing.T) {
 	if tr.Initiator != domain.InitiatorUser || tr.InitiatorID == nil || *tr.InitiatorID != sub.UserID {
 		t.Errorf("initiator = %q/%v, want user/%v", tr.Initiator, tr.InitiatorID, sub.UserID)
 	}
+}
 
+// requireTariffChangeAudit asserts the audit trail holds exactly the
+// tariff-change entry with the from/to tariff context.
+func (h *subscriptionHarness) requireTariffChangeAudit(t *testing.T, sub domain.Subscription) {
+	t.Helper()
 	entries := h.audit.recorded()
 	if len(entries) != 1 {
 		t.Fatalf("audit entries = %d, want 1", len(entries))
@@ -371,6 +390,26 @@ func TestSubscriptionService_ChangeTariff_DowngradeIsScheduled(t *testing.T) {
 	if entries[0].Context[auditKeyFromTariffID] != sub.TariffID || entries[0].Context[auditKeyToTariffID] != h.tariffID(t, domain.TariffPro) {
 		t.Errorf("audit context = %v, want from business to pro", entries[0].Context)
 	}
+}
+
+func TestSubscriptionService_ChangeTariff_DowngradeIsScheduled(t *testing.T) {
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
+
+	result, err := h.svc.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff() error = %v", err)
+	}
+	if result.PaymentID != uuid.Nil || result.ConfirmURL != "" {
+		t.Errorf("result = %+v, want zero values (no payment on the free path)", result)
+	}
+
+	h.requireDowngradeScheduled(t, sub)
+	h.requireDowngradeScheduledTransition(t, sub)
+	h.requireTariffChangeAudit(t, sub)
 }
 
 func TestSubscriptionService_ChangeTariff_SameTariffRejected(t *testing.T) {

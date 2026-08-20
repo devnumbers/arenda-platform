@@ -248,31 +248,51 @@ func (r *fakeSubscriptionRepo) List(_ context.Context, sel SubscriptionSelection
 var farFuture = time.Unix(1<<62, 0)
 
 // subscriptionInSelection is the fake's reading of the worker selection — the
-// Go mirror of ListSubscriptionsBySelection's predicate.
+// Go mirror of ListSubscriptionsBySelection's predicate — composed of the
+// sub-predicates below (identity, toggles, validity window, pending change).
 func subscriptionInSelection(s domain.Subscription, sel SubscriptionSelection) bool {
+	return subscriptionIdentityInSelection(s, sel) &&
+		subscriptionTogglesInSelection(s, sel) &&
+		subscriptionValidityInSelection(s, sel) &&
+		subscriptionPendingChangeInSelection(s, sel)
+}
+
+// subscriptionIdentityInSelection matches the user filter and the exact status.
+func subscriptionIdentityInSelection(s domain.Subscription, sel SubscriptionSelection) bool {
 	if sel.UserID != nil && s.UserID != *sel.UserID {
 		return false
 	}
-	if s.Status != sel.Status {
-		return false
-	}
+	return s.Status == sel.Status
+}
+
+// subscriptionTogglesInSelection matches the auto-renew flag and the
+// not-yet-reminded-in-grace flag.
+func subscriptionTogglesInSelection(s domain.Subscription, sel SubscriptionSelection) bool {
 	if sel.AutoRenewEnabled != nil && s.AutoRenewEnabled != *sel.AutoRenewEnabled {
 		return false
 	}
+	return !sel.Unreminded || s.GraceRemindedAt == nil
+}
+
+// subscriptionValidityInSelection matches the validity window: a row without
+// ValidUntil never falls inside either boundary.
+func subscriptionValidityInSelection(s domain.Subscription, sel SubscriptionSelection) bool {
 	if sel.ValidUntilBefore != nil && (s.ValidUntil == nil || s.ValidUntil.After(*sel.ValidUntilBefore)) {
 		return false
 	}
 	if sel.ValidUntilAfter != nil && (s.ValidUntil == nil || !s.ValidUntil.After(*sel.ValidUntilAfter)) {
 		return false
 	}
-	if sel.Unreminded && s.GraceRemindedAt != nil {
-		return false
-	}
-	if sel.PendingChangeDue != nil &&
-		(s.PendingTariffID == nil || s.PendingChangeAt == nil || s.PendingChangeAt.After(*sel.PendingChangeDue)) {
-		return false
-	}
 	return true
+}
+
+// subscriptionPendingChangeInSelection matches the due-pending-change filter:
+// a row qualifies only with both pending fields set and the change clock due.
+func subscriptionPendingChangeInSelection(s domain.Subscription, sel SubscriptionSelection) bool {
+	if sel.PendingChangeDue == nil {
+		return true
+	}
+	return s.PendingTariffID != nil && s.PendingChangeAt != nil && !s.PendingChangeAt.After(*sel.PendingChangeDue)
 }
 
 func (r *fakeSubscriptionRepo) Create(_ context.Context, sub domain.Subscription) (domain.Subscription, error) {

@@ -294,31 +294,46 @@ func TestPolicyEnforcement_RescheduleReminder(t *testing.T) {
 			svc := newPolicyReminderService(policy, repo)
 
 			updated, err := svc.Reschedule(ctx, actor, policyReminderID, newDate)
-			switch {
-			case sharedpolicy.CanEdit(tc.role):
-				if err != nil {
-					t.Fatalf("Reschedule: want success, got %v", err)
-				}
-				wantScheduledAt := domain.ScheduledAtForDate(newDate, time.UTC, dispatchHour)
-				if !updated.ScheduledAt.Equal(wantScheduledAt) {
-					t.Errorf("ScheduledAt: want %s, got %s", wantScheduledAt, updated.ScheduledAt)
-				}
-				if len(repo.updateScheduledAtCalls) != 1 || repo.updateScheduledAtCalls[0] != [2]uuid.UUID{policyOwnerID, policyReminderID} {
-					t.Errorf("UpdateScheduledAt: want one call on the owner scope, got %+v", repo.updateScheduledAtCalls)
-				}
-			case tc.role == sharedpolicy.RoleViewer:
-				if !errors.Is(err, ErrForbidden) {
-					t.Fatalf("Reschedule: want ErrForbidden, got %v", err)
-				}
-			default:
-				if !errors.Is(err, ErrNotFound) {
-					t.Fatalf("Reschedule: want ErrNotFound, got %v", err)
-				}
-			}
-			if !sharedpolicy.CanEdit(tc.role) && len(repo.updateScheduledAtCalls) != 0 {
-				t.Errorf("UpdateScheduledAt: want no calls for role %s, got %+v", tc.role, repo.updateScheduledAtCalls)
-			}
+			assertRescheduleByRole(t, tc.role, updated, err, repo, newDate)
 		})
+	}
+}
+
+// assertRescheduleByRole checks the role-matrix outcome of Reschedule:
+// editors succeed with one owner-scoped repository call, a viewer is
+// forbidden, and weaker roles get object privacy (ErrNotFound, issue #166).
+func assertRescheduleByRole(
+	t *testing.T,
+	role sharedpolicy.Role,
+	updated domain.Reminder,
+	err error,
+	repo *fakeReminderRepo,
+	newDate time.Time,
+) {
+	t.Helper()
+	switch {
+	case sharedpolicy.CanEdit(role):
+		if err != nil {
+			t.Fatalf("Reschedule: want success, got %v", err)
+		}
+		wantScheduledAt := domain.ScheduledAtForDate(newDate, time.UTC, dispatchHour)
+		if !updated.ScheduledAt.Equal(wantScheduledAt) {
+			t.Errorf("ScheduledAt: want %s, got %s", wantScheduledAt, updated.ScheduledAt)
+		}
+		if len(repo.updateScheduledAtCalls) != 1 || repo.updateScheduledAtCalls[0] != [2]uuid.UUID{policyOwnerID, policyReminderID} {
+			t.Errorf("UpdateScheduledAt: want one call on the owner scope, got %+v", repo.updateScheduledAtCalls)
+		}
+	case role == sharedpolicy.RoleViewer:
+		if !errors.Is(err, ErrForbidden) {
+			t.Fatalf("Reschedule: want ErrForbidden, got %v", err)
+		}
+	default:
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("Reschedule: want ErrNotFound, got %v", err)
+		}
+	}
+	if !sharedpolicy.CanEdit(role) && len(repo.updateScheduledAtCalls) != 0 {
+		t.Errorf("UpdateScheduledAt: want no calls for role %s, got %+v", role, repo.updateScheduledAtCalls)
 	}
 }
 

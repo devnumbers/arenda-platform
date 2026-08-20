@@ -6,44 +6,40 @@ import (
 	"time"
 )
 
+// assertFailuresBelowThreshold records one failure per minute up to
+// MaxLoginFailures-1, asserting after every call that the counter incremented,
+// the window start stayed pinned, and the last-failure timestamp moved.
+func assertFailuresBelowThreshold(t *testing.T, start time.Time) {
+	t.Helper()
+	var w AttemptWindow
+	now := start
+	for i := 1; i < MaxLoginFailures; i++ {
+		if err := w.RecordFailure(now); err != nil {
+			t.Fatalf("RecordFailure #%d error = %v, want nil", i, err)
+		}
+		if w.Failures != i {
+			t.Fatalf("after #%d: Failures = %d, want %d", i, w.Failures, i)
+		}
+		if !w.FirstFailureAt.Equal(start) {
+			t.Fatalf("FirstFailureAt = %v, want %v", w.FirstFailureAt, start)
+		}
+		if !w.LastFailureAt.Equal(now) {
+			t.Fatalf("LastFailureAt = %v, want %v", w.LastFailureAt, now)
+		}
+		now = now.Add(time.Minute)
+	}
+}
+
 func TestAttemptWindow_RecordFailure(t *testing.T) {
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	t.Run("increments counter and returns nil below the threshold", func(t *testing.T) {
-		w := AttemptWindow{}
-		now := start
-
-		for i := 1; i < MaxLoginFailures; i++ {
-			if err := w.RecordFailure(now); err != nil {
-				t.Fatalf("RecordFailure #%d error = %v, want nil", i, err)
-			}
-			if w.Failures != i {
-				t.Fatalf("after #%d: Failures = %d, want %d", i, w.Failures, i)
-			}
-			if !w.FirstFailureAt.Equal(start) {
-				t.Fatalf("FirstFailureAt = %v, want %v", w.FirstFailureAt, start)
-			}
-			if !w.LastFailureAt.Equal(now) {
-				t.Fatalf("LastFailureAt = %v, want %v", w.LastFailureAt, now)
-			}
-			now = now.Add(time.Minute)
-		}
+		assertFailuresBelowThreshold(t, start)
 	})
 
 	t.Run("returns ErrTooManyAttempts on the MaxLoginFailures-th failure", func(t *testing.T) {
-		w := AttemptWindow{}
-		now := start
-
-		for i := 1; i < MaxLoginFailures; i++ {
-			if err := w.RecordFailure(now); err != nil {
-				t.Fatalf("RecordFailure #%d error = %v, want nil", i, err)
-			}
-		}
-		// The 15th failure trips the threshold.
-		err := w.RecordFailure(now)
-		if !errors.Is(err, ErrTooManyAttempts) {
-			t.Fatalf("RecordFailure #%d error = %v, want ErrTooManyAttempts", MaxLoginFailures, err)
-		}
+		var w AttemptWindow
+		fillWindowPastThreshold(t, &w, start)
 		if w.Failures != MaxLoginFailures {
 			t.Fatalf("Failures = %d, want %d", w.Failures, MaxLoginFailures)
 		}
