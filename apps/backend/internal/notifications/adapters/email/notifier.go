@@ -1,3 +1,4 @@
+// Package email renders reminder emails and sends them through the platform mailer.
 package email
 
 import (

@@ -1,3 +1,4 @@
+// Package postgres implements the admin application ports with cross-context SQLC queries.
 package postgres
 
 import (

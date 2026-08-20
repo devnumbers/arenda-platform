@@ -1,3 +1,5 @@
+// Package http holds the identity HTTP adapters: authentication and phone-change endpoints, profile updates,
+// logout flows and session loading.
 package http
 
 import (

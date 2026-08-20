@@ -1,3 +1,5 @@
+// Package postgres holds the notifications persistence adapters: reminder and push-subscription repositories
+// and the owner contact resolver.
 package postgres
 
 import (

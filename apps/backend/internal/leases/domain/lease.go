@@ -1,3 +1,5 @@
+// Package domain defines the leases domain model: leases, operations with their status lifecycle, recurring
+// operations, rent schedules and tenant contacts.
 package domain
 
 import (

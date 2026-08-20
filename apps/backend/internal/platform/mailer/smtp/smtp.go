@@ -1,3 +1,4 @@
+// Package smtp sends mailer messages over SMTP.
 package smtp
 
 import (

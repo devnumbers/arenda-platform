@@ -1,3 +1,4 @@
+// Package observability initializes the OpenTelemetry SDK (tracer and meter providers) with a combined Shutdown flush.
 package observability
 
 import (

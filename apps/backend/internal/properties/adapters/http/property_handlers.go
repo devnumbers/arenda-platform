@@ -1,3 +1,5 @@
+// Package http holds the properties HTTP adapters: property lifecycle endpoints with photos and contacts,
+// operations summaries and data export.
 package http
 
 import (

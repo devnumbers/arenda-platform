@@ -1,3 +1,4 @@
+// Package pgconv converts between Go domain values (UUIDs, timestamps) and pgx wire types.
 package pgconv
 
 import (

@@ -1,3 +1,5 @@
+// Package encryption provides the Encryptor port and its AES implementation: at-rest encryption, deterministic
+// encryption for searchable columns and HMAC token hashing.
 package encryption
 
 import (

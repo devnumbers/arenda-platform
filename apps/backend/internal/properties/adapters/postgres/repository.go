@@ -1,3 +1,5 @@
+// Package postgres holds the properties persistence adapters: property, photo and contact repositories with
+// occupancy queries.
 package postgres
 
 import (

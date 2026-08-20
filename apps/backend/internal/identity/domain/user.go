@@ -1,3 +1,5 @@
+// Package domain defines the identity domain model: users with roles and timezones, phone and email values,
+// sessions, login codes with purposes and attempt windows.
 package domain
 
 import (

@@ -1,3 +1,4 @@
+// Package postgres persists popup views: recording seen popups and listing the ones still pending per user.
 package postgres
 
 import (

@@ -1,3 +1,4 @@
+// Package tzresolver defines the timezone-resolution and reminder-rescheduling ports shared by Rental contexts.
 package tzresolver
 
 import (

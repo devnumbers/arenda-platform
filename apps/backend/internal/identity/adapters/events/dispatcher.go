@@ -1,3 +1,4 @@
+// Package events publishes identity's outbound events (UserRegistered) through the platform event dispatcher.
 package events
 
 import (

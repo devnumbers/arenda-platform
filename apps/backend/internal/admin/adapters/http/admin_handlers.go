@@ -1,3 +1,5 @@
+// Package http holds the admin HTTP adapters: read-only oversight endpoints over users, properties, leases,
+// operations, contacts, stats and audit logs.
 package http
 
 import (

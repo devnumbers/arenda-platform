@@ -1,3 +1,5 @@
+// Package postgres holds the billing persistence adapters: repositories for tariffs, subscriptions, payments,
+// payment methods, card binding sessions and the subscription transition log.
 package postgres
 
 import (

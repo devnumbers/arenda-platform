@@ -1,3 +1,4 @@
+// Package domain defines the popup registry: stable keys of onboarding popups and their view markers (ADR 0023).
 package domain
 
 // PopupKey identifies an info popup the product can show to a user. Keys are

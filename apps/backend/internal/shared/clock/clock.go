@@ -1,3 +1,4 @@
+// Package clock abstracts the time source so domain and application logic stay testable with deterministic time.
 package clock
 
 import "time"

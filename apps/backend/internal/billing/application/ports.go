@@ -1,3 +1,5 @@
+// Package application holds the billing use cases and ports: the subscription lifecycle with its worker phases,
+// payment, tariff and payment-method services, onboarding and grace-event publishing.
 package application
 
 import (

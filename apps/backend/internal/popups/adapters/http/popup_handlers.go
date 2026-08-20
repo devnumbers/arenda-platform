@@ -1,3 +1,4 @@
+// Package http holds the popups HTTP adapters: the pending-popup list and the mark-seen endpoint.
 package http
 
 import (

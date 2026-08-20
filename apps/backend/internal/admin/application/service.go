@@ -1,3 +1,4 @@
+// Package application holds the admin use cases and ports: cross-user, cross-context read-only oversight operations.
 package application
 
 import (

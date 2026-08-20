@@ -1,3 +1,5 @@
+// Package application holds the notifications use cases and ports: reminder scheduling and multi-channel
+// dispatch, per-channel preferences, push subscriptions and direct notifications.
 package application
 
 import (

@@ -1,3 +1,4 @@
+// Package sms dispatches reminders as SMS messages through the SMSSender port.
 package sms
 
 import (

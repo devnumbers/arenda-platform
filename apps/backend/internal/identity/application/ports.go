@@ -1,3 +1,5 @@
+// Package application holds the identity use cases and ports: authentication by phone and login code, profile
+// and phone-change flows, session lifecycle and logout.
 package application
 
 import (

@@ -1,3 +1,4 @@
+// Package pgerr classifies PostgreSQL driver errors (unique, foreign-key violations) for sentinel mapping.
 package pgerr
 
 import (

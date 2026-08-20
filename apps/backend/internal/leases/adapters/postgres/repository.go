@@ -1,3 +1,5 @@
+// Package postgres holds the leases persistence adapters: lease, operation, recurring-operation, category and
+// tenant-contact repositories, plus the property billing lifecycle implementation.
 package postgres
 
 import (

@@ -1,3 +1,5 @@
+// Package domain defines the notifications domain model: reminders with their lifecycle, calendar planning,
+// per-channel preferences and push subscriptions.
 package domain
 
 import (

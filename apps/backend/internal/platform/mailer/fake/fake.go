@@ -1,3 +1,4 @@
+// Package fake is a logging no-send mailer for development and tests.
 package fake
 
 import (

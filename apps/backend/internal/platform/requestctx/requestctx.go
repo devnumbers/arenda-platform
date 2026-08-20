@@ -1,3 +1,4 @@
+// Package requestctx carries request-scoped diagnostics (request ID, trace ID, client IP) through context.
 package requestctx
 
 import "context"

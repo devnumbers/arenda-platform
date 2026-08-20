@@ -1,3 +1,5 @@
+// Package httpsupport holds HTTP cross-cutting support for all contexts: the middleware chain (session,
+// logging, recovery, rate limiting, admin-only, readonly gate), problem mapping and request diagnostics.
 package httpsupport
 
 import (

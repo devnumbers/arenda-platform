@@ -1,3 +1,4 @@
+// Package config loads and validates backend configuration from environment variables across APP_ENV profiles.
 package config
 
 import (

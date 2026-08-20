@@ -1,3 +1,4 @@
+// Package policy is the single authorization point mapping an actor and a data owner to a role (ADR 0028).
 package policy
 
 import (

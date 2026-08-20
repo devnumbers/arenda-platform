@@ -1,3 +1,5 @@
+// Package domain defines the billing domain model: tariffs, subscriptions and the transition log, subscription
+// payments, payment methods and card binding sessions.
 package domain
 
 import (

@@ -1,3 +1,4 @@
+// Package storage stores property photos through the storage port: the S3-compatible adapter and its fake.
 package storage
 
 import (

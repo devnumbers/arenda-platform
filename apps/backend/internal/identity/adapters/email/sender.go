@@ -1,3 +1,4 @@
+// Package email delivers identity login codes: the LoginCodeSender adapter rendering the one-time-code message.
 package email
 
 import (

@@ -1,3 +1,4 @@
+// Package timeutil provides calendar-day helpers that interpret timestamps in explicit time locations.
 package timeutil
 
 import "time"

@@ -1,3 +1,5 @@
+// Package http holds the leases HTTP adapters: lease, operation, recurring-operation and category endpoints,
+// with the presenter mapping domain rows to API views.
 package http
 
 import (

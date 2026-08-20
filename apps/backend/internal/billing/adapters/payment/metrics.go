@@ -1,3 +1,4 @@
+// Package payment holds provider-neutral adapter plumbing: OTel metrics for provider requests, latency and errors.
 package payment
 
 import (

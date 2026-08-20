@@ -1,3 +1,5 @@
+// Package application holds the properties use cases and ports: property lifecycle (create, archive, delete),
+// photos, contacts and occupancy.
 package application
 
 import (

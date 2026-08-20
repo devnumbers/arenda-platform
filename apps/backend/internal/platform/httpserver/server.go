@@ -1,3 +1,5 @@
+// Package httpserver is the HTTP composition root: it builds the chi handler that wires every context's
+// endpoints, middleware and routes.
 package httpserver
 
 import (

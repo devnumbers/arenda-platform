@@ -1,3 +1,4 @@
+// Package scheduler holds the identity cleaner worker that deletes expired sessions and login codes.
 package scheduler
 
 import (

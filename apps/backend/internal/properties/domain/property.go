@@ -1,3 +1,5 @@
+// Package domain defines the property domain model: properties with per-type attributes, photo metadata and
+// property contacts.
 package domain
 
 import (

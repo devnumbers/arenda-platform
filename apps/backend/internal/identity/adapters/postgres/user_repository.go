@@ -1,3 +1,5 @@
+// Package postgres holds the identity persistence adapters: user, session, login-code and attempt-window
+// repositories, with deterministic phone encryption at the storage boundary.
 package postgres
 
 import (

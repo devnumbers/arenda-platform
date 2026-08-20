@@ -1,3 +1,5 @@
+// Package tzresolver resolves owner timezones from the users table with an in-process cache, implementing the
+// shared resolver port.
 package tzresolver
 
 import (

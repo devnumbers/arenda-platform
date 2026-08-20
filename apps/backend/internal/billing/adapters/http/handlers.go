@@ -1,3 +1,5 @@
+// Package http holds the billing HTTP adapters: tariff, subscription and payment-method endpoints, the
+// synchronous T-Kassa webhook, the readonly gate and the dev-only fake-payment confirmation routes.
 package http
 
 import (

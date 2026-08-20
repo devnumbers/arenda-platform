@@ -1,3 +1,4 @@
+// Package database owns the pgx connection pool: lifecycle, runtime tuning, migrations and instrumentation.
 package database
 
 import (

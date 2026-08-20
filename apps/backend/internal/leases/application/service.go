@@ -1,3 +1,5 @@
+// Package application holds the leases use cases and ports: lease lifecycle, operations, recurring operations,
+// categories, tenant contacts, summaries, export and overdue scanning.
 package application
 
 import (
