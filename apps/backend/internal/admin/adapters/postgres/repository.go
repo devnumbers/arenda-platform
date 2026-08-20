@@ -31,7 +31,9 @@ type AdminRepository struct {
 }
 
 // NewAdminRepository creates a new admin repository.
-func NewAdminRepository(db postgres.DBTX, enc encryption.Encryptor, clk clock.Clock, occupancy propertiesapp.OccupancyProvider) *AdminRepository {
+func NewAdminRepository(
+	db postgres.DBTX, enc encryption.Encryptor, clk clock.Clock, occupancy propertiesapp.OccupancyProvider,
+) *AdminRepository {
 	return &AdminRepository{db: db, enc: enc, clock: clk, occupancy: occupancy}
 }
 
@@ -182,7 +184,9 @@ func (r *AdminRepository) CountTenantContactsByOwner(ctx context.Context, ownerI
 }
 
 // ListProperties implements PropertyRepository.ListProperties.
-func (r *AdminRepository) ListProperties(ctx context.Context, filters adminapp.AdminPropertyFilters) ([]adminapp.AdminPropertyView, int64, error) {
+func (r *AdminRepository) ListProperties(
+	ctx context.Context, filters adminapp.AdminPropertyFilters,
+) ([]adminapp.AdminPropertyView, int64, error) {
 	q := escapeLikePattern(filters.Q)
 	total, err := r.q().CountPropertiesAdmin(ctx, postgres.CountPropertiesAdminParams{
 		OwnerID: pgconv.UUIDToPgtype(filters.OwnerID),
@@ -237,7 +241,9 @@ func adminGetPropertyRowToListRow(row postgres.GetPropertyByIDAdminRow) postgres
 	return postgres.ListPropertiesAdminRow(row)
 }
 
-func (r *AdminRepository) propertyViewFromRow(ctx context.Context, row postgres.ListPropertiesAdminRow) (adminapp.AdminPropertyView, error) {
+func (r *AdminRepository) propertyViewFromRow(
+	ctx context.Context, row postgres.ListPropertiesAdminRow,
+) (adminapp.AdminPropertyView, error) {
 	propType, err := propertiesdomain.ParsePropertyType(row.Type)
 	if err != nil {
 		return adminapp.AdminPropertyView{}, fmt.Errorf("invalid property type: %w", err)
@@ -414,7 +420,9 @@ func (r *AdminRepository) leaseViewFromRow(row postgres.ListLeasesAdminRow, now 
 }
 
 // ListTenantContacts implements TenantContactRepository.ListTenantContacts.
-func (r *AdminRepository) ListTenantContacts(ctx context.Context, filters adminapp.AdminTenantContactFilters) ([]adminapp.AdminTenantContactView, int64, error) {
+func (r *AdminRepository) ListTenantContacts(
+	ctx context.Context, filters adminapp.AdminTenantContactFilters,
+) ([]adminapp.AdminTenantContactView, int64, error) {
 	q := escapeLikePattern(filters.Q)
 	total, err := r.q().CountTenantContactsAdmin(ctx, postgres.CountTenantContactsAdminParams{
 		OwnerID: pgconv.UUIDToPgtype(filters.OwnerID),
@@ -467,7 +475,9 @@ func adminGetTenantContactRowToListRow(row postgres.GetTenantContactByIDAdminRow
 	return postgres.ListTenantContactsAdminRow(row)
 }
 
-func (r *AdminRepository) tenantContactViewFromRow(ctx context.Context, row postgres.ListTenantContactsAdminRow) (adminapp.AdminTenantContactView, error) {
+func (r *AdminRepository) tenantContactViewFromRow(
+	ctx context.Context, row postgres.ListTenantContactsAdminRow,
+) (adminapp.AdminTenantContactView, error) {
 	ownerPhone, err := r.decryptPhone(ctx, row.OwnerPhone, row.OwnerPhoneEncrypted)
 	if err != nil {
 		return adminapp.AdminTenantContactView{}, err
@@ -491,8 +501,10 @@ func (r *AdminRepository) tenantContactViewFromRow(ctx context.Context, row post
 }
 
 // ListPropertyContacts implements PropertyContactRepository.ListPropertyContacts.
-// property_contacts.phone is plaintext, so no decryption is needed.
-func (r *AdminRepository) ListPropertyContacts(ctx context.Context, filters adminapp.AdminPropertyContactFilters) ([]adminapp.AdminPropertyContactView, int64, error) {
+// The property_contacts.phone column is plaintext, so no decryption is needed.
+func (r *AdminRepository) ListPropertyContacts(
+	ctx context.Context, filters adminapp.AdminPropertyContactFilters,
+) ([]adminapp.AdminPropertyContactView, int64, error) {
 	total, err := r.q().CountPropertyContactsAdmin(ctx, pgconv.UUIDToPgtype(filters.PropertyID))
 	if err != nil {
 		return nil, 0, fmt.Errorf("count property contacts: %w", err)
@@ -526,7 +538,9 @@ func (r *AdminRepository) ListPropertyContacts(ctx context.Context, filters admi
 }
 
 // ListOperations implements OperationRepository.ListOperations.
-func (r *AdminRepository) ListOperations(ctx context.Context, filters adminapp.AdminOperationFilters) ([]adminapp.AdminOperationView, int64, error) {
+func (r *AdminRepository) ListOperations(
+	ctx context.Context, filters adminapp.AdminOperationFilters,
+) ([]adminapp.AdminOperationView, int64, error) {
 	q := escapeLikePattern(filters.Q)
 	total, err := r.q().CountOperationsAdmin(ctx, postgres.CountOperationsAdminParams{
 		OwnerID:    pgconv.UUIDToPgtype(filters.OwnerID),
@@ -630,7 +644,9 @@ func adminGetOperationRowToListRow(row postgres.GetOperationByIDAdminRow) postgr
 }
 
 // ListAuditLogs implements AuditLogRepository.ListAuditLogs.
-func (r *AdminRepository) ListAuditLogs(ctx context.Context, filters adminapp.AdminAuditLogFilters) ([]adminapp.AdminAuditLogView, int64, error) {
+func (r *AdminRepository) ListAuditLogs(
+	ctx context.Context, filters adminapp.AdminAuditLogFilters,
+) ([]adminapp.AdminAuditLogView, int64, error) {
 	params := postgres.ListAuditLogsAdminParams{
 		ActorID:    pgconv.UUIDToPgtype(filters.ActorID),
 		Action:     filters.Action,

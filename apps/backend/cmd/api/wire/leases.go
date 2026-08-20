@@ -28,7 +28,10 @@ func WireLeasesRepos(p platformDeps, reminderScheduler notificationsapp.Reminder
 	leaseRepo := leasespg.NewLeaseRepository(p.DB)
 	categoryRepo := leasespg.NewOperationCategoryRepository(p.DB)
 	categoryService := leasesapp.NewCategoryService(categoryRepo, p.AuditRecorder)
-	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(operationRepo, recurringOpRepo, leaseRepo, categoryRepo, reminderScheduler, p.AuditRecorder, p.Clock)
+	propertyBillingLifecycle := leasespg.NewPropertyBillingLifecycle(
+		operationRepo, recurringOpRepo, leaseRepo, categoryRepo,
+		reminderScheduler, p.AuditRecorder, p.Clock,
+	)
 
 	return &LeasesRepos{
 		OperationRepo:            operationRepo,
@@ -66,7 +69,7 @@ func WireLeasesServices(
 	leasePropertyContactRepo := leasespg.NewPropertyContactRepository(p.DB)
 	tenantContactRepo := leasespg.NewTenantContactRepository(p.DB)
 
-	// factory is the single canonical txStoreFactory bundling the leases
+	// The single canonical txStoreFactory bundles the leases
 	// repositories, the cross-context reminder scheduler, the audit recorder,
 	// and the UoW (ADR 0033 γ-factory). It is passed to the three leases
 	// services that open their own transactions so adding an Nth repository is
@@ -111,7 +114,10 @@ func WireLeasesServices(
 		p.Policy,
 		p.Logger,
 	)
-	exportService := leasesapp.NewExportService(repos.OperationRepo, repos.LeaseRepo, leasePropertyRepo, leasePropertyContactRepo, p.Policy, p.Clock, p.Logger)
+	exportService := leasesapp.NewExportService(
+		repos.OperationRepo, repos.LeaseRepo, leasePropertyRepo, leasePropertyContactRepo,
+		p.Policy, p.Clock, p.Logger,
+	)
 	recurringOperationService := leasesapp.NewRecurringOperationService(
 		repos.RecurringOpRepo,
 		repos.OperationRepo,

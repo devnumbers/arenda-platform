@@ -197,11 +197,11 @@ type AdminAuditLogView struct {
 // AdminAuditLogFilters carries optional filters for the admin audit log list.
 // Zero values disable the filter.
 type AdminAuditLogFilters struct {
-	ActorID    uuid.UUID // uuid.Nil = off
+	ActorID    uuid.UUID // Off when uuid.Nil.
 	Action     string
 	EntityType string
-	DateFrom   time.Time // zero = off
-	DateTo     time.Time // zero = off; EXCLUSIVE upper bound
+	DateFrom   time.Time // Off when zero.
+	DateTo     time.Time // Off when zero; exclusive upper bound.
 	Limit      int
 	Offset     int
 	Sort       string

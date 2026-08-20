@@ -124,11 +124,13 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 // default (issue #248) — and the wrap below names the env vars so the error
 // is actionable in local, where the config layer allows an empty
 // T_KASSA_BASE_URL.
-func wirePaymentProvider(cfg *config.Config, log *slog.Logger, clk clock.Clock, metrics *payment.Metrics) (billingapp.PaymentProvider, error) {
+func wirePaymentProvider(
+	cfg *config.Config, log *slog.Logger, clk clock.Clock, metrics *payment.Metrics,
+) (billingapp.PaymentProvider, error) {
 	switch cfg.PaymentProvider {
-	case "fake":
+	case providerFake:
 		return paymentfake.NewProvider(cfg.AppBaseURL, log, clk, metrics), nil
-	case "tkassa":
+	case providerTkassa:
 		provider, err := paymenttkassa.NewProvider(paymenttkassa.Config{
 			BaseURL:        cfg.TKassaBaseURL,
 			TerminalKey:    cfg.TKassaTerminalKey,
@@ -140,7 +142,8 @@ func wirePaymentProvider(cfg *config.Config, log *slog.Logger, clk clock.Clock, 
 			RetryMaxDelay:  cfg.TKassaRetryMaxDelay,
 		}, log, metrics)
 		if err != nil {
-			return nil, fmt.Errorf("init tkassa payment provider (check T_KASSA_BASE_URL, T_KASSA_TERMINAL_KEY, T_KASSA_PASSWORD, APP_BASE_URL): %w", err)
+			return nil, fmt.Errorf("init tkassa payment provider (check T_KASSA_BASE_URL, T_KASSA_TERMINAL_KEY, "+
+				"T_KASSA_PASSWORD, APP_BASE_URL): %w", err)
 		}
 		return provider, nil
 	default:

@@ -39,6 +39,14 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
+// providerFake and providerTkassa are the PAYMENT_PROVIDER values pinned by
+// config validation (providerFake doubles as the no-integration EMAIL_SENDER
+// value); the wire functions select adapters by them.
+const (
+	providerFake   = "fake"
+	providerTkassa = "tkassa"
+)
+
 // platformDeps bundles the platform-level resources shared across every module
 // constructor. Fields are populated once by WirePlatform and passed by value
 // (or pointer where appropriate) into the per-module wire functions.
@@ -57,7 +65,7 @@ type platformDeps struct {
 	UoW           transaction.UoW
 	OTelShutdown  func(ctx context.Context) error
 	StopSignalCtx context.CancelFunc
-	PoolConfigLog func() // logs the database pool config; nil-safe
+	PoolConfigLog func() // Logs the database pool config; nil-safe.
 }
 
 // Platform is the result of WirePlatform. It exposes the shared platform
@@ -123,7 +131,7 @@ func WirePlatform() (*Platform, context.Context, error) {
 		return nil, nil, fmt.Errorf("encryption: %w", err)
 	}
 	if cfg.EncryptionKey == "" {
-		if cfg.PaymentProvider != "fake" {
+		if cfg.PaymentProvider != providerFake {
 			stop()
 			return nil, nil, errors.New("ENCRYPTION_KEY is required when using a real payment provider")
 		}

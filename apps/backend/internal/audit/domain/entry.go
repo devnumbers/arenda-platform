@@ -171,12 +171,12 @@ const (
 type Entry struct {
 	ID         uuid.UUID
 	CreatedAt  time.Time
-	ActorID    *uuid.UUID // nil = system/anonymous
+	ActorID    *uuid.UUID // System or anonymous when nil.
 	ActorRole  ActorRole
 	Action     Action
-	EntityType EntityType     // "" = none
-	EntityID   *uuid.UUID     // nil = none
-	Context    map[string]any // whitelist fields only, never PII/secrets
+	EntityType EntityType     // None when empty.
+	EntityID   *uuid.UUID     // None when nil.
+	Context    map[string]any // Whitelist fields only, never PII/secrets.
 	RequestID  string
 	IP         string
 }

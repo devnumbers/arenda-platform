@@ -55,7 +55,7 @@ func WireIdentity(
 	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
 	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
 
-	// factory is the single canonical txStoreFactory bundling the four identity
+	// The single canonical txStoreFactory bundles the four identity
 	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
 	// passed to every identity service so adding an Nth repository is a change
 	// here, not in six constructors.
@@ -84,7 +84,7 @@ func WireIdentity(
 			FromName: p.Cfg.SMTPFromName,
 			Timeout:  p.Cfg.SMTPTimeout,
 		})
-	case "fake":
+	case providerFake:
 		emailMailer = mailerfake.NewFakeSender(p.Logger)
 	default:
 		return nil, fmt.Errorf("unsupported EMAIL_SENDER: %s", p.Cfg.EmailSender)
@@ -92,8 +92,8 @@ func WireIdentity(
 
 	emailSender := identityemail.NewSender(emailMailer, p.Renderer)
 
-	// loginCodeService is the deep module for login-code issuance/verification
-	// shared by AuthenticationService and PhoneChangeService (ADR 0033, step 4).
+	// Login-code issuance/verification is a deep module shared by
+	// AuthenticationService and PhoneChangeService (ADR 0033, step 4).
 	loginCodeService := identityapp.NewLoginCodeService(
 		factory,
 		identityapp.LoginCodeServiceConfig{

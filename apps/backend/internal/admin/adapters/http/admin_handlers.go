@@ -74,7 +74,9 @@ func (h *AdminHandlers) GetAdminUser(w http.ResponseWriter, r *http.Request, id 
 }
 
 // ListAdminUserProperties implements GET /admin/users/{id}/properties.
-func (h *AdminHandlers) ListAdminUserProperties(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserPropertiesParams) {
+func (h *AdminHandlers) ListAdminUserProperties(
+	w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserPropertiesParams,
+) {
 	filters := adminapp.AdminPropertyFilters{Limit: 20, Offset: 0}
 	httpsupport.OptInt(&filters.Limit, params.Limit)
 	httpsupport.OptInt(&filters.Offset, params.Offset)
@@ -127,7 +129,9 @@ func (h *AdminHandlers) GetAdminProperty(w http.ResponseWriter, r *http.Request,
 }
 
 // ListAdminUserLeases implements GET /admin/users/{id}/leases.
-func (h *AdminHandlers) ListAdminUserLeases(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserLeasesParams) {
+func (h *AdminHandlers) ListAdminUserLeases(
+	w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserLeasesParams,
+) {
 	filters := adminapp.AdminLeaseFilters{Limit: 20, Offset: 0}
 	httpsupport.OptInt(&filters.Limit, params.Limit)
 	httpsupport.OptInt(&filters.Offset, params.Offset)
@@ -181,7 +185,9 @@ func (h *AdminHandlers) GetAdminLease(w http.ResponseWriter, r *http.Request, id
 }
 
 // ListAdminUserTenantContacts implements GET /admin/users/{id}/tenant-contacts.
-func (h *AdminHandlers) ListAdminUserTenantContacts(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserTenantContactsParams) {
+func (h *AdminHandlers) ListAdminUserTenantContacts(
+	w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserTenantContactsParams,
+) {
 	filters := adminapp.AdminTenantContactFilters{Limit: 20, Offset: 0}
 	httpsupport.OptInt(&filters.Limit, params.Limit)
 	httpsupport.OptInt(&filters.Offset, params.Offset)
@@ -250,7 +256,9 @@ func (h *AdminHandlers) GetAdminTenantContact(w http.ResponseWriter, r *http.Req
 }
 
 // ListAdminUserOperations implements GET /admin/users/{id}/operations.
-func (h *AdminHandlers) ListAdminUserOperations(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserOperationsParams) {
+func (h *AdminHandlers) ListAdminUserOperations(
+	w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserOperationsParams,
+) {
 	filters := adminapp.AdminOperationFilters{Limit: 20, Offset: 0}
 	httpsupport.OptInt(&filters.Limit, params.Limit)
 	httpsupport.OptInt(&filters.Offset, params.Offset)
@@ -364,7 +372,9 @@ func (h *AdminHandlers) GetAdminAuditLog(w http.ResponseWriter, r *http.Request,
 }
 
 // ListAdminUserAuditLogs implements GET /admin/users/{id}/audit-logs.
-func (h *AdminHandlers) ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserAuditLogsParams) {
+func (h *AdminHandlers) ListAdminUserAuditLogs(
+	w http.ResponseWriter, r *http.Request, id uuid.UUID, params openapi.ListAdminUserAuditLogsParams,
+) {
 	filters := adminapp.AdminAuditLogFilters{Limit: 20, Offset: 0}
 	httpsupport.OptInt(&filters.Limit, params.Limit)
 	httpsupport.OptInt(&filters.Offset, params.Offset)
@@ -383,10 +393,10 @@ func (h *AdminHandlers) ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Re
 	)
 }
 
-// auditLogDateRange converts the date_from/date_to query params to timestamptz
-// filter bounds. date_from is inclusive (00:00:00 UTC); date_to is converted
-// to an exclusive upper bound by adding 24 hours. Absent params yield zero
-// times, which disable the filter.
+// The auditLogDateRange helper converts the date_from/date_to query params to
+// timestamptz filter bounds. The date_from bound is inclusive (00:00:00 UTC);
+// date_to is converted to an exclusive upper bound by adding 24 hours. Absent
+// params yield zero times, which disable the filter.
 func auditLogDateRange(from, to *openapi_types.Date) (start, end time.Time) {
 	var dateFrom, dateTo time.Time
 	if from != nil {

@@ -26,7 +26,8 @@ func NewPopupHandlers(svc *popupsapp.PopupService, logger *slog.Logger) *PopupHa
 func (h *PopupHandlers) GetPendingPopups(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -42,7 +43,8 @@ func (h *PopupHandlers) GetPendingPopups(w http.ResponseWriter, r *http.Request)
 func (h *PopupHandlers) MarkPopupSeen(w http.ResponseWriter, r *http.Request, popupKey string) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

@@ -30,10 +30,12 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 	emailVerifyLimiter := httpsupport.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailVerifyPer15Min)/(15*60), emailVerifyBurst, 1*time.Hour)
 
 	phoneChangeSendBurst := min(3, cfg.RateLimit.PhoneChangeSendPerHour)
-	phoneChangeSendLimiter := httpsupport.NewRateLimiter(rate.Every(time.Hour/time.Duration(cfg.RateLimit.PhoneChangeSendPerHour)), phoneChangeSendBurst, 1*time.Hour)
+	phoneChangeSendLimiter := httpsupport.NewRateLimiter(
+		rate.Every(time.Hour/time.Duration(cfg.RateLimit.PhoneChangeSendPerHour)), phoneChangeSendBurst, 1*time.Hour)
 
 	phoneChangeVerifyBurst := min(5, cfg.RateLimit.PhoneChangeVerifyPer15Min)
-	phoneChangeVerifyLimiter := httpsupport.NewRateLimiter(rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), phoneChangeVerifyBurst, 1*time.Hour)
+	phoneChangeVerifyLimiter := httpsupport.NewRateLimiter(
+		rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), phoneChangeVerifyBurst, 1*time.Hour)
 
 	clientErrorsLimiter := httpsupport.NewRateLimiter(rate.Every(2*time.Second), 10, time.Minute)
 

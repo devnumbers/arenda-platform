@@ -57,13 +57,14 @@ func WireProperties(
 		if err := photoStorage.HeadBucket(ctx); err != nil {
 			return nil, fmt.Errorf("photo storage: head bucket %q: %w", p.Cfg.PhotoStorageBucket, err)
 		}
-		p.Logger.InfoContext(ctx, "photo storage initialized", "provider", "s3", "bucket", p.Cfg.PhotoStorageBucket, "endpoint", p.Cfg.PhotoStorageEndpoint)
+		p.Logger.InfoContext(ctx, "photo storage initialized",
+			"provider", "s3", "bucket", p.Cfg.PhotoStorageBucket, "endpoint", p.Cfg.PhotoStorageEndpoint)
 	} else {
 		photoStorage = storage.NewFakeStorage(p.Cfg.PhotoStoragePublicBaseURL)
 		p.Logger.InfoContext(ctx, "photo storage initialized", "provider", "fake")
 	}
 
-	// factory is the single canonical txStoreFactory bundling the properties
+	// The single canonical txStoreFactory bundles the properties
 	// repositories, the cross-context ports, the audit recorder, and the UoW
 	// (ADR 0033 γ-factory). It is passed to both properties services so adding
 	// an Nth repository is a change here, not in several constructors.

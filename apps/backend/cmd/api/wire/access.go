@@ -64,9 +64,9 @@ var (
 // (built from the billing repos) plus the properties occupancy/owned-property
 // providers, so billingRepos is required; the properties adapters are rebuilt
 // here from the shared db pool (they are stateless pointers over the pool).
-// emailMailer is the platform mailer (wired by the identity module) used for
-// the invite email of the email invitation lifecycle (issue #161, T5) and the
-// sharing lifecycle emails (issue #162, T6).
+// The emailMailer parameter is the platform mailer (wired by the identity
+// module) used for the invite email of the email invitation lifecycle
+// (issue #161, T5) and the sharing lifecycle emails (issue #162, T6).
 func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer mailer.Sender) (*Access, error) {
 	memberRepo := accesspg.NewMembershipRepository(p.DB)
 	invitationRepo := accesspg.NewInvitationRepository(p.DB)
@@ -80,7 +80,7 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 
 	policy := accessapp.NewMembershipPolicy(ownerResolver, memberRepo)
 
-	// factory is the single canonical txStoreFactory bundling the access
+	// The single canonical txStoreFactory bundles the access
 	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
 	// passed to every access service so adding an Nth repository is a change
 	// here, not in several constructors.

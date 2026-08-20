@@ -92,11 +92,12 @@ linters:
     - iface                # идентичные интерфейсы — случайный дубль контракта
     - intrange             # for i := range n — modernize этот случай не ловит
     - testableexamples     # 0; Example-функции обязаны быть runnable
+    # --- ЭТАП 2, волны механики goconst/godot/lll закрыты (сетка #325, тикеты #360–#367) ---
+    - goconst              # повторяющиеся строки → константы (волна 314 → 0)
+    - lll                  # длина строки ≤140 (волна 605 → 0)
     # REMEDIATION (этап 2, волны сетки #325):
-    # - goconst          # 314 (56 прод): вынос констант
     # - cyclop           # 57 при max-complexity 15
     # - gocognit         # 64 при min-complexity 25
-    # - lll              # 605 при line-length 140
     # - paralleltest     # 994: t.Parallel() поэтапно с юнит-пакетов
   settings:
     depguard:
@@ -369,8 +370,11 @@ linters:
           arguments:
             - strings\.Builder\.Write(String|Byte|Rune)
     godot:
-      scope: declarations
-      # REMEDIATION (этап 2, волны механики #360–#367): scope all + capital — 393.
+      # Волна механики закрыта (сетка #325, флип тикета #367): strict-режим.
+      scope: all
+      capital: true
+    lll:
+      line-length: 140
     nolintlint:
       allow-unused: false
       require-explanation: true

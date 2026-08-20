@@ -134,13 +134,13 @@ func TestWirePaymentProvider(t *testing.T) {
 	t.Run("fake", func(t *testing.T) {
 		t.Parallel()
 		provider, err := wirePaymentProvider(&config.Config{
-			PaymentProvider: "fake",
+			PaymentProvider: providerFake,
 			AppBaseURL:      "http://localhost:8080",
 		}, log, clk, metrics)
 		if err != nil {
 			t.Fatalf("wirePaymentProvider: %v", err)
 		}
-		if got, want := provider.Name(), billingdomain.PaymentProvider("fake"); got != want {
+		if got, want := provider.Name(), billingdomain.PaymentProvider(providerFake); got != want {
 			t.Fatalf("Name: got %q, want %q", got, want)
 		}
 	})
@@ -148,7 +148,7 @@ func TestWirePaymentProvider(t *testing.T) {
 	t.Run("tkassa", func(t *testing.T) {
 		t.Parallel()
 		provider, err := wirePaymentProvider(&config.Config{
-			PaymentProvider:   "tkassa",
+			PaymentProvider:   providerTkassa,
 			AppBaseURL:        "https://app.example",
 			TKassaBaseURL:     "https://rest-api-test.tinkoff.ru/v2/",
 			TKassaTerminalKey: "term",
@@ -158,7 +158,7 @@ func TestWirePaymentProvider(t *testing.T) {
 		if err != nil {
 			t.Fatalf("wirePaymentProvider: %v", err)
 		}
-		if got, want := provider.Name(), billingdomain.PaymentProvider("tkassa"); got != want {
+		if got, want := provider.Name(), billingdomain.PaymentProvider(providerTkassa); got != want {
 			t.Fatalf("Name: got %q, want %q", got, want)
 		}
 	})
@@ -166,7 +166,7 @@ func TestWirePaymentProvider(t *testing.T) {
 	t.Run("tkassa without explicit base URL fails with actionable error", func(t *testing.T) {
 		t.Parallel()
 		_, err := wirePaymentProvider(&config.Config{
-			PaymentProvider:   "tkassa",
+			PaymentProvider:   providerTkassa,
 			AppBaseURL:        "https://app.example",
 			TKassaTerminalKey: "term",
 			TKassaPassword:    "pass",
