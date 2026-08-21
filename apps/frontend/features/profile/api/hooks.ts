@@ -6,7 +6,7 @@ import {
   type UseMutationResult,
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
+import type { ApiError } from '@/shared/api/errors';
 import { authKeys } from '@/shared/api/query-keys';
 import { mapMeResponse } from '@/entities/user';
 import type {

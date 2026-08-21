@@ -48,7 +48,7 @@ No form library and no schema validator — this is deliberate, not a gap:
 - `shared/ui/` is the app's own kit: folder-per-component (`Button.tsx` + `Button.module.css` + `index.ts`), ~23 wrappers. Wrap, don't bypass; `/ui-kit` is the gallery route.
 - HeroUI v3 is provider-less: import `@heroui/react` components directly. `@heroui/styles` appears exactly once — the `@import` in `app/globals.css` — and never in TSX.
 - **React Compiler is on** (`next.config.ts`). Manual `useMemo`/`useCallback`/`memo` is not the default: write plain code and let the compiler memoize. Reach for manual memoization only where the compiler provably can't help (values escaping to non-React code) and justify it with a comment.
-- The memoization, derived-state, and effect-synchronizer smells are enforced by the tool, not the review rubric: the react-hooks v7 compiler rules already run through `eslint-config-next` 16.3.1 (the plugin's `recommended` preset is spread whole) — `purity`, `set-state-in-effect`, `set-state-in-render`, `use-memo`, `immutability`, `refs`, `preserve-manual-memoization`, `static-components`, `globals`, `error-boundaries`, `gating` at error; `rules-of-hooks` at error; `incompatible-library`/`unsupported-syntax` at warn; `exhaustive-deps` at warn until bar wave A flips it. Fix them at lint time.
+- The memoization, derived-state, and effect-synchronizer smells are enforced by the tool, not the review rubric: the react-hooks v7 compiler rules already run through `eslint-config-next` 16.3.1 (the plugin's `recommended` preset is spread whole) — `purity`, `set-state-in-effect`, `set-state-in-render`, `use-memo`, `immutability`, `refs`, `preserve-manual-memoization`, `static-components`, `globals`, `error-boundaries`, `gating` at error; `rules-of-hooks` at error; `incompatible-library`/`unsupported-syntax` at warn; `exhaustive-deps` at error (quality bar wave A). Fix them at lint time.
 
 ## Navigation and browser history
 
@@ -67,15 +67,15 @@ Unit tests are pure-logic only — vitest runs in a node environment with no DOM
 
 ## Quality bar — accepted waves (map #326, spec #378)
 
-The quality bar is decided (bar [#330](https://github.com/devnumbers/arenda-platform/issues/330), spec [#378](https://github.com/devnumbers/arenda-platform/issues/378)) and lands ticket by ticket — the patterns below are the standard now; write to them without waiting for the flips. Flip conventions: wave A lands flip-with-fix (config flips together with its code fixes); waves B/C land fix-then-flip per rule family — a family's advisory counter drops to zero, then the rule flips to error, and this section plus `docs/agents/tooling.md` update in the same change. Already active today, ahead of the waves: the react-hooks v7 compiler rules (see the React Compiler section above).
+The quality bar is decided (bar [#330](https://github.com/devnumbers/arenda-platform/issues/330), spec [#378](https://github.com/devnumbers/arenda-platform/issues/378)) and lands ticket by ticket — the patterns below are the standard now; write to them without waiting for the flips. Flip conventions: wave A lands flip-with-fix (config flips together with its code fixes); waves B/C land fix-then-flip per rule family — a family's advisory counter drops to zero, then the rule flips to error, and this section plus `docs/agents/tooling.md` update in the same change. Already active today: wave A (ticket #390, section below) and, ahead of the waves, the react-hooks v7 compiler rules (see the React Compiler section above).
 
-### Wave A — configuration
+### Wave A — configuration (in force since 2026-08-21, ticket [#390](https://github.com/devnumbers/arenda-platform/issues/390))
 
-Enforced by ESLint, `tsconfig.json`, and `next.config.ts` once landed:
+Enforced by `eslint.config.mjs`, `tsconfig.json`, and `next.config.ts`:
 
-- `react-hooks/exhaustive-deps` at error; `switch-exhaustiveness-check`; `consistent-type-imports`.
-- Dangerous browser APIs banned via restricted rules — `dangerouslySetInnerHTML`, `innerHTML`, `insertAdjacentHTML`, `document.write`/`writeln`, `eval`, `new Function` — an XSS-class regression becomes mechanically impossible.
-- Ambient `*.svg` module declarations in the shared layer — the one real typing gap behind icon-import noise, not strict-lint noise.
+- `react-hooks/exhaustive-deps` at error; `switch-exhaustiveness-check` (the config's type-checked block — the `projectService` foundation the wave B families extend); `consistent-type-imports` — `import type` is the only legal spelling for type-only imports.
+- Dangerous browser APIs banned via restricted selectors — `dangerouslySetInnerHTML`, `innerHTML`, `insertAdjacentHTML`, `document.write`/`writeln`, `eval`, `new Function` — an XSS-class regression becomes mechanically impossible.
+- Ambient `*.svg` module declarations in the shared layer (`shared/assets/svg.d.ts`): svg imports are typed `FC<SVGProps<SVGSVGElement>>`, not `any`. The file must stay **first** in `tsconfig.json` `include` — with duplicate wildcard `*.svg` declarations the first into the program wins, and Next's image-types fallback (via `next-env.d.ts`) types svg as `any`.
 - tsconfig: `verbatimModuleSyntax`, `noImplicitOverride`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`; `reactStrictMode: true` explicit in `next.config.ts`.
 
 ### Wave B — type-checked core, rule by rule
@@ -96,15 +96,16 @@ A type-checked ESLint block (project service) with named rules, not a preset:
 
 ### Zero tolerance for suppressions
 
-`eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` — zero in manual code: fix the code, never suppress; a blocking CI counter guards the zero (accepted gate, `docs/agents/tooling.md`). The 15 existing frontend suppressions are being fixed in code during waves A/B. Generated code and build artifacts are outside the counter's scope.
+`eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` — zero in manual code: fix the code, never suppress; a blocking CI counter guards the zero (accepted gate, `docs/agents/tooling.md`). One frontend suppression survives (PhotoGrid's `set-state-in-effect`, #399's counter lands against it); the rest of the grid's 15 were already fixed in code. Generated code and build artifacts are outside the counter's scope.
 
-### Security contour — lint gates and served headers in force (decision #331, tickets #387/#388)
+### Security contour — lint gates and served headers in force (decision #331, tickets #387/#388; browser-API bans — wave A #390)
 
-Three blocking gates in `eslint.config.mjs`, wired through the existing lint runs (pre-commit `frontend lint`, the CI `frontend` job):
+Four blocking gates in `eslint.config.mjs`, wired through the existing lint runs (pre-commit `frontend lint`, the CI `frontend` job):
 
 - **Markdown stays secure by default**: the `rehype-raw` import is banned and the `urlTransform` prop may not be passed at all — react-markdown's default URL sanitizer is the policy; runtime sanitization (`rehype-sanitize`) was rejected. Changing the markdown content source from repo files to API/DB reopens the decision.
 - **`NEXT_PUBLIC_*` reads are banned** in every static form (member, computed literal, destructuring from `process.env`); the `PUBLIC_ENV_ALLOWLIST` in the config is the deliberate exposure list — empty today, so exposing a variable to the client bundle is a config edit, never a silent code read.
 - **Web storage is banned outside its two owners**: `localStorage`/`sessionStorage` (bare, `window.`, `globalThis.` forms) live only in `features/auth/lib/**` (login draft, resend cooldown) and `shared/lib/hooks/useDraftStore.ts` — session tokens stay in httpOnly cookies.
+- **Dangerous browser APIs are banned** (wave A): `dangerouslySetInnerHTML`, `innerHTML`, `insertAdjacentHTML`, `document.write`/`writeln`, `eval`, `new Function` — restricted selectors in the config's security block; zero usages today, the gate exists so an XSS-class regression is a lint error, not a review call.
 
 Security headers (decision #331, ticket #388) are served by `next.config.ts` — XCTO, XFO DENY, Referrer-Policy, Permissions-Policy, `poweredByHeader: false`, and CSP step 1 (`unsafe-inline` only for script/style; dev adds `'unsafe-eval'` for React Refresh). New external origins (CDN, fonts, analytics) require a `connect-src`/`img-src`/`font-src` edit there — same change as the registry update, never a silent code dependency.
 

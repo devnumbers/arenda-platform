@@ -54,10 +54,10 @@ export function ServiceWorkerRegister(): JSX.Element | null {
         // Defer registration to avoid competing with first-paint work.
         if (document.readyState === 'complete') {
             register();
-        } else {
-            window.addEventListener('load', register, { once: true });
-            return () => window.removeEventListener('load', register);
+            return undefined;
         }
+        window.addEventListener('load', register, { once: true });
+        return () => window.removeEventListener('load', register);
     }, []);
 
     useEffect(() => {
@@ -65,12 +65,14 @@ export function ServiceWorkerRegister(): JSX.Element | null {
         if (!('serviceWorker' in navigator)) return;
 
         const onMessage = (event: MessageEvent): void => {
-            const data = event.data;
+            // The SW posts `{ type: 'PUSH_NOTIFICATION_CLICK', url }`; held as
+            // unknown because MessageEvent.data is `any` on the DOM side.
+            const data: unknown = event.data;
             if (!data || typeof data !== 'object') return;
-            if (data.type !== 'PUSH_NOTIFICATION_CLICK') return;
+            if (!('type' in data) || data.type !== 'PUSH_NOTIFICATION_CLICK') return;
             // `resolveClickTarget` re-validates the URL the SW sent — same-origin
             // absolute path only, fallback to /dashboard otherwise.
-            const url = resolveClickTarget(data.url);
+            const url = resolveClickTarget('url' in data ? data.url : undefined);
             // Client-side navigation via the History API. The SW already focused
             // this window; we only need to move it to the click target.
             if (url !== window.location.pathname + window.location.search) {

@@ -40,7 +40,7 @@ function VariantIcon({
             return <BadgeInfo aria-hidden/>;
         case 'loading':
             return <Spinner color="current" size="sm"/>;
-        default:
+        case 'default':
             return null;
     }
 }

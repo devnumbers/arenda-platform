@@ -8,7 +8,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
+import type { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
 import { categoryKeys, type OperationCategoryType } from '@/shared/api/query-keys';
 

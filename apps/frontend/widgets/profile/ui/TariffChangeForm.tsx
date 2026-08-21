@@ -31,7 +31,7 @@ import type {
 } from '@/entities/billing';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { ROUTES } from '@/shared/config/routes';
-import { ApiError } from '@/shared/api/errors';
+import type { ApiError } from '@/shared/api/errors';
 import styles from './TariffChangeForm.module.css';
 
 type Period = 'month' | 'year';

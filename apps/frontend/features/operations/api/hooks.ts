@@ -13,7 +13,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
+import type { ApiError } from '@/shared/api/errors';
 import { categoryKeys, financeKeys, leaseKeys, operationKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 import { mapOperationResponse, mapOperationsResponse } from '@/entities/operation';

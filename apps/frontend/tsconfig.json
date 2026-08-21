@@ -5,6 +5,11 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -22,7 +27,12 @@
       "@/*": ["./*"]
     }
   },
+  // Порядок include существенен: shared/assets/svg.d.ts обязан попадать в
+  // программу раньше next-env.d.ts — при нескольких wildcard-декларациях
+  // '*.svg' побеждает первая, а фолбэк Next (image-types) типизирует svg
+  // как any (бар качества, волна A).
   "include": [
+    "shared/assets/svg.d.ts",
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",

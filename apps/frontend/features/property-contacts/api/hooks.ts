@@ -8,7 +8,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
+import type { ApiError } from '@/shared/api/errors';
 import { mapPropertyContactResponse } from '@/entities/property-contact';
 import type { PropertyContact } from '@/entities/property-contact';
 import { propertyContactKeys } from '@/shared/api/query-keys';

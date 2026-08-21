@@ -22,7 +22,7 @@ import {
 } from '@/features/operations';
 import {useOperationCategories} from '@/features/operation-categories';
 import {formatDateForApi} from '@/entities/operation';
-import {ApiError} from '@/shared/api/errors';
+import type {ApiError} from '@/shared/api/errors';
 import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
 import {PropertyDetailHeader} from './PropertyDetailHeader';

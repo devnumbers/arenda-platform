@@ -14,7 +14,7 @@ import {
   useSyncPaymentMethods,
 } from '@/features/billing';
 import { formatDate } from '@/shared/lib/format-date';
-import { ApiError } from '@/shared/api/errors';
+import type { ApiError } from '@/shared/api/errors';
 import styles from './PaymentMethodList.module.css';
 
 type DeleteModalProps = {

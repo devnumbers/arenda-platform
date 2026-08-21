@@ -92,6 +92,12 @@ const REHYPE_RAW_PATTERN = {
 const WEB_STORAGE_MESSAGE =
   "Web storage is owned by features/auth/lib and the shared draft store (shared/lib/hooks/useDraftStore) — tokens live in httpOnly cookies and must not spread into localStorage/sessionStorage (decision #331).";
 
+// XSS-class browser APIs banned outright (quality bar wave A, bar #330):
+// HTML injection sinks and dynamic code evaluation. Zero usages today — the
+// gate exists so a future regression is a lint error, not a review call.
+const DANGEROUS_BROWSER_API_MESSAGE =
+  "This browser API is an XSS-class sink (raw HTML injection or dynamic code evaluation) and is banned — render declarative React content instead (quality bar wave A, see apps/frontend/CODING_STANDARDS.md).";
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -145,6 +151,34 @@ const eslintConfig = defineConfig([
       // это правило ловит такие value-импорты. Type-импорты (`import type`)
       // плагин игнорирует by design — их ловит tsc (`npm run build` в CI).
       "import/no-unresolved": "error",
+    },
+  },
+  // Quality bar wave A (bar #330, ticket #390) — configuration flips.
+  // exhaustive-deps was warn via the next preset; 0 violations and 0
+  // suppressions in the tree, so the flip is free. consistent-type-imports
+  // lands together with tsconfig verbatimModuleSyntax — `import type` is the
+  // only legal spelling for type-only imports.
+  {
+    files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+    rules: {
+      "react-hooks/exhaustive-deps": "error",
+      "@typescript-eslint/consistent-type-imports": "error",
+    },
+  },
+  // The type-checked block (projectService). Wave A carries the one rule that
+  // needs type information — switch-exhaustiveness-check; the wave B families
+  // (ticket #393) land here fix-then-flip. Scoped exactly to tsconfig.json's
+  // include extensions — a linted file outside the project would fail to
+  // resolve its types.
+  {
+    files: ["**/*.{ts,mts,tsx}"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+      },
+    },
+    rules: {
+      "@typescript-eslint/switch-exhaustiveness-check": "error",
     },
   },
   {
@@ -203,7 +237,8 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Security contour (decision #331, ticket #387). react-markdown must stay
+  // Security contour (decision #331, ticket #387) + dangerous-browser-API bans
+  // (quality bar wave A, bar #330, ticket #390). react-markdown must stay
   // secure by default: raw HTML (`rehype-raw`) is banned at the import level
   // above, and the `urlTransform` URL sanitizer (default: protocol filtering)
   // may not be overridden or disabled. These blocks are the last in the config
@@ -219,6 +254,49 @@ const eslintConfig = defineConfig([
             "react-markdown must keep its secure default urlTransform — overriding or disabling it (urlTransform={null}) reopens XSS vectors (decision #331).",
         },
         ...publicEnvSelectors(),
+        // Wave A: XSS-class sinks — raw HTML injection and dynamic code
+        // evaluation (0 usages today; the gate makes a regression impossible).
+        // eval/Function/document.write are also matched through their
+        // window./globalThis. alias forms, mirroring the web-storage block.
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
+        {
+          selector: "MemberExpression[property.name='innerHTML']",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
+        {
+          selector: "CallExpression[callee.property.name='insertAdjacentHTML']",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
+        {
+          selector: "MemberExpression[object.name='document'][property.name=/^(write|writeln)$/]",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
+        {
+          selector:
+            "MemberExpression[object.object.name=/^(window|globalThis)$/][object.property.name='document'][property.name=/^(write|writeln)$/]",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
+        {
+          selector: "CallExpression[callee.name='eval']",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name=/^(window|globalThis)$/][callee.property.name='eval']",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
+        {
+          selector: "NewExpression[callee.name='Function']",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
+        {
+          selector:
+            "NewExpression[callee.object.name=/^(window|globalThis)$/][callee.property.name='Function']",
+          message: DANGEROUS_BROWSER_API_MESSAGE,
+        },
       ],
     },
   },

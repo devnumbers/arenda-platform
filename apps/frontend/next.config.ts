@@ -39,6 +39,9 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   reactCompiler: true,
+  // Явно, а не по умолчанию Next (true с 13.5.1): двойной рендер эффектов в
+  // dev — часть принятого бара качества (волна A, бар #330).
+  reactStrictMode: true,
   poweredByHeader: false,
   headers: async () => [
     {

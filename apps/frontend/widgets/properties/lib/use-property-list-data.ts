@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import {useArchivedProperties, useProperties} from '@/features/properties';
 import { useLeases } from '@/features/leases';
 import type {PropertiesViewMode} from './apply-filters';
-import { ApiError } from '@/shared/api/errors';
+import type { ApiError } from '@/shared/api/errors';
 import type { Property } from '@/entities/property';
 import type { Lease } from '@/entities/lease';
 import { getEffectiveLeaseStatus, isOpenLease } from '@/entities/lease';

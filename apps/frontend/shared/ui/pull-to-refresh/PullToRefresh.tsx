@@ -133,6 +133,8 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             const timer = window.setTimeout(finish, Math.max(0, remaining));
             return (): void => window.clearTimeout(timer);
         }
+        // No deadline recorded for this refresh cycle — nothing to clean up.
+        return undefined;
     }, [phase, isFetching, reset]);
 
     // Bind touch listeners on `window` once per standalone state.
