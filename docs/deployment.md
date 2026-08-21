@@ -1,17 +1,19 @@
 # Deployment
 
 Документ описывает stage/prod деплой: GitHub Actions собирает образы на
-self-hosted runner'е, пушит в GHCR и деплоит на сервер по digest через SSH.
+GitHub-hosted раннерах (ADR 0045; раньше — self-hosted раннер на самом
+сервере, списан), пушит в GHCR и деплоит на сервер по digest через SSH.
 На сервере нет репозитория и сборки — только compose-файлы, env и бэкапы.
 Caddy запущен на хосте и проксирует публичные домены на localhost-порты
-контейнеров. Архитектурное решение — `docs/adr/0024-deploy-pipeline-ghcr-runner.md`.
+контейнеров. Архитектурное решение — `docs/adr/0024-deploy-pipeline-ghcr-runner.md`
+(размещение раннеров — `docs/adr/0045-github-hosted-runners.md`).
 
 ## Поток деплоя
 
 ```
 push в dev (stage) или main (prod)
   → ci.yml (lint, тесты, миграции up/down, сканеры — blocking)
-  → сборка 4 образов (matrix, max-parallel: 2) → trivy → push в GHCR → cosign sign
+  → сборка 4 образов (matrix, параллельно, GitHub-hosted) → trivy → push в GHCR → cosign sign
   → _deploy.yml: cosign verify → рендер env из секрета ENV_FILE (со сверкой
     ключей против deploy/.env.<env>.example) → передача env на сервер через base64
     в envs ssh-шага → pg_dump-бэкап →
@@ -59,9 +61,10 @@ updates + сгруппированные weekly version updates в ветку `d
 Одноразовая подготовка нового сервера. Git-чекауты не нужны: deploy-каталоги
 получают compose-файл через scp, а env — через base64 в envs ssh-шага пайплайна.
 
-1. Установить Docker + compose plugin; установить и зарегистрировать
-   self-hosted GitHub Actions runner (labels `self-hosted, linux, x64`) —
-   runner на продовом VPS является принятым риском, компенсации см. в ADR 0024.
+1. Установить Docker + compose plugin. Раннер на сервере не нужен: все джобы
+   (CI, сборка образов, деплой) выполняются на GitHub-hosted раннерах
+   (ADR 0045); сервер принимает только SSH от deploy-пайплайна (ключ-deploy
+   пользователя, host key pinned, fail2ban на хосте).
 2. Создать deploy-пользователя и каталоги:
 
    ```bash
@@ -81,6 +84,27 @@ updates + сгруппированные weekly version updates в ветку `d
    `docker-compose.<env>.yml` и отрендеренный `.env.<env>`, сделает бэкап
    (пустая БД — дамп маленький, это нормально только для самого первого
    запуска), применит миграции и поднимет стек.
+
+## Runner Decommission (runbook)
+
+Одноразовое списание self-hosted раннера с VPS после перехода на
+GitHub-hosted раннеры (ADR 0045). Выполнялось 2026-08-21.
+
+1. В GitHub: Settings → Actions → Runners → выбрать раннер → Remove
+   (если сервис уже мёртв, принудительно). Registration token для CLI-удаления
+   выдаётся там же (New runner → Configure).
+2. На сервере:
+
+   ```bash
+   sudo systemctl stop actions.runner.*.service || true
+   sudo systemctl disable actions.runner.*.service || true
+   cd <каталог-раннера>   # обычно /opt/actions-runner или ~/actions-runner
+   ./config.sh remove --token <registration-token>
+   cd .. && rm -rf <каталог-раннера>
+   ```
+
+3. Проверить, что свободная память хоста выросла (`free -h`) — билды больше
+   не конкурируют с продом.
 
 ## GitHub Environments и секреты
 

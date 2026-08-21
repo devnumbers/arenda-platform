@@ -14,13 +14,11 @@ permissions:
 jobs:
   semgrep:
     name: Semgrep
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     container:
       # digest of :latest as of 2026-07-28; update periodically
       image: semgrep/semgrep@sha256:98c2572fced2474539fd27cab3207ebd8e95e4e7aab4c3b381fdc5e2641d9941
-      # self-hosted runner keeps the checkout owned by the runner user (997:981)
-      options: --user 997:981
     env:
       HOME: /tmp
     steps:
@@ -35,7 +33,7 @@ jobs:
   # in ci.yml; this workflow keeps SAST (semgrep) and the trivy filesystem scan.
   trivy-fs:
     name: Trivy filesystem scan
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout

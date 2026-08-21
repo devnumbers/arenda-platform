@@ -42,14 +42,13 @@ jobs:
     name: Build & push ${{ matrix.service }}
     needs: ci
     if: github.event_name == 'push'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         service: [backend, frontend, admin, landing]
     steps:
@@ -123,7 +122,7 @@ jobs:
     name: Collect image digests
     needs: images
     if: github.event_name == 'push'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     outputs:
       backend_digest: ${{ steps.read.outputs.backend_digest }}
       frontend_digest: ${{ steps.read.outputs.frontend_digest }}
