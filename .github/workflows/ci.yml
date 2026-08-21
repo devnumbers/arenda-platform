@@ -442,6 +442,48 @@ jobs:
           zricethezav/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
           git /repo --redact --config /repo/.gitleaks.toml --exit-code 1
 
+  # Зависимостный контур (карта #326, решение #331): npm audit блокирующе на PR,
+  # но только когда PR меняет хотя бы один lockfile — advisory-базы обновляются
+  # независимо от кода, и без фильтра джоба краснела бы на «не своих» изменениях
+  # (ночью вышла advisory под закешированную версию → утренние PR стоят).
+  # Pre-push-проводка (make npm-audit в lefthook) остаётся как есть.
+  npm-audit:
+    name: Npm audit (lockfiles)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # diff идёт от merge-base(base, head) до head — нужна история до базы
+          fetch-depth: 0
+
+      - name: Lockfiles changed in this PR?
+        id: lockfiles
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          merge_base="$(git merge-base "${BASE_SHA}" "${HEAD_SHA}")"
+          # grep без -q (читает весь ввод в /dev/null): с -q под pipefail git diff
+          # получил бы SIGPIPE на первом матче при выводе больше pipe-буфера.
+          if git diff --name-only "${merge_base}" "${HEAD_SHA}" | grep 'package-lock\.json$' >/dev/null; then
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "No lockfile changes in this PR — audit skipped (advisory DB drift cannot fail unrelated PRs)."
+          fi
+
+      - name: Set up Node.js
+        if: steps.lockfiles.outputs.changed == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: npm audit (high+)
+        if: steps.lockfiles.outputs.changed == 'true'
+        run: make npm-audit
+
   docker:
     name: Docker (${{ matrix.service }})
     runs-on: ubuntu-latest

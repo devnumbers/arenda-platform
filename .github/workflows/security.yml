@@ -25,8 +25,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # p/ci — CI/CD hardening rules; p/xss (dependency contour, #331/#389) —
+      # taint source→sink rules for JS/React DOM-XSS patterns: a nightly
+      # trigger in case an XSS sink ever appears (0 findings on the 2026-08-21
+      # tree). Not a PR gate: taint rules are MEDIUM/LOW confidence by nature.
       - name: Scan
-        run: semgrep scan --config=p/ci --error
+        run: semgrep scan --config=p/ci --config=p/xss --error
 
   # Dependency vulnerabilities are covered by Dependabot (.github/dependabot.yml:
   # security updates + grouped weekly version updates into dev) and govulncheck
