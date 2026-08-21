@@ -178,6 +178,11 @@ func Setup(tb testing.TB) *pgxpool.Pool {
 // Reset truncates every user table in the public schema of the pool's
 // database. With per-test database isolation it is only needed when a test
 // must clear its own state in the middle of its execution.
+//
+// The golang-migrate journal (schema_migrations) is excluded on purpose: an
+// empty journal over a deployed schema makes the next migration run replay
+// from version 1, fail on existing tables, and mark the database dirty
+// (#384). The contract is pinned by TestReset_PreservesMigrationJournal.
 func Reset(tb testing.TB, pool *pgxpool.Pool) {
 	tb.Helper()
 
@@ -186,7 +191,9 @@ func Reset(tb testing.TB, pool *pgxpool.Pool) {
 	rows, err := pool.Query(ctx, `
 		SELECT quote_ident(table_name)
 		FROM information_schema.tables
-		WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+		WHERE table_schema = 'public'
+			AND table_type = 'BASE TABLE'
+			AND table_name <> 'schema_migrations'
 	`)
 	if err != nil {
 		tb.Fatalf("testdb: list tables: %v", err)

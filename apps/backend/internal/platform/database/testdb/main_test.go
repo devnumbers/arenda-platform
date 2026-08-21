@@ -5,6 +5,8 @@ package testdb
 import (
 	"os"
 	"testing"
+
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 )
 
 // TestMain ensures the per-binary template database is dropped and the
@@ -93,5 +95,43 @@ func TestReset_ClearsTables(t *testing.T) {
 	}
 	if after != 0 {
 		t.Fatalf("expected 0 rows after reset, got %d", after)
+	}
+}
+
+// TestReset_PreservesMigrationJournal pins the #384 contract: Reset clears
+// user data but must never truncate golang-migrate's schema_migrations
+// journal. An empty journal over a deployed schema makes the next migration
+// process replay from version 1, fail on already-existing tables, and mark
+// the database dirty — exactly what killed consecutive runs against a shared
+// TEST_DATABASE_URL server before per-test clone isolation (#371).
+func TestReset_PreservesMigrationJournal(t *testing.T) {
+	t.Parallel()
+
+	if os.Getenv("TEST_DATABASE_URL") == "" && !dockerAvailable() {
+		t.Skip("docker not available and TEST_DATABASE_URL not set")
+	}
+
+	pool := Setup(t)
+	ctx := t.Context()
+
+	Reset(t, pool)
+
+	var journalRows int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&journalRows); err != nil {
+		t.Fatalf("count schema_migrations after reset: %v", err)
+	}
+	if journalRows == 0 {
+		t.Fatal("schema_migrations is empty after reset — Reset truncated the migration journal")
+	}
+
+	// The real-world symptom of #384: a second migration process connecting to
+	// this database must see it as fully migrated (ErrNoChange no-op), not
+	// replay from zero and leave the database dirty.
+	var dbName string
+	if err := pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName); err != nil {
+		t.Fatalf("read current database: %v", err)
+	}
+	if err := database.MigrateUp(withDatabase(databaseURL(), dbName), migrationsDir()); err != nil {
+		t.Fatalf("migrate up after reset: %v", err)
 	}
 }
