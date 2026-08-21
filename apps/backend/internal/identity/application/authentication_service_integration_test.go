@@ -17,6 +17,7 @@ import (
 // marked used, session created, attempts reset, audit recorded). The session
 // token must resolve back to the same user through SessionService.Load.
 func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000001")
 	email := mustEmail(t, "owner@example.com")
@@ -80,6 +81,7 @@ func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
 // phone+email pair creates a user row, marks the email verified, publishes a
 // UserRegistered event, and records the registration audit action.
 func TestAuthenticationIntegration_RegistrationCreatesNewUser(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000002")
 	email := mustEmail(t, "new@example.com")
@@ -130,6 +132,7 @@ func TestAuthenticationIntegration_RegistrationCreatesNewUser(t *testing.T) {
 // a code for a new phone whose email already belongs to another user is rejected
 // with ErrEmailAlreadyTaken before any code is persisted or delivered.
 func TestAuthenticationIntegration_DuplicateEmailRejectedAtSend(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	takenEmail := mustEmail(t, "taken@example.com")
 	takenPhone := mustPhone(t, "+79160000003")
@@ -151,6 +154,7 @@ func TestAuthenticationIntegration_DuplicateEmailRejectedAtSend(t *testing.T) {
 // records the attempt-window failure and the failed-login audit so rate-limiting
 // survives the rollback (ADR 0033).
 func TestAuthenticationIntegration_LoginFailRecordsAttemptAndAudit(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000005")
 	email := mustEmail(t, "owner@example.com")
@@ -187,6 +191,7 @@ func TestAuthenticationIntegration_LoginFailRecordsAttemptAndAudit(t *testing.T)
 // expiration within the 30-day absolute cap. It reproduces the middleware's
 // refresh path (httpsupport/session.go) against real rows.
 func TestAuthenticationIntegration_SlidingSessionRefresh(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000006")
 	email := mustEmail(t, "owner@example.com")

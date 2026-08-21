@@ -13,6 +13,7 @@ import (
 // token hash matches the raw token, through the real UoW against PostgreSQL.
 // Other sessions for the same user survive.
 func TestLogoutIntegration_ByToken(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000300")
 	email := mustEmail(t, "logout1@example.com")
@@ -51,6 +52,7 @@ func TestLogoutIntegration_ByToken(t *testing.T) {
 // TestLogoutIntegration_LogoutAll proves LogoutAll deletes every session for the
 // user through the real UoW.
 func TestLogoutIntegration_LogoutAll(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000301")
 	email := mustEmail(t, "logoutall@example.com")

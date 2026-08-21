@@ -15,6 +15,7 @@ import (
 // asymmetry where the aggregate owned one email transition but not the other.
 // See issue #241.
 func TestUser_VerifyEmail(t *testing.T) {
+	t.Parallel()
 	email, err := NewEmail("owner@example.com")
 	if err != nil {
 		t.Fatalf("NewEmail error = %v", err)

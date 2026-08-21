@@ -10,6 +10,7 @@ import (
 const testUserEmail = "user@example.com"
 
 func TestNormalizeEmail(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -23,6 +24,7 @@ func TestNormalizeEmail(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := NormalizeEmail(tc.input)
 			if err != nil {
 				t.Fatalf("NormalizeEmail(%q) error = %v, want nil", tc.input, err)
@@ -35,6 +37,7 @@ func TestNormalizeEmail(t *testing.T) {
 }
 
 func TestNormalizeEmail_Invalid(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"",
 		"   ",
@@ -48,6 +51,7 @@ func TestNormalizeEmail_Invalid(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc, func(t *testing.T) {
+			t.Parallel()
 			_, err := NormalizeEmail(tc)
 			if !errors.Is(err, ErrInvalidEmail) {
 				t.Fatalf("NormalizeEmail(%q) error = %v, want ErrInvalidEmail", tc, err)
@@ -57,7 +61,9 @@ func TestNormalizeEmail_Invalid(t *testing.T) {
 }
 
 func TestNewEmail(t *testing.T) {
+	t.Parallel()
 	t.Run("parses and lowercases", func(t *testing.T) {
+		t.Parallel()
 		e, err := NewEmail("Owner@Example.com")
 		if err != nil {
 			t.Fatalf("NewEmail error = %v", err)
@@ -68,6 +74,7 @@ func TestNewEmail(t *testing.T) {
 	})
 
 	t.Run("rejects invalid", func(t *testing.T) {
+		t.Parallel()
 		_, err := NewEmail("not-an-email")
 		if !errors.Is(err, ErrInvalidEmail) {
 			t.Fatalf("NewEmail error = %v, want ErrInvalidEmail", err)
@@ -76,7 +83,9 @@ func TestNewEmail(t *testing.T) {
 }
 
 func TestEmailFrom(t *testing.T) {
+	t.Parallel()
 	t.Run("accepts a valid normalized address", func(t *testing.T) {
+		t.Parallel()
 		e, err := EmailFrom("owner@example.com")
 		if err != nil {
 			t.Fatalf("EmailFrom error = %v", err)
@@ -87,6 +96,7 @@ func TestEmailFrom(t *testing.T) {
 	})
 
 	t.Run("rejects an empty value", func(t *testing.T) {
+		t.Parallel()
 		_, err := EmailFrom("")
 		if !errors.Is(err, ErrInvalidEmail) {
 			t.Fatalf("EmailFrom(\"\") error = %v, want ErrInvalidEmail", err)
@@ -94,6 +104,7 @@ func TestEmailFrom(t *testing.T) {
 	})
 
 	t.Run("rejects an invalid address", func(t *testing.T) {
+		t.Parallel()
 		_, err := EmailFrom("not-an-email")
 		if !errors.Is(err, ErrInvalidEmail) {
 			t.Fatalf("EmailFrom(invalid) error = %v, want ErrInvalidEmail", err)
@@ -105,7 +116,9 @@ func TestEmailFrom(t *testing.T) {
 // in issue #220. The local-part limit protects the trusted DB path (EmailFrom)
 // from oversized imported data; the total limit rejects abusive addresses.
 func TestNormalizeEmail_LengthBoundaries(t *testing.T) {
+	t.Parallel()
 	t.Run("local-part of exactly 64 chars is accepted", func(t *testing.T) {
+		t.Parallel()
 		addr := strings.Repeat("a", maxEmailLocalLen) + "@x.co"
 		got, err := NormalizeEmail(addr)
 		if err != nil {
@@ -117,6 +130,7 @@ func TestNormalizeEmail_LengthBoundaries(t *testing.T) {
 	})
 
 	t.Run("local-part of 65 chars is rejected", func(t *testing.T) {
+		t.Parallel()
 		addr := strings.Repeat("a", maxEmailLocalLen+1) + "@x.co"
 		_, err := NormalizeEmail(addr)
 		if !errors.Is(err, ErrInvalidEmail) {
@@ -125,6 +139,7 @@ func TestNormalizeEmail_LengthBoundaries(t *testing.T) {
 	})
 
 	t.Run("total length of exactly 254 chars is accepted", func(t *testing.T) {
+		t.Parallel()
 		// Local=64, '@'=1, domain=189 → 254 total. Domain has a dot so the
 		// shape regex (TLD present) is satisfied.
 		domain := strings.Repeat("b", 187) + ".c"
@@ -138,6 +153,7 @@ func TestNormalizeEmail_LengthBoundaries(t *testing.T) {
 	})
 
 	t.Run("total length of 255 chars is rejected", func(t *testing.T) {
+		t.Parallel()
 		domain := strings.Repeat("b", 188) + ".c"
 		addr := strings.Repeat("a", maxEmailLocalLen) + "@" + domain
 		if len(addr) != maxEmailTotalLen+1 {
@@ -154,7 +170,9 @@ func TestNormalizeEmail_LengthBoundaries(t *testing.T) {
 // is intentionally not applied (local-part is case-sensitive for many
 // providers); a well-formed unicode address passes unchanged.
 func TestNormalizeEmail_Unicode(t *testing.T) {
+	t.Parallel()
 	t.Run("unicode local-part passes unchanged", func(t *testing.T) {
+		t.Parallel()
 		addr := "üser@пример.рф"
 		got, err := NormalizeEmail(addr)
 		if err != nil {
@@ -166,6 +184,7 @@ func TestNormalizeEmail_Unicode(t *testing.T) {
 	})
 
 	t.Run("unicode local-part of exactly 64 runes is accepted", func(t *testing.T) {
+		t.Parallel()
 		// 64 multibyte runes before @ — byte length is 128, but the local-part
 		// limit counts runes per RFC 5321, so this must pass (regression guard
 		// for the byte-vs-rune fix in issue #220).
@@ -176,6 +195,7 @@ func TestNormalizeEmail_Unicode(t *testing.T) {
 	})
 
 	t.Run("unicode local-part over 64 runes is rejected", func(t *testing.T) {
+		t.Parallel()
 		// 65 'ä' runes before @ — the rune count exceeds the local-part limit.
 		addr := strings.Repeat("ä", maxEmailLocalLen+1) + "@x.co"
 		_, err := NormalizeEmail(addr)

@@ -6,6 +6,7 @@ import (
 )
 
 func TestNormalizePhone(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -22,6 +23,7 @@ func TestNormalizePhone(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := NormalizePhone(tc.input)
 			if err != nil {
 				t.Fatalf("NormalizePhone(%q) error = %v, want nil", tc.input, err)
@@ -34,6 +36,7 @@ func TestNormalizePhone(t *testing.T) {
 }
 
 func TestNormalizePhone_Invalid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -50,6 +53,7 @@ func TestNormalizePhone_Invalid(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := NormalizePhone(tc.input)
 			if !errors.Is(err, ErrInvalidPhone) {
 				t.Fatalf("NormalizePhone(%q) error = %v, want ErrInvalidPhone", tc.input, err)
@@ -59,7 +63,9 @@ func TestNormalizePhone_Invalid(t *testing.T) {
 }
 
 func TestNewPhone(t *testing.T) {
+	t.Parallel()
 	t.Run("parses and canonicalizes a mobile number", func(t *testing.T) {
+		t.Parallel()
 		p, err := NewPhone("89123456789")
 		if err != nil {
 			t.Fatalf("NewPhone error = %v", err)
@@ -70,6 +76,7 @@ func TestNewPhone(t *testing.T) {
 	})
 
 	t.Run("rejects an invalid number", func(t *testing.T) {
+		t.Parallel()
 		_, err := NewPhone("12345")
 		if !errors.Is(err, ErrInvalidPhone) {
 			t.Fatalf("NewPhone error = %v, want ErrInvalidPhone", err)
@@ -78,6 +85,7 @@ func TestNewPhone(t *testing.T) {
 }
 
 func TestValidatePhone(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   string
@@ -92,6 +100,7 @@ func TestValidatePhone(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidatePhone(tc.input)
 			if tc.wantErr && !errors.Is(err, ErrInvalidPhone) {
 				t.Fatalf("ValidatePhone(%q) error = %v, want ErrInvalidPhone", tc.input, err)

@@ -34,6 +34,7 @@ var testLogoutActor = auditdomain.Actor{Role: auditdomain.ActorRoleOwner}
 // raw token, deletes the matching session through the transactional store, and
 // the UoW commits.
 func TestLogoutService_Logout_DeletesSessionByTokenHash(t *testing.T) {
+	t.Parallel()
 	svc, stores := newLogoutHarness()
 
 	rawToken := "plain-test-value"
@@ -59,6 +60,7 @@ func TestLogoutService_Logout_DeletesSessionByTokenHash(t *testing.T) {
 // TestLogoutService_Logout_WrapsDeleteError proves a repository failure is
 // returned and the transaction is rolled back.
 func TestLogoutService_Logout_WrapsDeleteError(t *testing.T) {
+	t.Parallel()
 	users := newFakeUserRepo()
 	codes := newFakeCodeRepo()
 	attempts := newFakeAttemptRepo()
@@ -90,6 +92,7 @@ func TestLogoutService_Logout_WrapsDeleteError(t *testing.T) {
 // TestLogoutService_LogoutAll_DeletesSessionsByUserID proves LogoutAll removes
 // every session belonging to the user and commits.
 func TestLogoutService_LogoutAll_DeletesSessionsByUserID(t *testing.T) {
+	t.Parallel()
 	svc, stores := newLogoutHarness()
 
 	userID := uuid.Must(uuid.NewV7())
@@ -120,6 +123,7 @@ func TestLogoutService_LogoutAll_DeletesSessionsByUserID(t *testing.T) {
 // session repository is bound to the transaction and the UoW commits. This is
 // the core assertion of the ADR 0033 smoke test.
 func TestLogoutService_UsesRunInTx(t *testing.T) {
+	t.Parallel()
 	users := newFakeUserRepo()
 	codes := newFakeCodeRepo()
 	attempts := newFakeAttemptRepo()
@@ -149,6 +153,7 @@ func TestLogoutService_UsesRunInTx(t *testing.T) {
 // TestLogoutService_RecordsAuditInTx proves Logout records the logout audit
 // entry inside the same transaction that deletes the session.
 func TestLogoutService_RecordsAuditInTx(t *testing.T) {
+	t.Parallel()
 	users := newFakeUserRepo()
 	codes := newFakeCodeRepo()
 	attempts := newFakeAttemptRepo()
@@ -198,6 +203,7 @@ func TestLogoutService_RecordsAuditInTx(t *testing.T) {
 // TestLogoutService_LogoutAll_RecordsAuditInTx proves LogoutAll records the
 // logout-all audit entry inside the same transaction.
 func TestLogoutService_LogoutAll_RecordsAuditInTx(t *testing.T) {
+	t.Parallel()
 	users := newFakeUserRepo()
 	codes := newFakeCodeRepo()
 	attempts := newFakeAttemptRepo()
@@ -232,6 +238,7 @@ func TestLogoutService_LogoutAll_RecordsAuditInTx(t *testing.T) {
 // logout: the session delete still commits. This is the documented fail-open
 // exception — logout must always succeed regardless of the audit write.
 func TestLogoutService_AuditFailOpen(t *testing.T) {
+	t.Parallel()
 	users := newFakeUserRepo()
 	codes := newFakeCodeRepo()
 	attempts := newFakeAttemptRepo()

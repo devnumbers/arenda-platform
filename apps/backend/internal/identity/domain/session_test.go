@@ -8,6 +8,7 @@ import (
 )
 
 func TestSession_IsExpired(t *testing.T) {
+	t.Parallel()
 	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	s := Session{
 		ID:         uuid.Must(uuid.NewV7()),
@@ -28,6 +29,7 @@ func TestSession_IsExpired(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := s.IsExpired(tc.now); got != tc.want {
 				t.Fatalf("IsExpired(%v) = %v, want %v", tc.now, got, tc.want)
 			}
@@ -36,6 +38,7 @@ func TestSession_IsExpired(t *testing.T) {
 }
 
 func TestSession_Refresh(t *testing.T) {
+	t.Parallel()
 	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	// Single-refresh cases: each row seeds a session whose ExpiresAt sits at
@@ -93,6 +96,7 @@ func TestSession_Refresh(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s := Session{
 				ID:         uuid.Must(uuid.NewV7()),
 				ExpiresAt:  created.Add(tc.expiresOff),

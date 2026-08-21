@@ -40,6 +40,7 @@ func newValidCode(t *testing.T, codeHash string, now time.Time) LoginCode {
 }
 
 func TestLoginCode_Verify(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	hash := validHexHash("123456")
 	otherHash := validHexHash("999999") // Different value, same length.
@@ -105,6 +106,7 @@ func TestLoginCode_Verify(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			c := newValidCode(t, hash, now)
 			tc.mutate(&c)
 			usedBefore := c.Used

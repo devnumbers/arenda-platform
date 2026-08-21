@@ -6,6 +6,7 @@ import (
 )
 
 func TestLoginCodePurpose_KnownValues(t *testing.T) {
+	t.Parallel()
 	known := map[string]LoginCodePurpose{
 		"login":        LoginCodePurposeLogin,
 		"phone_change": LoginCodePurposePhoneChange,
@@ -25,6 +26,7 @@ func TestLoginCodePurpose_KnownValues(t *testing.T) {
 }
 
 func TestLoginCodePurpose_RejectedValues(t *testing.T) {
+	t.Parallel()
 	rejected := []string{"", "Login", "PHONE_CHANGE", "signup", "verify"}
 	for _, raw := range rejected {
 		_, err := NewLoginCodePurpose(raw)

@@ -49,6 +49,7 @@ func (h *loginCodeHarness) stores(ctx context.Context) (*txStores, error) {
 }
 
 func TestLoginCodeService_Send_IssuesPersistsAndDelivers(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
@@ -68,6 +69,7 @@ func TestLoginCodeService_Send_IssuesPersistsAndDelivers(t *testing.T) {
 }
 
 func TestLoginCodeService_Send_ThrottlesWithinMinInterval(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000002")
 	email := mustEmail(t, "owner@example.com")
@@ -86,6 +88,7 @@ func TestLoginCodeService_Send_ThrottlesWithinMinInterval(t *testing.T) {
 }
 
 func TestLoginCodeService_Send_RejectsWhenBlocked(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000003")
 	email := mustEmail(t, "owner@example.com")
@@ -109,6 +112,7 @@ func TestLoginCodeService_Send_RejectsWhenBlocked(t *testing.T) {
 }
 
 func TestLoginCodeService_Verify_AcceptsValidCode(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000004")
 	email := mustEmail(t, "owner@example.com")
@@ -133,6 +137,7 @@ func TestLoginCodeService_Verify_AcceptsValidCode(t *testing.T) {
 }
 
 func TestLoginCodeService_Verify_RejectsInvalidCode(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000005")
 	email := mustEmail(t, "owner@example.com")
@@ -158,6 +163,7 @@ func TestLoginCodeService_Verify_RejectsInvalidCode(t *testing.T) {
 }
 
 func TestLoginCodeService_Verify_MissingCode(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000006")
 	email := mustEmail(t, "owner@example.com")
@@ -174,6 +180,7 @@ func TestLoginCodeService_Verify_MissingCode(t *testing.T) {
 }
 
 func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000007")
 	email := mustEmail(t, "owner@example.com")
@@ -204,6 +211,7 @@ func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
 }
 
 func TestLoginCodeService_RecordFailure_IncrementsWindow(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000008")
 	ctx := t.Context()
@@ -225,6 +233,7 @@ func TestLoginCodeService_RecordFailure_IncrementsWindow(t *testing.T) {
 }
 
 func TestLoginCodeService_RecordFailure_ReachesTooManyAttempts(t *testing.T) {
+	t.Parallel()
 	h := newLoginCodeHarness()
 	phone := mustPhone(t, "+79150000009")
 	ctx := t.Context()

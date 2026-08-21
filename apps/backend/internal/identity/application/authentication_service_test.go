@@ -431,6 +431,7 @@ func mustEmail(t *testing.T, raw string) domain.Email {
 }
 
 func TestAuthenticationService_SendCodeByPhone(t *testing.T) {
+	t.Parallel()
 	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
 
@@ -468,6 +469,7 @@ func TestAuthenticationService_SendCodeByPhone(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			h := newAuthServiceHarness()
 			tt.seed(t, h)
 
@@ -489,6 +491,7 @@ func TestAuthenticationService_SendCodeByPhone(t *testing.T) {
 }
 
 func TestAuthenticationService_VerifyCode_ResolvesEmailFromUser(t *testing.T) {
+	t.Parallel()
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
@@ -520,6 +523,7 @@ func TestAuthenticationService_VerifyCode_ResolvesEmailFromUser(t *testing.T) {
 }
 
 func TestAuthenticationService_VerifyCode_UnknownPhoneWithoutEmail(t *testing.T) {
+	t.Parallel()
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000009")
 
@@ -530,6 +534,7 @@ func TestAuthenticationService_VerifyCode_UnknownPhoneWithoutEmail(t *testing.T)
 }
 
 func TestAuthenticationService_VerifyCode_UserWithoutEmailWithoutEmail(t *testing.T) {
+	t.Parallel()
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000008")
 	h.seedUser(t, phone, nil)
@@ -541,7 +546,9 @@ func TestAuthenticationService_VerifyCode_UserWithoutEmailWithoutEmail(t *testin
 }
 
 func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
+	t.Parallel()
 	t.Run("new user registers with explicit email", func(t *testing.T) {
+		t.Parallel()
 		h := newAuthServiceHarness()
 		phone := mustPhone(t, "+79150000005")
 		email := mustEmail(t, "new@example.com")
@@ -568,6 +575,7 @@ func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
 	})
 
 	t.Run("send code with mismatched email is rejected", func(t *testing.T) {
+		t.Parallel()
 		h := newAuthServiceHarness()
 		phone := mustPhone(t, "+79150000006")
 		stored := mustEmail(t, "stored@example.com")
@@ -581,7 +589,9 @@ func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
 }
 
 func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
+	t.Parallel()
 	t.Run("email taken by another user is rejected before sending", func(t *testing.T) {
+		t.Parallel()
 		h := newAuthServiceHarness()
 		takenEmail := mustEmail(t, "taken@example.com")
 		h.seedUser(t, mustPhone(t, "+79150000010"), &takenEmail)
@@ -599,6 +609,7 @@ func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
 	})
 
 	t.Run("free email sends the code", func(t *testing.T) {
+		t.Parallel()
 		h := newAuthServiceHarness()
 		phone := mustPhone(t, "+79150000012")
 		email := mustEmail(t, "free@example.com")
@@ -624,6 +635,7 @@ func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
 // attempt-window failure so rate-limiting survives the rollback. The pre-refactor
 // early-Commit-on-error is gone.
 func TestAuthenticationService_VerifyCode_InvalidCodeRecordsAttemptAndAudit(t *testing.T) {
+	t.Parallel()
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000020")
 	email := mustEmail(t, "owner@example.com")
@@ -663,6 +675,7 @@ func TestAuthenticationService_VerifyCode_InvalidCodeRecordsAttemptAndAudit(t *t
 // invalid verifications reach the attempt threshold and then block further
 // attempts.
 func TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks(t *testing.T) {
+	t.Parallel()
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000021")
 	email := mustEmail(t, "owner@example.com")
@@ -696,6 +709,7 @@ func TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks(t *testing.T) {
 // the block took effect, so the recovery-free `case err != nil` branch is
 // correct: the failure counter must not grow beyond MaxLoginFailures.
 func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T) {
+	t.Parallel()
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000022")
 	email := mustEmail(t, "owner@example.com")
@@ -738,6 +752,7 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 // TestAuthenticationService_SendCode_GetByPhoneError asserts an infrastructure
 // error from GetByPhone (not ErrNotFound) is propagated.
 func TestAuthenticationService_SendCode_GetByPhoneError(t *testing.T) {
+	t.Parallel()
 	stores := newFakeStores()
 	sender := &fakeCodeSender{}
 	dbErr := errors.New("db connection lost")
@@ -774,6 +789,7 @@ func TestAuthenticationService_SendCode_GetByPhoneError(t *testing.T) {
 // TestAuthenticationService_SendCode_GetByEmailError asserts an infrastructure
 // error from GetByEmail for a new phone (not ErrNotFound/nil) is propagated.
 func TestAuthenticationService_SendCode_GetByEmailError(t *testing.T) {
+	t.Parallel()
 	stores := newFakeStores()
 	sender := &fakeCodeSender{}
 	dbErr := errors.New("db connection lost")
@@ -813,6 +829,7 @@ func TestAuthenticationService_SendCode_GetByEmailError(t *testing.T) {
 // TestAuthenticationService_SendCodeByPhone_GetByPhoneError asserts an
 // infrastructure error from GetByPhone in SendCodeByPhone is propagated.
 func TestAuthenticationService_SendCodeByPhone_GetByPhoneError(t *testing.T) {
+	t.Parallel()
 	stores := newFakeStores()
 	dbErr := errors.New("db connection lost")
 

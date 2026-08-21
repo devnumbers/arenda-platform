@@ -42,6 +42,7 @@ func seedUser(t *testing.T, ctx context.Context, poolRepo *UserRepository, phone
 // methods report the number of rows removed, remove only expired rows, and
 // report 0 once nothing matches (loop completeness).
 func TestCleanupRepositories_DeleteCounts(t *testing.T) {
+	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := context.Background()
 	enc := noopEncryptor(t)

@@ -16,6 +16,7 @@ import (
 // and a verify surfaces ErrTooManyAttempts. The failures are recorded across
 // separate transactions that survive the rolled-back success paths (ADR 0033).
 func TestAttemptWindowIntegration_BlocksAfterMaxFailures(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000100")
 	email := mustEmail(t, "blocked@example.com")
@@ -52,6 +53,7 @@ func TestAttemptWindowIntegration_BlocksAfterMaxFailures(t *testing.T) {
 // 30-minute window expires: advancing the fake clock past LoginAttemptWindowTTL
 // lifts the block, and a new send+verify cycle succeeds.
 func TestAttemptWindowIntegration_UnblocksAfterTTL(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000101")
 	email := mustEmail(t, "ttl@example.com")

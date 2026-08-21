@@ -62,6 +62,7 @@ func doJSON(t *testing.T, handler http.HandlerFunc, path, body string) *httptest
 }
 
 func TestSendCode_PhoneOnly_RegisteredUser(t *testing.T) {
+	t.Parallel()
 	auth := &fakeAuthenticator{
 		sendCodeByPhone: func(_ context.Context, phone domain.Phone) (bool, error) {
 			if phone.String() != "+79150000001" {
@@ -90,6 +91,7 @@ func TestSendCode_PhoneOnly_RegisteredUser(t *testing.T) {
 }
 
 func TestSendCode_PhoneOnly_CodeSentTooRecentlyReturns429(t *testing.T) {
+	t.Parallel()
 	auth := &fakeAuthenticator{
 		sendCodeByPhone: func(context.Context, domain.Phone) (bool, error) {
 			return false, application.ErrCodeSentTooRecently
@@ -108,6 +110,7 @@ func TestSendCode_PhoneOnly_CodeSentTooRecentlyReturns429(t *testing.T) {
 }
 
 func TestSendCode_PhoneOnly_UnknownUser(t *testing.T) {
+	t.Parallel()
 	auth := &fakeAuthenticator{
 		sendCodeByPhone: func(context.Context, domain.Phone) (bool, error) {
 			return false, nil
@@ -133,6 +136,7 @@ func TestSendCode_PhoneOnly_UnknownUser(t *testing.T) {
 }
 
 func TestSendCode_WithEmail_MismatchReturns409(t *testing.T) {
+	t.Parallel()
 	var gotEmail domain.Email
 	auth := &fakeAuthenticator{
 		sendCode: func(_ context.Context, _ domain.Phone, email domain.Email, _ domain.LoginCodePurpose) error {
@@ -157,6 +161,7 @@ func TestSendCode_WithEmail_MismatchReturns409(t *testing.T) {
 }
 
 func TestSendCode_WithEmail_EmailAlreadyTakenReturns409(t *testing.T) {
+	t.Parallel()
 	auth := &fakeAuthenticator{
 		sendCode: func(context.Context, domain.Phone, domain.Email, domain.LoginCodePurpose) error {
 			return application.ErrEmailAlreadyTaken
@@ -183,6 +188,7 @@ func TestSendCode_WithEmail_EmailAlreadyTakenReturns409(t *testing.T) {
 }
 
 func TestVerifyCode_WithoutEmail_PassesNilEmailAndSetsCookie(t *testing.T) {
+	t.Parallel()
 	phone, err := domain.NewPhone("+79150000001")
 	if err != nil {
 		t.Fatalf("parse phone: %v", err)

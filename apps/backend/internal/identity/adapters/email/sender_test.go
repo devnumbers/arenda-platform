@@ -15,6 +15,7 @@ import (
 const ttlFiveMinutes = "5 минут"
 
 func TestFormatLoginCodeTTL(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		d    time.Duration
@@ -32,6 +33,7 @@ func TestFormatLoginCodeTTL(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := formatLoginCodeTTL(tc.d); got != tc.want {
 				t.Fatalf("formatLoginCodeTTL(%v) = %q, want %q", tc.d, got, tc.want)
 			}
@@ -86,6 +88,7 @@ func mustEmail(t *testing.T, raw string) domain.Email {
 }
 
 func TestSender_Send_RendersAndSends(t *testing.T) {
+	t.Parallel()
 	phone := mustPhone(t, "+79160005000")
 	emailAddr := mustEmail(t, "owner@example.com")
 
@@ -132,6 +135,7 @@ func TestSender_Send_RendersAndSends(t *testing.T) {
 }
 
 func TestSender_Send_RenderErrorIsWrapped(t *testing.T) {
+	t.Parallel()
 	phone := mustPhone(t, "+79160005001")
 	emailAddr := mustEmail(t, "owner@example.com")
 
@@ -146,6 +150,7 @@ func TestSender_Send_RenderErrorIsWrapped(t *testing.T) {
 }
 
 func TestSender_Send_SenderErrorIsWrapped(t *testing.T) {
+	t.Parallel()
 	phone := mustPhone(t, "+79160005002")
 	emailAddr := mustEmail(t, "owner@example.com")
 

@@ -17,6 +17,7 @@ import (
 // deleted (the current session survives), and the phone-changed audit entry is
 // recorded — all in one transaction (ADR 0033).
 func TestPhoneChangeIntegration_HappyPath(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	oldPhone := mustPhone(t, "+79160000200")
 	newPhone := mustPhone(t, "+79160000299")
@@ -86,6 +87,7 @@ func TestPhoneChangeIntegration_HappyPath(t *testing.T) {
 // another user is rejected with ErrPhoneAlreadyTaken at both SendChangeCode and
 // ChangePhone, and that the rejection at SendChangeCode never issues a code.
 func TestPhoneChangeIntegration_ConflictRejected(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	email := mustEmail(t, "conflict@example.com")
 	takenPhone := mustPhone(t, "+79160000201")
@@ -116,6 +118,7 @@ func TestPhoneChangeIntegration_ConflictRejected(t *testing.T) {
 // verifies the phone-change failure now leaves an audit trail — closing the gap
 // where only the success path was audited.
 func TestPhoneChangeIntegration_WrongCodeRecordsAttempt(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	oldPhone := mustPhone(t, "+79160000203")
 	newPhone := mustPhone(t, "+79160000204")

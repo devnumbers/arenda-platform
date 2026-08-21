@@ -39,6 +39,7 @@ func (h *sessionHarness) stores(ctx context.Context) (*txStores, error) {
 }
 
 func TestSessionService_Issue_CreatesNewUserAndSession(t *testing.T) {
+	t.Parallel()
 	h := newSessionHarness()
 	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
@@ -74,6 +75,7 @@ func TestSessionService_Issue_CreatesNewUserAndSession(t *testing.T) {
 }
 
 func TestSessionService_Issue_ExistingUserReturnsNewFalse(t *testing.T) {
+	t.Parallel()
 	h := newSessionHarness()
 	phone := mustPhone(t, "+79150000002")
 	email := mustEmail(t, "owner@example.com")
@@ -104,6 +106,7 @@ func TestSessionService_Issue_ExistingUserReturnsNewFalse(t *testing.T) {
 }
 
 func TestSessionService_Issue_VerifiesEmailWhenUnverified(t *testing.T) {
+	t.Parallel()
 	h := newSessionHarness()
 	phone := mustPhone(t, "+79150000003")
 	email := mustEmail(t, "owner@example.com")
@@ -149,6 +152,7 @@ func (h *sessionHarness) seedSessionUser(t *testing.T, phone domain.Phone, email
 }
 
 func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) {
+	t.Parallel()
 	beginner := &fakeBeginner{}
 	userID := uuid.Must(uuid.NewV7())
 	rawToken := "plain-token"
@@ -190,6 +194,7 @@ func TestSessionService_Load_DelegatesToRepositoryWithHashedToken(t *testing.T) 
 }
 
 func TestSessionService_Update_DelegatesToRepository(t *testing.T) {
+	t.Parallel()
 	h := newSessionHarness()
 	sess := domain.Session{
 		ID:        uuid.Must(uuid.NewV7()),

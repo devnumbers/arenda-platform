@@ -13,6 +13,7 @@ const (
 )
 
 func TestNewRole(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   string
@@ -28,6 +29,7 @@ func TestNewRole(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := NewRole(tc.input)
 			if tc.wantErr {
 				if !errors.Is(err, ErrInvalidRole) {
@@ -46,6 +48,7 @@ func TestNewRole(t *testing.T) {
 }
 
 func TestRole_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		role Role
 		want string

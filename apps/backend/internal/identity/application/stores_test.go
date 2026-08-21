@@ -175,6 +175,7 @@ func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
 // repository and the audit recorder to the same transaction, runs work, and the
 // UoW commits on a nil error.
 func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
+	t.Parallel()
 	cf := newCountingFactory(t)
 
 	workCalled := false
@@ -229,6 +230,7 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 // TestRunInTx_PanicRollsBackAndRepanics proves a panic inside work rolls the
 // transaction back and re-panics, so a panicking use case never leaks a tx.
 func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
+	t.Parallel()
 	cf := newCountingFactory(t)
 
 	panicVal := storesSentinelError{"kaboom"}
@@ -263,6 +265,7 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 // TestRunInTx_RollsBackOnWorkError proves a non-nil work error rolls the
 // transaction back and is returned to the caller.
 func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
+	t.Parallel()
 	cf := newCountingFactory(t)
 
 	workErr := errors.New("business rule violated")
@@ -287,6 +290,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 // TestRunInTx_WrapsWithTxError proves a repository WithTx failure aborts the
 // transaction with a wrapped error rather than proceeding with an unbound store.
 func TestRunInTx_WrapsWithTxError(t *testing.T) {
+	t.Parallel()
 	b := &fakeBeginner{}
 	bindErr := errors.New("bind failed")
 	users := &countingUserRepo{fakeUserRepo: newFakeUserRepo(), withTxErr: bindErr}
@@ -324,6 +328,7 @@ func TestRunInTx_WrapsWithTxError(t *testing.T) {
 // TestRunInTx_ReturnsErrorWhenUoWMissing proves a service that forgot to wire a
 // UoW fails loudly at the call site instead of nil-dereferencing.
 func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
+	t.Parallel()
 	f := &txStoreFactory{
 		users:    &countingUserRepo{fakeUserRepo: newFakeUserRepo()},
 		codes:    &countingCodeRepo{fakeCodeRepo: newFakeCodeRepo()},

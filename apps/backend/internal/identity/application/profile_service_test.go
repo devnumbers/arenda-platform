@@ -91,6 +91,7 @@ func seedProfileUser(t *testing.T, users *fakeUserRepo) domain.User {
 // TestProfileService_UpdateProfile_UpdatesPersonalData proves a name change is
 // persisted and the transaction commits.
 func TestProfileService_UpdateProfile_UpdatesPersonalData(t *testing.T) {
+	t.Parallel()
 	h := newProfileHarness(t)
 	user := seedProfileUser(t, h.users)
 
@@ -112,10 +113,12 @@ func TestProfileService_UpdateProfile_UpdatesPersonalData(t *testing.T) {
 // TestProfileService_UpdateProfile_EmailChangeResetsVerified proves changing
 // the email clears EmailVerifiedAt, while an unchanged email leaves it intact.
 func TestProfileService_UpdateProfile_EmailChangeResetsVerified(t *testing.T) {
+	t.Parallel()
 	h := newProfileHarness(t)
 	user := seedProfileUser(t, h.users)
 
 	t.Run("new email clears verified", func(t *testing.T) {
+		t.Parallel()
 		updated, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Email: new("new@example.com")})
 		if err != nil {
 			t.Fatalf("UpdateProfile error = %v", err)
@@ -129,6 +132,7 @@ func TestProfileService_UpdateProfile_EmailChangeResetsVerified(t *testing.T) {
 	})
 
 	t.Run("same email keeps verified", func(t *testing.T) {
+		t.Parallel()
 		// Re-seed: the first subtest already mutated the shared user.
 		h := newProfileHarness(t)
 		user := seedProfileUser(t, h.users)
@@ -147,7 +151,9 @@ func TestProfileService_UpdateProfile_EmailChangeResetsVerified(t *testing.T) {
 // change triggers the post-commit reminder reschedule, and an unchanged
 // timezone does not.
 func TestProfileService_UpdateProfile_TimezoneChangeReschedules(t *testing.T) {
+	t.Parallel()
 	t.Run("changed timezone reschedules post-commit", func(t *testing.T) {
+		t.Parallel()
 		h := newProfileHarness(t)
 		user := seedProfileUser(t, h.users)
 
@@ -178,6 +184,7 @@ func TestProfileService_UpdateProfile_TimezoneChangeReschedules(t *testing.T) {
 	})
 
 	t.Run("no timezone command does not reschedule", func(t *testing.T) {
+		t.Parallel()
 		h := newProfileHarness(t)
 		user := seedProfileUser(t, h.users)
 
@@ -194,6 +201,7 @@ func TestProfileService_UpdateProfile_TimezoneChangeReschedules(t *testing.T) {
 // recorded with the profile-updated action for the acting user, and the
 // transaction commits — so audit shares the mutation's transaction (ADR 0020).
 func TestProfileService_UpdateProfile_RecordsAuditInTx(t *testing.T) {
+	t.Parallel()
 	h := newProfileHarness(t)
 	user := seedProfileUser(t, h.users)
 
@@ -225,6 +233,7 @@ func TestProfileService_UpdateProfile_RecordsAuditInTx(t *testing.T) {
 // TestProfileService_UpdateProfile_RollsBackOnGetError proves a failure to load
 // the user aborts the transaction and returns the error.
 func TestProfileService_UpdateProfile_RollsBackOnGetError(t *testing.T) {
+	t.Parallel()
 	h := newProfileHarness(t)
 	// No seeded user → GetByIDForUpdate returns ErrNotFound.
 
@@ -247,6 +256,7 @@ func TestProfileService_UpdateProfile_RollsBackOnGetError(t *testing.T) {
 // failure rolls the transaction back and returns the wrapped error, so audit
 // failure cannot leave a committed mutation without its audit entry.
 func TestProfileService_UpdateProfile_RollsBackOnAuditError(t *testing.T) {
+	t.Parallel()
 	h := newProfileHarness(t)
 	user := seedProfileUser(t, h.users)
 	auditErr := errors.New("audit writer down")
@@ -269,6 +279,7 @@ func TestProfileService_UpdateProfile_RollsBackOnAuditError(t *testing.T) {
 // was committed. This documents the contract: the reschedule is best-effort
 // synchronous and its error is surfaced to the caller.
 func TestProfileService_UpdateProfile_RescheduleErrorAfterCommit(t *testing.T) {
+	t.Parallel()
 	h := newProfileHarness(t)
 	user := seedProfileUser(t, h.users)
 	rescheduleErr := errors.New("notifications unavailable")
@@ -288,6 +299,7 @@ func TestProfileService_UpdateProfile_RescheduleErrorAfterCommit(t *testing.T) {
 // the user repository is bound to the transaction exactly once and the UoW
 // commits. This is the core ADR 0033 assertion for the Profile migration.
 func TestProfileService_UsesRunInTx(t *testing.T) {
+	t.Parallel()
 	users := &countingUserRepo{fakeUserRepo: newFakeUserRepo()}
 	codes := newFakeCodeRepo()
 	attempts := newFakeAttemptRepo()
@@ -317,6 +329,7 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 // TestProfileService_Me_ReadsOutsideTx proves Me is a plain read that does not
 // open a transaction (ADR 0033: reads stay outside runInTx).
 func TestProfileService_Me_ReadsOutsideTx(t *testing.T) {
+	t.Parallel()
 	h := newProfileHarness(t)
 	user := seedProfileUser(t, h.users)
 

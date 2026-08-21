@@ -13,6 +13,7 @@ import (
 // is persisted against real PostgreSQL and the profile-updated audit entry is
 // recorded inside the same transaction.
 func TestProfileIntegration_UpdatePersonalData(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000400")
 	email := mustEmail(t, "profile@example.com")
@@ -51,6 +52,7 @@ func TestProfileIntegration_UpdatePersonalData(t *testing.T) {
 // clears EmailVerifiedAt on the persisted row, while re-submitting the same
 // email leaves verification intact.
 func TestProfileIntegration_EmailChangeResetsVerified(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000401")
 	email := mustEmail(t, "verified@example.com")
@@ -89,6 +91,7 @@ func TestProfileIntegration_EmailChangeResetsVerified(t *testing.T) {
 // triggers the post-commit reminder reschedule against the real persisted
 // timezone, and that an unchanged timezone (or no timezone command) does not.
 func TestProfileIntegration_TimezoneChangeReschedules(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	phone := mustPhone(t, "+79160000402")
 	email := mustEmail(t, "tz@example.com")

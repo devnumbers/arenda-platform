@@ -22,6 +22,7 @@ import (
 // NOT by itself prove the SQL increment is atomic without the lock. That narrower
 // property is covered by TestAttemptWindowRace_SaveWithoutLockIsAtomic.
 func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
+	t.Parallel()
 	const concurrentAttempts = 10 // < domain.MaxLoginFailures (15).
 
 	h := newIntegrationHarness(t)
@@ -89,6 +90,7 @@ func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
 // The first call lands on the INSERT branch (row absent) and seeds failures=1;
 // the remaining N-1 calls hit ON CONFLICT and each add 1 atomically.
 func TestAttemptWindowRace_SaveWithoutLockIsAtomic(t *testing.T) {
+	t.Parallel()
 	const concurrentAttempts = 10
 
 	h := newIntegrationHarness(t)

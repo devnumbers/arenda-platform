@@ -44,6 +44,7 @@ FOR UPDATE`
 // chooses an index scan over idx_login_codes_unique_unused. A regression to seq scan
 // at this volume would mean the index no longer serves the read path.
 func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
+	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := t.Context()
 
@@ -95,6 +96,7 @@ func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
 	// (COALESCE(email, '')) cannot serve the email predicate — email appears
 	// in Filter, not Index Cond. This documents *why* the prefix is phone+purpose only.
 	t.Run("forced_index_reveals_email_filter", func(t *testing.T) {
+		t.Parallel()
 		conn, err := pool.Acquire(ctx)
 		if err != nil {
 			t.Fatalf("acquire conn: %v", err)

@@ -31,13 +31,16 @@ func assertFailuresBelowThreshold(t *testing.T, start time.Time) {
 }
 
 func TestAttemptWindow_RecordFailure(t *testing.T) {
+	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	t.Run("increments counter and returns nil below the threshold", func(t *testing.T) {
+		t.Parallel()
 		assertFailuresBelowThreshold(t, start)
 	})
 
 	t.Run("returns ErrTooManyAttempts on the MaxLoginFailures-th failure", func(t *testing.T) {
+		t.Parallel()
 		var w AttemptWindow
 		fillWindowPastThreshold(t, &w, start)
 		if w.Failures != MaxLoginFailures {
@@ -46,6 +49,7 @@ func TestAttemptWindow_RecordFailure(t *testing.T) {
 	})
 
 	t.Run("keeps returning ErrTooManyAttempts within the same window", func(t *testing.T) {
+		t.Parallel()
 		w := AttemptWindow{}
 		now := start
 
@@ -61,6 +65,7 @@ func TestAttemptWindow_RecordFailure(t *testing.T) {
 	})
 
 	t.Run("resets the window once LoginAttemptWindowTTL has elapsed", func(t *testing.T) {
+		t.Parallel()
 		w := AttemptWindow{}
 		// Fill the window past the threshold.
 		fillWindowPastThreshold(t, &w, start)
@@ -99,9 +104,11 @@ func fillWindowPastThreshold(t *testing.T, w *AttemptWindow, at time.Time) {
 }
 
 func TestAttemptWindow_WasReset(t *testing.T) {
+	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	t.Run("false on a plain increment within the live window", func(t *testing.T) {
+		t.Parallel()
 		prev := AttemptWindow{Failures: 3, FirstFailureAt: start}
 		next := AttemptWindow{Failures: 4, FirstFailureAt: start}
 
@@ -111,6 +118,7 @@ func TestAttemptWindow_WasReset(t *testing.T) {
 	})
 
 	t.Run("true after a TTL reset", func(t *testing.T) {
+		t.Parallel()
 		prev := AttemptWindow{Failures: MaxLoginFailures, FirstFailureAt: start}
 		afterTTL := start.Add(LoginAttemptWindowTTL)
 		next := AttemptWindow{Failures: 1, FirstFailureAt: afterTTL}
@@ -121,6 +129,7 @@ func TestAttemptWindow_WasReset(t *testing.T) {
 	})
 
 	t.Run("true for a freshly created window", func(t *testing.T) {
+		t.Parallel()
 		var prev AttemptWindow // Zero value: Failures == 0, FirstFailureAt zero.
 		next := AttemptWindow{Failures: 1, FirstFailureAt: start}
 
@@ -131,9 +140,11 @@ func TestAttemptWindow_WasReset(t *testing.T) {
 }
 
 func TestAttemptWindow_Blocked(t *testing.T) {
+	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	t.Run("not blocked below the threshold", func(t *testing.T) {
+		t.Parallel()
 		w := AttemptWindow{Failures: MaxLoginFailures - 1, FirstFailureAt: start}
 		if w.Blocked(start.Add(time.Minute)) {
 			t.Fatal("Blocked = true, want false below MaxLoginFailures")
@@ -141,6 +152,7 @@ func TestAttemptWindow_Blocked(t *testing.T) {
 	})
 
 	t.Run("blocked until the window expires", func(t *testing.T) {
+		t.Parallel()
 		w := AttemptWindow{Failures: MaxLoginFailures, FirstFailureAt: start}
 		if !w.Blocked(start.Add(LoginAttemptWindowTTL - time.Second)) {
 			t.Fatal("Blocked = false, want true inside the window")
@@ -148,6 +160,7 @@ func TestAttemptWindow_Blocked(t *testing.T) {
 	})
 
 	t.Run("unblocked after the window expires", func(t *testing.T) {
+		t.Parallel()
 		w := AttemptWindow{Failures: MaxLoginFailures, FirstFailureAt: start}
 		if w.Blocked(start.Add(LoginAttemptWindowTTL)) {
 			t.Fatal("Blocked = true at window expiry, want false")
@@ -158,6 +171,7 @@ func TestAttemptWindow_Blocked(t *testing.T) {
 	})
 
 	t.Run("zero failures never blocks", func(t *testing.T) {
+		t.Parallel()
 		w := AttemptWindow{}
 		if w.Blocked(start) {
 			t.Fatal("Blocked = true for an empty window, want false")
