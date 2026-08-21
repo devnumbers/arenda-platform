@@ -40,6 +40,7 @@ func createInvitationFixture(
 }
 
 func TestInvitationRepository_CreateGetList(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -93,6 +94,7 @@ func TestInvitationRepository_CreateGetList(t *testing.T) {
 }
 
 func TestInvitationRepository_UniquePropertyEmail(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -141,6 +143,7 @@ func TestInvitationRepository_UniquePropertyEmail(t *testing.T) {
 }
 
 func TestInvitationRepository_ListPendingByEmailFIFO(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -226,6 +229,7 @@ func TestInvitationRepository_ListPendingByEmailFIFO(t *testing.T) {
 }
 
 func TestInvitationRepository_UpdateRoleLastSentDelete(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()

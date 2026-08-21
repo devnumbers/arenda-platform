@@ -231,6 +231,7 @@ func (f *invitationFixture) addProperty(ownerID uuid.UUID) uuid.UUID {
 // Invite: registered email → instant activation.
 
 func TestInvitationService_InviteRegisteredEmailActivatesInstantly(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -266,6 +267,7 @@ func TestInvitationService_InviteRegisteredEmailActivatesInstantly(t *testing.T)
 }
 
 func TestInvitationService_InviteOwnerOrSelfEmailRejected(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -278,6 +280,7 @@ func TestInvitationService_InviteOwnerOrSelfEmailRejected(t *testing.T) {
 }
 
 func TestInvitationService_InviteInvalidEmailRejected(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -292,6 +295,7 @@ func TestInvitationService_InviteInvalidEmailRejected(t *testing.T) {
 // Invite: unregistered email → pending invitation + single invite email.
 
 func TestInvitationService_InviteUnregisteredCreatesPending(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -331,6 +335,7 @@ func TestInvitationService_InviteUnregisteredCreatesPending(t *testing.T) {
 }
 
 func TestInvitationService_InviteMailFailureKeepsInvitation(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -348,6 +353,7 @@ func TestInvitationService_InviteMailFailureKeepsInvitation(t *testing.T) {
 // Resend with the 24h cooldown.
 
 func TestInvitationService_ResendCooldown(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -396,6 +402,7 @@ func TestInvitationService_ResendCooldown(t *testing.T) {
 // Role change and cancellation of a pending invitation.
 
 func TestInvitationService_ChangeRoleAndCancel(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -484,6 +491,7 @@ func (f *invitationFixture) assertInvitationConsumed(t *testing.T, invitationID,
 }
 
 func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	propA := f.addProperty(owner)
@@ -532,6 +540,7 @@ func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
 }
 
 func TestInvitationService_ActivationFIFOWhenSlotShort(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	propA := f.addProperty(owner)
@@ -578,6 +587,7 @@ func TestInvitationService_ActivationFIFOWhenSlotShort(t *testing.T) {
 }
 
 func TestInvitationService_ActivationAppliesCurrentRole(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -606,6 +616,7 @@ func TestInvitationService_ActivationAppliesCurrentRole(t *testing.T) {
 }
 
 func TestInvitationService_ActivationSkipsExistingMembership(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -642,6 +653,7 @@ func TestInvitationService_ActivationSkipsExistingMembership(t *testing.T) {
 // Member list: pending invitations are manager-only.
 
 func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -692,6 +704,7 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 // read-only without a slot (issue #163).
 
 func TestInvitationService_InviteArchivedPropertyRejected(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -723,6 +736,7 @@ func TestInvitationService_InviteArchivedPropertyRejected(t *testing.T) {
 }
 
 func TestInvitationService_ActivationToArchivedPropertySkipsSlotCheck(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
@@ -753,6 +767,7 @@ func TestInvitationService_ActivationToArchivedPropertySkipsSlotCheck(t *testing
 }
 
 func TestInvitationService_ActivationToActivePropertyWithoutSlotSuspends(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)

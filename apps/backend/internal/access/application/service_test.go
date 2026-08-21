@@ -29,6 +29,7 @@ var _ PropertyStatusResolver = fakeStatuses{}
 // TestAccessService_ArchivedPropertyRejectsNewMembers verifies that AddMember
 // on an archived property fails with ErrPropertyArchived (issue #163).
 func TestAccessService_ArchivedPropertyRejectsNewMembers(t *testing.T) {
+	t.Parallel()
 	owner := uuid.Must(uuid.NewV7())
 	member := uuid.Must(uuid.NewV7())
 	property := uuid.Must(uuid.NewV7())
@@ -52,6 +53,7 @@ func TestAccessService_ArchivedPropertyRejectsNewMembers(t *testing.T) {
 // that ChangeMemberRole and RevokeMember are not blocked on an archived
 // property (issue #163).
 func TestAccessService_ArchivedPropertyKeepsExistingMembersManageable(t *testing.T) {
+	t.Parallel()
 	owner := uuid.Must(uuid.NewV7())
 	member := uuid.Must(uuid.NewV7())
 	property := uuid.Must(uuid.NewV7())
@@ -109,6 +111,7 @@ var _ UserLookup = fakeUserLookup{}
 // sharing banner (issue T11): "Name Surname" when present, otherwise a masked
 // phone — never an email or a raw phone. Lookup failures propagate.
 func TestAccessService_DisplayName(t *testing.T) {
+	t.Parallel()
 	namedID := uuid.Must(uuid.NewV7())
 	phoneOnlyID := uuid.Must(uuid.NewV7())
 	missingID := uuid.Must(uuid.NewV7())
@@ -152,6 +155,7 @@ var _ auditapp.Recorder = (*fakeAuditRecorder)(nil)
 // as the owner's own (issue #166 follow-up). Self-exit is the only write a
 // viewer may perform, so it is where ActorRoleViewer enters the journal.
 func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		role domain.Role
@@ -161,6 +165,7 @@ func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
 		{name: "full access", role: domain.RoleFullAccess, want: auditdomain.ActorRoleFullAccess},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			owner := uuid.Must(uuid.NewV7())
 			member := uuid.Must(uuid.NewV7())
 			property := uuid.Must(uuid.NewV7())
@@ -199,6 +204,7 @@ func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
 // role, while the owner's own actions stay attributed as owner (issue #166
 // follow-up).
 func TestAccessService_ManageAuditActorRole(t *testing.T) {
+	t.Parallel()
 	owner := uuid.Must(uuid.NewV7())
 	full := uuid.Must(uuid.NewV7())
 	member := uuid.Must(uuid.NewV7())

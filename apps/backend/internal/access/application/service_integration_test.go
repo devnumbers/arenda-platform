@@ -304,6 +304,7 @@ var (
 // listed; a stranger is denied; the owner is always listed first and cannot be
 // re-added; a duplicate add is rejected (issue #156).
 func TestAccessService_AllowDenyPath(t *testing.T) {
+	t.Parallel()
 	owner := uuid.Must(uuid.NewV7())
 	member := uuid.Must(uuid.NewV7())
 	property := uuid.Must(uuid.NewV7())
@@ -373,6 +374,7 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 // TestAccessService_LeaveProperty verifies self-exit: a member can leave, the
 // owner cannot (issue #156).
 func TestAccessService_LeaveProperty(t *testing.T) {
+	t.Parallel()
 	owner := uuid.Must(uuid.NewV7())
 	member := uuid.Must(uuid.NewV7())
 	property := uuid.Must(uuid.NewV7())

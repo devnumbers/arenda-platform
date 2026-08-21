@@ -219,6 +219,7 @@ func (f *lifecycleFixture) addMember(t *testing.T, propertyID, ownerID, userID u
 // does not.
 
 func TestAccessService_RevokeActiveMemberSendsRevokedEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testNevskyTitle)
@@ -249,6 +250,7 @@ func TestAccessService_RevokeActiveMemberSendsRevokedEmail(t *testing.T) {
 }
 
 func TestAccessService_RevokeSuspendedMemberSendsNoEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testNevskyTitle)
@@ -274,6 +276,7 @@ func TestAccessService_RevokeSuspendedMemberSendsNoEmail(t *testing.T) {
 }
 
 func TestAccessService_RevokeMailFailureDoesNotFailRevoke(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testNevskyTitle)
@@ -298,6 +301,7 @@ func TestAccessService_RevokeMailFailureDoesNotFailRevoke(t *testing.T) {
 // AddMember / activation without a free slot: the "waiting for a slot" email.
 
 func TestAccessService_AddMemberWithoutSlotSendsWaitingEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testNevskyTitle)
@@ -329,6 +333,7 @@ func TestAccessService_AddMemberWithoutSlotSendsWaitingEmail(t *testing.T) {
 // Self-exit: the owner is notified; the leaving member gets nothing.
 
 func TestAccessService_LeavePropertyNotifiesOwner(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testNevskyTitle)
@@ -367,6 +372,7 @@ func TestAccessService_LeavePropertyNotifiesOwner(t *testing.T) {
 // additionally sends the "waiting for a slot" email to the new member.
 
 func TestInvitationService_ActivationAtRegistrationNotifiesOwner(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testNevskyTitle)
@@ -402,6 +408,7 @@ func TestInvitationService_ActivationAtRegistrationNotifiesOwner(t *testing.T) {
 }
 
 func TestInvitationService_ActivationWithoutSlotSendsWaitingEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testNevskyTitle)
@@ -435,6 +442,7 @@ func TestInvitationService_ActivationWithoutSlotSendsWaitingEmail(t *testing.T) 
 // this enforcement call.
 
 func TestSlotCoordinator_DowngradeSendsSingleSummaryEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	p1 := f.addProperty(owner, testApartmentTitle)
@@ -466,6 +474,7 @@ func TestSlotCoordinator_DowngradeSendsSingleSummaryEmail(t *testing.T) {
 }
 
 func TestSlotCoordinator_DowngradeWithoutExcessSendsNoEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	p1 := f.addProperty(owner, testApartmentTitle)
@@ -486,6 +495,7 @@ func TestSlotCoordinator_DowngradeWithoutExcessSendsNoEmail(t *testing.T) {
 // The downgrading user himself (billing passes sub.UserID) receives the single
 // summary for his suspended shared memberships on other owners' objects.
 func TestSlotCoordinator_DowngradingRecipientGetsSummaryEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	foreignOwner := uuid.Must(uuid.NewV7())
 	p1 := f.addProperty(foreignOwner, testApartmentTitle)
@@ -516,6 +526,7 @@ func TestSlotCoordinator_DowngradingRecipientGetsSummaryEmail(t *testing.T) {
 // foreign object is processed exactly once: one summary to him, one to the
 // member — no duplicates.
 func TestSlotCoordinator_DowngradeOwnerAndRecipientNoDuplicateSummary(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	user := uuid.Must(uuid.NewV7())
 	f.emails[user] = "user@example.com"
@@ -554,6 +565,7 @@ func TestSlotCoordinator_DowngradeOwnerAndRecipientNoDuplicateSummary(t *testing
 // Recovery: the "access restored" email per reactivated membership.
 
 func TestSlotCoordinator_RecoverSendsRestoredEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	p1 := f.addProperty(owner, testApartmentTitle)
@@ -576,6 +588,7 @@ func TestSlotCoordinator_RecoverSendsRestoredEmail(t *testing.T) {
 // Unarchive without a free slot: the "waiting for a slot" email.
 
 func TestSlotCoordinator_UnarchiveWithoutSlotSendsWaitingEmail(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testApartmentTitle)
@@ -600,6 +613,7 @@ func TestSlotCoordinator_UnarchiveWithoutSlotSendsWaitingEmail(t *testing.T) {
 // are skipped.
 
 func TestPropertyDeleteMailer_CollectsFormerMembersAndSends(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleFixture()
 	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner, testApartmentTitle)

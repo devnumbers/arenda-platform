@@ -42,6 +42,7 @@ import (
 // recovery was a no-op. The fix binds the own-properties port to the caller's
 // transaction via WithTx.
 func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx := context.Background()
 

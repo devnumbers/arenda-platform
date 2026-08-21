@@ -16,6 +16,7 @@ import (
 // ListActiveRecipientIDs feeds the reminder fan-out (issue #159): it must
 // return the active members of the property and exclude suspended ones.
 func TestMemberRecipientAdapter_ListActiveRecipientIDs(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()

@@ -32,8 +32,16 @@ func setupAccessDB(t *testing.T) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
+	// Tests run in parallel and each holds its own pool for a single rollback
+	// transaction (two connections max — see slot_owned_props_tx tests). The
+	// production DefaultPoolConfig keeps MinConns=16 warm per pool; across the
+	// ~20 parallel fixtures that is hundreds of connections against one
+	// PostgreSQL, so the test pools stay minimal.
+	cfg := database.DefaultPoolConfig()
+	cfg.MinConns = 0
+	cfg.MaxConns = 2
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, databaseURL)
+	pool, err := database.NewPoolWithConfig(ctx, databaseURL, cfg)
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}
@@ -108,6 +116,7 @@ func createAccessTestProperty(t *testing.T, ctx context.Context, q *genpostgres.
 }
 
 func TestMembershipRepository_CreateAndGet(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -159,6 +168,7 @@ func TestMembershipRepository_CreateAndGet(t *testing.T) {
 }
 
 func TestMembershipRepository_DuplicateUnique(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -185,6 +195,7 @@ func TestMembershipRepository_DuplicateUnique(t *testing.T) {
 }
 
 func TestMembershipRepository_UpdateRoleAndDelete(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -223,6 +234,7 @@ func TestMembershipRepository_UpdateRoleAndDelete(t *testing.T) {
 // can return RoleSuspended), while the active-only GetRole projection treats
 // it as absent.
 func TestMembershipRepository_SuspendedMembershipVisible(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -257,6 +269,7 @@ func TestMembershipRepository_SuspendedMembershipVisible(t *testing.T) {
 }
 
 func TestOwnerResolver_ReturnsOwner(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -338,6 +351,7 @@ func assertSlotAccounting(
 // CountActiveByUser and the FIFO recovery queue ListSuspendedByUser — and
 // re-enter the selection when the property is unarchived.
 func TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()

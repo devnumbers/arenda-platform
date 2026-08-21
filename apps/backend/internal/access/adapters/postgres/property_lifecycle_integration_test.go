@@ -131,12 +131,13 @@ func activePropertyIDs(t *testing.T, repo *MembershipRepository, userID uuid.UUI
 // archived), and the freed slot recovers the recipient's oldest suspended
 // membership FIFO via RecoverSuspendedForProperty.
 func TestPropertyLifecycle_ArchiveActiveMemberRecoversSuspendedFIFO(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
 	ctx := f.bg()
 	repo := NewMembershipRepository(f.tx)
 
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	recipient := f.addUserWithEmail(t, "recipient@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	recipient := f.addUserWithEmail(t, f.email("recipient"))
 	target := f.addProperty(t, owner, "Квартира на Невском")
 	older := f.addProperty(t, owner, "Дача у моря")
 	newer := f.addProperty(t, owner, "Студия в центре")
@@ -204,12 +205,13 @@ func TestPropertyLifecycle_ArchiveActiveMemberRecoversSuspendedFIFO(t *testing.T
 // recovery queue so it cannot be reactivated while archived) and does NOT
 // touch pending invitations (the row is still present afterwards).
 func TestPropertyLifecycle_ArchiveKeepsSuspendedMembersAndPendingInvitations(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
 	ctx := f.bg()
 	repo := NewMembershipRepository(f.tx)
 
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	recipient := f.addUserWithEmail(t, "recipient@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	recipient := f.addUserWithEmail(t, f.email("recipient"))
 	property := f.addProperty(t, owner, "Квартира на Невском")
 	f.limiter.set(recipient, 0)
 
@@ -260,13 +262,15 @@ func TestPropertyLifecycle_ArchiveKeepsSuspendedMembersAndPendingInvitations(t *
 // and the recipient's used slots stay unchanged because ListActiveByUser still
 // excludes the archived property. Goes through the real InvitationService.
 func TestPropertyLifecycle_InvitationActivationOnArchivedProperty(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
 	ctx := f.bg()
 	repo := NewMembershipRepository(f.tx)
 
-	owner := f.addUserWithEmail(t, "owner@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
 	property := f.addProperty(t, owner, "Квартира на Невском")
-	if _, err := f.invites.InviteByEmail(ctx, owner, property, "late@example.com", domain.RoleViewer); err != nil {
+	lateEmail := f.email("late")
+	if _, err := f.invites.InviteByEmail(ctx, owner, property, lateEmail, domain.RoleViewer); err != nil {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
 	if _, err := f.q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(property), OwnerID: pgUUID(owner)}); err != nil {
@@ -275,9 +279,9 @@ func TestPropertyLifecycle_InvitationActivationOnArchivedProperty(t *testing.T) 
 
 	// The invitee registers with ZERO free slots: if the slot check were not
 	// skipped for archived properties, the membership would be suspended.
-	late := f.addUserWithEmail(t, "late@example.com")
+	late := f.addUserWithEmail(t, lateEmail)
 	f.limiter.set(late, 0)
-	if err := f.invites.ActivatePendingInvitations(ctx, late, "late@example.com"); err != nil {
+	if err := f.invites.ActivatePendingInvitations(ctx, late, lateEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 
@@ -316,8 +320,8 @@ func unarchiveSlotScenario(t *testing.T, limit int, withOccupied bool) (repo *Me
 	t.Helper()
 	f := newLifecycleMailFixture(t)
 	repo = NewMembershipRepository(f.tx)
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	recipient = f.addUserWithEmail(t, "recipient@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	recipient = f.addUserWithEmail(t, f.email("recipient"))
 	target = f.addProperty(t, owner, "Квартира на Невском")
 	f.limiter.set(recipient, limit)
 
@@ -344,7 +348,9 @@ func unarchiveSlotScenario(t *testing.T, limit int, withOccupied bool) (repo *Me
 // suspends the membership when the recipient has no free slot and keeps it
 // active when a slot exists.
 func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
+	t.Parallel()
 	t.Run("no free slot suspends the membership", func(t *testing.T) {
+		t.Parallel()
 		// One slot, already occupied by the other property: the unarchived
 		// object does not fit and its membership is suspended.
 		repo, recipient, target := unarchiveSlotScenario(t, 1, true)
@@ -362,6 +368,7 @@ func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
 	})
 
 	t.Run("free slot keeps the membership active", func(t *testing.T) {
+		t.Parallel()
 		// Two slots, none otherwise occupied: the unarchived object fits and
 		// stays active.
 		repo, recipient, target := unarchiveSlotScenario(t, 2, false)
@@ -379,6 +386,7 @@ func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
 	})
 
 	t.Run("pool exactly at limit keeps the membership active", func(t *testing.T) {
+		t.Parallel()
 		// Two slots, one occupied by the other property: after the unarchive
 		// the pool is exactly at the limit — the object still fits and its
 		// membership must stay active (only strictly over the limit suspends).
@@ -404,12 +412,13 @@ func TestPropertyLifecycle_UnarchiveEnforcesRecipientSlots(t *testing.T) {
 // deletes the pending invitations with the property row, and the freed slot
 // recovers the recipient's oldest suspended membership FIFO.
 func TestPropertyLifecycle_DeleteDropsMembershipsAndRecoversFIFO(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
 	ctx := f.bg()
 	repo := NewMembershipRepository(f.tx)
 
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	recipient := f.addUserWithEmail(t, "recipient@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	recipient := f.addUserWithEmail(t, f.email("recipient"))
 	target := f.addProperty(t, owner, "Квартира на Невском")
 	other := f.addProperty(t, owner, "Дача у моря")
 	f.limiter.set(recipient, 1)
@@ -473,10 +482,11 @@ func TestPropertyLifecycle_DeleteDropsMembershipsAndRecoversFIFO(t *testing.T) {
 // TestPropertyService_ArchiveProperty_OpenLeaseStillRejected; DeleteProperty
 // consumes the same IsOccupied gate.
 func TestPropertyLifecycle_OpenLeaseOccupancyIgnoresLeaseAuthor(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
 	ctx := f.bg()
 
-	owner := f.addUserWithEmail(t, "owner@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
 	property := f.addProperty(t, owner, "Квартира на Невском")
 
 	// An open lease under the owner's scope — the only shape a lease can

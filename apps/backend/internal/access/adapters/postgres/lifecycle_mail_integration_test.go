@@ -173,6 +173,7 @@ type lifecycleMailFixture struct {
 	q       *genpostgres.Queries
 	sender  *lifecycleCapturingSender
 	limiter *lifecycleFakeLimiter
+	nonce   string
 	access  *accessapp.AccessService
 	invites *accessapp.InvitationService
 	slots   *accessapp.SlotCoordinator
@@ -182,12 +183,25 @@ type lifecycleMailFixture struct {
 // bg returns a background context (kept out of the struct per containedctx).
 func (f *lifecycleMailFixture) bg() context.Context { return context.Background() }
 
+// email derives a fixture-unique address for the given local part: the tests
+// run in parallel against one database, and users_email_lowercase_unique would
+// otherwise make their uncommitted inserts block on each other's rollback
+// transactions. Invitation-only addresses need no nonce — invitations are
+// unique per (property_id, email) and every fixture uses fresh property ids.
+func (f *lifecycleMailFixture) email(local string) string {
+	return local + "." + f.nonce + "@example.com"
+}
+
 func newLifecycleMailFixture(t *testing.T) *lifecycleMailFixture {
 	t.Helper()
 	pool := setupAccessDB(t)
 	_, tx, cleanup := beginAccessTx(t, pool)
 	t.Cleanup(cleanup)
 
+	nonce, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
 	renderer, err := mailer.NewRenderer("../../../../templates/email")
 	if err != nil {
 		t.Fatalf("load email templates: %v", err)
@@ -221,7 +235,7 @@ func newLifecycleMailFixture(t *testing.T) *lifecycleMailFixture {
 
 	return &lifecycleMailFixture{
 		tx: tx, q: genpostgres.New(tx),
-		sender: sender, limiter: limiter,
+		sender: sender, limiter: limiter, nonce: nonce.String(),
 		access: access, invites: invites, slots: slots, deleter: deleter,
 	}
 }
@@ -307,9 +321,10 @@ func (f *lifecycleMailFixture) suspendedTitle(t *testing.T, recipient uuid.UUID,
 // member sends nothing (T5 behaviour preserved), revoking an active membership
 // emails the former member.
 func TestLifecycleMail_ActiveMembershipLifecycle(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	member := f.addUserWithEmail(t, "member@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	member := f.addUserWithEmail(t, f.email("member"))
 	property := f.addProperty(t, owner, "Квартира на Невском")
 	f.limiter.set(member, 10)
 
@@ -328,16 +343,17 @@ func TestLifecycleMail_ActiveMembershipLifecycle(t *testing.T) {
 		t.Fatalf("RevokeMember: %v", err)
 	}
 	msg := f.sender.onlyWithSubject(t, subjectRevoked)
-	assertMessage(t, msg, "member@example.com", "Квартира на Невском")
+	assertMessage(t, msg, f.email("member"), "Квартира на Невском")
 }
 
 // TestLifecycleMail_SuspendedGrantAndRevoke covers: a grant created without a
 // free slot emails "access waits for a free slot"; revoking a suspended
 // membership is silent.
 func TestLifecycleMail_SuspendedGrantAndRevoke(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	member := f.addUserWithEmail(t, "member@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	member := f.addUserWithEmail(t, f.email("member"))
 	property := f.addProperty(t, owner, "Дача у моря")
 	f.limiter.set(member, 0)
 
@@ -349,7 +365,7 @@ func TestLifecycleMail_SuspendedGrantAndRevoke(t *testing.T) {
 		t.Fatalf("member must be suspended, got %v", m.Status)
 	}
 	msg := f.sender.onlyWithSubject(t, subjectWaiting)
-	assertMessage(t, msg, "member@example.com", "Дача у моря")
+	assertMessage(t, msg, f.email("member"), "Дача у моря")
 
 	f.sender.reset()
 	if err := f.access.RevokeMember(f.bg(), owner, property, m.ID); err != nil {
@@ -363,9 +379,10 @@ func TestLifecycleMail_SuspendedGrantAndRevoke(t *testing.T) {
 // TestLifecycleMail_LeaveNotifiesOwner covers: self-exit emails the owner and
 // never the leaving member.
 func TestLifecycleMail_LeaveNotifiesOwner(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	member := f.addUserWithEmail(t, "member@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	member := f.addUserWithEmail(t, f.email("member"))
 	property := f.addProperty(t, owner, "Квартира на Невском")
 	f.limiter.set(member, 10)
 
@@ -378,9 +395,9 @@ func TestLifecycleMail_LeaveNotifiesOwner(t *testing.T) {
 		t.Fatalf("LeaveProperty: %v", err)
 	}
 	msg := f.sender.onlyWithSubject(t, subjectMemberLeft)
-	assertMessage(t, msg, "owner@example.com", "Квартира на Невском")
+	assertMessage(t, msg, f.email("owner"), "Квартира на Невском")
 	for _, m := range f.sender.messages {
-		if slices.Contains(m.To, "member@example.com") {
+		if slices.Contains(m.To, f.email("member")) {
 			t.Errorf("the leaving member must not receive email, got %+v", m)
 		}
 	}
@@ -391,17 +408,19 @@ func TestLifecycleMail_LeaveNotifiesOwner(t *testing.T) {
 // at registration, and the "waiting for a slot" email on a suspended
 // activation.
 func TestLifecycleMail_InvitationLifecycle(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
-	owner := f.addUserWithEmail(t, "owner@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
 	property := f.addProperty(t, owner, "Квартира на Невском")
 	other := f.addProperty(t, owner, "Дача у моря")
 
 	// Pending invitation: the single invite email.
-	if _, err := f.invites.InviteByEmail(f.bg(), owner, property, "new@example.com", domain.RoleViewer); err != nil {
+	newEmail := f.email("new")
+	if _, err := f.invites.InviteByEmail(f.bg(), owner, property, newEmail, domain.RoleViewer); err != nil {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
 	msg := f.sender.onlyWithSubject(t, subjectInvite)
-	assertMessage(t, msg, "new@example.com", "Квартира на Невском")
+	assertMessage(t, msg, newEmail, "Квартира на Невском")
 
 	// Cancelling a pending invitation sends nothing.
 	outcome, err := f.invites.InviteByEmail(f.bg(), owner, other, "cancel@example.com", domain.RoleViewer)
@@ -418,30 +437,31 @@ func TestLifecycleMail_InvitationLifecycle(t *testing.T) {
 
 	// Registration activates the pending invitation: the owner is notified.
 	f.sender.reset()
-	user := f.addUserWithEmail(t, "new@example.com")
+	user := f.addUserWithEmail(t, newEmail)
 	f.limiter.set(user, 10)
-	if err := f.invites.ActivatePendingInvitations(f.bg(), user, "new@example.com"); err != nil {
+	if err := f.invites.ActivatePendingInvitations(f.bg(), user, newEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 	msg = f.sender.onlyWithSubject(t, subjectActivated)
-	assertMessage(t, msg, "owner@example.com", "Квартира на Невском", "new@example.com")
+	assertMessage(t, msg, f.email("owner"), "Квартира на Невском", newEmail)
 	if got := len(f.sender.withSubject(subjectWaiting)); got != 0 {
 		t.Errorf("activation with a free slot must not send the waiting email, got %d", got)
 	}
 
 	// A suspended activation additionally emails the new member.
 	f.sender.reset()
-	if _, err := f.invites.InviteByEmail(f.bg(), owner, other, "late@example.com", domain.RoleViewer); err != nil {
+	lateEmail := f.email("late")
+	if _, err := f.invites.InviteByEmail(f.bg(), owner, other, lateEmail, domain.RoleViewer); err != nil {
 		t.Fatalf("InviteByEmail (late): %v", err)
 	}
-	late := f.addUserWithEmail(t, "late@example.com")
+	late := f.addUserWithEmail(t, lateEmail)
 	f.limiter.set(late, 0)
 	f.sender.reset()
-	if err := f.invites.ActivatePendingInvitations(f.bg(), late, "late@example.com"); err != nil {
+	if err := f.invites.ActivatePendingInvitations(f.bg(), late, lateEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations (late): %v", err)
 	}
 	msg = f.sender.onlyWithSubject(t, subjectWaiting)
-	assertMessage(t, msg, "late@example.com", "Дача у моря")
+	assertMessage(t, msg, lateEmail, "Дача у моря")
 	if got := len(f.sender.withSubject(subjectActivated)); got != 1 {
 		t.Errorf("the owner must be notified about the suspended activation too, got %d", got)
 	}
@@ -450,9 +470,10 @@ func TestLifecycleMail_InvitationLifecycle(t *testing.T) {
 // TestLifecycleMail_DowngradeAndRecovery covers: a tariff downgrade sends one
 // summary email with the suspended titles; a recovery sends "access restored".
 func TestLifecycleMail_DowngradeAndRecovery(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	recipient := f.addUserWithEmail(t, "recipient@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	recipient := f.addUserWithEmail(t, f.email("recipient"))
 	p1 := f.addProperty(t, owner, "Квартира")
 	p2 := f.addProperty(t, owner, "Дача")
 	f.limiter.set(recipient, 10)
@@ -477,7 +498,7 @@ func TestLifecycleMail_DowngradeAndRecovery(t *testing.T) {
 	}
 	suspendedTitle, otherTitle := f.suspendedTitle(t, recipient, map[uuid.UUID]string{p1: "Квартира", p2: "Дача"})
 	msg := f.sender.onlyWithSubject(t, subjectDowngrade)
-	assertMessage(t, msg, "recipient@example.com", suspendedTitle)
+	assertMessage(t, msg, f.email("recipient"), suspendedTitle)
 	if strings.Contains(msg.TextBody, otherTitle) {
 		t.Errorf("summary must list only the suspended object, body:\n%s", msg.TextBody)
 	}
@@ -493,7 +514,7 @@ func TestLifecycleMail_DowngradeAndRecovery(t *testing.T) {
 		t.Fatalf("RecoverSuspended: %v", err)
 	}
 	msg = f.sender.onlyWithSubject(t, subjectRestored)
-	assertMessage(t, msg, "recipient@example.com", suspendedTitle)
+	assertMessage(t, msg, f.email("recipient"), suspendedTitle)
 }
 
 // TestLifecycleMail_DowngradeOfRecipientOnForeignObjects covers the billing
@@ -501,9 +522,10 @@ func TestLifecycleMail_DowngradeAndRecovery(t *testing.T) {
 // OWN id (sub.UserID), and his shared memberships on other owners' objects are
 // suspended with exactly one summary email to him (issue #162 AC5, issue #158).
 func TestLifecycleMail_DowngradeOfRecipientOnForeignObjects(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
-	foreignOwner := f.addUserWithEmail(t, "foreign-owner@example.com")
-	recipient := f.addUserWithEmail(t, "recipient@example.com")
+	foreignOwner := f.addUserWithEmail(t, f.email("foreign-owner"))
+	recipient := f.addUserWithEmail(t, f.email("recipient"))
 	p1 := f.addProperty(t, foreignOwner, "Квартира")
 	p2 := f.addProperty(t, foreignOwner, "Дача")
 	f.limiter.set(recipient, 10)
@@ -527,7 +549,7 @@ func TestLifecycleMail_DowngradeOfRecipientOnForeignObjects(t *testing.T) {
 	}
 	suspendedTitle, otherTitle := f.suspendedTitle(t, recipient, map[uuid.UUID]string{p1: "Квартира", p2: "Дача"})
 	msg := f.sender.onlyWithSubject(t, subjectDowngrade)
-	assertMessage(t, msg, "recipient@example.com", suspendedTitle)
+	assertMessage(t, msg, f.email("recipient"), suspendedTitle)
 	if strings.Contains(msg.TextBody, otherTitle) {
 		t.Errorf("summary must list only the suspended object, body:\n%s", msg.TextBody)
 	}
@@ -537,10 +559,11 @@ func TestLifecycleMail_DowngradeOfRecipientOnForeignObjects(t *testing.T) {
 // suspended) are collected before the memberships are dropped and emailed
 // after the delete; a pending invitation receives nothing.
 func TestLifecycleMail_PropertyDelete(t *testing.T) {
+	t.Parallel()
 	f := newLifecycleMailFixture(t)
-	owner := f.addUserWithEmail(t, "owner@example.com")
-	active := f.addUserWithEmail(t, "active@example.com")
-	suspended := f.addUserWithEmail(t, "suspended@example.com")
+	owner := f.addUserWithEmail(t, f.email("owner"))
+	active := f.addUserWithEmail(t, f.email("active"))
+	suspended := f.addUserWithEmail(t, f.email("suspended"))
 	property := f.addProperty(t, owner, "Квартира на Невском")
 	f.limiter.set(active, 10)
 	f.limiter.set(suspended, 0)
@@ -565,7 +588,7 @@ func TestLifecycleMail_PropertyDelete(t *testing.T) {
 		t.Fatalf("CollectFormerMemberEmails: %v", err)
 	}
 	slices.Sort(emails)
-	if !slices.Equal(emails, []string{"active@example.com", "suspended@example.com"}) {
+	if !slices.Equal(emails, []string{f.email("active"), f.email("suspended")}) {
 		t.Fatalf("collected emails = %v, want active+suspended only", emails)
 	}
 
