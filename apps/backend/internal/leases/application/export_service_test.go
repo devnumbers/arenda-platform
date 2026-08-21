@@ -419,6 +419,7 @@ func itoa(n int) string {
 // Tests.
 
 func TestExportProperty_SheetNames(t *testing.T) {
+	t.Parallel()
 	prop := &exportPropertyRepo{row: ExportPropertyRow{
 		Name:    testPropertyName,
 		Type:    propdomain.PropertyTypeApartment,
@@ -455,6 +456,7 @@ func TestExportProperty_SheetNames(t *testing.T) {
 }
 
 func TestExportProperty_OperationDateFormat(t *testing.T) {
+	t.Parallel()
 	july31 := time.Date(2026, 7, 31, 9, 30, 0, 0, time.UTC) // Time component must be dropped.
 	ops := &exportOperationRepo{completed: []ExportOperationRow{
 		{
@@ -488,6 +490,7 @@ func TestExportProperty_OperationDateFormat(t *testing.T) {
 }
 
 func TestExportProperty_ObjectSheet(t *testing.T) {
+	t.Parallel()
 	prop := &exportPropertyRepo{row: ExportPropertyRow{
 		Name:        "Тестовая квартира",
 		Type:        propdomain.PropertyTypeApartment,
@@ -544,6 +547,7 @@ func TestExportProperty_ObjectSheet(t *testing.T) {
 }
 
 func TestExportProperty_ObjectSheetSkipsMissingAttributes(t *testing.T) {
+	t.Parallel()
 	prop := &exportPropertyRepo{row: ExportPropertyRow{
 		Name:    testPropertyName,
 		Type:    propdomain.PropertyTypeApartment,
@@ -574,6 +578,7 @@ func TestExportProperty_ObjectSheetSkipsMissingAttributes(t *testing.T) {
 }
 
 func TestExportProperty_EmptySectionsRenderHeaders(t *testing.T) {
+	t.Parallel()
 	// No operations, leases, or contacts — but every sheet must still render
 	// with its header row and the monthly/category skeletons.
 	prop := &exportPropertyRepo{row: ExportPropertyRow{
@@ -629,6 +634,7 @@ func TestExportProperty_EmptySectionsRenderHeaders(t *testing.T) {
 }
 
 func TestExportProperty_NotFound(t *testing.T) {
+	t.Parallel()
 	prop := &exportPropertyRepo{err: ErrNotFound}
 	svc := newExportService(t, prop, &exportOperationRepo{}, &exportLeaseRepo{}, &exportContactRepo{})
 

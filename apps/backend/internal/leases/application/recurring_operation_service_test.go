@@ -169,6 +169,7 @@ func (r *lockingFakeRecurringOperationRepo) WithTx(tx transaction.Tx) RecurringO
 }
 
 func TestUpdateRecurringOperation_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	recID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -302,6 +303,7 @@ func newGuardTestRecurringOperation(id, ownerID, propertyID uuid.UUID, status do
 }
 
 func TestCreateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -326,6 +328,7 @@ func TestCreateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 		{name: testNameMaintenanceAllowed, status: propertyStatusMaintenance, wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			svc := newRecurringGuardService(ownerID, &fakeRecurringOperationRepo{}, &fakeOperationRepo{},
 				&fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}}, nil)
 			_, err := svc.CreateRecurringOperation(ctx, ownerID, cmd)
@@ -337,6 +340,7 @@ func TestCreateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestUpdateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -355,6 +359,7 @@ func TestUpdateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 		{name: testNameMaintenanceAllowed, status: propertyStatusMaintenance, wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
@@ -369,6 +374,7 @@ func TestUpdateRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestUpdateRecurringOperation_NoPropertySkipsGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	recID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
@@ -389,6 +395,7 @@ func TestUpdateRecurringOperation_NoPropertySkipsGuard(t *testing.T) {
 }
 
 func TestDeleteRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -404,6 +411,7 @@ func TestDeleteRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 		{name: testNameMaintenanceAllowed, status: propertyStatusMaintenance, wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
@@ -423,6 +431,7 @@ func TestDeleteRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestPauseRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -438,6 +447,7 @@ func TestPauseRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 		{name: testNameMaintenanceAllowed, status: propertyStatusMaintenance, wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
@@ -452,6 +462,7 @@ func TestPauseRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestResumeRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -470,6 +481,7 @@ func TestResumeRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 
 	for _, status := range []string{propertyStatusActive, propertyStatusMaintenance} {
 		t.Run(status+" allowed", func(t *testing.T) {
+			t.Parallel()
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
@@ -483,6 +495,7 @@ func TestResumeRecurringOperation_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestSetReminderOffset_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -498,6 +511,7 @@ func TestSetReminderOffset_ArchivedPropertyGuard(t *testing.T) {
 		{name: testNameMaintenanceAllowed, status: propertyStatusMaintenance, wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}
@@ -512,6 +526,7 @@ func TestSetReminderOffset_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestCreateReminder_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -530,6 +545,7 @@ func TestCreateReminder_ArchivedPropertyGuard(t *testing.T) {
 
 	for _, status := range []string{propertyStatusActive, propertyStatusMaintenance} {
 		t.Run(status+" allowed", func(t *testing.T) {
+			t.Parallel()
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				recID: newGuardTestRecurringOperation(recID, ownerID, propertyID, domain.RecurringOperationStatusActive),
 			}}

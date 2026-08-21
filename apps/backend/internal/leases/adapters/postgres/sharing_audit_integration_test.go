@@ -61,6 +61,7 @@ func (f *policyFixture) createIncomeRecurringCmd(propertyID, categoryID uuid.UUI
 // recurring-operations aggregate list: a member sees recurring operations of
 // shared properties (GET /recurring-operations), not just their own.
 func TestSharingAudit_RecurringOperations_IncludesShared(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -262,6 +263,7 @@ func assertFinanceReportHidesForeign(t *testing.T, ctx context.Context, f *polic
 // finance report. No owner is missed, none is double-counted, and a third
 // owner the member has NO access to does not leak.
 func TestSharingAudit_MultiOwner_AggregatesMerge(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -291,6 +293,7 @@ func TestSharingAudit_MultiOwner_AggregatesMerge(t *testing.T) {
 // member's access is suspended (tariff limit), all aggregate reads drop the
 // shared data: operations, leases, and recurring operations.
 func TestSharingAudit_SuspendedMember_ExcludedFromAggregates(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -341,6 +344,7 @@ func TestSharingAudit_SuspendedMember_ExcludedFromAggregates(t *testing.T) {
 // reads for the member (the member's own archived data is unaffected, but a
 // shared archived object is hidden — consistent with ListProperties).
 func TestSharingAudit_ArchivedSharedProperty_ExcludedFromAggregates(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -422,6 +426,7 @@ func membershipIDFor(t *testing.T, ctx context.Context, repo *accesspg.Membershi
 // history under "no property". This locks the privacy guarantee of detach mode
 // (ADR 0025) for shared access.
 func TestSharingAudit_DetachDelete_HidesFromMember(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -481,6 +486,7 @@ func TestSharingAudit_DetachDelete_HidesFromMember(t *testing.T) {
 // reactivate lifecycle: an active member sees shared data; after suspension the
 // data disappears from aggregates; after reactivation it reappears.
 func TestSharingAudit_SuspendReactivate_AggregateVisibility(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -541,6 +547,7 @@ func TestSharingAudit_SuspendReactivate_AggregateVisibility(t *testing.T) {
 // downgrading a member from full_access to viewer preserves read access
 // (aggregates + per-property) but blocks writes (CreateOperation → Forbidden).
 func TestSharingAudit_DowngradeFullToViewer_ReadOkWriteBlocked(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()

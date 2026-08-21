@@ -58,6 +58,7 @@ func newGuardTestOperation(id, ownerID, propertyID uuid.UUID, status domain.Oper
 }
 
 func TestCreateOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -81,6 +82,7 @@ func TestCreateOperation_ArchivedPropertyGuard(t *testing.T) {
 		{name: testNameMaintenanceAllowed, status: propertyStatusMaintenance, wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			svc := newOperationGuardService(ownerID, &fakeOperationRepo{}, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
 			_, err := svc.CreateOperation(ctx, ownerID, cmd)
 			if !errors.Is(err, tc.wantErr) {
@@ -91,6 +93,7 @@ func TestCreateOperation_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestUpdateOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -109,6 +112,7 @@ func TestUpdateOperation_ArchivedPropertyGuard(t *testing.T) {
 		{name: testNameMaintenanceAllowed, status: propertyStatusMaintenance, wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			opRepo := &fakeOperationRepo{}
 			mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
@@ -121,6 +125,7 @@ func TestUpdateOperation_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestUpdateOperation_NoPropertySkipsGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
@@ -140,6 +145,7 @@ func TestUpdateOperation_NoPropertySkipsGuard(t *testing.T) {
 }
 
 func TestDeleteOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -159,6 +165,7 @@ func TestDeleteOperation_ArchivedPropertyGuard(t *testing.T) {
 
 	for _, status := range []string{propertyStatusActive, propertyStatusMaintenance} {
 		t.Run(status+" allowed", func(t *testing.T) {
+			t.Parallel()
 			opRepo := &fakeOperationRepo{}
 			mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusPending))
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: status}})
@@ -193,6 +200,7 @@ func runArchivedPropertyGuard(
 		{name: testNameMaintenanceAllowed, status: propertyStatusMaintenance, wantErr: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			opRepo := &fakeOperationRepo{}
 			mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, seedStatus))
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: tc.status}})
@@ -204,6 +212,7 @@ func runArchivedPropertyGuard(
 }
 
 func TestCompleteOperation_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	runArchivedPropertyGuard(t, domain.OperationStatusPending,
 		func(ctx context.Context, svc *OperationService, ownerID, operationID uuid.UUID) error {
 			_, err := svc.CompleteOperation(ctx, CompleteOperationCommand{Actor: ownerID, OperationID: operationID})
@@ -212,6 +221,7 @@ func TestCompleteOperation_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestMarkOperationIncomplete_ArchivedPropertyGuard(t *testing.T) {
+	t.Parallel()
 	runArchivedPropertyGuard(t, domain.OperationStatusPaid,
 		func(ctx context.Context, svc *OperationService, ownerID, operationID uuid.UUID) error {
 			_, err := svc.MarkOperationIncomplete(ctx, MarkOperationIncompleteCommand{Actor: ownerID, OperationID: operationID})
@@ -220,6 +230,7 @@ func TestMarkOperationIncomplete_ArchivedPropertyGuard(t *testing.T) {
 }
 
 func TestCreateOperation_BackdatedOperationStartsUnconfirmed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -261,6 +272,7 @@ func TestCreateOperation_BackdatedOperationStartsUnconfirmed(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			svc := newOperationGuardService(ownerID, &fakeOperationRepo{},
 				&fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: propertyStatusActive}})
 			op, err := svc.CreateOperation(ctx, ownerID, CreateOperationCommand{
@@ -282,6 +294,7 @@ func TestCreateOperation_BackdatedOperationStartsUnconfirmed(t *testing.T) {
 }
 
 func TestCompleteOperation_Unconfirmed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -306,6 +319,7 @@ func TestCompleteOperation_Unconfirmed(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			operationID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 			op := newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed)
 			op.Type = tc.opType
@@ -327,6 +341,7 @@ func TestCompleteOperation_Unconfirmed(t *testing.T) {
 }
 
 func TestProcessOverdueOperation_SkipsUnconfirmed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -354,6 +369,7 @@ func TestProcessOverdueOperation_SkipsUnconfirmed(t *testing.T) {
 }
 
 func TestUpdateOperation_UnconfirmedStatusPreservedOnDateChange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -367,6 +383,7 @@ func TestUpdateOperation_UnconfirmedStatusPreservedOnDateChange(t *testing.T) {
 		{name: "future date", newDate: [3]int{2026, 6, 20}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			opRepo := &fakeOperationRepo{}
 			mustCreateOperation(t, opRepo, ctx, newGuardTestOperation(operationID, ownerID, propertyID, domain.OperationStatusUnconfirmed))
 			svc := newOperationGuardService(ownerID, opRepo, &fakePropertyRepo{statuses: map[uuid.UUID]string{propertyID: propertyStatusActive}})

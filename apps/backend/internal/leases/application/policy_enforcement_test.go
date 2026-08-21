@@ -278,9 +278,11 @@ var (
 // Operations.
 
 func TestPolicyEnforcement_GetOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			opRepo := &fakeOperationRepo{ops: []domain.Operation{policyTestOperation()}}
 			svc := newPolicyOperationService(policy, opRepo, newPolicyPropertyRepo(), nil, nil)
@@ -300,9 +302,11 @@ func TestPolicyEnforcement_GetOperation(t *testing.T) {
 }
 
 func TestPolicyEnforcement_ListOperationsByProperty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			svc := newPolicyOperationService(policy, &fakeOperationRepo{}, newPolicyPropertyRepo(), nil, nil)
 
@@ -321,9 +325,11 @@ func TestPolicyEnforcement_ListOperationsByProperty(t *testing.T) {
 }
 
 func TestPolicyEnforcement_UpdateOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			opRepo := &fakeOperationRepo{ops: []domain.Operation{policyTestOperation()}}
 			audit := &fakeAuditRecorder{}
@@ -359,9 +365,11 @@ func TestPolicyEnforcement_UpdateOperation(t *testing.T) {
 }
 
 func TestPolicyEnforcement_DeleteOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			opRepo := &fakeOperationRepo{ops: []domain.Operation{policyTestOperation()}}
 			audit := &fakeAuditRecorder{}
@@ -393,6 +401,7 @@ func TestPolicyEnforcement_DeleteOperation(t *testing.T) {
 }
 
 func TestPolicyEnforcement_CreateOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	cmd := CreateOperationCommand{
 		PropertyID:    policyPropertyID,
@@ -404,6 +413,7 @@ func TestPolicyEnforcement_CreateOperation(t *testing.T) {
 	}
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			audit := &fakeAuditRecorder{}
 			svc := newPolicyOperationService(policy, &fakeOperationRepo{}, newPolicyPropertyRepo(), nil, audit)
@@ -447,9 +457,11 @@ func policyTestLease() domain.Lease {
 }
 
 func TestPolicyEnforcement_GetLease(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			leaseRepo := &fakeLeaseRepo{leases: map[uuid.UUID]domain.Lease{policyLeaseID: policyTestLease()}}
 			svc := newPolicyLeaseService(policy, leaseRepo, newPolicyPropertyRepo(), &fakeOperationRepo{}, &fakeRecurringOperationRepo{}, nil)
@@ -469,6 +481,7 @@ func TestPolicyEnforcement_GetLease(t *testing.T) {
 }
 
 func TestPolicyEnforcement_CreateLease(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	cmd := CreateLeaseCommand{
 		PropertyID:        policyPropertyID,
@@ -478,6 +491,7 @@ func TestPolicyEnforcement_CreateLease(t *testing.T) {
 	}
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			audit := &fakeAuditRecorder{}
 			svc := newPolicyLeaseService(
@@ -512,9 +526,11 @@ func TestPolicyEnforcement_CreateLease(t *testing.T) {
 // Recurring operations.
 
 func TestPolicyEnforcement_GetRecurringOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				policyRecID: newGuardTestRecurringOperation(policyRecID, policyOwnerID, policyPropertyID, domain.RecurringOperationStatusActive),
@@ -536,6 +552,7 @@ func TestPolicyEnforcement_GetRecurringOperation(t *testing.T) {
 }
 
 func TestPolicyEnforcement_CreateRecurringOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	cmd := CreateRecurringOperationCommand{
 		PropertyID:    policyPropertyID,
@@ -548,6 +565,7 @@ func TestPolicyEnforcement_CreateRecurringOperation(t *testing.T) {
 	}
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			audit := &fakeAuditRecorder{}
 			svc := newPolicyRecurringService(policy, &fakeRecurringOperationRepo{}, &fakeOperationRepo{}, newPolicyPropertyRepo(), audit)
@@ -578,9 +596,11 @@ func TestPolicyEnforcement_CreateRecurringOperation(t *testing.T) {
 }
 
 func TestPolicyEnforcement_DeleteRecurringOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			recRepo := &fakeRecurringOperationRepo{recs: map[uuid.UUID]domain.RecurringOperation{
 				policyRecID: newGuardTestRecurringOperation(policyRecID, policyOwnerID, policyPropertyID, domain.RecurringOperationStatusActive),
@@ -616,9 +636,11 @@ func TestPolicyEnforcement_DeleteRecurringOperation(t *testing.T) {
 // Export.
 
 func TestPolicyEnforcement_ExportProperty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			prop := &exportPropertyRepo{row: ExportPropertyRow{
 				Name:    testPropertyName,
@@ -658,9 +680,11 @@ func newMoveOperationService(
 }
 
 func TestPolicyEnforcement_MoveOperation_RoleMatrix(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := policyActorAndPolicy(tc.role)
 			audit := &fakeAuditRecorder{}
 			svc, opRepo := newMoveOperationService(policy, newPolicyPropertyRepo(), policyTestOperation(), nil, audit)
@@ -699,6 +723,7 @@ func TestPolicyEnforcement_MoveOperation_RoleMatrix(t *testing.T) {
 }
 
 func TestPolicyEnforcement_MoveOperation_TargetRoleGate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range []struct {
 		name       string
@@ -710,6 +735,7 @@ func TestPolicyEnforcement_MoveOperation_TargetRoleGate(t *testing.T) {
 		{name: "suspended target", targetRole: sharedpolicy.RoleSuspended, wantErr: ErrNotFound},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			policy := fakePolicy{propertyRoles: map[[2]uuid.UUID]sharedpolicy.Role{
 				{policyMemberID, policyPropertyID}: sharedpolicy.RoleFullAccess,
 				{policyMemberID, policyTargetID}:   tc.targetRole,
@@ -725,6 +751,7 @@ func TestPolicyEnforcement_MoveOperation_TargetRoleGate(t *testing.T) {
 }
 
 func TestPolicyEnforcement_MoveOperation_Guards(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	recurringChild := policyTestOperation()
 	recurringChild.RecurringOperationID = policyRecID
@@ -750,6 +777,7 @@ func TestPolicyEnforcement_MoveOperation_Guards(t *testing.T) {
 		{name: "archived target rejected", op: policyTestOperation(), propertyRepo: archivedTargetRepo, target: policyTargetID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			svc, _ := newMoveOperationService(fakePolicy{}, tc.propertyRepo, tc.op, nil, nil)
 
 			_, err := svc.MoveOperation(ctx, policyOwnerID, policyOpID, MoveOperationCommand{PropertyID: tc.target})
@@ -761,6 +789,7 @@ func TestPolicyEnforcement_MoveOperation_Guards(t *testing.T) {
 }
 
 func TestPolicyEnforcement_MoveOperation_SideEffects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	offset := 2
 	op := policyTestOperation()
@@ -829,10 +858,12 @@ func newPolicyTenantContactService(policy fakePolicy, repo *fakeTenantContactRep
 }
 
 func TestPolicyEnforcement_CreateCategory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	propertyID := policyPropertyID
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := ownerWideActorAndPolicy(tc.role)
 			audit := &fakeAuditRecorder{}
 			svc := newPolicyCategoryService(policy, &fakeCategoryRepo{}, audit)
@@ -865,6 +896,7 @@ func TestPolicyEnforcement_CreateCategory(t *testing.T) {
 }
 
 func TestPolicyEnforcement_CreateCategory_ForeignPropertyContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	// A full-access member of policyOwnerID cannot create a category through
 	// another owner's property: the scope resolves to the other owner, where
@@ -886,6 +918,7 @@ func TestPolicyEnforcement_CreateCategory_ForeignPropertyContext(t *testing.T) {
 }
 
 func TestPolicyEnforcement_CreateCategory_NoPropertyContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	// Without a property context the category is created in the actor's own
 	// account and no policy call is made, even for a member with shared access.
@@ -906,10 +939,12 @@ func TestPolicyEnforcement_CreateCategory_NoPropertyContext(t *testing.T) {
 }
 
 func TestPolicyEnforcement_CreateTenantContact(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	propertyID := policyPropertyID
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := ownerWideActorAndPolicy(tc.role)
 			audit := &fakeAuditRecorder{}
 			svc := newPolicyTenantContactService(policy, &fakeTenantContactRepo{}, audit)
@@ -942,9 +977,11 @@ func TestPolicyEnforcement_CreateTenantContact(t *testing.T) {
 }
 
 func TestPolicyEnforcement_UpdateTenantContact(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := ownerWideActorAndPolicy(tc.role)
 			repo := &fakeTenantContactRepo{contacts: []domain.TenantContact{
 				{ID: policyContactID, OwnerID: policyOwnerID, Name: testTenantName},

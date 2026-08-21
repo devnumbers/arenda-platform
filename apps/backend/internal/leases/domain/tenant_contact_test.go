@@ -6,6 +6,7 @@ import (
 )
 
 func TestNormalizePhoneValid(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		input    string
 		expected string
@@ -31,6 +32,7 @@ func TestNormalizePhoneValid(t *testing.T) {
 }
 
 func TestNormalizePhoneInvalid(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"123",
 		"+7999123456",
@@ -50,6 +52,7 @@ func TestNormalizePhoneInvalid(t *testing.T) {
 }
 
 func TestValidatePhone(t *testing.T) {
+	t.Parallel()
 	if err := ValidatePhone("+79001234567"); err != nil {
 		t.Fatalf("ValidatePhone valid phone error: %v", err)
 	}
@@ -62,6 +65,7 @@ func TestValidatePhone(t *testing.T) {
 }
 
 func TestValidateEmail(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		email string
 		valid bool

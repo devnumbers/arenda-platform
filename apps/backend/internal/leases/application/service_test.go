@@ -133,6 +133,7 @@ func (r *fakeLeaseRepo) ListWithTenantForExport(_ context.Context, _, _ uuid.UUI
 func (r *fakeLeaseRepo) WithTx(_ transaction.Tx) LeaseRepository { return r }
 
 func TestOperationService_GetPropertyOperationsSummary(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")

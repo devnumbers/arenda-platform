@@ -68,8 +68,15 @@ func setupPolicyDB(t *testing.T) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
+	// Tests run in parallel and each holds its own pool for a single rollback
+	// transaction. The production DefaultPoolConfig keeps MinConns=16 warm per
+	// pool; across the ~15 parallel fixtures that is hundreds of connections
+	// against one PostgreSQL, so the test pools stay minimal.
+	cfg := database.DefaultPoolConfig()
+	cfg.MinConns = 0
+	cfg.MaxConns = 2
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, databaseURL)
+	pool, err := database.NewPoolWithConfig(ctx, databaseURL, cfg)
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}
@@ -298,6 +305,7 @@ func (f *policyFixture) assertOperationOwner(t *testing.T, ctx context.Context, 
 }
 
 func TestPolicyIntegration_FullAccessMemberOperatesOnOwnerScope(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -362,6 +370,7 @@ func TestPolicyIntegration_FullAccessMemberOperatesOnOwnerScope(t *testing.T) {
 }
 
 func TestPolicyIntegration_ViewerReadsButCannotWrite(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -428,6 +437,7 @@ func TestPolicyIntegration_ViewerReadsButCannotWrite(t *testing.T) {
 }
 
 func TestPolicyIntegration_NoneAndSuspendedGetNotFound(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -477,6 +487,7 @@ func TestPolicyIntegration_NoneAndSuspendedGetNotFound(t *testing.T) {
 }
 
 func TestPolicyIntegration_StandaloneReads(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -518,6 +529,7 @@ func TestPolicyIntegration_StandaloneReads(t *testing.T) {
 }
 
 func TestPolicyIntegration_MoveOperation(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -614,6 +626,7 @@ func TestPolicyIntegration_MoveOperation(t *testing.T) {
 // full-access member creates and updates contacts in the owner's scope, a
 // viewer reads but cannot write, and an outsider gets ErrNotFound.
 func TestPolicyIntegration_TenantContactsOwnerWideAccess(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -692,6 +705,7 @@ func TestPolicyIntegration_TenantContactsOwnerWideAccess(t *testing.T) {
 // property fix — filtered strictly by owner_id = actor, hiding the owner's
 // rent operations from the member.
 func TestPolicyIntegration_ListOperationsByLease_IncludesShared(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -739,6 +753,7 @@ func TestPolicyIntegration_ListOperationsByLease_IncludesShared(t *testing.T) {
 // gets an empty schedule (no overdue, no next payment) and the lease is shown
 // incorrectly.
 func TestPolicyIntegration_LeasePaymentSchedule_IncludesShared(t *testing.T) {
+	t.Parallel()
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()

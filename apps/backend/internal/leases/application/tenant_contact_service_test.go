@@ -94,6 +94,7 @@ func (r *fakeTenantContactRepo) WithTx(tx transaction.Tx) TenantContactRepositor
 }
 
 func TestListTenantContactsByIDs(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	id1 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	id2 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")
@@ -124,6 +125,7 @@ func TestListTenantContactsByIDs(t *testing.T) {
 }
 
 func TestListTenantContactsByIDsEmpty(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	repo := &fakeTenantContactRepo{}
 	svc := NewTenantContactService(repo, nil, nil)
@@ -138,6 +140,7 @@ func TestListTenantContactsByIDsEmpty(t *testing.T) {
 }
 
 func TestListTenantContactsByIDsRepositoryError(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	repo := &fakeTenantContactRepo{err: errors.New("boom")}
 	svc := NewTenantContactService(repo, nil, nil)
@@ -173,6 +176,7 @@ func setupUpdateTenantContactService(ownerID, contactID uuid.UUID) *TenantContac
 }
 
 func TestUpdateTenantContactClearsSurname(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -190,6 +194,7 @@ func TestUpdateTenantContactClearsSurname(t *testing.T) {
 }
 
 func TestUpdateTenantContactClearsPatronymic(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -207,6 +212,7 @@ func TestUpdateTenantContactClearsPatronymic(t *testing.T) {
 }
 
 func TestUpdateTenantContactClearsPhone(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -224,6 +230,7 @@ func TestUpdateTenantContactClearsPhone(t *testing.T) {
 }
 
 func TestUpdateTenantContactClearsEmail(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -241,6 +248,7 @@ func TestUpdateTenantContactClearsEmail(t *testing.T) {
 }
 
 func TestUpdateTenantContactClearsComment(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -258,6 +266,7 @@ func TestUpdateTenantContactClearsComment(t *testing.T) {
 }
 
 func TestUpdateTenantContactNormalizesPhone(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -278,6 +287,7 @@ func TestUpdateTenantContactNormalizesPhone(t *testing.T) {
 }
 
 func TestUpdateTenantContactPreservesEmail(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -298,6 +308,7 @@ func TestUpdateTenantContactPreservesEmail(t *testing.T) {
 }
 
 func TestUpdateTenantContactRejectsInvalidPhone(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -312,6 +323,7 @@ func TestUpdateTenantContactRejectsInvalidPhone(t *testing.T) {
 }
 
 func TestUpdateTenantContactRejectsInvalidEmail(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -326,6 +338,7 @@ func TestUpdateTenantContactRejectsInvalidEmail(t *testing.T) {
 }
 
 func TestUpdateTenantContactUpdatesName(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -343,6 +356,7 @@ func TestUpdateTenantContactUpdatesName(t *testing.T) {
 }
 
 func TestUpdateTenantContactRejectsEmptyName(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -357,6 +371,7 @@ func TestUpdateTenantContactRejectsEmptyName(t *testing.T) {
 }
 
 func TestUpdateTenantContactNoOpPreservesValues(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -386,6 +401,7 @@ func TestUpdateTenantContactNoOpPreservesValues(t *testing.T) {
 }
 
 func TestUpdateTenantContactNotFound(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	svc := setupUpdateTenantContactService(ownerID, contactID)
@@ -401,6 +417,7 @@ func TestUpdateTenantContactNotFound(t *testing.T) {
 }
 
 func TestUpdateTenantContactDuplicatePhone(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01")
 	contactID1 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02")
 	contactID2 := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03")

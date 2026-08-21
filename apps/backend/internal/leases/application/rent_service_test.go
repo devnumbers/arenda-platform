@@ -700,6 +700,7 @@ func (r *fakeRecurringOperationRepo) WithTx(_ transaction.Tx) RecurringOperation
 }
 
 func TestGenerateRentOperations_BackdatedLeaseMarksPastPeriodsUnconfirmed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -735,6 +736,7 @@ func TestGenerateRentOperations_BackdatedLeaseMarksPastPeriodsUnconfirmed(t *tes
 }
 
 func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -808,6 +810,7 @@ func TestRebuildSchedule_DeletedManualLeaseOperationDoesNotBlockGeneratedRent(t 
 }
 
 func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -891,6 +894,7 @@ func TestRebuildSchedule_MovedGeneratedRentOperationBlocksOriginalScheduleDate(t
 }
 
 func TestRebuildSchedule_EarlierStartDatePreservesPastOperations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
