@@ -32,13 +32,14 @@ Before adding components, hooks, helpers, entity types, feature state, or API wr
 
 - Keep `strict: true` and the strictest practical compiler options in `tsconfig.json`.
 - Use `eslint-config-next` (`core-web-vitals` + `typescript` presets) in `eslint.config.mjs`.
-- Avoid `any`; prefer `unknown` with narrowing. If `any` is unavoidable, add a comment and consider an ADR.
+- The react-hooks v7 compiler rules are already active transitively through `eslint-config-next` 16.3.1 (the plugin's `recommended` preset is spread whole) — manual-memoization, effect-synchronizer, and derived-state smells are lint errors today, not review-only calls. Rule list and levels: `CODING_STANDARDS.md`, React Compiler section (`exhaustive-deps` is warn until bar wave A flips it).
+- Zero tolerance for suppressions in manual code: `eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` are forbidden — fix the code, never suppress (quality bar, spec #378; a blocking CI counter is the accepted gate). Prefer `unknown` with narrowing. Generated code (`shared/api/generated.ts`, `features/property-attributes/lib/generated/`) and build artifacts are outside the counter's scope.
 - Use explicit return types for functions exported from `shared/`, `entities/`, `features/`, and `widgets/`.
 - Prefer `readonly`, `ReadonlyArray`, and `as const` for immutable data.
 
 ## Coding Standards
 
-Before implementing or reviewing frontend code, read `CODING_STANDARDS.md` (same directory): FSD slice anatomy, the DTO/command mapping patterns, react-query conventions, forms, styling and React Compiler rules, navigation flow rules, testing patterns, and the review rubric used by the Standards axis of `/code-review`.
+Before implementing or reviewing frontend code, read `CODING_STANDARDS.md` (same directory): FSD slice anatomy, the DTO/command mapping patterns, react-query conventions, forms, styling and React Compiler rules, navigation flow rules, the accepted quality bar (waves A/B/C), testing patterns, and the review rubric used by the Standards axis of `/code-review`.
 
 ## Architecture (FSD)
 

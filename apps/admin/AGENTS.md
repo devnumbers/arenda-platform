@@ -27,7 +27,7 @@ Before adding resources, fields, inputs, helpers, or API wrappers, search existi
 
 ## Coding Standards
 
-Before implementing or reviewing admin code, read `CODING_STANDARDS.md` (same directory): resource file anatomy, the read-only design and its dataProvider conventions, `fields.tsx` choice-catalog sync rules, i18n practice, testing patterns, and the review rubric used by the Standards axis of `/code-review`.
+Before implementing or reviewing admin code, read `CODING_STANDARDS.md` (same directory): resource file anatomy, the read-only design and its dataProvider conventions, `fields.tsx` choice-catalog sync rules, i18n practice, the accepted quality-bar track (map #326), testing patterns, and the review rubric used by the Standards axis of `/code-review`.
 
 ## Architecture
 
@@ -42,7 +42,7 @@ Before implementing or reviewing admin code, read `CODING_STANDARDS.md` (same di
 ## TypeScript
 
 - Keep `strict: true` and the existing strict compiler options in `tsconfig.json`; `npm run typecheck` (`tsc --noEmit`) must stay clean.
-- Avoid `any`; prefer `unknown` with narrowing. Enforced by `@typescript-eslint/no-explicit-any: error` (`apps/admin/eslint.config.mjs`, `npm run lint`).
+- Zero tolerance for suppressions in manual code (`src` outside `src/lib/generated/`): `eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` are forbidden — fix the code, never suppress (quality bar, spec #378; a blocking CI counter is the accepted gate). Explicit `any` is already a gate: `@typescript-eslint/no-explicit-any: error` (`apps/admin/eslint.config.mjs`, `npm run lint`). Prefer `unknown` with narrowing.
 
 ## Quality Gates
 

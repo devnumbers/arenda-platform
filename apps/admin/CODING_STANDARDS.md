@@ -50,6 +50,19 @@ Unit tests are pure-logic only — vitest in a node environment, colocated `*.te
 
 Components and `dataProvider` mapping are not unit-tested; that is the standard, not a gap.
 
+## Quality bar — admin track (accepted, map #326, spec #378)
+
+The admin joins the frontend quality bar (bar [#330](https://github.com/devnumbers/arenda-platform/issues/330), spec [#378](https://github.com/devnumbers/arenda-platform/issues/378)) on its own minimal-config track — the whole mode adds exactly one devDependency, `eslint-plugin-react-hooks`. The patterns are the standard now; flips land ticket by ticket, fix-then-flip per rule family, with this section and `docs/agents/tooling.md` updating in the same change.
+
+- `typescript-eslint` `recommendedTypeChecked` scoped to `src` sources. The known finding families: `no-misused-promises` (async handlers in void form signatures), `no-unsafe-*` (untyped JSON at the `dataProvider`/`authProvider` boundaries — type it at the boundary instead), `no-base-to-string` (a real `[object Object]` class).
+- `eslint-plugin-react-hooks` `recommended` — conditional hook calls and hook discipline checked statically, not by runtime crashes.
+- Money selectors: raw `/100`/`*100` arithmetic and `.toFixed` banned outside `src/fields.tsx` (and outside `src/lib/generated/` — generated code is not fixed by hand), the same file-allowlist approach as frontend wave C.
+- `src/lib/generated/` stays behind a files-scoped config block; the generator template is not modified for the bar.
+- tsconfig: `noUncheckedIndexedAccess`, `verbatimModuleSyntax`; plus `prefer-nullish-coalescing`.
+- jsx-a11y stays frontend-only (rejected for the admin — MUI and react-admin carry the semantics).
+
+Zero tolerance for suppressions: `eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` — zero in manual code (`src` outside `src/lib/generated/`): fix the code, never suppress; a blocking CI counter guards the zero (accepted gate, `docs/agents/tooling.md`). The admin has no legal suppressions today.
+
 ## Review rubric — smells ESLint does not catch
 
 Judgement calls for the Standards axis, not violations. Read each as *what it is* → *how to fix*.
