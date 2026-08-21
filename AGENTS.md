@@ -75,6 +75,9 @@ make backend-nolint
 make migrations-lint
 make backend-test
 make backend-test-integration
+make frontend-install
+make frontend-dev
+make frontend-build
 make frontend-test
 make admin-test
 make tools-test
@@ -89,7 +92,11 @@ make migrate-down
 make landing-install
 make landing-dev
 make landing-build
+make versions-sync
+make versions-check
 ```
+
+`make help` prints the full list of targets grouped by section. The Makefile is the single source of truth for language versions (`GO_VERSION`, `NODE_VERSION`) and the migrate CLI pin (`MIGRATE_VERSION`): bump them there, run `make versions-sync`, and commit the stamped files — never edit a version inside `ci.yml`, a Dockerfile, `go.work`/`go.mod`, or `.nvmrc` by hand.
 
 Use `make local-infra-reset` only when intentionally deleting local Docker volumes, including database data.
 

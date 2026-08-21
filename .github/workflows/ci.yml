@@ -35,7 +35,7 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" \
             -e GOCACHE=/tmp/gocache -e GOMODCACHE=/tmp/gomodcache \
             -v "${{ github.workspace }}:/src" -w /src/apps/backend \
-            golang:1.26-bookworm go test -race ./...
+            golang:1.26.5-bookworm go test -race ./...
 
       - name: Vet
         run: go vet ./apps/backend/...
@@ -128,7 +128,7 @@ jobs:
 
   # Интеграционные тесты бэкенда (волна 1B, #304) — закрывают CI-гэп: локальный
   # `make backend-test-integration` теперь подстрахован CI. Toolchain та же, что у
-  # unit-степа джобы backend: контейнер golang:1.26-bookworm (образ прода),
+  # unit-степа джобы backend: контейнер golang:1.26.5-bookworm (образ прода),
   # GOCACHE/GOMODCACHE в /tmp. Testcontainers работает изнутри контейнера (DooD):
   # примонтирован Docker-сокет (--group-add даёт runner-юзеру право на него),
   # PostgreSQL 18 стартует sibling-контейнером, а TESTCONTAINERS_HOST_OVERRIDE +
@@ -158,7 +158,7 @@ jobs:
             -e TESTCONTAINERS_RYUK_DISABLED=true \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "${{ github.workspace }}:/src" -w /src/apps/backend \
-            golang:1.26-bookworm go test -tags=integration -race ./...
+            golang:1.26.5-bookworm go test -tags=integration -race ./...
 
   # Freshness-гейты generated-кода платформенной спеки и sqlc (волна 1B, #303):
   # make-таргет перегенерирует артефакт и сравнивает git hash-object до/после —
@@ -194,6 +194,21 @@ jobs:
 
       - name: sqlc generated code freshness
         run: make backend-sqlc-check
+
+  # Freshness-гейт пинов версий: Makefile (GO_VERSION/NODE_VERSION/MIGRATE_VERSION)
+  # — единственный источник правды; make versions-sync штампит их в ci.yml,
+  # Dockerfile'ы, go.work/go.mod и .nvmrc, а versions-check сверяет хэши до/после
+  # штамповки (идиома codegen-гейтов выше). Рассинхрон роняет джобу с командой
+  # исправления. Ни Go, ни Node не нужны — чистые make/perl/git.
+  versions-freshness:
+    name: Versions freshness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Version pins freshness
+        run: make versions-check
 
   frontend:
     name: Frontend
