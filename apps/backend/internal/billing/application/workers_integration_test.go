@@ -168,6 +168,7 @@ func requireRegisteredAndAppliedTransitions(t *testing.T, h *integrationHarness,
 // pair, the payment and the renewal land atomically, and the transition log
 // records the applied payment.
 func TestWorkers_Integration_RenewalChargesActiveMethod(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID, sub := seedExpiredProSubscription(t, h, time.Hour)
 	seedActiveMethod(t, h, userID, "tok_renew_ok")
@@ -238,6 +239,7 @@ func requireBasicDowngrade(t *testing.T, h *integrationHarness, userID uuid.UUID
 // configured window, the window's expiry downgrades to basic, and the
 // lifecycle bridges run inside the same transaction as the downgrade.
 func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	archiver, slots := wireBridges(h)
 	userID, sub := seedExpiredProSubscription(t, h, time.Hour)
@@ -277,6 +279,7 @@ func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
 // provider is as good as absent — the renewal cannot charge it, the
 // subscription enters grace instead of being blocked forever.
 func TestWorkers_Integration_NoChargeableMethodEntersGrace(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID, sub := seedPaidProSubscription(t, h)
 	expired := h.clock.Now().Add(-time.Hour)
@@ -419,6 +422,7 @@ func chargePaidScheduledChange(t *testing.T, h *integrationHarness) {
 // directly in the scheduled phase, a paid target is charged and applied by
 // the renewal phase of the same tick.
 func TestWorkers_Integration_ScheduledChangesFreeAndPaid(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	archiver, _ := wireBridges(h)
 	applyFreeScheduledChange(t, h, archiver)
@@ -430,6 +434,7 @@ func TestWorkers_Integration_ScheduledChangesFreeAndPaid(t *testing.T) {
 // cancelled one whose retained period ended downgrade to basic with the
 // expiry transition and the archiving bridges.
 func TestWorkers_Integration_NonRenewingAndCancelledExpireToBasic(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	archiver, slots := wireBridges(h)
 	basic, err := h.tariffs.GetByName(h.ctx(), domain.TariffBasic)
@@ -494,6 +499,7 @@ func TestWorkers_Integration_NonRenewingAndCancelledExpireToBasic(t *testing.T) 
 // subscription change back with its transition, and the next tick — with the
 // failure cleared — applies it.
 func TestWorkers_Integration_BridgeFailureRollsBack(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	archiver, slots := wireBridges(h)
 	archiver.err = errArchiveBoom
@@ -586,6 +592,7 @@ func requireReconciledUpgradeApplied(t *testing.T, h *integrationHarness, userID
 // webhook was never delivered is finalized from the provider's status once it
 // goes stale, and the upgrade applies through the synchronous path.
 func TestWorkers_Integration_ReconcileLostWebhook(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID, _ := seedPaidProSubscription(t, h)
 
@@ -679,6 +686,7 @@ func requireRecoveredWithoutSecondCharge(t *testing.T, h *integrationHarness, us
 // provider status on the next tick — without a second charge (the fake
 // provider records confirmed amounts, so a second charge would show).
 func TestWorkers_Integration_RenewalDoubleChargeGuardOnCrash(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID, _ := seedExpiredProSubscription(t, h, time.Hour)
 	seedActiveMethod(t, h, userID, "tok_guard")

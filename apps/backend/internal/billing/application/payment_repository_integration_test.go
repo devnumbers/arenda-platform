@@ -128,6 +128,7 @@ func (s paymentSelectionSeeder) backdate(
 }
 
 func TestPaymentRepository_Integration_ListSelection(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	now := h.clock.Now()
 
@@ -173,6 +174,7 @@ func TestPaymentRepository_Integration_ListSelection(t *testing.T) {
 		{name: "stale refunding", sel: refundingSel, want: []uuid.UUID{staleRefunding.ID}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			found, err := h.payments.List(h.ctx(), tc.sel)
 			if err != nil {
 				t.Fatalf("List() error = %v", err)

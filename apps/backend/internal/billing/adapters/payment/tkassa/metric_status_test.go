@@ -19,6 +19,7 @@ import (
 //     signals (auth-rejected 204/205, invalid-operation 9/12/1125/1126) —
 //     whether direct or wrapped.
 func TestMetricStatus(t *testing.T) {
+	t.Parallel()
 	// Mirror how post constructs a provider error-code response.
 	providerErr := &ProviderError{
 		Method:    methodCharge,
@@ -107,6 +108,7 @@ func TestMetricStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := metricStatus(tt.err); got != tt.want {
 				t.Fatalf("metricStatus(%v) = %q, want %q", tt.err, got, tt.want)
 			}

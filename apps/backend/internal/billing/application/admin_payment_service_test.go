@@ -68,6 +68,7 @@ func (h *refundHarness) succeededUpgradePayment(t *testing.T) domain.Subscriptio
 // and records the transition-log entry and the audit entry attributed to the
 // acting admin.
 func TestRefundPayment_SucceedsAndDowngradesToBasic(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -203,6 +204,7 @@ func (h *refundHarness) assertDowngradeSideEffects(t *testing.T) {
 // refund of the same payment is rejected by the reservation, and the provider
 // is never asked twice.
 func TestRefundPayment_DoubleRefundRejected(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	payment := h.succeededUpgradePayment(t)
 
@@ -224,9 +226,11 @@ func TestRefundPayment_DoubleRefundRejected(t *testing.T) {
 // (migrated from TestBilling_RefundPayment_RejectedForNonSucceededOrPendingPayment
 // and TestBilling_RefundPayment_RejectedWhenProviderPaymentIDMissing).
 func TestRefundPayment_RejectedBeforeProviderCall(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 
 	t.Run("failed payment", func(t *testing.T) {
+		t.Parallel()
 		sub := h.seedSubscription(t, nil)
 		result := h.initiateUpgrade(t, sub)
 		payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
@@ -245,6 +249,7 @@ func TestRefundPayment_RejectedBeforeProviderCall(t *testing.T) {
 	})
 
 	t.Run("payment without a provider reference", func(t *testing.T) {
+		t.Parallel()
 		sub := h.seedSubscription(t, nil)
 		payment, err := domain.NewSubscriptionPayment(
 			sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
@@ -262,6 +267,7 @@ func TestRefundPayment_RejectedBeforeProviderCall(t *testing.T) {
 	})
 
 	t.Run("unknown payment", func(t *testing.T) {
+		t.Parallel()
 		if err := h.payments.RefundPayment(t.Context(), h.adminID, uuid.Must(uuid.NewV7())); !errors.Is(err, ErrPaymentNotFound) {
 			t.Errorf("err = %v, want ErrPaymentNotFound", err)
 		}
@@ -277,6 +283,7 @@ func TestRefundPayment_RejectedBeforeProviderCall(t *testing.T) {
 // provider failure rolls the reservation back to the previous status, so the
 // payment stays refundable, and the error propagates to the admin.
 func TestRefundPayment_ProviderErrorRevertsReservation(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.refundErr = errors.New("provider is down")
@@ -312,6 +319,7 @@ func TestRefundPayment_ProviderErrorRevertsReservation(t *testing.T) {
 // answer that is not a refund outcome rolls the reservation back and fails
 // the request (migrated from TestBilling_RefundPayment_CancelFailureRevertsStatus).
 func TestRefundPayment_NonRefundAnswerRevertsReservation(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.refundRes = RefundResult{
@@ -337,6 +345,7 @@ func TestRefundPayment_NonRefundAnswerRevertsReservation(t *testing.T) {
 // reservation in place — reverting would cancel a refund in flight — and the
 // request answers success: the reconciliation worker resolves the outcome.
 func TestRefundPayment_InFlightRefundKeepsReservation(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.refundRes = RefundResult{
@@ -372,6 +381,7 @@ func TestRefundPayment_InFlightRefundKeepsReservation(t *testing.T) {
 // refunded amount is an anomaly — the reservation is kept for manual review
 // instead of recording a full refund that did not happen.
 func TestRefundPayment_PartialRefundAnomalyKeepsReservation(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.refundRes = RefundResult{
@@ -400,7 +410,9 @@ func TestRefundPayment_PartialRefundAnomalyKeepsReservation(t *testing.T) {
 // refund is resolved from the provider's status — a refunded payment
 // finalizes, a still-captured charge reverts — instead of failing blindly.
 func TestRefundPayment_DuplicateOperationResolvesFromProvider(t *testing.T) {
+	t.Parallel()
 	t.Run("provider confirms the refund", func(t *testing.T) {
+		t.Parallel()
 		h := newRefundHarness(t)
 		payment := h.succeededUpgradePayment(t)
 		h.provider.refundErr = ErrProviderDuplicateOperation
@@ -419,6 +431,7 @@ func TestRefundPayment_DuplicateOperationResolvesFromProvider(t *testing.T) {
 	})
 
 	t.Run("provider still holds the charge", func(t *testing.T) {
+		t.Parallel()
 		h := newRefundHarness(t)
 		payment := h.succeededUpgradePayment(t)
 		h.provider.refundErr = ErrProviderDuplicateOperation
@@ -440,6 +453,7 @@ func TestRefundPayment_DuplicateOperationResolvesFromProvider(t *testing.T) {
 // TestSyncPayment applies the provider's status through the synchronous paths
 // and audits the admin action (issue #254).
 func TestSyncPayment(t *testing.T) {
+	t.Parallel()
 	t.Run("provider refunded applies the refund effects", syncAppliesRefundEffects)
 	t.Run("provider pending changes nothing", syncPendingChangesNothing)
 	t.Run("a stuck refund reservation resolves like the worker", syncResolvesStuckReservation)
@@ -451,6 +465,7 @@ func TestSyncPayment(t *testing.T) {
 // finalizes with the refund effects on the subscription and the admin-attributed
 // synced audit entry.
 func syncAppliesRefundEffects(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusRefunded}
@@ -490,6 +505,7 @@ func syncAppliesRefundEffects(t *testing.T) {
 // syncPendingChangesNothing covers the pending sync outcome: a provider-pending
 // answer leaves the succeeded payment untouched.
 func syncPendingChangesNothing(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.statusRes = PaymentStatusResult{Status: domain.PaymentStatusPending}
@@ -510,6 +526,7 @@ func syncPendingChangesNothing(t *testing.T) {
 // reserved refund the provider reports refunded finalizes like the worker
 // reconciliation would.
 func syncResolvesStuckReservation(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	// Reserve the payment the way the saga does, then have the provider
@@ -548,6 +565,7 @@ func syncResolvesStuckReservation(t *testing.T) {
 // syncWithoutProviderReferenceRejected covers the guard: a payment without a
 // provider reference cannot be synced.
 func syncWithoutProviderReferenceRejected(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	sub := h.seedSubscription(t, nil)
 	payment, err := domain.NewSubscriptionPayment(
@@ -567,6 +585,7 @@ func syncWithoutProviderReferenceRejected(t *testing.T) {
 
 // syncUnknownPaymentRejected covers the unknown-payment guard.
 func syncUnknownPaymentRejected(t *testing.T) {
+	t.Parallel()
 	h := newRefundHarness(t)
 	if err := h.payments.SyncPayment(t.Context(), h.adminID, uuid.Must(uuid.NewV7())); !errors.Is(err, ErrPaymentNotFound) {
 		t.Errorf("err = %v, want ErrPaymentNotFound", err)
@@ -606,6 +625,7 @@ func seedStuckRefundReservation(t *testing.T, h *workersHarness, origin domain.P
 // effects, a still-captured charge reverts the reservation, and ambiguous or
 // unsettled outcomes stay for the next tick or manual review.
 func TestReconcileStaleRefunds(t *testing.T) {
+	t.Parallel()
 	t.Run("provider refunded finalizes", reconcileProviderRefundedFinalizes)
 	t.Run("provider still captured reverts a succeeded origin", reconcileCapturedRevertsSucceededOrigin)
 	t.Run("provider still captured reverts a pending origin to pending", reconcileCapturedRevertsPendingOrigin)
@@ -617,6 +637,7 @@ func TestReconcileStaleRefunds(t *testing.T) {
 // reconcileProviderRefundedFinalizes covers the refunded outcome: the stuck
 // reservation finalizes with the subscription downgrade to basic.
 func reconcileProviderRefundedFinalizes(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
 	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
@@ -650,6 +671,7 @@ func reconcileProviderRefundedFinalizes(t *testing.T) {
 // a succeeded origin: the reservation reverts and the subscription keeps the
 // paid plan.
 func reconcileCapturedRevertsSucceededOrigin(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
 	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
@@ -678,6 +700,7 @@ func reconcileCapturedRevertsSucceededOrigin(t *testing.T) {
 // reconcileCapturedRevertsPendingOrigin covers the still-captured outcome of a
 // pending origin: the reservation reverts to the pending origin.
 func reconcileCapturedRevertsPendingOrigin(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusPending)
 	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
@@ -700,6 +723,7 @@ func reconcileCapturedRevertsPendingOrigin(t *testing.T) {
 // ambiguous answer keeps the reservation for manual review, and the payment is
 // still counted as processed.
 func reconcileFailedStatusStaysForReview(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
 	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
@@ -725,6 +749,7 @@ func reconcileFailedStatusStaysForReview(t *testing.T) {
 // reconcileUnsettledWaitsForNextTick covers the unsettled outcome: a refund
 // the provider has not settled yet keeps the reservation for the next tick.
 func reconcileUnsettledWaitsForNextTick(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	payment := seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
 	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
@@ -746,6 +771,7 @@ func reconcileUnsettledWaitsForNextTick(t *testing.T) {
 // reconcileFreshReservationsNotListed covers the freshness edge: a reservation
 // younger than the staleness threshold is not even listed.
 func reconcileFreshReservationsNotListed(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	seedStuckRefundReservation(t, h, domain.PaymentStatusSucceeded)
 

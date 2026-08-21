@@ -50,6 +50,7 @@ func validInitRequest(paymentID uuid.UUID) application.InitPaymentRequest {
 }
 
 func TestProviderInitPayment(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
@@ -74,6 +75,7 @@ func TestProviderInitPayment(t *testing.T) {
 }
 
 func TestProviderInitPaymentIdempotentByPaymentID(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	req := validInitRequest(paymentID)
@@ -99,6 +101,7 @@ func TestProviderInitPaymentIdempotentByPaymentID(t *testing.T) {
 }
 
 func TestProviderInitPaymentValidation(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	validPaymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
@@ -125,6 +128,7 @@ func TestProviderInitPaymentValidation(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			req := validInitRequest(validPaymentID)
 			tt.mutate(&req)
 			_, err := p.InitPayment(context.Background(), req)
@@ -139,6 +143,7 @@ func TestProviderInitPaymentValidation(t *testing.T) {
 }
 
 func TestProviderConfirmPaymentFlow(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
@@ -173,6 +178,7 @@ func TestProviderConfirmPaymentFlow(t *testing.T) {
 }
 
 func TestProviderConfirmPaymentFailedFlow(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
@@ -196,6 +202,7 @@ func TestProviderConfirmPaymentFailedFlow(t *testing.T) {
 }
 
 func TestProviderConfirmPaymentUnknownID(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	_, err := p.ConfirmPayment(context.Background(), uuid.Must(uuid.NewV7()).String())
 	if err == nil {
@@ -204,6 +211,7 @@ func TestProviderConfirmPaymentUnknownID(t *testing.T) {
 }
 
 func TestProviderPendingPurgedAfterTTL(t *testing.T) {
+	t.Parallel()
 	clk := newTestClock(time.Now())
 	p := NewProvider("http://localhost:8080", discardLogger(), clk, nil)
 	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -218,6 +226,7 @@ func TestProviderPendingPurgedAfterTTL(t *testing.T) {
 }
 
 func TestProviderChargePayment(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 
 	res, err := p.ChargePayment(context.Background(), application.ChargeRequest{
@@ -252,6 +261,7 @@ func TestProviderChargePayment(t *testing.T) {
 }
 
 func TestProviderRefundPayment(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 
 	res, err := p.RefundPayment(context.Background(), application.RefundRequest{
@@ -271,6 +281,7 @@ func TestProviderRefundPayment(t *testing.T) {
 }
 
 func TestProviderParseWebhook(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	paymentID := uuid.Must(uuid.NewV7())
 	payload, err := json.Marshal(map[string]any{
@@ -309,6 +320,7 @@ func TestProviderParseWebhook(t *testing.T) {
 }
 
 func TestProviderAddPaymentMethodFromToken(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	ctx := context.Background()
 
@@ -382,6 +394,7 @@ func requireFakeBindingCompleted(t *testing.T, p *Provider, ctx context.Context,
 // pending until confirmed, its form URL points at the local confirmation
 // endpoint (issue #251), and confirming completes it idempotently.
 func TestProviderBindingAPIs(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	ctx := context.Background()
 
@@ -415,6 +428,7 @@ func TestProviderBindingAPIs(t *testing.T) {
 // precedence over real entries (tests can force outcomes the local flow cannot
 // produce), and that removing a method empties the listing.
 func TestProviderProgrammedBindingStateAndRemoval(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	ctx := context.Background()
 
@@ -453,6 +467,7 @@ func TestProviderProgrammedBindingStateAndRemoval(t *testing.T) {
 }
 
 func TestProviderWebhookAck(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	if got, want := string(p.WebhookAck()), `{"status":"ok"}`; got != want {
 		t.Fatalf("WebhookAck: got %q, want %q", got, want)
@@ -460,6 +475,7 @@ func TestProviderWebhookAck(t *testing.T) {
 }
 
 func TestProviderName(t *testing.T) {
+	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	if got, want := p.Name(), domain.PaymentProvider("fake"); got != want {
 		t.Fatalf("Name: got %q, want %q", got, want)
@@ -469,6 +485,7 @@ func TestProviderName(t *testing.T) {
 // TestProviderSatisfiesPort asserts the aggregate port at runtime in addition
 // to the package-level compile-time assertions.
 func TestProviderSatisfiesPort(t *testing.T) {
+	t.Parallel()
 	var provider application.PaymentProvider = NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
 	if got, want := provider.Name(), domain.PaymentProvider("fake"); got != want {
 		t.Fatalf("Name: got %q, want %q", got, want)

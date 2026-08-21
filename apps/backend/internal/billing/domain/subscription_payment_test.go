@@ -25,6 +25,7 @@ func newTestPayment(t *testing.T) SubscriptionPayment {
 }
 
 func TestNewSubscriptionPayment(t *testing.T) {
+	t.Parallel()
 	payment := newTestPayment(t)
 	if payment.Status != PaymentStatusPending {
 		t.Errorf("Status = %q, want pending", payment.Status)
@@ -41,6 +42,7 @@ func TestNewSubscriptionPayment(t *testing.T) {
 }
 
 func TestNewSubscriptionPayment_RejectsInvalidInput(t *testing.T) {
+	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	subID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	tariffID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
@@ -59,6 +61,7 @@ func TestNewSubscriptionPayment_RejectsInvalidInput(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := NewSubscriptionPayment(tc.user, subID, tariffID, tc.period, tc.amount, "fake", paymentNow)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tc.wantErr)
@@ -68,7 +71,9 @@ func TestNewSubscriptionPayment_RejectsInvalidInput(t *testing.T) {
 }
 
 func TestSubscriptionPayment_FinalizationTransitions(t *testing.T) {
+	t.Parallel()
 	t.Run("mark succeeded", func(t *testing.T) {
+		t.Parallel()
 		payment := newTestPayment(t)
 		if err := payment.MarkSucceeded(paymentNow); err != nil {
 			t.Fatalf("MarkSucceeded() error = %v", err)
@@ -82,6 +87,7 @@ func TestSubscriptionPayment_FinalizationTransitions(t *testing.T) {
 	})
 
 	t.Run("mark failed records the error code", func(t *testing.T) {
+		t.Parallel()
 		payment := newTestPayment(t)
 		code := "card_declined"
 		if err := payment.MarkFailed(&code, paymentNow); err != nil {
@@ -93,6 +99,7 @@ func TestSubscriptionPayment_FinalizationTransitions(t *testing.T) {
 	})
 
 	t.Run("reconcile to succeeded clears the failure", func(t *testing.T) {
+		t.Parallel()
 		payment := newTestPayment(t)
 		code := "timeout"
 		if err := payment.MarkFailed(&code, paymentNow); err != nil {
@@ -107,6 +114,7 @@ func TestSubscriptionPayment_FinalizationTransitions(t *testing.T) {
 	})
 
 	t.Run("reconcile requires the failed status", func(t *testing.T) {
+		t.Parallel()
 		payment := newTestPayment(t)
 		if err := payment.ReconcileToSucceeded(paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
 			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
@@ -117,6 +125,7 @@ func TestSubscriptionPayment_FinalizationTransitions(t *testing.T) {
 // refundMarkedRecordsFullAmount proves a completed refund stores the refunded
 // status with the full original amount.
 func refundMarkedRecordsFullAmount(t *testing.T) {
+	t.Parallel()
 	payment := newTestPayment(t)
 	if err := payment.MarkSucceeded(paymentNow); err != nil {
 		t.Fatalf("MarkSucceeded() error = %v", err)
@@ -132,6 +141,7 @@ func refundMarkedRecordsFullAmount(t *testing.T) {
 // beginRefundReservesSucceededAndPendingOnly proves both refundable source
 // statuses move into the refunding reservation.
 func beginRefundReservesSucceededAndPendingOnly(t *testing.T) {
+	t.Parallel()
 	succeeded := newTestPayment(t)
 	if err := succeeded.MarkSucceeded(paymentNow); err != nil {
 		t.Fatalf("MarkSucceeded() error = %v", err)
@@ -155,6 +165,7 @@ func beginRefundReservesSucceededAndPendingOnly(t *testing.T) {
 // beginRefundRejectsTerminalAndReservedPayments proves every non-refundable
 // status rejects the reservation.
 func beginRefundRejectsTerminalAndReservedPayments(t *testing.T) {
+	t.Parallel()
 	for status, prepare := range map[PaymentStatus]func(*SubscriptionPayment){
 		PaymentStatusFailed: func(p *SubscriptionPayment) {
 			if err := p.MarkFailed(nil, paymentNow); err != nil {
@@ -189,6 +200,7 @@ func beginRefundRejectsTerminalAndReservedPayments(t *testing.T) {
 // revertRefundReservationRestoresPreviousStatus proves reverting a reservation
 // returns the payment to the status it was reserved from.
 func revertRefundReservationRestoresPreviousStatus(t *testing.T) {
+	t.Parallel()
 	succeeded := newTestPayment(t)
 	if err := succeeded.MarkSucceeded(paymentNow); err != nil {
 		t.Fatalf("MarkSucceeded() error = %v", err)
@@ -218,6 +230,7 @@ func revertRefundReservationRestoresPreviousStatus(t *testing.T) {
 // revertRequiresReservationAndRefundableStatus proves the revert guards: no
 // reservation to revert, and no reverting into a terminal status.
 func revertRequiresReservationAndRefundableStatus(t *testing.T) {
+	t.Parallel()
 	payment := newTestPayment(t)
 	if err := payment.RevertRefundReservation(PaymentStatusSucceeded, paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
 		t.Errorf("revert without reservation err = %v, want ErrInvalidPaymentStatus", err)
@@ -235,6 +248,7 @@ func revertRequiresReservationAndRefundableStatus(t *testing.T) {
 }
 
 func TestSubscriptionPayment_RefundTransitions(t *testing.T) {
+	t.Parallel()
 	t.Run("mark refunded records the full amount", refundMarkedRecordsFullAmount)
 	t.Run("begin refund reserves succeeded and pending only", beginRefundReservesSucceededAndPendingOnly)
 	t.Run("begin refund rejects terminal and reserved payments", beginRefundRejectsTerminalAndReservedPayments)
@@ -243,7 +257,9 @@ func TestSubscriptionPayment_RefundTransitions(t *testing.T) {
 }
 
 func TestSubscriptionPayment_SaveProviderReference(t *testing.T) {
+	t.Parallel()
 	t.Run("persists reference and url", func(t *testing.T) {
+		t.Parallel()
 		payment := newTestPayment(t)
 		if err := payment.SaveProviderReference("prov_1", "https://pay/1", paymentNow); err != nil {
 			t.Fatalf("SaveProviderReference() error = %v", err)
@@ -257,6 +273,7 @@ func TestSubscriptionPayment_SaveProviderReference(t *testing.T) {
 	})
 
 	t.Run("second save is rejected (the reference never changes)", func(t *testing.T) {
+		t.Parallel()
 		payment := newTestPayment(t)
 		if err := payment.SaveProviderReference("prov_1", "https://pay/1", paymentNow); err != nil {
 			t.Fatalf("first SaveProviderReference() error = %v", err)
@@ -267,6 +284,7 @@ func TestSubscriptionPayment_SaveProviderReference(t *testing.T) {
 	})
 
 	t.Run("finalized payment rejects the reference", func(t *testing.T) {
+		t.Parallel()
 		payment := newTestPayment(t)
 		if err := payment.MarkFailed(nil, paymentNow); err != nil {
 			t.Fatalf("MarkFailed() error = %v", err)
@@ -277,6 +295,7 @@ func TestSubscriptionPayment_SaveProviderReference(t *testing.T) {
 	})
 
 	t.Run("empty reference is rejected", func(t *testing.T) {
+		t.Parallel()
 		payment := newTestPayment(t)
 		if err := payment.SaveProviderReference("", "", paymentNow); !errors.Is(err, ErrInvalidPayment) {
 			t.Errorf("err = %v, want ErrInvalidPayment", err)
@@ -285,15 +304,18 @@ func TestSubscriptionPayment_SaveProviderReference(t *testing.T) {
 }
 
 func TestReconstituteSubscriptionPayment(t *testing.T) {
+	t.Parallel()
 	payment := newTestPayment(t)
 
 	t.Run("valid payment passes", func(t *testing.T) {
+		t.Parallel()
 		if _, err := ReconstituteSubscriptionPayment(payment); err != nil {
 			t.Fatalf("ReconstituteSubscriptionPayment() error = %v", err)
 		}
 	})
 
 	t.Run("unknown status is rejected", func(t *testing.T) {
+		t.Parallel()
 		bad := payment
 		bad.Status = PaymentStatus("maybe")
 		if _, err := ReconstituteSubscriptionPayment(bad); err == nil {
@@ -302,6 +324,7 @@ func TestReconstituteSubscriptionPayment(t *testing.T) {
 	})
 
 	t.Run("missing identity is rejected", func(t *testing.T) {
+		t.Parallel()
 		bad := payment
 		bad.UserID = uuid.Nil
 		if _, err := ReconstituteSubscriptionPayment(bad); err == nil {
@@ -311,6 +334,7 @@ func TestReconstituteSubscriptionPayment(t *testing.T) {
 }
 
 func TestNewAppliedPaymentTransition(t *testing.T) {
+	t.Parallel()
 	sub, err := NewBasicSubscription(
 		uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 		uuid.MustParse("22222222-2222-2222-2222-222222222222"),

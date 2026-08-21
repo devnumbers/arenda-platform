@@ -514,6 +514,7 @@ func (h *workersHarness) swapLifecyclePort() *scriptedLifecycle {
 // payment succeeds, and the subscription renews from now with the transition
 // logged (ported from TestBilling_ProcessRenewals_Success).
 func TestWorkers_RenewalChargesActiveMethodAndRenews(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	method := h.seedActiveMethod(t, sub, testProviderFake, "token_good")
@@ -542,6 +543,7 @@ func TestWorkers_RenewalChargesActiveMethodAndRenews(t *testing.T) {
 // foreign-provider case is the provider-switch semantics of ADR 0038, ported
 // from the old foreign-card scenario).
 func TestWorkers_RenewalWithoutChargeableMethodEntersGrace(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name       string
 		methodProv domain.PaymentProvider
@@ -551,6 +553,7 @@ func TestWorkers_RenewalWithoutChargeableMethodEntersGrace(t *testing.T) {
 		{name: "foreign provider method", seedMethod: true, methodProv: "tkassa"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newWorkersHarness(t, Config{})
 			sub := h.seedSubscription(t, func(s *domain.Subscription) {
 				// A paid deferred downgrade is still pending: grace entry must
@@ -584,6 +587,7 @@ func TestWorkers_RenewalWithoutChargeableMethodEntersGrace(t *testing.T) {
 // TestBilling_ProcessRenewals_FailedChargeMovesToGrace and
 // ..._ProviderErrorCodeSavedOnFailedCharge).
 func TestWorkers_RenewalFailedChargeMovesToGrace(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	h.seedActiveMethod(t, sub, testProviderFake, "token_bad")
@@ -617,6 +621,7 @@ func TestWorkers_RenewalFailedChargeMovesToGrace(t *testing.T) {
 // payment the provider reports as succeeded is applied without a new charge
 // (ported from TestBilling_ProcessRenewals_SkipsDuplicateChargeWhenProviderSucceeded).
 func TestWorkers_RenewalSkipsRechargeWhenProviderSucceeded(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	method := h.seedActiveMethod(t, sub, testProviderFake, "token_good")
@@ -668,6 +673,7 @@ func TestWorkers_RenewalSkipsRechargeWhenProviderSucceeded(t *testing.T) {
 // no charge attempt (ported from
 // TestBilling_ProcessRenewals_FinalizesFailedPaymentWithoutCharge).
 func TestWorkers_RenewalFinalizesProviderFailedWithoutCharge(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	h.seedActiveMethod(t, sub, testProviderFake, "token_good")
@@ -712,6 +718,7 @@ func TestWorkers_RenewalFinalizesProviderFailedWithoutCharge(t *testing.T) {
 // may be a success (ported from ..._SkipsRechargeWhenProviderStatusUnknown and
 // ..._StatusErrorDoesNotCountChargeAttempt).
 func TestWorkers_RenewalProviderStatusUnknownSkipsCharge(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	h.seedActiveMethod(t, sub, testProviderFake, "token_good")
@@ -758,7 +765,9 @@ func TestWorkers_RenewalProviderStatusUnknownSkipsCharge(t *testing.T) {
 // TestBilling_ProcessRenewals_RecoverAfterChargeTimeoutProviderSucceeds and
 // ..._ProviderUnknownKeepsActive).
 func TestWorkers_RenewalUncertainChargeResolvesFromProviderStatus(t *testing.T) {
+	t.Parallel()
 	t.Run("provider succeeded", func(t *testing.T) {
+		t.Parallel()
 		h := newWorkersHarness(t, Config{})
 		sub := h.seedSubscription(t, nil)
 		h.seedActiveMethod(t, sub, testProviderFake, "token_good")
@@ -793,6 +802,7 @@ func TestWorkers_RenewalUncertainChargeResolvesFromProviderStatus(t *testing.T) 
 	})
 
 	t.Run("provider unknown", func(t *testing.T) {
+		t.Parallel()
 		h := newWorkersHarness(t, Config{})
 		sub := h.seedSubscription(t, nil)
 		h.seedActiveMethod(t, sub, testProviderFake, "token_good")
@@ -828,6 +838,7 @@ func TestWorkers_RenewalUncertainChargeResolvesFromProviderStatus(t *testing.T) 
 // configured number of attempts and the subscription enters grace (ported
 // from TestBilling_ProcessRenewals_ChargeAttemptLimitMovesToGrace).
 func TestWorkers_RenewalChargeAttemptLimitMovesToGrace(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{
 		ChargeAttemptLimit: 2, WorkerBatchSize: 100,
 		GraceDuration: 7 * 24 * time.Hour, PendingPaymentStaleness: 5 * time.Minute,
@@ -874,6 +885,7 @@ func TestWorkers_RenewalChargeAttemptLimitMovesToGrace(t *testing.T) {
 // resolves to the existing row instead of duplicating (ported from
 // TestBilling_ProcessRenewals_RecoversExistingPendingPaymentOnCreateRace).
 func TestWorkers_RenewalRecoversPendingPaymentFromCreateRace(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	method := h.seedActiveMethod(t, sub, testProviderFake, "token_good")
@@ -915,6 +927,7 @@ func TestWorkers_RenewalRecoversPendingPaymentFromCreateRace(t *testing.T) {
 // state — validity cleared, auto-renew off — through the shared expiry
 // outcome (ported from the old free-renewal path).
 func TestWorkers_RenewalFreeBasicTermsFallToBasic(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
 		s.TariffID = h.basic.ID
@@ -948,6 +961,7 @@ func TestWorkers_RenewalFreeBasicTermsFallToBasic(t *testing.T) {
 // TestBilling_ProcessScheduledChanges_NoChargeApplies and
 // ..._AppliesOnceAndNotAgain).
 func TestWorkers_ScheduledChangesApplyFreeTarget(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	archiver := &fakeArchiverSource{}
 	slots := &fakeSlotSource{}
@@ -987,6 +1001,7 @@ func TestWorkers_ScheduledChangesApplyFreeTarget(t *testing.T) {
 // TestBilling_ProcessScheduledChanges_PaidDowngradeSkippedForRenewalCharge
 // and TestBilling_ProcessRenewals_PaidScheduledDowngradeChargedAtApply).
 func TestWorkers_ScheduledChangesSkipPaidTargetForRenewalCharge(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	archiver := &fakeArchiverSource{}
 	h.workers.SetLifecycleBridges(archiver, nil)
@@ -1046,6 +1061,7 @@ func TestWorkers_ScheduledChangesSkipPaidTargetForRenewalCharge(t *testing.T) {
 // for the next tick (the shared expiry path, ported from
 // TestBilling_ProcessExpiredGrace_DowngradesToBasic).
 func TestWorkers_ExpiredGraceDowngradesToBasicWithBridges(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	archiver := &fakeArchiverSource{}
 	slots := &fakeSlotSource{}
@@ -1088,6 +1104,7 @@ func TestWorkers_ExpiredGraceDowngradesToBasicWithBridges(t *testing.T) {
 // and cancelled expiries share the downgrade-to-basic path with their archive
 // triggers (ported from the old expireNonRenewingSubscription scenarios).
 func TestWorkers_RenewalsExpireNonRenewingAndCancelled(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	slots := &fakeSlotSource{}
 	h.workers.SetLifecycleBridges(nil, slots)
@@ -1137,6 +1154,7 @@ func containsAll(got []string, want ...string) bool {
 // refuses to run without a provider instead of punishing users for a wiring
 // mistake.
 func TestWorkers_ProcessRenewalsRequiresProvider(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	h.workers.provider = nil
 	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); !errors.Is(err, ErrPaymentUnavailable) {
@@ -1149,6 +1167,7 @@ func TestWorkers_ProcessRenewalsRequiresProvider(t *testing.T) {
 // synchronous notification path; a provider-pending payment is left alone
 // (ported from TestBilling_ProcessPendingUpgradePayments_*).
 func TestWorkers_ReconcileStalePendingPayments(t *testing.T) {
+	t.Parallel()
 	t.Run("succeeded finalizes upgrade", reconcileUpgradeSucceededFinalizes)
 	t.Run("failed marks failed without subscription damage", reconcileUpgradeFailedKeepsSubscription)
 	t.Run("provider pending is left alone", reconcileProviderPendingLeftAlone)
@@ -1158,6 +1177,7 @@ func TestWorkers_ReconcileStalePendingPayments(t *testing.T) {
 // reconcileUpgradeSucceededFinalizes covers the succeeded stale outcome: the
 // upgrade payment finalizes and the business tariff applies.
 func reconcileUpgradeSucceededFinalizes(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil) // Still on pro; the payment buys business.
 	payment := h.seedStalePendingUpgrade(t, sub, "prov_stale_1")
@@ -1184,6 +1204,7 @@ func reconcileUpgradeSucceededFinalizes(t *testing.T) {
 // reconcileUpgradeFailedKeepsSubscription covers the failed stale outcome: the
 // payment fails with no subscription damage.
 func reconcileUpgradeFailedKeepsSubscription(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	payment := h.seedStalePendingUpgrade(t, sub, "prov_stale_2")
@@ -1206,6 +1227,7 @@ func reconcileUpgradeFailedKeepsSubscription(t *testing.T) {
 // reconcileProviderPendingLeftAlone covers the provider-pending outcome: the
 // reconciliation leaves the stale payment pending.
 func reconcileProviderPendingLeftAlone(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	payment := h.seedStalePendingUpgrade(t, sub, "prov_stale_3")
@@ -1226,6 +1248,7 @@ func reconcileProviderPendingLeftAlone(t *testing.T) {
 // than the staleness threshold is never reconciled, the provider is not even
 // queried.
 func reconcileFreshPendingNotStale(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	payment, err := domain.NewSubscriptionPayment(
@@ -1256,6 +1279,7 @@ func reconcileFreshPendingNotStale(t *testing.T) {
 // refund as one resolution whose answer drives the batch progress. The
 // workers hold no reference to the payment service behind the port.
 func TestWorkers_ReconciliationRoutesThroughLifecyclePort(t *testing.T) {
+	t.Parallel()
 	t.Run("succeeded outcome arrives as one applied notification", portAppliesSucceededOutcome)
 	t.Run("failed outcome keeps the provider error code", portKeepsProviderErrorCode)
 	t.Run("stuck refund resolves through the port", portResolvesStuckRefund)
@@ -1265,6 +1289,7 @@ func TestWorkers_ReconciliationRoutesThroughLifecyclePort(t *testing.T) {
 // portAppliesSucceededOutcome covers the succeeded outcome: exactly one
 // notification application with the provider status translated.
 func portAppliesSucceededOutcome(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	payment := h.seedStalePendingUpgrade(t, sub, "prov_port_1")
@@ -1301,6 +1326,7 @@ func portAppliesSucceededOutcome(t *testing.T) {
 // portKeepsProviderErrorCode covers the failed outcome: the notification
 // carries the provider's error code and the payment identity.
 func portKeepsProviderErrorCode(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	payment := h.seedStalePendingUpgrade(t, sub, "prov_port_2")
@@ -1327,6 +1353,7 @@ func portKeepsProviderErrorCode(t *testing.T) {
 // portResolvesStuckRefund covers a stuck refund the provider reports refunded:
 // one resolution through the port drives the batch progress.
 func portResolvesStuckRefund(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	payment := h.seedStuckRefundPayment(t)
 	lifecycle := h.swapLifecyclePort()
@@ -1360,6 +1387,7 @@ func portResolvesStuckRefund(t *testing.T) {
 // portKeepsUnresolvedReservation covers an unresolved port answer: the refund
 // reservation survives untouched.
 func portKeepsUnresolvedReservation(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	payment := h.seedStuckRefundPayment(t)
 	lifecycle := h.swapLifecyclePort()
@@ -1386,6 +1414,7 @@ func portKeepsUnresolvedReservation(t *testing.T) {
 // reconciliation refuses to run without the payment lifecycle instead of
 // punishing users for a wiring mistake.
 func TestWorkers_ReconcileStaleRefundsRequiresLifecycle(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	h.workers.payments = nil
 	if _, err := h.workers.ReconcileStaleRefunds(t.Context(), h.now); !errors.Is(err, ErrPaymentUnavailable) {
@@ -1401,6 +1430,7 @@ func TestWorkers_ReconcileStaleRefundsRequiresLifecycle(t *testing.T) {
 // forever. A customer-initiated payment (no method) leaves the subscription
 // untouched (ported from TestBilling_HandleWebhook_FailedRenewalMovesToGrace).
 func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
+	t.Parallel()
 	newHarnessWithPayments := func(t *testing.T) (*workersHarness, domain.Subscription, *domain.SubscriptionPayment) {
 		t.Helper()
 		h := newWorkersHarness(t, Config{})
@@ -1425,6 +1455,7 @@ func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
 	}
 
 	t.Run("merchant-initiated renewal enters grace", func(t *testing.T) {
+		t.Parallel()
 		h, sub, payment := newHarnessWithPayments(t)
 		err := h.workers.payments.ApplyPaymentNotification(t.Context(), &PaymentNotification{
 			InternalPaymentID: payment.ID,
@@ -1449,6 +1480,7 @@ func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
 	})
 
 	t.Run("customer-initiated payment leaves subscription untouched", func(t *testing.T) {
+		t.Parallel()
 		h, sub, payment := newHarnessWithPayments(t)
 		// Strip the method: the payment becomes a customer-initiated one.
 		payment.PaymentMethodID = nil
@@ -1479,6 +1511,7 @@ func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
 // TestBilling_ProcessRenewals_BatchWithoutProgressStops and
 // ..._ProcessExpiredGrace_BatchWithoutProgressStops).
 func TestWorkers_BatchWithoutProgressStops(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{
 		WorkerBatchSize: 1, GraceDuration: 7 * 24 * time.Hour,
 		ChargeAttemptLimit: 3, PendingPaymentStaleness: 5 * time.Minute,
@@ -1523,6 +1556,7 @@ func TestWorkers_BatchWithoutProgressStops(t *testing.T) {
 // after an errored charge (ported from
 // TestBilling_ProcessRenewals_TypedProviderErrorsKeepGraceAndErrorCode).
 func TestWorkers_UncertainChargeKeepsProviderErrorCode(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	sub := h.seedSubscription(t, nil)
 	h.seedActiveMethod(t, sub, testProviderFake, "token_good")

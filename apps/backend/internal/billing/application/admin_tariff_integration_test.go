@@ -25,6 +25,7 @@ import (
 // Create persists the plan and narrows the name unique violation to
 // ErrTariffAlreadyExists' underlying ErrAlreadyExists sentinel.
 func TestTariffRepository_Integration_CreateInsertsAndDuplicateNarrows(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	// Free the 'business' name: no subscription references it in a fresh
 	// harness, so the row can go and the create below recreates it.
@@ -57,6 +58,7 @@ func TestTariffRepository_Integration_CreateInsertsAndDuplicateNarrows(t *testin
 // rewrites the editable fields (the name stays) and narrows a miss to
 // ErrNotFound.
 func TestTariffRepository_Integration_UpdateEditsAndMissNarrows(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	pro, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
 	if err != nil {
@@ -186,6 +188,7 @@ func (h *integrationHarness) requireFreshProPrice(t *testing.T, proID uuid.UUID)
 // and the next read observes the write. The clock stays fixed, so the fresh
 // read can only come from the invalidation, not the TTL.
 func TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	pro := h.primeTariffCaches(t)
 	h.commitRepricingThroughTx(t, pro)
@@ -201,6 +204,7 @@ func TestTariffRepository_Integration_InvalidateMakesCommittedWriteVisible(t *te
 // lands the row change and its audit entry in one transaction, and the
 // invalidation makes the shared repository observe the change immediately.
 func TestAdminTariff_Integration_UpdatePersistsWithAudit(t *testing.T) {
+	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
 	adminID := h.seedUser()
 	proID := h.tariffIDByName(t, domain.TariffPro)
@@ -320,6 +324,7 @@ func (h *paymentIntegrationHarness) requireApplyTimeCharge(t *testing.T, userID,
 // paid target charges the price current at apply time, not at schedule time
 // (the paid target is applied by the renewal phase, ADR 0008).
 func TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice(t *testing.T) {
+	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
 	adminID := h.seedUser()
 	userID := h.seedAutoRenewingBusinessPayer(t)
@@ -361,6 +366,7 @@ func TestAdminTariff_Integration_DeferredChangeChargesUpdatedPrice(t *testing.T)
 // plan's current price even though the plan is no longer offered or
 // selectable, and the subscription stays on it.
 func TestAdminTariff_Integration_HiddenTariffSubscriptionStillRenews(t *testing.T) {
+	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
 	adminID := h.seedUser()
 	userID, sub := seedPaidProSubscription(t, h.integrationHarness)
@@ -414,6 +420,7 @@ func TestAdminTariff_Integration_HiddenTariffSubscriptionStillRenews(t *testing.
 // updated price — including through the read cache, which the service
 // invalidated at the edit.
 func TestAdminTariff_Integration_RenewalChargesUpdatedPrice(t *testing.T) {
+	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
 	adminID := h.seedUser()
 	userID, sub := seedPaidProSubscription(t, h.integrationHarness)

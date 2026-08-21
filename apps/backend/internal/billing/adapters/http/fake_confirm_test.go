@@ -96,6 +96,7 @@ func pendingPayment() domain.SubscriptionPayment {
 // payment is read, the fake provider completes it and the confirmed event is
 // applied through the same synchronous path a webhook takes (issue #287).
 func TestFakeConfirmPayment_AppliesConfirmedEvent(t *testing.T) {
+	t.Parallel()
 	payment := pendingPayment()
 	confirmed := billingapp.WebhookEvent{Payment: &billingapp.PaymentNotification{
 		InternalPaymentID: payment.ID,
@@ -137,6 +138,7 @@ func TestFakeConfirmPayment_AppliesConfirmedEvent(t *testing.T) {
 // TestFakeConfirmPayment_NotFoundMapsTo404 proves an unknown payment answers
 // the contract's 404.
 func TestFakeConfirmPayment_NotFoundMapsTo404(t *testing.T) {
+	t.Parallel()
 	h := newFakeConfirmRouter(
 		nil,
 		&stubConfirmBackend{getPayment: func(context.Context, uuid.UUID) (domain.SubscriptionPayment, error) {
@@ -153,6 +155,7 @@ func TestFakeConfirmPayment_NotFoundMapsTo404(t *testing.T) {
 // TestFakeConfirmPayment_FinalizedIsNoOp proves confirming a finalized payment
 // never reaches the provider — the idempotency the local flow guarantees.
 func TestFakeConfirmPayment_FinalizedIsNoOp(t *testing.T) {
+	t.Parallel()
 	payment := pendingPayment()
 	payment.Status = domain.PaymentStatusSucceeded
 	h := newFakeConfirmRouter(
@@ -181,6 +184,7 @@ func TestFakeConfirmPayment_FinalizedIsNoOp(t *testing.T) {
 // confirmation the provider cannot resolve (a purged or already-settled entry)
 // falls back to the provider status as the source of truth.
 func TestFakeConfirmPayment_LostProviderEntryFallsBackToStatus(t *testing.T) {
+	t.Parallel()
 	payment := pendingPayment()
 	var applied *billingapp.WebhookEvent
 	h := newFakeConfirmRouter(
@@ -220,6 +224,7 @@ func TestFakeConfirmPayment_LostProviderEntryFallsBackToStatus(t *testing.T) {
 // TestFakeConfirmPayment_LostEntryPendingStatusIsNoOp proves a lost entry the
 // provider has not settled yet changes nothing.
 func TestFakeConfirmPayment_LostEntryPendingStatusIsNoOp(t *testing.T) {
+	t.Parallel()
 	payment := pendingPayment()
 	h := newFakeConfirmRouter(
 		&stubFakeProvider{
@@ -250,6 +255,7 @@ func TestFakeConfirmPayment_LostEntryPendingStatusIsNoOp(t *testing.T) {
 // TestFakeConfirmPayment_ProviderErrorMapsTo500 proves a provider failure
 // without a fallback answers 500.
 func TestFakeConfirmPayment_ProviderErrorMapsTo500(t *testing.T) {
+	t.Parallel()
 	payment := pendingPayment()
 	h := newFakeConfirmRouter(
 		&stubFakeProvider{confirm: func(context.Context, string) (billingapp.WebhookEvent, error) {
@@ -271,6 +277,7 @@ func TestFakeConfirmPayment_ProviderErrorMapsTo500(t *testing.T) {
 // TestFakeConfirmPayment_InvalidUUIDMapsTo400 proves a malformed payment id is
 // a request defect, not a server failure.
 func TestFakeConfirmPayment_InvalidUUIDMapsTo400(t *testing.T) {
+	t.Parallel()
 	h := newFakeConfirmRouter(nil, nil)
 
 	w := postConfirm(t, h, "/internal/fake-subscription-payment/not-a-uuid/confirm")
@@ -283,6 +290,7 @@ func TestFakeConfirmPayment_InvalidUUIDMapsTo400(t *testing.T) {
 // the fake adapter completes the session and the method-bound event is applied
 // through the synchronous webhook path (issue #287).
 func TestFakeConfirmCardBinding_AppliesConfirmedEvent(t *testing.T) {
+	t.Parallel()
 	confirmed := billingapp.WebhookEvent{MethodBound: &billingapp.MethodBoundNotification{
 		BindingID: testBindingID,
 		Method:    billingapp.SavedMethod{ChargeToken: "token_1"},
@@ -313,6 +321,7 @@ func TestFakeConfirmCardBinding_AppliesConfirmedEvent(t *testing.T) {
 // TestFakeConfirmCardBinding_UnknownKeyMapsTo404 proves an unknown or expired
 // request key answers 404.
 func TestFakeConfirmCardBinding_UnknownKeyMapsTo404(t *testing.T) {
+	t.Parallel()
 	h := newFakeConfirmRouter(
 		&stubFakeProvider{confirmBind: func(context.Context, string) (billingapp.WebhookEvent, error) {
 			return billingapp.WebhookEvent{}, billingapp.ErrProviderBindingNotFound

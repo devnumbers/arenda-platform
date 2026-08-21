@@ -18,6 +18,7 @@ import (
 // TestSubscriptionRepository_Integration_UpdatePersistsMutations proves Update
 // writes every mutable field of the ADR 0008 lifecycle state.
 func TestSubscriptionRepository_Integration_UpdatePersistsMutations(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID := h.seedUser()
 	if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
@@ -67,6 +68,7 @@ func TestSubscriptionRepository_Integration_UpdatePersistsMutations(t *testing.T
 // TestSubscriptionRepository_Integration_ForUpdateInsideTx proves the row lock
 // variant reads the same aggregate inside a real transaction.
 func TestSubscriptionRepository_Integration_ForUpdateInsideTx(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID := h.seedUser()
 	if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
@@ -97,6 +99,7 @@ func TestSubscriptionRepository_Integration_ForUpdateInsideTx(t *testing.T) {
 // the ON CONFLICT path: creating a subscription for a user who already has one
 // returns the existing row instead of failing.
 func TestSubscriptionRepository_Integration_CreateConflictReturnsExisting(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID := h.seedUser()
 	if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
@@ -128,6 +131,7 @@ func TestSubscriptionRepository_Integration_CreateConflictReturnsExisting(t *tes
 // schema-level guard: pending_change_at before valid_until violates the CHECK
 // constraint, proving the deferred-change invariant lives in the database.
 func TestSubscriptionRepository_Integration_ExpiryWindowRespectedBySchema(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID := h.seedUser()
 	if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
@@ -255,10 +259,13 @@ func requireReminderFlagDropsRow(
 // TestSubscriptionRepository_Integration_ListSelection proves the
 // parameterized worker selection (issue #286) against the real schema: every
 // phase's selection picks exactly its batch from a state matrix, the batch
-// order follows the phase clock, a user-narrowed selection is the under-lock
-// membership re-check, and marking a grace window reminded removes it from
-// the reminder selection.
+// order follows the phase clock, and a user-narrowed selection is the
+// under-lock membership re-check. The matrix is immutable, so the subtests
+// run in parallel; the mutating reminder-flag check lives in its own test
+// because parallel subtests observe the seeded state only after the parent
+// body has finished.
 func TestSubscriptionRepository_Integration_ListSelection(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	now := h.clock.Now()
 	seed := func(name string, mutate func(*domain.Subscription)) domain.Subscription {
@@ -396,10 +403,36 @@ func TestSubscriptionRepository_Integration_ListSelection(t *testing.T) {
 		{name: "pending changes due", sel: pendingSel, want: []uuid.UUID{pendingDue.UserID}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			requireSelectionUserIDs(t, h, tc.sel, tc.want)
 		})
 	}
 
 	requireNarrowedSelectionIsMembershipRecheck(t, h, renewSel, renewExpired, graceInWindow)
-	requireReminderFlagDropsRow(t, h, graceInWindow, reminderSel, now)
+}
+
+// TestSubscriptionRepository_Integration_ReminderFlagDropsRow proves marking
+// the grace window reminded persists the flag through a re-read and removes
+// the row from the reminder selection. It runs on its own harness because the
+// mutation must not race the read-only matrix subtests of ListSelection.
+func TestSubscriptionRepository_Integration_ReminderFlagDropsRow(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	now := h.clock.Now()
+	const lead = 48 * time.Hour
+
+	unreminded := seedLifecycleSelectionRow(t, h, "grace inside reminder window", func(s *domain.Subscription) {
+		until := now.Add(24 * time.Hour)
+		s.Status = domain.SubscriptionStatusGrace
+		s.ValidUntil = &until
+	})
+	reminderSel := billingapp.SubscriptionSelection{
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntilAfter:  new(now),
+		ValidUntilBefore: new(now.Add(lead)),
+		Unreminded:       true,
+		Limit:            100,
+	}
+	requireSelectionUserIDs(t, h, reminderSel, []uuid.UUID{unreminded.UserID})
+	requireReminderFlagDropsRow(t, h, unreminded, reminderSel, now)
 }

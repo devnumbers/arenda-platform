@@ -99,7 +99,7 @@ func (r *captureRescheduler) RescheduleForTimezoneChange(_ context.Context, user
 // repositories through a postgres-backed Unit-of-Work, sharing one fake clock,
 // one noop encryptor, and capture fakes for the email sender, event publisher,
 // and reminder rescheduler. Each test builds a fresh harness over a clean
-// (truncated) database via testdb.Setup.
+// (private template-cloned) database via testdb.Setup.
 type integrationHarness struct {
 	t           *testing.T
 	pool        *pgxpool.Pool

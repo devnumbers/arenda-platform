@@ -10,6 +10,7 @@ import (
 )
 
 func TestSign(t *testing.T) {
+	t.Parallel()
 	data := map[string]any{
 		fieldTerminalKey: "TinkoffBankTest",
 		fieldAmount:      int64(1000),
@@ -36,6 +37,7 @@ func TestSign(t *testing.T) {
 }
 
 func TestSignSkipsNullBlankAndNested(t *testing.T) {
+	t.Parallel()
 	data := map[string]any{
 		fieldTerminalKey: "Term",
 		fieldAmount:      int64(1),
@@ -60,6 +62,7 @@ func TestSignSkipsNullBlankAndNested(t *testing.T) {
 // TestSignFixedVector pins the token algorithm to a fixed test vector so a
 // regression in sorting, concatenation or hashing is caught byte-exactly.
 func TestSignFixedVector(t *testing.T) {
+	t.Parallel()
 	data := map[string]any{
 		fieldTerminalKey: testTerminalKey,
 		fieldOrderID:     testPaymentUUID,
@@ -78,6 +81,7 @@ func TestSignFixedVector(t *testing.T) {
 }
 
 func TestSignDoesNotMutateInput(t *testing.T) {
+	t.Parallel()
 	data := map[string]any{
 		fieldTerminalKey: "Term",
 		fieldAmount:      json.Number("1"),

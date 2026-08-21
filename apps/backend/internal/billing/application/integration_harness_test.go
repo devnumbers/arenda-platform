@@ -85,8 +85,9 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	t.Helper()
 
 	pool := testdb.Setup(t)
-	// The testdb helper truncates every table between tests, including the migration's
-	// tariff seed; re-seed it so each harness starts from the canonical plans.
+	// Each harness runs on a private clone of the migrated template, whose
+	// migrations already seed the canonical tariff plans; seedTariffs is an
+	// idempotent guard (ON CONFLICT DO NOTHING) pinning those plans.
 	seedTariffs(t, pool)
 	clk := &mutableClock{now: integrationBaseTime}
 	logger := slog.New(slog.DiscardHandler)

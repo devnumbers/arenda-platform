@@ -11,6 +11,7 @@ import (
 // TestTariffService_ListTariffs_ReturnsActiveOnly proves the user-facing tariff
 // listing hides inactive tariffs.
 func TestTariffService_ListTariffs_ReturnsActiveOnly(t *testing.T) {
+	t.Parallel()
 	hidden := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
 	stores := newFakeStores(append(testTariffs(), hidden)...)
 	svc := NewTariffService(stores.factory(nil), TariffServiceConfig{})
@@ -32,6 +33,7 @@ func TestTariffService_ListTariffs_ReturnsActiveOnly(t *testing.T) {
 // TestTariffService_ListAllTariffs_ReturnsHiddenToo proves the admin tariff
 // listing includes hidden tariffs (issue #247).
 func TestTariffService_ListAllTariffs_ReturnsHiddenToo(t *testing.T) {
+	t.Parallel()
 	hidden := domain.Tariff{ID: uuid.Must(uuid.NewV7()), Name: domain.TariffBusiness, ActivePropertyLimit: -1, IsActive: false}
 	seeded := append(testTariffs(), hidden)
 	stores := newFakeStores(seeded...)
@@ -61,6 +63,7 @@ func TestTariffService_ListAllTariffs_ReturnsHiddenToo(t *testing.T) {
 // TestSubscriptionService_GetSubscription_AssemblesView proves GetSubscription
 // resolves the current and pending tariffs into the view.
 func TestSubscriptionService_GetSubscription_AssemblesView(t *testing.T) {
+	t.Parallel()
 	tariffs := testTariffs()
 	stores := newFakeStores(tariffs...)
 	svc := NewSubscriptionService(stores.factory(nil), SubscriptionServiceConfig{})
@@ -92,6 +95,7 @@ func TestSubscriptionService_GetSubscription_AssemblesView(t *testing.T) {
 // TestSubscriptionService_GetSubscription_NotFound proves a user without a
 // subscription maps to ErrSubscriptionNotFound.
 func TestSubscriptionService_GetSubscription_NotFound(t *testing.T) {
+	t.Parallel()
 	svc := NewSubscriptionService(newFakeStores().factory(nil), SubscriptionServiceConfig{})
 
 	_, err := svc.GetSubscription(t.Context(), uuid.Must(uuid.NewV7()))

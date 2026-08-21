@@ -22,6 +22,7 @@ func signedWebhookPayload(t *testing.T, payload map[string]any) []byte {
 }
 
 func TestParseWebhookPayment(t *testing.T) {
+	t.Parallel()
 	paymentID := uuid.MustParse(testPaymentUUID)
 	payload := map[string]any{
 		fieldTerminalKey: testTerminalKey,
@@ -68,6 +69,7 @@ func TestParseWebhookPayment(t *testing.T) {
 // delivery moment of a save-method chain: the RebillId arriving in a payment
 // notification (typically AUTHORIZED) becomes the saved method.
 func TestParseWebhookPaymentWithRebillIdSurfacesSavedMethod(t *testing.T) {
+	t.Parallel()
 	paymentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	payload := map[string]any{
 		fieldTerminalKey: testTerminalKey,
@@ -99,6 +101,7 @@ func TestParseWebhookPaymentWithRebillIdSurfacesSavedMethod(t *testing.T) {
 }
 
 func TestParseWebhookFailedPaymentCarriesErrorCode(t *testing.T) {
+	t.Parallel()
 	paymentID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 	payload := map[string]any{
 		fieldTerminalKey: testTerminalKey,
@@ -123,6 +126,7 @@ func TestParseWebhookFailedPaymentCarriesErrorCode(t *testing.T) {
 }
 
 func TestParseWebhookRefundStatuses(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		status     string
@@ -138,6 +142,7 @@ func TestParseWebhookRefundStatuses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			payload := map[string]any{
 				fieldTerminalKey: testTerminalKey,
 				fieldOrderID:     "22222222-2222-2222-2222-222222222222",
@@ -163,6 +168,7 @@ func TestParseWebhookRefundStatuses(t *testing.T) {
 }
 
 func TestParseWebhookAddCard(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey:      testTerminalKey,
 		fieldRequestKey:       testRequestKey,
@@ -198,6 +204,7 @@ func TestParseWebhookAddCard(t *testing.T) {
 }
 
 func TestParseWebhookAddCardLegacyType(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey: testTerminalKey,
 		fieldRequestKey:  "request-key-2",
@@ -223,6 +230,7 @@ func TestParseWebhookAddCardLegacyType(t *testing.T) {
 // add-card notifications may omit NotificationType entirely: discrimination
 // falls back to RequestKey presence (ADR 0017).
 func TestParseWebhookAddCardWithoutNotificationType(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey: testTerminalKey,
 		fieldRequestKey:  "request-key-3",
@@ -243,6 +251,7 @@ func TestParseWebhookAddCardWithoutNotificationType(t *testing.T) {
 }
 
 func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey:      testTerminalKey,
 		fieldRequestKey:       "request-key-4",
@@ -263,6 +272,7 @@ func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
 }
 
 func TestParseWebhookUnknownNotificationType(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey:      testTerminalKey,
 		fieldNotificationType: "NotificationSomethingElse",
@@ -280,6 +290,7 @@ func TestParseWebhookUnknownNotificationType(t *testing.T) {
 }
 
 func TestParseWebhookInvalidOrderID(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey: testTerminalKey,
 		fieldOrderID:     "not-a-uuid",
@@ -298,6 +309,7 @@ func TestParseWebhookInvalidOrderID(t *testing.T) {
 }
 
 func TestVerifyWebhookTokenMissing(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey: testTerminalKey,
 		fieldOrderID:     testPaymentUUID,
@@ -319,6 +331,7 @@ func TestVerifyWebhookTokenMissing(t *testing.T) {
 }
 
 func TestVerifyWebhookTokenInvalid(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey: testTerminalKey,
 		fieldOrderID:     testPaymentUUID,
@@ -343,6 +356,7 @@ func TestVerifyWebhookTokenInvalid(t *testing.T) {
 }
 
 func TestParseWebhookTerminalKeyMismatch(t *testing.T) {
+	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey: "anotherTerminal",
 		fieldOrderID:     testPaymentUUID,
@@ -361,6 +375,7 @@ func TestParseWebhookTerminalKeyMismatch(t *testing.T) {
 }
 
 func TestGetAmount(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		data    map[string]any
@@ -376,6 +391,7 @@ func TestGetAmount(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := getAmount(tt.data)
 			if tt.wantErr {
 				if err == nil {

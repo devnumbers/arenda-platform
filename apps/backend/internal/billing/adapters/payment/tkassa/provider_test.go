@@ -152,6 +152,7 @@ var addCardExtraFieldsAllowlist = []string{
 }
 
 func TestNewProviderRequiresBaseURL(t *testing.T) {
+	t.Parallel()
 	_, err := NewProvider(Config{
 		TerminalKey: testTerminalKey,
 		Password:    testPassword,
@@ -166,6 +167,7 @@ func TestNewProviderRequiresBaseURL(t *testing.T) {
 }
 
 func TestNewProviderRequiresCredentialsAndAppBaseURL(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cfg  Config
@@ -177,6 +179,7 @@ func TestNewProviderRequiresCredentialsAndAppBaseURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := NewProvider(tt.cfg, discardLogger(), nil)
 			if err == nil {
 				t.Fatal("expected error")
@@ -189,6 +192,7 @@ func TestNewProviderRequiresCredentialsAndAppBaseURL(t *testing.T) {
 }
 
 func TestNewProviderTrimsTrailingSlash(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		BaseURL:     "https://api.example/v2",
 		TerminalKey: testTerminalKey,
@@ -256,6 +260,7 @@ func assertInitRequestMap(t *testing.T, data map[string]any, paymentID uuid.UUID
 }
 
 func TestProviderInitPayment(t *testing.T) {
+	t.Parallel()
 	paymentID := uuid.MustParse(testPaymentUUID)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -304,6 +309,7 @@ func TestProviderInitPayment(t *testing.T) {
 // initiator is a mandatory explicit parameter and must not default to CIT
 // silently (issue #246 §6).
 func TestProviderInitPaymentInitiatorRequired(t *testing.T) {
+	t.Parallel()
 	var requests int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests++
@@ -329,6 +335,7 @@ func TestProviderInitPaymentInitiatorRequired(t *testing.T) {
 }
 
 func TestProviderInitPaymentMerchantInitiated(t *testing.T) {
+	t.Parallel()
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = verifyRequestToken(t, r)
@@ -375,6 +382,7 @@ func TestProviderInitPaymentMerchantInitiated(t *testing.T) {
 }
 
 func TestProviderInitPaymentFormDeadline(t *testing.T) {
+	t.Parallel()
 	newServer := func(captured *map[string]any) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			*captured = verifyRequestToken(t, r)
@@ -387,6 +395,7 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 	}
 
 	t.Run("set normalizes to utc", func(t *testing.T) {
+		t.Parallel()
 		var captured map[string]any
 		server := newServer(&captured)
 		defer server.Close()
@@ -415,6 +424,7 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 	})
 
 	t.Run("zero omits field", func(t *testing.T) {
+		t.Parallel()
 		var captured map[string]any
 		server := newServer(&captured)
 		defer server.Close()
@@ -438,6 +448,7 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 }
 
 func TestProviderInitPaymentError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = verifyRequestToken(t, r)
 		writeJSON(t, w, initResponse{
@@ -471,6 +482,7 @@ func TestProviderInitPaymentError(t *testing.T) {
 }
 
 func TestProviderChargePayment(t *testing.T) {
+	t.Parallel()
 	paymentID := uuid.Must(uuid.NewV7())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -521,6 +533,7 @@ func TestProviderChargePayment(t *testing.T) {
 }
 
 func TestProviderChargePaymentRejectedCarriesErrorCode(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, chargeResponse{
 			baseResponse: baseResponse{Success: true, Status: statusRejected, ErrorCode: "103"},
@@ -547,6 +560,7 @@ func TestProviderChargePaymentRejectedCarriesErrorCode(t *testing.T) {
 }
 
 func TestProviderPaymentStatus(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/"+methodGetState {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -585,6 +599,7 @@ func TestProviderPaymentStatus(t *testing.T) {
 }
 
 func TestProviderRefundPayment(t *testing.T) {
+	t.Parallel()
 	paymentID := uuid.Must(uuid.NewV7())
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -625,6 +640,7 @@ func TestProviderRefundPayment(t *testing.T) {
 }
 
 func TestProviderRefundPaymentReversedPending(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, cancelResponse{
 			baseResponse:   baseResponse{Success: true, Status: statusReversed, ErrorCode: "0"},
@@ -652,6 +668,7 @@ func TestProviderRefundPaymentReversedPending(t *testing.T) {
 }
 
 func TestProviderRefundPaymentError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, cancelResponse{
 			baseResponse: baseResponse{
@@ -679,6 +696,7 @@ func TestProviderRefundPaymentError(t *testing.T) {
 }
 
 func TestProviderBindPaymentMethod(t *testing.T) {
+	t.Parallel()
 	customerRef := testCustomerRef
 	var addCardCaptured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -750,6 +768,7 @@ func verifyRequestTokenExcluding(t *testing.T, r *http.Request, exclude ...strin
 }
 
 func TestProviderBindPaymentMethodCustomerAlreadyExistsProceeds(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/" + methodAddCustomer:
@@ -781,6 +800,7 @@ func TestProviderBindPaymentMethodCustomerAlreadyExistsProceeds(t *testing.T) {
 }
 
 func TestProviderBindPaymentMethodOtherAPIErrorPropagated(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/"+methodAddCustomer {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -805,6 +825,7 @@ func TestProviderBindPaymentMethodOtherAPIErrorPropagated(t *testing.T) {
 // bindingCompletedCarriesMethod proves a completed GetAddCardState response
 // maps to the completed binding state carrying the card fields.
 func bindingCompletedCarriesMethod(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/GetAddCardState" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -842,6 +863,7 @@ func bindingCompletedCarriesMethod(t *testing.T) {
 // bindingIntermediateStatesArePending proves every non-terminal add-card
 // status maps to the pending binding state without a method.
 func bindingIntermediateStatesArePending(t *testing.T) {
+	t.Parallel()
 	for _, status := range []string{
 		statusNew, statusFormShowed, status3DSChecking, status3DSChecked, statusAuthorizing, statusAuthorized,
 	} {
@@ -872,6 +894,7 @@ func bindingIntermediateStatesArePending(t *testing.T) {
 // bindingRejectedIsFailedWithErrorCode proves a rejected add-card state maps
 // to the failed binding state carrying the provider error code.
 func bindingRejectedIsFailedWithErrorCode(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, getAddCardStateResponse{
 			baseResponse: baseResponse{Success: true, ErrorCode: "7", Status: statusRejected},
@@ -896,6 +919,7 @@ func bindingRejectedIsFailedWithErrorCode(t *testing.T) {
 // bindingUnknownStatusErrors proves an unmapped add-card status surfaces as
 // an error instead of a guessed state.
 func bindingUnknownStatusErrors(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, getAddCardStateResponse{
 			baseResponse: baseResponse{Success: true, Status: "TOTALLY_NEW_STATUS"},
@@ -915,6 +939,7 @@ func bindingUnknownStatusErrors(t *testing.T) {
 }
 
 func TestProviderPaymentMethodBinding(t *testing.T) {
+	t.Parallel()
 	t.Run("completed carries method", bindingCompletedCarriesMethod)
 	t.Run("intermediate states are pending", bindingIntermediateStatesArePending)
 	t.Run("rejected is failed with error code", bindingRejectedIsFailedWithErrorCode)
@@ -922,6 +947,7 @@ func TestProviderPaymentMethodBinding(t *testing.T) {
 }
 
 func TestProviderRemovePaymentMethod(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/RemoveCard" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -944,6 +970,7 @@ func TestProviderRemovePaymentMethod(t *testing.T) {
 }
 
 func TestProviderRemovePaymentMethodNotFound(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, removeCardResponse{
 			baseResponse: baseResponse{Success: false, ErrorCode: "107", Message: "Неверно введен CardId"},
@@ -959,6 +986,7 @@ func TestProviderRemovePaymentMethodNotFound(t *testing.T) {
 }
 
 func TestProviderListPaymentMethods(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/GetCardList" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -992,6 +1020,7 @@ func TestProviderListPaymentMethods(t *testing.T) {
 }
 
 func TestProviderListPaymentMethodsCustomerNotFound(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, baseResponse{
 			Success:   false,
@@ -1013,6 +1042,7 @@ func TestProviderListPaymentMethodsCustomerNotFound(t *testing.T) {
 }
 
 func TestProviderListPaymentMethodsEmpty(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, []cardListItem{})
 	}))
@@ -1029,6 +1059,7 @@ func TestProviderListPaymentMethodsEmpty(t *testing.T) {
 }
 
 func TestProviderWebhookAck(t *testing.T) {
+	t.Parallel()
 	p := newTestProvider("")
 	if got, want := string(p.WebhookAck()), "OK"; got != want {
 		t.Fatalf("WebhookAck: got %q, want %q", got, want)
@@ -1036,6 +1067,7 @@ func TestProviderWebhookAck(t *testing.T) {
 }
 
 func TestProviderHTTPErrorIncludesBody(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		if _, err := w.Write([]byte("upstream exploded")); err != nil {
@@ -1060,6 +1092,7 @@ func TestProviderHTTPErrorIncludesBody(t *testing.T) {
 }
 
 func TestProviderName(t *testing.T) {
+	t.Parallel()
 	p := newTestProvider("")
 	if got, want := p.Name(), domain.PaymentProvider("tkassa"); got != want {
 		t.Fatalf("Name: got %q, want %q", got, want)

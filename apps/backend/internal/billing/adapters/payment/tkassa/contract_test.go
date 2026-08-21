@@ -31,6 +31,7 @@ type initContractCase struct {
 }
 
 func TestProviderInitPaymentContract(t *testing.T) {
+	t.Parallel()
 	tests := []initContractCase{
 		{
 			name: "first_payment_save_method",
@@ -73,6 +74,7 @@ func TestProviderInitPaymentContract(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			paymentURL := testPaymentURL
 			var captured []byte
 			var capturedMap map[string]any
@@ -257,6 +259,7 @@ func assertInitSpecData(t *testing.T, reqBody spec.InitRequest, wantInitiator sp
 }
 
 func TestProviderChargePaymentContract(t *testing.T) {
+	t.Parallel()
 	paymentID := uuid.Must(uuid.NewV7())
 	var captured []byte
 	var capturedMap map[string]any
@@ -326,6 +329,7 @@ func TestProviderChargePaymentContract(t *testing.T) {
 }
 
 func TestProviderGetStateContract(t *testing.T) {
+	t.Parallel()
 	var captured []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/GetState" {
@@ -382,6 +386,7 @@ func TestProviderGetStateContract(t *testing.T) {
 }
 
 func TestProviderCancelContract(t *testing.T) {
+	t.Parallel()
 	paymentID := uuid.Must(uuid.NewV7())
 	providerPaymentID := "cancel-contract-123"
 	var captured []byte
@@ -514,6 +519,7 @@ func assertAddCardContractBody(t *testing.T, strippedBody []byte) {
 }
 
 func TestProviderAddCustomerAddCardContract(t *testing.T) {
+	t.Parallel()
 	var addCustomerCaptured []byte
 	var addCardCapturedMap map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -568,6 +574,7 @@ func TestProviderAddCustomerAddCardContract(t *testing.T) {
 }
 
 func TestProviderRemoveCardContract(t *testing.T) {
+	t.Parallel()
 	var captured []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/RemoveCard" {
@@ -606,6 +613,7 @@ func TestProviderRemoveCardContract(t *testing.T) {
 }
 
 func TestProviderGetCardListContract(t *testing.T) {
+	t.Parallel()
 	var captured []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/GetCardList" {
@@ -653,6 +661,7 @@ func TestProviderGetCardListContract(t *testing.T) {
 }
 
 func TestProviderGetAddCardStateContract(t *testing.T) {
+	t.Parallel()
 	var captured []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/GetAddCardState" {
@@ -707,6 +716,7 @@ func TestProviderGetAddCardStateContract(t *testing.T) {
 // TestClassifyProviderError pins the error-code catalogue classification
 // against the officially documented meanings (issue #246 §5).
 func TestClassifyProviderError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		code string
@@ -729,6 +739,7 @@ func TestClassifyProviderError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := classifyProviderError(&ProviderError{Method: methodCharge, ErrorCode: tt.code})
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("classify code %s: got %v, want %v", tt.code, err, tt.want)

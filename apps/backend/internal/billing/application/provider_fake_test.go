@@ -39,6 +39,7 @@ func newFakeProvider(t *testing.T) application.PaymentProvider {
 // confirm it via the provider's webhook-shaped event, read the saved method
 // back, charge it merchant-initiated, and refund it.
 func TestProviderPortRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	provider := newFakeProvider(t)
 	paymentID := mustUUID(t)
@@ -112,6 +113,7 @@ func TestProviderPortRoundTrip(t *testing.T) {
 // the (upcoming) webhook flow: the fake's webhook payload parses into the
 // port's WebhookEvent with the payment branch populated.
 func TestProviderPortWebhookShape(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	provider := newFakeProvider(t)
 	paymentID := mustUUID(t)
@@ -159,6 +161,7 @@ func TestProviderPortWebhookShape(t *testing.T) {
 // adapter: the initiator is mandatory and the empty value is rejected before
 // any provider interaction.
 func TestProviderPortInitiatorContract(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	provider := newFakeProvider(t)
 

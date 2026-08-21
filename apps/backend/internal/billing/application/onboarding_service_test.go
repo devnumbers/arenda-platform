@@ -49,6 +49,7 @@ func basicTariffID(t *testing.T, tariffs []domain.Tariff) uuid.UUID {
 // auto-renew off — and appends the registration transition in the same
 // transaction.
 func TestOnboardingService_OnUserRegistered_CreatesBasicSubscription(t *testing.T) {
+	t.Parallel()
 	svc, stores := newOnboardingHarness()
 	userID := uuid.Must(uuid.NewV7())
 
@@ -102,6 +103,7 @@ func TestOnboardingService_OnUserRegistered_CreatesBasicSubscription(t *testing.
 // redelivered registration event leaves the existing subscription untouched and
 // does not append a second transition.
 func TestOnboardingService_OnUserRegistered_IdempotentOnRedelivery(t *testing.T) {
+	t.Parallel()
 	svc, stores := newOnboardingHarness()
 	userID := uuid.Must(uuid.NewV7())
 
@@ -153,6 +155,7 @@ func (r *racingSubscriptionRepo) Create(context.Context, domain.Subscription) (d
 // that when the repository's create returns an existing row (a concurrent
 // delivery won the race), no duplicate transition is appended.
 func TestOnboardingService_OnUserRegistered_ConcurrentCreateSkipsTransition(t *testing.T) {
+	t.Parallel()
 	stores := newFakeStores(testTariffs()...)
 	userID := uuid.Must(uuid.NewV7())
 	winner, err := domain.NewBasicSubscription(userID, basicTariffID(t, testTariffs()))
@@ -182,6 +185,7 @@ func TestOnboardingService_OnUserRegistered_ConcurrentCreateSkipsTransition(t *t
 // onboarding fails loudly when the basic tariff seed is absent instead of
 // creating a subscription with a nil tariff.
 func TestOnboardingService_OnUserRegistered_MissingBasicSeedFails(t *testing.T) {
+	t.Parallel()
 	stores := newFakeStores() // No tariffs seeded.
 	svc := NewOnboardingService(stores.factory(nil), OnboardingServiceConfig{Logger: slog.New(slog.DiscardHandler)})
 

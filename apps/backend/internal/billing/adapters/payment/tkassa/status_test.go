@@ -13,6 +13,7 @@ import (
 // because the new domain has no partial-refund status (ADR 0037, issue #246
 // §3.1).
 func TestMapStatus(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		status string
 		want   domain.PaymentStatus
@@ -56,6 +57,7 @@ func TestMapStatus(t *testing.T) {
 }
 
 func TestMapCancelStatus(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		status string
 		want   domain.PaymentStatus
@@ -87,6 +89,7 @@ func TestMapCancelStatus(t *testing.T) {
 // TestMapAddCardStateStatus pins the collapse of the eight provider binding
 // statuses into the neutral pending/completed/failed states.
 func TestMapAddCardStateStatus(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		status string
 		want   application.MethodBindingStatus

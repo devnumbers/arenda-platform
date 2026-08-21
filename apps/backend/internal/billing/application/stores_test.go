@@ -714,6 +714,7 @@ func (s *fakeStores) factory(audit auditapp.Recorder) txStoreFactory {
 // repository and the audit recorder to the same transaction, runs work, and the
 // UoW commits on a nil error.
 func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
+	t.Parallel()
 	audit := &countingRecorder{}
 	f := newFakeStores().factory(audit)
 
@@ -741,6 +742,7 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 // TestRunInTx_PanicRollsBackAndRepanics proves a panic inside work rolls the
 // transaction back and re-panics, so a panicking use case never leaks a tx.
 func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
+	t.Parallel()
 	f := newFakeStores().factory(nil)
 
 	panicVal := errors.New("kaboom")
@@ -763,6 +765,7 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 // TestRunInTx_RollsBackOnWorkError proves a non-nil work error is returned to
 // the caller.
 func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
+	t.Parallel()
 	f := newFakeStores().factory(nil)
 
 	workErr := errors.New("business rule violated")
@@ -775,6 +778,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 // TestRunInTx_ReturnsErrorWhenUoWMissing proves a service that forgot to wire a
 // UoW fails loudly at the call site instead of nil-dereferencing.
 func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
+	t.Parallel()
 	f := &txStoreFactory{
 		tariffs:       newFakeTariffRepo(),
 		subscriptions: newFakeSubscriptionRepo(),

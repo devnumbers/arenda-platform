@@ -7,13 +7,17 @@ import (
 	"testing"
 )
 
-// TestMain ensures the PostgreSQL container is terminated after the test binary
-// finishes. When TEST_DATABASE_URL is set, no container is started and
-// terminateContainer is a no-op. Cleanup runs via defer: since Go 1.15 the test
-// wrapper exits with m.Run's result after TestMain returns, so no os.Exit here
-// (exit policy: os.Exit lives in cmd/ only).
+// TestMain ensures the per-binary template database is dropped and the
+// PostgreSQL container terminated after the test binary finishes. The
+// dropTemplate call is deferred after terminateContainer so it runs first:
+// the template lives on the database server, which must still be up (the call
+// is a no-op when no test called Setup). When TEST_DATABASE_URL is set, no
+// container is started and terminateContainer is a no-op. Cleanup runs via
+// defer: since Go 1.15 the test wrapper exits with m.Run's result after
+// TestMain returns, so no os.Exit here (exit policy: os.Exit lives in cmd/).
 func TestMain(m *testing.M) {
 	defer terminateContainer()
+	defer dropTemplate()
 	m.Run()
 }
 

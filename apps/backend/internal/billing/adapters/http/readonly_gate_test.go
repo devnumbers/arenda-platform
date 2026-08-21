@@ -148,6 +148,7 @@ func (c clockOn) Now() time.Time { return time.Time(c) }
 // criterion of issue #245: the basic subscription created at onboarding allows
 // data mutations through the readonly gate.
 func TestMutationGate_BasicSubscriptionAllowsMutations(t *testing.T) {
+	t.Parallel()
 	sub, err := domain.NewBasicSubscription(uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
 	if err != nil {
 		t.Fatalf("NewBasicSubscription() error = %v", err)
@@ -166,6 +167,7 @@ func TestMutationGate_BasicSubscriptionAllowsMutations(t *testing.T) {
 // TestMutationGate_NoSubscriptionAllowsMutations proves a user without a
 // subscription is treated as mutable: the gate only blocks, never grants.
 func TestMutationGate_NoSubscriptionAllowsMutations(t *testing.T) {
+	t.Parallel()
 	gate := newGate(domain.Subscription{}, billingapp.ErrSubscriptionNotFound, time.Now())
 
 	ok, err := gate.CanMutateData(t.Context(), uuid.Must(uuid.NewV7()))
@@ -180,6 +182,7 @@ func TestMutationGate_NoSubscriptionAllowsMutations(t *testing.T) {
 // TestMutationGate_ExpiredGraceBlocksMutations proves the gate blocks when the
 // grace window has passed (ADR 0008 readonly mode).
 func TestMutationGate_ExpiredGraceBlocksMutations(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	graceUntil := now.Add(-time.Hour)
 	sub := domain.Subscription{
@@ -203,6 +206,7 @@ func TestMutationGate_ExpiredGraceBlocksMutations(t *testing.T) {
 // TestMutationGate_InfrastructureErrorPropagates proves a lookup failure is
 // returned rather than silently allowing or blocking.
 func TestMutationGate_InfrastructureErrorPropagates(t *testing.T) {
+	t.Parallel()
 	boom := errors.New("connection reset")
 	gate := newGate(domain.Subscription{}, boom, time.Now())
 

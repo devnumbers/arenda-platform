@@ -13,6 +13,7 @@ import (
 // the structured purpose (issue #244/#248): the wording lives in the adapter,
 // not in the application layer.
 func TestPaymentDescription(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		purpose application.PaymentPurpose
@@ -57,6 +58,7 @@ func TestPaymentDescription(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := paymentDescription(tt.purpose); got != tt.want {
 				t.Fatalf("paymentDescription() = %q, want %q", got, tt.want)
 			}
@@ -68,6 +70,7 @@ func TestPaymentDescription(t *testing.T) {
 // cut would split a UTF-8 rune in half and send an invalid string (issue #246
 // §2.1). The limit is 140 characters for card and COF payments.
 func TestTruncateDescriptionRunes(t *testing.T) {
+	t.Parallel()
 	// Short strings pass through untouched.
 	short := testProMonthDescription
 	if got := truncateDescription(short); got != short {

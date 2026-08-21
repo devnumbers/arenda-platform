@@ -100,6 +100,7 @@ func (h *graceModuleHarness) runGrace(ctx context.Context, work func(*graceEvent
 // strictly after the causing transaction commits — never inside it — and
 // identifies the subscription with its fresh window.
 func TestGraceEvents_EnteredPublishedStrictlyAfterCommit(t *testing.T) {
+	t.Parallel()
 	h := newGraceModuleHarness(t)
 	// The real grace paths arrive from an expired paid period (ADR 0008);
 	// EnterGrace then extends the validity to the fresh grace window.
@@ -140,6 +141,7 @@ func TestGraceEvents_EnteredPublishedStrictlyAfterCommit(t *testing.T) {
 // webhook of a crashed run, the next worker tick) captures nothing and
 // publishes no second event for the same window.
 func TestGraceEvents_EnteredPublishedOncePerGraceWindow(t *testing.T) {
+	t.Parallel()
 	h := newGraceModuleHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 
@@ -163,6 +165,7 @@ func TestGraceEvents_EnteredPublishedOncePerGraceWindow(t *testing.T) {
 // contract from the failure side: a transaction that rolls back after the
 // grace transition publishes nothing — the event belongs to the commit.
 func TestGraceEvents_RollbackPublishesNothing(t *testing.T) {
+	t.Parallel()
 	h := newGraceModuleHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 	cause := errors.New("payment finalization failed")
@@ -188,6 +191,7 @@ func TestGraceEvents_RollbackPublishesNothing(t *testing.T) {
 // best-effort contract: a failing publisher is logged and swallowed — the
 // committed grace transition stands and no error surfaces to the payment flow.
 func TestGraceEvents_PublisherFailureDoesNotFailTheTransition(t *testing.T) {
+	t.Parallel()
 	h := newGraceModuleHarness(t)
 	h.pub.err = errors.New("publisher down")
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
@@ -209,6 +213,7 @@ func TestGraceEvents_PublisherFailureDoesNotFailTheTransition(t *testing.T) {
 // wiring keeps the pre-#253 behaviour: no dispatch, no crash, the grace
 // transition itself unaffected.
 func TestGraceEvents_NilPublisherKeepsPreEventBehaviour(t *testing.T) {
+	t.Parallel()
 	h := newGraceModuleHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 
@@ -228,6 +233,7 @@ func TestGraceEvents_NilPublisherKeepsPreEventBehaviour(t *testing.T) {
 // reminder half of the module: a window marked reminded inside the transaction
 // publishes its GraceExpiring event strictly after the commit, once.
 func TestGraceEvents_ExpiringReminderPublishedStrictlyAfterCommit(t *testing.T) {
+	t.Parallel()
 	h := newGraceModuleHarness(t)
 	graceUntil := h.now.Add(24 * time.Hour)
 	sub := h.seedSubscription(t, domain.TariffPro, func(s *domain.Subscription) {
@@ -318,6 +324,7 @@ func (h *workersHarness) seedGraceSubscription(t *testing.T, graceUntil time.Tim
 // the planning transaction commits, with the subscription and window
 // identified.
 func TestWorkers_NoChargeableMethodPublishesGraceEntered(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	pub := &capturePublisher{}
 	h.workers.publisher = pub
@@ -351,6 +358,7 @@ func TestWorkers_NoChargeableMethodPublishesGraceEntered(t *testing.T) {
 // TestWorkers_FailedChargePublishesGraceEntered proves a definitively failed
 // renewal charge publishes GraceEntered once (issue #253).
 func TestWorkers_FailedChargePublishesGraceEntered(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	pub := &capturePublisher{}
 	h.workers.publisher = pub
@@ -377,6 +385,7 @@ func TestWorkers_FailedChargePublishesGraceEntered(t *testing.T) {
 // once per grace window: a second failed charge while the subscription is
 // already in grace publishes nothing new (issue #253).
 func TestWorkers_GraceEnteredNotRepublishedInsideWindow(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	pub := &capturePublisher{}
 	h.workers.publisher = pub
@@ -405,6 +414,7 @@ func TestWorkers_GraceEnteredNotRepublishedInsideWindow(t *testing.T) {
 // contract of issue #253: a failing publisher is swallowed — the subscription
 // still enters grace, the payment still fails, and no error surfaces.
 func TestWorkers_PublisherFailureDoesNotAffectTransition(t *testing.T) {
+	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	pub := &capturePublisher{err: errors.New("publisher down")}
 	h.workers.publisher = pub
@@ -431,6 +441,7 @@ func TestWorkers_PublisherFailureDoesNotAffectTransition(t *testing.T) {
 // carries the payment method) publishes GraceEntered after the finalizing
 // transaction commits (issue #253).
 func TestWebhook_FailedRenewalChargePublishesGraceEntered(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	pub := &capturePublisher{}
 	h.payments.publisher = pub
@@ -514,6 +525,7 @@ func requireGraceReminderPublished(
 // before the lead time arrives, one reminder inside the window, no second
 // reminder on the next tick, and no reminder after the window has ended.
 func TestWorkers_GraceExpiryReminderWindow(t *testing.T) {
+	t.Parallel()
 	const lead = 48 * time.Hour
 	h := newWorkersHarness(t, graceTestConfig(lead))
 	pub := &capturePublisher{}
@@ -556,6 +568,7 @@ func TestWorkers_GraceExpiryReminderWindow(t *testing.T) {
 // recovers, fails again and enters a new grace window is reminded again: a new
 // window starts unreminded (issue #253).
 func TestWorkers_GraceExpiryReminderFreshWindow(t *testing.T) {
+	t.Parallel()
 	const lead = 48 * time.Hour
 	h := newWorkersHarness(t, graceTestConfig(lead))
 	pub := &capturePublisher{}
@@ -612,6 +625,7 @@ func TestWorkers_GraceExpiryReminderFreshWindow(t *testing.T) {
 // dispatch attempt per window) and the publisher failure never fails the
 // phase (issue #253).
 func TestWorkers_GraceExpiryReminderPublisherFailure(t *testing.T) {
+	t.Parallel()
 	const lead = 48 * time.Hour
 	h := newWorkersHarness(t, graceTestConfig(lead))
 	pub := &capturePublisher{err: errors.New("publisher down")}

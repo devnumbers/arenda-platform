@@ -182,6 +182,7 @@ func (h *transitionHarness) requireUserCancellationAudit(t *testing.T, userID, s
 // user's cancellation: the aggregate is persisted, the log entry captures the
 // from-side, and the audit entry attributes the change to the user.
 func TestApplyTransition_StatusChange(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 	userID := sub.UserID
@@ -209,6 +210,7 @@ func TestApplyTransition_StatusChange(t *testing.T) {
 // no audit entry appears — worker phases audit their payments, not the
 // subscription change.
 func TestApplyTransition_TariffChange(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 	basicID := h.tariffID(t, domain.TariffBasic)
@@ -249,6 +251,7 @@ func TestApplyTransition_TariffChange(t *testing.T) {
 // overwritten by an active service subscription on business, with the audit
 // context built from the post-change subscription.
 func TestApplyTransition_StatusAndTariffChange(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, func(s *domain.Subscription) {
 		s.Status = domain.SubscriptionStatusGrace
@@ -326,6 +329,7 @@ func (h *transitionHarness) requireInitiatorAudit(
 // owner, the admin as the admin, the system as the system without an actor
 // id.
 func TestApplyTransition_Initiators(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name          string
 		initiator     domain.TransitionInitiator
@@ -336,6 +340,7 @@ func TestApplyTransition_Initiators(t *testing.T) {
 		{name: "system", initiator: domain.InitiatorSystem, wantAuditRole: auditdomain.ActorRoleSystem},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newTransitionHarness(t)
 			sub := h.seedSubscription(t, domain.TariffPro, nil)
 
@@ -369,6 +374,7 @@ func TestApplyTransition_Initiators(t *testing.T) {
 // deadline is what changed, and the audit context quotes the post-change
 // deadline.
 func TestApplyTransition_ValidityOnlyChange(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, func(s *domain.Subscription) {
 		s.Status = domain.SubscriptionStatusGrace
@@ -414,6 +420,7 @@ func TestApplyTransition_ValidityOnlyChange(t *testing.T) {
 // status, the log entry records the future target as its to-side, and the
 // audit context may quote the transition's captured from-side.
 func TestApplyTransition_ScheduledTariffChange(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffBusiness, nil)
 	business, pro := h.tariffID(t, domain.TariffBusiness), h.tariffID(t, domain.TariffPro)
@@ -461,7 +468,9 @@ func TestApplyTransition_ScheduledTariffChange(t *testing.T) {
 // initiator, and a refund references the refunded payment with the acting
 // admin.
 func TestApplyTransition_PaymentTransitions(t *testing.T) {
+	t.Parallel()
 	t.Run("applied payment", func(t *testing.T) {
+		t.Parallel()
 		h := newTransitionHarness(t)
 		sub := h.seedSubscription(t, domain.TariffPro, nil)
 		paymentID := uuid.Must(uuid.NewV7())
@@ -489,6 +498,7 @@ func TestApplyTransition_PaymentTransitions(t *testing.T) {
 	})
 
 	t.Run("refunded payment", func(t *testing.T) {
+		t.Parallel()
 		h := newTransitionHarness(t)
 		sub := h.seedSubscription(t, domain.TariffPro, nil)
 		basicID := h.tariffID(t, domain.TariffBasic)
@@ -524,6 +534,7 @@ func TestApplyTransition_PaymentTransitions(t *testing.T) {
 // without a from-side — the zero value a no-op returns — false, so an
 // idempotent no-op never triggers the limit enforcement.
 func TestTransitionChangedTariff(t *testing.T) {
+	t.Parallel()
 	from := uuid.Must(uuid.NewV7())
 	other := uuid.Must(uuid.NewV7())
 	cases := []struct {
@@ -538,6 +549,7 @@ func TestTransitionChangedTariff(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := transitionChangedTariff(tc.transition, tc.tariffID); got != tc.want {
 				t.Errorf("transitionChangedTariff() = %t, want %t", got, tc.want)
 			}
@@ -551,6 +563,7 @@ func TestTransitionChangedTariff(t *testing.T) {
 // system-initiated. A caller mix-up fails loudly instead of silently
 // flattening into a wrong log entry.
 func TestApplyTransition_RejectsMisusedPaymentSpec(t *testing.T) {
+	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
 	for _, tc := range []struct {
 		name string
@@ -576,6 +589,7 @@ func TestApplyTransition_RejectsMisusedPaymentSpec(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newTransitionHarness(t)
 			sub := h.seedSubscription(t, domain.TariffPro, nil)
 
@@ -625,6 +639,7 @@ func (r *failingRecorder) WithTx(transaction.Tx) auditapp.Recorder { return r }
 // the whole change: the aggregate, the transition log and the audit trail
 // stay untouched, and the mutation's error is returned as-is.
 func TestApplyTransition_MutateErrorWritesNothing(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 	mutateErr := errors.New("domain rule violated")
@@ -656,6 +671,7 @@ func TestApplyTransition_MutateErrorWritesNothing(t *testing.T) {
 // invariant's update side: when the aggregate cannot be persisted, no
 // transition-log entry and no audit entry land.
 func TestApplyTransition_UpdateFailureSkipsTransitionAndAudit(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 	// Drop the row so the fake's Update answers ErrNotFound.
@@ -684,6 +700,7 @@ func TestApplyTransition_UpdateFailureSkipsTransitionAndAudit(t *testing.T) {
 // TestApplyTransition_AppendFailureFailsTheChange proves a transition-log
 // failure fails the whole change — the log entry is not optional.
 func TestApplyTransition_AppendFailureFailsTheChange(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 	appendErr := errors.New("transition log unavailable")
@@ -713,6 +730,7 @@ func TestApplyTransition_AppendFailureFailsTheChange(t *testing.T) {
 // the whole change — the audit record rides in the same transaction (ADR
 // 0020), never after it.
 func TestApplyTransition_AuditFailureFailsTheChange(t *testing.T) {
+	t.Parallel()
 	h := newTransitionHarness(t)
 	sub := h.seedSubscription(t, domain.TariffPro, nil)
 	auditErr := errors.New("audit log unavailable")

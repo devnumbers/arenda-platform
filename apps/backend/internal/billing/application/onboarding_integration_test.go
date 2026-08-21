@@ -13,6 +13,7 @@ import (
 // registration flow lands both the basic subscription and its transition entry
 // in one transaction against the real schema (seeded tariffs included).
 func TestOnboarding_Integration_CreatesBasicSubscriptionAndTransition(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID := h.seedUser()
 
@@ -57,6 +58,7 @@ func TestOnboarding_Integration_CreatesBasicSubscriptionAndTransition(t *testing
 // TestOnboarding_Integration_RedeliveryIsIdempotent proves a repeated
 // user_registered event neither duplicates the subscription nor the transition.
 func TestOnboarding_Integration_RedeliveryIsIdempotent(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID := h.seedUser()
 
@@ -78,6 +80,7 @@ func TestOnboarding_Integration_RedeliveryIsIdempotent(t *testing.T) {
 // assembles over the real repositories, including ErrSubscriptionNotFound for
 // a user without a subscription.
 func TestSubscriptionService_Integration_GetSubscription(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 
 	if _, err := h.subscriptionsSvc.GetSubscription(h.ctx(), uuid.Must(uuid.NewV7())); err == nil {
@@ -104,6 +107,7 @@ func TestSubscriptionService_Integration_GetSubscription(t *testing.T) {
 // TestTariffService_Integration_ListsSeededActiveTariffs proves the destructive
 // migration seeded the three canonical tariffs and the listing serves them.
 func TestTariffService_Integration_ListsSeededActiveTariffs(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 
 	tariffs, err := h.tariffsSvc.ListTariffs(h.ctx())
@@ -118,6 +122,7 @@ func TestTariffService_Integration_ListsSeededActiveTariffs(t *testing.T) {
 // TestTariffRepository_Integration_HiddenTariffNotListed proves is_active=false
 // hides a tariff from the user listing while GetByName still resolves it.
 func TestTariffRepository_Integration_HiddenTariffNotListed(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 
 	if _, err := h.pool.Exec(h.ctx(), "UPDATE tariffs SET is_active = false WHERE name = 'business'"); err != nil {
@@ -146,6 +151,7 @@ func TestTariffRepository_Integration_HiddenTariffNotListed(t *testing.T) {
 // cross-context bridge reads the limit through the real schema: basic is 1,
 // no subscription is 0.
 func TestLimiter_Integration_ActivePropertyLimitFollowsSubscription(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 
 	userIdle := h.seedUser()
@@ -175,6 +181,7 @@ func TestLimiter_Integration_ActivePropertyLimitFollowsSubscription(t *testing.T
 // cascading user/subscription deletions fire row-level triggers and must be
 // able to remove the log together with its subscription (ADR 0037).
 func TestTransitionRepository_Integration_AppendOnly(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID := h.seedUser()
 	if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
@@ -199,6 +206,7 @@ func TestTransitionRepository_Integration_AppendOnly(t *testing.T) {
 // over an empty database without errors or side effects (the lifecycle
 // scenarios themselves live in workers_integration_test.go, issue #252).
 func TestWorkers_Integration_EmptyDatabaseIsNoOp(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	for name, phase := range map[string]func() (int, error){
 		"ProcessScheduledChanges": func() (int, error) { return h.services.Workers.ProcessScheduledChanges(h.ctx(), h.clock.Now()) },

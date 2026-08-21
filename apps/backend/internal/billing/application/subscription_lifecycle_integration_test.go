@@ -89,6 +89,7 @@ func (h *integrationHarness) requireCancelledTransitionLog(t *testing.T, sub dom
 // and audit trail capture the user-initiated change in the same transaction
 // (issue #249).
 func TestSubscriptionLifecycle_Integration_Cancel(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID, sub := seedPaidProSubscription(t, h)
 	// A scheduled downgrade exists before the cancellation: it must be dropped
@@ -119,6 +120,7 @@ func TestSubscriptionLifecycle_Integration_Cancel(t *testing.T) {
 // use case persists the flag and its audit entry, and that enabling without a
 // validity period is rejected by the domain rule.
 func TestSubscriptionLifecycle_Integration_ToggleAutoRenew(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID, sub := seedPaidProSubscription(t, h)
 
@@ -206,6 +208,7 @@ func (h *integrationHarness) requireDowngradeScheduledTransitionLog(
 // period, date) and the enabled auto-renew persist, and the transition log
 // and audit capture the scheduling (issue #249, ADR 0008 §3).
 func TestSubscriptionLifecycle_Integration_DowngradeScheduling(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID, sub := seedPaidProSubscription(t, h)
 	basic, err := h.tariffs.GetByName(h.ctx(), domain.TariffBasic)
@@ -244,6 +247,7 @@ func TestSubscriptionLifecycle_Integration_DowngradeScheduling(t *testing.T) {
 // upgrade no longer fails with the temporary payment-unavailable error of
 // issue #249 — it starts a pending payment (issue #250).
 func TestSubscriptionLifecycle_Integration_ChangeTariffRejections(t *testing.T) {
+	t.Parallel()
 	h := newIntegrationHarness(t)
 	userID, sub := seedPaidProSubscription(t, h)
 

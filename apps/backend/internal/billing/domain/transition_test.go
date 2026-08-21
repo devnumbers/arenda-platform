@@ -23,6 +23,7 @@ func validSubscription(t *testing.T) Subscription {
 }
 
 func TestNewTransition_Registered(t *testing.T) {
+	t.Parallel()
 	sub := validSubscription(t)
 
 	transition, err := NewTransition(sub, nil, nil, TransitionReasonRegistered, InitiatorSystem, nil)
@@ -59,6 +60,7 @@ func TestNewTransition_Registered(t *testing.T) {
 }
 
 func TestNewTransition_RecordsAppliedState(t *testing.T) {
+	t.Parallel()
 	sub := validSubscription(t)
 	from := SubscriptionStatusActive
 	fromTariff := uuid.Must(uuid.NewV7())
@@ -83,6 +85,7 @@ func TestNewTransition_RecordsAppliedState(t *testing.T) {
 }
 
 func TestNewTransition_RejectsInvalidInput(t *testing.T) {
+	t.Parallel()
 	sub := validSubscription(t)
 
 	cases := []struct {
@@ -102,6 +105,7 @@ func TestNewTransition_RejectsInvalidInput(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if _, err := NewTransition(tc.sub, nil, nil, tc.reason, tc.initiator, tc.initiatorID); err == nil {
 				t.Fatal("NewTransition() error = nil, want error")
 			}
@@ -110,6 +114,7 @@ func TestNewTransition_RejectsInvalidInput(t *testing.T) {
 }
 
 func TestNewScheduledTariffTransition_RecordsTargetTariff(t *testing.T) {
+	t.Parallel()
 	sub := validSubscription(t)
 	target := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
 	actorID := uuid.Must(uuid.NewV7())
@@ -136,6 +141,7 @@ func TestNewScheduledTariffTransition_RecordsTargetTariff(t *testing.T) {
 }
 
 func TestNewScheduledTariffTransition_RejectsInvalidInput(t *testing.T) {
+	t.Parallel()
 	sub := validSubscription(t)
 
 	cases := []struct {
@@ -156,6 +162,7 @@ func TestNewScheduledTariffTransition_RejectsInvalidInput(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if _, err := NewScheduledTariffTransition(sub, tc.target, tc.reason, tc.initiator, tc.initiatorID); err == nil {
 				t.Fatal("NewScheduledTariffTransition() error = nil, want error")
 			}
@@ -164,6 +171,7 @@ func TestNewScheduledTariffTransition_RejectsInvalidInput(t *testing.T) {
 }
 
 func TestParseTransitionInitiator(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{"user", "admin", "system"} {
 		if _, err := ParseTransitionInitiator(raw); err != nil {
 			t.Errorf("ParseTransitionInitiator(%q) error = %v", raw, err)
@@ -175,6 +183,7 @@ func TestParseTransitionInitiator(t *testing.T) {
 }
 
 func TestNewRefundTransition(t *testing.T) {
+	t.Parallel()
 	sub := validSubscription(t)
 	fromStatus := sub.Status
 	fromTariff := sub.TariffID
@@ -182,6 +191,7 @@ func TestNewRefundTransition(t *testing.T) {
 	adminID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
 
 	t.Run("admin refund carries the actor", func(t *testing.T) {
+		t.Parallel()
 		transition, err := NewRefundTransition(sub, &fromStatus, &fromTariff, InitiatorAdmin, &adminID, paymentID)
 		if err != nil {
 			t.Fatalf("NewRefundTransition() error = %v", err)
@@ -198,6 +208,7 @@ func TestNewRefundTransition(t *testing.T) {
 	})
 
 	t.Run("system refund carries no actor", func(t *testing.T) {
+		t.Parallel()
 		transition, err := NewRefundTransition(sub, &fromStatus, &fromTariff, InitiatorSystem, nil, paymentID)
 		if err != nil {
 			t.Fatalf("NewRefundTransition(system) error = %v", err)
@@ -208,6 +219,7 @@ func TestNewRefundTransition(t *testing.T) {
 	})
 
 	t.Run("rejects a missing payment and a system actor id", func(t *testing.T) {
+		t.Parallel()
 		if _, err := NewRefundTransition(sub, &fromStatus, &fromTariff, InitiatorSystem, nil, uuid.Nil); err == nil {
 			t.Error("nil payment error = nil, want error")
 		}
@@ -218,6 +230,7 @@ func TestNewRefundTransition(t *testing.T) {
 }
 
 func TestReconstituteTransition(t *testing.T) {
+	t.Parallel()
 	sub := validSubscription(t)
 	valid, err := NewTransition(sub, nil, nil, TransitionReasonRegistered, InitiatorSystem, nil)
 	if err != nil {

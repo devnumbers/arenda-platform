@@ -28,6 +28,7 @@ func (r *failingTariffRepo) GetByID(ctx context.Context, id uuid.UUID) (domain.T
 // the subscription status: active (or cancelled within the paid period) keeps
 // the tariff limit, anything else is zero; unlimited tariffs are MaxInt32.
 func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	clk := fakeClock{now: now}
 
@@ -115,6 +116,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			stores := newFakeStores(tt.tariffs...)
 			limiter := NewSubscriptionPropertyLimiter(stores.subscriptions, stores.tariffs, clk)
 
@@ -152,6 +154,7 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 // TestSubscriptionPropertyLimiter_TariffErrorIsWrapped proves a tariff lookup
 // failure surfaces as an error rather than silently allowing zero.
 func TestSubscriptionPropertyLimiter_TariffErrorIsWrapped(t *testing.T) {
+	t.Parallel()
 	errBoom := errors.New("tariff repo boom")
 	stores := newFakeStores()
 	sub := domain.Subscription{UserID: uuid.Must(uuid.NewV7()), TariffID: uuid.Must(uuid.NewV7()), Status: domain.SubscriptionStatusActive}
@@ -173,6 +176,7 @@ func TestSubscriptionPropertyLimiter_TariffErrorIsWrapped(t *testing.T) {
 // TestDefaultConfig pins the operational defaults carried over from the
 // pre-rewrite module (ADR 0008, issue #244).
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultConfig()
 	if cfg.GraceDuration != 7*24*time.Hour {
 		t.Errorf("GraceDuration = %v, want 7d", cfg.GraceDuration)

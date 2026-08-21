@@ -390,6 +390,7 @@ func (h *paymentHarness) requireAppliedTransition(
 // about. Migrated from the pre-rewrite test
 // TestBilling_ChangeTariff_UpgradeCreatesPaymentBeforeProviderCall.
 func TestChangeTariff_UpgradeCreatesPendingPaymentBeforeProviderCall(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 
@@ -431,6 +432,7 @@ func TestChangeTariff_UpgradeCreatesPendingPaymentBeforeProviderCall(t *testing.
 // amount, customer reference, structured purpose, CIT initiator, saved-method
 // flag and the form deadline from the module config (issue #250).
 func TestChangeTariff_UpgradeInitRequestCarriesPortContract(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 
@@ -465,6 +467,7 @@ func TestChangeTariff_UpgradeInitRequestCarriesPortContract(t *testing.T) {
 // payment instead of creating a duplicate (issue #250). Migrated from the
 // pre-rewrite test TestBilling_ChangeTariff_UpgradeReturnsExistingPendingPayment.
 func TestChangeTariff_UpgradeReturnsExistingPendingPayment(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 
@@ -494,6 +497,7 @@ func TestChangeTariff_UpgradeReturnsExistingPendingPayment(t *testing.T) {
 // but Create loses the unique race, the existing payment is returned instead
 // of failing (issue #250).
 func TestChangeTariff_UpgradeUniqueRaceReturnsExistingPayment(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 
@@ -537,6 +541,7 @@ func TestChangeTariff_UpgradeUniqueRaceReturnsExistingPayment(t *testing.T) {
 // path idempotent. Migrated from the pre-rewrite test
 // TestBilling_ChangeTariff_UpgradeRecoversProviderReferenceAfterCrash.
 func TestChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 
@@ -583,6 +588,7 @@ func TestChangeTariff_UpgradeRecoversProviderReferenceAfterCrash(t *testing.T) {
 // start over (issue #250). Migrated from the pre-rewrite test
 // TestBilling_ChangeTariff_UpgradeInitFailureMarksPaymentFailed.
 func TestChangeTariff_UpgradeInitFailureMarksPaymentFailed(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	h.provider.initErr = errors.New("provider is down")
@@ -615,6 +621,7 @@ func TestChangeTariff_UpgradeInitFailureMarksPaymentFailed(t *testing.T) {
 // Migrated from the pre-rewrite test
 // TestBilling_ChangeTariff_SameTariffInGraceStartsRenewalPayment.
 func TestChangeTariff_SameTariffInGraceStartsRenewalPayment(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	graceUntil := h.now.Add(48 * time.Hour)
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
@@ -659,6 +666,7 @@ func TestChangeTariff_SameTariffInGraceStartsRenewalPayment(t *testing.T) {
 // Migrated from the pre-rewrite test
 // TestBilling_ChangeTariff_SameTariffExpiredGraceRejected.
 func TestChangeTariff_ExpiredGraceRejectsPayment(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	expired := h.now.Add(-time.Hour)
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
@@ -682,6 +690,7 @@ func TestChangeTariff_ExpiredGraceRejectsPayment(t *testing.T) {
 // subscription is the ADR 0008 restoration path: the payment is initiated and
 // success reactivates the subscription.
 func TestChangeTariff_CancelledUpgradeIsRecovery(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
 		s.Status = domain.SubscriptionStatusCancelled
@@ -730,6 +739,7 @@ func (h *paymentHarness) webhookSucceeded(t *testing.T, payment domain.Subscript
 // TestBilling_ConfirmFakePayment_AppliesUpgrade /
 // TestBilling_HandleWebhook_AppliesRenewal.
 func TestWebhook_SucceededAppliesUpgrade(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	payment := h.seedSucceededUpgrade(t, sub)
@@ -757,6 +767,7 @@ func TestWebhook_SucceededAppliesUpgrade(t *testing.T) {
 // not paid time and must not be gifted) and reactivates it. Migrated from the
 // pre-rewrite test TestBilling_HandleWebhook_AppliesRenewal.
 func TestWebhook_SucceededAppliesGraceRenewal(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	graceUntil := h.now.Add(24 * time.Hour)
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
@@ -799,6 +810,7 @@ func TestWebhook_SucceededAppliesGraceRenewal(t *testing.T) {
 // from the pre-rewrite test
 // TestBilling_HandleWebhook_DuplicateSucceededIsIdempotent.
 func TestWebhook_DuplicateSucceededIsIdempotent(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -841,6 +853,7 @@ func TestWebhook_DuplicateSucceededIsIdempotent(t *testing.T) {
 // Migrated from the pre-rewrite test
 // TestBilling_HandleWebhook_AppliesFailedUpgradePayment.
 func TestWebhook_AppliesFailedUpgradePayment(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -888,6 +901,7 @@ func TestWebhook_AppliesFailedUpgradePayment(t *testing.T) {
 // Migrated from the pre-rewrite test
 // TestBilling_HandleWebhook_SucceededPersistsProviderPaymentID.
 func TestWebhook_SucceededPersistsProviderPaymentID(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	// Crash state: the provider was called but the reference was lost.
@@ -935,6 +949,7 @@ func TestWebhook_SucceededPersistsProviderPaymentID(t *testing.T) {
 // notification carries no outcome: it only backfills a lost provider
 // reference and leaves the payment pending.
 func TestWebhook_PendingNotificationBackfillsReference(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	payment, err := domain.NewSubscriptionPayment(
@@ -976,6 +991,7 @@ func TestWebhook_PendingNotificationBackfillsReference(t *testing.T) {
 // applied. Migrated from the pre-rewrite test
 // TestBilling_HandleWebhook_SucceededAfterFailed_ReconcilesToSucceeded.
 func TestWebhook_SucceededAfterFailed_ReconcilesToSucceeded(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -1030,6 +1046,7 @@ func TestWebhook_SucceededAfterFailed_ReconcilesToSucceeded(t *testing.T) {
 // pre-rewrite test
 // TestBilling_HandleWebhook_SucceededAfterFailed_StillFailed.
 func TestWebhook_SucceededAfterFailed_ProviderStillFailsIsNoOp(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -1076,6 +1093,7 @@ func TestWebhook_SucceededAfterFailed_ProviderStillFailsIsNoOp(t *testing.T) {
 // pre-rewrite test
 // TestBilling_HandleWebhook_SucceededAfterFailed_StatusError.
 func TestWebhook_SucceededAfterFailed_StatusErrorPropagates(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -1104,6 +1122,7 @@ func TestWebhook_SucceededAfterFailed_StatusErrorPropagates(t *testing.T) {
 // TestWebhook_FailedAfterSucceededIsNoOp proves a terminal state is never
 // overridden by a late opposite outcome: money captured stays captured.
 func TestWebhook_FailedAfterSucceededIsNoOp(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -1138,6 +1157,7 @@ func TestWebhook_FailedAfterSucceededIsNoOp(t *testing.T) {
 // records the full refund on the payment; the subscription-side effects of a
 // refund land with the admin refund flow (issue #254).
 func TestWebhook_RefundedMarksPaymentRefunded(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	payment := h.seedSucceededUpgrade(t, sub)
@@ -1183,6 +1203,7 @@ func TestWebhook_RefundedMarksPaymentRefunded(t *testing.T) {
 // provider payment id contradicts the persisted reference all fail the
 // delivery without state changes.
 func TestWebhook_Rejections(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -1237,6 +1258,7 @@ func TestWebhook_Rejections(t *testing.T) {
 // webhook flow after parsing, the local fake confirmation after the adapter
 // reports the completed entry — runs through the same synchronous finalization.
 func TestApplyProviderEvent_AppliesPaymentBranch(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	result := h.initiateUpgrade(t, sub)
@@ -1268,6 +1290,7 @@ func TestApplyProviderEvent_AppliesPaymentBranch(t *testing.T) {
 // payload branch is rejected with the unsupported sentinel instead of
 // silently applying nothing.
 func TestApplyProviderEvent_EmptyEventRejected(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 
 	if err := h.payments.ApplyProviderEvent(t.Context(), WebhookEvent{}); !errors.Is(err, ErrWebhookUnsupported) {
@@ -1283,6 +1306,7 @@ func TestApplyProviderEvent_EmptyEventRejected(t *testing.T) {
 // data: the user's payments with the tariff resolved, newest first (issue
 // #250).
 func TestListPayments_ReturnsPaymentsWithTariffs(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, nil)
 	first := h.initiateUpgrade(t, sub)

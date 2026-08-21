@@ -48,6 +48,7 @@ func (e *permanentNetError) Temporary() bool { return false }
 func (e *permanentNetError) Timeout() bool   { return false }
 
 func TestRetryTransportSuccessFirstAttempt(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -72,6 +73,7 @@ func TestRetryTransportSuccessFirstAttempt(t *testing.T) {
 }
 
 func TestRetryTransportRetryThenSuccess(t *testing.T) {
+	t.Parallel()
 	base := &countingRoundTripper{
 		failures: 2,
 		err:      &timeoutNetError{errorString: errTimeout},
@@ -90,6 +92,7 @@ func TestRetryTransportRetryThenSuccess(t *testing.T) {
 }
 
 func TestRetryTransportExhaustsRetries(t *testing.T) {
+	t.Parallel()
 	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
 	tr := newRetryTransport(base, 2, 1*time.Millisecond, 5*time.Millisecond)
@@ -109,6 +112,7 @@ func TestRetryTransportExhaustsRetries(t *testing.T) {
 }
 
 func TestRetryTransportNoRetryWhenDisabled(t *testing.T) {
+	t.Parallel()
 	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
 	tr := newRetryTransport(base, 0, 1*time.Millisecond, 5*time.Millisecond)
@@ -125,6 +129,7 @@ func TestRetryTransportNoRetryWhenDisabled(t *testing.T) {
 }
 
 func TestRetryTransportNoRetryOnPermanentError(t *testing.T) {
+	t.Parallel()
 	permanentErr := &permanentNetError{errorString: "permanent"}
 	base := &fakeRoundTripper{err: permanentErr}
 	tr := newRetryTransport(base, 3, 1*time.Millisecond, 5*time.Millisecond)
@@ -141,6 +146,7 @@ func TestRetryTransportNoRetryOnPermanentError(t *testing.T) {
 }
 
 func TestRetryTransportPreservesBodyAcrossRetries(t *testing.T) {
+	t.Parallel()
 	wantBody := `{"key":"value"}`
 	base := &bodyCapturingRoundTripper{
 		failures: 2,
@@ -168,6 +174,7 @@ func TestRetryTransportPreservesBodyAcrossRetries(t *testing.T) {
 }
 
 func TestRetryTransportBackoffExponential(t *testing.T) {
+	t.Parallel()
 	tr := &retryTransport{baseDelay: 10 * time.Millisecond, maxDelay: 100 * time.Millisecond}
 	cases := []struct {
 		attempt int
@@ -189,6 +196,7 @@ func TestRetryTransportBackoffExponential(t *testing.T) {
 }
 
 func TestRetryTransportJitterApplied(t *testing.T) {
+	t.Parallel()
 	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
 	tr := newRetryTransport(base, 1, 1*time.Millisecond, 100*time.Millisecond)
@@ -228,6 +236,7 @@ func TestRetryTransportJitterApplied(t *testing.T) {
 }
 
 func TestRetryTransportBackoffOverflowCap(t *testing.T) {
+	t.Parallel()
 	tr := &retryTransport{baseDelay: time.Hour, maxDelay: 10 * time.Minute}
 	// Shift is capped at 30; time.Hour * (1<<30) exceeds int64 and wraps to a
 	// negative value. The overflow guard must clamp the result to maxDelay and
@@ -266,6 +275,7 @@ func TestCryptoJitter_NonPositiveMaxIsZero(t *testing.T) {
 }
 
 func TestRetryTransportCanRetry(t *testing.T) {
+	t.Parallel()
 	timeout := &timeoutNetError{errorString: errTimeout}
 	cases := []struct {
 		name         string
@@ -292,6 +302,7 @@ func TestRetryTransportCanRetry(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := canRetry(tc.method, tc.err, tc.wroteRequest)
 			if got != tc.want {
 				t.Errorf("canRetry(%q, %v, %v) = %v, want %v", tc.method, tc.err, tc.wroteRequest, got, tc.want)
@@ -317,6 +328,7 @@ func (w *wroteRequestRoundTripper) RoundTrip(req *http.Request) (*http.Response,
 }
 
 func TestRetryTransportChargeNotRetriedAfterRequestSent(t *testing.T) {
+	t.Parallel()
 	base := &wroteRequestRoundTripper{err: &timeoutNetError{errorString: "read timeout"}}
 	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
 
@@ -332,6 +344,7 @@ func TestRetryTransportChargeNotRetriedAfterRequestSent(t *testing.T) {
 }
 
 func TestRetryTransportInitRetriedAfterRequestSent(t *testing.T) {
+	t.Parallel()
 	base := &wroteRequestRoundTripper{err: &timeoutNetError{errorString: "read timeout"}}
 	tr := newRetryTransport(base, 2, 1*time.Millisecond, 10*time.Millisecond)
 
@@ -471,6 +484,7 @@ func timeoutTransport() *http.Transport {
 // sent, Charge/Cancel (and unknown future methods) reach the server exactly
 // once, while Init/GetState are retried.
 func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		method   string
 		wantHits int32
@@ -484,6 +498,7 @@ func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.method, func(t *testing.T) {
+			t.Parallel()
 			var hits atomic.Int32
 			srv := hangingServer(t, &hits)
 			tr := newRetryTransport(timeoutTransport(), 3, time.Millisecond, 5*time.Millisecond)
@@ -506,8 +521,10 @@ func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
 }
 
 func TestRetryTransportReadMethodsRetriedAfterReadTimeout(t *testing.T) {
+	t.Parallel()
 	for _, method := range []string{methodInit, methodGetState} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 			var hits atomic.Int32
 			srv := hangingServer(t, &hits)
 			tr := newRetryTransport(timeoutTransport(), 2, time.Millisecond, 5*time.Millisecond)
@@ -541,6 +558,7 @@ func (s *signalingRoundTripper) RoundTrip(_ *http.Request) (*http.Response, erro
 }
 
 func TestRetryTransportBackoffRespectsContextCancel(t *testing.T) {
+	t.Parallel()
 	base := &signalingRoundTripper{
 		calls: make(chan struct{}, 4),
 		err:   &timeoutNetError{errorString: errBoom},

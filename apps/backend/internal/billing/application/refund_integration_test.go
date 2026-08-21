@@ -138,6 +138,7 @@ func (h *refundIntegrationHarness) requireRefundTransitionAudit(
 // by the lifecycle bridges, and both the transition log and the audit log
 // attribute the refund to the acting admin.
 func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBasic)
 	result, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), sub.UserID, billingapp.ChangeTariffRequest{
@@ -166,6 +167,7 @@ func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
 // PostgreSQL: the second refund of the same payment is rejected and the
 // provider is never called twice.
 func TestRefundFlow_DoubleRefundRejected(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 	payment := h.succeededUpgradePayment(t)
 
@@ -182,6 +184,7 @@ func TestRefundFlow_DoubleRefundRejected(t *testing.T) {
 // transaction: a refused provider refund rolls the reservation back, leaving
 // the payment refundable.
 func TestRefundFlow_ProviderErrorRevertsReservation(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.SetRefundOutcome(payment.ID.String(), nil, errors.New("provider is down"))
@@ -204,6 +207,7 @@ func TestRefundFlow_ProviderErrorRevertsReservation(t *testing.T) {
 // staleness window passes the reconciliation worker resolves it from the
 // provider's status — finalizing the refund with its subscription effects.
 func TestRefundFlow_StuckReservationReconciledByWorker(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.SetRefundOutcome(payment.ID.String(), &billingapp.RefundResult{
@@ -265,6 +269,7 @@ func TestRefundFlow_StuckReservationReconciledByWorker(t *testing.T) {
 // handling: the system always refunds the full amount, so a provider
 // answering with a partial amount keeps the reservation for review.
 func TestRefundFlow_PartialRefundAnomalyStaysRefunding(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.SetRefundOutcome(payment.ID.String(), &billingapp.RefundResult{
@@ -291,6 +296,7 @@ func TestRefundFlow_PartialRefundAnomalyStaysRefunding(t *testing.T) {
 // TestSyncPayment_AppliesProviderRefund proves the manual sync resolves a
 // provider-side refund the webhook delivery lost (issue #254).
 func TestSyncPayment_AppliesProviderRefund(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 	payment := h.succeededUpgradePayment(t)
 	h.provider.SetPaymentState(payment.ID.String(), billingapp.PaymentStatusResult{Status: domain.PaymentStatusRefunded})
@@ -421,6 +427,7 @@ func (h *refundIntegrationHarness) requireFilterReturnsExactly(
 // the subscription-status filter narrows by the payer's current subscription,
 // and a filter outside the whitelist answers ErrInvalidFilter.
 func TestAdminPayments_ListAndFilters(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 
 	// A refunded payer on the basic tariff (the post-refund shape).
@@ -452,6 +459,7 @@ func TestAdminPayments_ListAndFilters(t *testing.T) {
 // encrypted phone is found by the phone filter and the phone is decrypted in
 // the views (issue #254).
 func TestAdminPayments_PhoneFilterDecryptsEncryptedPhone(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 
 	pendingPayment := h.seedPendingPayment(t)
@@ -498,6 +506,7 @@ func TestAdminPayments_PhoneFilterDecryptsEncryptedPhone(t *testing.T) {
 // view resolves the same shape as the listing, filters outside the whitelist
 // answer ErrInvalidFilter, and an unknown payment answers not found.
 func TestAdminPayments_GetAdminPaymentAndInvalidFilters(t *testing.T) {
+	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 
 	refundedPayment := h.refundedPayment(t)

@@ -164,6 +164,7 @@ func (h *methodIntegrationHarness) requireSingleMethod(t *testing.T, userID uuid
 // the same synchronous path as the add-card webhook, and the payment method is
 // created, active, linked to the subscription and encrypted at rest.
 func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
+	t.Parallel()
 	h := newMethodIntegrationHarness(t)
 	userID := h.seedMethodUser(t)
 
@@ -206,6 +207,7 @@ func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
 // not delivered: the provider completed its side, the session completes via
 // polling and the method becomes active (issue #251).
 func TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook(t *testing.T) {
+	t.Parallel()
 	h := newMethodIntegrationHarness(t)
 	userID := h.seedMethodUser(t)
 
@@ -274,6 +276,7 @@ func TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook(t *testing.T) {
 // UNIQUE (user_id, token_hash) invariant at the database level: re-binding
 // the same card converges on one row instead of duplicating (issue #251 AC).
 func TestPaymentMethodRepository_DuplicateTokenConvergesByHash(t *testing.T) {
+	t.Parallel()
 	h := newMethodIntegrationHarness(t)
 	userID := h.seedMethodUser(t)
 
@@ -321,6 +324,7 @@ func TestPaymentMethodRepository_DuplicateTokenConvergesByHash(t *testing.T) {
 // switches atomically, and the subscription FK blocks deleting the referenced
 // method (issue #251 AC).
 func TestPaymentMethodRepository_OneActivePerUserAndDeleteGuards(t *testing.T) {
+	t.Parallel()
 	h := newMethodIntegrationHarness(t)
 	userID := h.seedMethodUser(t)
 
@@ -400,6 +404,7 @@ func (h *methodIntegrationHarness) seedBindingSession(
 // port against real PostgreSQL: create with TTL, lock by request key, list
 // open sessions per user, and the status transition (issue #251).
 func TestCardBindingSessionRepository_RoundTrip(t *testing.T) {
+	t.Parallel()
 	h := newMethodIntegrationHarness(t)
 	userID := h.seedMethodUser(t)
 	other := h.seedMethodUser(t)

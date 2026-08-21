@@ -146,6 +146,7 @@ func (h *adminSubscriptionHarness) requireSingleAuditEntry(t *testing.T, action,
 // the term ends the expiry worker downgrades the subscription to basic through
 // the common non-renewing path with its transition recorded.
 func TestAdminSubscription_AssignServiceOverwritesAndExpiresToBasic(t *testing.T) {
+	t.Parallel()
 	h := newAdminSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
@@ -172,6 +173,7 @@ func TestAdminSubscription_AssignServiceOverwritesAndExpiresToBasic(t *testing.T
 // subscription pays for an upgrade, and the applied payment converts the
 // subscription into a paid one from the new period.
 func TestAdminSubscription_UpgradeOverServiceTurnsPaid(t *testing.T) {
+	t.Parallel()
 	h := newAdminSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	sub.Source = domain.SubscriptionSourceService
@@ -269,6 +271,7 @@ func (h *adminSubscriptionHarness) requireForcedChangeTransition(t *testing.T, s
 // immediately for the chosen period without any payment row, and the
 // transition log and audit trail attribute it to the acting admin.
 func TestAdminSubscription_ForceChangeAppliesWithoutPayment(t *testing.T) {
+	t.Parallel()
 	h := newAdminSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
 
@@ -366,6 +369,7 @@ func (h *adminSubscriptionHarness) requireGraceExtendedTransition(t *testing.T, 
 // subscription at the original deadline, and the transition log records the
 // extension.
 func TestAdminSubscription_ExtendGraceKeepsWindowAlive(t *testing.T) {
+	t.Parallel()
 	h := newAdminSubscriptionHarness(t)
 	sub := h.seedGraceSubscription(t, 24*time.Hour)
 	originalUntil := *sub.ValidUntil
@@ -407,6 +411,7 @@ func (h *adminSubscriptionHarness) requireCancelledRunsOutPaidPeriod(
 // with the admin attribution, stays working until the retained period ends,
 // then falls to basic through the cancelled-expiry worker path.
 func TestAdminSubscription_AdminCancelRunsOutPaidPeriod(t *testing.T) {
+	t.Parallel()
 	h := newAdminSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 

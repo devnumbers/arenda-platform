@@ -12,6 +12,7 @@ import (
 const graceDuration = 7 * 24 * time.Hour
 
 func TestNewBasicSubscription(t *testing.T) {
+	t.Parallel()
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 
@@ -41,6 +42,7 @@ func TestNewBasicSubscription(t *testing.T) {
 }
 
 func TestSubscriptionCanMutateData(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
 	future := now.Add(24 * time.Hour)
 	past := now.Add(-24 * time.Hour)
@@ -63,6 +65,7 @@ func TestSubscriptionCanMutateData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sub := Subscription{Status: tt.status, ValidUntil: tt.validUntil}
 			if got := sub.CanMutateData(now); got != tt.want {
 				t.Errorf("CanMutateData() = %v, want %v", got, tt.want)
@@ -72,6 +75,7 @@ func TestSubscriptionCanMutateData(t *testing.T) {
 }
 
 func TestSubscriptionIsPaidSource(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		source SubscriptionSource
@@ -83,6 +87,7 @@ func TestSubscriptionIsPaidSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sub := Subscription{Source: tt.source}
 			if got := sub.IsPaidSource(); got != tt.want {
 				t.Errorf("IsPaidSource() = %v, want %v", got, tt.want)
@@ -92,6 +97,7 @@ func TestSubscriptionIsPaidSource(t *testing.T) {
 }
 
 func TestSubscriptionIsInGrace(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
 	future := now.Add(24 * time.Hour)
 	past := now.Add(-24 * time.Hour)
@@ -110,6 +116,7 @@ func TestSubscriptionIsInGrace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sub := Subscription{Status: tt.status, ValidUntil: tt.validUntil}
 			if got := sub.IsInGrace(now); got != tt.want {
 				t.Errorf("IsInGrace() = %v, want %v", got, tt.want)
@@ -119,6 +126,7 @@ func TestSubscriptionIsInGrace(t *testing.T) {
 }
 
 func TestSubscriptionHasPendingChange(t *testing.T) {
+	t.Parallel()
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	changeAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 
@@ -136,6 +144,7 @@ func TestSubscriptionHasPendingChange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sub := Subscription{PendingTariffID: tt.pendingTariffID, PendingChangeAt: tt.pendingChangeAt}
 			if got := sub.HasPendingChange(); got != tt.want {
 				t.Errorf("HasPendingChange() = %v, want %v", got, tt.want)
@@ -145,6 +154,7 @@ func TestSubscriptionHasPendingChange(t *testing.T) {
 }
 
 func TestSubscriptionScheduleDowngrade(t *testing.T) {
+	t.Parallel()
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	currentTariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 	newTariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
@@ -232,6 +242,7 @@ func assertAppliedTariffChange(
 }
 
 func TestSubscriptionApplyTariffChange(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
@@ -340,6 +351,7 @@ func renewalFromGraceStartsAtNow(
 }
 
 func TestSubscriptionApplyRenewal(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	existingValidUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
@@ -356,6 +368,7 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 }
 
 func TestSubscriptionSetAutoRenew(t *testing.T) {
+	t.Parallel()
 	validUntil := time.Now().AddDate(0, 1, 0)
 	sub := Subscription{AutoRenewEnabled: false, ValidUntil: &validUntil}
 	if err := sub.SetAutoRenew(true); err != nil {
@@ -385,6 +398,7 @@ func TestSubscriptionSetAutoRenew(t *testing.T) {
 }
 
 func TestSubscriptionCancel(t *testing.T) {
+	t.Parallel()
 	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	pendingAt := validUntil
 	period := PeriodMonth
@@ -424,6 +438,7 @@ func TestSubscriptionCancel(t *testing.T) {
 }
 
 func TestSubscriptionDowngradeToBasic(t *testing.T) {
+	t.Parallel()
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
@@ -468,11 +483,13 @@ func TestSubscriptionDowngradeToBasic(t *testing.T) {
 }
 
 func TestSubscriptionEnterGrace(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 
 	t.Run("extends ValidUntil from nil", func(t *testing.T) {
+		t.Parallel()
 		sub := Subscription{
 			ID:       uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13"),
 			UserID:   userID,
@@ -492,6 +509,7 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 	})
 
 	t.Run("does not shorten already-paid ValidUntil", func(t *testing.T) {
+		t.Parallel()
 		farFuture := now.Add(30 * 24 * time.Hour)
 		sub := Subscription{
 			ID:         uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
@@ -512,6 +530,7 @@ func TestSubscriptionEnterGrace(t *testing.T) {
 	})
 
 	t.Run("clears pending scheduled change", func(t *testing.T) {
+		t.Parallel()
 		pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15")
 		validUntil := now.Add(-time.Hour)
 		pendingAt := validUntil
@@ -576,6 +595,7 @@ func assertAppliedScheduledDowngrade(
 }
 
 func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
@@ -616,6 +636,7 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sub := newSub(tt.period)
 			baseLastPayment := sub.LastAppliedPaymentID
 
@@ -651,6 +672,7 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 }
 
 func TestSubscriptionClearPendingChange(t *testing.T) {
+	t.Parallel()
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 	pendingID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14")
@@ -688,6 +710,7 @@ func TestSubscriptionClearPendingChange(t *testing.T) {
 }
 
 func TestSubscriptionApplyScheduledDowngradePreconditions(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
@@ -732,6 +755,7 @@ func TestSubscriptionApplyScheduledDowngradePreconditions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sub := validSub()
 			tt.mutate(&sub)
 			before := sub
@@ -747,6 +771,7 @@ func TestSubscriptionApplyScheduledDowngradePreconditions(t *testing.T) {
 }
 
 func TestReconstituteSubscription(t *testing.T) {
+	t.Parallel()
 	id := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
@@ -767,6 +792,7 @@ func TestReconstituteSubscription(t *testing.T) {
 	}
 
 	t.Run("accepts valid aggregate", func(t *testing.T) {
+		t.Parallel()
 		want := validSub()
 		got, err := ReconstituteSubscription(want)
 		if err != nil {
@@ -778,6 +804,7 @@ func TestReconstituteSubscription(t *testing.T) {
 	})
 
 	t.Run("accepts valid pending period", func(t *testing.T) {
+		t.Parallel()
 		sub := validSub()
 		period := PeriodMonth
 		sub.PendingPeriod = &period
@@ -791,6 +818,7 @@ func TestReconstituteSubscription(t *testing.T) {
 	})
 
 	t.Run("accepts valid current period", func(t *testing.T) {
+		t.Parallel()
 		sub := validSub()
 		period := PeriodYear
 		sub.CurrentPeriod = &period
@@ -825,6 +853,7 @@ func TestReconstituteSubscription(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sub := validSub()
 			tt.mutate(&sub)
 			if _, err := ReconstituteSubscription(sub); err == nil {
@@ -839,6 +868,7 @@ func TestReconstituteSubscription(t *testing.T) {
 // auto-renew is off, and every planning field of the overwritten subscription
 // is cleared while the active payment method survives.
 func TestSubscriptionAssignService(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	oldValidUntil := now.AddDate(0, 0, 10)
 	termUntil := now.AddDate(0, 1, 0)
@@ -900,6 +930,7 @@ func TestSubscriptionAssignService(t *testing.T) {
 // source and auto-renew setting keep their value, and a cancelled subscription
 // is out of scope.
 func TestSubscriptionForceApplyTariffChange(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	fromID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	toID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
@@ -951,6 +982,7 @@ func TestSubscriptionForceApplyTariffChange(t *testing.T) {
 // leaves grace when the admin force-changes its tariff (issue #255): the
 // repaired subscription is active for the new period.
 func TestSubscriptionForceApplyTariffChangeFromGrace(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	fromID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	toID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
@@ -984,6 +1016,7 @@ func TestSubscriptionForceApplyTariffChangeFromGrace(t *testing.T) {
 // the window lengthens from the later of now and the current deadline, and
 // only a subscription in grace qualifies.
 func TestSubscriptionExtendGrace(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	graceUntil := now.Add(48 * time.Hour)
 	remindedAt := now.Add(-6 * time.Hour)
@@ -1031,6 +1064,7 @@ func TestSubscriptionExtendGrace(t *testing.T) {
 // service rule (issue #255): both a tariff change and a renewal applied by a
 // succeeded payment put the subscription on the paid track.
 func TestSubscriptionPaymentFlipsServiceSourceToPaid(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
 	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")

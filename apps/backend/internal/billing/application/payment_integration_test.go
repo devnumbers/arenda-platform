@@ -128,6 +128,7 @@ func (h *paymentIntegrationHarness) requirePaymentAppliedTransition(t *testing.T
 // the period from the payment moment and auto-renew on, and the transition
 // log records the applied payment.
 func TestPaymentFlow_UpgradeEndToEnd(t *testing.T) {
+	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBasic)
 
@@ -173,6 +174,7 @@ func TestPaymentFlow_UpgradeEndToEnd(t *testing.T) {
 // acceptance criterion against real PostgreSQL: delivering the fake
 // provider's raw succeeded payload twice applies the tariff once.
 func TestPaymentFlow_WebhookDuplicateIsIdempotent(t *testing.T) {
+	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBasic)
 
@@ -226,6 +228,7 @@ func TestPaymentFlow_WebhookDuplicateIsIdempotent(t *testing.T) {
 // backstop: the partial unique index rejects a second pending payment for the
 // same user/tariff/period at the database level.
 func TestPaymentFlow_PendingPaymentUniqueIndex(t *testing.T) {
+	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBasic)
 

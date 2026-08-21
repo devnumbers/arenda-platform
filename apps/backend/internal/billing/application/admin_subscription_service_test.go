@@ -127,6 +127,7 @@ func (h *subscriptionHarness) requireServiceAssignedAudit(t *testing.T, adminID 
 // does not stack — and both the transition log and the audit trail attribute
 // the change to the acting admin.
 func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	adminID := uuid.Must(uuid.NewV7())
@@ -149,6 +150,7 @@ func TestAdminAssignServiceSubscription_OverwritesPaidWithTermTransitionAudit(t 
 // date inclusive, and a past or missing date answers ErrInvalidTerm before
 // anything is written.
 func TestAdminAssignServiceSubscription_TermResolution(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	adminID := uuid.Must(uuid.NewV7())
 
@@ -203,6 +205,7 @@ func TestAdminAssignServiceSubscription_TermResolution(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sub := h.seedPaidSubscription(t, domain.TariffBasic)
 			err := h.svc.AssignServiceSubscription(t.Context(), adminID, sub.UserID, tt.req)
 			if tt.wantErr != nil {
@@ -228,6 +231,7 @@ func TestAdminAssignServiceSubscription_TermResolution(t *testing.T) {
 // TestAdminAssignServiceSubscription_TariffNotFound proves an unknown plan
 // answers the tariff sentinel without touching the subscription.
 func TestAdminAssignServiceSubscription_TariffNotFound(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBasic)
 
@@ -298,6 +302,7 @@ func (h *subscriptionHarness) requireForcedChangeTransitionAudit(t *testing.T, u
 // source and auto-renew setting keep their value, and the transition log and
 // audit trail attribute the change to the acting admin.
 func TestAdminForceChangeTariff_AppliesWithoutPayment(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedServiceSubscription(t, domain.TariffBusiness)
 	adminID := uuid.Must(uuid.NewV7())
@@ -317,6 +322,7 @@ func TestAdminForceChangeTariff_AppliesWithoutPayment(t *testing.T) {
 // same tariff answers ErrAlreadyOnTariff and a cancelled subscription is out
 // of scope.
 func TestAdminForceChangeTariff_Rejections(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	adminID := uuid.Must(uuid.NewV7())
 
@@ -348,6 +354,7 @@ func TestAdminForceChangeTariff_Rejections(t *testing.T) {
 // deadline, the reminder flag resets for the fresh window, and the transition
 // log and audit trail attribute the extension to the acting admin.
 func TestAdminExtendGrace_LengthensWindowWithTransitionAudit(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	graceUntil := h.now.Add(48 * time.Hour)
@@ -394,6 +401,7 @@ func TestAdminExtendGrace_LengthensWindowWithTransitionAudit(t *testing.T) {
 // TestAdminExtendGrace_Rejections proves the guards: only a grace subscription
 // can be extended, and the day count stays within the operational cap.
 func TestAdminExtendGrace_Rejections(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	adminID := uuid.Must(uuid.NewV7())
 
@@ -423,6 +431,7 @@ func TestAdminExtendGrace_Rejections(t *testing.T) {
 // admin initiator in the transition log and the admin actor in the audit
 // trail. A service subscription cannot be cancelled this way.
 func TestAdminCancelSubscription_CancelsWithAdminAttribution(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	adminID := uuid.Must(uuid.NewV7())
@@ -472,6 +481,7 @@ func TestAdminCancelSubscription_CancelsWithAdminAttribution(t *testing.T) {
 // view (issue #255): the newest-first log with the tariff names resolved and
 // the payment reference kept.
 func TestAdminListTransitions_ResolvesTariffNames(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	if err := h.svc.CancelSubscriptionAsAdmin(t.Context(), uuid.Must(uuid.NewV7()), sub.UserID); err != nil {
@@ -507,6 +517,7 @@ func TestAdminListTransitions_ResolvesTariffNames(t *testing.T) {
 // upgrade-over-service rule (issue #255): a service subscription may take the
 // paid upgrade path, while a downgrade request on it stays rejected.
 func TestChangeTariff_ServiceSubscriptionUpgradeTakesPaymentPath(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
 		s.Source = domain.SubscriptionSourceService
@@ -541,6 +552,7 @@ func TestChangeTariff_ServiceSubscriptionUpgradeTakesPaymentPath(t *testing.T) {
 // the deferred downgrade path stays reserved for paid subscriptions — a
 // service subscription is reassigned by an admin, not rescheduled by the user.
 func TestChangeTariff_ServiceSubscriptionDowngradeRejected(t *testing.T) {
+	t.Parallel()
 	h := newPaymentHarness(t)
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
 		s.TariffID = h.tariffID(t, domain.TariffBusiness)

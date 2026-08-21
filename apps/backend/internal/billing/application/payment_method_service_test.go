@@ -232,6 +232,7 @@ func (h *methodHarness) activeMethod(t *testing.T, userID uuid.UUID) domain.Paym
 // the single active one, and the subscription charges it. Migrated from the
 // pre-rewrite test TestBilling_AddPaymentMethod.
 func TestAddPaymentMethod_TokenCreatesActivatesAndLinks(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, sub := h.seedMethodSubscription(t)
 
@@ -304,6 +305,7 @@ func (p bankFormStubProvider) WebhookAck() []byte { return p.stub.WebhookAck() }
 // chargeable method — the binding flow runs instead, so a client-supplied
 // token cannot inject an arbitrary charge target.
 func TestAddPaymentMethod_TokenIgnoredByBankFormProvider(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	h.provider.bindRes = BindMethodResult{
@@ -352,6 +354,7 @@ func TestAddPaymentMethod_TokenIgnoredByBankFormProvider(t *testing.T) {
 // TestBilling_AddPaymentMethod_TkassaPersistsPendingBinding — the placeholder
 // row is now a first-class session.
 func TestAddPaymentMethod_BindingStartsSessionWithTTL(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 
@@ -390,6 +393,7 @@ func TestAddPaymentMethod_BindingStartsSessionWithTTL(t *testing.T) {
 // TestBilling_HandleWebhook_TkassaAddCard and
 // TestBilling_HandleWebhook_AddCardLinksActivePaymentMethodToSubscription.
 func TestWebhook_MethodBoundCreatesActivatesAndLinks(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	session := h.openSession(t, userID)
@@ -429,6 +433,7 @@ func TestWebhook_MethodBoundCreatesActivatesAndLinks(t *testing.T) {
 // delivery is a no-op: one method row, one active method, no extra audit
 // entry (issue #251 AC).
 func TestWebhook_MethodBoundRedeliveryIsIdempotent(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	session := h.openSession(t, userID)
@@ -458,6 +463,7 @@ func TestWebhook_MethodBoundRedeliveryIsIdempotent(t *testing.T) {
 // (issue #251 AC): the session is rejected and the webhook answered as
 // processed.
 func TestWebhook_MethodBoundExpiredSessionCreatesNoCard(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	session := h.openSession(t, userID)
@@ -493,6 +499,7 @@ func TestWebhook_MethodBoundExpiredSessionCreatesNoCard(t *testing.T) {
 // notification no local session matches is answered as processed (a retry
 // cannot fix it) and creates nothing.
 func TestWebhook_MethodBoundUnknownRequestKeyIsProcessedNoop(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	h.methodBoundEvent("req_never_initiated")
@@ -516,6 +523,7 @@ func TestWebhook_MethodBoundUnknownRequestKeyIsProcessedNoop(t *testing.T) {
 // closed. Migrated from the pre-rewrite
 // TestBilling_SyncPaymentMethods_CompletesPendingBindingViaGetAddCardState.
 func TestSyncPaymentMethods_CompletesOpenBinding(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	session := h.openSession(t, userID)
@@ -555,6 +563,7 @@ func TestSyncPaymentMethods_CompletesOpenBinding(t *testing.T) {
 // binding closes its session without a payment method. Migrated from the
 // pre-rewrite TestBilling_SyncPaymentMethods_RejectedBindingDropped.
 func TestSyncPaymentMethods_RejectedBindingClosed(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	session := h.openSession(t, userID)
@@ -585,6 +594,7 @@ func TestSyncPaymentMethods_RejectedBindingClosed(t *testing.T) {
 // binding can never complete. Migrated from the pre-rewrite
 // TestBilling_SyncPaymentMethods_ExpiredPlaceholderDroppedFreshKept.
 func TestSyncPaymentMethods_ExpiredSessionClosedWithoutPolling(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	fresh := h.openSession(t, userID)
@@ -628,6 +638,7 @@ func TestSyncPaymentMethods_ExpiredSessionClosedWithoutPolling(t *testing.T) {
 // Migrated from the pre-rewrite
 // TestBilling_SyncPaymentMethods_UnknownRequestKeyDroppedAsExpired.
 func TestSyncPaymentMethods_UnknownRequestKeyClosesSession(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	session := h.openSession(t, userID)
@@ -650,6 +661,7 @@ func TestSyncPaymentMethods_UnknownRequestKeyClosesSession(t *testing.T) {
 // outage keeps the session resolvable: a later sync (or the webhook) can
 // still complete it.
 func TestSyncPaymentMethods_TransientPollErrorKeepsSessionOpen(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	session := h.openSession(t, userID)
@@ -673,6 +685,7 @@ func TestSyncPaymentMethods_TransientPollErrorKeepsSessionOpen(t *testing.T) {
 // (issue #251 AC: exactly one active). Migrated from the pre-rewrite
 // TestBilling_SetActivePaymentMethodUsesTransaction.
 func TestActivatePaymentMethod_SwitchesSingleActiveAndLinks(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	first, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{ProviderToken: "token_first"})
@@ -722,6 +735,7 @@ func TestActivatePaymentMethod_SwitchesSingleActiveAndLinks(t *testing.T) {
 // TestActivatePaymentMethod_MissingOrForeignIsNotFound proves activation of a
 // missing method or a method of another user answers ErrPaymentMethodNotFound.
 func TestActivatePaymentMethod_MissingOrForeignIsNotFound(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	other, _ := h.seedMethodSubscription(t)
@@ -743,6 +757,7 @@ func TestActivatePaymentMethod_MissingOrForeignIsNotFound(t *testing.T) {
 // deletable after another method is activated (issue #251 AC). Migrated from
 // the pre-rewrite TestBilling_DeletePaymentMethod_RejectsActiveMethodInSingleTransaction.
 func TestDeletePaymentMethod_RejectsActiveUntilAnotherActivated(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	first, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{ProviderToken: "token_first"})
@@ -779,6 +794,7 @@ func TestDeletePaymentMethod_RejectsActiveUntilAnotherActivated(t *testing.T) {
 // failure (even a hard one) does not fail the delete. Migrated from the
 // pre-rewrite TestBilling_DeletePaymentMethod_TkassaRemoveCardFailureIsBestEffort.
 func TestDeletePaymentMethod_DetachesProviderCardBestEffort(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	added, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{ProviderToken: testChargeToken})
@@ -813,6 +829,7 @@ func TestDeletePaymentMethod_DetachesProviderCardBestEffort(t *testing.T) {
 // TestDeletePaymentMethod_NotFoundOrForeign proves deleting a missing method
 // or a method of another user answers ErrPaymentMethodNotFound.
 func TestDeletePaymentMethod_NotFoundOrForeign(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	other, _ := h.seedMethodSubscription(t)
@@ -832,6 +849,7 @@ func TestDeletePaymentMethod_NotFoundOrForeign(t *testing.T) {
 // TestAddPaymentMethod_DuplicateTokenConverges proves re-adding the same card
 // converges on one row by token hash instead of duplicating (issue #251 AC).
 func TestAddPaymentMethod_DuplicateTokenConverges(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 
@@ -854,6 +872,7 @@ func TestAddPaymentMethod_DuplicateTokenConverges(t *testing.T) {
 // view resolves the active method (issue #251). Migrated from the pre-rewrite
 // TestBilling_GetSubscriptionWithActivePaymentMethod.
 func TestGetSubscription_IncludesActivePaymentMethod(t *testing.T) {
+	t.Parallel()
 	h := newMethodHarness(t)
 	userID, _ := h.seedMethodSubscription(t)
 	added, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{ProviderToken: testChargeToken})

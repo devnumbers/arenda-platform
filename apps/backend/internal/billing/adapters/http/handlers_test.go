@@ -340,6 +340,7 @@ func ownerRequest(t *testing.T, method, target string, userID uuid.UUID) *http.R
 // with the frozen OpenAPI shape: items with name, kopeck prices as integers
 // and the property limit (issue #245).
 func TestListTariffs_MapsDomainTariffsToContract(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(&fakeTariffLister{list: func(context.Context) ([]domain.Tariff, error) {
 		return []domain.Tariff{
@@ -378,6 +379,7 @@ func TestListTariffs_MapsDomainTariffsToContract(t *testing.T) {
 // TestListTariffs_RequiresOwner proves the endpoint rejects unauthenticated
 // calls with 401 before touching the service.
 func TestListTariffs_RequiresOwner(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, nil, nil)
 
 	w := httptest.NewRecorder()
@@ -392,6 +394,7 @@ func TestListTariffs_RequiresOwner(t *testing.T) {
 // answers with the frozen OpenAPI shape: every tariff including hidden ones,
 // with id, isActive and the kopeck prices as integers (issue #247).
 func TestListAdminTariffs_MapsDomainTariffsToContract(t *testing.T) {
+	t.Parallel()
 	hiddenID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(&fakeTariffLister{listAll: func(context.Context) ([]domain.Tariff, error) {
 		return []domain.Tariff{
@@ -445,6 +448,7 @@ func TestListAdminTariffs_MapsDomainTariffsToContract(t *testing.T) {
 // TestListAdminTariffs_InfrastructureErrorIs500 proves an unexpected service
 // error answers 500 without leaking the cause into the response body.
 func TestListAdminTariffs_InfrastructureErrorIs500(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(&fakeTariffLister{listAll: func(context.Context) ([]domain.Tariff, error) {
 		return nil, errors.New("connection reset by peer")
 	}}, nil, nil)
@@ -479,6 +483,7 @@ func adminJSONRequest(t *testing.T, method, target string, adminID uuid.UUID, bo
 // (issue #256): the body maps to the application request, the acting admin is
 // attributed, and the created plan answers 201 with the contract shape.
 func TestCreateAdminTariff_CreatesAndAnswers201(t *testing.T) {
+	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
 	created := domain.Tariff{
 		ID: uuid.Must(uuid.NewV7()), Name: domain.TariffPro, ActivePropertyLimit: 5,
@@ -526,6 +531,7 @@ func TestCreateAdminTariff_CreatesAndAnswers201(t *testing.T) {
 // contract (issue #256): a duplicate name answers 409, invalid pricing 400,
 // an unknown name 400, and no session 401 before the service is touched.
 func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
+	t.Parallel()
 	validBody := func() map[string]any {
 		return map[string]any{testKeyName: testTariffPro, testKeyActivePropertyLimit: 5, testKeyMonthlyPrice: 59000, testKeyYearlyPrice: 540000}
 	}
@@ -549,6 +555,7 @@ func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			h := NewBillingHandlers(nil, &fakeAdminTariffManager{create: func(
 				context.Context, uuid.UUID, billingapp.CreateTariffRequest,
 			) (domain.Tariff, error) {
@@ -585,6 +592,7 @@ func TestCreateAdminTariff_ErrorMapping(t *testing.T) {
 // (issue #256): the full editable state maps to the application request with
 // the acting admin and the path id, and the saved plan answers 200.
 func TestUpdateAdminTariff_UpdatesAndAnswers200(t *testing.T) {
+	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
 	tariffID := uuid.Must(uuid.NewV7())
 	updated := domain.Tariff{
@@ -630,6 +638,7 @@ func TestUpdateAdminTariff_UpdatesAndAnswers200(t *testing.T) {
 // TestUpdateAdminTariff_ErrorMapping proves the edit endpoint's error
 // contract (issue #256): a miss answers 404, invalid pricing 400.
 func TestUpdateAdminTariff_ErrorMapping(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		svcErr error
@@ -640,6 +649,7 @@ func TestUpdateAdminTariff_ErrorMapping(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			h := NewBillingHandlers(nil, &fakeAdminTariffManager{update: func(
 				context.Context, uuid.UUID, uuid.UUID, billingapp.UpdateTariffRequest,
 			) (domain.Tariff, error) {
@@ -663,6 +673,7 @@ func TestUpdateAdminTariff_ErrorMapping(t *testing.T) {
 // the frozen OpenAPI shape: required tariff/status/autoRenewEnabled plus the
 // optional lifecycle fields (validUntil, currentPeriod, pending tariff trio).
 func TestGetSubscription_MapsViewToContract(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	validUntil := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
 	pendingChangeAt := validUntil
@@ -741,6 +752,7 @@ func TestGetSubscription_MapsViewToContract(t *testing.T) {
 // TestGetSubscription_NotFoundIsProblem proves a missing subscription maps to
 // the contract's 404 with an RFC 7807 problem body.
 func TestGetSubscription_NotFoundIsProblem(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, &fakeSubscriptionViewer{get: func(context.Context, uuid.UUID) (billingapp.SubscriptionView, error) {
 		return billingapp.SubscriptionView{}, billingapp.ErrSubscriptionNotFound
 	}}, nil)
@@ -766,6 +778,7 @@ func TestGetSubscription_NotFoundIsProblem(t *testing.T) {
 // TestGetSubscription_InfrastructureErrorIs500 proves an unexpected service
 // error answers 500 without leaking the cause into the response body.
 func TestGetSubscription_InfrastructureErrorIs500(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, &fakeSubscriptionViewer{get: func(context.Context, uuid.UUID) (billingapp.SubscriptionView, error) {
 		return billingapp.SubscriptionView{}, errors.New("connection reset by peer")
 	}}, nil)
@@ -822,6 +835,7 @@ func adminPaymentView(t *testing.T) billingapp.AdminSubscriptionPaymentView {
 // /admin/subscription/payments/{id} maps the view to the contract DTO
 // (issue #254).
 func TestGetAdminSubscriptionPayment_AnswersView(t *testing.T) {
+	t.Parallel()
 	view := adminPaymentView(t)
 	h := newTestHandlers(nil, nil, nil)
 	h.adminPayments = &fakeAdminPaymentManager{get: func(
@@ -862,6 +876,7 @@ func TestGetAdminSubscriptionPayment_AnswersView(t *testing.T) {
 // /admin/subscription/payments/{id}/refund answers 204 and forwards the acting
 // admin from the session (issue #254).
 func TestRefundSubscriptionPayment_AttributesAdmin(t *testing.T) {
+	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
 	paymentID := uuid.Must(uuid.NewV7())
 	check, called := requireAdminAttribution(t, "RefundPayment", adminID, paymentID)
@@ -911,6 +926,7 @@ func requireNoContentAndCalled(t *testing.T, w *httptest.ResponseRecorder, calle
 // /admin/subscription/payments/{id}/sync answers 204 and forwards the acting
 // admin (issue #254).
 func TestSyncSubscriptionPayment_AttributesAdmin(t *testing.T) {
+	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
 	paymentID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(nil, nil, nil)
@@ -937,6 +953,7 @@ func TestSyncSubscriptionPayment_AttributesAdmin(t *testing.T) {
 // /admin/subscription/payments forwards every contract filter to the service
 // and answers the items with the total (issue #254).
 func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
+	t.Parallel()
 	userID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 	limit, offset := 50, 10
 	h := newTestHandlers(nil, nil, nil)
@@ -1003,6 +1020,7 @@ func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
 // TestListAdminSubscriptionPayments_InvalidFilterAnswers400 proves a sort
 // field outside the whitelist answers 400, not 500 (issue #254).
 func TestListAdminSubscriptionPayments_InvalidFilterAnswers400(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, nil, nil)
 	h.adminPayments = &fakeAdminPaymentManager{list: func(
 		_ context.Context, filters billingapp.AdminPaymentFilters,
@@ -1030,6 +1048,7 @@ func ownerJSONRequest(t *testing.T, method, target string, userID uuid.UUID, bod
 // TestCancelSubscription_Returns204 proves POST /subscription/cancel answers
 // 204 and forwards the owner id to the service (issue #249).
 func TestCancelSubscription_Returns204(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	called := false
 	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(_ context.Context, got uuid.UUID) error {
@@ -1054,6 +1073,7 @@ func TestCancelSubscription_Returns204(t *testing.T) {
 // TestCancelSubscription_RequiresOwner proves the endpoint rejects
 // unauthenticated calls with 401 before touching the service.
 func TestCancelSubscription_RequiresOwner(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, nil, nil)
 
 	w := httptest.NewRecorder()
@@ -1068,6 +1088,7 @@ func TestCancelSubscription_RequiresOwner(t *testing.T) {
 // frozen contract statuses: 404 for a missing subscription, 409 for an invalid
 // state.
 func TestCancelSubscription_ErrorMapping(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		err  error
@@ -1079,6 +1100,7 @@ func TestCancelSubscription_ErrorMapping(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(context.Context, uuid.UUID) error {
 				return tc.err
 			}})
@@ -1097,6 +1119,7 @@ func TestCancelSubscription_ErrorMapping(t *testing.T) {
 // /subscription/auto-renew decodes the contract body and answers 204 (issue
 // #249).
 func TestToggleAutoRenew_Returns204AndForwardsBody(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	var gotEnabled bool
 	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{toggleRenew: func(_ context.Context, got uuid.UUID, enabled bool) error {
@@ -1121,6 +1144,7 @@ func TestToggleAutoRenew_Returns204AndForwardsBody(t *testing.T) {
 // TestToggleAutoRenew_RejectsBadBody proves a malformed body answers 400
 // before the service is reached.
 func TestToggleAutoRenew_RejectsBadBody(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{toggleRenew: func(context.Context, uuid.UUID, bool) error {
 		t.Error("service must not be called on a malformed body")
 		return nil
@@ -1138,6 +1162,7 @@ func TestToggleAutoRenew_RejectsBadBody(t *testing.T) {
 // auto-renew without a validity period" answers 409 with a user-facing
 // detail.
 func TestToggleAutoRenew_CannotEnableMapsTo409(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{toggleRenew: func(context.Context, uuid.UUID, bool) error {
 		return domain.ErrCannotEnableAutoRenew
 	}})
@@ -1157,6 +1182,7 @@ func TestToggleAutoRenew_CannotEnableMapsTo409(t *testing.T) {
 // /subscription/change answers 200 with the contract shape on the free
 // downgrade path: paymentId and confirmUrl are null (issue #249).
 func TestChangeTariff_DowngradeReturnsEmptyResult(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	var gotReq billingapp.ChangeTariffRequest
 	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(
@@ -1194,6 +1220,7 @@ func TestChangeTariff_DowngradeReturnsEmptyResult(t *testing.T) {
 // 503 with an explicit payment-unavailable problem until the payment flow
 // lands (issue #250).
 func TestChangeTariff_UpgradeTemporarilyUnavailable(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(
 		context.Context, uuid.UUID, billingapp.ChangeTariffRequest,
 	) (billingapp.ChangeTariffResult, error) {
@@ -1215,6 +1242,7 @@ func TestChangeTariff_UpgradeTemporarilyUnavailable(t *testing.T) {
 // TestChangeTariff_ErrorMapping proves the request-validation and state
 // sentinels map to the frozen contract statuses.
 func TestChangeTariff_ErrorMapping(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		err  error
@@ -1227,6 +1255,7 @@ func TestChangeTariff_ErrorMapping(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(
 				context.Context, uuid.UUID, billingapp.ChangeTariffRequest,
 			) (billingapp.ChangeTariffResult, error) {
@@ -1248,6 +1277,7 @@ func TestChangeTariff_ErrorMapping(t *testing.T) {
 // tariff name and an unknown period answer 400 before the service is
 // reached.
 func TestChangeTariff_RejectsInvalidInput(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		body string
@@ -1258,6 +1288,7 @@ func TestChangeTariff_RejectsInvalidInput(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{changeTariff: func(
 				context.Context, uuid.UUID, billingapp.ChangeTariffRequest,
 			) (billingapp.ChangeTariffResult, error) {
@@ -1280,6 +1311,7 @@ func TestChangeTariff_RejectsInvalidInput(t *testing.T) {
 // id, tariff, period, status, kopeck amount as integer, provider and the
 // payment URL of an unfinished payment (issue #250).
 func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	paymentID := uuid.Must(uuid.NewV7())
 	url := "http://localhost:8080/internal/fake-subscription-payment/x/confirm"
@@ -1349,6 +1381,7 @@ func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
 // TestListSubscriptionPayments_RequiresOwner proves the endpoint rejects
 // unauthenticated calls with 401 before touching the service.
 func TestListSubscriptionPayments_RequiresOwner(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, nil, nil)
 
 	w := httptest.NewRecorder()
@@ -1369,6 +1402,7 @@ func webhookRequest(t *testing.T, provider, payload string) *http.Request {
 // notification answers 200 with the provider's fixed acknowledgement body
 // (issue #250, synchronous webhooks).
 func TestHandlePaymentWebhook_AnswersAckOnSuccess(t *testing.T) {
+	t.Parallel()
 	var gotPayload []byte
 	h := newTestHandlersOpts(nil, nil, nil, nil, nil, &fakeWebhookProcessor{
 		handle: func(_ context.Context, providerName string, payload []byte) error {
@@ -1400,6 +1434,7 @@ func TestHandlePaymentWebhook_AnswersAckOnSuccess(t *testing.T) {
 // non-200 so the provider retries: request defects answer 400, a missing
 // payment 404, anything else 500 (issue #250).
 func TestHandlePaymentWebhook_ErrorMapping(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		err  error
@@ -1414,6 +1449,7 @@ func TestHandlePaymentWebhook_ErrorMapping(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newTestHandlersOpts(nil, nil, nil, nil, nil, &fakeWebhookProcessor{
 				handle: func(context.Context, string, []byte) error { return tc.err },
 			})
@@ -1431,6 +1467,7 @@ func TestHandlePaymentWebhook_ErrorMapping(t *testing.T) {
 // TestHandlePaymentWebhook_RejectsOversizedBody proves a body over the size
 // cap answers 413 without reaching the processor.
 func TestHandlePaymentWebhook_RejectsOversizedBody(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlersOpts(nil, nil, nil, nil, nil, &fakeWebhookProcessor{
 		handle: func(context.Context, string, []byte) error {
 			t.Error("processor must not be called on an oversized body")
@@ -1451,6 +1488,7 @@ func TestHandlePaymentWebhook_RejectsOversizedBody(t *testing.T) {
 // /subscription/payment-methods answers with the frozen OpenAPI shape:
 // display fields only (no charge token), newest first (issue #251).
 func TestListPaymentMethods_MapsDomainMethodsToContract(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	createdAt := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	methodID := uuid.Must(uuid.NewV7())
@@ -1506,6 +1544,7 @@ func TestListPaymentMethods_MapsDomainMethodsToContract(t *testing.T) {
 // TestListPaymentMethods_RequiresOwner proves the endpoint rejects
 // unauthenticated calls with 401.
 func TestListPaymentMethods_RequiresOwner(t *testing.T) {
+	t.Parallel()
 	h := newTestHandlers(nil, nil, nil)
 
 	w := httptest.NewRecorder()
@@ -1519,6 +1558,7 @@ func TestListPaymentMethods_RequiresOwner(t *testing.T) {
 // TestAddPaymentMethod_BindingReturnsConfirmURL proves the bank-form branch
 // answers with the confirmation URL and no method (issue #251).
 func TestAddPaymentMethod_BindingReturnsConfirmURL(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{add: func(
 		_ context.Context, got uuid.UUID, req billingapp.AddPaymentMethodRequest,
@@ -1558,6 +1598,7 @@ func TestAddPaymentMethod_BindingReturnsConfirmURL(t *testing.T) {
 // TestAddPaymentMethod_TokenReturnsMethod proves the synchronous branch
 // forwards the raw token and answers with the created method (issue #251).
 func TestAddPaymentMethod_TokenReturnsMethod(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	methodID := uuid.Must(uuid.NewV7())
 	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{add: func(
@@ -1599,6 +1640,7 @@ func TestAddPaymentMethod_TokenReturnsMethod(t *testing.T) {
 // TestDeletePaymentMethod_MapsServiceErrors proves DELETE maps the in-use
 // guard to the contract's 409 and misses to 404, success to 204 (issue #251).
 func TestDeletePaymentMethod_MapsServiceErrors(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	methodID := uuid.Must(uuid.NewV7())
 
@@ -1613,6 +1655,7 @@ func TestDeletePaymentMethod_MapsServiceErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{del: func(_ context.Context, gotUser, gotMethod uuid.UUID) error {
 				if gotUser != ownerID || gotMethod != methodID {
 					t.Errorf("DeletePaymentMethod called with %v/%v, want %v/%v", gotUser, gotMethod, ownerID, methodID)
@@ -1633,6 +1676,7 @@ func TestDeletePaymentMethod_MapsServiceErrors(t *testing.T) {
 // TestActivatePaymentMethod_Returns204 proves POST activate answers 204 and
 // forwards owner and method ids (issue #251).
 func TestActivatePaymentMethod_Returns204(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	methodID := uuid.Must(uuid.NewV7())
 	called := false
@@ -1661,6 +1705,7 @@ func TestActivatePaymentMethod_Returns204(t *testing.T) {
 // TestSyncPaymentMethods_ReturnsList proves POST sync answers with the
 // up-to-date method list (issue #251).
 func TestSyncPaymentMethods_ReturnsList(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{sync: func(
 		_ context.Context, got uuid.UUID,
@@ -1765,6 +1810,7 @@ func assertAdminTransitionItem(t *testing.T, item openapi.AdminSubscriptionTrans
 // /admin/users/{id}/subscription/service answers 204, forwards the acting
 // admin and maps the contract body to the application input (issue #255).
 func TestAssignAdminServiceSubscription_MapsBodyAndAttributesAdmin(t *testing.T) {
+	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
 	userID := uuid.MustParse("77777777-7777-7777-7777-777777777777")
 	called := false
@@ -1808,6 +1854,7 @@ func TestAssignAdminServiceSubscription_MapsBodyAndAttributesAdmin(t *testing.T)
 // assignment's error mapping: a past until date answers 400, a state conflict
 // answers 409 (issue #255).
 func TestAssignAdminServiceSubscription_ErrorMapping(t *testing.T) {
+	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(nil, nil, nil)
 	h.adminSubscriptions = &fakeAdminSubscriptionManager{assignService: func(
@@ -1839,6 +1886,7 @@ func TestAssignAdminServiceSubscription_ErrorMapping(t *testing.T) {
 // POST /admin/users/{id}/subscription/force-change answers 204 with the body
 // and the acting admin forwarded (issue #255).
 func TestForceChangeAdminSubscriptionTariff_MapsBodyAndAttributesAdmin(t *testing.T) {
+	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
 	userID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(nil, nil, nil)
@@ -1873,6 +1921,7 @@ func TestForceChangeAdminSubscriptionTariff_MapsBodyAndAttributesAdmin(t *testin
 // /admin/users/{id}/subscription/grace-extension answers 204 with the day
 // count and the acting admin forwarded (issue #255).
 func TestExtendAdminSubscriptionGrace_MapsBodyAndAttributesAdmin(t *testing.T) {
+	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
 	userID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(nil, nil, nil)
@@ -1902,6 +1951,7 @@ func TestExtendAdminSubscriptionGrace_MapsBodyAndAttributesAdmin(t *testing.T) {
 // /admin/users/{id}/subscription/cancel answers 204 and forwards the acting
 // admin (issue #255).
 func TestCancelAdminSubscription_AttributesAdmin(t *testing.T) {
+	t.Parallel()
 	adminID := uuid.Must(uuid.NewV7())
 	userID := uuid.Must(uuid.NewV7())
 	check, called := requireAdminAttribution(t, "CancelSubscriptionAsAdmin", adminID, userID)
@@ -1919,6 +1969,7 @@ func TestCancelAdminSubscription_AttributesAdmin(t *testing.T) {
 // with the tariff names and the initiator vocabulary of the contract
 // (issue #255).
 func TestListAdminSubscriptionTransitions_MapsView(t *testing.T) {
+	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
 	view := subscriptionTransitionView(t)
 	h := newTestHandlers(nil, nil, nil)

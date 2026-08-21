@@ -106,6 +106,7 @@ func (h *providerReferenceHarness) assertReferenceShape(
 // result carries no URL and persists the provider id alone. Both leave the
 // payment pending with the save's timestamp.
 func TestSaveProviderReference_CITAndMITShapes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		initRes InitPaymentResult
@@ -122,6 +123,7 @@ func TestSaveProviderReference_CITAndMITShapes(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newProviderReferenceHarness(t)
 			seeded := h.seedPendingPayment(t, nil)
 
@@ -143,6 +145,7 @@ func TestSaveProviderReference_CITAndMITShapes(t *testing.T) {
 // after a crash or a concurrent flow produces — never overwrites the
 // reference, the URL or the timestamp the first save persisted.
 func TestSaveProviderReference_SecondWriteKeepsFirstReference(t *testing.T) {
+	t.Parallel()
 	h := newProviderReferenceHarness(t)
 	seeded := h.seedPendingPayment(t, nil)
 
@@ -174,6 +177,7 @@ func TestSaveProviderReference_SecondWriteKeepsFirstReference(t *testing.T) {
 // guard: a payment a webhook finalized before the save lands is returned as
 // persisted — no error, no reference written over the final state.
 func TestSaveProviderReference_FinalizedPaymentWins(t *testing.T) {
+	t.Parallel()
 	h := newProviderReferenceHarness(t)
 	seeded := h.seedPendingPayment(t, func(p *domain.SubscriptionPayment) {
 		if err := p.MarkSucceeded(h.now.Add(-time.Minute)); err != nil {
@@ -197,6 +201,7 @@ func TestSaveProviderReference_FinalizedPaymentWins(t *testing.T) {
 // TestSaveProviderReference_MissingPaymentFails proves the miss narrows to
 // the payment-not-found error of the shared lock step.
 func TestSaveProviderReference_MissingPaymentFails(t *testing.T) {
+	t.Parallel()
 	h := newProviderReferenceHarness(t)
 
 	_, err := h.save(t, uuid.Must(uuid.NewV7()), InitPaymentResult{ProviderPaymentID: "prov_x"}, h.now)
@@ -209,6 +214,7 @@ func TestSaveProviderReference_MissingPaymentFails(t *testing.T) {
 // rejection of a referenceless initiation result fails the save before
 // anything is written: the stored payment keeps its pre-save shape.
 func TestSaveProviderReference_RejectedReferenceWritesNothing(t *testing.T) {
+	t.Parallel()
 	h := newProviderReferenceHarness(t)
 	seeded := h.seedPendingPayment(t, nil)
 

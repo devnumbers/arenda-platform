@@ -15,6 +15,7 @@ const (
 )
 
 func TestClassifyTariffChange(t *testing.T) {
+	t.Parallel()
 	basic := Tariff{
 		ID:                  uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 		Name:                TariffBasic,
@@ -77,6 +78,7 @@ func TestClassifyTariffChange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := ClassifyTariffChange(tt.current, tt.next)
 			if got != tt.want {
 				t.Errorf("ClassifyTariffChange() = %v, want %v", got, tt.want)

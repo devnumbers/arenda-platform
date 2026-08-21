@@ -161,6 +161,7 @@ func (h *subscriptionHarness) requireCancelledAudit(t *testing.T, sub domain.Sub
 }
 
 func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
@@ -174,6 +175,7 @@ func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t 
 }
 
 func TestSubscriptionService_CancelSubscription_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 
 	if err := h.svc.CancelSubscription(t.Context(), uuid.Must(uuid.NewV7())); !errors.Is(err, ErrSubscriptionNotFound) {
@@ -182,6 +184,7 @@ func TestSubscriptionService_CancelSubscription_NotFound(t *testing.T) {
 }
 
 func TestSubscriptionService_CancelSubscription_AlreadyCancelledRejected(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
@@ -201,6 +204,7 @@ func TestSubscriptionService_CancelSubscription_AlreadyCancelledRejected(t *test
 }
 
 func TestSubscriptionService_CancelSubscription_ServiceSourceRejected(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	sub.Source = domain.SubscriptionSourceService
@@ -214,6 +218,7 @@ func TestSubscriptionService_CancelSubscription_ServiceSourceRejected(t *testing
 }
 
 func TestSubscriptionService_ToggleAutoRenew_PersistsAndAudits(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
@@ -263,6 +268,7 @@ func TestSubscriptionService_ToggleAutoRenew_PersistsAndAudits(t *testing.T) {
 }
 
 func TestSubscriptionService_CancelSubscription_DropsScheduledDowngrade(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
 
@@ -286,6 +292,7 @@ func TestSubscriptionService_CancelSubscription_DropsScheduledDowngrade(t *testi
 }
 
 func TestSubscriptionService_ToggleAutoRenew_CancelledRejected(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); err != nil {
@@ -298,6 +305,7 @@ func TestSubscriptionService_ToggleAutoRenew_CancelledRejected(t *testing.T) {
 }
 
 func TestSubscriptionService_ToggleAutoRenew_EnableWithoutValidityRejected(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub, err := domain.NewBasicSubscription(uuid.Must(uuid.NewV7()), h.tariffID(t, domain.TariffBasic))
 	if err != nil {
@@ -320,6 +328,7 @@ func TestSubscriptionService_ToggleAutoRenew_EnableWithoutValidityRejected(t *te
 }
 
 func TestSubscriptionService_ToggleAutoRenew_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 
 	if err := h.svc.ToggleAutoRenew(t.Context(), uuid.Must(uuid.NewV7()), true); !errors.Is(err, ErrSubscriptionNotFound) {
@@ -393,6 +402,7 @@ func (h *subscriptionHarness) requireTariffChangeAudit(t *testing.T, sub domain.
 }
 
 func TestSubscriptionService_ChangeTariff_DowngradeIsScheduled(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
 
@@ -413,6 +423,7 @@ func TestSubscriptionService_ChangeTariff_DowngradeIsScheduled(t *testing.T) {
 }
 
 func TestSubscriptionService_ChangeTariff_SameTariffRejected(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
@@ -429,6 +440,7 @@ func TestSubscriptionService_ChangeTariff_SameTariffRejected(t *testing.T) {
 }
 
 func TestSubscriptionService_ChangeTariff_UpgradeTemporarilyUnavailable(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
@@ -445,6 +457,7 @@ func TestSubscriptionService_ChangeTariff_UpgradeTemporarilyUnavailable(t *testi
 }
 
 func TestSubscriptionService_ChangeTariff_SameTariffInGraceNeedsPayment(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	graceUntil := h.now.Add(48 * time.Hour)
@@ -464,6 +477,7 @@ func TestSubscriptionService_ChangeTariff_SameTariffInGraceNeedsPayment(t *testi
 }
 
 func TestSubscriptionService_ChangeTariff_UnknownTariffRejected(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
@@ -477,6 +491,7 @@ func TestSubscriptionService_ChangeTariff_UnknownTariffRejected(t *testing.T) {
 }
 
 func TestSubscriptionService_ChangeTariff_CancelledSubscriptionRejected(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
 	if err := sub.Cancel(); err != nil {
@@ -496,6 +511,7 @@ func TestSubscriptionService_ChangeTariff_CancelledSubscriptionRejected(t *testi
 }
 
 func TestSubscriptionService_ChangeTariff_NoSubscription(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 
 	_, err := h.svc.ChangeTariff(t.Context(), uuid.Must(uuid.NewV7()), ChangeTariffRequest{

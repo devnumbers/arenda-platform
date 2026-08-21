@@ -46,6 +46,7 @@ func (h *tariffHarness) tariffID(t *testing.T, name domain.TariffName) uuid.UUID
 // (issue #256): the plan lands with a minted id and the requested fields, and
 // the audit trail names the acting admin.
 func TestCreateTariff_PersistsValidatedPlanWithAudit(t *testing.T) {
+	t.Parallel()
 	h := newTariffHarness(t)
 	// Drop pro so the name is free to create; the closed vocabulary keeps the
 	// same name space the user contract pins.
@@ -88,6 +89,7 @@ func TestCreateTariff_PersistsValidatedPlanWithAudit(t *testing.T) {
 // TestCreateTariff_DuplicateNameRejected proves the unique-name backstop: a
 // name that already exists answers ErrAlreadyExists and writes nothing.
 func TestCreateTariff_DuplicateNameRejected(t *testing.T) {
+	t.Parallel()
 	h := newTariffHarness(t)
 	before := len(h.stores.tariffs.tariffs)
 
@@ -112,6 +114,7 @@ func TestCreateTariff_DuplicateNameRejected(t *testing.T) {
 // before persistence: a negative price answers the domain sentinel and
 // nothing is written or audited.
 func TestCreateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
+	t.Parallel()
 	h := newTariffHarness(t)
 	h.stores.tariffs.tariffs = h.stores.tariffs.tariffs[:1]
 	before := len(h.stores.tariffs.tariffs)
@@ -135,6 +138,7 @@ func TestCreateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
 // in one operation, the name stays, and the audit entry captures the
 // resulting values.
 func TestUpdateTariff_RewritesPricingLimitAndActivityWithAudit(t *testing.T) {
+	t.Parallel()
 	h := newTariffHarness(t)
 	proID := h.tariffID(t, domain.TariffPro)
 	adminID := uuid.Must(uuid.NewV7())
@@ -176,6 +180,7 @@ func TestUpdateTariff_RewritesPricingLimitAndActivityWithAudit(t *testing.T) {
 // TestUpdateTariff_MissingTariffRejected proves an unknown id answers
 // ErrTariffNotFound without audit.
 func TestUpdateTariff_MissingTariffRejected(t *testing.T) {
+	t.Parallel()
 	h := newTariffHarness(t)
 
 	_, err := h.svc.UpdateTariff(t.Context(), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), UpdateTariffRequest{
@@ -196,6 +201,7 @@ func TestUpdateTariff_MissingTariffRejected(t *testing.T) {
 // like the creation: a limit below -1 answers the domain sentinel and leaves
 // the stored plan untouched.
 func TestUpdateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
+	t.Parallel()
 	h := newTariffHarness(t)
 	proID := h.tariffID(t, domain.TariffPro)
 
@@ -222,6 +228,7 @@ func TestUpdateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
 // and a direct change request against it answers ErrTariffInactive, while the
 // plan itself keeps resolving for the subscriptions that already reference it.
 func TestChangeTariff_HiddenTariffNotSelectable(t *testing.T) {
+	t.Parallel()
 	h := newSubscriptionHarness(t)
 	businessID := h.tariffID(t, domain.TariffBusiness)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
