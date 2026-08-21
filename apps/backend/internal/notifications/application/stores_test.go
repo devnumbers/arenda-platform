@@ -103,6 +103,8 @@ func (r *countingRecorder) WithTx(transaction.Tx) auditapp.Recorder {
 // a nil error. ReminderRepository.WithTx is infallible (it returns the bound
 // port directly), so — unlike identity — there are no bind-error paths to cover.
 func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
+	t.Parallel()
+
 	b := &countingBeginner{}
 	repo := &fakeReminderRepo{}
 	audit := &countingRecorder{}
@@ -147,6 +149,8 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 // TestRunInTx_PanicRollsBackAndRepanics proves a panic inside work rolls the
 // transaction back and re-panics, so a panicking use case never leaks a tx.
 func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
+	t.Parallel()
+
 	b := &countingBeginner{}
 	f := NewTxStoreFactory(&fakeReminderRepo{}, &countingRecorder{}, fakeUoW{beginner: b})
 
@@ -181,6 +185,8 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 // TestRunInTx_RollsBackOnWorkError proves a non-nil work error rolls the
 // transaction back and is returned to the caller.
 func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
+	t.Parallel()
+
 	b := &countingBeginner{}
 	f := NewTxStoreFactory(&fakeReminderRepo{}, &countingRecorder{}, fakeUoW{beginner: b})
 
@@ -206,6 +212,8 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 // TestRunInTx_ReturnsErrorWhenUoWMissing proves a service that forgot to wire a
 // UoW fails loudly at the call site instead of nil-dereferencing.
 func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
+	t.Parallel()
+
 	f := NewTxStoreFactory(&fakeReminderRepo{}, &countingRecorder{}, nil)
 
 	workCalled := false

@@ -8,6 +8,8 @@ import (
 )
 
 func TestValidateChannelPreferences(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		prefs   []domain.NotificationChannelPreference
@@ -65,6 +67,7 @@ func TestValidateChannelPreferences(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validateChannelPreferences(tt.prefs)
 			if tt.wantErr && err == nil {
 				t.Errorf("expected error, got nil")

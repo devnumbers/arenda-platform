@@ -283,10 +283,13 @@ func policyTestReminder() domain.Reminder {
 }
 
 func TestPolicyEnforcement_RescheduleReminder(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	newDate := policyClock.now.Add(48 * time.Hour)
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := reminderActorAndPolicy(tc.role)
 			repo := &fakeReminderRepo{reminders: map[uuid.UUID]domain.Reminder{
 				policyReminderID: policyTestReminder(),
@@ -338,9 +341,12 @@ func assertRescheduleByRole(
 }
 
 func TestPolicyEnforcement_CancelReminder(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	for _, tc := range policyRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			actor, policy := reminderActorAndPolicy(tc.role)
 			repo := &fakeReminderRepo{
 				reminders: map[uuid.UUID]domain.Reminder{
@@ -376,6 +382,8 @@ func TestPolicyEnforcement_CancelReminder(t *testing.T) {
 }
 
 func TestPolicyEnforcement_RescheduleCancelMissingReminder(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	repo := &fakeReminderRepo{reminders: map[uuid.UUID]domain.Reminder{}}
 	svc := newPolicyReminderService(fakePolicy{}, repo)

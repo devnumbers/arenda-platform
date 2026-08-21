@@ -22,13 +22,17 @@ const removedFreeReminderPath = "/free-reminders/ffffffff-0000-0000-0000-0000000
 // The surviving notifications routes stay registered: routed to the
 // Unimplemented stub they answer 501, proving the route still exists.
 func TestRemovedReminderRoutes_NotFound(t *testing.T) {
+	t.Parallel()
+
 	r := chi.NewRouter()
 	_ = openapi.HandlerWithOptions(struct{ openapi.Unimplemented }{}, openapi.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: httpsupport.OpenAPIErrorHandler,
 	})
 	srv := httptest.NewServer(r)
-	defer srv.Close()
+	// Shutdown goes through t.Cleanup, not defer: the parallel subtests below
+	// share this server and only start once this function's body has returned.
+	t.Cleanup(srv.Close)
 
 	removed := []struct{ method, path string }{
 		{http.MethodPost, fmt.Sprintf("/properties/%s/free-reminders", handlerPropertyID)},
@@ -41,6 +45,7 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 	}
 	for _, tc := range removed {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			t.Parallel()
 			req, err := http.NewRequestWithContext(t.Context(), tc.method, srv.URL+tc.path, nil)
 			if err != nil {
 				t.Fatalf("build request: %v", err)

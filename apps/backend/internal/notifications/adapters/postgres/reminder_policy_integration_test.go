@@ -122,6 +122,8 @@ func (f *reminderPolicyFixture) seedReminder(t *testing.T, ctx context.Context, 
 }
 
 func TestReminderPolicyIntegration_MemberReschedulesAndCancels(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -173,6 +175,8 @@ func TestReminderPolicyIntegration_MemberReschedulesAndCancels(t *testing.T) {
 }
 
 func TestReminderPolicyIntegration_ViewerCannotWrite(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()
@@ -203,6 +207,8 @@ func TestReminderPolicyIntegration_ViewerCannotWrite(t *testing.T) {
 }
 
 func TestReminderPolicyIntegration_NoneAndSuspendedGetNotFound(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()

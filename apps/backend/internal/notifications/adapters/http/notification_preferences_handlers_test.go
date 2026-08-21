@@ -11,6 +11,8 @@ import (
 // item expands into exactly two domain entries (email + push) carrying the
 // request's flags.
 func TestChannelPreferencesFromRequest(t *testing.T) {
+	t.Parallel()
+
 	items := []openapi.NotificationPreference{
 		{
 			EventType:    openapi.NotificationPreferenceEventType(notificationsdomain.EventOperationDue),
@@ -53,6 +55,8 @@ func TestChannelPreferencesFromRequest(t *testing.T) {
 // domain slice collapses back into one response item per event type, with the
 // email and push flags carried through.
 func TestNotificationChannelPreferencesResponse(t *testing.T) {
+	t.Parallel()
+
 	// Build a full default set, then flip operation_due/email off and
 	// lease_expiring/push off.
 	prefs := notificationsdomain.DefaultNotificationChannelPreferences()
@@ -97,6 +101,8 @@ func TestNotificationChannelPreferencesResponse(t *testing.T) {
 // a response into domain prefs and collapsing back is stable for an untouched
 // default set.
 func TestNotificationChannelPreferencesResponse_RoundTrip(t *testing.T) {
+	t.Parallel()
+
 	defaults := notificationsdomain.DefaultNotificationChannelPreferences()
 	resp := notificationChannelPreferencesResponse(defaults)
 

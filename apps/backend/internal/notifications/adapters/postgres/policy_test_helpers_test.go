@@ -44,8 +44,15 @@ func setupPolicyDB(t *testing.T) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
+	// Tests run in parallel and each holds its own pool for a single rollback
+	// transaction. The production DefaultPoolConfig keeps MinConns=16 warm per
+	// pool; across the parallel fixtures that is hundreds of connections
+	// against one PostgreSQL, so the test pools stay minimal.
+	cfg := database.DefaultPoolConfig()
+	cfg.MinConns = 0
+	cfg.MaxConns = 2
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, databaseURL)
+	pool, err := database.NewPoolWithConfig(ctx, databaseURL, cfg)
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}

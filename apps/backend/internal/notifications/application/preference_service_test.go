@@ -52,6 +52,8 @@ func newPreferenceHarness() *preferenceHarness {
 // one audit entry is recorded when permissions change, and the transaction
 // commits.
 func TestReplaceChannelPreferences_UpsertsInTxAndAuditsChanges(t *testing.T) {
+	t.Parallel()
+
 	h := newPreferenceHarness()
 	userID := uuid.Must(uuid.NewV7())
 
@@ -134,6 +136,8 @@ func assertTxCounters(t *testing.T, h *preferenceHarness, committed, rolledBack,
 // the stored one is still upserted (idempotent replace) but produces no audit
 // entry, matching the pre-UoW behavior.
 func TestReplaceChannelPreferences_NoChangesSkipsAudit(t *testing.T) {
+	t.Parallel()
+
 	h := newPreferenceHarness()
 	userID := uuid.Must(uuid.NewV7())
 
@@ -161,6 +165,8 @@ func TestReplaceChannelPreferences_NoChangesSkipsAudit(t *testing.T) {
 // not carry exactly one entry per (event type, channel) pair is rejected by
 // validation before any transaction is opened.
 func TestReplaceChannelPreferences_InvalidSetFailsBeforeTx(t *testing.T) {
+	t.Parallel()
+
 	h := newPreferenceHarness()
 	userID := uuid.Must(uuid.NewV7())
 
@@ -180,6 +186,8 @@ func TestReplaceChannelPreferences_InvalidSetFailsBeforeTx(t *testing.T) {
 // repository failure mid-replace rolls the transaction back and records no
 // audit entry: the journal never describes a change that did not land.
 func TestReplaceChannelPreferences_UpsertErrorRollsBackAndSkipsAudit(t *testing.T) {
+	t.Parallel()
+
 	h := newPreferenceHarness()
 	h.repo.upsertErr = errors.New("db unavailable")
 	userID := uuid.Must(uuid.NewV7())

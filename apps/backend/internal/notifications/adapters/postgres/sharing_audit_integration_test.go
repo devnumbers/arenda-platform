@@ -11,6 +11,8 @@ import (
 // aggregate list (GET /reminders): a member sees reminders of shared
 // properties, not just their own.
 func TestSharingAudit_Reminders_IncludesShared(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPolicyDB(t)
 	ctx, tx, cleanup := beginPolicyTx(t, pool)
 	defer cleanup()

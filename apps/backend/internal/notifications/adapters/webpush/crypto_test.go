@@ -44,6 +44,8 @@ const (
 )
 
 func TestEncryptPayload_RFC8291TestVector(t *testing.T) {
+	t.Parallel()
+
 	salt, err := base64.RawURLEncoding.DecodeString(rfc8291Salt)
 	if err != nil {
 		t.Fatalf("decode salt: %v", err)
@@ -80,6 +82,8 @@ func TestEncryptPayload_RFC8291TestVector(t *testing.T) {
 }
 
 func TestDeriveKeys_RFC8291IntermediateValues(t *testing.T) {
+	t.Parallel()
+
 	// RFC 8291 Appendix A intermediate values (hex), used to pin each step of
 	// the derivation independently so a regression is easy to localise.
 	const (
@@ -168,6 +172,8 @@ func hexEncode(b []byte) string {
 }
 
 func TestEncryptPayload_RoundTrip(t *testing.T) {
+	t.Parallel()
+
 	// Generate a fresh subscription key pair to exercise the full path and
 	// verify we can decrypt our own output with AES-128-GCM.
 	uaPrivate, err := ecdh.P256().GenerateKey(nil)
@@ -228,6 +234,8 @@ func TestEncryptPayload_RoundTrip(t *testing.T) {
 }
 
 func TestEncryptPayload_TooLarge(t *testing.T) {
+	t.Parallel()
+
 	uaPrivate, err := ecdh.P256().GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate ua key: %v", err)
@@ -243,6 +251,8 @@ func TestEncryptPayload_TooLarge(t *testing.T) {
 }
 
 func TestBase64urlDecode_PaddedAndUnpadded(t *testing.T) {
+	t.Parallel()
+
 	// The same 16 bytes as padded and unpadded base64url must both decode.
 	raw := []byte{
 		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,

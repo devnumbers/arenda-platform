@@ -29,8 +29,14 @@ func setupPushDB(t *testing.T) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
+	// Same minimal test pool as setupPolicyDB: these tests commit directly
+	// against the shared test database, one statement at a time, so each
+	// parallel fixture needs at most one connection.
+	cfg := database.DefaultPoolConfig()
+	cfg.MinConns = 0
+	cfg.MaxConns = 2
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, databaseURL)
+	pool, err := database.NewPoolWithConfig(ctx, databaseURL, cfg)
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}
@@ -56,6 +62,8 @@ func createPushTestUser(t *testing.T, ctx context.Context, q *genpostgres.Querie
 }
 
 func TestPushSubscriptionRepository_UpsertIdempotentByEndpoint(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)
@@ -113,6 +121,8 @@ func TestPushSubscriptionRepository_UpsertIdempotentByEndpoint(t *testing.T) {
 }
 
 func TestPushSubscriptionRepository_UpsertExpirationTimeNullable(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)
@@ -159,6 +169,8 @@ func TestPushSubscriptionRepository_UpsertExpirationTimeNullable(t *testing.T) {
 }
 
 func TestPushSubscriptionRepository_Delete(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)
@@ -194,6 +206,8 @@ func TestPushSubscriptionRepository_Delete(t *testing.T) {
 }
 
 func TestPushSubscriptionRepository_DeleteScopedByUser(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)
@@ -228,6 +242,8 @@ func TestPushSubscriptionRepository_DeleteScopedByUser(t *testing.T) {
 }
 
 func TestPushSubscriptionRepository_ListByUserOnlyOwn(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)

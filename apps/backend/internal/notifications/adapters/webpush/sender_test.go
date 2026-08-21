@@ -45,6 +45,8 @@ func newTestSubscription(t *testing.T, endpoint string) domain.PushSubscription 
 }
 
 func TestSend_Success(t *testing.T) {
+	t.Parallel()
+
 	var gotHeaders http.Header
 	var gotBody []byte
 	var readErr error
@@ -95,6 +97,8 @@ func TestSend_Success(t *testing.T) {
 }
 
 func TestSend_ResponseCodeMapping(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name      string
 		status    int
@@ -113,6 +117,7 @@ func TestSend_ResponseCodeMapping(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				if tc.status == http.StatusTooManyRequests {
 					w.Header().Set("Retry-After", "60")
@@ -147,6 +152,8 @@ func TestSend_ResponseCodeMapping(t *testing.T) {
 }
 
 func TestSend_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Block so the context cancellation surfaces.
 		select {}
@@ -166,6 +173,8 @@ func TestSend_ContextCancellation(t *testing.T) {
 }
 
 func TestNewSender_NilLoggerDefaultsToDefault(t *testing.T) {
+	t.Parallel()
+
 	privB64, pubB64 := generateTestVAPIDKeys(t)
 	s, err := NewSender("mailto:test@example.com", pubB64, privB64, nil, nil)
 	if err != nil {
@@ -177,6 +186,8 @@ func TestNewSender_NilLoggerDefaultsToDefault(t *testing.T) {
 }
 
 func TestSend_RateLimitedCarriesRetryAfter(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Retry-After", "120")
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -200,6 +211,8 @@ func TestSend_RateLimitedCarriesRetryAfter(t *testing.T) {
 }
 
 func TestSend_RateLimitedNoRetryAfter(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
@@ -219,6 +232,8 @@ func TestSend_RateLimitedNoRetryAfter(t *testing.T) {
 }
 
 func TestValidTopic(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		tag  string
 		want string
@@ -235,6 +250,7 @@ func TestValidTopic(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.tag, func(t *testing.T) {
+			t.Parallel()
 			got := validTopic(tc.tag)
 			if tc.tag == "" {
 				if got != "" {
@@ -250,6 +266,8 @@ func TestValidTopic(t *testing.T) {
 }
 
 func TestParseRetryAfter(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		input   string
 		wantDur time.Duration
@@ -262,6 +280,7 @@ func TestParseRetryAfter(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
 			d, ok := parseRetryAfter(tc.input)
 			if ok != tc.wantOk {
 				t.Errorf("parseRetryAfter(%q) ok = %v, want %v", tc.input, ok, tc.wantOk)
@@ -274,6 +293,8 @@ func TestParseRetryAfter(t *testing.T) {
 }
 
 func TestUrgencyForEventType(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		eventType domain.EventType
 		want      string
@@ -286,6 +307,7 @@ func TestUrgencyForEventType(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.eventType), func(t *testing.T) {
+			t.Parallel()
 			if got := urgencyForEventType(tc.eventType); got != tc.want {
 				t.Errorf("urgencyForEventType(%q) = %q, want %q", tc.eventType, got, tc.want)
 			}

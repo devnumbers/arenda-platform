@@ -144,6 +144,8 @@ var directRecipient = uuid.Must(uuid.NewV7())
 // both channels allowed, a subscribed user with a verified email gets the
 // email and one push per device subscription (issue #253).
 func TestDirectNotification_BothChannelsDelivered(t *testing.T) {
+	t.Parallel()
+
 	h := newDirectHarness(t)
 	h.withSubscriptions(t, directRecipient, "https://push.example/a", "https://push.example/b")
 
@@ -166,6 +168,8 @@ func TestDirectNotification_BothChannelsDelivered(t *testing.T) {
 // each channel is gated by its own preference — an email opt-out silences
 // email while push still delivers, and vice versa (issue #253).
 func TestDirectNotification_PerChannelPreferences(t *testing.T) {
+	t.Parallel()
+
 	pushOnly := newDirectHarness(t)
 	pushOnly.prefs.allowed[domain.ChannelEmail] = false
 	pushOnly.withSubscriptions(t, directRecipient, "https://push.example/a")
@@ -207,6 +211,8 @@ func TestDirectNotification_PerChannelPreferences(t *testing.T) {
 // skips: a user without a verified email still gets the push, and a user
 // without push subscriptions still gets the email (issue #253).
 func TestDirectNotification_MissingContactAndSubscriptions(t *testing.T) {
+	t.Parallel()
+
 	noContact := newDirectHarness(t)
 	noContact.withSubscriptions(t, directRecipient, "https://push.example/a")
 	noContact.svc = NewDirectNotificationService(
@@ -242,6 +248,8 @@ func TestDirectNotification_MissingContactAndSubscriptions(t *testing.T) {
 // is deleted, a rate-limited push stops the device fan-out, and a failing
 // email send leaves push delivered (issue #253).
 func TestDirectNotification_ChannelFailuresAreBestEffort(t *testing.T) {
+	t.Parallel()
+
 	gone := newDirectHarness(t)
 	gone.withSubscriptions(t, directRecipient, "https://push.example/dead")
 	gone.push.errByEndpoint = map[string]error{"https://push.example/dead": ErrSubscriptionGone}
@@ -283,6 +291,8 @@ func TestDirectNotification_ChannelFailuresAreBestEffort(t *testing.T) {
 // without a wired push sender (local dev without VAPID keys) delivery is
 // email-only and never panics (issue #253).
 func TestDirectNotification_NilPushSenderIsEmailOnly(t *testing.T) {
+	t.Parallel()
+
 	h := newDirectHarness(t)
 	h.withSubscriptions(t, directRecipient, "https://push.example/a")
 	h.svc = NewDirectNotificationService(

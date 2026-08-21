@@ -6,17 +6,21 @@ import (
 )
 
 func TestValidatePushSubscription(t *testing.T) {
+	t.Parallel()
+
 	validEndpoint := "https://fcm.googleapis.com/fcm/send/cid"
 	validP256dh := "BG3bT1r6xXm2Na3pH4d5sE7F8aN9o0pQ1rS2tU3vW4xY5zA6bC7dE8fG9hI0jK1lM"
 	validAuth := "n9o0pQ1rS2tU3vW4xY5"
 
 	t.Run("valid", func(t *testing.T) {
+		t.Parallel()
 		if err := ValidatePushSubscription(validEndpoint, validP256dh, validAuth); err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
 	})
 
 	t.Run("http endpoint allowed (local fakes)", func(t *testing.T) {
+		t.Parallel()
 		if err := ValidatePushSubscription("http://localhost:8080/push/abc", validP256dh, validAuth); err != nil {
 			t.Fatalf("expected no error for http endpoint, got %v", err)
 		}
@@ -40,6 +44,7 @@ func TestValidatePushSubscription(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidatePushSubscription(tc.endpoint, tc.p256dh, tc.auth)
 			if !errors.Is(err, ErrInvalidPushSubscription) {
 				t.Fatalf("expected ErrInvalidPushSubscription, got %v", err)

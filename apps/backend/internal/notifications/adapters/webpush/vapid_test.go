@@ -50,6 +50,8 @@ func ecdsaPublicKeyFromB64(t *testing.T, b64 string) *ecdsa.PublicKey {
 }
 
 func TestNewVAPIDSigner_ValidKeys(t *testing.T) {
+	t.Parallel()
+
 	privB64, pubB64 := generateTestVAPIDKeys(t)
 	signer, err := newVAPIDSigner("mailto:test@example.com", pubB64, privB64)
 	if err != nil {
@@ -64,6 +66,8 @@ func TestNewVAPIDSigner_ValidKeys(t *testing.T) {
 }
 
 func TestNewVAPIDSigner_InvalidSubject(t *testing.T) {
+	t.Parallel()
+
 	privB64, pubB64 := generateTestVAPIDKeys(t)
 	cases := []struct {
 		name    string
@@ -75,6 +79,7 @@ func TestNewVAPIDSigner_InvalidSubject(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := newVAPIDSigner(tc.subject, pubB64, privB64)
 			if !errors.Is(err, ErrInvalidVAPIDKey) {
 				t.Errorf("expected ErrInvalidVAPIDKey, got %v", err)
@@ -84,6 +89,8 @@ func TestNewVAPIDSigner_InvalidSubject(t *testing.T) {
 }
 
 func TestNewVAPIDSigner_KeyMismatch(t *testing.T) {
+	t.Parallel()
+
 	privB64, _ := generateTestVAPIDKeys(t)
 	_, otherPubB64 := generateTestVAPIDKeys(t)
 	_, err := newVAPIDSigner("mailto:test@example.com", otherPubB64, privB64)
@@ -93,6 +100,8 @@ func TestNewVAPIDSigner_KeyMismatch(t *testing.T) {
 }
 
 func TestNewVAPIDSigner_BadPrivateKeyLength(t *testing.T) {
+	t.Parallel()
+
 	short := base64.RawURLEncoding.EncodeToString([]byte{1, 2, 3})
 	_, pubB64 := generateTestVAPIDKeys(t)
 	_, err := newVAPIDSigner("mailto:test@example.com", pubB64, short)
@@ -102,6 +111,8 @@ func TestNewVAPIDSigner_BadPrivateKeyLength(t *testing.T) {
 }
 
 func TestAuthorizationHeader_Structure(t *testing.T) {
+	t.Parallel()
+
 	privB64, pubB64 := generateTestVAPIDKeys(t)
 	signer, err := newVAPIDSigner("mailto:test@example.com", pubB64, privB64)
 	if err != nil {
@@ -121,6 +132,8 @@ func TestAuthorizationHeader_Structure(t *testing.T) {
 }
 
 func TestSignJWT_ClaimsAndSignature(t *testing.T) {
+	t.Parallel()
+
 	privB64, pubB64 := generateTestVAPIDKeys(t)
 	signer, err := newVAPIDSigner("mailto:test@example.com", pubB64, privB64)
 	if err != nil {
@@ -225,6 +238,8 @@ const (
 )
 
 func TestES256Sign_VerifiesWithStdlib(t *testing.T) {
+	t.Parallel()
+
 	// The signer draws a fresh nonce per call, so the output is not
 	// reproducible; what must hold for every draw is that stdlib ECDSA accepts
 	// it. Several rounds over fresh key pairs exercise the rejection-sampling
@@ -256,6 +271,8 @@ func TestES256Sign_VerifiesWithStdlib(t *testing.T) {
 }
 
 func TestES256SignDigest_KnownAnswerVector(t *testing.T) {
+	t.Parallel()
+
 	signer, err := newVAPIDSigner("mailto:test@example.com", es256VectorPubB64, es256VectorPrivB64)
 	if err != nil {
 		t.Fatalf("new signer: %v", err)
@@ -287,6 +304,8 @@ func TestES256SignDigest_KnownAnswerVector(t *testing.T) {
 }
 
 func TestP256Order_MatchesStdlib(t *testing.T) {
+	t.Parallel()
+
 	// The order constant is hardcoded because stdlib exposes it only through
 	// crypto/elliptic, which the signer dropped (ADR 0043); the pin catches a
 	// typo against the stdlib value.
@@ -296,6 +315,8 @@ func TestP256Order_MatchesStdlib(t *testing.T) {
 }
 
 func TestTokenFor_CachesPerOrigin(t *testing.T) {
+	t.Parallel()
+
 	privB64, pubB64 := generateTestVAPIDKeys(t)
 	signer, err := newVAPIDSigner("mailto:test@example.com", pubB64, privB64)
 	if err != nil {
@@ -320,6 +341,8 @@ func TestTokenFor_CachesPerOrigin(t *testing.T) {
 }
 
 func TestTokenFor_DistinctOrigins(t *testing.T) {
+	t.Parallel()
+
 	privB64, pubB64 := generateTestVAPIDKeys(t)
 	signer, err := newVAPIDSigner("mailto:test@example.com", pubB64, privB64)
 	if err != nil {
@@ -344,6 +367,8 @@ func TestTokenFor_DistinctOrigins(t *testing.T) {
 }
 
 func TestTokenFor_RefreshesAfterExpiry(t *testing.T) {
+	t.Parallel()
+
 	privB64, pubB64 := generateTestVAPIDKeys(t)
 	signer, err := newVAPIDSigner("mailto:test@example.com", pubB64, privB64)
 	if err != nil {
@@ -370,6 +395,8 @@ func TestTokenFor_RefreshesAfterExpiry(t *testing.T) {
 }
 
 func TestOriginOf(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		endpoint string
 		origin   string
@@ -383,6 +410,7 @@ func TestOriginOf(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.endpoint, func(t *testing.T) {
+			t.Parallel()
 			got, err := originOf(tc.endpoint)
 			if tc.wantErr {
 				if err == nil {
