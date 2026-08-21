@@ -10,6 +10,8 @@ import (
 )
 
 func TestS3Storage_Upload_RequestShape(t *testing.T) {
+	t.Parallel()
+
 	var gotMethod, gotPath, gotContentType, gotACL string
 	var gotBody []byte
 	var readErr error
@@ -59,6 +61,8 @@ func TestS3Storage_Upload_RequestShape(t *testing.T) {
 }
 
 func TestS3Storage_Upload_Error(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -76,6 +80,8 @@ func TestS3Storage_Upload_Error(t *testing.T) {
 }
 
 func TestS3Storage_Upload_SetsContentLength(t *testing.T) {
+	t.Parallel()
+
 	var gotContentLength int64 = -1
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +113,10 @@ func TestS3Storage_Upload_SetsContentLength(t *testing.T) {
 }
 
 func TestS3Storage_HeadBucket(t *testing.T) {
+	t.Parallel()
+
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodHead {
 				t.Errorf("method = %q, want HEAD", r.Method)
@@ -131,6 +140,7 @@ func TestS3Storage_HeadBucket(t *testing.T) {
 	})
 
 	t.Run("error on non-2xx", func(t *testing.T) {
+		t.Parallel()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 		}))

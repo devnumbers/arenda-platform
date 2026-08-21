@@ -210,6 +210,8 @@ func assertContactWriteAccess(t *testing.T, ctx context.Context, s contactPolicy
 // full-access member manages the owner's contacts, a viewer reads but cannot
 // write, and an outsider or a suspended member gets ErrNotFound.
 func TestPolicyIntegration_PropertyContacts(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	tx, err := pool.Begin(ctx)

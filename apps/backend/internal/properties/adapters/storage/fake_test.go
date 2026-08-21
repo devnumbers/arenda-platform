@@ -8,6 +8,8 @@ import (
 )
 
 func TestFakeStorage_Upload(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	s := NewFakeStorage("http://localhost:8080/uploads")
 
@@ -31,6 +33,8 @@ func TestFakeStorage_Upload(t *testing.T) {
 }
 
 func TestFakeStorage_Upload_Overwrites(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	s := NewFakeStorage("http://localhost:8080/uploads")
 
@@ -50,6 +54,8 @@ func TestFakeStorage_Upload_Overwrites(t *testing.T) {
 }
 
 func TestFakeStorage_Upload_LargeFile(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	s := NewFakeStorage("http://localhost:8080/uploads")
 
@@ -72,6 +78,8 @@ func TestFakeStorage_Upload_LargeFile(t *testing.T) {
 }
 
 func TestFakeStorage_HeadBucket(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	s := NewFakeStorage("http://localhost:8080/uploads")
 

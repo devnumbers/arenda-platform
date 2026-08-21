@@ -175,9 +175,12 @@ func assertNoContactAuditEntries(t *testing.T, audit *fakeAuditRecorder) {
 }
 
 func TestPolicyEnforcement_ListPropertyContacts(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range contactRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newContactFixture()
 			svc := f.service(tc.role, &fakeAuditRecorder{})
 
@@ -199,9 +202,12 @@ func TestPolicyEnforcement_ListPropertyContacts(t *testing.T) {
 }
 
 func TestPolicyEnforcement_GetPropertyContact(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range contactRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newContactFixture()
 			svc := f.service(tc.role, &fakeAuditRecorder{})
 
@@ -223,9 +229,12 @@ func TestPolicyEnforcement_GetPropertyContact(t *testing.T) {
 }
 
 func TestPolicyEnforcement_CreatePropertyContact(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range contactRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newContactFixture()
 			audit := &fakeAuditRecorder{}
 			svc := f.service(tc.role, audit)
@@ -258,9 +267,12 @@ func TestPolicyEnforcement_CreatePropertyContact(t *testing.T) {
 }
 
 func TestPolicyEnforcement_UpdatePropertyContact(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range contactRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newContactFixture()
 			audit := &fakeAuditRecorder{}
 			svc := f.service(tc.role, audit)
@@ -295,9 +307,12 @@ func TestPolicyEnforcement_UpdatePropertyContact(t *testing.T) {
 }
 
 func TestPolicyEnforcement_DeletePropertyContact(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range contactRoleCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newContactFixture()
 			audit := &fakeAuditRecorder{}
 			svc := f.service(tc.role, audit)

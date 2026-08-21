@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"sync"
@@ -33,8 +34,16 @@ func setupPropertiesIntegrationDB(t *testing.T) *pgxpool.Pool {
 	if errMigrate != nil {
 		t.Fatalf("migrate up: %v", errMigrate)
 	}
+	// Tests run in parallel and each holds its own pool. The production
+	// DefaultPoolConfig keeps MinConns=16 warm per pool; across the parallel
+	// fixtures of the package that is close to a hundred connections against
+	// one PostgreSQL, so the test pools stay minimal (repo tests run
+	// sequential statements, the policy test one rollback transaction).
+	cfg := database.DefaultPoolConfig()
+	cfg.MinConns = 0
+	cfg.MaxConns = 2
 	ctx := t.Context()
-	pool, err := database.NewPool(ctx, databaseURL)
+	pool, err := database.NewPoolWithConfig(ctx, databaseURL, cfg)
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}
@@ -49,9 +58,13 @@ func setupPropertiesIntegrationDB(t *testing.T) *pgxpool.Pool {
 func createTestOwner(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
-	// Derive a unique phone from the owner UUID's random bytes. Since the id is
-	// unique, the phone is too — dodging the users.phone UNIQUE constraint.
-	phone := fmt.Sprintf("+7000%012x", id[0:6])
+	// The phone comes from the UUID's random tail, not its leading bytes:
+	// those are the UUIDv7 timestamp with millisecond precision, so parallel
+	// tests creating owners in the same millisecond would collide on
+	// users.phone (the flake #168 predicted). Value-unique phones keep the
+	// fixture parallel-safe (the same fix as waves #374/#375; the sibling
+	// createContactPolicyTestUser derives its phone the same way).
+	phone := fmt.Sprintf("+7000%07d", binary.BigEndian.Uint32(id[12:])%10000000)
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO users (id, phone, role) VALUES ($1, $2, 'owner')`,
@@ -84,6 +97,8 @@ func sampleProperty(ownerID uuid.UUID, attrs domain.Attributes) domain.Property 
 }
 
 func TestPropertyRepository_Attributes_JSONBRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	repo := NewPropertyRepository(pool)
@@ -124,6 +139,8 @@ func TestPropertyRepository_Attributes_JSONBRoundTrip(t *testing.T) {
 }
 
 func TestPropertyRepository_Attributes_EmptyObjectDefault(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	repo := NewPropertyRepository(pool)
@@ -150,6 +167,8 @@ func TestPropertyRepository_Attributes_EmptyObjectDefault(t *testing.T) {
 }
 
 func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	repo := NewPropertyRepository(pool)
@@ -191,6 +210,8 @@ func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
 }
 
 func TestPropertyRepository_Attributes_NilAttributesStoredAsEmpty(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	repo := NewPropertyRepository(pool)

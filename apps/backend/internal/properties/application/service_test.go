@@ -211,6 +211,8 @@ func (r *lockingFakePropertyRepo) WithTx(tx transaction.Tx) PropertyRepository {
 }
 
 func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -320,6 +322,8 @@ func (fakePropertyBillingLifecycle) WithTx(_ transaction.Tx) PropertyBillingLife
 }
 
 func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -390,6 +394,8 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 }
 
 func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyA := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -568,6 +574,8 @@ func (r fakeLeaseRepoForProperties) GetOpenLeaseByProperty(_ context.Context, _,
 var _ LeaseRepository = fakeLeaseRepoForProperties{}
 
 func TestPropertyService_ListPropertyLeases(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -626,6 +634,8 @@ func TestPropertyService_ListPropertyLeases(t *testing.T) {
 }
 
 func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	missingPropertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -653,6 +663,8 @@ func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
 }
 
 func TestPropertyService_ListArchivedProperties(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	archivedID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -868,6 +880,8 @@ func (l *recordingBillingLifecycle) WithTx(_ transaction.Tx) PropertyBillingLife
 var _ PropertyBillingLifecycle = (*recordingBillingLifecycle)(nil)
 
 func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	keepAID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -944,6 +958,8 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 }
 
 func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyAID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -993,6 +1009,8 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 }
 
 func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -1043,6 +1061,8 @@ func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
 // yields ErrAccessSuspended so the transport can answer 403 with the
 // membership_suspended code.
 func TestGetProperty_AccessOutcomes(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -1061,6 +1081,7 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			repo := newFakePropertyRepo(
 				domain.Property{
 					ID: propertyID, OwnerID: ownerID, Name: "Obj", Address: testPropertyAddress,
@@ -1132,6 +1153,8 @@ var _ RecipientSlotPolicy = (*recordingSlotPolicy)(nil)
 // members (issue #163): every archived property triggers a FIFO recovery of its
 // recipients' suspended memberships.
 func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	keepID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -1229,6 +1252,8 @@ var _ PropertyRepository = scopedPropertyRepo{}
 // carry the membership role, and an accidental self-membership never demotes
 // the owner. The owner display name is never resolved on the list path.
 func TestListProperties_AccessRoles(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	otherOwnerID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
@@ -1300,6 +1325,8 @@ func TestListProperties_AccessRoles(t *testing.T) {
 // TestListArchivedProperties_AccessRoles verifies that the archived list
 // carries the same access context as the active list (issue T11).
 func TestListArchivedProperties_AccessRoles(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	otherOwnerID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
@@ -1369,6 +1396,8 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 // A resolver failure is logged and degrades to an empty name, never to a
 // failed request.
 func TestGetProperty_AccessContext(t *testing.T) {
+	t.Parallel()
+
 	// Фикстура отображаемого имени владельца.
 	const testOwnerName = "Ivan Petrov"
 
@@ -1404,6 +1433,7 @@ func TestGetProperty_AccessContext(t *testing.T) {
 	}
 
 	t.Run("owner gets owner role and no owner name", func(t *testing.T) {
+		t.Parallel()
 		svc := newSvc(sharedpolicy.RoleOwner, fakeOwnerNames{names: map[uuid.UUID]string{ownerID: testOwnerName}})
 		p, err := svc.GetProperty(ctx, ownerID, propertyID)
 		if err != nil {
@@ -1418,6 +1448,7 @@ func TestGetProperty_AccessContext(t *testing.T) {
 	})
 
 	t.Run("recipient gets membership role and owner name", func(t *testing.T) {
+		t.Parallel()
 		svc := newSvc(sharedpolicy.RoleFullAccess, fakeOwnerNames{names: map[uuid.UUID]string{ownerID: testOwnerName}})
 		p, err := svc.GetProperty(ctx, recipientID, propertyID)
 		if err != nil {
@@ -1432,6 +1463,7 @@ func TestGetProperty_AccessContext(t *testing.T) {
 	})
 
 	t.Run("recipient without resolver gets no owner name", func(t *testing.T) {
+		t.Parallel()
 		svc := newSvc(sharedpolicy.RoleViewer, nil)
 		p, err := svc.GetProperty(ctx, recipientID, propertyID)
 		if err != nil {
@@ -1446,6 +1478,7 @@ func TestGetProperty_AccessContext(t *testing.T) {
 	})
 
 	t.Run("resolver error degrades to an empty owner name", func(t *testing.T) {
+		t.Parallel()
 		svc := newSvc(sharedpolicy.RoleViewer, fakeOwnerNames{err: errors.New("lookup failed")})
 		p, err := svc.GetProperty(ctx, recipientID, propertyID)
 		if err != nil {
@@ -1465,6 +1498,8 @@ func TestGetProperty_AccessContext(t *testing.T) {
 // ArchiveProperty must additionally call RecoverSuspended(ownerID). See issue
 // #158 (T4).
 func TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -1512,6 +1547,8 @@ func TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient(t *t
 // tariff slots, so DeleteProperty must call RecoverSuspended(ownerID) in
 // addition to the per-property RecoverAfterPropertyDelete.
 func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")

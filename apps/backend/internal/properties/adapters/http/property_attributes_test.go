@@ -28,6 +28,8 @@ func newPropertyHandlersForMapping(t *testing.T) *PropertyHandlers {
 const attrFloor = "floor"
 
 func TestPropertyResponse_IncludesAttributes(t *testing.T) {
+	t.Parallel()
+
 	h := newPropertyHandlersForMapping(t)
 
 	property := domain.Property{
@@ -60,6 +62,8 @@ func TestPropertyResponse_IncludesAttributes(t *testing.T) {
 }
 
 func TestPropertyResponse_EmptyAttributesWhenNil(t *testing.T) {
+	t.Parallel()
+
 	h := newPropertyHandlersForMapping(t)
 
 	property := domain.Property{
@@ -105,6 +109,8 @@ func TestPropertyResponse_EmptyAttributesWhenNil(t *testing.T) {
 }
 
 func TestHandlePropertyError_AttributeValidationErrors(t *testing.T) {
+	t.Parallel()
+
 	h := newPropertyHandlersForMapping(t)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
@@ -141,6 +147,8 @@ func TestHandlePropertyError_AttributeValidationErrors(t *testing.T) {
 }
 
 func TestProblemWithFieldErrors(t *testing.T) {
+	t.Parallel()
+
 	p := httpsupport.ProblemWithFieldErrors(
 		context.Background(),
 		"Bad request",
@@ -160,6 +168,8 @@ func TestProblemWithFieldErrors(t *testing.T) {
 }
 
 func TestProblemWithFieldErrors_EmptySliceOmitsErrors(t *testing.T) {
+	t.Parallel()
+
 	// Guard against an empty field-error slice being encoded as a null "errors"
 	// array, which would violate the response contract.
 	p := httpsupport.ProblemWithFieldErrors(
@@ -174,12 +184,16 @@ func TestProblemWithFieldErrors_EmptySliceOmitsErrors(t *testing.T) {
 }
 
 func TestPropertyAttributesPtr_NilReturnsNil(t *testing.T) {
+	t.Parallel()
+
 	if got := propertyAttributesPtr(nil); got != nil {
 		t.Fatalf("propertyAttributesPtr(nil) = %v, want nil", got)
 	}
 }
 
 func TestPropertyAttributesPtr_NonNilReturnsMap(t *testing.T) {
+	t.Parallel()
+
 	in := &openapi.PropertyAttributes{"rooms": "2"}
 	got := propertyAttributesPtr(in)
 	if got == nil {
@@ -191,6 +205,8 @@ func TestPropertyAttributesPtr_NonNilReturnsMap(t *testing.T) {
 }
 
 func TestPropertyAttributesPtr_EmptyMapIsNotNil(t *testing.T) {
+	t.Parallel()
+
 	// An empty (but non-nil) attributes object means "clear all characteristics";
 	// it must round-trip to a non-nil pointer so the service treats it as a
 	// full replacement rather than an omitted field.

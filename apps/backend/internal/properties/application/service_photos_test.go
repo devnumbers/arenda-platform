@@ -112,6 +112,8 @@ func newPhotoService(t *testing.T, repo PropertyRepository, photoRepo PropertyPh
 }
 
 func TestAddPropertyPhoto_InvalidContentType(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -126,6 +128,8 @@ func TestAddPropertyPhoto_InvalidContentType(t *testing.T) {
 }
 
 func TestAddPropertyPhoto_FileTooLarge(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -140,6 +144,8 @@ func TestAddPropertyPhoto_FileTooLarge(t *testing.T) {
 }
 
 func TestAddPropertyPhoto_PropertyNotFound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -154,6 +160,8 @@ func TestAddPropertyPhoto_PropertyNotFound(t *testing.T) {
 }
 
 func TestAddPropertyPhoto_PhotoLimitReached(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -169,6 +177,8 @@ func TestAddPropertyPhoto_PhotoLimitReached(t *testing.T) {
 }
 
 func TestAddPropertyPhoto_Success(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -195,6 +205,8 @@ func TestAddPropertyPhoto_Success(t *testing.T) {
 }
 
 func TestAddPropertyPhoto_PassesSizeToStorage(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -216,6 +228,8 @@ func TestAddPropertyPhoto_PassesSizeToStorage(t *testing.T) {
 }
 
 func TestAddPropertyPhoto_UploadError(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -231,6 +245,8 @@ func TestAddPropertyPhoto_UploadError(t *testing.T) {
 }
 
 func TestWithPhotos_AttachesPhotos(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	photo := domain.Photo{ID: uuid.MustParse("33333333-3333-3333-3333-333333333333"), URL: "https://cdn.example.com/photo.jpg"}
@@ -256,6 +272,8 @@ func TestWithPhotos_AttachesPhotos(t *testing.T) {
 }
 
 func TestWithPhotos_Empty(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	svc := newPhotoService(t, newLockingFakePropertyRepo(domain.Property{}), &fakePhotoRepo{}, &fakePhotoStorage{})
 
@@ -269,6 +287,8 @@ func TestWithPhotos_Empty(t *testing.T) {
 }
 
 func TestAddPropertyPhoto_ArchivedProperty(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
@@ -283,6 +303,8 @@ func TestAddPropertyPhoto_ArchivedProperty(t *testing.T) {
 }
 
 func TestDeletePropertyPhoto_ArchivedProperty(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")

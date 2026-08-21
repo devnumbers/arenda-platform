@@ -119,6 +119,8 @@ func (bindFailingLimiter) WithTx(transaction.Tx) (SubscriptionLimiter, error) {
 // policy and the delete mailer, which take a transaction.Tx), runs work, and
 // the UoW commits on a nil error.
 func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
+	t.Parallel()
+
 	b := &countingBeginner{}
 	repo := newFakePropertyRepo()
 	photos := fakePropertyPhotoRepo{}
@@ -189,6 +191,8 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 // wires contacts): an unwired optional store stays nil instead of panicking on
 // a nil WithTx, and the core (repo, audit) is still bound.
 func TestRunInTx_OptionalStoresStayNilWhenUnwired(t *testing.T) {
+	t.Parallel()
+
 	b := &countingBeginner{}
 	repo := newFakePropertyRepo()
 	audit := &countingRecorder{}
@@ -221,6 +225,8 @@ func TestRunInTx_OptionalStoresStayNilWhenUnwired(t *testing.T) {
 // (the only fallible WithTx in the store set) aborts the transaction with a
 // wrapped cause instead of a silent fallthrough.
 func TestRunInTx_LimiterBindErrorRollsBack(t *testing.T) {
+	t.Parallel()
+
 	b := &countingBeginner{}
 	f := NewTxStoreFactory(
 		newFakePropertyRepo(), fakePropertyPhotoRepo{}, nil,
@@ -257,6 +263,8 @@ func TestRunInTx_LimiterBindErrorRollsBack(t *testing.T) {
 // TestRunInTx_PanicRollsBackAndRepanics proves a panic inside work rolls the
 // transaction back and re-panics, so a panicking use case never leaks a tx.
 func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
+	t.Parallel()
+
 	b := &countingBeginner{}
 	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, nil, &countingRecorder{}, fakeUoW{beginner: b})
 
@@ -291,6 +299,8 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 // TestRunInTx_RollsBackOnWorkError proves a non-nil work error rolls the
 // transaction back and is returned to the caller.
 func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
+	t.Parallel()
+
 	b := &countingBeginner{}
 	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, nil, &countingRecorder{}, fakeUoW{beginner: b})
 
@@ -316,6 +326,8 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 // TestRunInTx_ReturnsErrorWhenUoWMissing proves a service that forgot to wire a
 // UoW fails loudly at the call site instead of nil-dereferencing.
 func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
+	t.Parallel()
+
 	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, nil, &countingRecorder{}, nil)
 
 	workCalled := false

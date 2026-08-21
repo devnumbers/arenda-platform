@@ -83,6 +83,8 @@ func assertNoField(t *testing.T, res ValidationResult, name string) {
 }
 
 func TestAttributesCatalogKeys(t *testing.T) {
+	t.Parallel()
+
 	apartmentWant := []string{
 		attrAreaKitchen, attrAreaLiving, attrAreaTotal, attrBalcony, attrBathroom,
 		attrCeilingHeight, attrFloor, attrFloorsTotal, attrParkingType, attrRenovation,
@@ -148,6 +150,8 @@ func TestAttributesCatalogKeys(t *testing.T) {
 }
 
 func TestAttributesEnumValues(t *testing.T) {
+	t.Parallel()
+
 	enumCases := []struct {
 		propType PropertyType
 		field    string
@@ -184,6 +188,8 @@ func TestAttributesEnumValues(t *testing.T) {
 }
 
 func TestAttributesNumberRanges(t *testing.T) {
+	t.Parallel()
+
 	type tc struct {
 		propType PropertyType
 		field    string
@@ -222,6 +228,8 @@ func TestAttributesNumberRanges(t *testing.T) {
 }
 
 func TestAttributesIntegerRanges(t *testing.T) {
+	t.Parallel()
+
 	currentYear := time.Now().UTC().Year()
 	cases := []struct {
 		propType PropertyType
@@ -263,11 +271,15 @@ func TestAttributesIntegerRanges(t *testing.T) {
 }
 
 func TestAttributesRoomHasNoAreaLiving(t *testing.T) {
+	t.Parallel()
+
 	res := ValidateAttributes(PropertyTypeRoom, Attributes{attrAreaLiving: 50.0})
 	assertHasField(t, res, attrAreaLiving, "unknown attribute for property type room")
 }
 
 func TestAttributesRoomRoomsStartsAtTwo(t *testing.T) {
+	t.Parallel()
+
 	for _, v := range []string{enumStudio, "1"} {
 		res := ValidateAttributes(PropertyTypeRoom, Attributes{attrRooms: v})
 		assertHasField(t, res, attrRooms, "must be one of")
@@ -279,7 +291,10 @@ func TestAttributesRoomRoomsStartsAtTwo(t *testing.T) {
 }
 
 func TestAttributesCrossValidations(t *testing.T) {
+	t.Parallel()
+
 	t.Run("apartment floor exceeds floors_total", func(t *testing.T) {
+		t.Parallel()
 		res := ValidateAttributes(PropertyTypeApartment, Attributes{
 			attrFloor:       float64(5),
 			attrFloorsTotal: float64(3),
@@ -288,6 +303,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 	})
 
 	t.Run("apartment area_living exceeds area_total", func(t *testing.T) {
+		t.Parallel()
 		res := ValidateAttributes(PropertyTypeApartment, Attributes{
 			attrAreaLiving: 80.0,
 			attrAreaTotal:  50.0,
@@ -296,6 +312,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 	})
 
 	t.Run("apartment area_kitchen exceeds area_total", func(t *testing.T) {
+		t.Parallel()
 		res := ValidateAttributes(PropertyTypeApartment, Attributes{
 			attrAreaKitchen: 40.0,
 			attrAreaTotal:   30.0,
@@ -304,6 +321,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 	})
 
 	t.Run("floor alone without floors_total passes", func(t *testing.T) {
+		t.Parallel()
 		res := ValidateAttributes(PropertyTypeApartment, Attributes{attrFloor: float64(3)})
 		if !res.Valid() {
 			t.Fatalf("floor=3 alone should be valid, got errors: %+v", res.Errors)
@@ -311,6 +329,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 	})
 
 	t.Run("room floor exceeds floors_total", func(t *testing.T) {
+		t.Parallel()
 		res := ValidateAttributes(PropertyTypeRoom, Attributes{
 			attrFloor:       float64(5),
 			attrFloorsTotal: float64(3),
@@ -319,6 +338,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 	})
 
 	t.Run("room area_kitchen exceeds area_total", func(t *testing.T) {
+		t.Parallel()
 		res := ValidateAttributes(PropertyTypeRoom, Attributes{
 			attrAreaKitchen: 40.0,
 			attrAreaTotal:   30.0,
@@ -327,6 +347,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 	})
 
 	t.Run("office floor exceeds floors_total", func(t *testing.T) {
+		t.Parallel()
 		res := ValidateAttributes(PropertyTypeOffice, Attributes{
 			attrFloor:       float64(10),
 			attrFloorsTotal: float64(5),
@@ -335,6 +356,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 	})
 
 	t.Run("commercial floor exceeds floors_total", func(t *testing.T) {
+		t.Parallel()
 		res := ValidateAttributes(PropertyTypeCommercial, Attributes{
 			attrFloor:       float64(10),
 			attrFloorsTotal: float64(5),
@@ -344,16 +366,22 @@ func TestAttributesCrossValidations(t *testing.T) {
 }
 
 func TestAttributesUnknownKeys(t *testing.T) {
+	t.Parallel()
+
 	res := ValidateAttributes(PropertyTypeApartment, Attributes{"foo": float64(1)})
 	assertHasField(t, res, "foo", "unknown attribute for property type apartment")
 }
 
 func TestAttributesNullValues(t *testing.T) {
+	t.Parallel()
+
 	res := ValidateAttributes(PropertyTypeApartment, Attributes{attrFloor: nil})
 	assertHasField(t, res, attrFloor, "null")
 }
 
 func TestAttributesMultipleErrorsCollected(t *testing.T) {
+	t.Parallel()
+
 	// Floor=-4 (out of range), rooms=invalid, area_total=0.5 (below min).
 	res := ValidateAttributes(PropertyTypeApartment, Attributes{
 		attrFloor:     float64(-4),
@@ -375,6 +403,8 @@ func TestAttributesMultipleErrorsCollected(t *testing.T) {
 }
 
 func TestAttributesEmptyAttrsValid(t *testing.T) {
+	t.Parallel()
+
 	for _, pt := range []PropertyType{
 		PropertyTypeApartment,
 		PropertyTypeApartments,
@@ -395,6 +425,8 @@ func TestAttributesEmptyAttrsValid(t *testing.T) {
 }
 
 func TestAttributesUnknownPropertyType(t *testing.T) {
+	t.Parallel()
+
 	// An unrecognised property type string is treated as unsupported: empty
 	// attrs => valid (vacuous); non-empty => one error per key.
 	const unknownType PropertyType = "unknown"
@@ -419,6 +451,8 @@ func TestAttributesUnknownPropertyType(t *testing.T) {
 }
 
 func TestAttributesFilterByType(t *testing.T) {
+	t.Parallel()
+
 	// Use keys that are apartment-only (not in the house catalog) plus one
 	// house-only key (land_area). The rooms and area_total keys are shared
 	// by both apartment and house, so they are excluded to keep the
@@ -431,6 +465,7 @@ func TestAttributesFilterByType(t *testing.T) {
 	}
 
 	t.Run("apartment filter drops land_area", func(t *testing.T) {
+		t.Parallel()
 		out := attrs.FilterByType(PropertyTypeApartment)
 		if _, ok := out[attrLandArea]; ok {
 			t.Fatal("land_area should be dropped for apartment")
@@ -443,6 +478,7 @@ func TestAttributesFilterByType(t *testing.T) {
 	})
 
 	t.Run("house filter keeps only land_area", func(t *testing.T) {
+		t.Parallel()
 		out := attrs.FilterByType(PropertyTypeHouse)
 		if _, ok := out[attrLandArea]; !ok {
 			t.Fatal("land_area should be retained for house")
@@ -458,6 +494,7 @@ func TestAttributesFilterByType(t *testing.T) {
 	})
 
 	t.Run("unknown type drops everything", func(t *testing.T) {
+		t.Parallel()
 		const unknownType PropertyType = "unknown"
 		out := attrs.FilterByType(unknownType)
 		if len(out) != 0 {
@@ -467,6 +504,8 @@ func TestAttributesFilterByType(t *testing.T) {
 }
 
 func TestAttributesNumberTypeStrictness(t *testing.T) {
+	t.Parallel()
+
 	res := ValidateAttributes(PropertyTypeApartment, Attributes{attrFloor: 5.5})
 	assertHasField(t, res, attrFloor, "expected an integer")
 
@@ -476,6 +515,8 @@ func TestAttributesNumberTypeStrictness(t *testing.T) {
 }
 
 func TestAttributesApartmentsMirrorsApartment(t *testing.T) {
+	t.Parallel()
+
 	// A valid apartment set must also be valid for the apartments type, and a
 	// cross-field violation surfaces identically.
 	valid := Attributes{
@@ -499,6 +540,8 @@ func TestAttributesApartmentsMirrorsApartment(t *testing.T) {
 }
 
 func TestAttributesCommercialMirrorsOffice(t *testing.T) {
+	t.Parallel()
+
 	valid := Attributes{
 		attrBuildingType: enumBusinessCenter,
 		attrFloor:        float64(3),
@@ -521,6 +564,8 @@ func TestAttributesCommercialMirrorsOffice(t *testing.T) {
 }
 
 func TestAttributesParkingSpotNumber(t *testing.T) {
+	t.Parallel()
+
 	// Valid string.
 	res := ValidateAttributes(PropertyTypeParking, Attributes{attrSpotNumber: "A-42"})
 	if !res.Valid() {

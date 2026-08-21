@@ -141,6 +141,8 @@ func assertSuggestRequest(t *testing.T, capture *suggestRequestCapture, tc sugge
 }
 
 func TestSuggestAddresses(t *testing.T) {
+	t.Parallel()
+
 	cases := []suggestCase{
 		{
 			name:  "successful suggestions",
@@ -194,6 +196,7 @@ func TestSuggestAddresses(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			server, capture := newSuggestServer(t, tc)
 
 			client := NewClient(Config{
@@ -228,6 +231,8 @@ func TestSuggestAddresses(t *testing.T) {
 }
 
 func TestSuggestAddressesHandlesEmptySuggestions(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

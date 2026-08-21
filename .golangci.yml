@@ -5,10 +5,11 @@
 # из «не включаем» без причины в комментарии.
 #
 # Двухэтапный режим (бар качества #323, тикет #336): этап 1 приземлён
-# 2026-08-18 (research #321, docs/research/2026-08-18-golangci-lint-catalog.md).
-# Блоки с "# REMEDIATION:" — этап 2, включаются волнами сетки #325 по флип-конвенции
-# (docs/research/2026-08-18-remediation-grid-counters.md): настройка переносится
-# в действующий конфиг тикетом, закрывшим последнюю ненулевую ячейку волны.
+# 2026-08-18 (research #321, docs/research/2026-08-18-golangci-lint-catalog.md),
+# этап 2 закрыт волнами сетки #325 — каждая настройка переносилась в действующий
+# конфиг тикетом, закрывшим последнюю ненулевую ячейку волны (флип-конвенция:
+# docs/research/2026-08-18-remediation-grid-counters.md), последняя — paralleltest
+# (тикет #376).
 version: "2"
 
 run:
@@ -97,8 +98,8 @@ linters:
     # --- ЭТАП 2, структурная волна закрыта (сетка #325, тикет #369) ---
     - cyclop               # цикломатическая сложность ≤15 (волна 52 → 0); замещает gocyclo@30
     - gocognit             # когнитивная сложность ≤25 (волна 75 → 0)
-    # REMEDIATION (этап 2, волны сетки #325):
-    # - paralleltest     # 994: t.Parallel() поэтапно с юнит-пакетов
+    # --- ЭТАП 2, волна paralleltest закрыта (сетка #325, тикет #376) ---
+    - paralleltest       # t.Parallel() в тестах и субтестах (волна 994 → 0)
   settings:
     depguard:
       rules:
@@ -450,8 +451,7 @@ issues:
 #   метода), nonamedreturns (11 — named return в defer-идиоме метрик tkassa).
 # - Внешний контракт: tagliatelle (50 — T-Bank PascalCase + openapi смешанный).
 # - Метрики: funlen 37 / nestif 19 — осознанно вне гейта (после структурной
-#   волны #369 их сигнатура дублирует cyclop/gocognit); paralleltest — этап 2
-#   (REMEDIATION-блок в enable).
+#   волны #369 их сигнатура дублирует cyclop/gocognit).
 # - govet shadow (341 — идиома if err :=) и fieldalignment (269 — переупаковка
 #   полей против читаемости DDD-доменов); gocritic performance-тег
 #   (hugeParam 381 + rangeValCopy 221 — осознанная семантика передачи

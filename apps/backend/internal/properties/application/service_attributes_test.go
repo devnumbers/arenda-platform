@@ -69,6 +69,8 @@ const (
 // TestCreateProperty_WithValidAttributes verifies that a fully valid attribute
 // set for an apartment is accepted and stored verbatim.
 func TestCreateProperty_WithValidAttributes(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 
@@ -108,6 +110,8 @@ func TestCreateProperty_WithValidAttributes(t *testing.T) {
 // yields an *AttributeValidationErrors that unwraps to ErrInvalidInput and
 // reports exactly one error bound to the "floor" field.
 func TestCreateProperty_WithInvalidAttributes(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 
@@ -146,6 +150,8 @@ func TestCreateProperty_WithInvalidAttributes(t *testing.T) {
 // TestCreateProperty_WithNilAttributes verifies that nil attributes are accepted
 // and stored as a non-nil empty map.
 func TestCreateProperty_WithNilAttributes(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 
@@ -173,6 +179,8 @@ func TestCreateProperty_WithNilAttributes(t *testing.T) {
 // TestCreateProperty_WithEmptyAttributes verifies that an empty attribute map
 // is accepted and stored empty.
 func TestCreateProperty_WithEmptyAttributes(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 
@@ -198,6 +206,8 @@ func TestCreateProperty_WithEmptyAttributes(t *testing.T) {
 // that omitting Attributes from an update (nil pointer) does not touch the
 // existing stored attributes.
 func TestUpdateProperty_AttributesNotPresent_LeavesAttributesUntouched(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 	propertyID := uuid.MustParse(attrTestPropertyIDStr)
@@ -230,6 +240,8 @@ func TestUpdateProperty_AttributesNotPresent_LeavesAttributesUntouched(t *testin
 // TestUpdateProperty_AttributesEmptyObject_ClearsAll verifies that passing a
 // pointer to an empty attributes map clears all stored attributes.
 func TestUpdateProperty_AttributesEmptyObject_ClearsAll(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 	propertyID := uuid.MustParse(attrTestPropertyIDStr)
@@ -262,6 +274,8 @@ func TestUpdateProperty_AttributesEmptyObject_ClearsAll(t *testing.T) {
 // TestUpdateProperty_AttributesFullReplacement verifies that passing attributes
 // fully replaces the stored set (old keys are dropped, new keys are stored).
 func TestUpdateProperty_AttributesFullReplacement(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 	propertyID := uuid.MustParse(attrTestPropertyIDStr)
@@ -303,6 +317,8 @@ func TestUpdateProperty_AttributesFullReplacement(t *testing.T) {
 // TestUpdateProperty_AttributesIdempotentReplacement verifies that applying the
 // same attributes twice produces an identical, stable result.
 func TestUpdateProperty_AttributesIdempotentReplacement(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 	propertyID := uuid.MustParse(attrTestPropertyIDStr)
@@ -360,6 +376,8 @@ func TestUpdateProperty_AttributesIdempotentReplacement(t *testing.T) {
 // updating with an out-of-range attribute yields an *AttributeValidationErrors
 // bound to the offending field.
 func TestUpdateProperty_InvalidAttributes_ReturnsValidationError(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 	propertyID := uuid.MustParse(attrTestPropertyIDStr)
@@ -401,6 +419,8 @@ func TestUpdateProperty_InvalidAttributes_ReturnsValidationError(t *testing.T) {
 // type without supplying Attributes does NOT destroy the stored attribute blob:
 // the original keys remain present in storage.
 func TestUpdateProperty_LosslessOnTypeChange(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 	propertyID := uuid.MustParse(attrTestPropertyIDStr)
@@ -441,11 +461,14 @@ func TestUpdateProperty_LosslessOnTypeChange(t *testing.T) {
 // against the NEW type: a house-valid key is accepted, while an
 // apartment-only key (ceiling_height) is rejected as unknown for a house.
 func TestUpdateProperty_AttributesValidatedAgainstNewType(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse(attrTestOwnerIDStr)
 	propertyID := uuid.MustParse(attrTestPropertyIDStr)
 
 	t.Run("house_valid_key_accepted", func(t *testing.T) {
+		t.Parallel()
 		property := domain.Property{
 			ID:         propertyID,
 			OwnerID:    ownerID,
@@ -472,6 +495,7 @@ func TestUpdateProperty_AttributesValidatedAgainstNewType(t *testing.T) {
 	})
 
 	t.Run("apartment_only_key_rejected_for_house", func(t *testing.T) {
+		t.Parallel()
 		property := domain.Property{
 			ID:         propertyID,
 			OwnerID:    ownerID,
