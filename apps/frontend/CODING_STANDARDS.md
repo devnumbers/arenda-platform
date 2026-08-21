@@ -98,13 +98,15 @@ A type-checked ESLint block (project service) with named rules, not a preset:
 
 `eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` — zero in manual code: fix the code, never suppress; a blocking CI counter guards the zero (accepted gate, `docs/agents/tooling.md`). The 15 existing frontend suppressions are being fixed in code during waves A/B. Generated code and build artifacts are outside the counter's scope.
 
-### Security contour — lint gates in force (decision #331, ticket #387)
+### Security contour — lint gates and served headers in force (decision #331, tickets #387/#388)
 
 Three blocking gates in `eslint.config.mjs`, wired through the existing lint runs (pre-commit `frontend lint`, the CI `frontend` job):
 
 - **Markdown stays secure by default**: the `rehype-raw` import is banned and the `urlTransform` prop may not be passed at all — react-markdown's default URL sanitizer is the policy; runtime sanitization (`rehype-sanitize`) was rejected. Changing the markdown content source from repo files to API/DB reopens the decision.
 - **`NEXT_PUBLIC_*` reads are banned** in every static form (member, computed literal, destructuring from `process.env`); the `PUBLIC_ENV_ALLOWLIST` in the config is the deliberate exposure list — empty today, so exposing a variable to the client bundle is a config edit, never a silent code read.
 - **Web storage is banned outside its two owners**: `localStorage`/`sessionStorage` (bare, `window.`, `globalThis.` forms) live only in `features/auth/lib/**` (login draft, resend cooldown) and `shared/lib/hooks/useDraftStore.ts` — session tokens stay in httpOnly cookies.
+
+Security headers (decision #331, ticket #388) are served by `next.config.ts` — XCTO, XFO DENY, Referrer-Policy, Permissions-Policy, `poweredByHeader: false`, and CSP step 1 (`unsafe-inline` only for script/style; dev adds `'unsafe-eval'` for React Refresh). New external origins (CDN, fonts, analytics) require a `connect-src`/`img-src`/`font-src` edit there — same change as the registry update, never a silent code dependency.
 
 ## Review rubric — smells ESLint does not catch
 

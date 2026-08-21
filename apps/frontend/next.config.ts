@@ -1,8 +1,45 @@
 import type { NextConfig } from "next";
 
+// CSP шаг 1 (решение #331, тикет #388): без nonce — 'unsafe-inline' только для
+// script/style, остальные директивы строгие. Источники: API ходит через
+// same-origin route (app/api/[...path]), шрифты next/font self-hosted,
+// blob: — превью фото перед загрузкой (PhotoGrid). 'unsafe-eval' в dev:
+// React Refresh реконструирует стектрейсы через eval —
+// https://nextjs.org/docs/app/guides/content-security-policy
+const isDev = process.env.NODE_ENV === 'development';
+
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' blob: data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  'upgrade-insecure-requests',
+].join('; ');
+
+// Базовый security-контур браузера (решение #331): тот же смысловой набор несут
+// nginx-конфиги admin и landing (без CSP — шаг 1 только на Next-приложениях).
+const securityHeaders = [
+  { key: 'Content-Security-Policy', value: contentSecurityPolicy },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Referrer-Policy', value: 'no-referrer' },
+  {
+    key: 'Permissions-Policy',
+    value:
+      'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()',
+  },
+];
+
 const nextConfig: NextConfig = {
   output: 'standalone',
   reactCompiler: true,
+  poweredByHeader: false,
   headers: async () => [
     {
       // The service worker script must always be fetched fresh so updates are
@@ -13,6 +50,10 @@ const nextConfig: NextConfig = {
       headers: [
         { key: 'Cache-Control', value: 'no-store' },
       ],
+    },
+    {
+      source: '/:path*',
+      headers: securityHeaders,
     },
   ],
   turbopack: {
