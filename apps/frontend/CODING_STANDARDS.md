@@ -5,6 +5,7 @@ How the Next.js frontend is built and reviewed. Read before implementing or revi
 Not duplicated here — single sources of truth elsewhere:
 
 - Import boundaries, the DTO isolation gates, and the `@heroui/styles` ban are enforced by `eslint.config.mjs` (`boundaries/dependencies`, `no-restricted-imports`); review does not re-report what lint blocks.
+- The security lint gates — no `rehype-raw` / no `urlTransform` prop (react-markdown secure by default), `NEXT_PUBLIC_*` only via the `PUBLIC_ENV_ALLOWLIST` in the config, web storage only in `features/auth/lib/**` and `useDraftStore` — are enforced by `eslint.config.mjs` (decision #331; see the Security contour section below).
 - Invariants and commands: `AGENTS.md` (same directory). Domain language: per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`). Decisions: `docs/adr/`.
 - HeroUI v3 component APIs: verify through the `heroui-react` MCP server — v3 is beta and not in model training data.
 
@@ -39,7 +40,7 @@ No form library and no schema validator — this is deliberate, not a gap:
 - Controlled `useState` fields + `touched`/`submitAttempted` flags + derived validity + a derived `canSubmit`. Pattern: `widgets/profile/ui/PersonalDataForm.tsx`.
 - Validation error strings are hardcoded Russian, inline next to the field.
 - Property attributes validate through the generated validators (`features/property-attributes/lib/validate.ts` re-exports the generated catalog validators) — never hand-roll rules the catalog already encodes.
-- Persisted form drafts (survive a refresh mid-flow) go through the shared draft store — `shared/lib/hooks/useDraftStore` (`useSyncExternalStore` with `getServerSnapshot`, so the draft loads after hydration with no setState-in-effect). The slice's `use-*-draft.ts` wrapper owns only the storage key, the default, `validate`, and the terminal-step predicate; never hand-roll the sessionStorage load/persist/clear cycle.
+- Persisted form drafts (survive a refresh mid-flow) go through the shared draft store — `shared/lib/hooks/useDraftStore` (`useSyncExternalStore` with `getServerSnapshot`, so the draft loads after hydration with no setState-in-effect). The slice's `use-*-draft.ts` wrapper owns only the storage key, the default, `validate`, and the terminal-step predicate; never hand-roll the sessionStorage load/persist/clear cycle — web storage outside `features/auth/lib/**` and `useDraftStore` is a lint error (decision #331).
 
 ## Components, styling, and React Compiler
 
@@ -96,6 +97,14 @@ A type-checked ESLint block (project service) with named rules, not a preset:
 ### Zero tolerance for suppressions
 
 `eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` — zero in manual code: fix the code, never suppress; a blocking CI counter guards the zero (accepted gate, `docs/agents/tooling.md`). The 15 existing frontend suppressions are being fixed in code during waves A/B. Generated code and build artifacts are outside the counter's scope.
+
+### Security contour — lint gates in force (decision #331, ticket #387)
+
+Three blocking gates in `eslint.config.mjs`, wired through the existing lint runs (pre-commit `frontend lint`, the CI `frontend` job):
+
+- **Markdown stays secure by default**: the `rehype-raw` import is banned and the `urlTransform` prop may not be passed at all — react-markdown's default URL sanitizer is the policy; runtime sanitization (`rehype-sanitize`) was rejected. Changing the markdown content source from repo files to API/DB reopens the decision.
+- **`NEXT_PUBLIC_*` reads are banned** in every static form (member, computed literal, destructuring from `process.env`); the `PUBLIC_ENV_ALLOWLIST` in the config is the deliberate exposure list — empty today, so exposing a variable to the client bundle is a config edit, never a silent code read.
+- **Web storage is banned outside its two owners**: `localStorage`/`sessionStorage` (bare, `window.`, `globalThis.` forms) live only in `features/auth/lib/**` (login draft, resend cooldown) and `shared/lib/hooks/useDraftStore.ts` — session tokens stay in httpOnly cookies.
 
 ## Review rubric — smells ESLint does not catch
 
