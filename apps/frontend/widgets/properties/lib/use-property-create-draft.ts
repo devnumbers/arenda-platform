@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { clearDraftStorage, useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 import type { PropertyAttributes, PropertyType } from '@/entities/property';
 import { coerceAttributes } from '@/entities/property';
 import { propertyTypeOptions } from '@/features/properties';
@@ -23,52 +23,20 @@ const STORAGE_KEY = 'property-create-draft';
 const DEFAULT_DRAFT: CreateDraft = { step: 1 };
 
 export function clearPropertyCreateDraft(): void {
-  try {
-    sessionStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Ignore storage quota / privacy mode errors.
-  }
+  clearDraftStorage(STORAGE_KEY);
 }
 
 export function usePropertyCreateDraft(): {
   draft: CreateDraft;
   setDraft: Dispatch<SetStateAction<CreateDraft>>;
 } {
-  const [draft, setDraft] = useState<CreateDraft>(DEFAULT_DRAFT);
-
-  useEffect(() => {
-    // Load persisted draft after hydration; reading sessionStorage during
-    // render would cause an SSR/hydration mismatch in the App Router.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft(loadDraft());
-  }, []);
-
-  useEffect(() => {
-    if (draft.step === 5) {
-      clearPropertyCreateDraft();
-      return;
-    }
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-    } catch {
-      // Ignore storage quota / privacy mode errors.
-    }
-  }, [draft]);
-
+  const { draft, setDraft } = useDraftStore<CreateDraft>({
+    storageKey: STORAGE_KEY,
+    createDefault: () => DEFAULT_DRAFT,
+    validate: validateDraft,
+    isTerminal: (draft) => draft.step === 5,
+  });
   return { draft, setDraft };
-}
-
-function loadDraft(): CreateDraft {
-  if (typeof window === 'undefined') return DEFAULT_DRAFT;
-
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_DRAFT;
-    const parsed = JSON.parse(raw) as unknown;
-    return validateDraft(parsed);
-  } catch {
-    return DEFAULT_DRAFT;
-  }
 }
 
 function isOptionalString(value: unknown): value is string | undefined {

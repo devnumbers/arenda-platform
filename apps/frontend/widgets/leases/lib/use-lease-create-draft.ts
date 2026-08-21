@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 
 export type LeaseCreateStep = 1 | 2 | 3;
 
@@ -23,41 +23,13 @@ export function useLeaseCreateDraft(): {
   draft: LeaseCreateDraft;
   setDraft: Dispatch<SetStateAction<LeaseCreateDraft>>;
 } {
-  const [draft, setDraft] = useState<LeaseCreateDraft>(DEFAULT_DRAFT);
-
-  useEffect(() => {
-    // Load persisted draft after hydration; reading sessionStorage during
-    // render would cause an SSR/hydration mismatch in the App Router.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft(loadDraft());
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (draft.step === 3) {
-        sessionStorage.removeItem(STORAGE_KEY);
-        return;
-      }
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-    } catch {
-      // Ignore storage quota / privacy mode errors.
-    }
-  }, [draft]);
-
+  const { draft, setDraft } = useDraftStore<LeaseCreateDraft>({
+    storageKey: STORAGE_KEY,
+    createDefault: () => DEFAULT_DRAFT,
+    validate: validateDraft,
+    isTerminal: (draft) => draft.step === 3,
+  });
   return { draft, setDraft };
-}
-
-function loadDraft(): LeaseCreateDraft {
-  if (typeof window === 'undefined') return DEFAULT_DRAFT;
-
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_DRAFT;
-    const parsed = JSON.parse(raw) as unknown;
-    return validateDraft(parsed);
-  } catch {
-    return DEFAULT_DRAFT;
-  }
 }
 
 function isOptionalString(value: unknown): value is string | undefined {

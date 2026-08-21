@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 
 export type TenantCreateStep = 'form' | 'success';
 
@@ -33,50 +33,15 @@ export function useTenantCreateDraft(): {
   setDraft: Dispatch<SetStateAction<TenantCreateDraft>>;
   clearDraft: () => void;
 } {
-  const [draft, setDraft] = useState<TenantCreateDraft>(DEFAULT_DRAFT);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    // Load persisted draft after hydration to avoid SSR/hydration mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft(loadDraft());
-    setIsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    try {
-      // Persist both form and success states so a refresh returns to the
-      // same step (e.g. success screen survives reload). The draft is cleared
-      // explicitly on close or success-button navigation.
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-    } catch {
-      // Ignore storage quota / privacy mode errors.
-    }
-  }, [draft]);
-
-  const clearDraft = useCallback(() => {
-    setDraft(DEFAULT_DRAFT);
-    try {
-      sessionStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Ignore storage errors.
-    }
-  }, []);
-
+  const { draft, isLoaded, setDraft, clearDraft } = useDraftStore<TenantCreateDraft>({
+    storageKey: STORAGE_KEY,
+    // Persist both form and success states so a refresh returns to the
+    // same step (e.g. success screen survives reload). The draft is cleared
+    // explicitly on close or success-button navigation.
+    createDefault: () => DEFAULT_DRAFT,
+    validate: validateDraft,
+  });
   return { draft, isLoaded, setDraft, clearDraft };
-}
-
-function loadDraft(): TenantCreateDraft {
-  if (typeof window === 'undefined') return DEFAULT_DRAFT;
-
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_DRAFT;
-    const parsed = JSON.parse(raw) as unknown;
-    return validateDraft(parsed);
-  } catch {
-    return DEFAULT_DRAFT;
-  }
 }
 
 function isString(value: unknown): value is string {

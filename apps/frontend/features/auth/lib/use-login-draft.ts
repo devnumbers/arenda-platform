@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 import { isPhoneValid } from '@/shared/lib/phone';
 
 export type LoginStep = 'phone' | 'email' | 'code';
@@ -25,45 +25,12 @@ export function useLoginDraft(): {
   setDraft: Dispatch<SetStateAction<LoginDraft>>;
   clearDraft: () => void;
 } {
-  const [draft, setDraft] = useState<LoginDraft>(DEFAULT_DRAFT);
-
-  useEffect(() => {
-    // Load persisted draft after hydration to avoid SSR/hydration mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft(loadDraft());
-  }, []);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-    } catch {
-      // Ignore storage quota / privacy mode errors.
-    }
-  }, [draft]);
-
-  const clearDraft = useCallback(() => {
-    setDraft(DEFAULT_DRAFT);
-    try {
-      sessionStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Ignore storage errors.
-    }
-  }, []);
-
+  const { draft, setDraft, clearDraft } = useDraftStore<LoginDraft>({
+    storageKey: STORAGE_KEY,
+    createDefault: () => DEFAULT_DRAFT,
+    validate: validateDraft,
+  });
   return { draft, setDraft, clearDraft };
-}
-
-function loadDraft(): LoginDraft {
-  if (typeof window === 'undefined') return DEFAULT_DRAFT;
-
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_DRAFT;
-    const parsed = JSON.parse(raw) as unknown;
-    return validateDraft(parsed);
-  } catch {
-    return DEFAULT_DRAFT;
-  }
 }
 
 function isString(value: unknown): value is string {

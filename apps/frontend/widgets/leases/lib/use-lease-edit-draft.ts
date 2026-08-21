@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 
 export type LeaseEditDraft = {
   tenantContactId: string;
@@ -22,51 +22,13 @@ export function useLeaseEditDraft(leaseId: string): {
   saveDraft: (data: LeaseEditDraft) => void;
   clearDraft: () => void;
 } {
-  const [draft, setDraft] = useState<LeaseEditDraft | undefined>(undefined);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    // Load persisted draft after hydration; reading sessionStorage during
-    // render would cause an SSR/hydration mismatch in the App Router.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft(loadDraft(leaseId));
-    setIsLoaded(true);
-  }, [leaseId]);
-
-  // Write to storage without touching state: the draft state is only read
-  // once at form init, so a setState here would force an extra render on
-  // every keystroke.
-  const saveDraft = useCallback((data: LeaseEditDraft) => {
-    try {
-      sessionStorage.setItem(getStorageKey(leaseId), JSON.stringify(data));
-    } catch {
-      // Ignore storage quota / privacy mode errors.
-    }
-  }, [leaseId]);
-
-  const clearDraft = useCallback(() => {
-    setDraft(undefined);
-    try {
-      sessionStorage.removeItem(getStorageKey(leaseId));
-    } catch {
-      // Ignore storage quota / privacy mode errors.
-    }
-  }, [leaseId]);
-
+  const { draft, isLoaded, saveDraft, clearDraft } = useDraftStore<LeaseEditDraft | undefined>({
+    storageKey: getStorageKey(leaseId),
+    createDefault: () => undefined,
+    validate: validateDraft,
+    persist: 'manual',
+  });
   return { draft, isLoaded, saveDraft, clearDraft };
-}
-
-function loadDraft(leaseId: string): LeaseEditDraft | undefined {
-  if (typeof window === 'undefined') return undefined;
-
-  try {
-    const raw = sessionStorage.getItem(getStorageKey(leaseId));
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as unknown;
-    return validateDraft(parsed);
-  } catch {
-    return undefined;
-  }
 }
 
 function validateDraft(parsed: unknown): LeaseEditDraft | undefined {

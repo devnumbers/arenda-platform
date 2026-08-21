@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 import type { OperationFrequency, OperationType } from '@/entities/operation';
 import type { BasicInfoData, ReminderData, ScheduleData } from '../model/types';
 
@@ -46,48 +46,22 @@ export function useOperationCreateDraft(
   draft: OperationCreateDraft;
   setDraft: Dispatch<SetStateAction<OperationCreateDraft>>;
 } {
-  const [defaultDraft] = useState<OperationCreateDraft>(() => buildDefaultDraft(type, propertyId));
-  const [draft, setDraft] = useState<OperationCreateDraft>(defaultDraft);
-
-  useEffect(() => {
-    // Load persisted draft after hydration; reading sessionStorage during render would cause an SSR/hydration mismatch.
-    const loaded = loadDraft(defaultDraft);
-    // An explicit propertyId (from the URL) wins over the persisted draft; all
-    // other persisted fields are kept as-is.
-    const next = propertyId
-      ? { ...loaded, basicInfo: { ...loaded.basicInfo, propertyId } }
-      : loaded;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraft(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (draft.step === 'success') {
-        sessionStorage.removeItem(STORAGE_KEY);
-        return;
-      }
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-    } catch {
-      // Ignore storage quota / privacy mode errors.
-    }
-  }, [draft]);
-
+  const { draft, setDraft } = useDraftStore<OperationCreateDraft>({
+    storageKey: STORAGE_KEY,
+    // The config freezes on first render, so the default keeps the entry
+    // (type, propertyId) the wizard was opened with.
+    createDefault: () => buildDefaultDraft(type, propertyId),
+    validate: (parsed) => {
+      const loaded = validateDraft(parsed, buildDefaultDraft(type, propertyId));
+      // An explicit propertyId (from the URL) wins over the persisted draft; all
+      // other persisted fields are kept as-is.
+      return propertyId
+        ? { ...loaded, basicInfo: { ...loaded.basicInfo, propertyId } }
+        : loaded;
+    },
+    isTerminal: (draft) => draft.step === 'success',
+  });
   return { draft, setDraft };
-}
-
-function loadDraft(defaultDraft: OperationCreateDraft): OperationCreateDraft {
-  if (typeof window === 'undefined') return defaultDraft;
-
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultDraft;
-    const parsed = JSON.parse(raw) as unknown;
-    return validateDraft(parsed, defaultDraft);
-  } catch {
-    return defaultDraft;
-  }
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

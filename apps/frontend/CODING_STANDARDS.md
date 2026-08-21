@@ -39,6 +39,7 @@ No form library and no schema validator — this is deliberate, not a gap:
 - Controlled `useState` fields + `touched`/`submitAttempted` flags + derived validity + a derived `canSubmit`. Pattern: `widgets/profile/ui/PersonalDataForm.tsx`.
 - Validation error strings are hardcoded Russian, inline next to the field.
 - Property attributes validate through the generated validators (`features/property-attributes/lib/validate.ts` re-exports the generated catalog validators) — never hand-roll rules the catalog already encodes.
+- Persisted form drafts (survive a refresh mid-flow) go through the shared draft store — `shared/lib/hooks/useDraftStore` (`useSyncExternalStore` with `getServerSnapshot`, so the draft loads after hydration with no setState-in-effect). The slice's `use-*-draft.ts` wrapper owns only the storage key, the default, `validate`, and the terminal-step predicate; never hand-roll the sessionStorage load/persist/clear cycle.
 
 ## Components, styling, and React Compiler
 
