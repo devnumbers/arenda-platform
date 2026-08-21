@@ -14,10 +14,6 @@ apps/admin/dist
 apps/landing/node_modules
 apps/landing/dist
 
-apps/backend/perf/fixtures.json
-apps/backend/perf/results
-apps/backend/perfvegeta
-
 .playwright-mcp
 screenshots
 docs/plans

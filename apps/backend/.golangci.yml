@@ -411,19 +411,19 @@ linters:
       #    наследуют оба исключения автоматически — конфиг править не нужно.
       # text должен совпадать с msg forbidigo-паттерна выше.
       - linters: [forbidigo]
-        path: ^apps/backend/internal/platform/
+        path: ^internal/platform/
         text: 'use runInTx/UoW instead of manual Begin'
       - linters: [forbidigo]
         path: _test\.go$
         text: 'use runInTx/UoW instead of manual Begin'
       # Exit-политика (бар #323, тикет #336): os.Exit/log.Fatal* легитимны только
       # в композиционном корне cmd/ (завершение при фатальных startup-ошибках и
-      # по сигналам ОС). Путь issues отсчитывается от каталога конфига (корень
-      # репо), поэтому паттерн заякорен полным префиксом apps/backend/cmd/ —
-      # случайные «cmd/» внутри путей его не проходят; везде остальное
-      # forbidigo-паттерны выше поднимают нарушение.
+      # по сигналам ОС). Путь issues отсчитывается от каталога конфига
+      # (apps/backend — конфиг живёт рядом с модулем), поэтому паттерн заякорен
+      # префиксом cmd/ — случайные «cmd/» внутри путей его не проходят; везде
+      # остальное forbidigo-паттерны выше поднимают нарушение.
       - linters: [forbidigo]
-        path: ^apps/backend/cmd/
+        path: ^cmd/
         text: 'exit policy \(bar #323\)'
 
 formatters:

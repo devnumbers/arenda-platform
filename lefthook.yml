@@ -30,7 +30,7 @@ pre-commit:
     - name: admin lint
       glob: "apps/admin/**/*.{ts,tsx}"
       run: npm --prefix apps/admin run lint
-    # Migration lint (wave 3, #309): squawk (.squawk.toml) + domain rules
+    # Migration lint (wave 3, #309): squawk (apps/backend/.squawk.toml) + domain rules
     # (money BIGINT kopecks, no DEFAULT on id) over the staged migrations only.
     - name: migrations lint
       glob: "apps/backend/db/migrations/*.sql"

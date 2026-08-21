@@ -6,7 +6,6 @@
 .env
 .env.*
 !.env.example
-!.env.perf.example
 !.env.stage.example
 !.env.prod.example
 *.exe
@@ -17,12 +16,6 @@ apps/landing/dist
 
 # Bruno runtime environment (contains session ids and dynamic object ids)
 tools/bruno/arenda-api/environments/Local.bru
-
-# Generated perf fixtures
-apps/backend/perf/fixtures.json
-apps/backend/perf/results/
-# Compiled perf binaries
-apps/backend/perfvegeta
 
 .playwright-mcp
 screenshots

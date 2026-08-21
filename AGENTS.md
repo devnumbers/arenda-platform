@@ -18,7 +18,7 @@ All coding agents in this repo — Kimi Code, ZCode, or any other harness — wo
 - Admin: `apps/admin`, a Vite + React SPA built on react-admin 5 and MUI 7 — a separate stack from the Next.js frontend; its rules live in `apps/admin/AGENTS.md`.
 - Landing: `apps/landing`, a standalone Vite + React SPA (export from Figma Make) served by nginx as the public site at `/`.
 - Product docs: `docs/`; domain glossary: `CONTEXT-MAP.md` (index) + per-context `CONTEXT.md` under `apps/backend/internal/<context>/`; architecture decisions: `docs/adr/`.
-- Local infrastructure runs through `docker-compose.local.yml`; run the backend on the host with Go.
+- Local infrastructure runs through `apps/backend/docker-compose.local.yml`; run the backend on the host with Go.
 - Stage/prod deploy: GitHub Actions on a self-hosted runner builds images, pushes them to GHCR and deploys by digest over SSH (`docs/adr/0024-deploy-pipeline-ghcr-runner.md`). Environment values live in GitHub Environments (`ENV_FILE` secret, key set pinned to `.env.<env>.example`); nothing is built or hand-edited on the server. Operational procedures (bootstrap, secrets map, backup/restore, rollback) — `docs/deployment.md`.
 - Observability: the self-hosted Uptrace stack collecting stage/prod logs, traces, and metrics with email alerts lives in the devnumbers/observability repo (compose project `observability`, server directory `/opt/observability`). Consumer-side connection for stage/prod is documented in `docs/deployment.md` (section "Observability"); the decision history is in `docs/adr/0021-centralized-observability-uptrace.md` (superseded — transferred to devnumbers/observability ADR 0001).
 
@@ -97,7 +97,7 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 
 - Do not create or switch to a git worktree by default. Work in the current checkout and current branch unless the user explicitly asks for a worktree or branch isolation.
 - If a generic skill recommends a worktree, this repository rule overrides it.
-- Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`. On the schema side this is enforced by `make migrations-lint` (`tools/migration-lint/domain-rules.mjs`, config `.squawk.toml`).
+- Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`. On the schema side this is enforced by `make migrations-lint` (`tools/migration-lint/domain-rules.mjs`, config `apps/backend/.squawk.toml`).
 - All amounts are in RUB; there is no multi-currency support (`docs/adr/0036-fintech-domain-language.md`).
 - Format money for display only at the UI layer: frontend — `formatMoneyKopecks` (`apps/frontend/shared/lib/format-money.ts`); admin — `formatKopecks` / `MoneyField` (`apps/admin/src/fields.tsx`).
 - Two money vocabularies (`docs/adr/0036-fintech-domain-language.md`): rental money records are Операции — «платёж»/«транзакция» belong to Billing (T-Kassa processing) only. Canonical terms and `_Avoid_` lists live in `CONTEXT-MAP.md` and the per-context `CONTEXT.md` files.
