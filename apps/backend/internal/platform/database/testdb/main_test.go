@@ -23,15 +23,23 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
+// requireServer skips the test unless a PostgreSQL server is reachable: an
+// external one via TEST_DATABASE_URL, or a local Docker daemon for
+// testcontainers provisioning.
+func requireServer(tb testing.TB) {
+	tb.Helper()
+	if os.Getenv("TEST_DATABASE_URL") == "" && !dockerAvailable() {
+		tb.Skip("docker not available and TEST_DATABASE_URL not set")
+	}
+}
+
 // TestSetup_Smoke verifies that Setup produces a pool connected to a migrated
 // database: it can run a trivial query and the users table (created in the
 // initial migration) exists and is queryable.
 func TestSetup_Smoke(t *testing.T) {
 	t.Parallel()
 
-	if os.Getenv("TEST_DATABASE_URL") == "" && !dockerAvailable() {
-		t.Skip("docker not available and TEST_DATABASE_URL not set")
-	}
+	requireServer(t)
 
 	pool := Setup(t)
 	ctx := t.Context()
@@ -64,9 +72,7 @@ func TestSetup_Smoke(t *testing.T) {
 func TestReset_ClearsTables(t *testing.T) {
 	t.Parallel()
 
-	if os.Getenv("TEST_DATABASE_URL") == "" && !dockerAvailable() {
-		t.Skip("docker not available and TEST_DATABASE_URL not set")
-	}
+	requireServer(t)
 
 	pool := Setup(t)
 	ctx := t.Context()
@@ -107,9 +113,7 @@ func TestReset_ClearsTables(t *testing.T) {
 func TestReset_PreservesMigrationJournal(t *testing.T) {
 	t.Parallel()
 
-	if os.Getenv("TEST_DATABASE_URL") == "" && !dockerAvailable() {
-		t.Skip("docker not available and TEST_DATABASE_URL not set")
-	}
+	requireServer(t)
 
 	pool := Setup(t)
 	ctx := t.Context()
