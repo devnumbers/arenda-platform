@@ -173,21 +173,7 @@ func (r *fakeReminderRepo) MarkReminderSending(context.Context, uuid.UUID) (doma
 
 func (r *fakeReminderRepo) MarkSent(context.Context, uuid.UUID, time.Time) error { return nil }
 
-func (r *fakeReminderRepo) MarkReminderSent(context.Context, uuid.UUID, time.Time) error { return nil }
-
 func (r *fakeReminderRepo) MarkFailed(context.Context, uuid.UUID, *time.Time, bool) error { return nil }
-
-func (r *fakeReminderRepo) SaveSentSMSReminder(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, time.Time) error {
-	return nil
-}
-
-func (r *fakeReminderRepo) UpdateSMSProviderResponse(context.Context, uuid.UUID, string) error {
-	return nil
-}
-
-func (r *fakeReminderRepo) IsSMSReminderSent(context.Context, uuid.UUID) (bool, error) {
-	return false, nil
-}
 
 func (r *fakeReminderRepo) SaveSentEmailReminder(context.Context, SaveSentEmailReminderParams) error {
 	return nil

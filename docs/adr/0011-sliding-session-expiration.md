@@ -22,7 +22,7 @@ The session token itself, the hashing scheme, and the cookie attributes (`HttpOn
 
 ## Consequences
 
-- Active users stay signed in without re-entering the SMS code.
+- Active users stay signed in without re-entering the login code.
 - A stolen cookie is usable only until the session expires; because expiration is refreshed on activity, the effective compromise window is bounded by the base lifetime unless the attacker can keep the session active.
 - The maximum lifetime guarantees that even an attacker who can continuously refresh the session cannot extend it beyond 30 days from the original login.
 - Each authenticated request may update the session row in PostgreSQL; this is acceptable for the expected MVP load.

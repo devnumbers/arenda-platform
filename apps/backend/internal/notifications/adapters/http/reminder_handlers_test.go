@@ -249,26 +249,8 @@ func (r *handlerFakeReminderRepo) MarkReminderSending(context.Context, uuid.UUID
 
 func (r *handlerFakeReminderRepo) MarkSent(context.Context, uuid.UUID, time.Time) error { return nil }
 
-func (r *handlerFakeReminderRepo) MarkReminderSent(context.Context, uuid.UUID, time.Time) error {
-	return nil
-}
-
 func (r *handlerFakeReminderRepo) MarkFailed(context.Context, uuid.UUID, *time.Time, bool) error {
 	return nil
-}
-
-func (r *handlerFakeReminderRepo) SaveSentSMSReminder(
-	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, time.Time,
-) error {
-	return nil
-}
-
-func (r *handlerFakeReminderRepo) UpdateSMSProviderResponse(context.Context, uuid.UUID, string) error {
-	return nil
-}
-
-func (r *handlerFakeReminderRepo) IsSMSReminderSent(context.Context, uuid.UUID) (bool, error) {
-	return false, nil
 }
 
 func (r *handlerFakeReminderRepo) SaveSentEmailReminder(context.Context, notificationsapp.SaveSentEmailReminderParams) error {

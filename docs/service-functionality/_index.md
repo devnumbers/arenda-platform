@@ -37,7 +37,7 @@ order: 1
 
 ## Напоминания
 
-* [SMS-напоминания](./reminders/sozdanie-napominanija)
+* [Напоминания](./reminders/sozdanie-napominanija)
 
 ## Аналитика
 

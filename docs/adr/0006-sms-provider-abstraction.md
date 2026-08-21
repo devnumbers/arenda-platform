@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Superseded by ADR 0044 (SMS Channel Removal) — the platform never shipped SMS;
+authentication codes are delivered by email and reminders by email and Web
+Push. The SMS port, adapters, and the `sent_sms_reminders` audit table are
+removed.
 
 ## Context
 

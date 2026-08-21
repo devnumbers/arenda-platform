@@ -7,7 +7,7 @@ flowchart TD
 
     startDate["Дата начала аренды"]:::button
     endDate["Дата окончания<br/>включительно"]:::button
-    sms["SMS-напоминание<br/>необязательно"]:::button
+    reminder["Напоминание<br/>необязательно"]:::button
     backdated{"Дата начала<br/>в прошлом?"}:::decision
     pastOps["Создать прошлые<br/>арендные операции"]:::button
     futureOps["Создать операции<br/>на 100 лет вперед"]:::button
@@ -23,14 +23,14 @@ flowchart TD
     deposit --> paymentDay
     paymentDay --> startDate
     paymentDay --> endDate
-    paymentDay --> sms
+    paymentDay --> reminder
     startDate --> backdated
     backdated -- Да --> pastOps
     backdated -- Нет --> futureOps
     pastOps --> futureOps
     futureOps --> comment
     endDate --> comment
-    sms --> comment
+    reminder --> comment
     comment --> createLease
     createLease --> createRecurring
 

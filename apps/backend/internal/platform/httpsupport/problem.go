@@ -114,7 +114,6 @@ var userFacingDetails = []struct {
 	{notificationsapp.ErrInvalidReminderDate, "Некорректная дата напоминания"},
 	{notificationsapp.ErrReminderNotPending, "Напоминание не в статусе ожидания"},
 	{notificationsapp.ErrConcurrentUpdate, "Напоминание изменено одновременно"},
-	{notificationsapp.ErrDuplicateSMSReminder, "SMS-напоминание уже отправлено"},
 	{notificationsapp.ErrNotFound, detailNotFound},
 }
 

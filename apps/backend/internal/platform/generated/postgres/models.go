@@ -420,16 +420,6 @@ type SentPushReminder struct {
 	SentAt      pgtype.Timestamptz `json:"sent_at"`
 }
 
-type SentSmsReminder struct {
-	ID               pgtype.UUID        `json:"id"`
-	ReminderID       pgtype.UUID        `json:"reminder_id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Phone            string             `json:"phone"`
-	Message          string             `json:"message"`
-	ProviderResponse pgtype.Text        `json:"provider_response"`
-	SentAt           pgtype.Timestamptz `json:"sent_at"`
-}
-
 type Session struct {
 	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`

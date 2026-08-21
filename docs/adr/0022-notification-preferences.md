@@ -29,7 +29,8 @@ row means allowed, so no backfill is needed and existing behaviour is
 preserved for all users.
 
 Permissions are bound to the event type, not to the delivery channel: one
-setting governs email today and future channels (SMS and the like) tomorrow.
+setting governs email today and future channels tomorrow. (Superseded by
+ADR 0030: preferences are per event type × channel.)
 
 ### 2. Storage
 

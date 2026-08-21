@@ -374,29 +374,6 @@ func (r *ReminderRepository) MarkSent(ctx context.Context, id uuid.UUID, at time
 	return nil
 }
 
-// MarkReminderSent marks a pending or sending reminder as sent. It is
-// idempotent: if the reminder is already sent, it returns success.
-func (r *ReminderRepository) MarkReminderSent(ctx context.Context, id uuid.UUID, sentAt time.Time) error {
-	rows, err := r.q().MarkReminderSent(ctx, postgres.MarkReminderSentParams{
-		ID:     pgconv.UUIDToPgtype(id),
-		SentAt: pgtype.Timestamptz{Time: sentAt, Valid: true},
-	})
-	if err != nil {
-		return fmt.Errorf("mark reminder sent: %w", err)
-	}
-	if rows == 0 {
-		existing, err := r.GetByIDUnscoped(ctx, id)
-		if err != nil {
-			return fmt.Errorf("check reminder status after no-op sent: %w", err)
-		}
-		if existing.Status == domain.ReminderSent {
-			return nil
-		}
-		return application.ErrConcurrentUpdate
-	}
-	return nil
-}
-
 // MarkFailed increments failed attempts and optionally marks a reminder as terminal failed.
 func (r *ReminderRepository) MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error {
 	var next pgtype.Timestamptz
@@ -512,67 +489,6 @@ func (r *ReminderRepository) MarkSendingReminderPending(ctx context.Context, id 
 		return application.ErrConcurrentUpdate
 	}
 	return nil
-}
-
-// SaveSentSMSReminder records a successfully sent SMS reminder for audit. It
-// returns ErrDuplicateSMSReminder when an audit row for the same reminder_id
-// already exists.
-func (r *ReminderRepository) SaveSentSMSReminder(
-	ctx context.Context,
-	id, reminderID, scope uuid.UUID,
-	phone, message, providerResponse string,
-	sentAt time.Time,
-) error {
-	rows, err := r.q().CreateSentSMSReminder(ctx, postgres.CreateSentSMSReminderParams{
-		ID:               pgconv.UUIDToPgtype(id),
-		ReminderID:       pgconv.UUIDToPgtype(reminderID),
-		OwnerID:          pgconv.UUIDToPgtype(scope),
-		Phone:            phone,
-		Message:          message,
-		ProviderResponse: pgtype.Text{String: providerResponse, Valid: providerResponse != ""},
-		SentAt:           pgtype.Timestamptz{Time: sentAt, Valid: true},
-	})
-	if err != nil {
-		if isDuplicateSMSReminderError(err) {
-			return application.ErrDuplicateSMSReminder
-		}
-		return fmt.Errorf("create sent sms reminder: %w", err)
-	}
-	if rows == 0 {
-		return application.ErrDuplicateSMSReminder
-	}
-	return nil
-}
-
-func isDuplicateSMSReminderError(err error) bool {
-	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
-		return pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "uq_sent_sms_reminders_reminder_id"
-	}
-	return false
-}
-
-// UpdateSMSProviderResponse updates the provider response for a sent SMS audit row.
-func (r *ReminderRepository) UpdateSMSProviderResponse(ctx context.Context, reminderID uuid.UUID, response string) error {
-	rows, err := r.q().UpdateSentSMSReminderProviderResponse(ctx, postgres.UpdateSentSMSReminderProviderResponseParams{
-		ProviderResponse: pgtype.Text{String: response, Valid: response != ""},
-		ReminderID:       pgconv.UUIDToPgtype(reminderID),
-	})
-	if err != nil {
-		return fmt.Errorf("update sent sms reminder provider response: %w", err)
-	}
-	if rows == 0 {
-		return application.ErrNotFound
-	}
-	return nil
-}
-
-// IsSMSReminderSent reports whether an audit row already exists for the given reminder.
-func (r *ReminderRepository) IsSMSReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error) {
-	exists, err := r.q().IsSMSReminderSent(ctx, pgconv.UUIDToPgtype(reminderID))
-	if err != nil {
-		return false, fmt.Errorf("check sent sms reminder: %w", err)
-	}
-	return exists, nil
 }
 
 // SaveSentEmailReminder records a successfully sent email reminder for audit. It

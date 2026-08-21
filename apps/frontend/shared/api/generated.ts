@@ -2434,7 +2434,7 @@ export interface components {
             /** Format: uuid */
             lease_id?: string;
             /**
-             * @description 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before the operation date.
+             * @description 0 means no reminder; 1/3/7 schedule a reminder that many days before the operation date.
              * @enum {integer|null}
              */
             reminder_offset_days?: 0 | 1 | 3 | 7 | null;
@@ -2518,7 +2518,7 @@ export interface components {
             /** @enum {string} */
             periodicity?: "monthly" | "yearly";
             /**
-             * @description 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before each generated operation.
+             * @description 0 means no reminder; 1/3/7 schedule a reminder that many days before each generated operation.
              * @enum {integer|null}
              */
             reminder_offset_days?: 0 | 1 | 3 | 7 | null;

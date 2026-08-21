@@ -42,7 +42,8 @@ From the repository root run the unified E2E orchestrator:
 ```
 
 The script:
-- sends a fake SMS code and extracts it from the backend logs,
+- sends a login code and extracts it from the backend logs (the dev fake
+  email sender logs the message body),
 - runs this `system-e2e` collection folder by folder,
 - runs the `system-e2e-edge` negative/boundary collection,
 - executes SQL verification checks,

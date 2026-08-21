@@ -6,9 +6,10 @@ set -euo pipefail
 # - Reads environment from the project root .env
 # - Assumes backend is already running and reachable on localhost:8080
 # - Assumes PostgreSQL container is running
-# - Sends a fake SMS code, runs the system-e2e collection folder-by-folder,
-#   executes SQL verification checks, runs edge-case collection and concurrency
-#   tests, and writes a markdown report to .tmp/.
+# - Sends a login code and extracts it from the backend logs (the dev fake
+#   email sender logs the message body), runs the system-e2e collection
+#   folder-by-folder, executes SQL verification checks, runs edge-case
+#   collection and concurrency tests, and writes a markdown report to .tmp/.
 #
 # Optional environment overrides:
 #   BASE_URL          default http://localhost:8080

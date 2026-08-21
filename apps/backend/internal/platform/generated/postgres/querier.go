@@ -66,7 +66,6 @@ type Querier interface {
 	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
 	CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error)
 	CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error)
-	CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (int64, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
 	// Subscription payments (issue #250). The partial unique index
@@ -235,7 +234,6 @@ type Querier interface {
 	IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error)
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
 	IsPushReminderSent(ctx context.Context, arg IsPushReminderSentParams) (bool, error)
-	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
 	ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
@@ -355,7 +353,6 @@ type Querier interface {
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
 	MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error)
 	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
-	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)
 	MarkReminderSkipped(ctx context.Context, id pgtype.UUID) (int64, error)
 	MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error)
 	MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error)
@@ -391,7 +388,6 @@ type Querier interface {
 	UpdateRecurringOperationStatusByLeaseID(ctx context.Context, arg UpdateRecurringOperationStatusByLeaseIDParams) ([]RecurringOperation, error)
 	UpdateRecurringOperationStatusByPropertyID(ctx context.Context, arg UpdateRecurringOperationStatusByPropertyIDParams) error
 	UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error)
-	UpdateSentSMSReminderProviderResponse(ctx context.Context, arg UpdateSentSMSReminderProviderResponseParams) (int64, error)
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) error
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error)
 	UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubscriptionPaymentParams) (SubscriptionPayment, error)

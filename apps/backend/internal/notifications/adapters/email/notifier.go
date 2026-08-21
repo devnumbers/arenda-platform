@@ -49,9 +49,9 @@ func (n *Notifier) SendDirect(ctx context.Context, to, subject, template string,
 func (n *Notifier) Notify(
 	ctx context.Context,
 	notification application.Notification,
-) (providerResponse, renderedPlainBody string, err error) {
+) error {
 	if notification.Contact == nil || notification.Contact.Email == "" {
-		return "", "", errors.New("notification contact missing email")
+		return errors.New("notification contact missing email")
 	}
 
 	plain, html, err := n.renderer.Render("reminder", map[string]any{
@@ -60,7 +60,7 @@ func (n *Notifier) Notify(
 		"Body":    notification.Body,
 	})
 	if err != nil {
-		return "", "", fmt.Errorf("render reminder email: %w", err)
+		return fmt.Errorf("render reminder email: %w", err)
 	}
 
 	msg := mailer.Message{
@@ -70,9 +70,9 @@ func (n *Notifier) Notify(
 		HTMLBody: html,
 	}
 	if err := n.sender.Send(ctx, msg); err != nil {
-		return "", "", fmt.Errorf("send reminder email: %w", err)
+		return fmt.Errorf("send reminder email: %w", err)
 	}
-	return "", plain, nil
+	return nil
 }
 
 var _ application.Notifier = (*Notifier)(nil)

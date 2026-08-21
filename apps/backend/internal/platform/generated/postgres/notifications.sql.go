@@ -150,38 +150,6 @@ func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) 
 	return i, err
 }
 
-const createSentSMSReminder = `-- name: CreateSentSMSReminder :execrows
-INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (reminder_id) DO NOTHING
-`
-
-type CreateSentSMSReminderParams struct {
-	ID               pgtype.UUID        `json:"id"`
-	ReminderID       pgtype.UUID        `json:"reminder_id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Phone            string             `json:"phone"`
-	Message          string             `json:"message"`
-	ProviderResponse pgtype.Text        `json:"provider_response"`
-	SentAt           pgtype.Timestamptz `json:"sent_at"`
-}
-
-func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, createSentSMSReminder,
-		arg.ID,
-		arg.ReminderID,
-		arg.OwnerID,
-		arg.Phone,
-		arg.Message,
-		arg.ProviderResponse,
-		arg.SentAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteSentEmailReminder = `-- name: DeleteSentEmailReminder :exec
 DELETE FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
 `
@@ -342,17 +310,6 @@ type IsPushReminderSentParams struct {
 
 func (q *Queries) IsPushReminderSent(ctx context.Context, arg IsPushReminderSentParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isPushReminderSent, arg.ReminderID, arg.RecipientID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-const isSMSReminderSent = `-- name: IsSMSReminderSent :one
-SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists
-`
-
-func (q *Queries) IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, isSMSReminderSent, reminderID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -833,25 +790,6 @@ func (q *Queries) MarkReminderSending(ctx context.Context, id pgtype.UUID) (Remi
 	return i, err
 }
 
-const markReminderSent = `-- name: MarkReminderSent :execrows
-UPDATE reminders
-SET status = 'sent', sent_at = $1
-WHERE id = $2 AND status IN ('pending', 'sending')
-`
-
-type MarkReminderSentParams struct {
-	SentAt pgtype.Timestamptz `json:"sent_at"`
-	ID     pgtype.UUID        `json:"id"`
-}
-
-func (q *Queries) MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markReminderSent, arg.SentAt, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const markReminderSkipped = `-- name: MarkReminderSkipped :execrows
 UPDATE reminders
 SET status = 'skipped'
@@ -1066,25 +1004,6 @@ type UpdateReminderScheduledAtParams struct {
 
 func (q *Queries) UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateReminderScheduledAt, arg.ScheduledAt, arg.ID, arg.OwnerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const updateSentSMSReminderProviderResponse = `-- name: UpdateSentSMSReminderProviderResponse :execrows
-UPDATE sent_sms_reminders
-SET provider_response = $1
-WHERE reminder_id = $2
-`
-
-type UpdateSentSMSReminderProviderResponseParams struct {
-	ProviderResponse pgtype.Text `json:"provider_response"`
-	ReminderID       pgtype.UUID `json:"reminder_id"`
-}
-
-func (q *Queries) UpdateSentSMSReminderProviderResponse(ctx context.Context, arg UpdateSentSMSReminderProviderResponseParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateSentSMSReminderProviderResponse, arg.ProviderResponse, arg.ReminderID)
 	if err != nil {
 		return 0, err
 	}

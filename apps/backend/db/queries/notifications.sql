@@ -107,11 +107,6 @@ UPDATE reminders
 SET status = 'sent', sent_at = $2
 WHERE id = $1 AND status = 'sending';
 
--- name: MarkReminderSent :execrows
-UPDATE reminders
-SET status = 'sent', sent_at = $1
-WHERE id = $2 AND status IN ('pending', 'sending');
-
 -- name: MarkReminderFailed :execrows
 UPDATE reminders
 SET failed_attempts = failed_attempts + 1,
@@ -160,19 +155,6 @@ SELECT EXISTS(
     WHERE owner_id = $1 AND operation_id = $2 AND event_type = $3
       AND status IN ('pending', 'sending', 'sent')
 ) AS exists;
-
--- name: IsSMSReminderSent :one
-SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists;
-
--- name: CreateSentSMSReminder :execrows
-INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (reminder_id) DO NOTHING;
-
--- name: UpdateSentSMSReminderProviderResponse :execrows
-UPDATE sent_sms_reminders
-SET provider_response = $1
-WHERE reminder_id = $2;
 
 -- name: IsEmailReminderSent :one
 SELECT EXISTS (

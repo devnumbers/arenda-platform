@@ -46,13 +46,7 @@ type ReminderRepository interface {
 	// MarkSent marks a reminder that is currently sending as sent. It is used
 	// after a notification has been dispatched successfully.
 	MarkSent(ctx context.Context, id uuid.UUID, at time.Time) error
-	// MarkReminderSent marks any pending or sending reminder as sent. It is
-	// used when the sent SMS audit row already exists (idempotent success path).
-	MarkReminderSent(ctx context.Context, id uuid.UUID, sentAt time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, nextAttempt *time.Time, terminal bool) error
-	SaveSentSMSReminder(ctx context.Context, id, reminderID, scope uuid.UUID, phone, message, providerResponse string, sentAt time.Time) error
-	UpdateSMSProviderResponse(ctx context.Context, reminderID uuid.UUID, response string) error
-	IsSMSReminderSent(ctx context.Context, reminderID uuid.UUID) (bool, error)
 	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) error
 	IsEmailReminderSent(ctx context.Context, reminderID, recipientID uuid.UUID) (bool, error)
 	DeleteSentEmailReminder(ctx context.Context, reminderID, recipientID uuid.UUID) error
@@ -150,7 +144,7 @@ type SaveSentPushReminderParams struct {
 
 // Notifier dispatches a notification to a recipient.
 type Notifier interface {
-	Notify(ctx context.Context, n Notification) (providerResponse, renderedPlainBody string, err error)
+	Notify(ctx context.Context, n Notification) error
 }
 
 // DirectEmailSender renders and sends a one-off email outside the reminder
@@ -158,11 +152,6 @@ type Notifier interface {
 // content, the adapter owns templates and transport.
 type DirectEmailSender interface {
 	SendDirect(ctx context.Context, to, subject, template string, data map[string]any) error
-}
-
-// SMSSender sends an SMS message to a phone number.
-type SMSSender interface {
-	Send(ctx context.Context, phone, message string) (providerResponse string, err error)
 }
 
 // PushSender dispatches a single Web Push message to one browser subscription.
@@ -199,7 +188,6 @@ type Notification struct {
 // Contact is a resolved delivery endpoint.
 type Contact struct {
 	Channel Channel
-	Phone   string
 	Email   string
 }
 
@@ -207,7 +195,6 @@ type Contact struct {
 type Channel string
 
 const (
-	ChannelSMS   Channel = "sms"
 	ChannelEmail Channel = "email"
 	ChannelPush  Channel = "push"
 )

@@ -47,6 +47,7 @@ excluded_paths = [
   # таблицы малы); операционный риск очереди блокировок гасят SET-таймауты
   # в начале файла.
   "*000111_property_contacts_owner_fk.up.sql",       # adding-foreign-key-constraint: FK без NOT VALID (тикет #351, решение #324)
+  "*000112_drop_sent_sms_reminders.up.sql",          # ban-drop-table: осознанный drop (ADR 0044, канал SMS удалён)
 ]
 
 excluded_rules = [

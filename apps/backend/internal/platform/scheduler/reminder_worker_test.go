@@ -27,8 +27,6 @@ const (
 
 type fakeReminderRepoForWorker struct {
 	reminders          []domain.Reminder
-	isSMSReminderSent  bool
-	saveSentSMSErr     error
 	saveSentEmailErr   error
 	markFailedErr      error
 	getByIDUnscoped    domain.Reminder
@@ -109,28 +107,9 @@ func (r *fakeReminderRepoForWorker) MarkSent(context.Context, uuid.UUID, time.Ti
 	return nil
 }
 
-func (r *fakeReminderRepoForWorker) MarkReminderSent(context.Context, uuid.UUID, time.Time) error {
-	r.markSentCalls++
-	return nil
-}
-
 func (r *fakeReminderRepoForWorker) MarkFailed(context.Context, uuid.UUID, *time.Time, bool) error {
 	r.markFailedCalls++
 	return r.markFailedErr
-}
-
-func (r *fakeReminderRepoForWorker) SaveSentSMSReminder(
-	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, time.Time,
-) error {
-	return r.saveSentSMSErr
-}
-
-func (r *fakeReminderRepoForWorker) UpdateSMSProviderResponse(context.Context, uuid.UUID, string) error {
-	return nil
-}
-
-func (r *fakeReminderRepoForWorker) IsSMSReminderSent(context.Context, uuid.UUID) (bool, error) {
-	return r.isSMSReminderSent, nil
 }
 
 func (r *fakeReminderRepoForWorker) SaveSentEmailReminder(_ context.Context, arg application.SaveSentEmailReminderParams) error {
@@ -230,15 +209,15 @@ type fakeNotifier struct {
 	calls     []uuid.UUID
 }
 
-func (n *fakeNotifier) Notify(_ context.Context, notif application.Notification) (providerResponse, renderedPlainBody string, err error) {
+func (n *fakeNotifier) Notify(_ context.Context, notif application.Notification) error {
 	n.calls = append(n.calls, notif.RecipientID)
 	if n.notifyErr == nil {
-		return "", "", nil
+		return nil
 	}
 	if n.failFor == nil || n.failFor[notif.RecipientID] {
-		return "", "", n.notifyErr
+		return n.notifyErr
 	}
-	return "", "", nil
+	return nil
 }
 
 type fakeContactResolver struct {

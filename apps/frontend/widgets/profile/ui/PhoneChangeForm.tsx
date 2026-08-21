@@ -150,7 +150,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
     <form onSubmit={handleVerifyCode} className={styles.form}>
       <div className={styles.fields}>
         <TextField
-          label="Код из SMS"
+          label="Код из письма"
           type="text"
           inputMode="numeric"
           placeholder="000000"
@@ -164,7 +164,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
       </div>
 
       <div className={styles.hint}>
-        Код отправлен на {phone}
+        Мы отправили код на вашу почту
         <button
           type="button"
           className={styles.changePhoneLink}
