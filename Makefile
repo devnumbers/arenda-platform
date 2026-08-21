@@ -26,12 +26,16 @@ TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disa
 LINT_MIGRATIONS_DIR := apps/backend/db/migrations
 # Squawk (migration linter, wave 3 / #309): pinned binary from GitHub Releases.
 # Squawk publishes no checksums file, so the release-asset sha256 of each
-# supported platform is pinned by hand.
+# supported platform is pinned by hand. The pin variables are deliberately
+# lowercase: squawk-install builds the lookup key from the lowercased
+# $(SQUAWK_OS)_$(SQUAWK_ARCH) pair, and make variables are case-sensitive
+# (uppercase pins made the lookup silently empty — every cold-cache CI run
+# died with "no pinned squawk sha256").
 SQUAWK_VERSION := v2.62.0
-SQUAWK_SHA256_DARWIN_ARM64 := 699d5a2cc6ed622f1469caf4db2faf047d89049b09d89b91d8307238e002d1ac
-SQUAWK_SHA256_DARWIN_X64 := df7c9dfae0acd65c694ac50754cb356ced172d8b118a46261ce14fb70de5136f
-SQUAWK_SHA256_LINUX_ARM64 := 561a1ea458082970f485017561d986a930d3863ef7d348d47af6473a0c82bb9a
-SQUAWK_SHA256_LINUX_X64 := 54bd3e7bf2101502317c3400d1043202c51414a646a10f92f56f7b3032630758
+SQUAWK_SHA256_darwin_arm64 := 699d5a2cc6ed622f1469caf4db2faf047d89049b09d89b91d8307238e002d1ac
+SQUAWK_SHA256_darwin_x64 := df7c9dfae0acd65c694ac50754cb356ced172d8b118a46261ce14fb70de5136f
+SQUAWK_SHA256_linux_arm64 := 561a1ea458082970f485017561d986a930d3863ef7d348d47af6473a0c82bb9a
+SQUAWK_SHA256_linux_x64 := 54bd3e7bf2101502317c3400d1043202c51414a646a10f92f56f7b3032630758
 SQUAWK_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 SQUAWK_ARCH := $(subst x86_64,x64,$(subst aarch64,arm64,$(shell uname -m)))
 SQUAWK_ASSET := squawk-$(SQUAWK_OS)-$(SQUAWK_ARCH)
