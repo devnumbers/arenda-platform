@@ -13,7 +13,7 @@ push в dev (stage) или main (prod)
   → ci.yml (lint, тесты, миграции up/down, сканеры — blocking)
   → сборка 4 образов (matrix, max-parallel: 2) → trivy → push в GHCR → cosign sign
   → _deploy.yml: cosign verify → рендер env из секрета ENV_FILE (со сверкой
-    ключей против .env.<env>.example) → передача env на сервер через base64
+    ключей против deploy/.env.<env>.example) → передача env на сервер через base64
     в envs ssh-шага → pg_dump-бэкап →
     миграции → up -d --wait → внешние smoke → точечная чистка старых образов
 ```
@@ -89,7 +89,7 @@ updates + сгруппированные weekly version updates в ветку `d
 
 | Секрет | Где | Назначение | Ротация |
 | --- | --- | --- | --- |
-| `ENV_FILE` | environment | Весь набор переменных окружения одним multiline-значением. Ключи должны точно совпадать с `.env.<env>.example` | При изменении любой переменной; заодно обновить example, иначе deploy упадёт на сверке ключей |
+| `ENV_FILE` | environment | Весь набор переменных окружения одним multiline-значением. Ключи должны точно совпадать с `deploy/.env.<env>.example` | При изменении любой переменной; заодно обновить example, иначе deploy упадёт на сверке ключей |
 | `SSH_PRIVATE_KEY` | environment | Deploy-доступ на сервер (appleboy scp/ssh) | При смене ключа deploy-пользователя |
 | `SSH_HOST` | environment | Хост VPS | При смене сервера |
 | `SSH_USER` | environment | Deploy-пользователь | — |
@@ -103,8 +103,9 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
 
 ## Env: как это работает
 
-- Источник истины по **набору ключей** — `.env.stage.example` /
-  `.env.prod.example` в репозитории. Источник **значений** — секрет
+- Источник истины по **набору ключей** — `deploy/.env.stage.example` /
+  `deploy/.env.prod.example` в репозитории (рядом с `deploy/docker-compose.<env>.yml`,
+  чьи `env_file`-пути разрешаются от каталога compose-файла). Источник **значений** — секрет
   `ENV_FILE` соответствующего GitHub Environment.
 - При деплое runner рендерит `ENV_FILE` в файл, сверяет множество ключей с
   example-файлом (несовпадение = fail, защита от drift'а), дописывает

@@ -458,10 +458,10 @@ jobs:
           ADMIN_IMAGE: ghcr.io/x@sha256:0000000000000000000000000000000000000000000000000000000000000000
           LANDING_IMAGE: ghcr.io/x@sha256:0000000000000000000000000000000000000000000000000000000000000000
         run: |
-          touch .env.stage .env.prod
-          trap 'rm -f .env.stage .env.prod' EXIT
-          docker compose -f docker-compose.stage.yml config >/dev/null
-          docker compose -f docker-compose.prod.yml config >/dev/null
+          touch deploy/.env.stage deploy/.env.prod
+          trap 'rm -f deploy/.env.stage deploy/.env.prod' EXIT
+          docker compose -f deploy/docker-compose.stage.yml config >/dev/null
+          docker compose -f deploy/docker-compose.prod.yml config >/dev/null
 
       - name: Build image
         run: |
