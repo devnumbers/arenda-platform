@@ -8,6 +8,10 @@ import (
 
 func TestDaDataDefaults(t *testing.T) {
 	setRequiredLocalEnv(t)
+	// This is an env test and stays serial: t.Setenv cannot follow t.Parallel.
+	// The call is direct (the helper's identical set is invisible to the
+	// linter) so paralleltest's Setenv exemption recognizes the class.
+	t.Setenv("DADATA_API_KEY", "test-dadata-key")
 
 	cfg, err := Load()
 	if err != nil {

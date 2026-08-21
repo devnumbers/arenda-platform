@@ -221,6 +221,8 @@ func (f *pushDispatchFixture) subscriptionExists(t *testing.T, ctx context.Conte
 // Due-reminder with push-allowed recipient and a subscription: Send is called
 // with the correct payload, and the audit row is created.
 func TestPushDispatch_Integration_DeliversToRecipientWithSubscription(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -254,6 +256,8 @@ func TestPushDispatch_Integration_DeliversToRecipientWithSubscription(t *testing
 // A 404/410 (ErrSubscriptionGone) from the push service deletes the dead
 // subscription so future dispatches do not waste attempts on it.
 func TestPushDispatch_Integration_DeadSubscriptionIsDeleted(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -276,6 +280,8 @@ func TestPushDispatch_Integration_DeadSubscriptionIsDeleted(t *testing.T) {
 // A recipient who disabled push in their per-channel preferences does not
 // receive a push notification.
 func TestPushDispatch_Integration_PushDisabledNoSend(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -297,6 +303,8 @@ func TestPushDispatch_Integration_PushDisabledNoSend(t *testing.T) {
 // Fan-out over shared property: owner and active member both receive a push if
 // they each have a subscription and push allowed.
 func TestPushDispatch_Integration_FanOutToOwnerAndMember(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -325,6 +333,8 @@ func TestPushDispatch_Integration_FanOutToOwnerAndMember(t *testing.T) {
 // Email and push dispatch independently: a recipient with both channels enabled
 // receives both, and both audit rows are created.
 func TestPushDispatch_Integration_EmailAndPushBothDelivered(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -355,6 +365,8 @@ func TestPushDispatch_Integration_EmailAndPushBothDelivered(t *testing.T) {
 // Deduplication: a second dispatch of the same reminder does not call Send
 // again because the audit row already marks the recipient as notified.
 func TestPushDispatch_Integration_DedupOnRedispatch(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()

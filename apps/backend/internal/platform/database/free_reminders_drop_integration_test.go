@@ -27,6 +27,8 @@ const preDropFreeRemindersVersion = 107
 // the shared testdb fixture (already at the latest version, where planting
 // is structurally impossible) cannot serve it.
 func TestFreeRemindersDropContract(t *testing.T) {
+	t.Parallel()
+
 	if !dockerAvailable() {
 		t.Skip("docker not available — the drop contract test always needs its own container")
 	}

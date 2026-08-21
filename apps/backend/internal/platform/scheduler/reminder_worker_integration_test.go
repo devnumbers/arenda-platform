@@ -4,6 +4,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"testing"
 	"time"
@@ -143,9 +144,15 @@ func createWorkerTestUser(t *testing.T, ctx context.Context, q *genpostgres.Quer
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
+	// The phone comes from the UUID's random tail, not its timestamp: UUIDv7
+	// timestamps have millisecond precision, so parallel tests creating users
+	// in the same millisecond would collide on users.phone, and CreateUser's
+	// ON CONFLICT DO NOTHING then returns no row (the flake #168 predicted for
+	// these tests). Value-unique phones keep the fixture parallel-safe (the
+	// same approach as the notifications wave, #374).
 	_, err = q.CreateUser(ctx, genpostgres.CreateUserParams{
 		ID:    pgtype.UUID{Bytes: id, Valid: true},
-		Phone: fmt.Sprintf("+7999%010d", id.Time()%1e10),
+		Phone: fmt.Sprintf("+7999%07d", binary.BigEndian.Uint32(id[12:])%10000000),
 		Role:  "owner",
 	})
 	if err != nil {
@@ -307,6 +314,8 @@ func (f reminderFanoutFixture) assertDelivered(t *testing.T, ctx context.Context
 // Owner and active member without any preference rows both receive the
 // property reminder (default is allowed in the opt-out model).
 func TestReminderWorker_Integration_DeliversToOwnerAndActiveMember(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -319,6 +328,8 @@ func TestReminderWorker_Integration_DeliversToOwnerAndActiveMember(t *testing.T)
 // An active member who opted out of the event type does not receive the
 // reminder; the owner still does.
 func TestReminderWorker_Integration_MemberOptOutReceivesNothing(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -332,6 +343,8 @@ func TestReminderWorker_Integration_MemberOptOutReceivesNothing(t *testing.T) {
 // The owner's opt-out does not affect the member: preferences are enforced
 // per recipient.
 func TestReminderWorker_Integration_OwnerOptOutMemberStillReceives(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -344,6 +357,8 @@ func TestReminderWorker_Integration_OwnerOptOutMemberStillReceives(t *testing.T)
 
 // A suspended member is excluded from the fan-out at the recipient source.
 func TestReminderWorker_Integration_SuspendedMemberReceivesNothing(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()
@@ -362,6 +377,8 @@ func TestReminderWorker_Integration_SuspendedMemberReceivesNothing(t *testing.T)
 // TestFreeRemindersDropContract — so the selection is verified against live
 // operation reminders only.
 func TestReminderWorker_Integration_ListDueSelection(t *testing.T) {
+	t.Parallel()
+
 	pool := setupReminderWorkerDB(t)
 	ctx, tx, cleanup := beginReminderWorkerTx(t, pool)
 	defer cleanup()

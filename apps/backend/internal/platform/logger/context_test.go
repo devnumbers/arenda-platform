@@ -12,6 +12,8 @@ import (
 )
 
 func TestWithCorrelation_AddsIDs(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 	base := slog.New(slog.NewJSONHandler(&buf, nil))
 	ctx := requestctx.WithRequestID(context.Background(), "req-1")
@@ -38,6 +40,8 @@ func TestWithCorrelation_AddsIDs(t *testing.T) {
 }
 
 func TestWithCorrelation_NoIDs_ReturnsSameLogger(t *testing.T) {
+	t.Parallel()
+
 	base := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
 
 	log := WithCorrelation(context.Background(), base)
@@ -47,12 +51,16 @@ func TestWithCorrelation_NoIDs_ReturnsSameLogger(t *testing.T) {
 }
 
 func TestWithCorrelation_PassesNil(t *testing.T) {
+	t.Parallel()
+
 	if got := WithCorrelation(context.Background(), nil); got != nil {
 		t.Fatalf("expected nil, got %v", got)
 	}
 }
 
 func TestWithCorrelation_PrefersOTelSpanTraceID(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 	base := slog.New(slog.NewJSONHandler(&buf, nil))
 
@@ -84,6 +92,8 @@ func TestWithCorrelation_PrefersOTelSpanTraceID(t *testing.T) {
 }
 
 func TestWithCorrelation_FallsBackToLocalTraceIDWithoutSpan(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 	base := slog.New(slog.NewJSONHandler(&buf, nil))
 	ctx := requestctx.WithTraceID(t.Context(), "local-trace-only")

@@ -60,6 +60,8 @@ func newUoWWithBeginner(b *fakeBeginner) *uow {
 }
 
 func TestUoW_Do_CommitsOnNilError(t *testing.T) {
+	t.Parallel()
+
 	b := &fakeBeginner{}
 	u := newUoWWithBeginner(b)
 
@@ -89,6 +91,8 @@ func TestUoW_Do_CommitsOnNilError(t *testing.T) {
 }
 
 func TestUoW_Do_RollsBackOnError(t *testing.T) {
+	t.Parallel()
+
 	b := &fakeBeginner{}
 	u := newUoWWithBeginner(b)
 
@@ -112,6 +116,8 @@ func TestUoW_Do_RollsBackOnError(t *testing.T) {
 }
 
 func TestUoW_Do_PanicsRollsBackAndRepanics(t *testing.T) {
+	t.Parallel()
+
 	b := &fakeBeginner{}
 	u := newUoWWithBeginner(b)
 
@@ -145,6 +151,8 @@ func TestUoW_Do_PanicsRollsBackAndRepanics(t *testing.T) {
 }
 
 func TestUoW_Do_PropagatesCommitError(t *testing.T) {
+	t.Parallel()
+
 	commitErr := errors.New("commit failed")
 	b := &fakeBeginner{commitErr: commitErr}
 	u := newUoWWithBeginner(b)
@@ -170,6 +178,8 @@ func TestUoW_Do_PropagatesCommitError(t *testing.T) {
 }
 
 func TestUoW_Do_PropagatesBeginError(t *testing.T) {
+	t.Parallel()
+
 	beginErr := errors.New("begin failed")
 	b := &fakeBeginner{beginErr: beginErr}
 	u := newUoWWithBeginner(b)

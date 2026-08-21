@@ -6,6 +6,8 @@ import (
 )
 
 func TestNewRole_Valid(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		raw  string
 		want Role
@@ -15,6 +17,7 @@ func TestNewRole_Valid(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {
+			t.Parallel()
 			got, err := NewRole(tc.raw)
 			if err != nil {
 				t.Fatalf("NewRole(%q) returned unexpected error: %v", tc.raw, err)
@@ -30,9 +33,12 @@ func TestNewRole_Valid(t *testing.T) {
 }
 
 func TestNewRole_Invalid(t *testing.T) {
+	t.Parallel()
+
 	cases := []string{"", "superadmin", "OWNER", "Owner", "none", "viewer", "system"}
 	for _, raw := range cases {
 		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
 			got, err := NewRole(raw)
 			if err == nil {
 				t.Fatalf("NewRole(%q) = %q, want error", raw, got)
@@ -48,6 +54,8 @@ func TestNewRole_Invalid(t *testing.T) {
 }
 
 func TestRole_String(t *testing.T) {
+	t.Parallel()
+
 	if got := RoleOwner.String(); got != "owner" {
 		t.Fatalf("RoleOwner.String() = %q, want %q", got, "owner")
 	}

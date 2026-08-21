@@ -52,6 +52,10 @@ func TestPhotoStorageProviderFakeAllowedInProduction(t *testing.T) {
 func TestPhotoStorageProviderS3StillRequiredInProductionByDefault(t *testing.T) {
 	setRequiredProductionEnv(t)
 	clearPhotoStorageEnv(t)
+	// Explicit empty provider is the "by default" condition under test: an
+	// unset and an empty PHOTO_STORAGE_PROVIDER both resolve to s3 (config.go
+	// reads it with os.Getenv + TrimSpace), which production requires.
+	t.Setenv("PHOTO_STORAGE_PROVIDER", "")
 
 	_, err := Load()
 	if err == nil {

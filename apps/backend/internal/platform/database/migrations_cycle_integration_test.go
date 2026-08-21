@@ -27,6 +27,8 @@ import (
 // TEST_DATABASE_URL: down -all destroys the schema, and the shared database
 // may be used concurrently by other test binaries in the same run.
 func TestMigrationsUpDownUpCycle(t *testing.T) {
+	t.Parallel()
+
 	if !dockerAvailable() {
 		t.Skip("docker not available — the cycle test always needs its own container")
 	}

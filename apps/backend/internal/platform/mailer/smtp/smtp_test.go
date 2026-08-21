@@ -12,6 +12,8 @@ import (
 // Go's client default floor is TLS 1.2 today, and the pin keeps it from
 // silently dropping if that default ever changes.
 func TestTLSConfig_PinsTLS12Floor(t *testing.T) {
+	t.Parallel()
+
 	cfg := tlsConfig("smtp.example.com")
 
 	if cfg.ServerName != "smtp.example.com" {

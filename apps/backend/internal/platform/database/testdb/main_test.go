@@ -25,6 +25,8 @@ func TestMain(m *testing.M) {
 // database: it can run a trivial query and the users table (created in the
 // initial migration) exists and is queryable.
 func TestSetup_Smoke(t *testing.T) {
+	t.Parallel()
+
 	if os.Getenv("TEST_DATABASE_URL") == "" && !dockerAvailable() {
 		t.Skip("docker not available and TEST_DATABASE_URL not set")
 	}
@@ -58,6 +60,8 @@ func TestSetup_Smoke(t *testing.T) {
 // one database. Reset wipes seed data too (e.g. the test admin from migration
 // 000042), which is expected: each test starts from a completely clean slate.
 func TestReset_ClearsTables(t *testing.T) {
+	t.Parallel()
+
 	if os.Getenv("TEST_DATABASE_URL") == "" && !dockerAvailable() {
 		t.Skip("docker not available and TEST_DATABASE_URL not set")
 	}
