@@ -147,7 +147,7 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
                         onDescriptionChange={(description) =>
                             setDraft((prev) => ({...prev, description}))
                         }
-                        onSubmit={handleCreate}
+                        onSubmit={() => void handleCreate()}
                         isLoading={isSubmitting}
                     />
                 )}

@@ -41,7 +41,7 @@ export function OperationsSection({title, href, filters}: OperationsSectionProps
         return (
             <section className={styles.section}>
                 <SectionHeader title={title} href={href}/>
-                <FinanceErrorState onRetry={refetch} isLoading={isFetching}/>
+                <FinanceErrorState onRetry={() => void refetch()} isLoading={isFetching}/>
             </section>
         );
     }

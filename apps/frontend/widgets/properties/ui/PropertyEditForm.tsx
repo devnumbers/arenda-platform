@@ -218,14 +218,14 @@ export function PropertyEditForm({
     if (propertyQuery.isError || !propertyQuery.data) {
         return (
             <PropertyEditFormError
-                onRetry={propertyQuery.refetch}
+                onRetry={() => void propertyQuery.refetch()}
                 isLoading={propertyQuery.isFetching}
             />
         );
     }
 
     return (
-        <form className={styles.root} onSubmit={handleSubmit}>
+        <form className={styles.root} onSubmit={(event) => void handleSubmit(event)}>
             <PageHeader title="Информация об объекте" backHref={ROUTES.property(propertyId)}/>
 
             <section className={styles.section}>

@@ -91,7 +91,7 @@ export function PropertyContactEditPage({
                 <PropertyContactForm
                     submitLabel="Сохранить изменения"
                     isLoading={updateContact.isPending}
-                    onSubmit={handleSubmit}
+                    onSubmit={(data) => void handleSubmit(data)}
                     initialValues={{
                         name: contact.name,
                         phone: contact.phone,
@@ -118,7 +118,7 @@ export function PropertyContactEditPage({
                 description="Действие нельзя отменить."
                 confirmLabel="Удалить"
                 onClose={handleDeleteModalClose}
-                onConfirm={handleDeleteConfirm}
+                onConfirm={() => void handleDeleteConfirm()}
             />
         </>
     );

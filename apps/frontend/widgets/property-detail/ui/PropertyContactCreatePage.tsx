@@ -57,7 +57,7 @@ export function PropertyContactCreatePage({
             <PropertyContactForm
                 submitLabel="Добавить контакт"
                 isLoading={createContact.isPending}
-                onSubmit={handleSubmit}
+                onSubmit={(data) => void handleSubmit(data)}
             />
         </>
     );

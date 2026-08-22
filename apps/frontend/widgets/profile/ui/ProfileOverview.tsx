@@ -51,7 +51,7 @@ export function ProfileOverview(): JSX.Element {
             {isError ? (
                 <div className={styles.error}>
                     <p className={styles.errorText}>Не удалось загрузить профиль</p>
-                    <Button onClick={() => refetch()} variant="secondary">
+                    <Button onClick={() => void refetch()} variant="secondary">
                         Повторить
                     </Button>
                 </div>

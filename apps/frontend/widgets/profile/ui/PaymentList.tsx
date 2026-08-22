@@ -91,7 +91,7 @@ export function PaymentList(): JSX.Element {
         <p className={styles.errorText}>
           Не удалось загрузить историю операций
         </p>
-        <Button onClick={() => refetch()} variant="secondary">
+        <Button onClick={() => void refetch()} variant="secondary">
           Повторить
         </Button>
       </div>

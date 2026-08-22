@@ -43,7 +43,7 @@ export function TenantsPage(): JSX.Element {
             {query.isPending && <TenantsLoading/>}
 
             {!query.isPending && query.isError && (
-                <TenantsError onRetry={() => query.refetch()} isLoading={query.isFetching}/>
+                <TenantsError onRetry={() => void query.refetch()} isLoading={query.isFetching}/>
             )}
 
             {!query.isPending && !query.isError && (query.data?.length ?? 0) === 0 && (

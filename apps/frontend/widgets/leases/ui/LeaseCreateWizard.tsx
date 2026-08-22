@@ -240,7 +240,7 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
                         }
                         onStartDateChange={(startDate) => setDraft((prev) => ({...prev, startDate}))}
                         onEndDateChange={(endDate) => setDraft((prev) => ({...prev, endDate}))}
-                        onSubmit={handleSubmit}
+                        onSubmit={() => void handleSubmit()}
                         isLoading={isSubmitting}
                     />
                 )}

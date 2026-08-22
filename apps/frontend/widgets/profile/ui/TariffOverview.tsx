@@ -89,7 +89,7 @@ export function TariffOverview(): JSX.Element {
         return (
             <div className={styles.error}>
                 <p className={styles.errorText}>Не удалось загрузить данные тарифа</p>
-                <Button onClick={() => refetch()} variant="secondary">
+                <Button onClick={() => void refetch()} variant="secondary">
                     Повторить
                 </Button>
             </div>

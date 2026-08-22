@@ -94,7 +94,7 @@ export function ProfitReport(): JSX.Element {
   }
 
   if (isError) {
-    return <FinanceErrorState onRetry={refetch} isLoading={isFetching} />;
+    return <FinanceErrorState onRetry={() => void refetch()} isLoading={isFetching} />;
   }
 
   const totals = report?.totals;

@@ -325,7 +325,7 @@ export function OperationEditForm(): JSX.Element {
       {id && isLoading && <FinanceLoading />}
 
       {id && !isLoading && isError && (
-        <FinanceErrorState onRetry={refetch} isLoading={isFetching} />
+        <FinanceErrorState onRetry={() => void refetch()} isLoading={isFetching} />
       )}
 
       {id && !isLoading && !isError && data && (

@@ -253,12 +253,12 @@ function RemindersOnboardingModalContent({
                 preferences={notificationPrefs}
                 isSubmitting={isSavingPreferences}
                 onPreferenceChange={handlePreferenceChange}
-                onNext={handleNext}
+                onNext={() => void handleNext()}
             />
         ) : (
             <PushContent
                 isBusy={isPushBusy}
-                onAllow={handleAllowPush}
+                onAllow={() => void handleAllowPush()}
                 onSkip={handleSkipPush}
             />
         );

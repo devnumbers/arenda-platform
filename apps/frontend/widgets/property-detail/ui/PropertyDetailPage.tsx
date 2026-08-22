@@ -334,7 +334,7 @@ export function PropertyDetailPage(): JSX.Element {
                         onAccess={handleAccess}
                         onToggleMaintenance={handleToggleMaintenance}
                         onToggleArchive={handleToggleArchive}
-                        onExport={handleExport}
+                        onExport={() => void handleExport()}
                         onDelete={() => setDeleteOpen(true)}
                     />
                 }

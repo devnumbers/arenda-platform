@@ -543,7 +543,7 @@ export function RecurringOperationEditPage(): JSX.Element {
       {isLoading && <FinanceLoading />}
 
       {!isLoading && isError && (
-        <FinanceErrorState onRetry={refetch} isLoading={isFetching} />
+        <FinanceErrorState onRetry={() => void refetch()} isLoading={isFetching} />
       )}
 
       {!isLoading && !isError && data && (

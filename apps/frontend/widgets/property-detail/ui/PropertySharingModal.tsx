@@ -341,7 +341,7 @@ export function PropertySharingModal({
                                         <Button
                                             variant="secondary"
                                             size="small"
-                                            onClick={() => membersQuery.refetch()}
+                                            onClick={() => void membersQuery.refetch()}
                                         >
                                             Повторить
                                         </Button>

@@ -144,7 +144,7 @@ export function FinancePage(): JSX.Element {
                                 isLoading={isLoadingOverdue}
                                 isFetching={isFetchingOverdue}
                                 isError={isErrorOverdue}
-                                refetch={refetchOverdue}
+                                refetch={() => void refetchOverdue()}
                                 actionHref={`${ROUTES.financeOperations}?status=overdue&period=all&sort=operation_date_asc`}
                             />
 
@@ -153,7 +153,7 @@ export function FinancePage(): JSX.Element {
                                 isLoading={isLoadingUpcoming}
                                 isFetching={isFetchingUpcoming}
                                 isError={isErrorUpcoming}
-                                refetch={refetchUpcoming}
+                                refetch={() => void refetchUpcoming()}
                             />
                         </>
                     )}

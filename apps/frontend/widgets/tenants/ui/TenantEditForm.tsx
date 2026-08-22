@@ -166,7 +166,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
       {isPending && <TenantEditLoading />}
 
       {!isPending && isError && (
-        <TenantEditFormError onRetry={refetch} isLoading={isFetching} />
+        <TenantEditFormError onRetry={() => void refetch()} isLoading={isFetching} />
       )}
 
       {!isPending && !isError && !initialData && <TenantEditFormNotFound />}
@@ -176,7 +176,7 @@ export function TenantEditForm({ tenantId }: TenantEditFormProps): JSX.Element {
           initialData={initialData}
           submitLabel="Сохранить изменения"
           isLoading={updateTenantContact.isPending}
-          onSubmit={handleSubmit}
+          onSubmit={(data) => void handleSubmit(data)}
         />
       )}
     </>

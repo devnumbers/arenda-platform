@@ -322,13 +322,13 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
 
             {!leaseQuery.isPending && (leaseQuery.isError || !leaseQuery.data) && (
                 <LeaseEditFormError
-                    onRetry={leaseQuery.refetch}
+                    onRetry={() => void leaseQuery.refetch()}
                     isLoading={leaseQuery.isFetching}
                 />
             )}
 
             {!leaseQuery.isPending && leaseQuery.data && (
-                <form className={styles.form} onSubmit={handleSubmit}>
+                <form className={styles.form} onSubmit={(event) => void handleSubmit(event)}>
                     <DetailSection>
                         <h2 className={styles.sectionTitle}>Условия аренды</h2>
                         <div className={styles.fields}>

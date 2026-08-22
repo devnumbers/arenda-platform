@@ -263,7 +263,7 @@ export function OperationDetailPage(): JSX.Element {
             )}
             {id && isLoading && <OperationDetailLoading/>}
             {id && !isLoading && isError && (
-                <FinanceErrorState onRetry={refetch} isLoading={isFetching}/>
+                <FinanceErrorState onRetry={() => void refetch()} isLoading={isFetching}/>
             )}
             {id && !isLoading && !isError && data && (
                 <>

@@ -106,7 +106,7 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
   );
 
   return (
-    <form onSubmit={handleSubmit} className={styles.form}>
+    <form onSubmit={(event) => void handleSubmit(event)} className={styles.form}>
       <div className={styles.fields}>
         <TextField
           label="Фамилия"
@@ -194,7 +194,7 @@ export function PersonalDataForm(): JSX.Element {
       {isError && (
         <div className={styles.error}>
           <p className={styles.errorText}>Не удалось загрузить данные</p>
-          <Button onClick={() => refetch()} variant="secondary">
+          <Button onClick={() => void refetch()} variant="secondary">
             Повторить
           </Button>
         </div>

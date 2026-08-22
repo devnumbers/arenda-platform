@@ -294,7 +294,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
           onCancel={handleCancel}
         />
         <div className={styles.content}>
-          <FinanceErrorState onRetry={refetchProperties} isLoading={isPropertiesFetching} />
+          <FinanceErrorState onRetry={() => void refetchProperties()} isLoading={isPropertiesFetching} />
         </div>
       </div>
     );

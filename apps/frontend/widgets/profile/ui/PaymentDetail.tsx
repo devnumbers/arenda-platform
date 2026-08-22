@@ -48,7 +48,7 @@ export function PaymentDetail({ id }: PaymentDetailProps): JSX.Element {
         <p className={styles.errorText}>
           Не удалось загрузить операцию
         </p>
-        <Button onClick={() => refetch()} variant="secondary">
+        <Button onClick={() => void refetch()} variant="secondary">
           Повторить
         </Button>
       </div>

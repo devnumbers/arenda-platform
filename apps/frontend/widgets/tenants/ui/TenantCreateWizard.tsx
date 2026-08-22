@@ -140,7 +140,7 @@ export function TenantCreateWizard({returnTo}: TenantCreateWizardProps): JSX.Ele
                         comment: draft.comment,
                     }}
                     isLoading={isSubmitting}
-                    onSubmit={handleSubmit}
+                    onSubmit={(data) => void handleSubmit(data)}
                     onChange={handleChange}
                 />
             </div>
