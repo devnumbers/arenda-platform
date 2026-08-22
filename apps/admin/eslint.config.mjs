@@ -107,15 +107,14 @@ export default defineConfig([
     },
   },
   // Админ-трек I бара качества (бар #330, тикет #391): type-checked пресет
-  // на ручной код. HTTP-границы dataProvider/authProvider временно выведены
-  // из пресета files-scoped-игнором — их 34 находки no-unsafe-* (нетипизированный
-  // JSON ответа) закрываются типизацией границ в админ-треке II (#392);
-  // с приземлением #392 игнор из этого блока убирается. Шаблон генератора
-  // property-attributes не правится под бар — generated-каталог живёт под
-  // собственным files-scoped блоком без type-checked правил.
+  // на ручной код. HTTP-границы dataProvider/authProvider типизированы в
+  // админ-треке II (#392) и живут под пресетом наравне с остальным ручным
+  // кодом. Шаблон генератора property-attributes не правится под бар —
+  // generated-каталог живёт под собственным files-scoped блоком без
+  // type-checked правил.
   {
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/lib/generated/**", "src/dataProvider.ts", "src/authProvider.ts"],
+    ignores: ["src/lib/generated/**"],
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {

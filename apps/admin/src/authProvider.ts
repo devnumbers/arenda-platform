@@ -11,8 +11,16 @@ interface MeResponse {
   phone?: string;
 }
 
-const httpClient = (url: string, options: RequestInit = {}) =>
-  fetchUtils.fetchJson(url, { ...options, credentials: 'include' });
+// Граница типизирована (админ-трек II, #392): fetchUtils.fetchJson отдаёт
+// json как any — обёртка переводит его в unknown до первого использования,
+// дальше полезная нагрузка сужается целевыми типами (MeResponse).
+const httpClient = async (
+  url: string,
+  options: RequestInit = {}
+): Promise<{ json: unknown; headers: Headers }> => {
+  const response = await fetchUtils.fetchJson(url, { ...options, credentials: 'include' });
+  return { json: response.json as unknown, headers: response.headers };
+};
 
 interface ProblemDetails {
   detail?: string;
@@ -24,7 +32,7 @@ const statusOf = (error: unknown): number | undefined => (error as { status?: nu
 const messageOf = (error: unknown, fallback: string): string => {
   const body = (error as { body?: ProblemDetails | string | null } | undefined)?.body;
   if (body && typeof body === 'object') {
-    return body.detail || body.title || fallback;
+    return body.detail ?? body.title ?? fallback;
   }
   if (typeof body === 'string' && body) {
     return body;
@@ -61,6 +69,14 @@ interface AdminAuthProvider extends AuthProvider {
   sendLoginCode: (payload: { phone: string; email: string }) => Promise<void>;
 }
 
+// Полезная нагрузка POST /auth/verify из экрана входа: интерфейс AuthProvider
+// типизирует login(params: any) — граница сужает параметры сама.
+interface LoginParams {
+  phone?: string;
+  email?: string;
+  code?: string;
+}
+
 export const authProvider: AdminAuthProvider = {
   sendLoginCode: async ({ phone, email }) => {
     try {
@@ -73,7 +89,7 @@ export const authProvider: AdminAuthProvider = {
     }
   },
 
-  login: async ({ phone, email, code }) => {
+  login: async ({ phone, email, code }: LoginParams) => {
     const normalizedPhone = normalizePhone(String(phone ?? ''));
     try {
       await httpClient(`${API_PREFIX}/auth/verify`, {
@@ -114,11 +130,14 @@ export const authProvider: AdminAuthProvider = {
     }
   },
 
-  checkError: async (error) => {
+  // Без await: решение по статусу синхронно, редирект — rejected promise
+  // (требование типа Promise<void> у AuthProvider).
+  checkError: (error: unknown) => {
     const status = statusOf(error);
     if (status === 401 || status === 403) {
-      throw silentLoginRedirect();
+      return Promise.reject(silentLoginRedirect());
     }
+    return Promise.resolve();
   },
 
   logout: async () => {
@@ -129,7 +148,7 @@ export const authProvider: AdminAuthProvider = {
     const me = await fetchMe();
     return {
       id: me.id,
-      fullName: me.full_name || me.email || me.phone || me.id,
+      fullName: me.full_name ?? me.email ?? me.phone ?? me.id,
       avatar: undefined,
     };
   },

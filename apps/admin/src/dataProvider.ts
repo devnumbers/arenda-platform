@@ -3,10 +3,6 @@ import {
   HttpError,
   type CreateParams,
   type CreateResult,
-  type DeleteManyParams,
-  type DeleteManyResult,
-  type DeleteParams,
-  type DeleteResult,
   type GetListParams,
   type GetListResult,
   type GetManyParams,
@@ -16,8 +12,6 @@ import {
   type GetOneParams,
   type GetOneResult,
   type RaRecord,
-  type UpdateManyParams,
-  type UpdateManyResult,
   type UpdateParams,
   type UpdateResult,
 } from 'react-admin';
@@ -59,7 +53,7 @@ const httpClient = async (url: string, options: RequestInit = {}): Promise<{ jso
   const response = await fetch(url, { ...options, credentials: 'include' });
 
   if (!response.ok) {
-    const contentType = response.headers.get('content-type') || '';
+    const contentType = response.headers.get('content-type') ?? '';
     let body: ProblemDetails | string | null = null;
 
     try {
@@ -73,8 +67,11 @@ const httpClient = async (url: string, options: RequestInit = {}): Promise<{ jso
     }
 
     const message =
-      (typeof body === 'object' && body && (body.detail || body.title)) ||
-      (typeof body === 'string' ? body : response.statusText);
+      typeof body === 'object' && body
+        ? (body.detail ?? body.title ?? response.statusText)
+        : typeof body === 'string'
+          ? body
+          : response.statusText;
 
     throw new HttpError(message, response.status, body);
   }
@@ -88,9 +85,17 @@ const httpClient = async (url: string, options: RequestInit = {}): Promise<{ jso
   return { json, headers: response.headers };
 };
 
+// Бэкенд отдаёт идентификатор в поле Id (PascalCase) — ensureId переносит
+// его в react-admin'овский id. Трюк с аннотацией вместо каста: RaRecord
+// индексируется любым значением, прямое чтение дало бы any. Значения не
+// string/number игнорируются — строковизация объекта дала бы «[object Object]».
 const ensureId = <T extends RaRecord>(item: T): T => {
-  if (item.id === undefined && (item as Record<string, unknown>).Id !== undefined) {
-    return { ...item, id: String((item as Record<string, unknown>).Id) } as T;
+  const record: Record<string, unknown> = item;
+  if (item.id === undefined) {
+    const backendId = record.Id;
+    if (typeof backendId === 'string' || typeof backendId === 'number') {
+      return { ...item, id: String(backendId) };
+    }
   }
   return item;
 };
@@ -116,8 +121,13 @@ const sortableFieldsByResource: Record<string, readonly string[]> = {
 // OpenAPI-контракту.
 const unpaginatedResources = new Set(['tariffs', 'subscriptionTransitions']);
 
+// Фильтры списков приходят из react-admin как any (GetListParams.filter) —
+// на границе якорятся в Record<string, unknown> и сужаются по месту.
+type ListFilter = Record<string, unknown>;
+
 const buildListQuery = (resource: string, params: GetListParams): string => {
-  const { pagination, sort, filter } = params;
+  const { pagination, sort } = params;
+  const filter = (params.filter ?? {}) as ListFilter;
   const query = new URLSearchParams();
 
   if (!unpaginatedResources.has(resource)) {
@@ -136,9 +146,13 @@ const buildListQuery = (resource: string, params: GetListParams): string => {
     query.set('order', sort.order === 'ASC' ? 'asc' : 'desc');
   }
 
-  Object.entries(filter || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      query.set(key, String(value));
+  // В query-строку уходят только примитивы: String(объекта) дал бы
+  // «[object Object]» — значения прочих типов молча отбрасываются.
+  Object.entries(filter).forEach(([key, value]) => {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      if (value !== '') {
+        query.set(key, String(value));
+      }
     }
   });
 
@@ -228,12 +242,13 @@ const parseListResponse = <T extends RaRecord>(json: unknown, headers: Headers):
 
 export const dataProvider: AdminDataProvider = {
   getList: async <T extends RaRecord>(resource: string, params: GetListParams): Promise<GetListResult<T>> => {
-    const url = `${listUrl(resource, params.filter?.owner_id as string | number | undefined)}${buildListQuery(resource, params)}`;
+    const ownerId = (params.filter as ListFilter | undefined)?.owner_id as string | number | undefined;
+    const url = `${listUrl(resource, ownerId)}${buildListQuery(resource, params)}`;
     const { json, headers } = await httpClient(url, { method: 'GET' });
     return parseListResponse<T>(json, headers);
   },
 
-  getOne: async <T extends RaRecord>(resource: string, params: GetOneParams): Promise<GetOneResult<T>> => {
+  getOne: async <T extends RaRecord>(resource: string, params: GetOneParams<T>): Promise<GetOneResult<T>> => {
     const { json } = await httpClient(oneUrl(resource, params.id), { method: 'GET' });
 
     let data: T;
@@ -277,7 +292,7 @@ export const dataProvider: AdminDataProvider = {
     return { data: ensureId(data) };
   },
 
-  getMany: async <T extends RaRecord>(resource: string, params: GetManyParams): Promise<GetManyResult<T>> => {
+  getMany: async <T extends RaRecord>(resource: string, params: GetManyParams<T>): Promise<GetManyResult<T>> => {
     const results = await Promise.all(params.ids.map((id) => dataProvider.getOne<T>(resource, { id })));
     return { data: results.map((r) => r.data) };
   },
@@ -288,13 +303,15 @@ export const dataProvider: AdminDataProvider = {
   ): Promise<GetManyReferenceResult<T>> => {
     // owner_id — вложенный эндпоинт; property_id/lease_id — плоский эндпоинт с фильтром.
     if (params.target === 'owner_id') {
-      const url = `${listUrl(resource, params.id)}${buildListQuery(resource, { ...params, filter: { ...params.filter, owner_id: params.id } })}`;
+      const filter: ListFilter = { ...(params.filter ?? {}) as ListFilter, owner_id: params.id };
+      const url = `${listUrl(resource, params.id)}${buildListQuery(resource, { ...params, filter })}`;
       const { json, headers } = await httpClient(url, { method: 'GET' });
       return parseListResponse<T>(json, headers);
     }
 
     if (params.target === 'property_id' || params.target === 'lease_id') {
-      const url = `${listUrl(resource)}${buildListQuery(resource, { ...params, filter: { ...params.filter, [params.target]: params.id } })}`;
+      const filter: ListFilter = { ...(params.filter ?? {}) as ListFilter, [params.target]: params.id };
+      const url = `${listUrl(resource)}${buildListQuery(resource, { ...params, filter })}`;
       const { json, headers } = await httpClient(url, { method: 'GET' });
       return parseListResponse<T>(json, headers);
     }
@@ -336,17 +353,17 @@ export const dataProvider: AdminDataProvider = {
     return { data: ensureId(json as T) };
   },
 
-  updateMany: async <T extends RaRecord>(resource: string, _params: UpdateManyParams<T>): Promise<UpdateManyResult<T>> => {
-    throw new HttpError(`Массовое обновление для ресурса ${resource} не поддерживается`, 405);
-  },
+  // Неподдерживаемые методы отдают rejected promise (Promise<never>
+  // присваивается Promise-сигнатуре интерфейса) — async/throw без await
+  // ловился бы require-await.
+  updateMany: (resource: string): Promise<never> =>
+    Promise.reject(new HttpError(`Массовое обновление для ресурса ${resource} не поддерживается`, 405)),
 
-  delete: async <T extends RaRecord>(resource: string, _params: DeleteParams<T>): Promise<DeleteResult<T>> => {
-    throw new HttpError(`Удаление для ресурса ${resource} не поддерживается`, 405);
-  },
+  delete: (resource: string): Promise<never> =>
+    Promise.reject(new HttpError(`Удаление для ресурса ${resource} не поддерживается`, 405)),
 
-  deleteMany: async <T extends RaRecord>(resource: string, _params: DeleteManyParams<T>): Promise<DeleteManyResult<T>> => {
-    throw new HttpError(`Массовое удаление для ресурса ${resource} не поддерживается`, 405);
-  },
+  deleteMany: (resource: string): Promise<never> =>
+    Promise.reject(new HttpError(`Массовое удаление для ресурса ${resource} не поддерживается`, 405)),
 
   refundPayment: async ({ id }) => {
     const { json } = await httpClient(`${API_PREFIX}/admin/subscription/payments/${id}/refund`, { method: 'POST' });
