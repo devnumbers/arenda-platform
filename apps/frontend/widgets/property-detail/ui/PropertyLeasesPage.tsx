@@ -106,7 +106,7 @@ function LeaseHistoryCard({lease}: { readonly lease: Lease }): JSX.Element {
 
 export function PropertyLeasesPage(): JSX.Element {
     const params = useParams<{ id: string }>();
-    const id = params.id ?? '';
+    const id = params.id;
 
     const propertyQuery = useProperty(id);
     const leasesQuery = usePropertyLeases(id);

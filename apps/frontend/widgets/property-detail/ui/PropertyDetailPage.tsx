@@ -71,7 +71,7 @@ function resolveExportFilename(disposition: string): string {
 
 export function PropertyDetailPage(): JSX.Element {
     const params = useParams<{ id: string }>();
-    const id = params.id ?? '';
+    const id = params.id;
     const router = useRouter();
 
     const propertyQuery = useProperty(id);
@@ -463,7 +463,7 @@ export function PropertyDetailPage(): JSX.Element {
                 membersCount={property?.members_count ?? 0}
                 deletingMode={
                     deleteProperty.isPending
-                        ? (deleteProperty.variables?.mode ?? null)
+                        ? deleteProperty.variables.mode
                         : null
                 }
                 isCompletingLease={completeLease.isPending}

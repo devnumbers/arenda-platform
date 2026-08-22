@@ -34,7 +34,7 @@ export function PropertyLeaseCard({
         ? `${ROUTES.financeOperations}?property_id=${lease.propertyId}`
         : ROUTES.financeOperations;
     const showRentActions = status === 'rented';
-    const showResolveActions = status === 'requires_action' && lease;
+    const showResolveActions = status === 'requires_action' && lease !== undefined;
     const showCreateAction = status === 'free';
     const showUnavailableState =
         status !== 'awaiting_start' &&

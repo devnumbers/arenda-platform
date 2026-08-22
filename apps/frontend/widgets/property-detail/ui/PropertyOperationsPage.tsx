@@ -62,7 +62,7 @@ function getYearRange(date: Date): { from: string; to: string } {
 
 export function PropertyOperationsPage(): JSX.Element {
   const params = useParams<{ id: string }>();
-  const id = params.id ?? '';
+  const id = params.id;
 
   const [period, setPeriod] = useState<Period>('month');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');

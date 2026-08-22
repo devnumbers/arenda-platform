@@ -32,7 +32,7 @@ export function PropertyContactsSection({
                 <p className={styles.errorText}>Не удалось загрузить контакты</p>
             )}
 
-            {!isPending && !isError && (!contacts || contacts.length === 0) && (
+            {!isPending && !isError && contacts.length === 0 && (
                 <LinkButton
                     href={ROUTES.propertyContactsNew(propertyId)}
                     variant="primary"
@@ -44,7 +44,7 @@ export function PropertyContactsSection({
                 </LinkButton>
             )}
 
-            {!isPending && !isError && contacts && contacts.length > 0 && (
+            {!isPending && !isError && contacts.length > 0 && (
                 <>
                     <ul className={styles.list}>
                         {contacts.map((contact) => (

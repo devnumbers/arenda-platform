@@ -74,7 +74,13 @@ function memberLabel(member: PropertyAccessMember): string {
     if (member.status === 'pending') {
         return member.email ?? '';
     }
-    return member.displayName || member.email || 'Без имени';
+    if (member.displayName !== '') {
+        return member.displayName;
+    }
+    if (member.email !== null && member.email !== '') {
+        return member.email;
+    }
+    return 'Без имени';
 }
 
 export type PropertySharingModalProps = {
@@ -242,8 +248,11 @@ export function PropertySharingModal({
     }, []);
 
     const handleCopyLink = (): void => {
-        // Ссылка не даёт прав — только для удобства.
-        navigator.clipboard
+        // Ссылка не даёт прав — только для удобства. В небезопасном контексте
+        // (http) clipboard у навигатора отсутствует, хотя DOM-тип считает его
+        // всегда доступным — расширение типа сохраняет runtime-проверку.
+        const clipboard = navigator.clipboard as Clipboard | undefined;
+        clipboard
             ?.writeText(`${window.location.origin}${ROUTES.property(propertyId)}`)
             .catch(() => {
                 // clipboard может быть недоступен — подсказку всё равно показываем
