@@ -13,6 +13,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import { Link, useDataProvider } from 'react-admin';
 import { formatKopecks, fullName, subscriptionPaymentStatusChoices } from './fields';
+import type { AdminDataProvider } from './dataProvider';
 
 // Ссылка на список пользователей с активной подпиской: react-admin читает фильтры списка
 // из query-параметра filter (JSON), ключ совпадает с source фильтра в UserList.
@@ -195,7 +196,7 @@ const RecentPaymentsCard = ({ payments }: { payments: AdminStatsRecentPayment[] 
 );
 
 export const Dashboard = () => {
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<AdminDataProvider>();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -203,8 +204,6 @@ export const Dashboard = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     dataProvider
       .getStats()
       .then((result: { data: unknown }) => {
@@ -245,7 +244,14 @@ export const Dashboard = () => {
           <Alert severity="error" sx={{ mb: 2 }}>
             {error ?? 'Неизвестная ошибка'}
           </Alert>
-          <Button variant="contained" onClick={() => setReloadToken((value) => value + 1)}>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              setReloadToken((value) => value + 1);
+            }}
+          >
             Повторить
           </Button>
         </CardContent>

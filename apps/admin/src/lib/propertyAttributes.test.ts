@@ -185,13 +185,13 @@ describe('formatAttributesForCardGrouped', () => {
     expect(groups.length).toBeGreaterThan(0);
 
     const firstGroup = groups[0];
-    expect(firstGroup.label).toBe(groupLabels.about_object);
+    expect(firstGroup?.label).toBe(groupLabels.about_object);
 
-    const labels = firstGroup.items.map((i) => i.label);
+    const labels = firstGroup?.items.map((i) => i.label) ?? [];
     expect(labels).toContain(fieldLabels.rooms);
     expect(labels).toContain(fieldLabels.area_total);
 
-    const roomItem = firstGroup.items.find((i) => i.label === fieldLabels.rooms);
+    const roomItem = firstGroup?.items.find((i) => i.label === fieldLabels.rooms);
     expect(roomItem?.value).toBe('2');
   });
 
@@ -219,8 +219,8 @@ describe('formatAttributesForCardGrouped', () => {
   it('uses null group label for types whose fields have group=null (office)', () => {
     const attrs: PropertyAttributes = { area_total: 100 };
     const groups = formatAttributesForCardGrouped(asType('office'), attrs);
-    expect(groups[0].group).toBeNull();
-    expect(groups[0].label).toBeNull();
+    expect(groups[0]?.group).toBeNull();
+    expect(groups[0]?.label).toBeNull();
   });
 });
 
@@ -234,7 +234,7 @@ describe('labels — every AttrKey has a field label', () => {
     expect(keys.length).toBeGreaterThanOrEqual(21);
     for (const key of keys) {
       expect(typeof fieldLabels[key]).toBe('string');
-      expect((fieldLabels[key] as string).length).toBeGreaterThan(0);
+      expect(fieldLabels[key].length).toBeGreaterThan(0);
     }
   });
 

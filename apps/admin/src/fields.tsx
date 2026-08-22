@@ -183,7 +183,7 @@ interface PersonName {
 export const fullName = (person: PersonName): string =>
   [person.surname, person.name, person.patronymic].filter(Boolean).join(' ');
 
-export const asPersonName = (value: unknown): PersonName => (value && typeof value === 'object' ? (value as PersonName) : {});
+export const asPersonName = (value: unknown): PersonName => (value && typeof value === 'object' ? value : {});
 
 const moneyFormatter = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' });
 
@@ -219,7 +219,15 @@ export const ChoiceChipField = ({ choices, ...props }: FieldProps & { choices: C
     return null;
   }
   const choice = choices.find((item) => item.id === value);
-  return <Chip size="small" label={choice ? choice.name : String(value)} />;
+  if (choice) {
+    return <Chip size="small" label={choice.name} />;
+  }
+  // Неизвестный enum проходит как есть; строковые и числовые id строковируются
+  // явно — объектное значение не может стать чипом «[object Object]».
+  if (typeof value === 'string' || typeof value === 'number') {
+    return <Chip size="small" label={String(value)} />;
+  }
+  return null;
 };
 
 /**

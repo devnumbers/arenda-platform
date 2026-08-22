@@ -1,7 +1,7 @@
-import { AuthProvider, fetchUtils } from 'react-admin';
+import { type AuthProvider, fetchUtils } from 'react-admin';
 import { normalizePhone } from './phone';
 
-const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api';
+const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? '/api';
 
 interface MeResponse {
   id: string;

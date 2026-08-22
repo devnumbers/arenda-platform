@@ -56,6 +56,12 @@ describe('tariffRepresentation', () => {
     expect(tariffRepresentation({ id: 'abc', name: undefined })).toBe('#abc');
     expect(tariffRepresentation({ id: 'abc', name: '' })).toBe('#abc');
     expect(tariffRepresentation({ id: 'abc' })).toBe('#abc');
+    expect(tariffRepresentation({ id: 42, name: undefined })).toBe('#42');
+  });
+
+  it('renders an empty string when both name and id are unusable', () => {
+    expect(tariffRepresentation({ id: undefined, name: undefined })).toBe('');
+    expect(tariffRepresentation({ id: { nested: true }, name: undefined })).toBe('');
   });
 
   it('shows an unknown name as-is instead of falling back to #id', () => {

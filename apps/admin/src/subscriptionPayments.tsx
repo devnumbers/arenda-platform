@@ -22,6 +22,7 @@ import {
   useRecordContext,
   useRefresh,
 } from 'react-admin';
+import type { AdminDataProvider } from './dataProvider';
 import {
   ChoiceChipField,
   MoneyField,
@@ -69,7 +70,7 @@ export const SubscriptionPaymentList = () => (
 // Возвраты всегда полные (ADR 0037): контракт эндпоинта не принимает сумму,
 // диалог — только подтверждение действия.
 const RefundButton = () => {
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<AdminDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
   const record = useRecordContext();
@@ -112,7 +113,7 @@ const RefundButton = () => {
           <Button onClick={() => setOpen(false)} disabled={loading}>
             Отмена
           </Button>
-          <Button onClick={handleRefund} disabled={loading} color="error">
+          <Button onClick={() => void handleRefund()} disabled={loading} color="error">
             Вернуть полностью
           </Button>
         </DialogActions>
@@ -122,7 +123,7 @@ const RefundButton = () => {
 };
 
 const SyncButton = () => {
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<AdminDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
   const record = useRecordContext();
@@ -143,7 +144,7 @@ const SyncButton = () => {
   };
 
   return (
-    <Button variant="outlined" onClick={handleSync}>
+    <Button variant="outlined" onClick={() => void handleSync()}>
       Синхронизировать
     </Button>
   );

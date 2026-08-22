@@ -25,6 +25,7 @@ import {
   useRefresh,
 } from 'react-admin';
 import { ChoiceChipField, subscriptionStatusChoices } from './fields';
+import type { AdminDataProvider } from './dataProvider';
 import { errorMessage } from './lib/error-message';
 import {
   canCancelOnBehalf,
@@ -44,7 +45,7 @@ import {
 const useUserSubscription = (): UserSubscriptionRecord => {
   const record = useRecordContext();
   const subscription = (record as Record<string, unknown> | undefined)?.subscription;
-  return subscription && typeof subscription === 'object' ? (subscription as UserSubscriptionRecord) : {};
+  return subscription && typeof subscription === 'object' ? subscription : {};
 };
 
 /** Ссылка на Show платежа из истории переходов. */
@@ -69,15 +70,19 @@ const TransitionReasonField = () => {
   return <span>{transitionReasonLabel(String(record.reason))}</span>;
 };
 
+/** Значение перехода в ячейке: строки/числа как есть, прочее — прочерк. */
+const transitionDisplay = (value: unknown): string =>
+  typeof value === 'string' || typeof value === 'number' ? String(value) : '—';
+
 /** Смена статуса/тарифа в одной ячейке: «было → стало», «—» для первой записи. */
 const TransitionChangeField = ({ from, to }: { from: string; to: string }) => {
-  const record = useRecordContext() as Record<string, unknown> | undefined;
+  const record = useRecordContext<Record<string, unknown>>();
   if (!record) {
     return null;
   }
   const fromValue = record[from];
   const toValue = record[to];
-  return <span>{fromValue ? `${String(fromValue)} → ${String(toValue)}` : String(toValue)}</span>;
+  return <span>{fromValue ? `${transitionDisplay(fromValue)} → ${transitionDisplay(toValue)}` : transitionDisplay(toValue)}</span>;
 };
 
 /** История переходов подписки пользователя, новые сверху. */
@@ -168,7 +173,7 @@ const TariffSelect = ({ value, onChange }: { value: string; onChange: (name: str
 const AssignServiceButton = () => {
   const record = useRecordContext();
   const subscription = useUserSubscription();
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<AdminDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
   const [open, setOpen] = useState(false);
@@ -211,7 +216,7 @@ const AssignServiceButton = () => {
         setOpen(true);
       }}
       onClose={() => setOpen(false)}
-      onSubmit={handleSubmit}
+      onSubmit={() => void handleSubmit()}
       submitLabel="Назначить"
       loading={loading}
       canSubmit={tariffName !== '' && (termType !== 'date' || untilDate !== '')}
@@ -248,7 +253,7 @@ const AssignServiceButton = () => {
 /** Принудительная смена тарифа: мгновенно, без оплаты, с архивацией избытка. */
 const ForceChangeTariffButton = () => {
   const record = useRecordContext();
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<AdminDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
   const [open, setOpen] = useState(false);
@@ -282,7 +287,7 @@ const ForceChangeTariffButton = () => {
         setOpen(true);
       }}
       onClose={() => setOpen(false)}
-      onSubmit={handleSubmit}
+      onSubmit={() => void handleSubmit()}
       submitLabel="Сменить тариф"
       loading={loading}
       canSubmit={tariffName !== ''}
@@ -307,7 +312,7 @@ const ForceChangeTariffButton = () => {
 const ExtendGraceButton = () => {
   const record = useRecordContext();
   const subscription = useUserSubscription();
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<AdminDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
   const [open, setOpen] = useState(false);
@@ -340,7 +345,7 @@ const ExtendGraceButton = () => {
       open={open}
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
-      onSubmit={handleSubmit}
+      onSubmit={() => void handleSubmit()}
       submitLabel="Продлить"
       loading={loading}
     >
@@ -361,7 +366,7 @@ const ExtendGraceButton = () => {
 const CancelSubscriptionButton = () => {
   const record = useRecordContext();
   const subscription = useUserSubscription();
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<AdminDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
   const [open, setOpen] = useState(false);
@@ -393,7 +398,7 @@ const CancelSubscriptionButton = () => {
       open={open}
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
-      onSubmit={handleCancel}
+      onSubmit={() => void handleCancel()}
       submitLabel="Отменить подписку"
       loading={loading}
     />

@@ -24,7 +24,8 @@ export const formatPropertyLimit = (limit: number): string =>
 /** Представление записи тарифа для react-admin: русское название, иначе #id. */
 export const tariffRepresentation = (record: { id?: unknown; name?: unknown }): string => {
   const name = typeof record.name === 'string' && record.name !== '' ? tariffName(record.name) : '';
-  return name || `#${record.id}`;
+  const id = typeof record.id === 'string' || typeof record.id === 'number' ? String(record.id) : '';
+  return name || (id !== '' ? `#${id}` : '');
 };
 
 /** Поля тарифа, редактируемые админом (issue #256); цены — копейки. */

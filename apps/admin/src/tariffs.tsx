@@ -182,7 +182,7 @@ const EditTariffButton = () => {
           <Button onClick={() => setOpen(false)} disabled={loading}>
             Отмена
           </Button>
-          <Button onClick={handleSubmit} disabled={loading || validationError !== null} color="primary">
+          <Button onClick={() => void handleSubmit()} disabled={loading || validationError !== null} color="primary">
             Сохранить
           </Button>
         </DialogActions>
@@ -240,7 +240,7 @@ const ToggleTariffActivityButton = () => {
             <Button onClick={() => setConfirmOpen(false)} disabled={loading}>
               Отмена
             </Button>
-            <Button onClick={() => apply(false)} disabled={loading} color="warning">
+            <Button onClick={() => { void apply(false); }} disabled={loading} color="warning">
               Скрыть тариф
             </Button>
           </DialogActions>
@@ -250,7 +250,7 @@ const ToggleTariffActivityButton = () => {
   }
 
   return (
-    <Button size="small" disabled={loading} onClick={() => apply(true)}>
+    <Button size="small" disabled={loading} onClick={() => { void apply(true); }}>
       Показать
     </Button>
   );
@@ -332,7 +332,7 @@ export const CreateTariffButton = () => {
           <Button onClick={() => setOpen(false)} disabled={loading}>
             Отмена
           </Button>
-          <Button onClick={handleSubmit} disabled={loading || validationError !== null} color="primary">
+          <Button onClick={() => void handleSubmit()} disabled={loading || validationError !== null} color="primary">
             Создать
           </Button>
         </DialogActions>
@@ -351,7 +351,7 @@ export const TariffList = () => (
       <BooleanField source="isActive" valueLabelTrue="Активен" valueLabelFalse="Скрыт" sortable={false} />
       <FunctionField
         source="activePropertyLimit"
-        render={(record) => formatPropertyLimit(record.activePropertyLimit)}
+        render={(record) => formatPropertyLimit((record as TariffRecord).activePropertyLimit ?? 0)}
         sortable={false}
       />
       <MoneyField source="monthlyPriceKopecks" sortable={false} />

@@ -90,7 +90,7 @@ export const LoginPage = () => {
           )}
 
           {step === 'send' ? (
-            <Box component="form" onSubmit={handleSendCode} noValidate>
+            <Box component="form" onSubmit={(event) => void handleSendCode(event)} noValidate>
               <TextField
                 margin="normal"
                 required
@@ -125,7 +125,7 @@ export const LoginPage = () => {
               </Button>
             </Box>
           ) : (
-            <Box component="form" onSubmit={handleLogin} noValidate>
+            <Box component="form" onSubmit={(event) => void handleLogin(event)} noValidate>
               <TextField
                 margin="normal"
                 required

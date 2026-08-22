@@ -1,5 +1,5 @@
 import {
-  DataProvider,
+  type DataProvider,
   HttpError,
   type CreateParams,
   type CreateResult,
@@ -22,14 +22,17 @@ import {
   type UpdateResult,
 } from 'react-admin';
 
-const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api';
+const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? '/api';
 
 interface ProblemDetails {
   detail?: string;
   title?: string;
 }
 
-interface AdminDataProvider extends DataProvider {
+// Экспортируется для типизации useDataProvider<AdminDataProvider>() в
+// компонентах: кастомные методы (refundPayment, getStats, …) доступны на
+// значении провайдера, а не на базовом типе DataProvider хука.
+export interface AdminDataProvider extends DataProvider {
   // Возврат всегда полный (ADR 0037): контракт эндпоинта не принимает тело.
   refundPayment: (payload: { id: string | number }) => Promise<{ data: unknown }>;
   syncPayment: (payload: { id: string | number }) => Promise<{ data: unknown }>;

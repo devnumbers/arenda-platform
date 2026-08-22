@@ -4,7 +4,7 @@ How the react-admin back-office SPA is built and reviewed. Read before implement
 
 Not duplicated here — single sources of truth elsewhere:
 
-- The four ESLint gates (`no-explicit-any`, URL literals, `generated/` imports, raw `fetch` boundaries) are enforced by `eslint.config.mjs`; review does not re-report what lint blocks.
+- The wave-2C ESLint gates (`no-explicit-any`, URL literals, `generated/` imports, raw `fetch` boundaries) and the quality-bar gates (the type-checked preset, react-hooks, money selectors) are enforced by `eslint.config.mjs`; review does not re-report what lint blocks.
 - Invariants, stack versions, and commands: `AGENTS.md` (same directory). Decisions: `docs/adr/`.
 - The backend contract (`openapi.yaml`, audit action registry, sort whitelists) is the source of truth this app mirrors — see the sync-test rules below.
 
@@ -33,7 +33,7 @@ All backend calls go through `src/dataProvider.ts` (or `authProvider.ts`) — th
 ## fields.tsx — choices and display
 
 - Choice catalogs (`roleChoices`, `leaseStatusChoices`, …) mirror `openapi.yaml` and the audit registry, with Russian labels. **Every catalog ships a sync contract test** (in `src/lib/*.test.ts`): enum values from the backend source asserted to be covered exactly once with non-empty labels — drift fails the suite, not production.
-- Money displays only through `MoneyField` / `formatKopecks` (`Intl` ru-RU); never ad-hoc `/100`.
+- Money displays only through `MoneyField` / `formatKopecks` (`Intl` ru-RU); never ad-hoc `/100` — enforced by the money selectors (raw `/100`/`*100` and `.toFixed` banned outside `fields.tsx`).
 - Link and Reference wrappers (`UserLinkField`, `UserReferenceField`, …) avoid extra requests; the documented exception is `ReferenceField` in list views, where RA batches `getMany`.
 - Names through `fullName`/`asPersonName`; enum chips through `ChoiceChipField`.
 
@@ -50,15 +50,15 @@ Unit tests are pure-logic only — vitest in a node environment, colocated `*.te
 
 Components and `dataProvider` mapping are not unit-tested; that is the standard, not a gap.
 
-## Quality bar — admin track (accepted, map #326, spec #378)
+## Quality bar — admin track (track I in force since 2026-08-22, ticket #391; map #326, spec #378)
 
-The admin joins the frontend quality bar (bar [#330](https://github.com/devnumbers/arenda-platform/issues/330), spec [#378](https://github.com/devnumbers/arenda-platform/issues/378)) on its own minimal-config track — the whole mode adds exactly one devDependency, `eslint-plugin-react-hooks`. The patterns are the standard now; flips land ticket by ticket, fix-then-flip per rule family, with this section and `docs/agents/tooling.md` updating in the same change.
+The admin joins the frontend quality bar (bar [#330](https://github.com/devnumbers/arenda-platform/issues/330), spec [#378](https://github.com/devnumbers/arenda-platform/issues/378)) on its own minimal-config track — the whole mode adds exactly one devDependency, `eslint-plugin-react-hooks`. Track I is tool-enforced now; track II (typing the HTTP boundaries) is [#392](https://github.com/devnumbers/arenda-platform/issues/392).
 
-- `typescript-eslint` `recommendedTypeChecked` scoped to `src` sources. The known finding families: `no-misused-promises` (async handlers in void form signatures), `no-unsafe-*` (untyped JSON at the `dataProvider`/`authProvider` boundaries — type it at the boundary instead), `no-base-to-string` (a real `[object Object]` class).
-- `eslint-plugin-react-hooks` `recommended` — conditional hook calls and hook discipline checked statically, not by runtime crashes.
-- Money selectors: raw `/100`/`*100` arithmetic and `.toFixed` banned outside `src/fields.tsx` (and outside `src/lib/generated/` — generated code is not fixed by hand), the same file-allowlist approach as frontend wave C.
-- `src/lib/generated/` stays behind a files-scoped config block; the generator template is not modified for the bar.
-- tsconfig: `noUncheckedIndexedAccess`, `verbatimModuleSyntax`; plus `prefer-nullish-coalescing`.
+- `typescript-eslint` `recommendedTypeChecked` + `prefer-nullish-coalescing` run at error level over manual code (`src` minus `src/lib/generated/`, `src/dataProvider.ts`, `src/authProvider.ts` — the two boundary files are files-scoped out of the preset until #392 types their response JSON). Custom provider methods are typed via `useDataProvider<AdminDataProvider>()`; async handlers in void-signature props go through `void`-wrappers (the handlers catch everything themselves).
+- `eslint-plugin-react-hooks` `recommended` — conditional hook calls and hook discipline checked statically, not by runtime crashes; synchronous `setState` in an effect body is an error (reset state in the triggering handler, not in the effect).
+- Money selectors: raw `/100`/`*100` arithmetic and `.toFixed` banned outside `src/fields.tsx` (and outside `src/lib/generated/` — generated code is not fixed by hand), the same file-allowlist approach as frontend wave C. The selectors live in a files-scoped block that restates the URL-literal selectors — flat-config last-write-wins replaces `no-restricted-syntax` per file set, the same trap the frontend config documents.
+- `src/lib/generated/` stays behind files-scoped config blocks; the generator template is not adapted to the ESLint bar. One motivated exception landed with track I: `emit-admin-ts.mjs` emits `groups[groups.length - 1]?.items.push(...)` instead of the non-null-safe indexing — tsconfig flags are program-wide and generated code cannot be files-scoped out of `tsc`, so the one-token `?.` hardening (behavior identical — the group is pushed by the guard above) is the only non-suppressing path to a green gate.
+- tsconfig: `noUncheckedIndexedAccess`, `verbatimModuleSyntax` — indexed access carries `| undefined` (`??` / narrowing, not assertions), type-only imports are spelled `import type` / `type` specifiers.
 - jsx-a11y stays frontend-only (rejected for the admin — MUI and react-admin carry the semantics).
 
 Zero tolerance for suppressions: `eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` — zero in manual code (`src` outside `src/lib/generated/`): fix the code, never suppress; a blocking CI counter guards the zero (accepted gate, `docs/agents/tooling.md`). The admin has no legal suppressions today.
