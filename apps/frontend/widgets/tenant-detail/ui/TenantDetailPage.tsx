@@ -60,8 +60,8 @@ export function TenantDetailPage({ id }: TenantDetailPageProps): JSX.Element {
       {!isLoading && isError && (
         <TenantDetailError
           onRetry={() => {
-            tenantQuery.refetch();
-            leasesQuery.refetch();
+            void tenantQuery.refetch();
+            void leasesQuery.refetch();
           }}
           isLoading={tenantQuery.isFetching || leasesQuery.isFetching}
         />

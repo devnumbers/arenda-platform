@@ -166,8 +166,8 @@ const eslintConfig = defineConfig([
     },
   },
   // The type-checked block (projectService). Wave A brought
-  // switch-exhaustiveness-check; wave B (ticket #393, bar #330) added the first
-  // type-checked families fix-then-flip: every family was counted advisory,
+  // switch-exhaustiveness-check; wave B (tickets #393 and #394, bar #330) added
+  // the type-checked families fix-then-flip: every family was counted advisory,
   // fixed to zero, then flipped to error in the same change. Scoped exactly to
   // tsconfig.json's include extensions — a linted file outside the project
   // would fail to resolve its types.
@@ -179,6 +179,7 @@ const eslintConfig = defineConfig([
       },
     },
     rules: {
+      "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
       "@typescript-eslint/no-unnecessary-type-assertion": "error",
       "@typescript-eslint/no-non-null-assertion": "error",

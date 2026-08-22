@@ -104,7 +104,7 @@ export function useCreateProperty(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
     },
   });
 }
@@ -122,8 +122,8 @@ export function useUpdateProperty(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
 }
@@ -140,12 +140,12 @@ export function useArchiveProperty(): UseMutationResult<
         method: 'POST',
       }),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
     },
   });
 }
@@ -162,12 +162,12 @@ export function useUnarchiveProperty(): UseMutationResult<
         method: 'POST',
       }),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
     },
   });
 }
@@ -217,8 +217,8 @@ export function useDeletePropertyPhoto(): UseMutationResult<
         method: 'DELETE',
       }),
     onSuccess: (_, { propertyId }) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(propertyId) });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(propertyId) });
     },
   });
 }
@@ -244,19 +244,19 @@ export function useDeleteProperty(): UseMutationResult<
         // При detach операции выживают с property_id: null — инвалидируем
         // весь префикс операций (списки и detail), чтобы подтянуть
         // обновлённые property_id/property_status.
-        queryClient.invalidateQueries({ queryKey: ['operations'] });
+        void queryClient.invalidateQueries({ queryKey: ['operations'] });
       }
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-      queryClient.invalidateQueries({ queryKey: leaseKeys.byProperty(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
-      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
-      queryClient.invalidateQueries({ queryKey: recurringOperationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: recurringOperationKeys.byProperty(id) });
+      void queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+      void queryClient.invalidateQueries({ queryKey: leaseKeys.byProperty(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
+      void queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
+      void queryClient.invalidateQueries({ queryKey: recurringOperationKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: recurringOperationKeys.byProperty(id) });
     },
   });
 }

@@ -284,10 +284,10 @@ export function TariffChangeForm(): JSX.Element {
 
   const handleRetry = useCallback(() => {
     if (isTariffsError) {
-      refetchTariffs();
+      void refetchTariffs();
     }
     if (isSubscriptionError) {
-      refetchSubscription();
+      void refetchSubscription();
     }
   }, [isTariffsError, isSubscriptionError, refetchTariffs, refetchSubscription]);
 

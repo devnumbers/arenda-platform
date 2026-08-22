@@ -68,7 +68,7 @@ export function useUpdateNotificationPreferences(): UseMutationResult<
     },
     onSuccess: (data) => {
       queryClient.setQueryData(notificationPreferencesKeys.all, data);
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: notificationPreferencesKeys.all,
       });
     },

@@ -59,24 +59,24 @@ function invalidateLeaseScope(
   queryClient: ReturnType<typeof useQueryClient>,
   lease: Pick<Lease, 'id' | 'propertyId'>,
 ): void {
-  queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-  queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
-  queryClient.invalidateQueries({
+  void queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+  void queryClient.invalidateQueries({ queryKey: leaseKeys.detail(lease.id) });
+  void queryClient.invalidateQueries({
     queryKey: operationKeys.operations({ lease_id: lease.id }),
   });
-  queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-  queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-  queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
+  void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+  void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+  void queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
   if (lease.propertyId) {
-    queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-    queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.propertyId) });
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+    void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(lease.propertyId) });
+    void queryClient.invalidateQueries({
       queryKey: leaseKeys.byProperty(lease.propertyId),
     });
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({
       queryKey: operationKeys.byProperty(lease.propertyId),
     });
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({
       queryKey: operationKeys.summary(lease.propertyId),
     });
   }
@@ -189,7 +189,7 @@ export function useCreateLeaseReminder(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: leaseKeys.reminders(id) });
+      void queryClient.invalidateQueries({ queryKey: leaseKeys.reminders(id) });
     },
   });
 }

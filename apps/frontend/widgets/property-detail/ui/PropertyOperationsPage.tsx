@@ -102,9 +102,9 @@ export function PropertyOperationsPage(): JSX.Element {
     propertyQuery.isFetching || summaryQuery.isFetching || operationsQuery.isFetching;
 
   const handleRetry = () => {
-    propertyQuery.refetch();
-    summaryQuery.refetch();
-    operationsQuery.refetch();
+    void propertyQuery.refetch();
+    void summaryQuery.refetch();
+    void operationsQuery.refetch();
   };
 
   const propertyName = propertyQuery.data?.name ?? 'Мой объект';

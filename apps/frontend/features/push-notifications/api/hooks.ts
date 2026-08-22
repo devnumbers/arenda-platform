@@ -88,7 +88,7 @@ export function useDeletePushSubscription(): UseMutationResult<
     },
     onSuccess: () => {
       queryClient.setQueryData(pushSubscriptionKeys.subscription, null);
-      queryClient.invalidateQueries({ queryKey: pushSubscriptionKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: pushSubscriptionKeys.subscription });
     },
   });
 }

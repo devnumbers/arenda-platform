@@ -69,7 +69,7 @@ export function useUpdateReminder(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: reminderKeys.all });
+      void queryClient.invalidateQueries({ queryKey: reminderKeys.all });
     },
   });
 }
@@ -84,8 +84,8 @@ export function useDeleteReminder(): UseMutationResult<
     mutationFn: (id) =>
       apiClient<void>(`/reminders/${id}`, { method: 'DELETE' }),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: reminderKeys.all });
-      queryClient.invalidateQueries({ queryKey: reminderKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: reminderKeys.all });
+      void queryClient.invalidateQueries({ queryKey: reminderKeys.detail(id) });
     },
   });
 }

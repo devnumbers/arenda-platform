@@ -116,9 +116,9 @@ function operationsQueryString(filters: Record<string, string | string[]>): stri
 }
 
 function invalidateOperationLists(queryClient: QueryClient): void {
-  queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-  queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-  queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
+  void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+  void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+  void queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
 }
 
 // Команды приходят из виджетов в camelCase; wire-формат (snake_case) живёт
@@ -308,14 +308,14 @@ export function useCompleteOperation(): UseMutationResult<
       ),
     onSuccess: (operation, { id, propertyId }) => {
       queryClient.setQueryData(operationKeys.detail(id), operation);
-      queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
       invalidateOperationLists(queryClient);
       if (propertyId) {
-        queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
-        queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
+        void queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
+        void queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
       }
       if (shouldInvalidateLeaseKeys(queryClient, operation)) {
-        queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+        void queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       }
     },
   });
@@ -336,14 +336,14 @@ export function useMarkOperationIncomplete(): UseMutationResult<
       ),
     onSuccess: (operation, { id, propertyId }) => {
       queryClient.setQueryData(operationKeys.detail(id), operation);
-      queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
       invalidateOperationLists(queryClient);
       if (propertyId) {
-        queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
-        queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
+        void queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(propertyId) });
+        void queryClient.invalidateQueries({ queryKey: operationKeys.summary(propertyId) });
       }
       if (shouldInvalidateLeaseKeys(queryClient, operation)) {
-        queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+        void queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       }
     },
   });
@@ -365,10 +365,10 @@ export function useCreateOperation(): UseMutationResult<
       ),
     onSuccess: (_, { propertyId }) => {
       invalidateOperationLists(queryClient);
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: operationKeys.byProperty(propertyId),
       });
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: operationKeys.summary(propertyId),
       });
     },
@@ -392,17 +392,17 @@ export function useUpdateOperation(): UseMutationResult<
     onSuccess: (operation, { id, propertyId }) => {
       queryClient.setQueryData(operationKeys.detail(id), operation);
       invalidateOperationLists(queryClient);
-      queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: operationKeys.detail(id) });
       if (propertyId) {
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: operationKeys.byProperty(propertyId),
         });
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: operationKeys.summary(propertyId),
         });
       }
       if (shouldInvalidateLeaseKeys(queryClient, operation)) {
-        queryClient.invalidateQueries({ queryKey: leaseKeys.all });
+        void queryClient.invalidateQueries({ queryKey: leaseKeys.all });
       }
     },
   });
@@ -421,10 +421,10 @@ export function useDeleteOperation(): UseMutationResult<
       queryClient.removeQueries({ queryKey: operationKeys.detail(id), exact: true });
       invalidateOperationLists(queryClient);
       if (propertyId) {
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: operationKeys.byProperty(propertyId),
         });
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: operationKeys.summary(propertyId),
         });
       }

@@ -32,7 +32,7 @@ export function useUpdateMe(): UseMutationResult<
     },
     onSuccess: (data) => {
       queryClient.setQueryData(authKeys.me, data);
-      queryClient.invalidateQueries({ queryKey: authKeys.all });
+      void queryClient.invalidateQueries({ queryKey: authKeys.all });
     },
   });
 }
@@ -70,7 +70,7 @@ export function useChangePhone(): UseMutationResult<
       return mapMeResponse(res);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: authKeys.all });
+      void queryClient.invalidateQueries({ queryKey: authKeys.all });
     },
   });
 }

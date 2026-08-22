@@ -102,9 +102,9 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
 
             setCreatedLeaseId(lease.id);
 
-            queryClient.invalidateQueries({queryKey: propertyKeys.all});
-            queryClient.invalidateQueries({queryKey: propertyKeys.list});
-            queryClient.invalidateQueries({queryKey: propertyKeys.detail(propertyId)});
+            void queryClient.invalidateQueries({queryKey: propertyKeys.all});
+            void queryClient.invalidateQueries({queryKey: propertyKeys.list});
+            void queryClient.invalidateQueries({queryKey: propertyKeys.detail(propertyId)});
 
             handleNext();
         } catch (error: unknown) {

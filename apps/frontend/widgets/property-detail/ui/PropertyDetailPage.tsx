@@ -196,7 +196,7 @@ export function PropertyDetailPage(): JSX.Element {
                     // Закрываем модалку архивации, обновляем список аренд
                     // и показываем модалку «нельзя изменить статус».
                     setArchiveOpen(false);
-                    leasesQuery.refetch();
+                    void leasesQuery.refetch();
                     setBlockedOpen(true);
                     return;
                 }
@@ -245,7 +245,7 @@ export function PropertyDetailPage(): JSX.Element {
                         // Устаревший кэш: аренда открыта в другой вкладке.
                         // Обновляем список аренд — модалка переключится
                         // в состояние «нельзя удалить».
-                        leasesQuery.refetch();
+                        void leasesQuery.refetch();
                     }
                     notify.scenarios.property.deleteError({description: error.detail});
                 },
@@ -358,9 +358,9 @@ export function PropertyDetailPage(): JSX.Element {
                 (hasAnyError || !property) && (
                 <PropertyDetailError
                     onRetry={() => {
-                        propertyQuery.refetch();
-                        leasesQuery.refetch();
-                        summaryQuery.refetch();
+                        void propertyQuery.refetch();
+                        void leasesQuery.refetch();
+                        void summaryQuery.refetch();
                     }}
                     isLoading={
                         propertyQuery.isFetching ||

@@ -91,7 +91,7 @@ export function useToggleAutoRenew(): UseMutationResult<
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -104,7 +104,7 @@ export function useCancelSubscription(): UseMutationResult<void, ApiError, void>
       await apiClient<void>('/subscription/cancel', { method: 'POST' });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -128,7 +128,7 @@ export function useChangeTariff(): UseMutationResult<
       return mapChangeTariffResponse(response);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -161,7 +161,7 @@ export function useAddPaymentMethod(): UseMutationResult<
       return mapAddPaymentMethodResponse(response);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
     },
   });
 }
@@ -181,8 +181,8 @@ export function useActivatePaymentMethod(): UseMutationResult<
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -201,8 +201,8 @@ export function useSyncPaymentMethods(): UseMutationResult<
         { method: 'POST' },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -222,8 +222,8 @@ export function useDeletePaymentMethod(): UseMutationResult<
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }

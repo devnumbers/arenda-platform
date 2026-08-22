@@ -57,7 +57,7 @@ export function useVerifyCode(): UseMutationResult<
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: authKeys.me });
+      void queryClient.invalidateQueries({ queryKey: authKeys.me });
     },
   });
 }

@@ -95,7 +95,7 @@ export function useCreateTenantContact(): UseMutationResult<
       return mapTenantContactResponse(response);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: tenantContactKeys.all });
+      void queryClient.invalidateQueries({ queryKey: tenantContactKeys.all });
     },
   });
 }
@@ -115,8 +115,8 @@ export function useUpdateTenantContact(): UseMutationResult<
       return mapTenantContactResponse(response);
     },
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: tenantContactKeys.all });
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({ queryKey: tenantContactKeys.all });
+      void queryClient.invalidateQueries({
         queryKey: tenantContactKeys.detail(id),
       });
     },

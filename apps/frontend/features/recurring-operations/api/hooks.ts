@@ -72,12 +72,12 @@ function fetchRecurringOperation(id: string): Promise<RecurringOperation> {
 }
 
 function invalidateOperationLists(queryClient: QueryClient): void {
-  queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-  queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
+  void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
+  void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
 }
 
 function invalidateRecurringOperationLists(queryClient: QueryClient): void {
-  queryClient.invalidateQueries({ queryKey: recurringOperationKeys.lists() });
+  void queryClient.invalidateQueries({ queryKey: recurringOperationKeys.lists() });
 }
 
 export function useRecurringOperations(): UseQueryResult<
@@ -137,7 +137,7 @@ export function useCreateRecurringOperation(): UseMutationResult<
       ),
     onSuccess: (_, { propertyId }) => {
       invalidateRecurringOperationLists(queryClient);
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
     },
@@ -161,18 +161,18 @@ export function useUpdateRecurringOperation(): UseMutationResult<
     onSuccess: (_, { id, propertyId }) => {
       invalidateRecurringOperationLists(queryClient);
       invalidateOperationLists(queryClient);
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.detail(id),
       });
-      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
+      void queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
       if (propertyId) {
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: recurringOperationKeys.byProperty(propertyId),
         });
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: operationKeys.summary(propertyId),
         });
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: operationKeys.byProperty(propertyId),
         });
       }
@@ -195,10 +195,10 @@ export function usePauseRecurringOperation(): UseMutationResult<
       ).then(mapRecurringOperationResponse),
     onSuccess: (_, { id, propertyId }) => {
       invalidateRecurringOperationLists(queryClient);
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.detail(id),
       });
     },
@@ -221,10 +221,10 @@ export function useResumeRecurringOperation(): UseMutationResult<
       ).then(mapRecurringOperationResponse),
     onSuccess: (_, { id, propertyId }) => {
       invalidateRecurringOperationLists(queryClient);
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.byProperty(propertyId),
       });
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: recurringOperationKeys.detail(id),
       });
     },
@@ -248,13 +248,13 @@ export function useDeleteRecurringOperation(): UseMutationResult<
       invalidateRecurringOperationLists(queryClient);
       invalidateOperationLists(queryClient);
       if (propertyId) {
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: recurringOperationKeys.byProperty(propertyId),
         });
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: operationKeys.byProperty(propertyId),
         });
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: operationKeys.summary(propertyId),
         });
       }

@@ -44,7 +44,7 @@ export function useCreateOperationCategory(): UseMutationResult<
         categoryKeys.list(category.type),
         (previous) => (previous ? [...previous, category] : [category]),
       );
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: categoryKeys.list(category.type),
       });
     },

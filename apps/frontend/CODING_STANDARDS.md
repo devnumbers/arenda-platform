@@ -30,7 +30,7 @@ Adding a new slice: user scenario → feature; domain model shared across scenar
 
 - Hooks live in `features/<name>/api/hooks.ts`, named `useXxx`, typed like `UseMutationResult<Entity, ApiError, XxxCommand>`; API errors normalize to `ApiError` (`shared/api/errors.ts`).
 - Cache keys live in the single registry `shared/api/query-keys.ts` — one `xxxKeys` factory per feature: `all: ['domain'] as const` plus parameterized keys composed from `all` (`detail(id)`, `byProperty(propertyId)`). The registry is shared because cross-feature invalidation must bypass the cross-slice import ban.
-- Mutations invalidate in `onSuccess` through the registry (`invalidateQueries({ queryKey: xxxKeys.all })`); the profile pattern is `setQueryData` for the optimistic value plus `invalidateQueries`; deletes use `removeQueries`.
+- Mutations invalidate in `onSuccess` through the registry (`void invalidateQueries({ queryKey: xxxKeys.all })` — the fire-and-forget spelling, see the wave B `no-floating-promises` gate); the profile pattern is `setQueryData` for the optimistic value plus `invalidateQueries`; deletes use `removeQueries`, which is synchronous in v5 and stays bare.
 - `QueryClient` is configured once in `shared/providers/query-provider.tsx` (`staleTime: 30_000`, `refetchOnWindowFocus: false`) — don't override per-query without a stated reason.
 
 ## Forms
@@ -80,15 +80,15 @@ Enforced by `eslint.config.mjs`, `tsconfig.json`, and `next.config.ts`:
 
 ### Wave B — type-checked core, rule by rule
 
-A type-checked ESLint block (project service) with named rules, not a preset. First families in force since 2026-08-22 (ticket [#393](https://github.com/devnumbers/arenda-platform/issues/393)):
+A type-checked ESLint block (project service) with named rules, not a preset. First families in force since 2026-08-22 (tickets [#393](https://github.com/devnumbers/arenda-platform/issues/393), [#394](https://github.com/devnumbers/arenda-platform/issues/394)):
 
 - `no-unnecessary-type-assertion`, `no-non-null-assertion` — a cast or `!` that the type system already knows is noise; a value the system doesn't know needs a guard (`def?.kind !== 'number'` early-throw), not an assertion.
 - `no-base-to-string` — `String(unknown)` renders `[object Object]` at the worst moment; narrow to string with a fallback (the api client's `problemText`).
 - `require-await`; `no-confusing-void-expression` (`ignoreArrowShorthand`) and `restrict-template-expressions` (`allowNumber`) — React-friendly options tuned in the config, not by suppressions. `void`-prefixing a void-returning call (App-Router `router.replace`) is the exact confusion the rule names — the prefix goes only on promises.
+- `no-floating-promises` (ticket #394) — a promise is handled or explicitly discarded, three canonical spellings: `void` on fire-and-forget `invalidateQueries` (hooks' `onSuccess`, post-mutation invalidation; `removeQueries` is synchronous in v5 and stays bare — the prefix goes only on promises); `void` on `refetch()` in retry/conflict handlers — v5's `refetch` never rejects without `throwOnError` (query-core swallows the rejection; the error surfaces through `isError` → the error-state UI the handler serves, so the state machine is the error path); a real `.catch` with meaningful handling where the promise can genuinely reject (the SW updater's `serviceWorker.ready` reports via `reportClientError`) — never an empty catch.
 
 Still landing (fix-then-flip per family):
 
-- `no-floating-promises` — `void`-prefix on fire-and-forget calls like `invalidateQueries`; real `catch` paths in handlers.
 - `no-misused-promises` — async handlers in void signatures (`onPress`/`onClick`) get catch-wrappers.
 - `no-deprecated`.
 - jsx-a11y `recommended` — keyboard support on custom controls, valid anchors; the OTP input's `no-autofocus` is solved with programmatic focus, not a rule exception.
@@ -120,7 +120,7 @@ Judgement calls for the Standards axis, not violations. Read each as *what it is
 
 - **`key={index}`** on a list that can reorder. → key by stable entity id.
 - **Naked data surface** — a new query render path with no loading state (inline `isLoading` + skeleton/`FinanceLoading`) and no error path. → both states ship with the feature.
-- **Mutation without invalidation** — success leaves the cache stale. → `invalidateQueries` via the key registry in `onSuccess`.
+- **Mutation without invalidation** — success leaves the cache stale. → `void invalidateQueries` via the key registry in `onSuccess`.
 - **Hand-rolled formatting** — `/100` money math or ad-hoc date strings. → `formatMoneyKopecks`, `@react-aria/i18n` (ru-RU) helpers. (Becomes the money-gate selectors in wave C.)
-- **Floating promise in a handler** — an async event handler with no error path. → `catch` → toast via `shared/lib/toast` / `ApiError`. (Becomes the `no-floating-promises` gate in wave B.)
+- **Floating promise in a handler** — an async event handler with no error path. → `catch` → toast via `shared/lib/toast` / `ApiError`. (The `no-floating-promises` gate of wave B; the rubric now covers what the rule's `void` escape hatch cannot judge — whether the discard is justified.)
 - **Synchronous `searchParams`** — reading the Next 16 promise directly. → `await` it in the server page and pass parsed initial props into the client widget.

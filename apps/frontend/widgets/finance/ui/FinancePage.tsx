@@ -81,10 +81,10 @@ export function FinancePage(): JSX.Element {
 
     const handleRetry = () => {
         if (isReportError) {
-            refetchReport();
+            void refetchReport();
         }
         if (isOperationsError) {
-            refetchOperations();
+            void refetchOperations();
         }
     };
 

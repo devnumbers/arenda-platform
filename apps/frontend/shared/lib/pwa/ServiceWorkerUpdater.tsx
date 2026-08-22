@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type JSX } from 'react';
 import { usePathname } from 'next/navigation';
+import { reportClientError } from '@/shared/lib/error-reporting/report-client-error';
 
 /**
  * Silent service worker update lifecycle.
@@ -157,6 +158,16 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
                     // the next interval or the next navigation will retry.
                 });
             }, UPDATE_INTERVAL_MS);
+        }).catch((error: unknown) => {
+            // Covers both failure sources of the chain: `ready` rejecting
+            // (SW infrastructure broken — registration failed / browser gave
+            // up) and an exception inside the then-callback itself; either way
+            // silent-update watching is simply off. Reported for diagnostics,
+            // not shown to the user: the update strategy must never interrupt
+            // the session.
+            reportClientError(
+                `serviceWorker update wiring failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
         });
 
         return () => {

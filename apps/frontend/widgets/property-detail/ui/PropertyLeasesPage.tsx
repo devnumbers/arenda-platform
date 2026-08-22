@@ -125,8 +125,8 @@ export function PropertyLeasesPage(): JSX.Element {
     const showCreateLeaseAction = !isLoading && !isError && !hasOpenLease;
 
     const handleRetry = (): void => {
-        propertyQuery.refetch();
-        leasesQuery.refetch();
+        void propertyQuery.refetch();
+        void leasesQuery.refetch();
     };
 
     const title = (

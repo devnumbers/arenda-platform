@@ -271,16 +271,16 @@ export function LeaseDetailPage({id}: LeaseDetailPageProps): JSX.Element {
         (lease.status === 'active' || lease.status === 'requires_action');
     const handleRetry = useCallback(() => {
         if (leaseQuery.isError) {
-            leaseQuery.refetch();
+            void leaseQuery.refetch();
         }
     }, [leaseQuery]);
 
     const handleOperationsRetry = useCallback(() => {
         if (rentCategoryIds.length === 0) {
-            categoriesQuery.refetch();
+            void categoriesQuery.refetch();
             return;
         }
-        rentOperationsQuery.refetch();
+        void rentOperationsQuery.refetch();
     }, [rentCategoryIds, categoriesQuery, rentOperationsQuery]);
 
     const handleLoadMoreOperations = useCallback(() => {

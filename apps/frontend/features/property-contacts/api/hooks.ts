@@ -57,7 +57,7 @@ export function useCreatePropertyContact(
       return mapPropertyContactResponse(response);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: propertyContactKeys.list(propertyId),
       });
     },
@@ -101,10 +101,10 @@ export function useUpdatePropertyContact(
       return mapPropertyContactResponse(response);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: propertyContactKeys.list(propertyId),
       });
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: propertyContactKeys.detail(propertyId, contactId),
       });
     },
@@ -125,7 +125,7 @@ export function useDeletePropertyContact(
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: propertyContactKeys.list(propertyId),
       });
     },

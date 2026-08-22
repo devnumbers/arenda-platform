@@ -43,7 +43,7 @@ export function useMarkPopupSeen(): UseMutationResult<void, ApiError, PopupKey> 
       queryClient.setQueryData<PopupKey[]>(popupKeys.pending, (previous) =>
         previous?.filter((key) => key !== popupKey),
       );
-      queryClient.invalidateQueries({ queryKey: popupKeys.pending });
+      void queryClient.invalidateQueries({ queryKey: popupKeys.pending });
     },
   });
 }
