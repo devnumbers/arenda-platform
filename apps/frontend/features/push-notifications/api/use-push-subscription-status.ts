@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   isPushSupported,
   readNotificationPermission,
@@ -73,10 +73,13 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatusResult {
   const [status, setStatus] = useState<PushSubscriptionStatus>(getInitial);
 
   // Re-read the browser push capability/permission/subscription and push the
-  // result into state. Plain function (no useCallback) — React Compiler
-  // memoizes it automatically. `cancelled` is threaded in by the mount effect
-  // so a probe that resolves after unmount does not call setState.
-  const refresh = async (cancelled: () => boolean = () => false): Promise<void> => {
+  // result into state. Explicit useCallback, not the compiler's automatic
+  // memoization: exhaustive-deps is static and cannot see it, so a plain
+  // function plus `[refresh]` deps below is a lint error; with useCallback the
+  // identity is stable by construction and the mount effect runs exactly
+  // once. `cancelled` is threaded in by the mount effect so a probe that
+  // resolves after unmount does not call setState.
+  const refresh = useCallback(async (cancelled: () => boolean = () => false): Promise<void> => {
     if (!isPushSupported()) return;
 
     const permission = readNotificationPermission();
@@ -105,12 +108,15 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatusResult {
       isReady: subscription !== null,
       isPending: false,
     });
-  };
+  }, []);
 
   useEffect(() => {
     // The synchronous-unsupported case was handled by the initializer; bail
-    // out here so no setState is reached for unsupported browsers.
-    if (status.isUnsupported) return;
+    // out here so no setState is reached for unsupported browsers. The same
+    // synchronous check (not `status.isUnsupported`) keeps the effect free of
+    // the status value in its reads; `refresh` is compiler-memoized, so the
+    // effect still runs exactly once per mount.
+    if (!isPushSupported()) return;
 
     let cancelled = false;
     // Run once on mount. The async IIFE keeps the setStatus calls behind an
@@ -121,8 +127,7 @@ export function usePushSubscriptionStatus(): PushSubscriptionStatusResult {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
 
   return { ...status, refresh: () => void refresh() };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import {type ChangeEvent, type JSX, type KeyboardEvent, useCallback, useEffect, useMemo, useState} from 'react';
+import {type ChangeEvent, type JSX, type KeyboardEvent, useCallback, useMemo, useState} from 'react';
 import {Select, type SelectOption} from '@/shared/ui/select';
 
 export type TimezoneSelectProps = {
@@ -54,11 +54,13 @@ export function TimezoneSelect({value, onChange, error, disabled, required}: Tim
         return TIMEZONE_OPTIONS.filter((option) => option.label.toLowerCase().includes(query));
     }, [inputValue]);
 
-    useEffect(() => {
-        // Sync local input with the timezone value controlled by the parent form.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Sync local input with the timezone value controlled by the parent form —
+    // the render-time prop adjustment from the React docs (no effect).
+    const [prevValue, setPrevValue] = useState(value);
+    if (prevValue !== value) {
+        setPrevValue(value);
         setInputValue(labelFor(value));
-    }, [value]);
+    }
 
     const handleSelect = useCallback(
         (timezone: string) => {

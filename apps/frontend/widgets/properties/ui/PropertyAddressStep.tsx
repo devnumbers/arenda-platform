@@ -37,12 +37,14 @@ export function PropertyAddressStep({
   const listRef = useRef<HTMLUListElement>(null);
   const fieldRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    // Sync local input with the selected address when it is restored from
-    // sessionStorage or changed by the parent wizard.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Sync local input with the selected address when it is restored from
+  // sessionStorage or changed by the parent wizard — the render-time prop
+  // adjustment from the React docs (no effect).
+  const [prevValue, setPrevValue] = useState(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
     setInputValue(value ?? '');
-  }, [value]);
+  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

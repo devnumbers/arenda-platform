@@ -131,11 +131,13 @@ export function AuthForm({
         setCode(value);
     }, []);
 
-    // Clear any entered digits when the step changes (e.g. resend → email → code).
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Clear any entered digits when the step changes (e.g. resend → email → code) —
+    // the render-time prop adjustment from the React docs (no effect).
+    const [prevStep, setPrevStep] = useState(effectiveStep);
+    if (prevStep !== effectiveStep) {
+        setPrevStep(effectiveStep);
         setCode("");
-    }, [effectiveStep]);
+    }
 
     const handleSendPhone = useCallback(() => {
         onSendPhone?.(phone);

@@ -1,6 +1,6 @@
 'use client';
 
-import {type ChangeEvent, type JSX, type KeyboardEvent, useCallback, useEffect, useState} from 'react';
+import {type ChangeEvent, type JSX, type KeyboardEvent, useCallback, useState} from 'react';
 import {useAddressSuggestions} from '@/features/properties';
 import {useDebounce} from '@/shared/lib/hooks/useDebounce';
 import {Select} from '@/shared/ui/select';
@@ -18,11 +18,13 @@ export function AddressField({value, onChange, error}: AddressFieldProps): JSX.E
     const debouncedQuery = useDebounce(inputValue, 300);
     const {data: suggestions, isLoading} = useAddressSuggestions(debouncedQuery);
 
-    useEffect(() => {
-        // Sync local input with the address value controlled by the parent form.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Sync local input with the address value controlled by the parent form —
+    // the render-time prop adjustment from the React docs (no effect).
+    const [prevValue, setPrevValue] = useState(value);
+    if (prevValue !== value) {
+        setPrevValue(value);
         setInputValue(value ?? '');
-    }, [value]);
+    }
 
     const handleSelect = useCallback(
         (address: string) => {

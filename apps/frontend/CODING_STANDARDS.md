@@ -98,7 +98,7 @@ A type-checked ESLint block (project service) with named rules, not a preset. Fi
 
 ### Zero tolerance for suppressions
 
-`eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` — zero in manual code: fix the code, never suppress; a blocking CI counter guards the zero (accepted gate, `docs/agents/tooling.md`). One frontend suppression survives (PhotoGrid's `set-state-in-effect`, #399's counter lands against it); the rest of the grid's 15 were already fixed in code. Generated code and build artifacts are outside the counter's scope.
+`eslint-disable*` comments, explicit `any`, and `@ts-ignore`/`@ts-expect-error` — zero in manual code: fix the code, never suppress; the blocking counter `make ts-suppressions` guards the zero since #399 (in force, `docs/agents/tooling.md`). The last 8 directives were eliminated in code, not moved: PhotoGrid turned out to be dead code and was deleted, the four prop-sync `set-state-in-effect` disables became the render-time prop adjustment from the React docs, and the push-status hook's `exhaustive-deps` disable became an explicit `useCallback`. Generated code and build artifacts are outside the counter's scope.
 
 ### Security contour — lint gates and served headers in force (decision #331, tickets #387/#388; browser-API bans — wave A #390)
 

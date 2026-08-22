@@ -30,10 +30,10 @@ SQLC_VERSION := v1.31.1
 # aquasec/trivy 0.74.0, multi-arch manifest digest
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
 TRIVY_CACHE_VOLUME := arenda-trivy-cache
-NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate
-TOOLS_TEST_DIRS := tools/hooks tools/migration-lint tools/nolint-gate
+NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate
+TOOLS_TEST_DIRS := tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate
 KNIP_VERSION := 6.32.2
-KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate
+KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate
 TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
 # Named LINT_MIGRATIONS_DIR to stay distinct from the MIGRATIONS_DIR env
 # contract checked in check-env (.env.example).
@@ -94,7 +94,7 @@ DEFAULT_GOAL := help
 	landing-install landing-dev landing-build \
 	test backend-test backend-test-integration tools-test \
 	attributes-gen attributes-check \
-	migrations-lint squawk-install npm-audit trivy-fs knip hooks-install
+	migrations-lint ts-suppressions squawk-install npm-audit trivy-fs knip hooks-install
 
 ##@ Help
 help: ## List available targets grouped by section
@@ -372,6 +372,33 @@ attributes-check: ## Fail if the property-attributes catalog artifacts are stale
 		echo "attributes-check: catalog generated files are fresh"
 
 ##@ Quality and security
+# TS suppression gate (quality mode #378, gate #399): an eslint-disable
+# comment, a @ts-ignore/@ts-expect-error/@ts-nocheck, or an explicit `any` in
+# the manual TS/JS code of apps/frontend + apps/admin is a finding — zero
+# suppressions, no whitelist. Generated code, build artifacts and node_modules
+# are excluded by the script itself (the counter looks only at hand-written
+# code: .next/types alone carries 20 `any` and 102 `@ts-ignore`). Without
+# FILES checks every source file under both apps (CI, Stop-gate); with FILES
+# checks only the listed files (pre-commit: make ts-suppressions
+# FILES="{staged_files}"); non-source entries and staged deletions are skipped
+# by the filter/the script itself.
+ts-suppressions: ## Fail on any suppression in manual frontend/admin TS/JS code (FILES= to scope)
+	@set +e; status=0; \
+	if [ -n "$(FILES)" ]; then \
+		files=`echo "$(FILES)" | tr ' ' '\n' | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$$' | tr '\n' ' '`; \
+		if [ -n "$${files// /}" ]; then \
+			echo "==> suppression gate $$files"; \
+			node tools/suppression-gate/suppression-gate.mjs $$files || status=1; \
+		else \
+			echo "==> suppression gate (skip: no source files in FILES)"; \
+		fi; \
+	else \
+		echo "==> suppression gate apps/frontend + apps/admin manual sources"; \
+		files=`find apps/frontend apps/admin -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \) -not -path '*/node_modules/*' -not -path '*/.next/*' -not -path '*/dist/*'`; \
+		node tools/suppression-gate/suppression-gate.mjs $$files || status=1; \
+	fi; \
+	if [ $$status -ne 0 ]; then echo "ERROR: suppression gate failed (see above)"; exit 1; fi
+
 # Migration lint (wave 3 / #309): squawk (lock-safety, config
 # apps/backend/.squawk.toml) + the domain rules in
 # tools/migration-lint/domain-rules.mjs

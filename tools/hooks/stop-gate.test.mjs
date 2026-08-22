@@ -23,6 +23,9 @@ const MAKEFILE = `backend-lint:
 backend-nolint:
 \t@node mark-gate.mjs backend-nolint
 
+ts-suppressions:
+\t@node mark-gate.mjs ts-suppressions
+
 admin-typecheck:
 \t@node mark-gate.mjs admin
 
@@ -131,7 +134,7 @@ describe("stop-gate: gates by touched package", () => {
     writeFileSync(path.join(dir, "apps/frontend/page.tsx"), "export {};\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["frontend"]);
+    expect(gatesRun(dir)).toEqual(["frontend", "ts-suppressions"]);
   });
 
   it("uncommitted admin change runs only the admin gates", () => {
@@ -139,7 +142,7 @@ describe("stop-gate: gates by touched package", () => {
     writeFileSync(path.join(dir, "apps/admin/App.tsx"), "export {};\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["admin", "admin-lint"]);
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "ts-suppressions"]);
   });
 
   it("changes across all three packages run all the gates", () => {
@@ -149,7 +152,7 @@ describe("stop-gate: gates by touched package", () => {
     writeFileSync(path.join(dir, "apps/admin/App.tsx"), "export {};\n");
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "backend", "backend-nolint", "frontend"]);
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "backend", "backend-nolint", "frontend", "ts-suppressions"]);
   });
 
   it("untracked files count as touched", () => {
@@ -166,7 +169,7 @@ describe("stop-gate: gates by touched package", () => {
     exec(dir, ["add", "apps/admin/App.tsx"]);
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(0);
-    expect(gatesRun(dir)).toEqual(["admin", "admin-lint"]);
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "ts-suppressions"]);
   });
 
   it("uncommitted migration change runs the migrations gate (and the backend gates)", () => {
@@ -211,7 +214,7 @@ describe("stop-gate: blocking and fail-open behavior", () => {
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
     expect(res.code).toBe(2);
     expect(res.stderr).toContain("npm --prefix apps/admin run lint");
-    expect(gatesRun(dir)).toEqual(["admin", "admin-lint"]);
+    expect(gatesRun(dir)).toEqual(["admin", "admin-lint", "ts-suppressions"]);
   });
 
   it("invalid JSON on stdin fails open (exit 0)", () => {

@@ -126,6 +126,27 @@ jobs:
       - name: Nolint gate
         run: make backend-nolint
 
+  # Гейт «0 подавлений» TS/JS-кода (режим качества #378, гейт #399):
+  # eslint-disable-комментарии, @ts-ignore/@ts-expect-error/@ts-nocheck и
+  # явный `any` в ручном коде apps/frontend + apps/admin — находки, белого
+  # списка нет; generated/артефакты/node_modules исключает сам скрипт —
+  # CI-backstop для pre-commit-проводки; Node нужен только для
+  # tools/suppression-gate/suppression-gate.mjs.
+  ts-suppressions:
+    name: TS suppressions gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Suppression gate
+        run: make ts-suppressions
+
   # Интеграционные тесты бэкенда (волна 1B, #304) — закрывают CI-гэп: локальный
   # `make backend-test-integration` теперь подстрахован CI. Toolchain та же, что у
   # unit-степа джобы backend: контейнер golang:1.26.5-bookworm (образ прода),

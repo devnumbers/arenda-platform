@@ -22,18 +22,23 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-// Mirrors the pre-commit gates in lefthook.yml; keep the two in sync.
+// Mirrors the pre-commit gates in lefthook.yml; keep the two in sync. A gate
+// lists every path prefix that trips it (the TS suppression gate spans both
+// frontend and admin — one full-tree scan either way).
 const PACKAGE_GATES = [
-  { name: "backend", prefix: "apps/backend/", command: ["make", "backend-lint"] },
+  { name: "backend", prefixes: ["apps/backend/"], command: ["make", "backend-lint"] },
   // Same prefix as the backend gate — both run in parallel on any backend
   // change (nolint gate #344: zero //nolint directives, full pass).
-  { name: "backend nolint", prefix: "apps/backend/", command: ["make", "backend-nolint"] },
-  { name: "frontend", prefix: "apps/frontend/", command: ["npm", "--prefix", "apps/frontend", "run", "lint"] },
-  { name: "admin typecheck", prefix: "apps/admin/", command: ["make", "admin-typecheck"] },
-  { name: "admin lint", prefix: "apps/admin/", command: ["npm", "--prefix", "apps/admin", "run", "lint"] },
+  { name: "backend nolint", prefixes: ["apps/backend/"], command: ["make", "backend-nolint"] },
+  { name: "frontend", prefixes: ["apps/frontend/"], command: ["npm", "--prefix", "apps/frontend", "run", "lint"] },
+  // Suppression gate #399: zero eslint-disable/@ts-*/explicit-any in the
+  // manual code of both apps; a change in either app runs the full pass.
+  { name: "ts suppressions", prefixes: ["apps/frontend/", "apps/admin/"], command: ["make", "ts-suppressions"] },
+  { name: "admin typecheck", prefixes: ["apps/admin/"], command: ["make", "admin-typecheck"] },
+  { name: "admin lint", prefixes: ["apps/admin/"], command: ["npm", "--prefix", "apps/admin", "run", "lint"] },
   // Coarser than lefthook's *.sql glob by design (prefix matching): a
   // migration-only change also trips the backend prefix above — accepted.
-  { name: "migrations lint", prefix: "apps/backend/db/migrations/", command: ["make", "migrations-lint"] },
+  { name: "migrations lint", prefixes: ["apps/backend/db/migrations/"], command: ["make", "migrations-lint"] },
 ];
 
 const OUTPUT_TAIL_LINES = 40;
@@ -100,7 +105,9 @@ async function main() {
   if (!root) return;
 
   const paths = changedPaths(root);
-  const gates = PACKAGE_GATES.filter((gate) => paths.some((p) => p.startsWith(gate.prefix)));
+  const gates = PACKAGE_GATES.filter((gate) =>
+    paths.some((p) => gate.prefixes.some((prefix) => p.startsWith(prefix))),
+  );
   if (gates.length === 0) return;
 
   const results = await Promise.all(gates.map((gate) => runGate(gate, root)));
