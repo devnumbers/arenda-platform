@@ -176,10 +176,11 @@ export function parseOperationsFromParams(params: SearchParamsLike): OperationIn
         get: (name: string) => readString(params[name]) ?? null,
     };
     const resolved = resolveOperationPeriod(searchParams);
+    const propertyId = readString(params.property_id);
 
     return {
         type: getOperationType(readString(params.type) ?? null),
-        propertyId: readString(params.property_id),
+        propertyId: propertyId === '' ? undefined : propertyId,
         period: resolved.period,
         from: resolved.from,
         to: resolved.to,
