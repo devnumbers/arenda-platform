@@ -116,6 +116,12 @@
   background-color: var(--color-secondary-bg);
 }
 
+/* Roving keyboard focus inside the dropdown — same ring as the trigger. */
+.listItem:focus-visible {
+  background-color: var(--color-secondary-bg);
+  box-shadow: var(--focus-ring);
+}
+
 .listItemActive,
 .listItemActive:hover {
   background-color: var(--color-secondary-bg);

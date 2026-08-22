@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import jsxA11y from "eslint-plugin-jsx-a11y";
 import boundaries from "eslint-plugin-boundaries";
 
 // FSD layers (app → widgets → features → entities → shared). Slices are the
@@ -198,6 +199,26 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/restrict-template-expressions": [
         "error",
         { allowNumber: true },
+      ],
+    },
+  },
+  // Quality bar wave B (bar #330, ticket #397) — jsx-a11y `recommended` at
+  // error: keyboard operability of custom controls, valid anchors, and no
+  // `autoFocus` (programmatic focus instead). The plugin ships with
+  // eslint-config-next and its preset already registers it, so only the
+  // preset's rules land here — re-declaring the plugin object would be a
+  // config error. alt-text keeps eslint-config-next's next/image scope
+  // (`img: ["Image"]`) unioned with the preset's default element set.
+  {
+    files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+    rules: {
+      ...jsxA11y.flatConfigs.recommended.rules,
+      "jsx-a11y/alt-text": [
+        "error",
+        {
+          elements: ["img", "object", "area", 'input[type="image"]'],
+          img: ["Image"],
+        },
       ],
     },
   },

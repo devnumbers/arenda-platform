@@ -14,6 +14,10 @@ import {
 import clsx from 'clsx';
 import { ChevronDown } from '@/shared/assets/icons';
 import { TextField } from '@/shared/ui/text-field';
+import {
+    focusListboxEdge,
+    runListboxAction,
+} from './listbox-keyboard';
 import styles from './Select.module.css';
 
 export type SelectOption<Value extends string = string> = {
@@ -103,6 +107,8 @@ export function Select<Value extends string = string>({
     }, [open, onOpenChange]);
 
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const listRef = useRef<HTMLUListElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
 
     const selectedLabel = useMemo(
         () => multiple ? '' : options.find((option) => option.value === value)?.label ?? '',
@@ -153,8 +159,45 @@ export function Select<Value extends string = string>({
         } else {
             (onChange as (value: Value) => void)(selectedValue);
             setIsOpen(false);
+            // The dropdown (and possibly the focused option with it) unmounts
+            // on selection — hand focus back to the trigger so keyboard
+            // interaction continues from the control.
+            triggerRef.current?.focus();
         }
     }, [multiple, onChange, value, setIsOpen]);
+
+    // Roving-focus listbox semantics (ARIA listbox pattern): the option is
+    // keyboard-operated in place — Enter/Space select, arrows/Home/End move
+    // focus between options with wrap-around. Escape is left to bubble to the
+    // listbox-level handler, which closes for every row (footer rows
+    // included) and hands focus back to the trigger.
+    const handleOptionKeyDown = (event: KeyboardEvent<HTMLLIElement>, optionValue: Value) => {
+        runListboxAction(event, { onSelect: () => handleSelect(optionValue) });
+    };
+
+    const handleListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+        if (event.key === 'Escape') {
+            setIsOpen(false);
+            triggerRef.current?.focus();
+        }
+    };
+
+    // The trigger button opens the dropdown with Enter/Space natively; arrows
+    // enter the option list while it is open, Escape closes it. The searchable
+    // variant keeps focus in the text field — its keyboard handling stays with
+    // the parent (arrow keys drive the parent's active index).
+    const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key === 'ArrowDown' && isOpen) {
+            event.preventDefault();
+            focusListboxEdge(listRef.current, 'first');
+        } else if (event.key === 'ArrowUp' && isOpen) {
+            event.preventDefault();
+            focusListboxEdge(listRef.current, 'last');
+        } else if (event.key === 'Escape' && isOpen) {
+            event.preventDefault();
+            setIsOpen(false);
+        }
+    };
 
     const showMessage = (loading || emptyMessage) && options.length === 0;
 
@@ -183,7 +226,9 @@ export function Select<Value extends string = string>({
                 <button
                     type="button"
                     className={clsx(styles.trigger, error && styles.error)}
+                    ref={triggerRef}
                     onClick={() => setIsOpen(!isOpen)}
+                    onKeyDown={handleTriggerKeyDown}
                     disabled={disabled}
                 >
                     <span className={styles.label}>
@@ -218,6 +263,8 @@ export function Select<Value extends string = string>({
                             role="listbox"
                             aria-label={label}
                             aria-multiselectable={multiple || undefined}
+                            ref={listRef}
+                            onKeyDown={handleListKeyDown}
                         >
                             {options.map((option, index) => (
                                 <li
@@ -230,7 +277,9 @@ export function Select<Value extends string = string>({
                                     role="option"
                                     aria-selected={isSelected(option.value)}
                                     data-active={activeIndex === index}
+                                    tabIndex={-1}
                                     onClick={() => handleSelect(option.value)}
+                                    onKeyDown={(event) => handleOptionKeyDown(event, option.value)}
                                 >
                                     {option.label}
                                 </li>

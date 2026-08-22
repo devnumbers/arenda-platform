@@ -13,6 +13,7 @@ import { useAddressSuggestions } from '@/features/properties';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
+import { runListboxAction } from '@/shared/ui/select/listbox-keyboard';
 import styles from './PropertyAddressStep.module.css';
 
 export type PropertyAddressStepProps = {
@@ -33,6 +34,8 @@ export function PropertyAddressStep({
   const debouncedQuery = useDebounce(inputValue, 300);
   const { data: suggestions, isLoading } = useAddressSuggestions(debouncedQuery);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const fieldRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Sync local input with the selected address when it is restored from
@@ -62,6 +65,8 @@ export function PropertyAddressStep({
       onChange(address);
       setIsOpen(false);
       setActiveIndex(null);
+      // The dropdown unmounts on selection — hand focus back to the field.
+      fieldRef.current?.focus();
     },
     [onChange],
   );
@@ -107,6 +112,32 @@ export function PropertyAddressStep({
     }
   };
 
+  // Roving-focus path for the options themselves (focus lands on an option
+  // after a mouse click): Enter/Space pick, Escape closes back into the
+  // field, arrows move focus and keep the field-driven active index in sync.
+  const handleOptionKeyDown = (event: KeyboardEvent<HTMLLIElement>, index: number) => {
+    const target = runListboxAction(event, {
+      onSelect: () => {
+        const suggestion = suggestions?.[index];
+        if (suggestion) {
+          handleSelect(suggestion.value);
+        }
+      },
+      onClose: () => {
+        setIsOpen(false);
+        setActiveIndex(null);
+        fieldRef.current?.focus();
+      },
+    });
+    if (target && listRef.current) {
+      const items = Array.from(listRef.current.querySelectorAll<HTMLElement>('[role="option"]'));
+      const targetIndex = items.indexOf(target);
+      if (targetIndex >= 0) {
+        setActiveIndex(targetIndex);
+      }
+    }
+  };
+
   const showDropdown =
     isOpen && debouncedQuery.trim().length >= 3;
 
@@ -125,6 +156,7 @@ export function PropertyAddressStep({
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder=""
+          ref={fieldRef}
         />
 
         {showDropdown && (
@@ -136,6 +168,7 @@ export function PropertyAddressStep({
                 className={styles.list}
                 role="listbox"
                 aria-label="Предложенные адреса"
+                ref={listRef}
               >
                 {suggestions.map((suggestion, index) => (
                   <li
@@ -144,7 +177,9 @@ export function PropertyAddressStep({
                     role="option"
                     aria-selected={activeIndex === index}
                     data-active={activeIndex === index}
+                    tabIndex={-1}
                     onClick={() => handleSelect(suggestion.value)}
+                    onKeyDown={(event) => handleOptionKeyDown(event, index)}
                   >
                     {suggestion.value}
                   </li>

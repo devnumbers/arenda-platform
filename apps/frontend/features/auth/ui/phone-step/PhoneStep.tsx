@@ -1,10 +1,12 @@
 "use client";
 
 import {type ChangeEvent, type JSX} from "react";
+import NextLink from "next/link";
 import {formatPhoneInput, isPhoneValid} from "@/shared/lib/phone";
 import {Support} from "@/shared/assets/icons";
 import {Button} from "@/shared/ui/button";
 import {TextField} from "@/shared/ui/text-field";
+import {ROUTES} from "@/shared/config/routes";
 import {SendCodeButton} from "@/features/auth/ui/send-code-button";
 import styles from "./PhoneStep.module.css";
 
@@ -62,13 +64,16 @@ export function PhoneStep({
 
             <p className={styles.legal}>
                 Нажимая кнопку «Войти», я принимаю{" "}
-                <a className={styles.legalLink} href="#">
+                <NextLink className={styles.legalLink} href={ROUTES.profilePrivacy}>
                     политику конфиденциальности
-                </a>{" "}
+                </NextLink>{" "}
                 и{" "}
-                <a className={styles.legalLink} href="#">
+                {/* The privacy policy page is the personal-data processing
+                    document (its own metadata description) — the consent link
+                    points there too. */}
+                <NextLink className={styles.legalLink} href={ROUTES.profilePrivacy}>
                     соглашаюсь на обработку персональных данных
-                </a>
+                </NextLink>
             </p>
 
             <Button

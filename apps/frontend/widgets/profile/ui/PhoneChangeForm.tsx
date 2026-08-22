@@ -2,6 +2,8 @@
 
 import {
   useCallback,
+  useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type JSX,
@@ -43,6 +45,17 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [isSubmitAttempted, setIsSubmitAttempted] = useState(false);
+
+  // Programmatic focus instead of autoFocus (jsx-a11y/no-autofocus): the
+  // step's field is focused on mount and on every step change — the login
+  // CodeStep's pattern. Unlike the attribute, the focus point stays under
+  // component control.
+  const phoneFieldRef = useRef<HTMLInputElement>(null);
+  const codeFieldRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    (step === 'phone' ? phoneFieldRef : codeFieldRef).current?.focus();
+  }, [step]);
 
   const normalizedPhone = normalizePhone(phone);
   const phoneError = isSubmitAttempted && !isValidPhone(phone)
@@ -126,7 +139,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
             onChange={handlePhoneChange}
             error={phoneError || (isSamePhone ? 'Новый номер совпадает с текущим' : undefined)}
             fullWidth
-            autoFocus
+            ref={phoneFieldRef}
           />
         </div>
 
@@ -159,7 +172,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
           error={codeError}
           maxLength={CODE_LENGTH}
           fullWidth
-          autoFocus
+          ref={codeFieldRef}
         />
       </div>
 

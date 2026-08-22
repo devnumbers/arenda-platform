@@ -51,6 +51,12 @@
   background-color: var(--color-secondary-bg);
 }
 
+/* Roving keyboard focus inside the dropdown — the app's standard focus ring. */
+.listItem:focus-visible {
+  background-color: var(--color-secondary-bg);
+  box-shadow: var(--focus-ring);
+}
+
 .message {
   padding: 12px;
   font-size: var(--font-size-text-m);

@@ -10,6 +10,7 @@ import {
 import { Button } from '@/shared/ui/button';
 import { Icon } from '@/shared/ui/icon';
 import { Select } from '@/shared/ui/select';
+import { runListboxAction } from '@/shared/ui/select/listbox-keyboard';
 import { Loading } from '@/shared/assets/icons';
 import { ApiError } from '@/shared/api/errors';
 import { notify } from '@/shared/lib/notifications';
@@ -52,6 +53,10 @@ export function CategorySelect({
     const [isCreating, setIsCreating] = useState(false);
     const [draftName, setDraftName] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    // Shared by both shapes of the inline row (option / create form): the li
+    // DOM node survives the shape switch, so the isCreating effect can hand
+    // focus back to the option after the create form cancels.
+    const otherOptionRef = useRef<HTMLLIElement>(null);
     // Synchronous mirrors of isCreating/draftName. Select calls onChange and
     // onOpenChange in the same event tick, before batched state commits, so
     // the close handler must read refs to see a just-cancelled draft.
@@ -63,8 +68,18 @@ export function CategorySelect({
     useEffect(() => {
         if (isCreating) {
             inputRef.current?.focus();
+        } else {
+            // Focus lands after the commit — the create input is gone, the
+            // row is an option again. No-op when the dropdown itself is
+            // closed (the row is unmounted, the ref is null).
+            otherOptionRef.current?.focus();
         }
     }, [isCreating]);
+
+    const startCreating = () => {
+        isCreatingRef.current = true;
+        setIsCreating(true);
+    };
 
     const cancelCreating = () => {
         isCreatingRef.current = false;
@@ -118,6 +133,10 @@ export function CategorySelect({
             submitCreate();
         }
         if (event.key === 'Escape') {
+            // Cancel the draft, not the dropdown: stop the Escape from
+            // bubbling into Select's listbox-level close. Focus returns to
+            // the row in the isCreating effect, after the commit.
+            event.stopPropagation();
             event.preventDefault();
             cancelCreating();
         }
@@ -165,48 +184,53 @@ export function CategorySelect({
         label: category.name,
     }));
 
-    const otherRow = (
+    // Roving-focus listbox semantics on the "other" option, same as Select's
+    // own options; Enter/Space opens the inline create form. Escape is left
+    // to Select's listbox-level handler, which closes and refocuses the
+    // trigger for every row, footer rows included.
+    const handleOtherKeyDown = (event: KeyboardEvent<HTMLLIElement>) => {
+        runListboxAction(event, { onSelect: startCreating });
+    };
+
+    // While creating, the row is an inline form, not a listbox option — no
+    // role/onClick, so the input keeps its own keyboard contract.
+    const otherRow = isCreating ? (
+        <li className={selectStyles.listItem} ref={otherOptionRef}>
+            <span className={styles.createRow}>
+                <span className={styles.createInputRow}>
+                    <input
+                        ref={inputRef}
+                        className={styles.createInput}
+                        value={draftName}
+                        onChange={(event) => {
+                            const nextName = event.currentTarget.value;
+                            draftNameRef.current = nextName;
+                            setDraftName(nextName);
+                        }}
+                        onKeyDown={handleCreateKeyDown}
+                        disabled={createCategory.isPending}
+                        placeholder="Название категории"
+                        aria-label="Название новой категории"
+                    />
+                    {createCategory.isPending && (
+                        <Icon size="s" className={styles.spinner}>
+                            <Loading />
+                        </Icon>
+                    )}
+                </span>
+            </span>
+        </li>
+    ) : (
         <li
             className={selectStyles.listItem}
+            ref={otherOptionRef}
             role="option"
             aria-selected={false}
-            onClick={() => {
-                if (!isCreating) {
-                    isCreatingRef.current = true;
-                    setIsCreating(true);
-                }
-            }}
+            tabIndex={-1}
+            onClick={startCreating}
+            onKeyDown={handleOtherKeyDown}
         >
-            {isCreating ? (
-                <span
-                    className={styles.createRow}
-                    onClick={(event) => event.stopPropagation()}
-                >
-                    <span className={styles.createInputRow}>
-                        <input
-                            ref={inputRef}
-                            className={styles.createInput}
-                            value={draftName}
-                            onChange={(event) => {
-                                const nextName = event.currentTarget.value;
-                                draftNameRef.current = nextName;
-                                setDraftName(nextName);
-                            }}
-                            onKeyDown={handleCreateKeyDown}
-                            disabled={createCategory.isPending}
-                            placeholder="Название категории"
-                            aria-label="Название новой категории"
-                        />
-                        {createCategory.isPending && (
-                            <Icon size="s" className={styles.spinner}>
-                                <Loading />
-                            </Icon>
-                        )}
-                    </span>
-                </span>
-            ) : (
-                OTHER_LABEL
-            )}
+            {OTHER_LABEL}
         </li>
     );
 
