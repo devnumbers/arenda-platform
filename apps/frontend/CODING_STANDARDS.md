@@ -67,7 +67,7 @@ Unit tests are pure-logic only — vitest runs in a node environment with no DOM
 
 ## Quality bar — accepted waves (map #326, spec #378)
 
-The quality bar is decided (bar [#330](https://github.com/devnumbers/arenda-platform/issues/330), spec [#378](https://github.com/devnumbers/arenda-platform/issues/378)) and lands ticket by ticket — the patterns below are the standard now; write to them without waiting for the flips. Flip conventions: wave A lands flip-with-fix (config flips together with its code fixes); waves B/C land fix-then-flip per rule family — a family's advisory counter drops to zero, then the rule flips to error, and this section plus `docs/agents/tooling.md` update in the same change. Already active today: wave A (ticket #390, section below) and, ahead of the waves, the react-hooks v7 compiler rules (see the React Compiler section above).
+The quality bar is decided (bar [#330](https://github.com/devnumbers/arenda-platform/issues/330), spec [#378](https://github.com/devnumbers/arenda-platform/issues/378)) and lands ticket by ticket — the patterns below are the standard now; write to them without waiting for the flips. Flip conventions: wave A lands flip-with-fix (config flips together with its code fixes); waves B/C land fix-then-flip per rule family — a family's advisory counter drops to zero, then the rule flips to error, and this section plus `docs/agents/tooling.md` update in the same change. Already active today: wave A (ticket #390, section below), the first wave B families (ticket #393, section below), and, ahead of the waves, the react-hooks v7 compiler rules (see the React Compiler section above).
 
 ### Wave A — configuration (in force since 2026-08-21, ticket [#390](https://github.com/devnumbers/arenda-platform/issues/390))
 
@@ -80,12 +80,17 @@ Enforced by `eslint.config.mjs`, `tsconfig.json`, and `next.config.ts`:
 
 ### Wave B — type-checked core, rule by rule
 
-A type-checked ESLint block (project service) with named rules, not a preset:
+A type-checked ESLint block (project service) with named rules, not a preset. First families in force since 2026-08-22 (ticket [#393](https://github.com/devnumbers/arenda-platform/issues/393)):
+
+- `no-unnecessary-type-assertion`, `no-non-null-assertion` — a cast or `!` that the type system already knows is noise; a value the system doesn't know needs a guard (`def?.kind !== 'number'` early-throw), not an assertion.
+- `no-base-to-string` — `String(unknown)` renders `[object Object]` at the worst moment; narrow to string with a fallback (the api client's `problemText`).
+- `require-await`; `no-confusing-void-expression` (`ignoreArrowShorthand`) and `restrict-template-expressions` (`allowNumber`) — React-friendly options tuned in the config, not by suppressions. `void`-prefixing a void-returning call (App-Router `router.replace`) is the exact confusion the rule names — the prefix goes only on promises.
+
+Still landing (fix-then-flip per family):
 
 - `no-floating-promises` — `void`-prefix on fire-and-forget calls like `invalidateQueries`; real `catch` paths in handlers.
 - `no-misused-promises` — async handlers in void signatures (`onPress`/`onClick`) get catch-wrappers.
-- `no-unnecessary-type-assertion`, `no-non-null-assertion`, `no-base-to-string`, `require-await`, `no-deprecated`.
-- `no-confusing-void-expression` (`ignoreArrowShorthand`) and `restrict-template-expressions` (`allowNumber`) — React-friendly options tuned in the config, not by suppressions.
+- `no-deprecated`.
 - jsx-a11y `recommended` — keyboard support on custom controls, valid anchors; the OTP input's `no-autofocus` is solved with programmatic focus, not a rule exception.
 - tsconfig `noUncheckedIndexedAccess`.
 

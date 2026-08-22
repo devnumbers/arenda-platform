@@ -1,5 +1,12 @@
 import { ApiError, type FieldError } from './errors';
 
+// problem+json fields are strings per the API contract (Problem schema); a
+// non-string value is a protocol violation — the fallback keeps it from
+// reaching the UI as '[object Object]'.
+function problemText(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
 export async function apiClient<T>(
   path: string,
   options: RequestInit = {},
@@ -35,13 +42,13 @@ export async function apiClient<T>(
     if (contentType?.includes('application/problem+json')) {
       try {
         const problem = (await response.json()) as Record<string, unknown>;
-        code = String(problem.code ?? problem.type ?? code);
-        detail = String(problem.detail ?? problem.title ?? detail);
+        code = problemText(problem.code ?? problem.type, code);
+        detail = problemText(problem.detail ?? problem.title, detail);
         if (Array.isArray(problem.errors)) {
           fieldErrors = problem.errors
             .map((e) => (e && typeof e === 'object' ? (e as unknown) : null))
             .filter((e): e is Record<string, unknown> => e !== null)
-            .map((e) => ({ field: String(e.field ?? ''), detail: String(e.detail ?? '') }))
+            .map((e) => ({ field: problemText(e.field, ''), detail: problemText(e.detail, '') }))
             .filter((e) => e.field !== '');
         }
       } catch {

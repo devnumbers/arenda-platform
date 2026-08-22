@@ -3,7 +3,6 @@ import type { components } from '@/shared/api/dto';
 import type {
   CalendarEntry,
   CalendarEntryEventType,
-  CalendarEntryStatus,
   CalendarEntryType,
 } from './types';
 
@@ -35,7 +34,7 @@ export function mapCalendarEntries(
     title: dto.title,
     hasProperty: dto.has_property,
     propertyName: dto.property_name ?? null,
-    status: (dto.status as CalendarEntryStatus | null | undefined) ?? null,
+    status: dto.status ?? null,
     eventType: (dto.event_type as CalendarEntryEventType | null | undefined) ?? null,
     operationId: dto.operation_id ?? null,
     leaseId: dto.lease_id ?? null,

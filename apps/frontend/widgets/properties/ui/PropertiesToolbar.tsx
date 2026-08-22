@@ -247,7 +247,7 @@ export function PropertiesToolbar({
                         multiple
                         value={filters.types}
                         options={propertyTypeOptions}
-                        onChange={(nextTypes) => onChange({...filters, types: nextTypes as PropertyType[]}, sort)}
+                        onChange={(nextTypes) => onChange({...filters, types: nextTypes}, sort)}
                         renderTrigger={({isOpen, onClick}) => (
                             <Button
                                 variant={isOpen ? 'primary' : 'secondary'}
@@ -271,7 +271,7 @@ export function PropertiesToolbar({
                             options={statusFilterOptions}
                             onChange={(nextStatuses) => onChange({
                                 ...filters,
-                                statuses: nextStatuses as StatusFilterValue[]
+                                statuses: nextStatuses
                             }, sort)}
                             renderTrigger={({isOpen, onClick}) => (
                                 <Button
@@ -293,7 +293,7 @@ export function PropertiesToolbar({
                         label="Сортировка"
                         value={sort}
                         options={sortOptions}
-                        onChange={(nextSort) => onChange(filters, nextSort as PropertySort)}
+                        onChange={(nextSort) => onChange(filters, nextSort)}
                         renderTrigger={({isOpen, onClick}) => (
                             <Button
                                 variant={isOpen ? 'primary' : 'secondary'}

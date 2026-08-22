@@ -1,14 +1,11 @@
 import type { components } from '@/shared/api/dto';
-import type { TariffName } from '@/shared/model/tariff';
 import type {
   AddPaymentMethodResult,
   ChangeTariffResult,
   PaymentMethod,
-  PaymentPeriod,
   PaymentStatus,
   Subscription,
   SubscriptionPayment,
-  SubscriptionStatus,
   Tariff,
 } from './types';
 
@@ -22,7 +19,7 @@ type AddPaymentMethodResponse = components['schemas']['AddPaymentMethodResponse'
 export function mapTariffResponse(response: TariffResponse): Tariff {
   return {
     id: response.name,
-    name: response.name as TariffName,
+    name: response.name,
     monthlyPriceKopecks: response.monthlyPriceKopecks,
     yearlyPriceKopecks: response.yearlyPriceKopecks,
     activePropertyLimit: response.activePropertyLimit,
@@ -46,23 +43,19 @@ export function mapSubscriptionResponse(
 ): Subscription {
   return {
     id: `${response.status}-${response.tariff.name}-${response.validUntil ?? ''}`,
-    status: response.status as SubscriptionStatus,
+    status: response.status,
     tariff: mapTariffResponse(response.tariff),
     pendingTariff: response.pendingTariff
       ? mapTariffResponse(response.pendingTariff)
       : undefined,
     autoRenewEnabled: response.autoRenewEnabled,
     validUntil: response.validUntil ?? undefined,
-    currentPeriod: response.currentPeriod
-      ? (response.currentPeriod as PaymentPeriod)
-      : undefined,
+    currentPeriod: response.currentPeriod ?? undefined,
     activePaymentMethod: response.activePaymentMethod
       ? mapPaymentMethodResponse(response.activePaymentMethod)
       : undefined,
     pendingChangeAt: response.pendingChangeAt ?? undefined,
-    pendingPeriod: response.pendingPeriod
-      ? (response.pendingPeriod as PaymentPeriod)
-      : undefined,
+    pendingPeriod: response.pendingPeriod ?? undefined,
   };
 }
 
@@ -72,7 +65,7 @@ export function mapSubscriptionPaymentResponse(
   return {
     id: response.id,
     tariff: mapTariffResponse(response.tariff),
-    period: response.period as PaymentPeriod,
+    period: response.period,
     amountKopecks: response.amountKopecks,
     status: response.status as PaymentStatus,
     provider: response.provider,

@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
   // dev — часть принятого бара качества (волна A, бар #330).
   reactStrictMode: true,
   poweredByHeader: false,
-  headers: async () => [
+  headers: () => [
     {
       // The service worker script must always be fetched fresh so updates are
       // picked up promptly (byte-compare update check). `public/` is served

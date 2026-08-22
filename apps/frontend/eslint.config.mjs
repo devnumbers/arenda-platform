@@ -165,11 +165,12 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/consistent-type-imports": "error",
     },
   },
-  // The type-checked block (projectService). Wave A carries the one rule that
-  // needs type information — switch-exhaustiveness-check; the wave B families
-  // (ticket #393) land here fix-then-flip. Scoped exactly to tsconfig.json's
-  // include extensions — a linted file outside the project would fail to
-  // resolve its types.
+  // The type-checked block (projectService). Wave A brought
+  // switch-exhaustiveness-check; wave B (ticket #393, bar #330) added the first
+  // type-checked families fix-then-flip: every family was counted advisory,
+  // fixed to zero, then flipped to error in the same change. Scoped exactly to
+  // tsconfig.json's include extensions — a linted file outside the project
+  // would fail to resolve its types.
   {
     files: ["**/*.{ts,mts,tsx}"],
     languageOptions: {
@@ -179,6 +180,22 @@ const eslintConfig = defineConfig([
     },
     rules: {
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "@typescript-eslint/no-unnecessary-type-assertion": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/no-base-to-string": "error",
+      "@typescript-eslint/require-await": "error",
+      // React-friendly options treat config-level noise with options, not
+      // suppressions: arrow shorthand `() => void discard()` is the canonical
+      // promise-discard spelling, and number interpolation in templates is
+      // idiomatic UI code.
+      "@typescript-eslint/no-confusing-void-expression": [
+        "error",
+        { ignoreArrowShorthand: true },
+      ],
+      "@typescript-eslint/restrict-template-expressions": [
+        "error",
+        { allowNumber: true },
+      ],
     },
   },
   {

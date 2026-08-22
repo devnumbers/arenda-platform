@@ -142,8 +142,9 @@ export function PropertyEditForm({
 
     const handleAttributesChange = useCallback(
         (next: PropertyAttributes) => {
+            if (!type) return;
             setAttributes((prev) => {
-                const currentTypeKeys = filterByType(type!, prev);
+                const currentTypeKeys = filterByType(type, prev);
                 return {...currentTypeKeys, ...next};
             });
         },

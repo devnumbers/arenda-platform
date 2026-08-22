@@ -60,8 +60,8 @@ describe('validateField — enum (rooms on apartment)', () => {
 describe('validateField — number (area_total on apartment)', () => {
   const type = asType('apartment');
   const key: AttrKey = 'area_total';
-  const def = findField(type, key)!;
-  if (def.kind !== 'number') throw new Error('expected number field');
+  const def = findField(type, key);
+  if (def?.kind !== 'number') throw new Error('expected number field');
 
   it('returns undefined for a value within [min, max]', () => {
     expect(validateField(type, key, def.min)).toBeUndefined();
@@ -106,8 +106,8 @@ describe('validateField — number (area_total on apartment)', () => {
 describe('validateField — number decimals boundary (ceiling_height, decimals=2)', () => {
   const type = asType('apartment');
   const key: AttrKey = 'ceiling_height';
-  const def = findField(type, key)!;
-  if (def.kind !== 'number') throw new Error('expected number field');
+  const def = findField(type, key);
+  if (def?.kind !== 'number') throw new Error('expected number field');
 
   it('allows exactly decimals digits', () => {
     expect(validateField(type, key, 2.75)).toBeUndefined();
@@ -123,8 +123,8 @@ describe('validateField — number decimals boundary (ceiling_height, decimals=2
 describe('validateField — integer (floor on apartment)', () => {
   const type = asType('apartment');
   const key: AttrKey = 'floor';
-  const def = findField(type, key)!;
-  if (def.kind !== 'integer') throw new Error('expected integer field');
+  const def = findField(type, key);
+  if (def?.kind !== 'integer') throw new Error('expected integer field');
 
   it('returns undefined for an integer within [min, max]', () => {
     expect(validateField(type, key, def.min)).toBeUndefined();
@@ -152,8 +152,8 @@ describe('validateField — integer (floor on apartment)', () => {
 describe('validateField — string (spot_number on parking)', () => {
   const type = asType('parking');
   const key: AttrKey = 'spot_number';
-  const def = findField(type, key)!;
-  if (def.kind !== 'string') throw new Error('expected string field');
+  const def = findField(type, key);
+  if (def?.kind !== 'string') throw new Error('expected string field');
 
   it('returns undefined for a string within maxLen', () => {
     expect(validateField(type, key, 'A12')).toBeUndefined();
@@ -358,7 +358,7 @@ describe('filterByType', () => {
   });
 
   it('drops unknown keys', () => {
-    const attrs: PropertyAttributes = { rooms: '2', whatever: 1 } as PropertyAttributes;
+    const attrs: PropertyAttributes = { rooms: '2', whatever: 1 };
     const filtered = filterByType(asType('apartment'), attrs);
     expect(filtered).not.toHaveProperty('whatever');
   });

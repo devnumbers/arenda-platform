@@ -150,7 +150,7 @@ describe('pickClickTargetClient', () => {
     const origin = 'https://app.rentli.ru';
     const makeClient = (url: string): SwClientLike => ({
         url,
-        focus: async () => undefined,
+        focus: () => Promise.resolve(undefined),
         postMessage: () => undefined,
     });
 

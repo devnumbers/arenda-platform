@@ -152,7 +152,7 @@ function TariffChangeContent({
           }
 
           notify.scenarios.tariff.changed();
-          void router.replace(ROUTES.profileTariffChangeSuccess);
+          router.replace(ROUTES.profileTariffChangeSuccess);
         })
         .catch((error: unknown) => {
           notify.close(loadingToastId);
