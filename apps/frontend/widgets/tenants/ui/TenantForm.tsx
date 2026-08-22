@@ -2,8 +2,8 @@
 
 import {
     type ChangeEvent,
-    type FormEvent,
     type JSX,
+    type SubmitEvent,
     useCallback,
     useEffect,
     useMemo,
@@ -104,7 +104,7 @@ export function TenantForm({
     }, []);
 
     const handleSubmit = useCallback(
-        (event: FormEvent<HTMLFormElement>) => {
+        (event: SubmitEvent<HTMLFormElement>) => {
             event.preventDefault();
             setIsSubmitAttempted(true);
 

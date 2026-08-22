@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type JSX, type SubmitEvent } from 'react';
 import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
@@ -55,7 +55,7 @@ function PersonalDataFormView({ me }: PersonalDataFormViewProps): JSX.Element {
   }, []);
 
   const handleSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
+    async (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       setIsSubmitAttempted(true);
 

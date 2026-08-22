@@ -1,6 +1,6 @@
 'use client';
 
-import {type FormEvent, type JSX, useCallback, useEffect, useMemo, useRef, useState,} from 'react';
+import {type JSX, type SubmitEvent, useCallback, useEffect, useMemo, useRef, useState,} from 'react';
 import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
@@ -177,7 +177,7 @@ export function PropertyEditForm({
         ? {...attrErrors, ...liveAttrErrors}
         : attrErrors;
 
-    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
 
         setSubmitAttempted(true);

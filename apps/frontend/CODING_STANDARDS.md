@@ -80,17 +80,17 @@ Enforced by `eslint.config.mjs`, `tsconfig.json`, and `next.config.ts`:
 
 ### Wave B — type-checked core, rule by rule
 
-A type-checked ESLint block (project service) with named rules, not a preset. First families in force since 2026-08-22 (tickets [#393](https://github.com/devnumbers/arenda-platform/issues/393), [#394](https://github.com/devnumbers/arenda-platform/issues/394), [#395](https://github.com/devnumbers/arenda-platform/issues/395)):
+A type-checked ESLint block (project service) with named rules, not a preset. First families in force since 2026-08-22 (tickets [#393](https://github.com/devnumbers/arenda-platform/issues/393), [#394](https://github.com/devnumbers/arenda-platform/issues/394), [#395](https://github.com/devnumbers/arenda-platform/issues/395), [#396](https://github.com/devnumbers/arenda-platform/issues/396)):
 
 - `no-unnecessary-type-assertion`, `no-non-null-assertion` — a cast or `!` that the type system already knows is noise; a value the system doesn't know needs a guard (`def?.kind !== 'number'` early-throw), not an assertion.
 - `no-base-to-string` — `String(unknown)` renders `[object Object]` at the worst moment; narrow to string with a fallback (the api client's `problemText`).
 - `require-await`; `no-confusing-void-expression` (`ignoreArrowShorthand`) and `restrict-template-expressions` (`allowNumber`) — React-friendly options tuned in the config, not by suppressions. `void`-prefixing a void-returning call (App-Router `router.replace`) is the exact confusion the rule names — the prefix goes only on promises.
 - `no-floating-promises` (ticket #394) — a promise is handled or explicitly discarded, three canonical spellings: `void` on fire-and-forget `invalidateQueries` (hooks' `onSuccess`, post-mutation invalidation; `removeQueries` is synchronous in v5 and stays bare — the prefix goes only on promises); `void` on `refetch()` in retry/conflict handlers — v5's `refetch` never rejects without `throwOnError` (query-core swallows the rejection; the error surfaces through `isError` → the error-state UI the handler serves, so the state machine is the error path); a real `.catch` with meaningful handling where the promise can genuinely reject (the SW updater's `serviceWorker.ready` reports via `reportClientError`) — never an empty catch.
 - `no-misused-promises` (ticket #395) — an async function never goes into a void-signature prop (`onClick`, `onSubmit`, `onRetry`, `onConfirm`, …) directly; the call site wraps it: `onClick={() => void handleSubmit()}`. Honest by construction, not a style call — the two shapes the wrappers bridge cannot reject: full-try/catch handlers (every `mutateAsync` path notifies its own error) and `refetch()` (the #394 semantics above). A handler that can genuinely reject gets a real `.catch` at the wrapper instead — the wrapper must never be where an error dies silently.
+- `no-deprecated` (ticket #396) — deprecated APIs are replaced, not suppressed. Two spellings this codebase hit: form submit handlers take `SubmitEvent<T>` from `react` (React 19.2 deprecated `FormEvent` — `onSubmit` is typed `SubmitEventHandler`; the swap is type-level only), and a deprecated Web API is replaced by the signal it actually carried (the iPadOS detector reads the `Macintosh` UA token — byte-identical in spoof mode — instead of `navigator.platform`, pinned by a device-table characterization test).
 
 Still landing (fix-then-flip per family):
 
-- `no-deprecated`.
 - jsx-a11y `recommended` — keyboard support on custom controls, valid anchors; the OTP input's `no-autofocus` is solved with programmatic focus, not a rule exception.
 - tsconfig `noUncheckedIndexedAccess`.
 

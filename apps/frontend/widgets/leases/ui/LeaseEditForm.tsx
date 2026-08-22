@@ -1,6 +1,6 @@
 'use client';
 
-import {type ChangeEvent, type FormEvent, type JSX, useEffect, useMemo, useRef, useState,} from 'react';
+import {type ChangeEvent, type JSX, type SubmitEvent, useEffect, useMemo, useRef, useState,} from 'react';
 import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
@@ -259,7 +259,7 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
         : ROUTES.leaseEdit(leaseId);
     const createTenantHref = `${ROUTES.tenantNew}?${RETURN_TO_PARAM}=${encodeURIComponent(currentUrl)}`;
 
-    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
 
         if (!validate()) {

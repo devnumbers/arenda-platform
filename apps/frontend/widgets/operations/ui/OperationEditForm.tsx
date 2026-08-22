@@ -2,7 +2,7 @@
 
 import {
   type ChangeEvent,
-  type FormEvent,
+  type SubmitEvent,
   useMemo,
   useState,
   type JSX,
@@ -175,7 +175,7 @@ function OperationEditFormContent({
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!validate()) {

@@ -4,8 +4,8 @@ import {
   useCallback,
   useState,
   type ChangeEvent,
-  type FormEvent,
   type JSX,
+  type SubmitEvent,
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/shared/lib/notifications';
@@ -64,7 +64,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
   }, []);
 
   const handleSendCode = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       setIsSubmitAttempted(true);
 
@@ -89,7 +89,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
   );
 
   const handleVerifyCode = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       setIsSubmitAttempted(true);
 

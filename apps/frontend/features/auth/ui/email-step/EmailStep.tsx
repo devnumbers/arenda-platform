@@ -31,7 +31,7 @@ export function EmailStep({
         onEmailChange(event.target.value);
     };
 
-    const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
         setTouched(true);
         if (isValid) {

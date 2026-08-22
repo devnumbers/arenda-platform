@@ -27,7 +27,7 @@ export function PhoneStep({
         onPhoneChange(formatPhoneInput(event.target.value));
     };
 
-    const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
         onSubmit();
     };

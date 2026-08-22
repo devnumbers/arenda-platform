@@ -2,7 +2,7 @@
 
 import {
   type ChangeEvent,
-  type FormEvent,
+  type SubmitEvent,
   useId,
   useMemo,
   useState,
@@ -318,7 +318,7 @@ function RecurringOperationEditPageContent({
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!validate()) {

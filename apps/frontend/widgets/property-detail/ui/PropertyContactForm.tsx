@@ -2,9 +2,9 @@
 
 import {
     type ChangeEvent,
-    type FormEvent,
     type JSX,
     type ReactNode,
+    type SubmitEvent,
     useCallback,
     useState,
 } from 'react';
@@ -59,7 +59,7 @@ export function PropertyContactForm({
     }, []);
 
     const handleSubmit = useCallback(
-        (event: FormEvent<HTMLFormElement>) => {
+        (event: SubmitEvent<HTMLFormElement>) => {
             event.preventDefault();
             setIsSubmitAttempted(true);
 
