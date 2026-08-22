@@ -42,7 +42,7 @@ export function OperationScheduleStep({
           required
           disabled={readonly}
           error={errors?.date}
-          onChange={(v) => onChange({ ...data, date: v || undefined })}
+          onChange={(v) => onChange({ ...data, date: v === '' ? undefined : v })}
         />
         {recurring && (
           <DateSelect
@@ -52,7 +52,7 @@ export function OperationScheduleStep({
             minValue={data.date}
             disabled={readonly}
             error={errors?.endDate}
-            onChange={(v) => onChange({ ...data, endDate: v || undefined })}
+            onChange={(v) => onChange({ ...data, endDate: v === '' ? undefined : v })}
           />
         )}
       </div>

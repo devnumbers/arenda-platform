@@ -179,7 +179,7 @@ export function CategorySelect({
         );
     }
 
-    const options = (categoriesQuery.data ?? []).map((category) => ({
+    const options = categoriesQuery.data.map((category) => ({
         value: category.id,
         label: category.name,
     }));

@@ -56,9 +56,9 @@ function getStatusVariant(status: OperationStatus) {
         ?.variant;
 }
 
-function useOperationId(): string | undefined {
+function useOperationId(): string {
     const params = useParams<{ readonly id: string }>();
-    return params?.id;
+    return params.id;
 }
 
 function formatReminderLabel(offsetDays: number | null | undefined): string {
@@ -196,7 +196,7 @@ function OperationDetailCard({
 export function OperationDetailPage(): JSX.Element {
     const id = useOperationId();
     const router = useRouter();
-    const {data, isLoading: operationIsPending, isError, refetch, isFetching} = useOperation(id ?? '');
+    const {data, isLoading: operationIsPending, isError, refetch, isFetching} = useOperation(id);
     const {data: subscription, isPending: isSubscriptionPending} = useSubscription();
     const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 

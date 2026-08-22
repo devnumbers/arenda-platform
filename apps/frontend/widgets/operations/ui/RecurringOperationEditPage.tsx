@@ -160,9 +160,9 @@ function validateForm(form: FormData): FormErrors {
   return next;
 }
 
-function useRecurringOperationId(): string | undefined {
+function useRecurringOperationId(): string {
   const params = useParams<{ readonly id: string }>();
-  return params?.id;
+  return params.id;
 }
 
 type DeleteSeriesModalProps = {
@@ -509,27 +509,15 @@ function RecurringOperationEditPageContent({
 
 export function RecurringOperationEditPage(): JSX.Element {
   const id = useRecurringOperationId();
-  const router = useRouter();
   const {
     data,
     isLoading,
     isError,
     refetch,
     isFetching,
-  } = useRecurringOperation(id ?? '');
+  } = useRecurringOperation(id);
   const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
   const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
-
-  if (!id) {
-    return (
-      <div className={styles.root}>
-        <FinanceErrorState
-          onRetry={() => router.push(ROUTES.financeOperations)}
-          isLoading={false}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className={styles.root}>

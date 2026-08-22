@@ -115,7 +115,7 @@ export function ProfitReport(): JSX.Element {
   }
 
   const maxIncome = Math.max(
-    ...(report.by_month?.map((row) => row.income_kopecks) ?? [0]),
+    ...report.by_month.map((row) => row.income_kopecks),
   );
 
   return (
@@ -157,7 +157,7 @@ export function ProfitReport(): JSX.Element {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>По объектам</h2>
         <ul className={styles.rows}>
-          {report.by_property?.map((row) => (
+          {report.by_property.map((row) => (
             <li key={row.property_id ?? 'no-property'} className={styles.row}>
               <span className={styles.rowName}>
                 {row.property_id
@@ -183,7 +183,7 @@ export function ProfitReport(): JSX.Element {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>По категориям</h2>
         <ul className={styles.rows}>
-          {report.by_category?.map((row, index) => (
+          {report.by_category.map((row, index) => (
             <li key={`${row.type}-${row.category_id}-${index}`} className={styles.row}>
               <div className={styles.rowMain}>
                 <span className={styles.rowName}>
@@ -204,7 +204,7 @@ export function ProfitReport(): JSX.Element {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>По месяцам</h2>
         <div className={styles.months}>
-          {report.by_month?.map((row) => {
+          {report.by_month.map((row) => {
             const widthPercent =
               maxIncome > 0 ? (row.income_kopecks / maxIncome) * 100 : 0;
             return (

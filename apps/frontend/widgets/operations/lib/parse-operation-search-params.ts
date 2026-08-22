@@ -179,7 +179,7 @@ export function parseOperationsFromParams(params: SearchParamsLike): OperationIn
 
     return {
         type: getOperationType(readString(params.type) ?? null),
-        propertyId: readString(params.property_id) || undefined,
+        propertyId: readString(params.property_id),
         period: resolved.period,
         from: resolved.from,
         to: resolved.to,

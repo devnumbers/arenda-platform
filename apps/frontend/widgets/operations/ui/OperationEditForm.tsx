@@ -66,9 +66,9 @@ function parseAmountToKopecks(amount: string): number | undefined {
   return Math.round(value * 100);
 }
 
-function useOperationId(): string | undefined {
+function useOperationId(): string {
   const params = useParams<{ readonly id: string }>();
-  return params?.id;
+  return params.id;
 }
 
 function OperationEditFormContent({
@@ -291,11 +291,11 @@ function OperationEditFormContent({
 export function OperationEditForm(): JSX.Element {
   const id = useOperationId();
   const router = useRouter();
-  const { data, isLoading, isError, refetch, isFetching } = useOperation(id ?? '');
+  const { data, isLoading, isError, refetch, isFetching } = useOperation(id);
   const { data: subscription, isPending: isSubscriptionPending } = useSubscription();
   const readonly = isSubscriptionPending || isSubscriptionReadonly(subscription);
 
-  const headerActions = id ? (
+  const headerActions = (
     <IconButton
       variant="secondary"
       size="large"
@@ -303,7 +303,7 @@ export function OperationEditForm(): JSX.Element {
       aria-label="Отменить"
       onClick={() => goBack(router, ROUTES.financeOperation(id))}
     />
-  ) : undefined;
+  );
 
   return (
     <div className={styles.root}>

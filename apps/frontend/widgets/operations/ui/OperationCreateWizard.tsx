@@ -136,9 +136,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     isSubscriptionPending ||
     (Boolean(propertyId) && preselectedPropertyQuery.isPending);
 
-  const currentUrl = type
-    ? `${ROUTES.financeCreateOperation}?type=${type}`
-    : ROUTES.financeCreateOperation;
+  const currentUrl = `${ROUTES.financeCreateOperation}?type=${type}`;
   const createPropertyHref = `${ROUTES.propertyNew}?${RETURN_TO_PARAM}=${encodeURIComponent(currentUrl)}`;
 
   const handleTypeChange = (nextType: OperationType) => {
@@ -215,7 +213,8 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
 
     try {
       const reminderOffsetDays = reminder.enabled ? reminder.offsetDays : 0;
-      const comment = basicInfo.comment?.trim() || undefined;
+      const trimmedComment = basicInfo.comment?.trim();
+      const comment = trimmedComment === '' ? undefined : trimmedComment;
 
       if (schedule.frequency === 'once') {
         await createOperation.mutateAsync({
@@ -239,7 +238,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
             name: basicInfo.name.trim(),
             amountKopecks,
             startDate: operationDate,
-            endDate: schedule.endDate || undefined,
+            endDate: schedule.endDate === '' ? undefined : schedule.endDate,
             comment,
             periodicity: schedule.frequency,
             reminderOffsetDays,
