@@ -105,7 +105,10 @@ export function PropertyAddressStep({
       );
     } else if (event.key === 'Enter' && activeIndex !== null) {
       event.preventDefault();
-      handleSelect(suggestions[activeIndex].value);
+      const suggestion = suggestions[activeIndex];
+      if (suggestion !== undefined) {
+        handleSelect(suggestion.value);
+      }
     } else if (event.key === 'Escape') {
       setIsOpen(false);
       setActiveIndex(null);

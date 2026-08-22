@@ -2,6 +2,7 @@
 
 import {useEffect, useRef, useState, type ChangeEvent, type JSX} from 'react';
 import {Modal} from '@heroui/react';
+import clsx from 'clsx';
 import {notify} from '@/shared/lib/notifications';
 import {ROUTES} from '@/shared/config/routes';
 import {ApiError} from '@/shared/api/errors';
@@ -47,9 +48,9 @@ const MEMBER_STATUS_LABELS: Record<AccessMemberStatus, string> = {
 };
 
 const STATUS_CHIP_CLASS: Record<AccessMemberStatus, string> = {
-    active: styles.statusActive,
-    pending: styles.statusPending,
-    suspended: styles.statusSuspended,
+    active: styles.statusActive ?? '',
+    pending: styles.statusPending ?? '',
+    suspended: styles.statusSuspended ?? '',
 };
 
 const ADD_ROLE_OPTIONS: readonly SelectOption<MemberRole>[] = [
@@ -350,7 +351,7 @@ export function PropertySharingModal({
                                 {!isLoading && !hasError && (
                                     <ul className={styles.list}>
                                         {owner && (
-                                            <li className={`${styles.row} ${styles.ownerRow}`}>
+                                            <li className={clsx(styles.row, styles.ownerRow)}>
                                                 <div className={styles.rowMain}>
                                                     <span className={styles.email}>
                                                         {owner.email ?? owner.displayName}
@@ -381,7 +382,12 @@ export function PropertySharingModal({
                                                         </span>
                                                         <span className={styles.statusLine}>
                                                             <span
-                                                                className={`${styles.statusChip} ${STATUS_CHIP_CLASS[member.status]}`}
+                                                                className={clsx(
+                                                                    styles.statusChip,
+                                                                    STATUS_CHIP_CLASS[
+                                                                        member.status
+                                                                    ]
+                                                                )}
                                                             >
                                                                 {
                                                                     MEMBER_STATUS_LABELS[

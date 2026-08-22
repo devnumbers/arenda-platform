@@ -10,6 +10,7 @@ import {
     type RefObject,
 } from 'react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
+import clsx from 'clsx';
 import { useStandalone } from '@/shared/lib/hooks/useStandalone';
 import styles from './PullToRefresh.module.css';
 
@@ -144,20 +145,24 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         const onTouchStart = (event: TouchEvent): void => {
             // Only single-finger gestures qualify; ignore multi-touch.
             if (event.touches.length !== 1) return;
+            const touch = event.touches[0];
+            if (touch === undefined) return;
             // A refresh is already in flight (content pinned, spinner
             // spinning) — ignore a new touch so it can't overwrite the
             // pinned offset mid-refresh.
             if (phaseRef.current === 'refreshing') return;
             // Gesture begins only when the page is pinned to the top.
             if (window.scrollY > 0) return;
-            startYRef.current = event.touches[0].clientY;
+            startYRef.current = touch.clientY;
             trackingRef.current = true;
             setOverscrollGuard(true);
         };
 
         const onTouchMove = (event: TouchEvent): void => {
             if (!trackingRef.current || startYRef.current === null) return;
-            const deltaY = event.touches[0].clientY - startYRef.current;
+            const touch = event.touches[0];
+            if (touch === undefined) return;
+            const deltaY = touch.clientY - startYRef.current;
             // Downward pull is positive. An upward drag aborts tracking.
             if (deltaY <= 0) {
                 if (phaseRef.current !== 'refreshing') {
@@ -234,12 +239,11 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
                   transform: `translate(-50%, 0) rotate(${pullY * ROTATE_DEG_PER_PX}deg) scale(${ratio})`,
               };
 
-    const spinnerClass =
-        phase === 'refreshing'
-            ? `${styles.spinner} ${styles.refreshing}`
-            : phase === 'pulling' || phase === 'armed'
-              ? `${styles.spinner} ${styles[phase]}`
-              : styles.spinner;
+    const spinnerClass = clsx(
+        styles.spinner,
+        phase === 'refreshing' && styles.refreshing,
+        (phase === 'pulling' || phase === 'armed') && styles[phase],
+    );
 
     return <div className={spinnerClass} style={spinnerStyle} aria-hidden="true" />;
 }

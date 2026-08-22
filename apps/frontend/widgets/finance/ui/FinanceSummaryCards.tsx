@@ -1,6 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
+import clsx from 'clsx';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
@@ -25,7 +26,7 @@ export function FinanceSummaryCards({
         aria-label="Перейти к операциям: Доходы"
       >
         <span className={styles.label}>Доходы</span>
-        <span className={`${styles.value} ${styles.income}`}>
+        <span className={clsx(styles.value, styles.income)}>
           {formatMoneyKopecks(incomeKopecks, { round: true })}
         </span>
       </NextLink>
@@ -35,7 +36,7 @@ export function FinanceSummaryCards({
         aria-label="Перейти к операциям: Расходы"
       >
         <span className={styles.label}>Расходы</span>
-        <span className={`${styles.value} ${styles.expense}`}>
+        <span className={clsx(styles.value, styles.expense)}>
           {formatMoneyKopecks(expenseKopecks, { round: true })}
         </span>
       </NextLink>

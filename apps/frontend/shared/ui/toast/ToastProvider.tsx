@@ -47,8 +47,8 @@ export function CloseToastButton({
 }
 
 const ToastTransition = cssTransition({
-    enter: styles.toastEnter,
-    exit: styles.toastExit,
+    enter: styles.toastEnter ?? '',
+    exit: styles.toastExit ?? '',
     collapseDuration: 250,
 });
 

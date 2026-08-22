@@ -1,5 +1,6 @@
 'use client';
 
+import clsx from 'clsx';
 import type { JSX, ReactNode } from 'react';
 import styles from './Icon.module.css';
 
@@ -12,14 +13,14 @@ export type IconProps = {
 };
 
 const sizeClassMap: Record<IconSize, string> = {
-  xs: styles.xs,
-  s: styles.s,
-  m: styles.m,
-  l: styles.l,
+  xs: styles.xs ?? '',
+  s: styles.s ?? '',
+  m: styles.m ?? '',
+  l: styles.l ?? '',
 };
 
 export function Icon({ size = 'm', className, children }: IconProps): JSX.Element {
   const sizeClass = sizeClassMap[size];
 
-  return <span className={`${styles.icon} ${sizeClass}${className ? ` ${className}` : ''}`}>{children}</span>;
+  return <span className={clsx(styles.icon, sizeClass, className)}>{children}</span>;
 }

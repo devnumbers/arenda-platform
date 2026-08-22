@@ -159,8 +159,9 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     }
 
     const currentIndex = stepOrder.indexOf(step);
-    if (currentIndex > 0) {
-      setStep(stepOrder[currentIndex - 1]);
+    const prevStep = currentIndex > 0 ? stepOrder[currentIndex - 1] : undefined;
+    if (prevStep !== undefined) {
+      setStep(prevStep);
     } else {
       goBack(router, ROUTES.finance);
     }

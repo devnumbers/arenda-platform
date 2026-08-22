@@ -60,8 +60,10 @@ const EXPORT_FILENAME_STAR_PATTERN = /filename\*=UTF-8''([^;]+)/;
 function resolveExportFilename(disposition: string): string {
     const match = EXPORT_FILENAME_STAR_PATTERN.exec(disposition);
     if (!match) return 'export.xlsx';
+    const filename = match[1];
+    if (filename === undefined) return 'export.xlsx';
     try {
-        return decodeURIComponent(match[1]);
+        return decodeURIComponent(filename);
     } catch {
         return 'export.xlsx';
     }

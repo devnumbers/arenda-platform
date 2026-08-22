@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, type JSX } from 'react';
+import clsx from 'clsx';
 import { Button } from '@/shared/ui/button';
 import {
   formatDateForApi,
@@ -135,13 +136,13 @@ export function ProfitReport(): JSX.Element {
       <div className={styles.totals}>
         <div className={styles.totalCard}>
           <span className={styles.totalLabel}>Доход</span>
-          <span className={`${styles.totalValue} ${styles.income}`}>
+          <span className={clsx(styles.totalValue, styles.income)}>
             {formatMoneyKopecks(totals.income_kopecks, { round: true })}
           </span>
         </div>
         <div className={styles.totalCard}>
           <span className={styles.totalLabel}>Расход</span>
-          <span className={`${styles.totalValue} ${styles.expense}`}>
+          <span className={clsx(styles.totalValue, styles.expense)}>
             {formatMoneyKopecks(totals.expense_kopecks, { round: true })}
           </span>
         </div>

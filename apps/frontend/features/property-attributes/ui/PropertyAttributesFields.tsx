@@ -173,7 +173,7 @@ export function PropertyAttributesFields({
   // Precompute group headers immutably: a header is shown before a field when
   // the field's group is non-null and differs from the previous field's group.
   const renderedFields = fields.map((field, index) => {
-    const prevGroup = index === 0 ? null : fields[index - 1].group;
+    const prevGroup = index === 0 ? null : (fields[index - 1]?.group ?? null);
     const showHeader = field.group !== null && field.group !== prevGroup;
     return { field, showHeader };
   });

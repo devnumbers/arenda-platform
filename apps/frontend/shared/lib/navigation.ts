@@ -18,7 +18,7 @@ export function sanitizeReturnTo(value: string | undefined): string | undefined 
  * a literal `?` inside a value is not supported and would be silently truncated.
  */
 export function buildReturnUrl(returnTo: string, params: Record<string, string>): string {
-    const [path, query] = returnTo.split('?');
+    const [path = returnTo, query] = returnTo.split('?');
     const search = new URLSearchParams(query);
     for (const [key, value] of Object.entries(params)) {
         search.set(key, value);

@@ -1,5 +1,6 @@
 'use client';
 
+import clsx from 'clsx';
 import type { JSX, ComponentType } from 'react';
 import {
   ArchiveBold,
@@ -20,24 +21,24 @@ const config: Record<
     icon: ComponentType<{ className?: string }>;
   }
 > = {
-  rented: { label: 'Арендована', className: styles.rented, icon: BadgeGood },
+  rented: { label: 'Арендована', className: styles.rented ?? '', icon: BadgeGood },
   requires_action: {
     label: 'Требует действия',
-    className: styles.requiresAction,
+    className: styles.requiresAction ?? '',
     icon: BadgeDanger,
   },
   awaiting_start: {
     label: 'Аренда скоро начнётся',
-    className: styles.awaitingStart,
+    className: styles.awaitingStart ?? '',
     icon: BadgeInfo,
   },
-  free: { label: 'Не арендована', className: styles.free, icon: StatusDoor },
+  free: { label: 'Не арендована', className: styles.free ?? '', icon: StatusDoor },
   maintenance: {
     label: 'На ремонте',
-    className: styles.maintenance,
+    className: styles.maintenance ?? '',
     icon: StatusWarning,
   },
-  archived: { label: 'В архиве', className: styles.archived, icon: ArchiveBold },
+  archived: { label: 'В архиве', className: styles.archived ?? '', icon: ArchiveBold },
 };
 
 export function PropertyDetailStatusBadge({
@@ -50,7 +51,7 @@ export function PropertyDetailStatusBadge({
   const item = config[status];
   const Icon = item.icon;
   return (
-    <span className={`${styles.badge} ${item.className}`}>
+    <span className={clsx(styles.badge, item.className)}>
       <Icon className={styles.icon} aria-hidden="true" />
       {text ?? item.label}
     </span>

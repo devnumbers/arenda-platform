@@ -1,6 +1,7 @@
 'use client';
 
 import type { ComponentType, JSX, SVGProps } from 'react';
+import clsx from 'clsx';
 import NextLink from 'next/link';
 import { ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo, Home } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -43,7 +44,7 @@ export function OperationListItem({ operation }: OperationListItemProps): JSX.El
         <span className={styles.name}>{operation.name}</span>
       </span>
       <span className={styles.right}>
-        <span className={`${styles.amount} ${amountClass}`}>
+        <span className={clsx(styles.amount, amountClass)}>
           {sign}
           {formatMoneyKopecks(operation.amountKopecks, { round: true })}
         </span>

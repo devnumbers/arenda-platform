@@ -3,6 +3,7 @@
 import {useParams, useRouter} from 'next/navigation';
 import {useState, type ComponentType, type JSX} from 'react';
 import {Modal} from '@heroui/react';
+import clsx from 'clsx';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack} from '@/shared/lib/navigation';
 import {ArchiveBold, BadgeDanger, BadgeGood, BadgeInfo} from '@/shared/assets/icons';
@@ -34,10 +35,10 @@ const STATUS_VARIANT_CLASS: Record<
     NonNullable<ReturnType<typeof getStatusVariant>>,
     string
 > = {
-    warning: styles.statusWarning,
-    danger: styles.statusDanger,
-    success: styles.statusSuccess,
-    default: styles.statusDefault,
+    warning: styles.statusWarning ?? '',
+    danger: styles.statusDanger ?? '',
+    success: styles.statusSuccess ?? '',
+    default: styles.statusDefault ?? '',
 };
 
 const STATUS_VARIANT_ICON: Record<
@@ -138,12 +139,12 @@ function OperationDetailCard({
             <div className={styles.cardHeader}>
                 <h2 className={styles.name}>{operation.name}</h2>
                 <div className={styles.badgeStack}>
-                    <span className={`${styles.status} ${statusClass}`}>
+                    <span className={clsx(styles.status, statusClass)}>
                         {StatusIcon && <StatusIcon aria-hidden="true" />}
                         {getOperationStatusLabel(operation.status)}
                     </span>
                     {isArchived && (
-                        <span className={`${styles.status} ${styles.statusArchived}`}>
+                        <span className={clsx(styles.status, styles.statusArchived)}>
                             <ArchiveBold aria-hidden="true" />
                             В архиве
                         </span>
@@ -152,7 +153,7 @@ function OperationDetailCard({
             </div>
 
             <div className={styles.amountRow}>
-        <span className={`${styles.amount} ${amountClass}`}>
+        <span className={clsx(styles.amount, amountClass)}>
           {sign}
             {formatMoneyKopecks(operation.amountKopecks, {round: true})}
         </span>

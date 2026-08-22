@@ -101,7 +101,10 @@ export function TimezoneSelect({value, onChange, error, disabled, required}: Tim
             );
         } else if (event.key === 'Enter' && activeIndex !== null) {
             event.preventDefault();
-            handleSelect(items[activeIndex].value);
+            const item = items[activeIndex];
+            if (item !== undefined) {
+                handleSelect(item.value);
+            }
         } else if (event.key === 'Escape') {
             setIsOpen(false);
             setActiveIndex(null);

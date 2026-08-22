@@ -52,17 +52,27 @@ export function addDays(iso: string, days: number): string {
 }
 
 // Семь дат (пн–вс) недели, содержащей isoDate.
-export function weekDates(isoDate: string): readonly string[] {
+export function weekDates(
+  isoDate: string,
+): readonly [string, string, string, string, string, string, string] {
   const date = parseISODate(isoDate);
   const mondayOffset = (date.getDay() + 6) % 7;
   const monday = addDays(isoDate, -mondayOffset);
-  return Array.from({ length: 7 }, (_, index) => addDays(monday, index));
+  return [
+    monday,
+    addDays(monday, 1),
+    addDays(monday, 2),
+    addDays(monday, 3),
+    addDays(monday, 4),
+    addDays(monday, 5),
+    addDays(monday, 6),
+  ];
 }
 
 // Короткий день недели («Пн») для строковой даты.
 export function weekdayShort(isoDate: string): string {
   const parsed = parseISODate(isoDate);
-  return WEEKDAY_SHORT_MONDAY_FIRST[(parsed.getDay() + 6) % 7];
+  return WEEKDAY_SHORT_MONDAY_FIRST[(parsed.getDay() + 6) % 7] ?? '';
 }
 
 // «3 августа, понедельник»
@@ -72,7 +82,8 @@ export function formatDateWithWeekday(isoDate: string): string {
     return isoDate;
   }
   const date = parsed.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-  return `${date}, ${WEEKDAY_FULL_BY_GETDAY[parsed.getDay()]}`;
+  const weekday = WEEKDAY_FULL_BY_GETDAY[parsed.getDay()] ?? '';
+  return `${date}, ${weekday}`;
 }
 
 // «12 авг, ср»
@@ -81,7 +92,8 @@ export function formatDateShort(isoDate: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return isoDate;
   }
-  return `${parsed.getDate()} ${MONTH_GENITIVE_SHORT[parsed.getMonth()]}, ${weekdayShort(isoDate)}`;
+  const month = MONTH_GENITIVE_SHORT[parsed.getMonth()] ?? '';
+  return `${parsed.getDate()} ${month}, ${weekdayShort(isoDate)}`;
 }
 
 // Локальная дата 'YYYY-MM-DD' из date-time строки API.

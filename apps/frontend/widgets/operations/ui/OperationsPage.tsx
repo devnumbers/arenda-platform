@@ -3,6 +3,7 @@
 import {type JSX, type MouseEvent as ReactMouseEvent, useMemo, useState} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
 import NextLink from 'next/link';
+import clsx from 'clsx';
 import {Plus} from '@/shared/assets/icons';
 import {PageHeader} from '@/shared/ui/page-header';
 import {Icon} from '@/shared/ui/icon';
@@ -294,7 +295,7 @@ export function OperationsPage({initial}: OperationsPageProps): JSX.Element {
                                 setType(nextType);
                                 router.replace(href, {scroll: false});
                             }}
-                            className={`${styles.tab} ${isActive ? styles.tabActive : ''}`}
+                            className={clsx(styles.tab, isActive && styles.tabActive)}
                             aria-current={isActive ? 'page' : undefined}
                         >
                             {tabItem.label}
