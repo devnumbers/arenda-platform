@@ -895,6 +895,140 @@ func TestWebhook_AppliesFailedUpgradePayment(t *testing.T) {
 	}
 }
 
+// laterPaymentID returns a UUIDv7 whose timestamp is one millisecond after
+// id's — an id guaranteed to sort right after it (the creation order v7 ids
+// carry), minted without sleeping off the real clock uuid.NewV7 reads.
+func laterPaymentID(id uuid.UUID) uuid.UUID {
+	next := id
+	// The leading six bytes are the 48-bit big-endian unix-millisecond
+	// timestamp; increment it with a carry towards the most significant byte.
+	for i := 5; i >= 0; i-- {
+		next[i]++
+		if next[i] != 0 {
+			break
+		}
+	}
+	return next
+}
+
+// seedStaleMitCharge seeds the precondition of a stale renewal failure: an
+// expired pro subscription with a linked payment method and a pending
+// merchant-initiated renewal charge hanging at the provider (issue #426).
+func (h *paymentHarness) seedStaleMitCharge(t *testing.T) (domain.Subscription, domain.SubscriptionPayment) {
+	t.Helper()
+	method, err := domain.NewPaymentMethod(uuid.Must(uuid.NewV7()), testProviderFake, "token_stale", h.now)
+	if err != nil {
+		t.Fatalf("new method: %v", err)
+	}
+	storedMethod, err := h.stores.methods.UpsertByTokenHash(t.Context(), method)
+	if err != nil {
+		t.Fatalf("seed method: %v", err)
+	}
+	// A renewal charge exists only for a subscription whose paid period has
+	// ended (the renewal worker charges at expiry).
+	expired := h.now.AddDate(0, -1, 0)
+	sub := h.seedSubscription(t, func(s *domain.Subscription) { s.ValidUntil = &expired })
+	stale, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffPro),
+		domain.PeriodMonth, 49000, testProviderFake, h.now.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("new stale payment: %v", err)
+	}
+	stale.PaymentMethodID = &storedMethod.ID
+	if err := stale.SaveProviderReference("prov_stale", "", h.now.Add(-time.Minute)); err != nil {
+		t.Fatalf("save stale reference: %v", err)
+	}
+	stale, err = h.stores.payments.Create(t.Context(), stale)
+	if err != nil {
+		t.Fatalf("seed stale payment: %v", err)
+	}
+	return sub, stale
+}
+
+// landManualRenewal pays a newer manual renewal through the webhook path
+// while the stale charge hangs — the year period is what makes the payment
+// coexist with the pending monthly charge (one pending payment per
+// user/tariff/period) — and proves the subscription is active on it. The
+// renewal's id is minted one v7 millisecond after the stale charge's, so the
+// creation order the freshness guard reads is deterministic.
+func (h *paymentHarness) landManualRenewal(t *testing.T, sub domain.Subscription, newerThan uuid.UUID) domain.SubscriptionPayment {
+	t.Helper()
+	renewal, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffPro),
+		domain.PeriodYear, 440000, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("new renewal payment: %v", err)
+	}
+	renewal.ID = laterPaymentID(newerThan)
+	if err := renewal.SaveProviderReference("prov_renewal", "", h.now); err != nil {
+		t.Fatalf("save renewal reference: %v", err)
+	}
+	renewal, err = h.stores.payments.Create(t.Context(), renewal)
+	if err != nil {
+		t.Fatalf("seed renewal payment: %v", err)
+	}
+	h.setNotification(&PaymentNotification{
+		InternalPaymentID: renewal.ID,
+		ProviderPaymentID: "prov_renewal",
+		Status:            domain.PaymentStatusSucceeded,
+	})
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("renewal HandleWebhook() error = %v", err)
+	}
+	return renewal
+}
+
+// TestWebhook_StaleFailedRenewalKeepsRenewedSubscriptionActive proves the
+// freshness guard of issue #426: the late failure of an old merchant-initiated
+// renewal charge — a newer payment renewed the subscription while the old
+// charge hung at the provider — is recorded on the payment alone. The
+// subscription keeps its active status and renewed period, the transition log
+// carries no grace entry, and no GraceEntered event is published.
+func TestWebhook_StaleFailedRenewalKeepsRenewedSubscriptionActive(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	pub := &capturePublisher{}
+	h.payments.publisher = pub
+	sub, stale := h.seedStaleMitCharge(t)
+	renewal := h.landManualRenewal(t, sub, stale.ID)
+
+	// The old charge finally fails at the provider.
+	errCode := testErrCodeDeclined
+	h.setNotification(&PaymentNotification{
+		InternalPaymentID: stale.ID,
+		ProviderPaymentID: "prov_stale",
+		Status:            domain.PaymentStatusFailed,
+		ErrorCode:         &errCode,
+	})
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("stale HandleWebhook() error = %v", err)
+	}
+
+	failed, err := h.stores.payments.GetByID(t.Context(), stale.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if failed.Status != domain.PaymentStatusFailed {
+		t.Errorf("stale payment status = %q, want failed", failed.Status)
+	}
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("subscription status = %q, want active (a stale failure must not enter grace)", stored.Status)
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != renewal.ID {
+		t.Errorf("last applied payment = %v, want the newer renewal", stored.LastAppliedPaymentID)
+	}
+	if h.transitionCount(t, sub.ID) != 1 {
+		t.Errorf("transitions = %d, want only the renewal's payment_applied (no grace entry)", h.transitionCount(t, sub.ID))
+	}
+	if len(pub.entered) != 0 {
+		t.Errorf("GraceEntered published %d times, want 0", len(pub.entered))
+	}
+}
+
 // TestWebhook_SucceededPersistsProviderPaymentID proves a webhook that
 // arrives before the initiation result was saved still finalizes the payment:
 // the carried provider reference is persisted, then the outcome applied.

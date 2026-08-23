@@ -3,6 +3,7 @@
 package domain
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"time"
@@ -451,6 +452,38 @@ func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
 	s.CurrentPeriod = nil
+}
+
+// FailedRenewalIsCurrent reports whether a failed renewal charge with the
+// given id is still relevant to the subscription's current paid period: the
+// period has ended (nothing is paid for beyond now — renewal charges exist
+// only for expired periods, the renewal worker charges at expiry) and no
+// payment created after the failed one has been applied since. A late failure
+// of a superseded payment — the subscription was renewed or upgraded by a
+// newer payment, or received a newer term while the charge hung at the
+// provider — must not move it into grace (issue #426); the failure is
+// recorded on the payment alone and the subscription keeps the period it was
+// already granted.
+func (s *Subscription) FailedRenewalIsCurrent(paymentID uuid.UUID, now time.Time) bool {
+	if s.ValidUntil == nil || s.ValidUntil.After(now) {
+		// Paid for beyond now (or nothing to renew at all): whatever this
+		// charge was for, a later payment or term has already covered it.
+		return false
+	}
+	if s.LastAppliedPaymentID == nil {
+		return true
+	}
+	// Payment ids are app-side UUIDv7, so byte order is creation order: a
+	// last applied payment ordered after the failed one was created later and
+	// supersedes its outcome.
+	return paymentIDBefore(*s.LastAppliedPaymentID, paymentID)
+}
+
+// paymentIDBefore reports whether payment id a was created before payment id
+// b. Repository ids are UUIDv7 — the leading bytes carry the generation
+// timestamp — so byte comparison is creation-time comparison.
+func paymentIDBefore(a, b uuid.UUID) bool {
+	return bytes.Compare(a[:], b[:]) < 0
 }
 
 // EnterGrace moves the subscription into the grace period. The validity date is

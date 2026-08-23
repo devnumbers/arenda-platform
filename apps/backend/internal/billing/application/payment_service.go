@@ -432,8 +432,11 @@ func (s *PaymentService) captureProviderReference(
 // merchant-initiated renewal charge, which carries the charged method — moves
 // the subscription into grace: the user gets the window to fix the payment
 // method, and the next worker tick does not simply charge a fresh payment
-// forever (ADR 0008). A customer-initiated payment has no method — its
-// failure leaves the subscription untouched. The grace-entered event is
+// forever (ADR 0008). The freshness guard of issue #426 keeps a superseded
+// charge out of grace: only a failure the subscription's current paid period
+// still depends on enters it, so a subscription renewed or upgraded by a
+// newer payment stays active. A customer-initiated payment has no method —
+// its failure leaves the subscription untouched. The grace-entered event is
 // captured by the grace-events module and published strictly after the commit
 // (issue #284).
 func (s *PaymentService) finalizeFailedPayment(
@@ -456,8 +459,10 @@ func (s *PaymentService) finalizeFailedPayment(
 		if err != nil {
 			return err
 		}
-		if err := grace.enterGrace(ctx, stores, sub, now, s.config.GraceDuration); err != nil {
-			return err
+		if sub.FailedRenewalIsCurrent(payment.ID, now) {
+			if err := grace.enterGrace(ctx, stores, sub, now, s.config.GraceDuration); err != nil {
+				return err
+			}
 		}
 	}
 	if err := stores.audit.Record(ctx, auditdomain.Entry{

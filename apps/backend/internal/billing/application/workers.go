@@ -754,7 +754,10 @@ func (w *Workers) applyRenewalSuccess(ctx context.Context, payment domain.Subscr
 
 // failRenewalPayment finalizes a definitively failed renewal charge and moves
 // the subscription into grace in the same transaction: the pending window for
-// the user to fix the payment method (ADR 0008). A payment finalized by
+// the user to fix the payment method (ADR 0008). The freshness guard of issue
+// #426 keeps a superseded charge out of grace: a subscription renewed or
+// upgraded by a newer payment while this charge was in flight stays active,
+// and the failure is recorded on the payment alone. A payment finalized by
 // another flow first is a no-op. The grace-entered event is captured by the
 // grace-events module inside the transaction and published strictly after the
 // commit — best-effort, a publication failure is logged and never fails the
@@ -779,8 +782,10 @@ func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, e
 		if err != nil {
 			return err
 		}
-		if err := grace.enterGrace(ctx, stores, sub, now, w.config.GraceDuration); err != nil {
-			return err
+		if sub.FailedRenewalIsCurrent(payment.ID, now) {
+			if err := grace.enterGrace(ctx, stores, sub, now, w.config.GraceDuration); err != nil {
+				return err
+			}
 		}
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,

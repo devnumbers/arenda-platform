@@ -1504,6 +1504,108 @@ func TestWorkers_AsyncFailedRenewalChargeEntersGrace(t *testing.T) {
 	})
 }
 
+// seedStaleMitCharge seeds the precondition of a stale renewal failure on the
+// workers harness: an expired pro subscription with a linked payment method
+// and a pending merchant-initiated renewal charge hanging at the provider
+// (issue #426).
+func (h *workersHarness) seedStaleMitCharge(t *testing.T) (domain.Subscription, domain.SubscriptionPayment) {
+	t.Helper()
+	sub := h.seedSubscription(t, nil) // Expired pro, auto-renew on.
+	method := h.seedActiveMethod(t, sub, testProviderFake, "token_stale")
+	stale, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+		h.pro.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("new stale payment: %v", err)
+	}
+	methodID := method.ID
+	stale.PaymentMethodID = &methodID
+	if err := stale.SaveProviderReference("prov_stale", "", h.now.Add(-time.Minute)); err != nil {
+		t.Fatalf("save stale reference: %v", err)
+	}
+	stale, err = h.stores.payments.Create(t.Context(), stale)
+	if err != nil {
+		t.Fatalf("seed stale payment: %v", err)
+	}
+	return sub, stale
+}
+
+// landManualUpgrade pays a newer manual upgrade through the webhook path
+// while the stale charge is in flight — the business tariff is what makes the
+// payment coexist with the pending pro charge (one pending payment per
+// user/tariff/period) — and proves the subscription is active on it. The
+// renewal's id is minted one v7 millisecond after the stale charge's, so the
+// creation order the freshness guard reads is deterministic.
+func (h *workersHarness) landManualUpgrade(t *testing.T, sub domain.Subscription, newerThan uuid.UUID) domain.SubscriptionPayment {
+	t.Helper()
+	renewal, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.business.ID, domain.PeriodMonth,
+		h.business.MonthlyPriceKopecks, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("new renewal payment: %v", err)
+	}
+	renewal.ID = laterPaymentID(newerThan)
+	if err := renewal.SaveProviderReference("prov_renewal", "", h.now); err != nil {
+		t.Fatalf("save renewal reference: %v", err)
+	}
+	renewal, err = h.stores.payments.Create(t.Context(), renewal)
+	if err != nil {
+		t.Fatalf("seed renewal payment: %v", err)
+	}
+	if err := h.workers.payments.ApplyPaymentNotification(t.Context(), &PaymentNotification{
+		InternalPaymentID: renewal.ID,
+		ProviderPaymentID: "prov_renewal",
+		Status:            domain.PaymentStatusSucceeded,
+	}); err != nil {
+		t.Fatalf("ApplyPaymentNotification(renewal) error = %v", err)
+	}
+	renewed := h.storedSubscription(t, sub)
+	if renewed.Status != domain.SubscriptionStatusActive {
+		t.Fatalf("renewal baseline: status = %q, want active on the renewal", renewed.Status)
+	}
+	if renewed.LastAppliedPaymentID == nil || *renewed.LastAppliedPaymentID != renewal.ID {
+		t.Fatalf("renewal baseline: last applied = %v, want the renewal", renewed.LastAppliedPaymentID)
+	}
+	return renewal
+}
+
+// TestWorkers_StaleFailedRenewalKeepsRenewedSubscriptionActive proves the
+// freshness guard on the worker's own finalization path (issue #426): when a
+// renewal charge definitively fails after a newer payment already renewed the
+// subscription — the manual payment lands while the charge is in flight — the
+// failed charge is recorded without moving the subscription into grace.
+func TestWorkers_StaleFailedRenewalKeepsRenewedSubscriptionActive(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	sub, stale := h.seedStaleMitCharge(t)
+	renewal := h.landManualUpgrade(t, sub, stale.ID)
+
+	// The worker's charge on the old payment ends in a definitive failure.
+	if err := h.workers.failRenewalPayment(t.Context(), stale.ID, nil, h.now); err != nil {
+		t.Fatalf("failRenewalPayment() error = %v", err)
+	}
+
+	failed, err := h.stores.payments.GetByID(t.Context(), stale.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if failed.Status != domain.PaymentStatusFailed {
+		t.Errorf("stale payment status = %q, want failed", failed.Status)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("subscription status = %q, want active (a stale failure must not enter grace)", stored.Status)
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != renewal.ID {
+		t.Errorf("last applied payment = %v, want the newer renewal", stored.LastAppliedPaymentID)
+	}
+	for _, tr := range h.transitionsOf(t, sub) {
+		if tr.Reason == domain.TransitionReasonGraceEntered {
+			t.Errorf("transitions carry a grace_entered entry for a stale failure: %+v", tr)
+		}
+	}
+}
+
 // TestWorkers_BatchWithoutProgressStops proves a full batch where nothing
 // processes stops the loop for this tick instead of spinning: with batch size
 // one, the failing item (a pending tariff that no longer exists) blocks the

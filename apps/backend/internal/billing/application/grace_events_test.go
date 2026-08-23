@@ -439,7 +439,9 @@ func TestWorkers_PublisherFailureDoesNotAffectTransition(t *testing.T) {
 // TestWebhook_FailedRenewalChargePublishesGraceEntered proves the webhook
 // finalization of a failed merchant-initiated renewal charge (the charge
 // carries the payment method) publishes GraceEntered after the finalizing
-// transaction commits (issue #253).
+// transaction commits (issue #253). The subscription's paid period has ended —
+// the precondition a renewal charge exists for (the renewal worker charges at
+// expiry); the freshness guard of issue #426 keeps that path entering grace.
 func TestWebhook_FailedRenewalChargePublishesGraceEntered(t *testing.T) {
 	t.Parallel()
 	h := newPaymentHarness(t)
@@ -454,7 +456,10 @@ func TestWebhook_FailedRenewalChargePublishesGraceEntered(t *testing.T) {
 		t.Fatalf("seed method: %v", err)
 	}
 
-	sub := h.seedSubscription(t, nil)
+	expired := h.now.AddDate(0, -1, 0)
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.ValidUntil = &expired
+	})
 	payment, err := domain.NewSubscriptionPayment(
 		sub.UserID, sub.ID, h.tariffID(t, domain.TariffPro),
 		domain.PeriodMonth, 49000, testProviderFake, h.now)
