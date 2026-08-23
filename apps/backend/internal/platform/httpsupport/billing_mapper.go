@@ -58,8 +58,8 @@ func TariffResponse(t domain.Tariff) openapi.Tariff {
 	return openapi.Tariff{
 		Name:                openapi.TariffName(t.Name),
 		ActivePropertyLimit: t.ActivePropertyLimit,
-		MonthlyPriceKopecks: int(t.MonthlyPriceKopecks),
-		YearlyPriceKopecks:  int(t.YearlyPriceKopecks),
+		MonthlyPriceKopecks: t.MonthlyPriceKopecks,
+		YearlyPriceKopecks:  t.YearlyPriceKopecks,
 	}
 }
 
@@ -72,7 +72,7 @@ func AdminTariffResponse(t domain.Tariff) openapi.AdminTariff {
 		Name:                openapi.TariffName(t.Name),
 		IsActive:            t.IsActive,
 		ActivePropertyLimit: t.ActivePropertyLimit,
-		MonthlyPriceKopecks: int(t.MonthlyPriceKopecks),
-		YearlyPriceKopecks:  int(t.YearlyPriceKopecks),
+		MonthlyPriceKopecks: t.MonthlyPriceKopecks,
+		YearlyPriceKopecks:  t.YearlyPriceKopecks,
 	}
 }

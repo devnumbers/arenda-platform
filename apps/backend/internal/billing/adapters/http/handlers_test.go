@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -872,6 +873,42 @@ func TestGetAdminSubscriptionPayment_AnswersView(t *testing.T) {
 	}
 }
 
+// TestGetAdminSubscriptionPayment_MapsInt64AmountBoundaries proves both the
+// payment amount and the refunded amount cross the admin DTO boundary as
+// 64-bit integers without truncation — values far beyond the int32 range
+// answer intact (issue #425).
+func TestGetAdminSubscriptionPayment_MapsInt64AmountBoundaries(t *testing.T) {
+	t.Parallel()
+	view := adminPaymentView(t)
+	view.Payment.AmountKopecks = math.MaxInt64
+	refunded := int64(math.MaxInt32) + 1
+	view.Payment.RefundedAmountKopecks = &refunded
+	h := newTestHandlers(nil, nil, nil)
+	h.adminPayments = &fakeAdminPaymentManager{get: func(
+		_ context.Context, _ uuid.UUID,
+	) (billingapp.AdminSubscriptionPaymentView, error) {
+		return view, nil
+	}}
+
+	w := httptest.NewRecorder()
+	h.GetAdminSubscriptionPayment(w,
+		adminRequest(t, http.MethodGet, "/admin/subscription/payments/"+view.Payment.ID.String(), uuid.Must(uuid.NewV7())), view.Payment.ID)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp openapi.AdminSubscriptionPayment
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.AmountKopecks != math.MaxInt64 {
+		t.Errorf("amountKopecks = %d, want %d (no truncation)", resp.AmountKopecks, math.MaxInt64)
+	}
+	if resp.RefundedAmountKopecks == nil || *resp.RefundedAmountKopecks != refunded {
+		t.Errorf("refundedAmountKopecks = %v, want %d (no truncation)", resp.RefundedAmountKopecks, refunded)
+	}
+}
+
 // TestRefundSubscriptionPayment_AttributesAdmin proves POST
 // /admin/subscription/payments/{id}/refund answers 204 and forwards the acting
 // admin from the session (issue #254).
@@ -1375,6 +1412,52 @@ func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
 	}
 	if item.PaymentURL == nil || *item.PaymentURL != url {
 		t.Errorf("paymentUrl = %v, want %q", item.PaymentURL, url)
+	}
+}
+
+// TestListSubscriptionPayments_MapsInt64AmountBoundary proves the payment
+// amount crosses the DTO boundary as a 64-bit integer without truncation: a
+// value far beyond the int32 range answers intact (issue #425).
+func TestListSubscriptionPayments_MapsInt64AmountBoundary(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.Must(uuid.NewV7())
+	h := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{list: func(
+		_ context.Context, _ uuid.UUID,
+	) ([]billingapp.SubscriptionPaymentView, error) {
+		return []billingapp.SubscriptionPaymentView{{
+			Payment: domain.SubscriptionPayment{
+				ID:            uuid.Must(uuid.NewV7()),
+				UserID:        ownerID,
+				TariffID:      uuid.Must(uuid.NewV7()),
+				Period:        domain.PeriodMonth,
+				AmountKopecks: math.MaxInt64,
+				Provider:      testProviderFake,
+				Status:        domain.PaymentStatusPending,
+				CreatedAt:     time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC),
+			},
+			Tariff: domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, IsActive: true},
+		}}, nil
+	}}, nil, nil)
+
+	w := httptest.NewRecorder()
+	h.ListSubscriptionPayments(w, ownerRequest(t, http.MethodGet, "/subscription/payments", ownerID))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			AmountKopecks int64 `json:"amountKopecks"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(resp.Items))
+	}
+	if resp.Items[0].AmountKopecks != math.MaxInt64 {
+		t.Errorf("amountKopecks = %d, want %d (no truncation)", resp.Items[0].AmountKopecks, math.MaxInt64)
 	}
 }
 

@@ -155,7 +155,7 @@ func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Reque
 		Type:          string(body.Type),
 		CategoryID:    body.CategoryId,
 		Name:          body.Name,
-		AmountKopecks: int64(body.AmountKopecks),
+		AmountKopecks: body.AmountKopecks,
 		OperationDate: body.OperationDate.Time,
 		LeaseID:       uuidPtrFromOpenAPI(body.LeaseId),
 	}
@@ -328,7 +328,7 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 		LeaseID:    uuidPtrFromOpenAPI(body.LeaseId),
 	}
 	if body.AmountKopecks != nil {
-		cmd.AmountKopecks = new(int64(*body.AmountKopecks))
+		cmd.AmountKopecks = new(*body.AmountKopecks)
 	}
 	if body.OperationDate != nil {
 		cmd.OperationDate = new(body.OperationDate.Time)
@@ -488,7 +488,7 @@ func operationResponse(
 		CategoryId:    op.CategoryID,
 		CategoryName:  categoryNames[op.CategoryID],
 		Name:          op.Name,
-		AmountKopecks: int(op.AmountKopecks),
+		AmountKopecks: op.AmountKopecks,
 		OperationDate: openapi_types.Date{Time: op.OperationDate},
 		Status:        openapi.OperationStatus(op.Status),
 		IsException:   op.IsException,

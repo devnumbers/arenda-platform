@@ -3975,8 +3975,10 @@ components:
           type: integer
         monthlyPriceKopecks:
           type: integer
+          format: int64
         yearlyPriceKopecks:
           type: integer
+          format: int64
 
     Subscription:
       type: object
@@ -4046,6 +4048,7 @@ components:
           $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
         amountKopecks:
           type: integer
+          format: int64
         status:
           $ref: '#/components/schemas/SubscriptionPaymentStatus'
         provider:
@@ -4129,8 +4132,10 @@ components:
           description: Maximum number of active properties; -1 means unlimited.
         monthlyPriceKopecks:
           type: integer
+          format: int64
         yearlyPriceKopecks:
           type: integer
+          format: int64
 
     AdminTariffsResponse:
       type: object
@@ -4155,11 +4160,13 @@ components:
           type: integer
           format: int64
           minimum: 0
+          maximum: 10000000 # domain.MaxTariffPriceKopecks (issue #425)
           description: Monthly price in kopecks.
         yearlyPriceKopecks:
           type: integer
           format: int64
           minimum: 0
+          maximum: 10000000 # domain.MaxTariffPriceKopecks (issue #425)
           description: Yearly price in kopecks.
 
     AdminUpdateTariffRequest:
@@ -4174,11 +4181,13 @@ components:
           type: integer
           format: int64
           minimum: 0
+          maximum: 10000000 # domain.MaxTariffPriceKopecks (issue #425)
           description: Monthly price in kopecks.
         yearlyPriceKopecks:
           type: integer
           format: int64
           minimum: 0
+          maximum: 10000000 # domain.MaxTariffPriceKopecks (issue #425)
           description: Yearly price in kopecks.
         isActive:
           type: boolean
@@ -4218,6 +4227,7 @@ components:
           $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
         amountKopecks:
           type: integer
+          format: int64
         status:
           $ref: '#/components/schemas/SubscriptionPaymentStatus'
         provider:
@@ -4229,6 +4239,7 @@ components:
           type: string
         refundedAmountKopecks:
           type: integer
+          format: int64
           nullable: true
         succeededAt:
           type: string
@@ -4510,8 +4521,10 @@ components:
           nullable: true
         rentAmountKopecks:
           type: integer
+          format: int64
         depositAmountKopecks:
           type: integer
+          format: int64
         paymentDay:
           type: integer
         comment:
@@ -4650,6 +4663,7 @@ components:
           type: string
         amountKopecks:
           type: integer
+          format: int64
         operationDate:
           type: string
           format: date
@@ -5047,12 +5061,16 @@ components:
       properties:
         monthly_profit_kopecks:
           type: integer
+          format: int64
         all_time_profit_kopecks:
           type: integer
+          format: int64
         all_time_income_kopecks:
           type: integer
+          format: int64
         all_time_expense_kopecks:
           type: integer
+          format: int64
         overdue_rent_count:
           type: integer
         overdue_total_count:
@@ -5080,9 +5098,11 @@ components:
           format: date
         rent_amount_kopecks:
           type: integer
+          format: int64
           minimum: 0
         deposit_amount_kopecks:
           type: integer
+          format: int64
           minimum: 0
           default: 0
         payment_day:
@@ -5110,8 +5130,10 @@ components:
           format: date
         rent_amount_kopecks:
           type: integer
+          format: int64
         deposit_amount_kopecks:
           type: integer
+          format: int64
         payment_day:
           type: integer
         comment:
@@ -5147,8 +5169,10 @@ components:
           nullable: true
         rent_amount_kopecks:
           type: integer
+          format: int64
         deposit_amount_kopecks:
           type: integer
+          format: int64
         payment_day:
           type: integer
         current_period_overdue:
@@ -5552,6 +5576,7 @@ components:
           maxLength: 50
         amount_kopecks:
           type: integer
+          format: int64
           minimum: 0
         operation_date:
           type: string
@@ -5590,6 +5615,7 @@ components:
           maxLength: 50
         amount_kopecks:
           type: integer
+          format: int64
         operation_date:
           type: string
           format: date
@@ -5641,6 +5667,7 @@ components:
           type: string
         amount_kopecks:
           type: integer
+          format: int64
         operation_date:
           type: string
           format: date
@@ -5697,6 +5724,7 @@ components:
           maxLength: 50
         amount_kopecks:
           type: integer
+          format: int64
           minimum: 0
         start_date:
           type: string
@@ -5733,6 +5761,7 @@ components:
           maxLength: 50
         amount_kopecks:
           type: integer
+          format: int64
           minimum: 0
         start_date:
           type: string
@@ -5789,6 +5818,7 @@ components:
           type: string
         amount_kopecks:
           type: integer
+          format: int64
         start_date:
           type: string
           format: date
@@ -6102,10 +6132,13 @@ components:
       properties:
         income_kopecks:
           type: integer
+          format: int64
         expense_kopecks:
           type: integer
+          format: int64
         profit_kopecks:
           type: integer
+          format: int64
     FinanceReportPropertyRow:
       type: object
       required: [income_kopecks, expense_kopecks, profit_kopecks]
@@ -6117,10 +6150,13 @@ components:
           description: Null groups operations whose property was deleted in detach mode.
         income_kopecks:
           type: integer
+          format: int64
         expense_kopecks:
           type: integer
+          format: int64
         profit_kopecks:
           type: integer
+          format: int64
     FinanceReportCategoryRow:
       type: object
       required: [type, category_id, category_name, total_kopecks]
@@ -6134,6 +6170,7 @@ components:
           type: string
         total_kopecks:
           type: integer
+          format: int64
     FinanceReportMonthRow:
       type: object
       required: [month, income_kopecks, expense_kopecks, profit_kopecks]
@@ -6143,10 +6180,13 @@ components:
           format: date
         income_kopecks:
           type: integer
+          format: int64
         expense_kopecks:
           type: integer
+          format: int64
         profit_kopecks:
           type: integer
+          format: int64
 
     ClientErrorReport:
       type: object

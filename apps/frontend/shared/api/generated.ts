@@ -1634,7 +1634,9 @@ export interface components {
         Tariff: {
             name: components["schemas"]["TariffName"];
             activePropertyLimit: number;
+            /** Format: int64 */
             monthlyPriceKopecks: number;
+            /** Format: int64 */
             yearlyPriceKopecks: number;
         };
         Subscription: {
@@ -1671,6 +1673,7 @@ export interface components {
             id: string;
             tariff: components["schemas"]["Tariff"];
             period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+            /** Format: int64 */
             amountKopecks: number;
             status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
@@ -1712,7 +1715,9 @@ export interface components {
             isActive: boolean;
             /** @description Maximum number of active properties; -1 means unlimited. */
             activePropertyLimit: number;
+            /** Format: int64 */
             monthlyPriceKopecks: number;
+            /** Format: int64 */
             yearlyPriceKopecks: number;
         };
         AdminTariffsResponse: {
@@ -1764,12 +1769,14 @@ export interface components {
             id: string;
             tariff: components["schemas"]["Tariff"];
             period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+            /** Format: int64 */
             amountKopecks: number;
             status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
             /** Format: uuid */
             userId: string;
             userPhone: string;
+            /** Format: int64 */
             refundedAmountKopecks?: number | null;
             /** Format: date-time */
             succeededAt?: string | null;
@@ -1914,7 +1921,9 @@ export interface components {
             startDate: string;
             /** Format: date */
             endDate?: string | null;
+            /** Format: int64 */
             rentAmountKopecks: number;
+            /** Format: int64 */
             depositAmountKopecks: number;
             paymentDay: number;
             comment?: string | null;
@@ -1981,6 +1990,7 @@ export interface components {
             categoryId: string;
             categoryName: string;
             name: string;
+            /** Format: int64 */
             amountKopecks: number;
             /** Format: date */
             operationDate: string;
@@ -2160,9 +2170,13 @@ export interface components {
             items: components["schemas"]["LeaseResponse"][];
         };
         PropertyOperationsSummaryResponse: {
+            /** Format: int64 */
             monthly_profit_kopecks: number;
+            /** Format: int64 */
             all_time_profit_kopecks: number;
+            /** Format: int64 */
             all_time_income_kopecks: number;
+            /** Format: int64 */
             all_time_expense_kopecks: number;
             overdue_rent_count: number;
             overdue_total_count: number;
@@ -2178,8 +2192,12 @@ export interface components {
             start_date: string;
             /** Format: date */
             end_date?: string;
+            /** Format: int64 */
             rent_amount_kopecks: number;
-            /** @default 0 */
+            /**
+             * Format: int64
+             * @default 0
+             */
             deposit_amount_kopecks: number;
             payment_day: number;
             comment?: string;
@@ -2193,7 +2211,9 @@ export interface components {
             start_date?: string;
             /** Format: date */
             end_date?: string;
+            /** Format: int64 */
             rent_amount_kopecks?: number;
+            /** Format: int64 */
             deposit_amount_kopecks?: number;
             payment_day?: number;
             comment?: string;
@@ -2214,7 +2234,9 @@ export interface components {
             start_date: string;
             /** Format: date */
             end_date?: string | null;
+            /** Format: int64 */
             rent_amount_kopecks: number;
+            /** Format: int64 */
             deposit_amount_kopecks: number;
             payment_day: number;
             /** @description Deprecated. Kept for backward compatibility; true when the lease has any overdue rent operation. The frontend no longer relies on it. */
@@ -2427,6 +2449,7 @@ export interface components {
             /** Format: uuid */
             category_id: string;
             name: string;
+            /** Format: int64 */
             amount_kopecks: number;
             /** Format: date */
             operation_date: string;
@@ -2451,6 +2474,7 @@ export interface components {
             /** Format: uuid */
             category_id?: string;
             name?: string;
+            /** Format: int64 */
             amount_kopecks?: number;
             /** Format: date */
             operation_date?: string;
@@ -2483,6 +2507,7 @@ export interface components {
             category_id: string;
             category_name: string;
             name: string;
+            /** Format: int64 */
             amount_kopecks: number;
             /** Format: date */
             operation_date: string;
@@ -2508,6 +2533,7 @@ export interface components {
             /** Format: uuid */
             category_id: string;
             name: string;
+            /** Format: int64 */
             amount_kopecks: number;
             /** Format: date */
             start_date: string;
@@ -2528,6 +2554,7 @@ export interface components {
             /** Format: uuid */
             category_id?: string;
             name?: string;
+            /** Format: int64 */
             amount_kopecks?: number;
             /** Format: date */
             start_date?: string;
@@ -2562,6 +2589,7 @@ export interface components {
             category_id: string;
             category_name: string;
             name: string;
+            /** Format: int64 */
             amount_kopecks: number;
             /** Format: date */
             start_date: string;
@@ -2717,8 +2745,11 @@ export interface components {
             to: string;
         };
         FinanceReportTotals: {
+            /** Format: int64 */
             income_kopecks: number;
+            /** Format: int64 */
             expense_kopecks: number;
+            /** Format: int64 */
             profit_kopecks: number;
         };
         FinanceReportPropertyRow: {
@@ -2727,8 +2758,11 @@ export interface components {
              * @description Null groups operations whose property was deleted in detach mode.
              */
             property_id?: string | null;
+            /** Format: int64 */
             income_kopecks: number;
+            /** Format: int64 */
             expense_kopecks: number;
+            /** Format: int64 */
             profit_kopecks: number;
         };
         FinanceReportCategoryRow: {
@@ -2736,13 +2770,17 @@ export interface components {
             /** Format: uuid */
             category_id: string;
             category_name: string;
+            /** Format: int64 */
             total_kopecks: number;
         };
         FinanceReportMonthRow: {
             /** Format: date */
             month: string;
+            /** Format: int64 */
             income_kopecks: number;
+            /** Format: int64 */
             expense_kopecks: number;
+            /** Format: int64 */
             profit_kopecks: number;
         };
         ClientErrorReport: {

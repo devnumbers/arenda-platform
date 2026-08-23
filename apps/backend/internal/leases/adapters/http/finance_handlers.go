@@ -59,18 +59,17 @@ func (h *FinanceHandlers) GetFinanceReport(w http.ResponseWriter, r *http.Reques
 			To:   periodTo,
 		},
 		Totals: openapi.FinanceReportTotals{
-			IncomeKopecks:  int(report.Totals.IncomeKopecks),
-			ExpenseKopecks: int(report.Totals.ExpenseKopecks),
-			ProfitKopecks:  int(report.Totals.IncomeKopecks - report.Totals.ExpenseKopecks),
+			IncomeKopecks:  report.Totals.IncomeKopecks,
+			ExpenseKopecks: report.Totals.ExpenseKopecks,
+			ProfitKopecks:  report.Totals.IncomeKopecks - report.Totals.ExpenseKopecks,
 		},
 	}
 	for _, row := range report.ByProperty {
-		profit := row.IncomeKopecks - row.ExpenseKopecks
 		resp.ByProperty = append(resp.ByProperty, openapi.FinanceReportPropertyRow{
 			PropertyId:     leasesdomain.PropertyIDPtr(row.PropertyID),
-			IncomeKopecks:  int(row.IncomeKopecks),
-			ExpenseKopecks: int(row.ExpenseKopecks),
-			ProfitKopecks:  int(profit),
+			IncomeKopecks:  row.IncomeKopecks,
+			ExpenseKopecks: row.ExpenseKopecks,
+			ProfitKopecks:  row.IncomeKopecks - row.ExpenseKopecks,
 		})
 	}
 	for _, row := range report.ByCategory {
@@ -78,16 +77,15 @@ func (h *FinanceHandlers) GetFinanceReport(w http.ResponseWriter, r *http.Reques
 			Type:         openapi.OperationType(row.Type),
 			CategoryId:   row.CategoryID,
 			CategoryName: row.CategoryName,
-			TotalKopecks: int(row.TotalKopecks),
+			TotalKopecks: row.TotalKopecks,
 		})
 	}
 	for _, row := range report.ByMonth {
-		profit := row.IncomeKopecks - row.ExpenseKopecks
 		resp.ByMonth = append(resp.ByMonth, openapi.FinanceReportMonthRow{
 			Month:          openapi_types.Date{Time: row.Month},
-			IncomeKopecks:  int(row.IncomeKopecks),
-			ExpenseKopecks: int(row.ExpenseKopecks),
-			ProfitKopecks:  int(profit),
+			IncomeKopecks:  row.IncomeKopecks,
+			ExpenseKopecks: row.ExpenseKopecks,
+			ProfitKopecks:  row.IncomeKopecks - row.ExpenseKopecks,
 		})
 	}
 

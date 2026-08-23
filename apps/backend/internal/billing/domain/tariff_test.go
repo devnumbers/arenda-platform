@@ -179,8 +179,9 @@ func TestTariffPrice(t *testing.T) {
 }
 
 // TestTariffValidate pins the admin-editable tariff invariants (issue #256):
-// prices are non-negative kopecks and the property limit is -1 (unlimited) or
-// a non-negative count.
+// prices are non-negative kopecks, a price never exceeds the sanity ceiling
+// (issue #425), and the property limit is -1 (unlimited) or a non-negative
+// count.
 func TestTariffValidate(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -201,6 +202,22 @@ func TestTariffValidate(t *testing.T) {
 			},
 			nil,
 		},
+		{
+			"monthly price at the ceiling",
+			Tariff{
+				Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit,
+				MonthlyPriceKopecks: MaxTariffPriceKopecks, YearlyPriceKopecks: 890000,
+			},
+			nil,
+		},
+		{
+			"yearly price at the ceiling",
+			Tariff{
+				Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit,
+				MonthlyPriceKopecks: 99000, YearlyPriceKopecks: MaxTariffPriceKopecks,
+			},
+			nil,
+		},
 		{"zero limit", Tariff{Name: TariffBasic, ActivePropertyLimit: 0}, nil},
 		{
 			"negative monthly price",
@@ -210,6 +227,22 @@ func TestTariffValidate(t *testing.T) {
 		{
 			"negative yearly price",
 			Tariff{Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: -1},
+			ErrInvalidTariffPricing,
+		},
+		{
+			"monthly price above the ceiling",
+			Tariff{
+				Name: TariffPro, ActivePropertyLimit: 5,
+				MonthlyPriceKopecks: MaxTariffPriceKopecks + 1, YearlyPriceKopecks: 440000,
+			},
+			ErrInvalidTariffPricing,
+		},
+		{
+			"yearly price above the ceiling",
+			Tariff{
+				Name: TariffPro, ActivePropertyLimit: 5,
+				MonthlyPriceKopecks: 49000, YearlyPriceKopecks: MaxTariffPriceKopecks + 1,
+			},
 			ErrInvalidTariffPricing,
 		},
 		{
@@ -248,6 +281,12 @@ func TestNewTariff(t *testing.T) {
 
 	if _, err := NewTariff(TariffPro, 5, -49000, 440000, true); !errors.Is(err, ErrInvalidTariffPricing) {
 		t.Errorf("NewTariff(invalid) error = %v, want %v", err, ErrInvalidTariffPricing)
+	}
+	if _, err := NewTariff(TariffPro, 5, MaxTariffPriceKopecks+1, 440000, true); !errors.Is(err, ErrInvalidTariffPricing) {
+		t.Errorf("NewTariff(monthly above ceiling) error = %v, want %v", err, ErrInvalidTariffPricing)
+	}
+	if _, err := NewTariff(TariffPro, 5, 49000, MaxTariffPriceKopecks+1, true); !errors.Is(err, ErrInvalidTariffPricing) {
+		t.Errorf("NewTariff(yearly above ceiling) error = %v, want %v", err, ErrInvalidTariffPricing)
 	}
 	if _, err := NewTariff("premium", 5, 49000, 440000, true); !errors.Is(err, ErrInvalidTariff) {
 		t.Errorf("NewTariff(unknown name) error = %v, want %v", err, ErrInvalidTariff)

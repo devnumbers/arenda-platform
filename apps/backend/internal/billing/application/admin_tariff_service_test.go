@@ -131,6 +131,20 @@ func TestCreateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
 	if after := len(h.stores.tariffs.tariffs); after != before {
 		t.Errorf("tariffs = %d, want %d (no write)", after, before)
 	}
+
+	// The ceiling variant of the same gate (issue #425): a price above
+	// MaxTariffPriceKopecks is an admin slip, rejected before any write.
+	if _, err := h.svc.CreateTariff(t.Context(), uuid.Must(uuid.NewV7()), CreateTariffRequest{
+		Name:                domain.TariffPro,
+		ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: domain.MaxTariffPriceKopecks + 1,
+		YearlyPriceKopecks:  540000,
+	}); !errors.Is(err, domain.ErrInvalidTariffPricing) {
+		t.Fatalf("CreateTariff(above ceiling) error = %v, want %v", err, domain.ErrInvalidTariffPricing)
+	}
+	if after := len(h.stores.tariffs.tariffs); after != before {
+		t.Errorf("tariffs after ceiling attempt = %d, want %d (no write)", after, before)
+	}
 }
 
 // TestUpdateTariff_RewritesPricingLimitAndActivityWithAudit proves the admin
@@ -220,6 +234,21 @@ func TestUpdateTariff_InvalidPricingRejectedBeforeWrite(t *testing.T) {
 	}
 	if stored.ActivePropertyLimit != 5 {
 		t.Errorf("stored limit = %d, want 5 (unchanged)", stored.ActivePropertyLimit)
+	}
+
+	// The ceiling variant of the same gate (issue #425).
+	_, err = h.svc.UpdateTariff(t.Context(), uuid.Must(uuid.NewV7()), proID, UpdateTariffRequest{
+		ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: 49000,
+		YearlyPriceKopecks:  domain.MaxTariffPriceKopecks + 1,
+		IsActive:            true,
+	})
+	if !errors.Is(err, domain.ErrInvalidTariffPricing) {
+		t.Fatalf("UpdateTariff(above ceiling) error = %v, want %v", err, domain.ErrInvalidTariffPricing)
+	}
+	if stored, gerr := h.stores.tariffs.GetByID(t.Context(), proID); gerr != nil ||
+		stored.YearlyPriceKopecks != 440000 {
+		t.Fatalf("stored yearly price = %d (err %v), want 440000 (unchanged)", stored.YearlyPriceKopecks, gerr)
 	}
 }
 

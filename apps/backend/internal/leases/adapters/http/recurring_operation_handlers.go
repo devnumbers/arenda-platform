@@ -55,7 +55,7 @@ func (h *RecurringOperationHandlers) CreateRecurringOperation(w http.ResponseWri
 		Type:          string(body.Type),
 		CategoryID:    body.CategoryId,
 		Name:          body.Name,
-		AmountKopecks: int64(body.AmountKopecks),
+		AmountKopecks: body.AmountKopecks,
 		StartDate:     body.StartDate.Time,
 	}
 	if body.PaymentDay != nil {
@@ -214,7 +214,7 @@ func (h *RecurringOperationHandlers) UpdateRecurringOperation(w http.ResponseWri
 		Comment:    body.Comment,
 	}
 	if body.AmountKopecks != nil {
-		cmd.AmountKopecks = new(int64(*body.AmountKopecks))
+		cmd.AmountKopecks = new(*body.AmountKopecks)
 	}
 	if body.StartDate != nil {
 		cmd.StartDate = new(body.StartDate.Time)
@@ -309,7 +309,7 @@ func recurringOperationResponse(rec domain.RecurringOperation, categoryNames map
 		CategoryId:    rec.CategoryID,
 		CategoryName:  categoryNames[rec.CategoryID],
 		Name:          rec.Name,
-		AmountKopecks: int(rec.AmountKopecks),
+		AmountKopecks: rec.AmountKopecks,
 		StartDate:     openapi_types.Date{Time: rec.StartDate},
 		PaymentDay:    rec.PaymentDay,
 		Periodicity:   openapi.RecurringOperationResponsePeriodicity(rec.Periodicity),

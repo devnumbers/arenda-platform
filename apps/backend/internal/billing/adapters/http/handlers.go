@@ -404,7 +404,7 @@ func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *htt
 			Tariff:        httpsupport.TariffResponse(v.Tariff),
 			Period:        openapi.AdminSubscriptionPaymentPeriod(v.Payment.Period),
 			Status:        openapi.SubscriptionPaymentStatus(v.Payment.Status),
-			AmountKopecks: int(v.Payment.AmountKopecks),
+			AmountKopecks: v.Payment.AmountKopecks,
 			Provider:      string(v.Payment.Provider),
 			CreatedAt:     v.Payment.CreatedAt,
 		}
@@ -879,7 +879,7 @@ func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentVi
 		Id:              p.ID,
 		Tariff:          httpsupport.TariffResponse(view.Tariff),
 		Period:          openapi.AdminSubscriptionPaymentPeriod(p.Period),
-		AmountKopecks:   int(p.AmountKopecks),
+		AmountKopecks:   p.AmountKopecks,
 		Status:          openapi.SubscriptionPaymentStatus(p.Status),
 		Provider:        string(p.Provider),
 		UserId:          p.UserID,
@@ -890,8 +890,8 @@ func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentVi
 		PaymentMethodId: p.PaymentMethodID,
 	}
 	if p.RefundedAmountKopecks != nil {
-		v := int(*p.RefundedAmountKopecks)
-		resp.RefundedAmountKopecks = &v
+		refunded := *p.RefundedAmountKopecks
+		resp.RefundedAmountKopecks = &refunded
 	}
 	return resp
 }

@@ -36,6 +36,12 @@ const (
 // an unlimited number of properties.
 const UnlimitedPropertyLimit = -1
 
+// MaxTariffPriceKopecks is the sanity ceiling for one billing period's price
+// (100 000 ₽): a price above it is an admin slip, never a plan — the point is
+// to keep a typo from reaching InitPayment, not to pin business pricing. The
+// schema's CHECK constraints mirror the same bound (issue #425).
+const MaxTariffPriceKopecks int64 = 10_000_000
+
 // Tariff is a subscription plan. IsActive=false hides the plan from users
 // (listing) without breaking foreign keys that still reference it (issue #245).
 type Tariff struct {
@@ -68,13 +74,17 @@ func NewTariff(name TariffName, activePropertyLimit int, monthlyPriceKopecks, ye
 	return tariff, nil
 }
 
-// Validate checks the admin-editable tariff invariants (issue #256): prices
-// are non-negative kopecks and the property limit is UnlimitedPropertyLimit
-// (-1) or a non-negative count. The schema's CHECK constraints mirror these
-// rules durably; this is the application-side gate.
+// Validate checks the admin-editable tariff invariants (issue #256, #425):
+// prices are non-negative kopecks within the sanity ceiling, and the property
+// limit is UnlimitedPropertyLimit (-1) or a non-negative count. The schema's
+// CHECK constraints mirror these rules durably; this is the application-side
+// gate.
 func (t Tariff) Validate() error {
 	if t.MonthlyPriceKopecks < 0 || t.YearlyPriceKopecks < 0 {
 		return fmt.Errorf("%w: prices must be non-negative kopecks", ErrInvalidTariffPricing)
+	}
+	if t.MonthlyPriceKopecks > MaxTariffPriceKopecks || t.YearlyPriceKopecks > MaxTariffPriceKopecks {
+		return fmt.Errorf("%w: prices must not exceed %d kopecks", ErrInvalidTariffPricing, MaxTariffPriceKopecks)
 	}
 	if t.ActivePropertyLimit < UnlimitedPropertyLimit {
 		return fmt.Errorf("%w: active property limit must be %d (unlimited) or greater", ErrInvalidTariffPricing, UnlimitedPropertyLimit)

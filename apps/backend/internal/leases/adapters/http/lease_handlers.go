@@ -112,11 +112,11 @@ func (h *LeaseHandlers) CreateLease(w http.ResponseWriter, r *http.Request) {
 		TenantContactID:   uuidPtrFromOpenAPI(body.TenantContactId),
 		StartDate:         body.StartDate.Time,
 		EndDate:           datePtrFromOpenAPI(body.EndDate),
-		RentAmountKopecks: int64(body.RentAmountKopecks),
+		RentAmountKopecks: body.RentAmountKopecks,
 		PaymentDay:        body.PaymentDay,
 	}
 	if body.DepositAmountKopecks != nil {
-		cmd.DepositAmountKopecks = int64(*body.DepositAmountKopecks)
+		cmd.DepositAmountKopecks = *body.DepositAmountKopecks
 	}
 	if body.Comment != nil {
 		cmd.Comment = *body.Comment
@@ -248,10 +248,10 @@ func (h *LeaseHandlers) UpdateLease(w http.ResponseWriter, r *http.Request, id u
 		Comment:            body.Comment,
 	}
 	if body.RentAmountKopecks != nil {
-		cmd.RentAmountKopecks = new(int64(*body.RentAmountKopecks))
+		cmd.RentAmountKopecks = new(*body.RentAmountKopecks)
 	}
 	if body.DepositAmountKopecks != nil {
-		cmd.DepositAmountKopecks = new(int64(*body.DepositAmountKopecks))
+		cmd.DepositAmountKopecks = new(*body.DepositAmountKopecks)
 	}
 	if body.PaymentDay != nil {
 		cmd.PaymentDay = body.PaymentDay

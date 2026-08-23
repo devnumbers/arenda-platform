@@ -503,10 +503,10 @@ func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertyOperationsSummaryResponse{
-		MonthlyProfitKopecks:  int(summary.MonthlyProfitKopecks),
-		AllTimeProfitKopecks:  int(summary.AllTimeProfitKopecks),
-		AllTimeIncomeKopecks:  int(summary.AllTimeIncomeKopecks),
-		AllTimeExpenseKopecks: int(summary.AllTimeExpenseKopecks),
+		MonthlyProfitKopecks:  summary.MonthlyProfitKopecks,
+		AllTimeProfitKopecks:  summary.AllTimeProfitKopecks,
+		AllTimeIncomeKopecks:  summary.AllTimeIncomeKopecks,
+		AllTimeExpenseKopecks: summary.AllTimeExpenseKopecks,
 		OverdueRentCount:      summary.OverdueRentCount,
 		OverdueTotalCount:     summary.OverdueTotalCount,
 		NextPaymentDate:       httpsupport.DatePtrToOpenAPI(summary.NextPaymentDate),

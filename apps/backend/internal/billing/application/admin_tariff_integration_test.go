@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
@@ -93,6 +94,38 @@ func TestTariffRepository_Integration_UpdateEditsAndMissNarrows(t *testing.T) {
 
 	if _, err := h.tariffs.Update(h.ctx(), domain.Tariff{ID: uuid.Must(uuid.NewV7())}); !errors.Is(err, billingapp.ErrNotFound) {
 		t.Fatalf("Update(missing) error = %v, want %v", err, billingapp.ErrNotFound)
+	}
+}
+
+// TestTariffRepository_Integration_SchemaRejectsAboveCeilingPrice proves the
+// schema backstop of the price ceiling (issue #425): rows written past the
+// application gate — straight SQL, no domain validation — are rejected by the
+// CHECK constraints, while a price exactly at the ceiling persists.
+func TestTariffRepository_Integration_SchemaRejectsAboveCeilingPrice(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+
+	insert := func(monthly int64) error {
+		_, err := h.pool.Exec(h.ctx(),
+			`INSERT INTO tariffs (id, name, active_property_limit, monthly_price_kopecks, yearly_price_kopecks)
+			 VALUES ($1, 'ceiling_probe', 5, $2, 440000)`,
+			uuid.Must(uuid.NewV7()), monthly)
+		return err
+	}
+
+	if err := insert(domain.MaxTariffPriceKopecks + 1); err == nil {
+		t.Fatal("above-ceiling insert succeeded, want the CHECK constraint to reject it")
+	} else {
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.ConstraintName != "chk_tariffs_monthly_price_ceiling" {
+			t.Fatalf("above-ceiling insert error = %v, want the chk_tariffs_monthly_price_ceiling violation", err)
+		}
+	}
+	if err := insert(domain.MaxTariffPriceKopecks); err != nil {
+		t.Fatalf("at-ceiling insert: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(), `DELETE FROM tariffs WHERE name = 'ceiling_probe'`); err != nil {
+		t.Fatalf("cleanup: %v", err)
 	}
 }
 
