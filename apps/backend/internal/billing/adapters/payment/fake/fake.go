@@ -71,6 +71,13 @@ type Provider struct {
 	// (issue #254): programmed states take precedence over the pending map —
 	// the refund tests model a provider that already settled a refund.
 	paymentStates map[string]application.PaymentStatusResult
+	// The finalStates map remembers the terminal outcome the provider itself
+	// produced for a payment (a confirm or a charge) — the counterpart of a
+	// real provider keeping its payment history, so GetState keeps resolving
+	// after the pending entry is gone. Entries stay for the process lifetime:
+	// a finalized payment is never forgotten. A payment id in neither map was
+	// never seen by this provider instance.
+	finalStates   map[string]application.PaymentStatusResult
 	bindingStates map[string]application.MethodBindingState
 	bindings      map[string]bindingEntry
 	metrics       *payment.Metrics
@@ -116,6 +123,7 @@ func NewProvider(baseURL string, log *slog.Logger, clk clock.Clock, metrics *pay
 		charges:          make(map[string]int),
 		refundOutcomes:   make(map[string]refundOutcome),
 		paymentStates:    make(map[string]application.PaymentStatusResult),
+		finalStates:      make(map[string]application.PaymentStatusResult),
 		bindingStates:    make(map[string]application.MethodBindingState),
 		bindings:         make(map[string]bindingEntry),
 		metrics:          metrics,
@@ -212,16 +220,21 @@ func (p *Provider) PaymentURL(internalPaymentID uuid.UUID) string {
 	return p.confirmURL(internalPaymentID)
 }
 
-// PaymentStatus returns the provider-side status of a payment. If the payment
-// is not found in the pending map it is assumed to have been completed and
-// succeeded. A status programmed via SetPaymentState takes precedence.
+// PaymentStatus returns the provider-side status of a payment, following the
+// GetState contract of a real provider (issue #420): a payment this provider
+// knows — pending, finalized here, or programmed via SetPaymentState — resolves
+// to its actual status; a payment it never saw (or whose pending session was
+// TTL-purged) answers ErrProviderPaymentNotFound, never a fabricated success.
 func (p *Provider) PaymentStatus(
 	ctx context.Context, paymentID uuid.UUID, providerPaymentID string,
 ) (res application.PaymentStatusResult, err error) {
 	start := time.Now()
 	defer func() {
+		// A definitive not-found is a completed operation, not an operational
+		// failure — the same classification the T-Kassa adapter applies, which
+		// keeps payment.provider.errors comparable across providers.
 		recStatus := payment.StatusOK
-		if err != nil {
+		if err != nil && !errors.Is(err, application.ErrProviderPaymentNotFound) {
 			recStatus = payment.StatusError
 		}
 		p.metrics.RecordRequest(ctx, "fake", "Status", recStatus, time.Since(start))
@@ -242,7 +255,11 @@ func (p *Provider) PaymentStatus(
 		}
 		return res, nil
 	}
-	return application.PaymentStatusResult{Status: domain.PaymentStatusSucceeded}, nil
+	if state, ok := p.finalStates[paymentID.String()]; ok {
+		return state, nil
+	}
+	return application.PaymentStatusResult{}, fmt.Errorf(
+		"fake: payment not found: %w", application.ErrProviderPaymentNotFound)
 }
 
 // ChargePayment performs a merchant-initiated charge using a saved token.
@@ -285,6 +302,12 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 	}
 
 	if strings.HasPrefix(req.ChargeToken, fakeFailTokenPrefix) {
+		// The charge outcome is final: remember it so a later status read (or a
+		// crash-recovery re-check) resolves the payment without charging again.
+		p.finalStates[req.PaymentID.String()] = application.PaymentStatusResult{
+			Status:    domain.PaymentStatusFailed,
+			ErrorCode: defaultErrorCode,
+		}
 		log.InfoContext(ctx, "fake charge failed",
 			"provider_payment_id", providerPaymentID,
 			"internal_payment_id", req.PaymentID.String(),
@@ -296,6 +319,9 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 		}, nil
 	}
 
+	p.finalStates[req.PaymentID.String()] = application.PaymentStatusResult{
+		Status: domain.PaymentStatusSucceeded,
+	}
 	log.InfoContext(ctx, "fake charge succeeded",
 		"provider_payment_id", providerPaymentID,
 		"internal_payment_id", req.PaymentID.String(),
@@ -706,6 +732,15 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 		errorCode = nil
 		p.confirmedAmounts[internalPaymentID] = entry.amountKopecks
 	}
+
+	// The finalized outcome stays known to the provider: a later status read —
+	// the reconciliation of a lost webhook, or the confirm endpoint's
+	// lost-entry fallback — resolves the actual outcome instead of a guess.
+	finalState := application.PaymentStatusResult{Status: status}
+	if errorCode != nil {
+		finalState.ErrorCode = *errorCode
+	}
+	p.finalStates[internalPaymentID] = finalState
 
 	event := application.WebhookEvent{
 		Payment: &application.PaymentNotification{

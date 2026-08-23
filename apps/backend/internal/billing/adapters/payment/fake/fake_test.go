@@ -201,6 +201,96 @@ func TestProviderConfirmPaymentFailedFlow(t *testing.T) {
 	}
 }
 
+// TestProviderStatusUnknownPaymentAnswersNotFound pins the GetState contract
+// (issue #420): a payment this provider instance never saw answers
+// ErrProviderPaymentNotFound, never a fabricated success — the same semantics
+// the real adapter maps from T-Kassa error code 255.
+func TestProviderStatusUnknownPaymentAnswersNotFound(t *testing.T) {
+	t.Parallel()
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+
+	_, err := p.PaymentStatus(context.Background(), uuid.Must(uuid.NewV7()), "fake_never_seen")
+	if !errors.Is(err, application.ErrProviderPaymentNotFound) {
+		t.Fatalf("PaymentStatus(unknown) error = %v, want ErrProviderPaymentNotFound", err)
+	}
+}
+
+// TestProviderStatusPurgedPendingAnswersNotFound proves the TTL purge makes a
+// pending payment forgotten: once the session is purged, its status read
+// answers not-found instead of assuming the payment completed.
+func TestProviderStatusPurgedPendingAnswersNotFound(t *testing.T) {
+	t.Parallel()
+	clk := newTestClock(time.Now())
+	p := NewProvider("http://localhost:8080", discardLogger(), clk, nil)
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	init, err := p.InitPayment(context.Background(), validInitRequest(paymentID))
+	if err != nil {
+		t.Fatalf("InitPayment error: %v", err)
+	}
+
+	clk.Add(pendingTTL + time.Minute)
+	_, err = p.PaymentStatus(context.Background(), paymentID, init.ProviderPaymentID)
+	if !errors.Is(err, application.ErrProviderPaymentNotFound) {
+		t.Fatalf("PaymentStatus(purged pending) error = %v, want ErrProviderPaymentNotFound", err)
+	}
+}
+
+// TestProviderStatusRemembersFinalOutcomes proves a payment the provider
+// finalized stays known: after a failed confirm and after charges, the status
+// read reports the actual outcome — not the assumed success of the pre-contract
+// fake.
+func TestProviderStatusRemembersFinalOutcomes(t *testing.T) {
+	t.Parallel()
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	ctx := context.Background()
+
+	failedID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	if _, err := p.InitPayment(ctx, validInitRequest(failedID)); err != nil {
+		t.Fatalf("InitPayment error: %v", err)
+	}
+	if _, err := p.ConfirmPaymentFailed(ctx, failedID.String(), nil); err != nil {
+		t.Fatalf("ConfirmPaymentFailed error: %v", err)
+	}
+	failed, err := p.PaymentStatus(ctx, failedID, "")
+	if err != nil {
+		t.Fatalf("PaymentStatus(failed confirm) error: %v", err)
+	}
+	if failed.Status != domain.PaymentStatusFailed || failed.ErrorCode != defaultErrorCode {
+		t.Errorf("status after failed confirm = %+v, want failed with the default error code", failed)
+	}
+
+	// A charge finalizes the provider-side payment even without a prior init —
+	// GetState keeps resolving the outcome afterwards.
+	chargedOK := uuid.Must(uuid.NewV7())
+	if _, err := p.ChargePayment(ctx, application.ChargeRequest{
+		PaymentID: chargedOK, AmountKopecks: 5000, ChargeToken: "fake_token_1",
+	}); err != nil {
+		t.Fatalf("ChargePayment error: %v", err)
+	}
+	okStatus, err := p.PaymentStatus(ctx, chargedOK, "")
+	if err != nil {
+		t.Fatalf("PaymentStatus(charged) error: %v", err)
+	}
+	if okStatus.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("status after charge = %q, want succeeded", okStatus.Status)
+	}
+
+	chargedFail := uuid.Must(uuid.NewV7())
+	if _, err := p.ChargePayment(ctx, application.ChargeRequest{
+		PaymentID: chargedFail, AmountKopecks: 5000, ChargeToken: fakeFailTokenPrefix + "1",
+	}); err != nil {
+		t.Fatalf("ChargePayment(declined) error: %v", err)
+	}
+	failStatus, err := p.PaymentStatus(ctx, chargedFail, "")
+	if err != nil {
+		t.Fatalf("PaymentStatus(declined charge) error: %v", err)
+	}
+	if failStatus.Status != domain.PaymentStatusFailed || failStatus.ErrorCode != defaultErrorCode {
+		t.Errorf("status after declined charge = %+v, want failed with the default error code", failStatus)
+	}
+}
+
 func TestProviderConfirmPaymentUnknownID(t *testing.T) {
 	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)

@@ -587,6 +587,19 @@ func requireReconciledUpgradeApplied(t *testing.T, h *integrationHarness, userID
 	}
 }
 
+// agePaymentRow pins a payment row's created_at to the fake clock's past so
+// the staleness threshold of a reconciliation phase selects it (created_at
+// otherwise comes from the database clock).
+func agePaymentRow(t *testing.T, h *integrationHarness, paymentID uuid.UUID) {
+	t.Helper()
+	staleCreated := h.clock.Now().Add(-10 * time.Minute)
+	if _, err := h.pool.Exec(
+		h.ctx(), `UPDATE subscription_payments SET created_at = $1 WHERE id = $2`, staleCreated,
+		paymentID); err != nil {
+		t.Fatalf("age payment row: %v", err)
+	}
+}
+
 // TestWorkers_Integration_ReconcileLostWebhook proves the reconciliation
 // acceptance scenario: a tariff-change payment the provider settled but whose
 // webhook was never delivered is finalized from the provider's status once it
@@ -617,18 +630,69 @@ func TestWorkers_Integration_ReconcileLostWebhook(t *testing.T) {
 
 	// The row's created_at comes from the database clock; pin it to the fake
 	// clock's past so the staleness threshold of the reconciliation selects it.
-	staleCreated := h.clock.Now().Add(-10 * time.Minute)
-	if _, err := h.pool.Exec(
-		h.ctx(), `UPDATE subscription_payments SET created_at = $1 WHERE id = $2`, staleCreated,
-		result.PaymentID); err != nil {
-		t.Fatalf("age payment row: %v", err)
-	}
+	agePaymentRow(t, h, result.PaymentID)
 	if count, err := h.services.Workers.ReconcilePendingPayments(h.ctx(), h.clock.Now()); err != nil || count != 1 {
 		t.Fatalf("ReconcilePendingPayments() = %d (err %v), want 1 stale payment reconciled", count, err)
 	}
 
 	requireReconciledPaymentSucceeded(t, h, result.PaymentID)
 	requireReconciledUpgradeApplied(t, h, userID)
+}
+
+// TestWorkers_Integration_ReconcileUnknownPaymentStaysPending is the honest
+// counterpart of the lost-webhook scenario (issue #420): a stale pending
+// payment the provider never knew is reported not-found by the contract-
+// faithful fake, so the reconciliation cannot fabricate a success — the
+// payment stays pending and the subscription keeps its seeded state.
+func TestWorkers_Integration_ReconcileUnknownPaymentStaysPending(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	userID, sub := seedPaidProSubscription(t, h)
+	business, err := h.tariffs.GetByName(h.ctx(), domain.TariffBusiness)
+	if err != nil {
+		t.Fatalf("GetByName(business) error = %v", err)
+	}
+
+	// A pending business payment the fake provider never saw: seeded straight
+	// into the database, no Init call, like a row left by a crashed external
+	// import or a provider switch.
+	payment, err := domain.NewSubscriptionPayment(
+		userID, sub.ID, business.ID, domain.PeriodMonth, 99000, testProviderFake, h.clock.Now())
+	if err != nil {
+		t.Fatalf("NewSubscriptionPayment() error = %v", err)
+	}
+	provRef := "prov_never_seen"
+	payment.ProviderPaymentID = &provRef
+	if _, err := h.payments.Create(h.ctx(), payment); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	agePaymentRow(t, h, payment.ID)
+
+	// The worker checks the payment with the provider — the not-found answer
+	// leaves it untouched instead of finalizing it as succeeded.
+	count, err := h.services.Workers.ReconcilePendingPayments(h.ctx(), h.clock.Now())
+	if err != nil {
+		t.Fatalf("ReconcilePendingPayments() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ReconcilePendingPayments() = %d, want 1 checked payment", count)
+	}
+
+	stored, err := h.payments.GetByID(h.ctx(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.Status != domain.PaymentStatusPending {
+		t.Fatalf("payment status = %q, want pending (no fabricated success)", stored.Status)
+	}
+	storedSub, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if storedSub.TariffID != sub.TariffID || storedSub.Status != domain.SubscriptionStatusActive {
+		t.Fatalf("subscription = %s/%s, want the seeded pro subscription untouched",
+			storedSub.TariffID, storedSub.Status)
+	}
 }
 
 // revertToCrashMoment rewinds the local rows to the crash moment: the payment
