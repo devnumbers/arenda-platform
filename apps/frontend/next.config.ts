@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
+import { CSP_BASE_DIRECTIVES } from "./shared/lib/csp";
 
 // CSP шаг 1 (решение #331, тикет #388): без nonce — 'unsafe-inline' только для
-// script/style, остальные директивы строгие. Источники: API ходит через
+// script/style, остальные директивы строгие (общий хвост обеих полис —
+// CSP_BASE_DIRECTIVES в shared/lib/csp.ts; шаг 2 — Report-Only в proxy.ts,
+// тикет #406 — строится на той же базе). Источники: API ходит через
 // same-origin route (app/api/[...path]), шрифты next/font self-hosted.
 // blob: убран из img-src вместе с PhotoGrid (#399) — превью загружаемых фото
 // были единственным его потребителем; возврат — осознанная правка здесь.
@@ -10,17 +13,9 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === 'development';
 
 const contentSecurityPolicy = [
-  "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  'upgrade-insecure-requests',
+  ...CSP_BASE_DIRECTIVES,
 ].join('; ');
 
 // Базовый security-контур браузера (решение #331): тот же смысловой набор несут

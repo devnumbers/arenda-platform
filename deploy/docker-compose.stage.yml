@@ -72,6 +72,11 @@ services:
     logging: *default-logging
     environment:
       BACKEND_URL: http://backend:8080
+      # CSP шаг 2 — разведка (тикет #406): nonce + strict-dynamic в
+      # Content-Security-Policy-Report-Only; отчёты летят в /api/csp-report
+      # и через Vector в Uptrace. Только stage: prod-compose переменную не
+      # получает, отсутствие флага = прежнее поведение.
+      CSP_REPORT_ONLY: "true"
     depends_on:
       backend:
         condition: service_healthy
