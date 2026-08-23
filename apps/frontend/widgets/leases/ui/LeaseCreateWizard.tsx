@@ -89,7 +89,7 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
         if (!propertyId) return;
 
         const rentKopecks = parseRublesToKopecks(draft.rentAmount, {positive: true});
-        const depositKopecks = parseRublesToKopecks(draft.depositAmount || '0');
+        const depositKopecks = parseRublesToKopecks(draft.depositAmount?.length ? draft.depositAmount : '0');
         if (rentKopecks === undefined || depositKopecks === undefined) return;
 
         setIsSubmitting(true);
@@ -101,8 +101,8 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
                 depositKopecks,
                 paymentDay: draft.paymentDay,
                 startDate: draft.startDate,
-                endDate: draft.endDate || undefined,
-                tenantContactId: draft.tenantContactId || undefined,
+                endDate: draft.endDate?.length ? draft.endDate : undefined,
+                tenantContactId: draft.tenantContactId?.length ? draft.tenantContactId : undefined,
             });
 
             setCreatedLeaseId(lease.id);

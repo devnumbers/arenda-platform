@@ -40,7 +40,7 @@ export function Button({
                            subtitle,
                            className,
                            children,
-                           disabled,
+                           disabled = false,
                            type = 'button',
                            ...rest
                        }: ButtonProps): JSX.Element {

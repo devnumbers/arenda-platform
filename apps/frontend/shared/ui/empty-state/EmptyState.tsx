@@ -52,9 +52,7 @@ export function EmptyState({
                 <h3 className={styles.title}>{title ?? `Нет ${entities ?? ''}`}</h3>
                 <p className={styles.subtitle}>{subtitle}</p>
             </div>
-            {actionNode ? (
-                actionNode
-            ) : actionHref && actionText && (
+            {actionNode ?? (actionHref && actionText && (
                 <LinkButton
                     href={actionHref}
                     variant="primary"
@@ -63,7 +61,7 @@ export function EmptyState({
                 >
                     {actionText}
                 </LinkButton>
-            )}
+            ))}
         </div>
     );
 }

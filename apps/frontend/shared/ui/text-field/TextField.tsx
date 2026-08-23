@@ -93,7 +93,7 @@ export const TextField = forwardRef<HTMLInputElement | HTMLTextAreaElement, Text
         </label>
       ) : null;
 
-    const hintId = helperText || error ? `${inputId}-hint` : undefined;
+    const hintId = Boolean(helperText) || Boolean(error) ? `${inputId}-hint` : undefined;
     const counterId =
       maxLength !== undefined && showCounter !== false ? `${inputId}-counter` : undefined;
     const describedBy = [hintId, counterId].filter(Boolean).join(' ') || undefined;
@@ -144,9 +144,9 @@ export const TextField = forwardRef<HTMLInputElement | HTMLTextAreaElement, Text
           )}
           {floatingLabelContent}
         </div>
-        {(helperText || error || (maxLength !== undefined && showCounter !== false)) && (
+        {(Boolean(helperText) || Boolean(error) || (maxLength !== undefined && showCounter !== false)) && (
           <div className={styles.footer}>
-            {(helperText || error) && (
+            {(Boolean(helperText) || Boolean(error)) && (
               <span id={hintId} className={clsx(styles.hint, hasError && styles.hintError)}>
                 {error ?? helperText}
               </span>

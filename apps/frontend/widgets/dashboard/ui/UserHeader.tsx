@@ -20,7 +20,7 @@ export function UserHeader({name, tariff}: UserHeaderProps): JSX.Element {
         <NextLink href="/profile" className={styles.link}>
             <Card className={styles.card}>
                 <div className={styles.left}>
-                    <span className={styles.name}>{name || 'Пользователь'}</span>
+                    <span className={styles.name}>{name?.length ? name : 'Пользователь'}</span>
                     <Icon size="s">
                         <ArrowRight/>
                     </Icon>

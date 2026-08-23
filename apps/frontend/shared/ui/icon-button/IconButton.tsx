@@ -34,7 +34,7 @@ export function IconButton({
   icon,
   'aria-label': ariaLabel,
   className,
-  disabled,
+  disabled = false,
   type = 'button',
   ...rest
 }: IconButtonProps): JSX.Element {

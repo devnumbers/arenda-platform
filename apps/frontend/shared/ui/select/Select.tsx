@@ -78,7 +78,7 @@ export function Select<Value extends string = string>({
     placeholder,
     error,
     disabled,
-    loading,
+    loading = false,
     emptyMessage,
     footerRow,
     searchable,
@@ -97,7 +97,7 @@ export function Select<Value extends string = string>({
     dropdownClassName,
 }: SelectProps<Value>): JSX.Element {
     const [internalOpen, setInternalOpen] = useState(false);
-    const isOpen = open !== undefined ? open : internalOpen;
+    const isOpen = open ?? internalOpen;
 
     const setIsOpen = useCallback((nextOpen: boolean) => {
         if (open === undefined) {
