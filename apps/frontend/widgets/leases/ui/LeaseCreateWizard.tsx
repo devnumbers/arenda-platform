@@ -9,6 +9,7 @@ import {useCreateLease, usePropertyLeases} from '@/features/leases';
 import {useTenantContacts} from '@/features/tenant-contacts';
 import {isOpenLeaseStatus} from '@/entities/lease';
 import {notify} from '@/shared/lib/notifications';
+import {parseRublesToKopecks} from '@/shared/lib/format-money';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack, RETURN_TO_PARAM} from '@/shared/lib/navigation';
 import {Button} from '@/shared/ui/button';
@@ -87,13 +88,17 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
         if (!draft.rentAmount || draft.paymentDay === undefined || !draft.startDate) return;
         if (!propertyId) return;
 
+        const rentKopecks = parseRublesToKopecks(draft.rentAmount, {positive: true});
+        const depositKopecks = parseRublesToKopecks(draft.depositAmount || '0');
+        if (rentKopecks === undefined || depositKopecks === undefined) return;
+
         setIsSubmitting(true);
 
         try {
             const lease = await createLease.mutateAsync({
                 propertyId,
-                rentKopecks: Math.round(Number(draft.rentAmount) * 100),
-                depositKopecks: Math.round(Number(draft.depositAmount || '0') * 100),
+                rentKopecks,
+                depositKopecks,
                 paymentDay: draft.paymentDay,
                 startDate: draft.startDate,
                 endDate: draft.endDate || undefined,

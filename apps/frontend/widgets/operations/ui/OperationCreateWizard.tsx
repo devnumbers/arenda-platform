@@ -22,13 +22,13 @@ import { OperationReminderStep } from './OperationReminderStep';
 import { OperationScheduleStep } from './OperationScheduleStep';
 import { OperationSuccessScreen } from './OperationSuccessScreen';
 import {
-  toKopecks,
   type BasicInfoData,
   type BasicInfoErrors,
   type ReminderData,
   type ScheduleData,
   type ScheduleErrors,
 } from '../model/types';
+import { parseRublesToKopecks } from '@/shared/lib/format-money';
 import {
   useOperationCreateDraft,
   type OperationCreateStep,
@@ -51,7 +51,7 @@ export type OperationCreateWizardProps = {
 
 function validateBasicInfo(data: BasicInfoData): BasicInfoErrors {
   const errors: BasicInfoErrors = {};
-  const amountKopecks = toKopecks(data.amount);
+  const amountKopecks = parseRublesToKopecks(data.amount);
 
   if (amountKopecks === undefined || amountKopecks <= 0) {
     errors.amount = 'Введите сумму больше 0';
@@ -203,7 +203,7 @@ export function OperationCreateWizard({ type, propertyId }: OperationCreateWizar
     const selectedPropertyId = basicInfo.propertyId;
     const category = basicInfo.category;
     const operationDate = schedule.date;
-    const amountKopecks = toKopecks(basicInfo.amount);
+    const amountKopecks = parseRublesToKopecks(basicInfo.amount);
 
     if (!selectedPropertyId || !category || !operationDate || amountKopecks === undefined) {
       return;

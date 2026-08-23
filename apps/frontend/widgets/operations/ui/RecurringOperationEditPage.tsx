@@ -18,6 +18,10 @@ import { TextField } from '@/shared/ui/text-field';
 import { DatePickerField } from '@/shared/ui/date-picker-field';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import {
+  kopecksToRublesString,
+  parseRublesToKopecks,
+} from '@/shared/lib/format-money';
 import { type OperationType } from '@/entities/operation';
 import type { RecurringOperation } from '@/entities/operation';
 import {
@@ -118,22 +122,6 @@ function SeriesFrequencySelect({
   );
 }
 
-function formatAmountFromKopecks(kopecks: number): string {
-  return (kopecks / 100).toFixed(2);
-}
-
-function parseAmountToKopecks(amount: string): number | undefined {
-  const normalized = amount.trim().replace(',', '.');
-  if (normalized === '') {
-    return undefined;
-  }
-  const value = Number(normalized);
-  if (Number.isNaN(value) || value <= 0) {
-    return undefined;
-  }
-  return Math.round(value * 100);
-}
-
 function validateForm(form: FormData): FormErrors {
   const next: FormErrors = {};
 
@@ -141,7 +129,7 @@ function validateForm(form: FormData): FormErrors {
     next.name = 'Введите название операции';
   }
 
-  if (parseAmountToKopecks(form.amount) === undefined) {
+  if (parseRublesToKopecks(form.amount, { positive: true }) === undefined) {
     next.amount = 'Введите сумму больше 0';
   }
 
@@ -237,7 +225,7 @@ function RecurringOperationEditPageContent({
     type: operation.type,
     categoryId: operation.categoryId,
     name: operation.name,
-    amount: formatAmountFromKopecks(operation.amountKopecks),
+    amount: kopecksToRublesString(operation.amountKopecks),
     periodicity: operation.periodicity,
     endDate: operation.endDate ?? '',
     comment: operation.comment ?? '',
@@ -285,7 +273,7 @@ function RecurringOperationEditPageContent({
   );
 
   const hasChanges = useMemo(() => {
-    const amountKopecks = parseAmountToKopecks(form.amount);
+    const amountKopecks = parseRublesToKopecks(form.amount, { positive: true });
     const currentReminder = form.reminderEnabled ? form.reminderOffsetDays : null;
     const originalReminder = operation.reminderOffsetDays ?? null;
 
@@ -325,7 +313,7 @@ function RecurringOperationEditPageContent({
       return;
     }
 
-    const amountKopecks = parseAmountToKopecks(form.amount);
+    const amountKopecks = parseRublesToKopecks(form.amount, { positive: true });
     if (amountKopecks === undefined || !form.categoryId) {
       return;
     }

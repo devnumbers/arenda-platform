@@ -2,7 +2,7 @@
 
 import type {JSX} from 'react';
 import clsx from 'clsx';
-import {formatMoneyKopecks} from '@/shared/lib/format-money';
+import {formatMoneyKopecks, ratioToPercent} from '@/shared/lib/format-money';
 import {formatCountdownLabel} from '@/shared/lib/format-countdown';
 import {
     currentMonthIndex,
@@ -90,7 +90,7 @@ export function LeaseInfo({
 
             <div className={styles.progress}>
                 {Array.from({length: SEGMENTS}).map((_, index) => {
-                    const fill = Math.min(1, Math.max(0, segmentProgress - index)) * 100;
+                    const fill = ratioToPercent(Math.min(1, Math.max(0, segmentProgress - index)));
                     return (
                         <div key={index} className={styles.track}>
                             {fill > 0 && (
@@ -104,7 +104,7 @@ export function LeaseInfo({
                 })}
                 <div
                     className={clsx(styles.marker, tone.marker)}
-                    style={{left: `calc(${progressRatio * 100}% - ${progressRatio * 12}px)`}}
+                    style={{left: `calc(${ratioToPercent(progressRatio)}% - ${progressRatio * 12}px)`}}
                 />
             </div>
 

@@ -3,6 +3,7 @@
 import {type ChangeEvent, type JSX, type SubmitEvent, useEffect, useMemo, useRef, useState,} from 'react';
 import {useRouter} from 'next/navigation';
 import {notify} from '@/shared/lib/notifications';
+import {kopecksToRublesString, parseRublesToKopecks} from '@/shared/lib/format-money';
 import {ROUTES} from '@/shared/config/routes';
 import {goBack, RETURN_TO_PARAM} from '@/shared/lib/navigation';
 import {useLease, useUpdateLease} from '@/features/leases';
@@ -42,22 +43,6 @@ type FormErrors = {
     endDate?: string;
 };
 
-function kopecksToRubles(kopecks: number): string {
-    return (kopecks / 100).toFixed(2);
-}
-
-function parseRublesToKopecks(value: string): number | undefined {
-    const normalized = value.trim().replace(',', '.');
-    if (normalized === '') {
-        return undefined;
-    }
-    const number = Number(normalized);
-    if (Number.isNaN(number) || number < 0) {
-        return undefined;
-    }
-    return Math.round(number * 100);
-}
-
 function getTenantContactOptionLabel(contact: TenantContact): string {
     return getTenantContactFullName(contact) || contact.name;
 }
@@ -67,8 +52,8 @@ function initializeForm(lease: Lease): FormData {
         tenantContactId: lease.tenantContact?.id ?? '',
         startDate: lease.startDate,
         endDate: lease.endDate ?? '',
-        rentAmount: kopecksToRubles(lease.rentKopecks),
-        depositAmount: kopecksToRubles(lease.depositKopecks),
+        rentAmount: kopecksToRublesString(lease.rentKopecks),
+        depositAmount: kopecksToRublesString(lease.depositKopecks),
         paymentDay: String(lease.paymentDay),
         comment: lease.comment ?? '',
     };

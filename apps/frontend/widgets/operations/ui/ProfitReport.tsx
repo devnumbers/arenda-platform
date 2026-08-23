@@ -10,7 +10,7 @@ import {
 } from '@/entities/operation';
 import { useFinanceReport } from '@/features/finance';
 import { useProperties } from '@/features/properties';
-import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { formatMoneyKopecks, ratioToPercent } from '@/shared/lib/format-money';
 import { FinanceLoading } from '@/shared/ui/finance-loading';
 import { FinanceErrorState } from '@/shared/ui/finance-error-state';
 import { FinanceEmptyState } from '@/shared/ui/finance-empty-state';
@@ -206,7 +206,7 @@ export function ProfitReport(): JSX.Element {
         <div className={styles.months}>
           {report.by_month.map((row) => {
             const widthPercent =
-              maxIncome > 0 ? (row.income_kopecks / maxIncome) * 100 : 0;
+              maxIncome > 0 ? ratioToPercent(row.income_kopecks / maxIncome) : 0;
             return (
               <div key={row.month} className={styles.monthRow}>
                 <div className={styles.monthHeader}>

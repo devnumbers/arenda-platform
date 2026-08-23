@@ -99,6 +99,105 @@ const WEB_STORAGE_MESSAGE =
 const DANGEROUS_BROWSER_API_MESSAGE =
   "This browser API is an XSS-class sink (raw HTML injection or dynamic code evaluation) and is banned — render declarative React content instead (quality bar wave A, see apps/frontend/CODING_STANDARDS.md).";
 
+// The security contour's no-restricted-syntax selectors (decision #331 +
+// wave A), shared verbatim by the two blocks at the end of the config: the
+// general block and the money-allowlist block that re-declares them for the
+// two formatting modules. Sharing one array keeps the re-declaration from
+// drifting — the allowlist may narrow the money selectors away, never the
+// security ones.
+const SECURITY_RESTRICTED_SYNTAX = [
+  {
+    selector: "JSXAttribute[name.name='urlTransform']",
+    message:
+      "react-markdown must keep its secure default urlTransform — overriding or disabling it (urlTransform={null}) reopens XSS vectors (decision #331).",
+  },
+  ...publicEnvSelectors(),
+  // Wave A: XSS-class sinks — raw HTML injection and dynamic code
+  // evaluation (0 usages today; the gate makes a regression impossible).
+  // eval/Function/document.write are also matched through their
+  // window./globalThis. alias forms, mirroring the web-storage block.
+  {
+    selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+  {
+    selector: "MemberExpression[property.name='innerHTML']",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+  {
+    selector: "CallExpression[callee.property.name='insertAdjacentHTML']",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+  {
+    selector:
+      "MemberExpression[object.name='document'][property.name=/^(write|writeln)$/]",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+  {
+    selector:
+      "MemberExpression[object.object.name=/^(window|globalThis)$/][object.property.name='document'][property.name=/^(write|writeln)$/]",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+  {
+    selector: "CallExpression[callee.name='eval']",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+  {
+    selector:
+      "CallExpression[callee.object.name=/^(window|globalThis)$/][callee.property.name='eval']",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+  {
+    selector: "NewExpression[callee.name='Function']",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+  {
+    selector:
+      "NewExpression[callee.object.name=/^(window|globalThis)$/][callee.property.name='Function']",
+    message: DANGEROUS_BROWSER_API_MESSAGE,
+  },
+];
+
+// Money gate (quality bar wave C, bar #330, ticket #403): raw kopecks↔rubles
+// arithmetic and .toFixed formatting are banned outside the formatting
+// modules. Money crosses the boundary only through the canonical helpers in
+// shared/lib/format-money.ts; percent widths scale via ratioToPercent. Both
+// sides of /100 and *100 are banned — `100 * x` is the same arithmetic as
+// `x * 100`.
+const MONEY_ARITHMETIC_MESSAGE =
+  "Raw kopecks↔rubles arithmetic (/100, *100) is banned (quality bar wave C, bar #330): convert through shared/lib/format-money.ts — kopecksToRublesString / parseRublesToKopecks for money, ratioToPercent for percent scaling.";
+
+const MONEY_TO_FIXED_MESSAGE =
+  ".toFixed lives only in the formatting modules (shared/lib/format-money.ts, features/property-attributes/lib/format.ts) — quality bar wave C, bar #330: money goes through the format-money helpers, and a new decimal format belongs in the owning format module (extending the allowlist is a deliberate config edit registered in docs/agents/tooling.md).";
+
+const MONEY_FORMATTING_ALLOWLIST = [
+  "shared/lib/format-money.ts",
+  "features/property-attributes/lib/format.ts",
+];
+
+const MONEY_RESTRICTED_SYNTAX = [
+  {
+    selector: "BinaryExpression[operator='/'][right.value=100]",
+    message: MONEY_ARITHMETIC_MESSAGE,
+  },
+  {
+    selector: "BinaryExpression[operator='/'][left.value=100]",
+    message: MONEY_ARITHMETIC_MESSAGE,
+  },
+  {
+    selector: "BinaryExpression[operator='*'][right.value=100]",
+    message: MONEY_ARITHMETIC_MESSAGE,
+  },
+  {
+    selector: "BinaryExpression[operator='*'][left.value=100]",
+    message: MONEY_ARITHMETIC_MESSAGE,
+  },
+  {
+    selector: "MemberExpression[property.name='toFixed']",
+    message: MONEY_TO_FIXED_MESSAGE,
+  },
+];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -279,65 +378,34 @@ const eslintConfig = defineConfig([
     },
   },
   // Security contour (decision #331, ticket #387) + dangerous-browser-API bans
-  // (quality bar wave A, bar #330, ticket #390). react-markdown must stay
-  // secure by default: raw HTML (`rehype-raw`) is banned at the import level
-  // above, and the `urlTransform` URL sanitizer (default: protocol filtering)
-  // may not be overridden or disabled. These blocks are the last in the config
-  // so no files-scoped override can weaken them.
+  // (quality bar wave A, bar #330, ticket #390) + the money gate (quality bar
+  // wave C, bar #330, ticket #403). react-markdown must stay secure by
+  // default: raw HTML (`rehype-raw`) is banned at the import level above, and
+  // the `urlTransform` URL sanitizer (default: protocol filtering) may not be
+  // overridden or disabled. The two blocks below are the config's last word
+  // on no-restricted-syntax, so no files-scoped override can weaken the
+  // security contour; the second one re-declares the security selectors (from
+  // the shared SECURITY_RESTRICTED_SYNTAX array) for the money-allowlist
+  // files, so ignoring those files for the money selectors never drops their
+  // security coverage. (The web-storage block after these declares other
+  // rules — no-restricted-globals/properties — and replaces nothing here.)
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+    ignores: MONEY_FORMATTING_ALLOWLIST,
     rules: {
       "no-restricted-syntax": [
         "error",
-        {
-          selector: "JSXAttribute[name.name='urlTransform']",
-          message:
-            "react-markdown must keep its secure default urlTransform — overriding or disabling it (urlTransform={null}) reopens XSS vectors (decision #331).",
-        },
-        ...publicEnvSelectors(),
-        // Wave A: XSS-class sinks — raw HTML injection and dynamic code
-        // evaluation (0 usages today; the gate makes a regression impossible).
-        // eval/Function/document.write are also matched through their
-        // window./globalThis. alias forms, mirroring the web-storage block.
-        {
-          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
-        {
-          selector: "MemberExpression[property.name='innerHTML']",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
-        {
-          selector: "CallExpression[callee.property.name='insertAdjacentHTML']",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
-        {
-          selector: "MemberExpression[object.name='document'][property.name=/^(write|writeln)$/]",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
-        {
-          selector:
-            "MemberExpression[object.object.name=/^(window|globalThis)$/][object.property.name='document'][property.name=/^(write|writeln)$/]",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
-        {
-          selector: "CallExpression[callee.name='eval']",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
-        {
-          selector:
-            "CallExpression[callee.object.name=/^(window|globalThis)$/][callee.property.name='eval']",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
-        {
-          selector: "NewExpression[callee.name='Function']",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
-        {
-          selector:
-            "NewExpression[callee.object.name=/^(window|globalThis)$/][callee.property.name='Function']",
-          message: DANGEROUS_BROWSER_API_MESSAGE,
-        },
+        ...SECURITY_RESTRICTED_SYNTAX,
+        ...MONEY_RESTRICTED_SYNTAX,
+      ],
+    },
+  },
+  {
+    files: MONEY_FORMATTING_ALLOWLIST,
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...SECURITY_RESTRICTED_SYNTAX,
       ],
     },
   },

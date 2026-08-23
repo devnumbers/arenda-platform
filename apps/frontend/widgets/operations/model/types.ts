@@ -39,17 +39,3 @@ export type ReminderData = {
 };
 
 export type { OperationType };
-
-export function toKopecks(amount: string): number | undefined {
-  const normalized = amount.trim().replace(',', '.');
-  if (normalized === '') {
-    return undefined;
-  }
-
-  const value = Number(normalized);
-  if (Number.isNaN(value) || value < 0) {
-    return undefined;
-  }
-
-  return Math.round(value * 100);
-}

@@ -17,6 +17,10 @@ import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import {
+  kopecksToRublesString,
+  parseRublesToKopecks,
+} from '@/shared/lib/format-money';
 import { type Operation, type OperationType } from '@/entities/operation';
 import {
   useOperation,
@@ -50,22 +54,6 @@ type FormErrors = {
   operationDate?: string;
 };
 
-function formatAmountFromKopecks(kopecks: number): string {
-  return (kopecks / 100).toFixed(2);
-}
-
-function parseAmountToKopecks(amount: string): number | undefined {
-  const normalized = amount.trim().replace(',', '.');
-  if (normalized === '') {
-    return undefined;
-  }
-  const value = Number(normalized);
-  if (Number.isNaN(value) || value <= 0) {
-    return undefined;
-  }
-  return Math.round(value * 100);
-}
-
 function useOperationId(): string {
   const params = useParams<{ readonly id: string }>();
   return params.id;
@@ -87,7 +75,7 @@ function OperationEditFormContent({
     name: operation.name,
     type: operation.type,
     categoryId: operation.categoryId,
-    amount: formatAmountFromKopecks(operation.amountKopecks),
+    amount: kopecksToRublesString(operation.amountKopecks),
     operationDate: operation.operationDate,
     comment: operation.comment ?? '',
     reminderEnabled: operation.reminderOffsetDays !== null && operation.reminderOffsetDays !== undefined,
@@ -96,7 +84,7 @@ function OperationEditFormContent({
   const [errors, setErrors] = useState<FormErrors>({});
 
   const hasChanges = useMemo(() => {
-    const amountKopecks = parseAmountToKopecks(form.amount);
+    const amountKopecks = parseRublesToKopecks(form.amount, { positive: true });
     const currentReminder = form.reminderEnabled ? form.reminderOffsetDays : null;
     const originalReminder = operation.reminderOffsetDays ?? null;
 
@@ -159,7 +147,7 @@ function OperationEditFormContent({
       next.name = 'Введите название операции';
     }
 
-    if (parseAmountToKopecks(form.amount) === undefined) {
+    if (parseRublesToKopecks(form.amount, { positive: true }) === undefined) {
       next.amount = 'Введите сумму больше 0';
     }
 
@@ -182,7 +170,7 @@ function OperationEditFormContent({
       return;
     }
 
-    const amountKopecks = parseAmountToKopecks(form.amount);
+    const amountKopecks = parseRublesToKopecks(form.amount, { positive: true });
     if (amountKopecks === undefined || !form.categoryId) {
       return;
     }
