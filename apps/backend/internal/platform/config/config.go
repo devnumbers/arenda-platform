@@ -57,6 +57,7 @@ type Config struct {
 	TKassaMaxRetries                    int
 	TKassaRetryBaseDelay                time.Duration
 	TKassaRetryMaxDelay                 time.Duration
+	TKassaRetryMutations                bool
 	DaDataAPIKey                        string
 	DaDataSecretKey                     string
 	DaDataBaseURL                       string
@@ -670,7 +671,21 @@ func (c *Config) loadTKassa() error {
 		return err
 	}
 	c.TKassaRetryMaxDelay = 5 * time.Second
-	return overridePositiveDurationEnv(&c.TKassaRetryMaxDelay, "T_KASSA_RETRY_MAX_DELAY")
+	if err := overridePositiveDurationEnv(&c.TKassaRetryMaxDelay, "T_KASSA_RETRY_MAX_DELAY"); err != nil {
+		return err
+	}
+	// Off by default: 5xx retries for the Init/Charge mutations are enabled
+	// only after the stage smoke confirms Init idempotency by OrderId
+	// (spec #419; the protocol lives in docs/tkassa-init-idempotency-smoke.md).
+	c.TKassaRetryMutations = false
+	if v := os.Getenv("T_KASSA_RETRY_MUTATIONS"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("invalid T_KASSA_RETRY_MUTATIONS %q: %w", v, err)
+		}
+		c.TKassaRetryMutations = b
+	}
+	return nil
 }
 
 // validateTKassaCredentials checks the terminal credentials and that an app

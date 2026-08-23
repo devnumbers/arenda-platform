@@ -17,21 +17,33 @@ import (
 )
 
 // retryTransport wraps an http.RoundTripper and retries requests on timeout
-// network errors. It does not retry on HTTP 4xx/5xx from the provider because
-// those are business/provider-level outcomes, and it does not retry when the
-// caller has already canceled the context.
+// network errors and provider HTTP 5xx (ADR 0017: 500/503 are temporary
+// provider-side failures answered with exponential backoff and jitter). It
+// does not retry on HTTP 4xx — those are definitive provider answers — and it
+// does not retry when the caller has already canceled the context.
 //
-// Retry safety is per-method: T-Kassa write operations (Charge first of all)
-// are not idempotent — the Charge body carries only PaymentId/RebillId without
-// an OrderId, so repeating it after a read timeout would charge the card
-// twice. Non-idempotent methods are retried only when the request never left
-// the client (tracked via httptrace WroteRequest). Read and idempotent
-// methods (GetState, Init-by-OrderId) are retried on any timeout.
+// Retry safety is per-method, separately for each failure class:
+//
+//   - Timeout network errors: T-Kassa write operations (Charge first of all)
+//     are not idempotent — the Charge body carries only PaymentId/RebillId
+//     without an OrderId, so repeating it after a read timeout would charge
+//     the card twice. Non-idempotent methods are retried only when the request
+//     never left the client (tracked via httptrace WroteRequest). Read and
+//     idempotent methods (GetState, Init-by-OrderId) are retried on any
+//     timeout.
+//   - HTTP 5xx: pure reads (GetState, GetCardList, GetAddCardState) are safe
+//     to repeat and retry unconditionally. The Init and Charge mutations
+//     retry only behind the retryMutations opt-in, which stays off until Init
+//     idempotency by OrderId is confirmed on stage (spec #419 — the smoke
+//     protocol lives in docs/tkassa-init-idempotency-smoke.md). Every other
+//     method never retries on 5xx.
 type retryTransport struct {
 	base       http.RoundTripper
 	maxRetries int
 	baseDelay  time.Duration
 	maxDelay   time.Duration
+	// When set, HTTP 5xx retries also cover the Init and Charge mutations.
+	retryMutations bool
 	// Jitter maps the deterministic backoff delay to the actual sleep duration.
 	// It defaults to the identity so callers (and tests) that do not configure
 	// it observe the exact backoff values; production wiring installs full-jitter.
@@ -39,14 +51,17 @@ type retryTransport struct {
 }
 
 // T-Kassa API method names: the metric method label, ProviderError.Method, and
-// the retry-safety table share them.
+// the retry-safety tables share them.
 const (
-	methodInit        = "Init"
-	methodCharge      = "Charge"
-	methodGetState    = "GetState"
-	methodCancel      = "Cancel"
-	methodAddCustomer = "AddCustomer"
-	methodAddCard     = "AddCard"
+	methodInit            = "Init"
+	methodCharge          = "Charge"
+	methodGetState        = "GetState"
+	methodCancel          = "Cancel"
+	methodAddCustomer     = "AddCustomer"
+	methodAddCard         = "AddCard"
+	methodGetAddCardState = "GetAddCardState"
+	methodRemoveCard      = "RemoveCard"
+	methodGetCardList     = "GetCardList"
 )
 
 // retryOnTimeoutMethods may be retried even after the request bytes reached
@@ -60,16 +75,27 @@ var retryOnTimeoutMethods = map[string]bool{
 	methodGetState: true,
 }
 
-func newRetryTransport(base http.RoundTripper, maxRetries int, baseDelay, maxDelay time.Duration) *retryTransport {
+// retryOn5xxReadMethods are pure reads: repeating them cannot change provider
+// state, so HTTP 5xx retries are unconditional (spec #419).
+var retryOn5xxReadMethods = map[string]bool{
+	methodGetState:        true,
+	methodGetCardList:     true,
+	methodGetAddCardState: true,
+}
+
+func newRetryTransport(
+	base http.RoundTripper, maxRetries int, baseDelay, maxDelay time.Duration, retryMutations bool,
+) *retryTransport {
 	if base == nil {
 		base = http.DefaultTransport
 	}
 	return &retryTransport{
-		base:       base,
-		maxRetries: maxRetries,
-		baseDelay:  baseDelay,
-		maxDelay:   maxDelay,
-		jitter:     func(d time.Duration) time.Duration { return d },
+		base:           base,
+		maxRetries:     maxRetries,
+		baseDelay:      baseDelay,
+		maxDelay:       maxDelay,
+		retryMutations: retryMutations,
+		jitter:         func(d time.Duration) time.Duration { return d },
 	}
 }
 
@@ -117,9 +143,16 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		resp, err = t.base.RoundTrip(attemptReq)
 		if err == nil {
-			return resp, nil
-		}
-		if !canRetry(method, err, wroteRequest.Load()) || attempt == t.maxRetries {
+			if resp.StatusCode < http.StatusInternalServerError ||
+				attempt == t.maxRetries || !t.shouldRetry5xx(method) {
+				return resp, nil
+			}
+			// A temporary provider failure: release the response so the
+			// connection can be reused, then back off and retry. A release
+			// failure only costs the connection and is superseded by the next
+			// attempt's outcome.
+			err = drainResponse(resp)
+		} else if !canRetry(method, err, wroteRequest.Load()) || attempt == t.maxRetries {
 			return nil, err
 		}
 		if sleepErr := sleepContext(req.Context(), t.jitter(t.backoff(attempt))); sleepErr != nil {
@@ -167,6 +200,35 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+// shouldRetry5xx reports whether an HTTP 5xx response may be retried for the
+// given T-Kassa method. Pure reads retry unconditionally; the Init and Charge
+// mutations only behind the retryMutations opt-in (off until Init idempotency
+// by OrderId is confirmed on stage — docs/tkassa-init-idempotency-smoke.md);
+// every other method never retries on 5xx.
+func (t *retryTransport) shouldRetry5xx(method string) bool {
+	if retryOn5xxReadMethods[method] {
+		return true
+	}
+	if method == methodInit || method == methodCharge {
+		return t.retryMutations
+	}
+	return false
+}
+
+// drainResponse releases a 5xx response the transport is about to retry: it
+// discards the body (bounded) and closes it so the underlying connection can
+// be reused. A failure only costs the connection — it is dropped instead of
+// reused — so the caller keeps the error merely as the attempt's current
+// error, superseded by the next attempt's outcome.
+func drainResponse(resp *http.Response) error {
+	_, copyErr := io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBytes))
+	closeErr := resp.Body.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
 }
 
 // canRetry reports whether a failed RoundTrip may be safely repeated.

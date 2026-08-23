@@ -394,34 +394,48 @@ func TestProviderInitPaymentFormDeadline(t *testing.T) {
 		}))
 	}
 
-	t.Run("set normalizes to utc", func(t *testing.T) {
-		t.Parallel()
-		var captured map[string]any
-		server := newServer(&captured)
-		defer server.Close()
+	// Wall-clock deadlines carry wall-clock zone offsets and nanoseconds; the
+	// wire contract is whole seconds in UTC (spec #419), so the adapter
+	// normalizes and truncates before the value reaches the request body
+	// (a bare time.Time would marshal as RFC3339Nano).
+	msk := time.FixedZone("MSK", 3*60*60)
+	cases := []struct {
+		name string
+		due  time.Time
+		want string
+	}{
+		{"set normalizes to utc", time.Date(2026, 7, 13, 15, 0, 0, 0, msk), "2026-07-13T12:00:00Z"},
+		{"set truncates nanoseconds to whole seconds", time.Date(2026, 7, 13, 15, 0, 0, 987654321, msk), "2026-07-13T12:00:00Z"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var captured map[string]any
+			server := newServer(&captured)
+			defer server.Close()
 
-		p := newTestProvider(server.URL)
-		due := time.Date(2026, 7, 13, 15, 0, 0, 0, time.FixedZone("MSK", 3*60*60))
-		_, err := p.InitPayment(context.Background(), application.InitPaymentRequest{
-			PaymentID:     uuid.Must(uuid.NewV7()),
-			AmountKopecks: 100,
-			CustomerRef:   "ck",
-			Purpose:       testPurpose(),
-			Initiator:     application.InitiatorCustomer,
-			FormDeadline:  due,
+			p := newTestProvider(server.URL)
+			_, err := p.InitPayment(context.Background(), application.InitPaymentRequest{
+				PaymentID:     uuid.Must(uuid.NewV7()),
+				AmountKopecks: 100,
+				CustomerRef:   "ck",
+				Purpose:       testPurpose(),
+				Initiator:     application.InitiatorCustomer,
+				FormDeadline:  tc.due,
+			})
+			if err != nil {
+				t.Fatalf("InitPayment failed: %v", err)
+			}
+
+			got, ok := captured["RedirectDueDate"].(string)
+			if !ok {
+				t.Fatalf("RedirectDueDate missing or not a string")
+			}
+			if got != tc.want {
+				t.Fatalf("RedirectDueDate: got %q, want %q", got, tc.want)
+			}
 		})
-		if err != nil {
-			t.Fatalf("InitPayment failed: %v", err)
-		}
-
-		got, ok := captured["RedirectDueDate"].(string)
-		if !ok {
-			t.Fatalf("RedirectDueDate missing or not a string")
-		}
-		if want := "2026-07-13T12:00:00Z"; got != want {
-			t.Fatalf("RedirectDueDate: got %q, want %q", got, want)
-		}
-	})
+	}
 
 	t.Run("zero omits field", func(t *testing.T) {
 		t.Parallel()
@@ -479,6 +493,81 @@ func TestProviderInitPaymentError(t *testing.T) {
 	if providerErr.ErrorCode != "7" {
 		t.Fatalf("ErrorCode: got %q, want %q", providerErr.ErrorCode, "7")
 	}
+}
+
+// TestProviderSuccessFalseWithoutErrorCode pins the defective-answer handling
+// (spec #419): a provider response with Success=false and no error code is a
+// call failure, not a business outcome and not a success. It must surface as a
+// plain error — not a *ProviderError — so the metric convention counts it as
+// an integration error.
+func TestProviderSuccessFalseWithoutErrorCode(t *testing.T) {
+	t.Parallel()
+	newServer := func(payload string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = verifyRequestToken(t, r)
+			if _, err := w.Write([]byte(payload)); err != nil {
+				t.Errorf("write fixture: %v", err)
+			}
+		}))
+	}
+
+	t.Run("init", func(t *testing.T) {
+		t.Parallel()
+		server := newServer(`{"Success":false,"Message":"internal"}`)
+		defer server.Close()
+
+		p := newTestProvider(server.URL)
+		_, err := p.InitPayment(context.Background(), application.InitPaymentRequest{
+			PaymentID:     uuid.Must(uuid.NewV7()),
+			AmountKopecks: 100,
+			CustomerRef:   "ck",
+			Purpose:       testPurpose(),
+			Initiator:     application.InitiatorCustomer,
+		})
+		if err == nil {
+			t.Fatalf("expected error for Success=false without error code")
+		}
+		var providerErr *ProviderError
+		if errors.As(err, &providerErr) {
+			t.Fatalf("expected a plain call failure, got *ProviderError: %v", err)
+		}
+	})
+
+	t.Run("refund", func(t *testing.T) {
+		t.Parallel()
+		server := newServer(`{"Success":false,"OrderId":"o","PaymentId":"1"}`)
+		defer server.Close()
+
+		p := newTestProvider(server.URL)
+		_, err := p.RefundPayment(context.Background(), application.RefundRequest{
+			PaymentID:         uuid.Must(uuid.NewV7()),
+			ProviderPaymentID: "1",
+			AmountKopecks:     100,
+		})
+		if err == nil {
+			t.Fatalf("expected error for Success=false without error code")
+		}
+		var providerErr *ProviderError
+		if errors.As(err, &providerErr) {
+			t.Fatalf("expected a plain call failure, got *ProviderError: %v", err)
+		}
+	})
+
+	t.Run("get card list", func(t *testing.T) {
+		t.Parallel()
+		server := newServer(`{"Success":false,"Message":"internal"}`)
+		defer server.Close()
+
+		p := newTestProvider(server.URL)
+		_, err := p.ListPaymentMethods(context.Background(), testCustomerRef)
+		if err == nil {
+			t.Fatalf("expected error for Success=false without error code")
+		}
+		var providerErr *ProviderError
+		if errors.As(err, &providerErr) {
+			t.Fatalf("expected a plain call failure, got *ProviderError: %v", err)
+		}
+	})
 }
 
 func TestProviderChargePayment(t *testing.T) {

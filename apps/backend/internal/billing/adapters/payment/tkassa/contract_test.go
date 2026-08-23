@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,9 +46,12 @@ func TestProviderInitPaymentContract(t *testing.T) {
 					TariffName: domain.TariffPro,
 					Period:     domain.PeriodMonth,
 				},
-				SaveMethod:   true,
-				Initiator:    application.InitiatorCustomer,
-				FormDeadline: time.Date(2026, 7, 13, 15, 0, 0, 0, time.UTC),
+				SaveMethod: true,
+				Initiator:  application.InitiatorCustomer,
+				// Carries nanoseconds on purpose: the wire contract is whole
+				// seconds (spec #419), and this fixture proves the adapter
+				// truncates before the value reaches the request body.
+				FormDeadline: time.Date(2026, 7, 13, 15, 0, 0, 123456789, time.UTC),
 			},
 			wantOperationInitiator: spec.CommonOperationInitiatorTypeN1, // CIT CC per the spec.
 			wantRecurrent:          true,
@@ -149,7 +153,10 @@ func assertInitMapBody(t *testing.T, capturedMap map[string]any, tt initContract
 		if _, err := time.Parse(time.RFC3339, raw); err != nil {
 			t.Errorf("RedirectDueDate is not RFC3339: %q: %v", raw, err)
 		}
-		if want := tt.req.FormDeadline.UTC().Format(time.RFC3339); raw != want {
+		if strings.Contains(raw, ".") {
+			t.Errorf("RedirectDueDate must be whole seconds without a sub-second part, got %q", raw)
+		}
+		if want := tt.req.FormDeadline.UTC().Truncate(time.Second).Format(time.RFC3339); raw != want {
 			t.Errorf("RedirectDueDate: got %q, want %q", raw, want)
 		}
 	} else if _, ok := capturedMap["RedirectDueDate"]; ok {
@@ -213,7 +220,7 @@ func assertInitSpecConditionalFields(t *testing.T, reqBody spec.InitRequest, tt 
 		if reqBody.RedirectDueDate == nil {
 			t.Fatalf("spec.InitRequest.RedirectDueDate missing")
 		}
-		if want := tt.req.FormDeadline.UTC(); !reqBody.RedirectDueDate.Equal(want) {
+		if want := tt.req.FormDeadline.UTC().Truncate(time.Second); !reqBody.RedirectDueDate.Equal(want) {
 			t.Errorf("spec.InitRequest.RedirectDueDate: got %v, want %v", reqBody.RedirectDueDate, want)
 		}
 	}

@@ -153,6 +153,23 @@ func bodyFromStruct(v any) (map[string]any, error) {
 	return body, nil
 }
 
+// failedBaseResponseError turns a Success=false response envelope into the
+// call error. A provider answer without an error code is defective — it is a
+// plain call failure (spec #419), not a business outcome, so the metric
+// convention counts it as an integration error; a coded answer is a
+// *ProviderError for callers to classify.
+func failedBaseResponseError(method string, base baseResponse) error {
+	if base.ErrorCode == "" || base.ErrorCode == "0" {
+		return fmt.Errorf("tkassa: %s returned Success=false without error code", method)
+	}
+	return &ProviderError{
+		Method:    method,
+		ErrorCode: base.ErrorCode,
+		Message:   base.Message,
+		Details:   base.Details,
+	}
+}
+
 // post signs body and sends it as a JSON POST request to a T-Kassa method.
 func (p *Provider) post(ctx context.Context, method string, body map[string]any, out any) error {
 	reqBody := maps.Clone(body)
@@ -202,14 +219,8 @@ func (p *Provider) send(ctx context.Context, method string, reqBody map[string]a
 	}
 
 	if r, ok := out.(responseWithBase); ok {
-		base := r.Base()
-		if !base.Success && base.ErrorCode != "" && base.ErrorCode != "0" {
-			return &ProviderError{
-				Method:    method,
-				ErrorCode: base.ErrorCode,
-				Message:   base.Message,
-				Details:   base.Details,
-			}
+		if base := r.Base(); !base.Success {
+			return failedBaseResponseError(method, base)
 		}
 	}
 

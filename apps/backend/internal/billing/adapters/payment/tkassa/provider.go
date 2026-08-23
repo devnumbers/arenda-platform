@@ -81,6 +81,13 @@ type Config struct {
 	// retries.
 	RetryBaseDelay time.Duration
 	RetryMaxDelay  time.Duration
+	// RetryMutations opts into HTTP 5xx retries for the Init and Charge
+	// mutations. Default false: enabling it is safe only once Init idempotency
+	// by OrderId is confirmed on stage per the fixed smoke protocol
+	// (docs/tkassa-init-idempotency-smoke.md) — until then a retried mutation
+	// could double-charge the card. Read methods retry on 5xx regardless of
+	// this flag.
+	RetryMutations bool
 }
 
 // Provider is a T-Kassa payment adapter.
@@ -133,7 +140,7 @@ func NewProvider(cfg Config, log *slog.Logger, metrics *payment.Metrics) (*Provi
 	}
 	base := http.DefaultTransport
 	if cfg.MaxRetries > 0 {
-		rt := newRetryTransport(base, cfg.MaxRetries, cfg.RetryBaseDelay, cfg.RetryMaxDelay)
+		rt := newRetryTransport(base, cfg.MaxRetries, cfg.RetryBaseDelay, cfg.RetryMaxDelay, cfg.RetryMutations)
 		// Full-jitter: the actual sleep is drawn uniformly from [0, d], where d
 		// is the deterministic exponential-backoff delay. This desynchronizes
 		// concurrent retries and avoids thundering-herd spikes against T-Kassa.
@@ -252,7 +259,11 @@ func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentR
 	description := truncateDescription(paymentDescription(req.Purpose))
 	initReq.Description = &description
 	if !req.FormDeadline.IsZero() {
-		deadline := req.FormDeadline.UTC()
+		// The wire contract is whole seconds (RFC3339 without a sub-second
+		// part); wall-clock deadlines carry nanoseconds and time.Time would
+		// marshal them as RFC3339Nano, so truncate before the value reaches
+		// the request body (spec #419).
+		deadline := req.FormDeadline.UTC().Truncate(time.Second)
 		initReq.RedirectDueDate = &deadline
 	}
 
@@ -442,18 +453,6 @@ func (p *Provider) RefundPayment(ctx context.Context, req application.RefundRequ
 		return application.RefundResult{}, err
 	}
 
-	if !resp.Success {
-		err = classifyProviderError(&ProviderError{
-			Method:    "Cancel",
-			ErrorCode: resp.ErrorCode,
-			Message:   resp.Message,
-			Details:   resp.Details,
-		})
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return application.RefundResult{}, err
-	}
-
 	status := mapCancelStatus(resp.Status)
 	refundedAmount := req.AmountKopecks
 	// Prefer the amount reported by T-Kassa when both original and new amounts
@@ -501,7 +500,7 @@ func (p *Provider) BindPaymentMethod(ctx context.Context, req application.BindMe
 		return application.BindMethodResult{}, err
 	}
 	var customerResp addCustomerResponse
-	if err := p.post(ctx, "AddCustomer", customerBody, &customerResp); err != nil {
+	if err := p.post(ctx, methodAddCustomer, customerBody, &customerResp); err != nil {
 		var providerErr *ProviderError
 		if !errors.As(err, &providerErr) || providerErr.ErrorCode != "7" {
 			wrappedErr := fmt.Errorf("tkassa: add customer failed: %w", classifyProviderError(err))
@@ -602,7 +601,7 @@ func (p *Provider) PaymentMethodBinding(ctx context.Context, bindingID string) (
 	)
 
 	var resp getAddCardStateResponse
-	if err := p.post(ctx, "GetAddCardState", body, &resp); err != nil {
+	if err := p.post(ctx, methodGetAddCardState, body, &resp); err != nil {
 		err = classifyProviderError(err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -664,7 +663,7 @@ func (p *Provider) RemovePaymentMethod(ctx context.Context, customerRef, provide
 	)
 
 	var resp removeCardResponse
-	if err := p.post(ctx, "RemoveCard", body, &resp); err != nil {
+	if err := p.post(ctx, methodRemoveCard, body, &resp); err != nil {
 		if isMethodNotFoundError(err) {
 			return application.ErrProviderMethodNotFound
 		}
@@ -713,7 +712,7 @@ func (p *Provider) ListPaymentMethods(ctx context.Context, customerRef string) (
 	// the usual response envelope on failure, so the base-response check inside
 	// post cannot fire. Decode the raw body and handle both shapes explicitly.
 	var raw json.RawMessage
-	if err := p.post(ctx, "GetCardList", body, &raw); err != nil {
+	if err := p.post(ctx, methodGetCardList, body, &raw); err != nil {
 		err = classifyProviderError(err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -728,32 +727,28 @@ func (p *Provider) ListPaymentMethods(ctx context.Context, customerRef string) (
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
-		if !base.Success && base.ErrorCode != "" && base.ErrorCode != "0" {
-			providerErr := &ProviderError{
-				Method:    "GetCardList",
-				ErrorCode: base.ErrorCode,
-				Message:   base.Message,
-				Details:   base.Details,
+		if !base.Success {
+			err := failedBaseResponseError(methodGetCardList, base)
+			var providerErr *ProviderError
+			if errors.As(err, &providerErr) {
+				if isCustomerNotFoundError(providerErr) {
+					log.InfoContext(ctx, "tkassa customer not found, treating as empty card list",
+						"customer_ref", customerRef,
+					)
+					// Keep the *ProviderError in the chain so errors.As on it still
+					// works for callers and metricStatus.
+					return nil, fmt.Errorf("%w: %w", application.ErrProviderCustomerNotFound, providerErr)
+				}
+				if isAccountNotFoundError(providerErr) {
+					log.WarnContext(ctx, "tkassa terminal not found, treating as empty card list",
+						"customer_ref", customerRef,
+					)
+					// Keep the *ProviderError in the chain so errors.As on it still
+					// works for callers and metricStatus.
+					return nil, fmt.Errorf("%w: %w", application.ErrProviderAccountNotFound, providerErr)
+				}
+				err = classifyProviderError(providerErr)
 			}
-			if isCustomerNotFoundError(providerErr) {
-				log.InfoContext(ctx, "tkassa customer not found, treating as empty card list",
-					"customer_ref", customerRef,
-				)
-				// Keep the *ProviderError in the chain so errors.As on it still
-				// works for callers and metricStatus.
-				err = fmt.Errorf("%w: %w", application.ErrProviderCustomerNotFound, providerErr)
-				return nil, err
-			}
-			if isAccountNotFoundError(providerErr) {
-				log.WarnContext(ctx, "tkassa terminal not found, treating as empty card list",
-					"customer_ref", customerRef,
-				)
-				// Keep the *ProviderError in the chain so errors.As on it still
-				// works for callers and metricStatus.
-				err = fmt.Errorf("%w: %w", application.ErrProviderAccountNotFound, providerErr)
-				return nil, err
-			}
-			err = classifyProviderError(providerErr)
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err

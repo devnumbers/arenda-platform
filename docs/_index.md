@@ -38,5 +38,6 @@ order: 1
 * [PRD MVP](./prd-mvp)
 * [Правила реализации MVP](./mvp-implementation-rules)
 * [Деплой stage и production](./deployment)
+* [Стейдж-smoke: идемпотентность Init Т-Кассы по OrderId](./tkassa-init-idempotency-smoke)
 * [Тестовая стратегия рефакторинга бекенда и монорепы](./testing-strategy)
 * [План миграции старого Nambers-сервера](./migration/2026-06-22-nambers-server-migration-runbook)

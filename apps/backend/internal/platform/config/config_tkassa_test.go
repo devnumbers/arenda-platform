@@ -39,6 +39,42 @@ func TestTKassaTimeoutDefault(t *testing.T) {
 	if cfg.TKassaTimeout != 30*time.Second {
 		t.Fatalf("expected default T_KASSA_TIMEOUT 30s, got %v", cfg.TKassaTimeout)
 	}
+	if cfg.TKassaRetryMutations {
+		t.Fatal("expected default T_KASSA_RETRY_MUTATIONS off — mutation 5xx retries stay" +
+			" disabled until the stage smoke confirms Init idempotency by OrderId")
+	}
+}
+
+func TestTKassaRetryMutationsEnv(t *testing.T) {
+	setRequiredLocalEnv(t)
+	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
+	t.Setenv("T_KASSA_PASSWORD", "pass")
+	t.Setenv("T_KASSA_RETRY_MUTATIONS", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if !cfg.TKassaRetryMutations {
+		t.Fatal("expected T_KASSA_RETRY_MUTATIONS=true to enable mutation 5xx retries")
+	}
+}
+
+func TestTKassaRetryMutationsInvalid(t *testing.T) {
+	setRequiredLocalEnv(t)
+	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
+	t.Setenv("T_KASSA_PASSWORD", "pass")
+	t.Setenv("T_KASSA_RETRY_MUTATIONS", "maybe")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for invalid T_KASSA_RETRY_MUTATIONS")
+	}
+	if !strings.Contains(err.Error(), "T_KASSA_RETRY_MUTATIONS") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestTKassaTimeoutEnv(t *testing.T) {

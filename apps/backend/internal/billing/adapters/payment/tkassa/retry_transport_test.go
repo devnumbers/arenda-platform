@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -55,7 +56,7 @@ func TestRetryTransportSuccessFirstAttempt(t *testing.T) {
 	defer server.Close()
 
 	base := http.DefaultTransport
-	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
+	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond, false)
 	client := &http.Client{Transport: tr}
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
@@ -78,7 +79,7 @@ func TestRetryTransportRetryThenSuccess(t *testing.T) {
 		failures: 2,
 		err:      &timeoutNetError{errorString: errTimeout},
 	}
-	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
+	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond, false)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
@@ -95,7 +96,7 @@ func TestRetryTransportExhaustsRetries(t *testing.T) {
 	t.Parallel()
 	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
-	tr := newRetryTransport(base, 2, 1*time.Millisecond, 5*time.Millisecond)
+	tr := newRetryTransport(base, 2, 1*time.Millisecond, 5*time.Millisecond, false)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
@@ -115,7 +116,7 @@ func TestRetryTransportNoRetryWhenDisabled(t *testing.T) {
 	t.Parallel()
 	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
-	tr := newRetryTransport(base, 0, 1*time.Millisecond, 5*time.Millisecond)
+	tr := newRetryTransport(base, 0, 1*time.Millisecond, 5*time.Millisecond, false)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
@@ -132,7 +133,7 @@ func TestRetryTransportNoRetryOnPermanentError(t *testing.T) {
 	t.Parallel()
 	permanentErr := &permanentNetError{errorString: "permanent"}
 	base := &fakeRoundTripper{err: permanentErr}
-	tr := newRetryTransport(base, 3, 1*time.Millisecond, 5*time.Millisecond)
+	tr := newRetryTransport(base, 3, 1*time.Millisecond, 5*time.Millisecond, false)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
 	resp, err := tr.RoundTrip(req)
@@ -152,7 +153,7 @@ func TestRetryTransportPreservesBodyAcrossRetries(t *testing.T) {
 		failures: 2,
 		err:      &timeoutNetError{errorString: errTimeout},
 	}
-	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
+	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond, false)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "http://example.com", bytes.NewReader([]byte(wantBody)))
 	req.Header.Set("Content-Type", "application/json")
@@ -199,7 +200,7 @@ func TestRetryTransportJitterApplied(t *testing.T) {
 	t.Parallel()
 	retriableErr := &timeoutNetError{errorString: errBoom}
 	base := &fakeRoundTripper{err: retriableErr}
-	tr := newRetryTransport(base, 1, 1*time.Millisecond, 100*time.Millisecond)
+	tr := newRetryTransport(base, 1, 1*time.Millisecond, 100*time.Millisecond, false)
 
 	// Deterministic jitter: record the input it receives and return a fixed,
 	// near-zero sleep so the test stays fast and wall-clock independent.
@@ -330,7 +331,7 @@ func (w *wroteRequestRoundTripper) RoundTrip(req *http.Request) (*http.Response,
 func TestRetryTransportChargeNotRetriedAfterRequestSent(t *testing.T) {
 	t.Parallel()
 	base := &wroteRequestRoundTripper{err: &timeoutNetError{errorString: "read timeout"}}
-	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond)
+	tr := newRetryTransport(base, 3, 1*time.Millisecond, 10*time.Millisecond, false)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://securepay.tinkoff.ru/v2/Charge", nil)
 	resp, err := tr.RoundTrip(req)
@@ -346,7 +347,7 @@ func TestRetryTransportChargeNotRetriedAfterRequestSent(t *testing.T) {
 func TestRetryTransportInitRetriedAfterRequestSent(t *testing.T) {
 	t.Parallel()
 	base := &wroteRequestRoundTripper{err: &timeoutNetError{errorString: "read timeout"}}
-	tr := newRetryTransport(base, 2, 1*time.Millisecond, 10*time.Millisecond)
+	tr := newRetryTransport(base, 2, 1*time.Millisecond, 10*time.Millisecond, false)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://securepay.tinkoff.ru/v2/Init", nil)
 	resp, err := tr.RoundTrip(req)
@@ -501,7 +502,7 @@ func TestRetryTransportWriteMethodsNoDuplicateAfterReadTimeout(t *testing.T) {
 			t.Parallel()
 			var hits atomic.Int32
 			srv := hangingServer(t, &hits)
-			tr := newRetryTransport(timeoutTransport(), 3, time.Millisecond, 5*time.Millisecond)
+			tr := newRetryTransport(timeoutTransport(), 3, time.Millisecond, 5*time.Millisecond, false)
 
 			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/v2/"+tc.method, bytes.NewReader([]byte(`{}`)))
 			if err != nil {
@@ -527,7 +528,7 @@ func TestRetryTransportReadMethodsRetriedAfterReadTimeout(t *testing.T) {
 			t.Parallel()
 			var hits atomic.Int32
 			srv := hangingServer(t, &hits)
-			tr := newRetryTransport(timeoutTransport(), 2, time.Millisecond, 5*time.Millisecond)
+			tr := newRetryTransport(timeoutTransport(), 2, time.Millisecond, 5*time.Millisecond, false)
 
 			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/v2/"+method, bytes.NewReader([]byte(`{}`)))
 			if err != nil {
@@ -563,7 +564,7 @@ func TestRetryTransportBackoffRespectsContextCancel(t *testing.T) {
 		calls: make(chan struct{}, 4),
 		err:   &timeoutNetError{errorString: errBoom},
 	}
-	tr := newRetryTransport(base, 3, time.Hour, time.Hour) // Backoff that would hang without ctx awareness.
+	tr := newRetryTransport(base, 3, time.Hour, time.Hour, false) // Backoff that would hang without ctx awareness.
 
 	ctx, cancel := context.WithCancel(t.Context())
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://securepay.tinkoff.ru/v2/Charge", nil)
@@ -585,5 +586,208 @@ func TestRetryTransportBackoffRespectsContextCancel(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("RoundTrip kept sleeping after context cancellation")
+	}
+}
+
+// closeCountingBody is an at-EOF response body that counts its closes, so
+// tests can assert the transport releases the bodies of discarded 5xx
+// responses instead of leaking them.
+type closeCountingBody struct {
+	closed *atomic.Int32
+}
+
+func (b closeCountingBody) Read([]byte) (int, error) { return 0, io.EOF }
+func (b closeCountingBody) Close() error             { b.closed.Add(1); return nil }
+
+// statusSequenceRoundTripper answers with the given HTTP status codes in order
+// (the last one repeats when calls outlive the sequence) and gives every
+// response a close-counting body.
+type statusSequenceRoundTripper struct {
+	calls    atomic.Int32
+	closed   atomic.Int32
+	statuses []int
+}
+
+func (s *statusSequenceRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error) {
+	call := int(s.calls.Add(1))
+	status := s.statuses[min(call-1, len(s.statuses)-1)]
+	return &http.Response{
+		StatusCode: status,
+		Body:       closeCountingBody{closed: &s.closed},
+		Header:     http.Header{},
+	}, nil
+}
+
+func retryRequest(t *testing.T, method string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(
+		t.Context(), http.MethodPost, "https://securepay.tinkoff.ru/v2/"+method, bytes.NewReader([]byte(`{}`)),
+	)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	return req
+}
+
+// TestRetryTransport5xxReadMethodsRetried pins the unconditional half of the
+// 5xx retry rules (spec #419): pure reads — GetState, GetCardList,
+// GetAddCardState — repeat a 5xx'd request with backoff, with the flag off,
+// and the discarded response bodies are closed.
+func TestRetryTransport5xxReadMethodsRetried(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{methodGetState, methodGetCardList, methodGetAddCardState} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			base := &statusSequenceRoundTripper{statuses: []int{
+				http.StatusInternalServerError,
+				http.StatusServiceUnavailable,
+				http.StatusOK,
+			}}
+			tr := newRetryTransport(base, 3, time.Millisecond, 5*time.Millisecond, false)
+
+			resp, err := tr.RoundTrip(retryRequest(t, method))
+			if err != nil {
+				t.Fatalf("unexpected error after retries: %v", err)
+			}
+			defer closeResp(t, resp)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status: got %d, want 200", resp.StatusCode)
+			}
+			if base.calls.Load() != 3 {
+				t.Fatalf("%s reached base %d times, want 3 (1 initial + 2 retries)", method, base.calls.Load())
+			}
+			// The two discarded 5xx bodies must be closed; the final response
+			// stays open for the caller.
+			if got := base.closed.Load(); got != 2 {
+				t.Fatalf("discarded response bodies closed %d times, want 2", got)
+			}
+		})
+	}
+}
+
+// TestRetryTransport5xxMutationsNotRetriedByDefault pins the safety default:
+// Init and Charge never repeat a request the provider answered with 5xx unless
+// the retryMutations flag opts in — until Init idempotency by OrderId is
+// confirmed on stage, a repeat could double-charge the card (spec #419).
+func TestRetryTransport5xxMutationsNotRetriedByDefault(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{methodInit, methodCharge} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			base := &statusSequenceRoundTripper{statuses: []int{http.StatusInternalServerError}}
+			tr := newRetryTransport(base, 3, time.Millisecond, 5*time.Millisecond, false)
+
+			resp, err := tr.RoundTrip(retryRequest(t, method))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer closeResp(t, resp)
+			if base.calls.Load() != 1 {
+				t.Fatalf("%s reached base %d times, want 1 (mutations must not retry on 5xx by default)", method, base.calls.Load())
+			}
+		})
+	}
+}
+
+// TestRetryTransport5xxMutationsRetriedBehindFlag pins the opt-in: with
+// retryMutations enabled, Init and Charge repeat 5xx'd requests with backoff.
+func TestRetryTransport5xxMutationsRetriedBehindFlag(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{methodInit, methodCharge} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			base := &statusSequenceRoundTripper{statuses: []int{
+				http.StatusInternalServerError,
+				http.StatusOK,
+			}}
+			tr := newRetryTransport(base, 3, time.Millisecond, 5*time.Millisecond, true)
+
+			resp, err := tr.RoundTrip(retryRequest(t, method))
+			if err != nil {
+				t.Fatalf("unexpected error after retry: %v", err)
+			}
+			defer closeResp(t, resp)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status: got %d, want 200", resp.StatusCode)
+			}
+			if base.calls.Load() != 2 {
+				t.Fatalf("%s reached base %d times, want 2 (1 initial + 1 retry)", method, base.calls.Load())
+			}
+		})
+	}
+}
+
+// TestRetryTransport5xxOtherMethodsNeverRetried: the flag covers only the
+// Init/Charge mutations; Cancel, AddCustomer, AddCard, RemoveCard, and unknown
+// future methods never repeat a 5xx'd request even with the flag on.
+func TestRetryTransport5xxOtherMethodsNeverRetried(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{
+		methodCancel, methodAddCustomer, methodAddCard, methodRemoveCard, futureMethodName,
+	} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			base := &statusSequenceRoundTripper{statuses: []int{http.StatusServiceUnavailable}}
+			tr := newRetryTransport(base, 3, time.Millisecond, 5*time.Millisecond, true)
+
+			resp, err := tr.RoundTrip(retryRequest(t, method))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer closeResp(t, resp)
+			if base.calls.Load() != 1 {
+				t.Fatalf("%s reached base %d times, want 1", method, base.calls.Load())
+			}
+		})
+	}
+}
+
+// TestRetryTransport5xxExhaustedReturnsLastResponse: when every attempt
+// answers 5xx, the last response is returned to the caller (the transport
+// layer cannot know the body), and the caller's send() turns it into the
+// usual non-2xx error.
+func TestRetryTransport5xxExhaustedReturnsLastResponse(t *testing.T) {
+	t.Parallel()
+	base := &statusSequenceRoundTripper{statuses: []int{http.StatusInternalServerError}}
+	tr := newRetryTransport(base, 2, time.Millisecond, 5*time.Millisecond, false)
+
+	resp, err := tr.RoundTrip(retryRequest(t, methodGetState))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer closeResp(t, resp)
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status: got %d, want 500 (the last response must pass through)", resp.StatusCode)
+	}
+	if base.calls.Load() != 3 {
+		t.Fatalf("GetState reached base %d times, want 3 (1 initial + 2 retries)", base.calls.Load())
+	}
+	if got := base.closed.Load(); got != 2 {
+		t.Fatalf("discarded response bodies closed %d times, want 2", got)
+	}
+}
+
+// TestRetryTransport4xxNotRetried: a definitive provider answer (4xx) is
+// never repeated, regardless of the method or the flag.
+func TestRetryTransport4xxNotRetried(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusBadRequest, http.StatusNotFound} {
+		t.Run(fmt.Sprintf("http_%d", status), func(t *testing.T) {
+			t.Parallel()
+			base := &statusSequenceRoundTripper{statuses: []int{status}}
+			tr := newRetryTransport(base, 3, time.Millisecond, 5*time.Millisecond, true)
+
+			resp, err := tr.RoundTrip(retryRequest(t, methodGetState))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer closeResp(t, resp)
+			if resp.StatusCode != status {
+				t.Fatalf("status: got %d, want %d", resp.StatusCode, status)
+			}
+			if base.calls.Load() != 1 {
+				t.Fatalf("HTTP %d retried: got %d calls, want 1", status, base.calls.Load())
+			}
+		})
 	}
 }

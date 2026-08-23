@@ -8,10 +8,11 @@ import (
 )
 
 // TestMapStatus pins the full payment-status mapping, including the deliberate
-// decisions: REVERSED from GetState/webhook is failed (ADR 0017), unknown
-// statuses default to pending, and the PARTIAL_* outcomes land in refunded
-// because the new domain has no partial-refund status (ADR 0037, issue #246
-// §3.1).
+// decisions: REVERSED and PARTIAL_REVERSED from GetState/webhook are failed
+// (ADR 0017 §Polling — a reversal of unclear origin is not a refund for our
+// subscription payment), unknown statuses default to pending, and
+// PARTIAL_REFUNDED lands in refunded because the new domain has no
+// partial-refund status (ADR 0037, issue #246 §3.1).
 func TestMapStatus(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -46,7 +47,7 @@ func TestMapStatus(t *testing.T) {
 		{statusDeadlineExpired, domain.PaymentStatusFailed},
 		{statusCanceled, domain.PaymentStatusFailed},
 		{statusReversed, domain.PaymentStatusFailed},
-		{statusPartialReversed, domain.PaymentStatusRefunded},
+		{statusPartialReversed, domain.PaymentStatusFailed},
 		{status3DSFailed, domain.PaymentStatusFailed},
 	}
 	for _, tt := range tests {
@@ -76,8 +77,20 @@ func TestMapCancelStatus(t *testing.T) {
 		{statusReversing, domain.PaymentStatusRefunding},
 		{statusRefunding, domain.PaymentStatusRefunding},
 		{statusAsyncRefunding, domain.PaymentStatusRefunding},
-		{statusConfirmed, domain.PaymentStatusFailed}, // Refund not confirmed — deliberate default.
-		{"WHATEVER", domain.PaymentStatusFailed},
+		// Definitive dead ends: the charge is intact or the payment died with
+		// no money returned — the saga reverts its reservation.
+		{statusConfirmed, domain.PaymentStatusFailed},
+		{statusRejected, domain.PaymentStatusFailed},
+		{statusAuthFail, domain.PaymentStatusFailed},
+		{statusCanceled, domain.PaymentStatusFailed},
+		{statusDeadlineExpired, domain.PaymentStatusFailed},
+		{status3DSFailed, domain.PaymentStatusFailed},
+		// Undetermined outcomes keep the refunding reservation under the
+		// reconciliation watchdog instead of failing the refund (spec #419).
+		{statusUnknown, domain.PaymentStatusRefunding},
+		{statusPayChecking, domain.PaymentStatusRefunding},
+		{statusConfirmChecking, domain.PaymentStatusRefunding},
+		{"WHATEVER", domain.PaymentStatusRefunding},
 	}
 	for _, tt := range tests {
 		if got := mapCancelStatus(tt.status); got != tt.want {

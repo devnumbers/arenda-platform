@@ -140,6 +140,7 @@ func wirePaymentProvider(
 			MaxRetries:     cfg.TKassaMaxRetries,
 			RetryBaseDelay: cfg.TKassaRetryBaseDelay,
 			RetryMaxDelay:  cfg.TKassaRetryMaxDelay,
+			RetryMutations: cfg.TKassaRetryMutations,
 		}, log, metrics)
 		if err != nil {
 			return nil, fmt.Errorf("init tkassa payment provider (check T_KASSA_BASE_URL, T_KASSA_TERMINAL_KEY, "+
