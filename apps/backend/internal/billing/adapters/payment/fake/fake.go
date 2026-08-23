@@ -632,16 +632,24 @@ func (p *Provider) WebhookAck() []byte {
 	return []byte(`{"status":"ok"}`)
 }
 
-// ParseWebhook parses the fake provider webhook JSON payload.
+// ParseWebhook parses the fake provider webhook JSON payload: a payment
+// notification by default, or a card-binding notification when the payload
+// carries a request key instead of a payment id — the fake counterpart of the
+// refused add-card delivery (issue #422).
 func (p *Provider) ParseWebhook(_ context.Context, payload []byte) (application.WebhookEvent, error) {
 	var raw struct {
 		ProviderPaymentID string `json:"provider_payment_id"`
 		InternalPaymentID string `json:"internal_payment_id"`
+		RequestKey        string `json:"request_key"`
 		Status            string `json:"status"`
 		ErrorCode         string `json:"error_code,omitempty"`
 	}
 	if err := json.Unmarshal(payload, &raw); err != nil {
 		return application.WebhookEvent{}, fmt.Errorf("fake: invalid webhook payload: %w", err)
+	}
+
+	if raw.RequestKey != "" && raw.InternalPaymentID == "" {
+		return parseBindingRefusalWebhook(raw.RequestKey, raw.Status, raw.ErrorCode)
 	}
 
 	internalPaymentID, err := uuid.Parse(raw.InternalPaymentID)
@@ -669,6 +677,21 @@ func (p *Provider) ParseWebhook(_ context.Context, payload []byte) (application.
 			InternalPaymentID: internalPaymentID,
 			Status:            status,
 			ErrorCode:         errorCode,
+		},
+	}, nil
+}
+
+// parseBindingRefusalWebhook maps a card-binding webhook payload to the
+// binding-failed event. Only a refusal is deliverable this way: a completed
+// binding arrives through the local confirmation flow.
+func parseBindingRefusalWebhook(requestKey, status, errorCode string) (application.WebhookEvent, error) {
+	if status != string(domain.PaymentStatusFailed) {
+		return application.WebhookEvent{}, fmt.Errorf("fake: unsupported binding webhook status %q", status)
+	}
+	return application.WebhookEvent{
+		MethodBindingFailed: &application.MethodBindingFailedNotification{
+			BindingID: requestKey,
+			ErrorCode: errorCode,
 		},
 	}, nil
 }

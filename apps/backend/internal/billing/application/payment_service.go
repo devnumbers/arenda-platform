@@ -181,6 +181,8 @@ func (s *PaymentService) ApplyProviderEvent(ctx context.Context, event WebhookEv
 		return s.ApplyPaymentNotification(ctx, event.Payment)
 	case event.MethodBound != nil:
 		return s.applyMethodBoundNotification(ctx, event.MethodBound)
+	case event.MethodBindingFailed != nil:
+		return s.applyMethodBindingFailedNotification(ctx, event.MethodBindingFailed)
 	default:
 		return fmt.Errorf("%w: empty event", ErrWebhookUnsupported)
 	}
@@ -239,6 +241,44 @@ func (s *PaymentService) applyMethodBoundNotification(ctx context.Context, n *Me
 		method.ExpDate = n.Method.ExpDate
 		_, err = applyCompletedCardBinding(ctx, stores, s.log, method, &session, now)
 		return err
+	})
+}
+
+// applyMethodBindingFailedNotification applies a refused payment-method
+// binding synchronously (issue #422, ADR 0039): the delivery itself is valid,
+// so it is a processed outcome — nil error, 200 to the provider — that closes
+// the session without a payment method. The user sees the failure on the next
+// sync and can start a new binding. Idempotent by the session state: a
+// repeated delivery resolves to a no-op, and an unknown request key cannot be
+// fixed by a retry, so it is answered as processed too.
+func (s *PaymentService) applyMethodBindingFailedNotification(ctx context.Context, n *MethodBindingFailedNotification) error {
+	now := s.clock.Now().UTC()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		session, err := stores.bindings.GetByRequestKeyForUpdate(ctx, s.provider.Name(), n.BindingID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				s.log.WarnContext(ctx, "method-binding-failed webhook for unknown binding session; ignoring",
+					slog.String("binding_id", n.BindingID),
+					slog.String(auditKeyProvider, string(s.provider.Name())))
+				return nil
+			}
+			return fmt.Errorf("get card binding session: %w", err)
+		}
+		if !session.IsOpen() {
+			// Duplicate delivery of an already-resolved session.
+			return nil
+		}
+		if err := session.MarkRejected(now); err != nil {
+			return err
+		}
+		if err := stores.bindings.UpdateStatus(ctx, session); err != nil {
+			return fmt.Errorf("reject card binding session: %w", err)
+		}
+		s.log.InfoContext(ctx, "card binding session rejected by webhook",
+			slog.String("binding_id", n.BindingID),
+			slog.String("user_id", session.UserID.String()),
+			slog.String("error_code", n.ErrorCode))
+		return nil
 	})
 }
 

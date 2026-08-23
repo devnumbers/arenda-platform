@@ -68,19 +68,31 @@ func notificationType(data map[string]any) string {
 	return kind
 }
 
-// parseAddCardNotification maps a completed add-card notification to the
-// method-bound event; anything short of a completed binding is rejected so the
-// application never stores a dead charge token.
+// parseAddCardNotification maps an add-card notification to the neutral
+// event. A completed binding becomes the method-bound event; a refused one
+// (REJECTED — the failure terminal of the binding-status dictionary, ADR 0017)
+// becomes the binding-failed event: a validly signed delivery the application
+// closes the session on, so the handler answers 200 and the provider stops
+// redelivering. Anything without a terminal outcome is an error so the
+// application never resolves a session on an intermediate status.
 func parseAddCardNotification(data map[string]any) (application.WebhookEvent, error) {
-	if !isAddCardSuccessful(data) {
-		return application.WebhookEvent{}, errors.New("tkassa: add card webhook ignored: binding not successful")
+	if isAddCardSuccessful(data) {
+		return application.WebhookEvent{
+			MethodBound: &application.MethodBoundNotification{
+				BindingID: getString(data, fieldRequestKey),
+				Method:    savedMethodFromWebhook(data),
+			},
+		}, nil
 	}
-	return application.WebhookEvent{
-		MethodBound: &application.MethodBoundNotification{
-			BindingID: getString(data, fieldRequestKey),
-			Method:    savedMethodFromWebhook(data),
-		},
-	}, nil
+	if getString(data, fieldStatus) == statusRejected {
+		return application.WebhookEvent{
+			MethodBindingFailed: &application.MethodBindingFailedNotification{
+				BindingID: getString(data, fieldRequestKey),
+				ErrorCode: getString(data, fieldErrorCode),
+			},
+		}, nil
+	}
+	return application.WebhookEvent{}, errors.New("tkassa: add card webhook ignored: binding outcome not final")
 }
 
 // parsePaymentNotification maps a payment notification to the payment event,

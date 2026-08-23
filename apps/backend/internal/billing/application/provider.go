@@ -184,6 +184,9 @@ type WebhookEvent struct {
 	Payment *PaymentNotification
 	// MethodBound is set for saved-method binding notifications.
 	MethodBound *MethodBoundNotification
+	// MethodBindingFailed is set for refused-binding notifications: the
+	// binding session ended without a saved method.
+	MethodBindingFailed *MethodBindingFailedNotification
 }
 
 // PaymentNotification reports a change in a payment's provider-side status.
@@ -208,6 +211,19 @@ type MethodBoundNotification struct {
 	// BindPaymentMethod.
 	BindingID string
 	Method    SavedMethod
+}
+
+// MethodBindingFailedNotification reports a refused payment-method binding:
+// the binding session ended without producing a saved method, so the session
+// closes without one. The delivery itself is valid — the caller answers it
+// like any processed notification.
+type MethodBindingFailedNotification struct {
+	// BindingID links the notification to the binding session started by
+	// BindPaymentMethod.
+	BindingID string
+	// ErrorCode is the provider code carried by the refusal; empty when the
+	// provider does not report one.
+	ErrorCode string
 }
 
 // MethodBindingStatus is the neutral state of a payment-method binding

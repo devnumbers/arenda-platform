@@ -517,6 +517,78 @@ func TestWebhook_MethodBoundUnknownRequestKeyIsProcessedNoop(t *testing.T) {
 	}
 }
 
+// TestWebhook_MethodBindingFailedClosesSession proves a validly delivered
+// refused binding is a processed outcome (nil error, so the handler answers
+// 200 and the provider stops redelivering): the session closes as rejected,
+// no payment method appears, and a repeated delivery is a no-op. A fresh
+// binding afterwards completes through the same path (issue #422).
+func TestWebhook_MethodBindingFailedClosesSession(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	userID, _ := h.seedMethodSubscription(t)
+	session := h.openSession(t, userID)
+
+	h.provider.parseEvent = WebhookEvent{
+		MethodBindingFailed: &MethodBindingFailedNotification{
+			BindingID: session.RequestKey,
+			ErrorCode: "6",
+		},
+	}
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook(refused binding) error = %v", err)
+	}
+
+	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, session.RequestKey)
+	if err != nil {
+		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
+	}
+	if closed.Status != domain.CardBindingRejected {
+		t.Fatalf("session status = %q, want rejected", closed.Status)
+	}
+	methods, err := h.stores.methods.ListByUserID(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("ListByUserID() error = %v", err)
+	}
+	if len(methods) != 0 {
+		t.Fatalf("methods = %d, want none from a refused binding", len(methods))
+	}
+
+	// A repeated delivery of the same refusal is an idempotent no-op.
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook(redelivery) error = %v", err)
+	}
+
+	// The refusal does not poison the next binding: a fresh session completes
+	// through the same webhook path. The stub answers a distinct request key,
+	// as the provider would for a new binding.
+	h.provider.bindRes = BindMethodResult{
+		FormURL:   "https://pay.example/bind2/" + userID.String(),
+		BindingID: "req2_" + userID.String(),
+	}
+	if _, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{}); err != nil {
+		t.Fatalf("AddPaymentMethod(second binding) error = %v", err)
+	}
+	h.methodBoundEvent("req2_" + userID.String())
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook(next binding) error = %v", err)
+	}
+	h.activeMethod(t, userID) // Asserts exactly one active method.
+}
+
+// TestWebhook_MethodBindingFailedUnknownRequestKeyIsProcessed proves a refusal
+// no local session matches is answered as processed: a retry cannot fix it,
+// mirroring the method-bound flow.
+func TestWebhook_MethodBindingFailedUnknownRequestKeyIsProcessed(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	h.provider.parseEvent = WebhookEvent{
+		MethodBindingFailed: &MethodBindingFailedNotification{BindingID: "req_never_initiated"},
+	}
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook(unknown key) error = %v, want processed no-op", err)
+	}
+}
+
 // TestSyncPaymentMethods_CompletesOpenBinding proves the polling path resolves
 // a completed binding exactly like the webhook would (issue #251): the method
 // is created and active, the subscription points at it and the session is

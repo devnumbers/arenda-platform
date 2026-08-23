@@ -250,7 +250,11 @@ func TestParseWebhookAddCardWithoutNotificationType(t *testing.T) {
 	}
 }
 
-func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
+// TestParseWebhookAddCardRejectedMapsToBindingFailed proves a validly signed
+// refused binding is a legitimate outcome, not a delivery defect: the parser
+// surfaces the binding-failed event so the application closes the session and
+// the handler answers 200 (issue #422).
+func TestParseWebhookAddCardRejectedMapsToBindingFailed(t *testing.T) {
 	t.Parallel()
 	payload := map[string]any{
 		fieldTerminalKey:      testTerminalKey,
@@ -258,15 +262,98 @@ func TestParseWebhookAddCardRejectsNonSuccess(t *testing.T) {
 		fieldCardID:           "card-4",
 		fieldStatus:           statusRejected,
 		fieldSuccess:          false,
+		fieldErrorCode:        "6",
+		fieldNotificationType: notificationTypeAddCard,
+	}
+
+	p := newTestProvider("")
+	event, err := p.ParseWebhook(context.Background(), signedWebhookPayload(t, payload))
+	if err != nil {
+		t.Fatalf("ParseWebhook error: %v", err)
+	}
+	if event.Payment != nil || event.MethodBound != nil {
+		t.Fatalf("event = %+v, want only the binding-failed payload", event)
+	}
+	if event.MethodBindingFailed == nil {
+		t.Fatal("MethodBindingFailed missing")
+	}
+	if event.MethodBindingFailed.BindingID != "request-key-4" {
+		t.Errorf("BindingID: got %q, want %q", event.MethodBindingFailed.BindingID, "request-key-4")
+	}
+	if event.MethodBindingFailed.ErrorCode != "6" {
+		t.Errorf("ErrorCode: got %q, want %q", event.MethodBindingFailed.ErrorCode, "6")
+	}
+}
+
+// TestParseWebhookAddCardRejectedWithoutNotificationType covers the prod fact
+// that add-card notifications may omit NotificationType (ADR 0017): a refused
+// binding is still discriminated by RequestKey and maps to the failed event.
+func TestParseWebhookAddCardRejectedWithoutNotificationType(t *testing.T) {
+	t.Parallel()
+	payload := map[string]any{
+		fieldTerminalKey: testTerminalKey,
+		fieldRequestKey:  "request-key-5",
+		fieldStatus:      statusRejected,
+		fieldSuccess:     false,
+	}
+
+	p := newTestProvider("")
+	event, err := p.ParseWebhook(context.Background(), signedWebhookPayload(t, payload))
+	if err != nil {
+		t.Fatalf("ParseWebhook error: %v", err)
+	}
+	if event.MethodBindingFailed == nil || event.MethodBindingFailed.BindingID != "request-key-5" {
+		t.Fatalf("MethodBindingFailed: got %+v", event.MethodBindingFailed)
+	}
+}
+
+// TestParseWebhookAddCardRejectedForgedTokenStillRejected proves the refused
+// outcome never bypasses verification: a REJECTED payload with a forged
+// signature stays a delivery defect (issue #422).
+func TestParseWebhookAddCardRejectedForgedTokenStillRejected(t *testing.T) {
+	t.Parallel()
+	payload := map[string]any{
+		fieldTerminalKey:      testTerminalKey,
+		fieldRequestKey:       "request-key-6",
+		fieldStatus:           statusRejected,
+		fieldSuccess:          false,
+		fieldNotificationType: notificationTypeAddCard,
+	}
+	payload["Token"] = sign(payload, "wrongPassword")
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal webhook: %v", err)
+	}
+
+	p := newTestProvider("")
+	_, err = p.ParseWebhook(context.Background(), body)
+	if err == nil {
+		t.Fatal("expected error for forged token")
+	}
+	if !strings.Contains(err.Error(), "invalid webhook token") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestParseWebhookAddCardRejectsNonTerminalStatus keeps the guard for
+// notifications without a terminal binding outcome: the application must not
+// resolve a session on an intermediate status (issue #422).
+func TestParseWebhookAddCardRejectsNonTerminalStatus(t *testing.T) {
+	t.Parallel()
+	payload := map[string]any{
+		fieldTerminalKey:      testTerminalKey,
+		fieldRequestKey:       "request-key-7",
+		fieldStatus:           status3DSChecking,
+		fieldSuccess:          false,
 		fieldNotificationType: notificationTypeAddCard,
 	}
 
 	p := newTestProvider("")
 	_, err := p.ParseWebhook(context.Background(), signedWebhookPayload(t, payload))
 	if err == nil {
-		t.Fatal("expected error for unsuccessful binding")
+		t.Fatal("expected error for non-terminal binding status")
 	}
-	if !strings.Contains(err.Error(), "binding not successful") {
+	if !strings.Contains(err.Error(), "binding outcome not final") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

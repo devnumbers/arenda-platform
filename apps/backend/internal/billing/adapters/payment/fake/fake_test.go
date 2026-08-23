@@ -409,6 +409,42 @@ func TestProviderParseWebhook(t *testing.T) {
 	}
 }
 
+// TestProviderParseWebhookCardBindingRefusal covers the fake counterpart of
+// the refused add-card notification: a request-key payload with a failed
+// status parses into the binding-failed event the refused-webhook flow
+// consumes (issue #422).
+func TestProviderParseWebhookCardBindingRefusal(t *testing.T) {
+	t.Parallel()
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	payload, err := json.Marshal(map[string]any{
+		"request_key": "req_refused",
+		"status":      "failed",
+		"error_code":  "6",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	event, err := p.ParseWebhook(context.Background(), payload)
+	if err != nil {
+		t.Fatalf("ParseWebhook error: %v", err)
+	}
+	if event.Payment != nil || event.MethodBound != nil {
+		t.Fatalf("event = %+v, want only the binding-failed payload", event)
+	}
+	if event.MethodBindingFailed == nil {
+		t.Fatal("expected binding-failed event")
+	}
+	if event.MethodBindingFailed.BindingID != "req_refused" || event.MethodBindingFailed.ErrorCode != "6" {
+		t.Errorf("binding-failed notification: got %+v", event.MethodBindingFailed)
+	}
+
+	// Binding payloads with a non-failure status stay unsupported.
+	if _, err := p.ParseWebhook(context.Background(), []byte(`{"request_key":"req_x","status":"pending"}`)); err == nil {
+		t.Error("expected error for unsupported binding webhook status")
+	}
+}
+
 func TestProviderAddPaymentMethodFromToken(t *testing.T) {
 	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)

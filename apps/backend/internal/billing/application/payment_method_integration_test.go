@@ -54,11 +54,11 @@ func (h *methodIntegrationHarness) rawColumn(t *testing.T, methodID uuid.UUID, c
 	return value
 }
 
-// startBinding initiates a card binding for the user and returns the answer
-// together with the single open session row it created.
+// startBinding initiates a card binding for the user and returns the single
+// open session row it created.
 func (h *methodIntegrationHarness) startBinding(
 	t *testing.T, userID uuid.UUID,
-) (billingapp.AddPaymentMethodResult, domain.CardBindingSession) {
+) domain.CardBindingSession {
 	t.Helper()
 	result, err := h.paymentMethodsSvc.AddPaymentMethod(h.ctx(), userID, billingapp.AddPaymentMethodRequest{})
 	if err != nil {
@@ -74,7 +74,7 @@ func (h *methodIntegrationHarness) startBinding(
 	if len(sessions) != 1 {
 		t.Fatalf("open sessions = %d, want 1", len(sessions))
 	}
-	return result, sessions[0]
+	return sessions[0]
 }
 
 // openBindingSessions lists the user's open binding sessions.
@@ -170,7 +170,7 @@ func TestCardBindingFlow_EndToEndOnFakeProvider(t *testing.T) {
 
 	// 1. The binding session is initiated: the answer is the form URL and the
 	// session row carries the provider's request key with its TTL.
-	_, session := h.startBinding(t, userID)
+	session := h.startBinding(t, userID)
 	if session.RequestKey == "" {
 		t.Fatal("session carries no request key")
 	}
@@ -270,6 +270,59 @@ func TestPaymentMethodSync_CompletesOpenBindingWithoutWebhook(t *testing.T) {
 	if len(methods) != 1 {
 		t.Fatalf("methods after repeated sync = %d, want 1", len(methods))
 	}
+}
+
+// TestCardBindingRefusedWebhook_ClosesSessionAndAllowsRebind proves the
+// refused-binding acceptance criteria against real PostgreSQL and the fake
+// provider (issue #422): a validly delivered refusal is a processed outcome
+// (nil error — the HTTP layer maps it to 200, so the provider stops
+// redelivering), the session closes as rejected without a payment method, the
+// user's sync reflects the failure, and a fresh binding afterwards completes.
+func TestCardBindingRefusedWebhook_ClosesSessionAndAllowsRebind(t *testing.T) {
+	t.Parallel()
+	h := newMethodIntegrationHarness(t)
+	userID := h.seedMethodUser(t)
+
+	session := h.startBinding(t, userID)
+
+	// The provider refuses the binding: the fake's request-key payload runs
+	// through the same synchronous webhook path a T-Kassa notification takes.
+	payload := []byte(`{"request_key":"` + session.RequestKey + `","status":"failed","error_code":"6"}`)
+	if err := h.paymentsSvc.HandleWebhook(h.ctx(), testProviderFake, payload); err != nil {
+		t.Fatalf("HandleWebhook(refused binding) error = %v, want processed (200)", err)
+	}
+
+	closed := h.bindingByRequestKey(t, session.RequestKey)
+	if closed.Status != domain.CardBindingRejected {
+		t.Fatalf("session status = %q, want rejected", closed.Status)
+	}
+	if open := h.openBindingSessions(t, userID); len(open) != 0 {
+		t.Fatalf("open sessions = %d, want 0 after the refusal", len(open))
+	}
+	if n := h.countRows("SELECT count(*) FROM payment_methods WHERE user_id = $1", userID); n != 0 {
+		t.Fatalf("payment methods = %d, want none from a refused binding", n)
+	}
+
+	// The user's sync reflects the failure: no methods, no error.
+	methods, err := h.paymentMethodsSvc.SyncPaymentMethods(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods() error = %v", err)
+	}
+	if len(methods) != 0 {
+		t.Fatalf("methods after sync = %d, want 0", len(methods))
+	}
+
+	// A repeated delivery of the refusal is an idempotent no-op.
+	if err := h.paymentsSvc.HandleWebhook(h.ctx(), testProviderFake, payload); err != nil {
+		t.Fatalf("HandleWebhook(redelivery) error = %v", err)
+	}
+
+	// Re-binding is possible: a fresh session completes through the local
+	// confirmation and produces the single active method.
+	next := h.startBinding(t, userID)
+	h.confirmFakeCardBinding(t, next.RequestKey)
+	method := h.activeMethodOf(t, userID)
+	h.requireMethodChargesSubscription(t, userID, method.ID)
 }
 
 // TestPaymentMethodRepository_DuplicateTokenConvergesByHash proves the
