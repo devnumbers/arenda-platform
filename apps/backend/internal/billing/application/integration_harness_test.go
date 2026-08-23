@@ -25,6 +25,7 @@ import (
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
 // integrationBaseTime anchors the fake clock so TTL and validity behaviour is
@@ -196,6 +197,13 @@ var seedUserCounter atomic.Int64
 
 // seedUser inserts a users row (the subscriptions FK target) and returns its id.
 func (h *integrationHarness) seedUser() uuid.UUID {
+	return h.seedUserWithRole(actor.RoleOwner)
+}
+
+// seedUserWithRole inserts a users row with an explicit role (the audit log's
+// actor FK target); the admin-gate composition test seeds the acting admin
+// this way (issue #424).
+func (h *integrationHarness) seedUserWithRole(role actor.Role) uuid.UUID {
 	h.t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -203,7 +211,7 @@ func (h *integrationHarness) seedUser() uuid.UUID {
 	}
 	phone := fmt.Sprintf("+7999%010d", seedUserCounter.Add(1)%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
-		"INSERT INTO users (id, phone, role) VALUES ($1, $2, 'owner')", id, phone,
+		"INSERT INTO users (id, phone, role) VALUES ($1, $2, $3)", id, phone, role,
 	); err != nil {
 		h.t.Fatalf("seed user: %v", err)
 	}

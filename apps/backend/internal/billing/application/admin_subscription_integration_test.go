@@ -32,8 +32,10 @@ func newAdminSubscriptionHarness(t *testing.T) *adminSubscriptionHarness {
 }
 
 // seedGraceSubscription creates a paid pro subscription inside an open grace
-// window ending at the given offset from the fixed now.
-func (h *adminSubscriptionHarness) seedGraceSubscription(t *testing.T, graceIn time.Duration) domain.Subscription {
+// window ending at the given offset from the fixed now. It lives on the
+// payment harness so composition-level harnesses can grow a grace fixture
+// too (the admin-gate composition test of issue #424 reuses it).
+func (h *paymentIntegrationHarness) seedGraceSubscription(t *testing.T, graceIn time.Duration) domain.Subscription {
 	t.Helper()
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 	graceUntil := h.clock.Now().Add(graceIn)
