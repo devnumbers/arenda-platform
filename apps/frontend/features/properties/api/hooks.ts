@@ -58,7 +58,7 @@ export function usePropertiesWithMeta(
       const response = await apiClient<PropertiesResponse>('/properties');
       return {
         items: response.items.map(mapPropertyResponse),
-        hiddenSharedCount: response.hidden_shared_count ?? 0,
+        hiddenSharedCount: response.hidden_shared_count,
       };
     },
     enabled: options.enabled,

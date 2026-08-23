@@ -124,7 +124,7 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
                 if (pendingSkipWaiting.current) {
                     activateWaiting();
                 }
-            } else if (document.visibilityState === 'visible') {
+            } else {
                 // User returned. If the SW took over while hidden, reload now.
                 if (needsReloadOnVisible.current) {
                     needsReloadOnVisible.current = false;

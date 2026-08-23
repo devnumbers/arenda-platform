@@ -23,8 +23,7 @@ export function useStandalone(): boolean {
         const update = (): void => setIsStandalone(isStandaloneMode());
         update();
 
-        const mql = window.matchMedia?.(STANDALONE_MEDIA_QUERY);
-        if (!mql) return;
+        const mql = window.matchMedia(STANDALONE_MEDIA_QUERY);
         const onChange = (): void => update();
         mql.addEventListener('change', onChange);
         return () => mql.removeEventListener('change', onChange);

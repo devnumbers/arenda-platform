@@ -287,6 +287,9 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-non-null-assertion": "error",
       "@typescript-eslint/no-base-to-string": "error",
       "@typescript-eslint/require-await": "error",
+      // Wave C (bar #330, ticket #404): dead conditionals are compile-time
+      // lies about the types beneath them.
+      "@typescript-eslint/no-unnecessary-condition": "error",
       // React-friendly options treat config-level noise with options, not
       // suppressions: arrow shorthand `() => void discard()` is the canonical
       // promise-discard spelling, and number interpolation in templates is

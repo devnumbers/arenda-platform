@@ -47,7 +47,7 @@ export function DashboardPage(): JSX.Element {
 
     return (
         <div className={styles.page}>
-            <UserHeader name={me?.name} tariff={me?.subscription?.tariff?.name}/>
+            <UserHeader name={me?.name} tariff={me?.subscription?.tariff.name}/>
             <NearestLease leases={leases} properties={properties} isLoading={leasesLoading || propertiesLoading}/>
             <PropertiesSection properties={properties} isLoading={propertiesLoading}/>
             <FinanceSection properties={properties} isLoading={propertiesLoading || operationsLoading}/>

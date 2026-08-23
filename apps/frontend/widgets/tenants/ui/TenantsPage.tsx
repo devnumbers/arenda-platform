@@ -46,11 +46,11 @@ export function TenantsPage(): JSX.Element {
                 <TenantsError onRetry={() => void query.refetch()} isLoading={query.isFetching}/>
             )}
 
-            {!query.isPending && !query.isError && (query.data?.length ?? 0) === 0 && (
+            {!query.isPending && !query.isError && query.data.length === 0 && (
                 <TenantsEmptyState/>
             )}
 
-            {!query.isPending && !query.isError && (query.data?.length ?? 0) > 0 && (
+            {!query.isPending && !query.isError && query.data.length > 0 && (
                 <>
                     <TenantSection title="Текущие арендаторы" tenants={active}/>
                     <TenantSection title="Остальные" tenants={past}/>

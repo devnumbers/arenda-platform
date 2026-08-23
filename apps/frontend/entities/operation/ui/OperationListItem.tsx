@@ -38,7 +38,7 @@ export function OperationListItem({ operation }: OperationListItemProps): JSX.El
             <ArchiveBold />
           </span>
         )}
-        {StatusBadgeIcon && <StatusBadgeIcon className={styles.statusBadge} aria-hidden="true" />}
+        <StatusBadgeIcon className={styles.statusBadge} aria-hidden="true" />
       </span>
       <span className={styles.main}>
         <span className={styles.name}>{operation.name}</span>

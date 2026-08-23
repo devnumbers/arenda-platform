@@ -9,5 +9,5 @@ const labels: Record<LeaseStatus, string> = {
 };
 
 export function getLeaseStatusLabel(status: LeaseStatus): string {
-  return labels[status] ?? status;
+  return labels[status];
 }

@@ -44,7 +44,7 @@ function runPromiseScenario<T>(
     .catch((error: unknown) => {
       notify.close(loadingKey);
       notify.error(
-        (error as ApiError).detail ?? messages.errorFallback,
+        getApiErrorDetail(error) ?? messages.errorFallback,
         options,
       );
     });

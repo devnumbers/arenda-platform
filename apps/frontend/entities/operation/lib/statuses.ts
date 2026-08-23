@@ -23,5 +23,5 @@ const statusLabelMap: Record<OperationStatus, string> = {
 };
 
 export function getOperationStatusLabel(status: OperationStatus): string {
-  return statusLabelMap[status] ?? status;
+  return statusLabelMap[status];
 }

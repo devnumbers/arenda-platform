@@ -38,9 +38,6 @@ describe('weekDates', () => {
   it('все семь дат — последовательные дни от понедельника', () => {
     const days = weekDates('2026-10-14');
     const monday = days[0];
-    if (monday === undefined) {
-      throw new Error('weekDates must return seven dates');
-    }
     for (let i = 1; i < 7; i += 1) {
       expect(days[i]).toBe(addDays(monday, i));
     }

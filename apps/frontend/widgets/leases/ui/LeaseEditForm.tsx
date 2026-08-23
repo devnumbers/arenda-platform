@@ -305,7 +305,7 @@ export function LeaseEditForm({leaseId, returnTo, preselectedTenantContactId}: L
 
             {leaseQuery.isPending && <LeaseEditFormLoading />}
 
-            {!leaseQuery.isPending && (leaseQuery.isError || !leaseQuery.data) && (
+            {!leaseQuery.isPending && leaseQuery.isError && (
                 <LeaseEditFormError
                     onRetry={() => void leaseQuery.refetch()}
                     isLoading={leaseQuery.isFetching}

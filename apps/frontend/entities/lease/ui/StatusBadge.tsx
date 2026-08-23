@@ -27,7 +27,7 @@ export function StatusBadge({ status }: StatusBadgeProps): JSX.Element {
       <Icon size="s">
         {status === 'awaiting_start' ? <BadgeInfo /> : <Good />}
       </Icon>
-      <span className={styles.label}>{statusLabels[status] ?? statusLabels.active}</span>
+      <span className={styles.label}>{statusLabels[status]}</span>
     </span>
   );
 }

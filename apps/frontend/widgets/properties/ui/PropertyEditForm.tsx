@@ -182,7 +182,7 @@ export function PropertyEditForm({
 
         setSubmitAttempted(true);
 
-        if (!canSubmit || !type) return;
+        if (!canSubmit) return;
 
         try {
             await updateProperty.mutateAsync({
@@ -215,7 +215,7 @@ export function PropertyEditForm({
         return <PropertyEditFormLoading />;
     }
 
-    if (propertyQuery.isError || !propertyQuery.data) {
+    if (propertyQuery.isError) {
         return (
             <PropertyEditFormError
                 onRetry={() => void propertyQuery.refetch()}

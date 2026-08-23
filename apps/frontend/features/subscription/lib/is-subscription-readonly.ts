@@ -26,9 +26,7 @@ export function isSubscriptionReadonly(subscription: Subscription | null | undef
     return new Date(validUntil) < new Date();
   }
 
-  if (status === 'active' || status === 'cancelled') {
-    return isValidUntilExpired(subscription);
-  }
-
-  return false;
+  // 'active' и 'cancelled' — полный набор статусов подписки, доступность
+  // определяется только сроком действия.
+  return isValidUntilExpired(subscription);
 }

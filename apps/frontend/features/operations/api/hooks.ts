@@ -84,7 +84,7 @@ function normalizeOperationsFilters(
 ): Record<string, string | string[]> {
   const result: Record<string, string | string[]> = {};
   Object.entries(filters).forEach(([key, value]) => {
-    if (value === undefined || value === '') {
+    if (value === '') {
       return;
     }
     if (typeof value === 'number' || typeof value === 'boolean') {

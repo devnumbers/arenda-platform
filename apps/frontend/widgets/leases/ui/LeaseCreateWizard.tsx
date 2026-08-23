@@ -145,7 +145,7 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
         );
     }
 
-    if (propertyQuery.isError || propertyLeasesQuery.isError || !propertyQuery.data) {
+    if (propertyQuery.isError || propertyLeasesQuery.isError) {
         return (
             <div className={styles.root}>
                 <WizardHeader

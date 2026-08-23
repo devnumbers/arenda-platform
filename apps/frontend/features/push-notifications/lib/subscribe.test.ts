@@ -17,14 +17,11 @@ function makeSubscription(overrides: Partial<SubscriptionLike> = {}): Subscripti
                 view.fill(1);
                 return buf;
             }
-            if (name === 'auth') {
-                // 16 bytes of 0x02
-                const buf = new ArrayBuffer(16);
-                const view = new Uint8Array(buf);
-                view.fill(2);
-                return buf;
-            }
-            return null;
+            // 16 bytes of 0x02 — ключ auth (в union только p256dh и auth)
+            const buf = new ArrayBuffer(16);
+            const view = new Uint8Array(buf);
+            view.fill(2);
+            return buf;
         },
         ...overrides,
     };
@@ -69,8 +66,7 @@ describe('subscriptionToPayload', () => {
             makeSubscription({
                 getKey(name) {
                     if (name === 'p256dh') return p256dh.slice().buffer;
-                    if (name === 'auth') return auth.slice().buffer;
-                    return null;
+                    return auth.slice().buffer;
                 },
             }),
         );
