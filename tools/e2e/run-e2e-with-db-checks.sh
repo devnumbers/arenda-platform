@@ -211,7 +211,7 @@ send_email_code() {
   local phone="$1"
   local email="$2"
   log "Sending auth code to $phone / $email ..."
-  curl -fsS -m 10 -X POST "$BASE_URL/auth/email/send" \
+  curl -fsS -m 10 -X POST "$BASE_URL/auth/send" \
     -H "Content-Type: application/json" \
     -d "{\"phone\":\"$phone\",\"email\":\"$email\"}" >/dev/null
 }
@@ -228,11 +228,13 @@ extract_code_for_email() {
   for _ in $(seq 1 30); do
     if [[ -f "$log_file" ]]; then
       local code
-      # The fake sender logs: "fake email sent", "email": "...", "code": "123456"
+      # The fake sender logs "fake email sent" with the code in the message
+      # body: text="Код для входа в Рентли: 123456\n…". Older builds logged it
+      # as code=NNNNNN / "code": "NNNNNN" — both spellings are matched.
       code=$(tail -n 500 "$log_file" 2>/dev/null \
         | grep -aF "$email" \
         | grep -aF "fake email sent" \
-        | grep -aoE 'code[=:] ?[0-9]{6}' \
+        | grep -aoE 'code[=:] ?[0-9]{6}|Рентли: ?[0-9]{6}' \
         | tail -1 \
         | grep -aoE '[0-9]{6}' || true)
       if [[ -n "$code" ]]; then
@@ -571,7 +573,7 @@ auth_and_upgrade() {
   }
 
   local verify_response
-  verify_response=$(curl -fsS -m 10 -X POST "$BASE_URL/auth/email/verify" \
+  verify_response=$(curl -fsS -m 10 -X POST "$BASE_URL/auth/verify" \
     -H "Content-Type: application/json" \
     -D - \
     -d "{\"phone\":\"$phone\",\"email\":\"$email\",\"code\":\"$code\"}" 2>/dev/null) || {
