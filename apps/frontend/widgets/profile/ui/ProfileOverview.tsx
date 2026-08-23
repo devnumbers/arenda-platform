@@ -65,7 +65,7 @@ export function ProfileOverview(): JSX.Element {
                               <Icon size="s">
                                 <StarColored/>
                               </Icon>
-                                <span>{getTariffLabel(me.subscription?.tariff?.name)}</span>
+                                <span>{getTariffLabel(me.subscription?.tariff.name)}</span>
                         </span>
                     </div>
                     <p className={styles.userField}>{me.phone}</p>

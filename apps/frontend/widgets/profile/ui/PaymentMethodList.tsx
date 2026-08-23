@@ -176,7 +176,7 @@ export function PaymentMethodList({
     );
   }
 
-  if (isPending || !items) {
+  if (isPending) {
     return <PaymentMethodListSkeleton />;
   }
 

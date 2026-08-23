@@ -64,7 +64,7 @@ export function TimezoneSelect({value, onChange, error, disabled, required}: Tim
 
     const handleSelect = useCallback(
         (timezone: string) => {
-            setInputValue(labelFor(timezone) ?? '');
+            setInputValue(labelFor(timezone));
             onChange(timezone);
             setIsOpen(false);
             setActiveIndex(null);

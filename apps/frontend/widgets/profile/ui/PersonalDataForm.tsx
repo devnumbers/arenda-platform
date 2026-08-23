@@ -199,7 +199,7 @@ export function PersonalDataForm(): JSX.Element {
           </Button>
         </div>
       )}
-      {!isError && (isPending || !me) && (
+      {!isError && isPending && (
         <form className={styles.form}>
           <div className={styles.fields}>
             <TextField label="Фамилия" placeholder=" " value="" disabled fullWidth />
@@ -215,7 +215,7 @@ export function PersonalDataForm(): JSX.Element {
           </div>
         </form>
       )}
-      {!isError && !isPending && me && (
+      {!isError && !isPending && (
         <PersonalDataFormView key={me.id} me={me} />
       )}
     </>

@@ -33,8 +33,8 @@ export function AccountOverview(): JSX.Element {
                     </Button>
                 </div>
             )}
-            {!isError && (isPending || !me) && <AccountOverviewSkeleton/>}
-            {!isError && !isPending && me && (
+            {!isError && isPending && <AccountOverviewSkeleton/>}
+            {!isError && !isPending && (
                 <section className={styles.section}>
                     <NextLink
                         href={ROUTES.profileChangePhone}

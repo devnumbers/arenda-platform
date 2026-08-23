@@ -98,7 +98,7 @@ export function PaymentList(): JSX.Element {
     );
   }
 
-  if (isPending || !payments) {
+  if (isPending) {
     return <PaymentListSkeleton />;
   }
 

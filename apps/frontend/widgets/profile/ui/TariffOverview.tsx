@@ -96,7 +96,7 @@ export function TariffOverview(): JSX.Element {
         );
     }
 
-    if (isPending || !subscription) {
+    if (isPending) {
         return <TariffOverviewSkeleton/>;
     }
 

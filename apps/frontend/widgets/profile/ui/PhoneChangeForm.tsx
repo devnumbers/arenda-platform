@@ -137,7 +137,7 @@ function PhoneChangeFormView({ currentPhone }: { currentPhone: string }): JSX.El
             placeholder="+7 (999) 000-00-00"
             value={phone}
             onChange={handlePhoneChange}
-            error={phoneError || (isSamePhone ? 'Новый номер совпадает с текущим' : undefined)}
+            error={phoneError ?? (isSamePhone ? 'Новый номер совпадает с текущим' : undefined)}
             fullWidth
             ref={phoneFieldRef}
           />
@@ -223,7 +223,7 @@ export function PhoneChangeForm(): JSX.Element {
           </Button>
         </div>
       )}
-      {!isMeError && (isMeLoading || !me) && (
+      {!isMeError && isMeLoading && (
         <form className={styles.form}>
           <div className={styles.fields}>
             <TextField
@@ -242,7 +242,7 @@ export function PhoneChangeForm(): JSX.Element {
           </div>
         </form>
       )}
-      {!isMeError && !isMeLoading && me && <PhoneChangeFormView currentPhone={me.phone} />}
+      {!isMeError && !isMeLoading && <PhoneChangeFormView currentPhone={me.phone} />}
     </>
   );
 }

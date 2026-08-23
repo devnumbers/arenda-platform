@@ -233,7 +233,7 @@ export function NotificationSettings(): JSX.Element {
           </Button>
         </div>
       )}
-      {!isError && (isPending || !data) && (
+      {!isError && isPending && (
         <div className={styles.container}>
           <p className={styles.notificationsHint}>
             Напоминания приходят на вашу почту.
@@ -241,7 +241,7 @@ export function NotificationSettings(): JSX.Element {
           <NotificationChannelMatrix disabled />
         </div>
       )}
-      {!isError && !isPending && data && (
+      {!isError && !isPending && (
         <NotificationSettingsView preferences={data} />
       )}
     </>

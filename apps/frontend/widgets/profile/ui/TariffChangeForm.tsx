@@ -144,7 +144,7 @@ function TariffChangeContent({
         .then((data) => {
           notify.close(loadingToastId);
 
-          if (data?.confirmUrl) {
+          if (data.confirmUrl) {
             // Upgrade: платёж только создан (pending) — редирект на оплату
             // без success-toast; тариф применится по webhook CONFIRMED.
             window.location.href = data.confirmUrl;
@@ -302,10 +302,8 @@ export function TariffChangeForm(): JSX.Element {
           </Button>
         </div>
       )}
-      {!isError && (isPending || !tariffs || !subscription) && (
-        <TariffChangeSkeleton />
-      )}
-      {!isError && !isPending && tariffs && subscription && (
+      {!isError && isPending && <TariffChangeSkeleton />}
+      {!isError && !isPending && (
         <TariffChangeContent
           tariffs={tariffs}
           subscription={subscription}
