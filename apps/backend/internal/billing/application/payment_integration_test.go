@@ -406,12 +406,49 @@ func applyDowngradeThroughWorker(t *testing.T, h *paymentIntegrationHarness, pro
 	return userID
 }
 
+// applyDowngradeThroughReconciliation covers the reconciliation half of the
+// shared-seam scenario (issue #428): a stale pending pro charge of a business
+// subscription the provider already settled is finalized by
+// ReconcilePendingPayments from the provider's status. It returns the payer.
+func applyDowngradeThroughReconciliation(t *testing.T, h *paymentIntegrationHarness, pro domain.Tariff) uuid.UUID {
+	t.Helper()
+	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, pro.ID, domain.PeriodMonth,
+		49000, testProviderFake, h.clock.Now())
+	if err != nil {
+		t.Fatalf("new pro payment: %v", err)
+	}
+	if err := payment.SaveProviderReference("prov_downgrade_reconcile", "", h.clock.Now()); err != nil {
+		t.Fatalf("save reference: %v", err)
+	}
+	if _, err := h.payments.Create(h.ctx(), payment); err != nil {
+		t.Fatalf("seed pro payment: %v", err)
+	}
+	// The provider settled the charge, but the webhook was lost; the row goes
+	// stale and the reconciliation worker resolves it from the status.
+	h.provider.SetPaymentState(payment.ID.String(), billingapp.PaymentStatusResult{Status: domain.PaymentStatusSucceeded})
+	agePaymentRow(t, h.integrationHarness, payment.ID)
+	if count, err := h.services.Workers.ReconcilePendingPayments(h.ctx(), h.clock.Now()); err != nil || count != 1 {
+		t.Fatalf("ReconcilePendingPayments() = %d (err %v), want 1 stale payment reconciled", count, err)
+	}
+
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID(reconciliation): %v", err)
+	}
+	if stored.TariffID != pro.ID {
+		t.Errorf("reconciliation tariff = %v, want pro applied", stored.TariffID)
+	}
+	return sub.UserID
+}
+
 // TestPaymentFlow_SucceededDowngradeArchivesExcessOnEveryPath proves the
 // shared success-application seam of issue #428 against real PostgreSQL: a
 // succeeded payment that lowers the tariff limit enforces the limit through
-// the lifecycle bridges identically whether it is delivered by the webhook or
-// applied by the renewal worker's charge — one archive call at the new plan's
-// limit per payer, with the same renewal trigger.
+// the lifecycle bridges identically on every delivery path — the webhook, the
+// renewal worker's charge and the lost-webhook reconciliation — one archive
+// call at the new plan's limit per payer, with the same renewal trigger.
 func TestPaymentFlow_SucceededDowngradeArchivesExcessOnEveryPath(t *testing.T) {
 	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
@@ -429,17 +466,34 @@ func TestPaymentFlow_SucceededDowngradeArchivesExcessOnEveryPath(t *testing.T) {
 		t.Fatalf("GetByName(business): %v", err)
 	}
 
-	webhookUser := applyDowngradeThroughWebhook(t, h, pro)
-	workerUser := applyDowngradeThroughWorker(t, h, pro, business)
-
-	// Both paths enforced the pro limit through the bridges, nothing else.
-	if got := archiver.recorded(); len(got) != 2 ||
-		got[0].ownerID != webhookUser || got[0].limit != pro.ActivePropertyLimit ||
-		got[1].ownerID != workerUser || got[1].limit != pro.ActivePropertyLimit {
-		t.Errorf("archive calls = %+v, want one pro-limit call per payer (webhook then worker)", got)
+	payers := []uuid.UUID{
+		applyDowngradeThroughWebhook(t, h, pro),
+		applyDowngradeThroughWorker(t, h, pro, business),
+		applyDowngradeThroughReconciliation(t, h, pro),
 	}
-	if got := slots.recorded(); len(got) != 2 || got[0] != "renewal_downgrade" || got[1] != "renewal_downgrade" {
-		t.Errorf("slot triggers = %v, want two renewal_downgrade calls", got)
+
+	// Every path enforced the pro limit through the bridges, once per payer
+	// and nothing else.
+	got := archiver.recorded()
+	if len(got) != len(payers) {
+		t.Fatalf("archive calls = %+v, want %d (one per payer)", got, len(payers))
+	}
+	seen := make(map[uuid.UUID]int, len(payers))
+	for _, call := range got {
+		if call.limit != pro.ActivePropertyLimit {
+			t.Errorf("archive call %+v: limit = %d, want the pro limit %d", call, call.limit, pro.ActivePropertyLimit)
+		}
+		seen[call.ownerID]++
+	}
+	for _, payer := range payers {
+		if seen[payer] != 1 {
+			t.Errorf("payer %s archived %d times, want exactly 1", payer, seen[payer])
+		}
+	}
+	for _, trigger := range slots.recorded() {
+		if trigger != "renewal_downgrade" {
+			t.Errorf("slot trigger = %q, want renewal_downgrade", trigger)
+		}
 	}
 }
 

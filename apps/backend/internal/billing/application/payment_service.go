@@ -519,11 +519,7 @@ func (s *PaymentService) finalizeSucceededPayment(
 	if err := stores.payments.Update(ctx, payment); err != nil {
 		return fmt.Errorf("mark payment succeeded: %w", err)
 	}
-	applied, err := applySucceededPayment(ctx, stores, payment, now)
-	if err != nil {
-		return err
-	}
-	if err := enforcePaymentTariffLimit(ctx, stores, payment, applied); err != nil {
+	if _, err := applySucceededPayment(ctx, stores, payment, now); err != nil {
 		return err
 	}
 	if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -545,7 +541,12 @@ func (s *PaymentService) finalizeSucceededPayment(
 // payment inside the finalizing transaction: an upgrade switches the tariff at
 // the full price of the new plan with the period counted from the payment
 // moment and auto-renew on; a same-tariff payment is a renewal. The transition
-// log records the applied change with the payment that caused it. A payment
+// log records the applied change with the payment that caused it, and when the
+// applied transition switched the tariff the new plan's limit is enforced in
+// the same transaction (issue #428) — the owner's excess active properties
+// archived and the excess recipient slots suspended; an upgrade to a higher
+// limit archives nothing, a renewal into a cheaper scheduled target archives
+// exactly like the renewal worker did before the seam was shared. A payment
 // the subscription already reflects is a no-op — the zero transition it
 // returns keeps duplicate deliveries, reconciliations and worker retries
 // idempotent. The freshness guard of issue #428 extends the no-op to a success
@@ -577,7 +578,7 @@ func applySucceededPayment(
 		return domain.Transition{}, fmt.Errorf("get payment tariff: %w", err)
 	}
 
-	return stores.applyTransition(ctx, &sub,
+	applied, err := stores.applyTransition(ctx, &sub,
 		func(s *domain.Subscription) error {
 			if s.TariffID == payment.TariffID {
 				return s.ApplyRenewal(payment.ID, payment.Period, now)
@@ -597,33 +598,17 @@ func applySucceededPayment(
 			paymentID: new(payment.ID),
 		},
 	)
-}
-
-// enforcePaymentTariffLimit is the limit tail of the success-application seam
-// (issue #428): when the applied transition switched the tariff, the new
-// plan's limit is enforced in the same transaction — the owner's excess
-// active properties archived and the excess recipient slots suspended. An
-// upgrade to a higher limit archives nothing; a renewal into a cheaper
-// scheduled target archives exactly like the renewal worker did before the
-// seam was shared. A no-op application (a duplicate or a superseded success)
-// changes no tariff, so it enforces nothing.
-func enforcePaymentTariffLimit(
-	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, applied domain.Transition,
-) error {
-	if !transitionChangedTariff(applied, payment.TariffID) {
-		return nil
-	}
-	target, err := stores.tariffs.GetByID(ctx, payment.TariffID)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return fmt.Errorf("payment %s references missing tariff %s: %w", payment.ID, payment.TariffID, ErrTariffNotFound)
+		return domain.Transition{}, err
+	}
+	if transitionChangedTariff(applied, payment.TariffID) {
+		// The applied payment switched the tariff: the new plan's limit takes
+		// effect with the same commit.
+		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, triggerRenewalDowngrade); err != nil {
+			return domain.Transition{}, fmt.Errorf("enforce tariff limit after payment downgrade: %w", err)
 		}
-		return fmt.Errorf("get applied tariff: %w", err)
 	}
-	if err := stores.enforceTariffLimit(ctx, payment.UserID, target.ActivePropertyLimit, triggerRenewalDowngrade); err != nil {
-		return fmt.Errorf("enforce tariff limit after payment downgrade: %w", err)
-	}
-	return nil
+	return applied, nil
 }
 
 // applyRefundNotification records a full refund reported by the provider and

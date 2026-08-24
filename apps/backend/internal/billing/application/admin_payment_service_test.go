@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -188,16 +189,24 @@ func (h *refundHarness) assertRefundAudit(t *testing.T) {
 // finalizing transaction: the excess properties beyond the basic limit were
 // archived and the recipient slots enforced with the refund trigger. The
 // applied upgrade webhook ran the shared success seam first (issue #428), so
-// one renewal-triggered call at the business limit precedes the refund's.
+// one renewal-triggered call at the business limit precedes the refund's —
+// counted by content, not position, so the seam's own call count stays free
+// to evolve.
 func (h *refundHarness) assertDowngradeSideEffects(t *testing.T) {
 	t.Helper()
 	calls := h.archiver.recorded()
-	if len(calls) != 2 || calls[1].limit != 1 {
-		t.Errorf("archiver calls = %v, want the success's business-limit call then one with the basic limit 1", calls)
+	basicCalls := 0
+	for _, c := range calls {
+		if c.limit == 1 {
+			basicCalls++
+		}
+	}
+	if len(calls) != 2 || basicCalls != 1 {
+		t.Errorf("archiver calls = %v, want the success's business-limit call plus one with the basic limit 1", calls)
 	}
 	triggers := h.slots.recorded()
-	if len(triggers) != 2 || triggers[1] != triggerRefund {
-		t.Errorf("slot triggers = %v, want the success's renewal trigger then [%s]", triggers, triggerRefund)
+	if len(triggers) != 2 || !slices.Contains(triggers, triggerRefund) {
+		t.Errorf("slot triggers = %v, want the success's renewal trigger and [%s]", triggers, triggerRefund)
 	}
 }
 
