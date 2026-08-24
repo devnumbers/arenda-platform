@@ -45,11 +45,12 @@ func systemRefundActor() refundActor {
 	}
 }
 
-// runRefundTx runs work like runInTx plus the lifecycle bridges bound to the
-// transaction — the transaction shape of every refund application, because the
-// refund downgrades the subscription and the excess archiving belongs to the
-// same commit as the payment change.
-func (s *PaymentService) runRefundTx(ctx context.Context, work func(*txStores) error) error {
+// runLifecycleTx runs work like runInTx plus the lifecycle bridges bound to
+// the transaction — the transaction shape of every payment application that
+// can lower a tariff limit: the refund's downgrade to basic (issue #254) and
+// the success application's tariff switch (issue #428), whose excess
+// archiving belongs to the same commit as the payment change.
+func (s *PaymentService) runLifecycleTx(ctx context.Context, work func(*txStores) error) error {
 	return s.runInTxWithBridges(ctx, s.archiverSource, s.slotSource, work)
 }
 
@@ -241,7 +242,7 @@ func (s *PaymentService) resolveDuplicateRefund(
 // an idempotent no-op — the persisted state wins) and applies the subscription
 // effects of the refund with the given actor's attribution.
 func (s *PaymentService) finalizeRefund(ctx context.Context, paymentID uuid.UUID, actor refundActor) error {
-	return s.runRefundTx(ctx, func(stores *txStores) error {
+	return s.runLifecycleTx(ctx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, paymentID)
 		if err != nil {
 			return err

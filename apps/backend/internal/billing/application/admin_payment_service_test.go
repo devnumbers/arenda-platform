@@ -186,16 +186,18 @@ func (h *refundHarness) assertRefundAudit(t *testing.T) {
 
 // assertDowngradeSideEffects checks the lifecycle bridges ran inside the
 // finalizing transaction: the excess properties beyond the basic limit were
-// archived and the recipient slots enforced with the refund trigger.
+// archived and the recipient slots enforced with the refund trigger. The
+// applied upgrade webhook ran the shared success seam first (issue #428), so
+// one renewal-triggered call at the business limit precedes the refund's.
 func (h *refundHarness) assertDowngradeSideEffects(t *testing.T) {
 	t.Helper()
 	calls := h.archiver.recorded()
-	if len(calls) != 1 || calls[0].limit != 1 {
-		t.Errorf("archiver calls = %v, want one call with the basic limit 1", calls)
+	if len(calls) != 2 || calls[1].limit != 1 {
+		t.Errorf("archiver calls = %v, want the success's business-limit call then one with the basic limit 1", calls)
 	}
 	triggers := h.slots.recorded()
-	if len(triggers) != 1 || triggers[0] != triggerRefund {
-		t.Errorf("slot triggers = %v, want [%s]", triggers, triggerRefund)
+	if len(triggers) != 2 || triggers[1] != triggerRefund {
+		t.Errorf("slot triggers = %v, want the success's renewal trigger then [%s]", triggers, triggerRefund)
 	}
 }
 

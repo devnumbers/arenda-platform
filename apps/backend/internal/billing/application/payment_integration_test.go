@@ -338,6 +338,111 @@ func (h *paymentIntegrationHarness) deliverWebhook(
 	}
 }
 
+// applyDowngradeThroughWebhook covers the webhook half of the shared-seam
+// scenario (issue #428): a pending merchant-initiated pro charge of a business
+// subscription (the scheduled-downgrade renewal) succeeds at the provider and
+// the webhook delivers it. It returns the payer.
+func applyDowngradeThroughWebhook(t *testing.T, h *paymentIntegrationHarness, pro domain.Tariff) uuid.UUID {
+	t.Helper()
+	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, pro.ID, domain.PeriodMonth,
+		49000, testProviderFake, h.clock.Now())
+	if err != nil {
+		t.Fatalf("new pro payment: %v", err)
+	}
+	if err := payment.SaveProviderReference("prov_downgrade_webhook", "", h.clock.Now()); err != nil {
+		t.Fatalf("save reference: %v", err)
+	}
+	if _, err := h.payments.Create(h.ctx(), payment); err != nil {
+		t.Fatalf("seed pro payment: %v", err)
+	}
+	h.deliverWebhook(t, "prov_downgrade_webhook", domain.PaymentStatusSucceeded, payment.ID)
+
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID(webhook): %v", err)
+	}
+	if stored.TariffID != pro.ID {
+		t.Errorf("webhook tariff = %v, want pro applied", stored.TariffID)
+	}
+	return sub.UserID
+}
+
+// applyDowngradeThroughWorker covers the worker half of the shared-seam
+// scenario (issue #428): an expired business subscription with a due scheduled
+// downgrade to pro is charged by the renewal phase and the success is applied
+// through the same seam the webhook ends in. It returns the payer.
+func applyDowngradeThroughWorker(t *testing.T, h *paymentIntegrationHarness, pro, business domain.Tariff) uuid.UUID {
+	t.Helper()
+	userID, sub := seedPaidProSubscription(t, h.integrationHarness)
+	expired := h.clock.Now().Add(-2 * time.Hour)
+	sub.TariffID = business.ID
+	sub.ValidUntil = &expired
+	if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
+		t.Fatalf("set business: %v", err)
+	}
+	if _, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), userID, billingapp.ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	}); err != nil {
+		t.Fatalf("ChangeTariff(pro) error = %v", err)
+	}
+	seedActiveMethod(t, h.integrationHarness, userID, "tok_seam_worker")
+	if _, err := h.services.Workers.ProcessScheduledChanges(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessScheduledChanges(): %v", err)
+	}
+	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessRenewals(): %v", err)
+	}
+
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID(worker): %v", err)
+	}
+	if stored.TariffID != pro.ID {
+		t.Errorf("worker tariff = %v, want pro applied", stored.TariffID)
+	}
+	return userID
+}
+
+// TestPaymentFlow_SucceededDowngradeArchivesExcessOnEveryPath proves the
+// shared success-application seam of issue #428 against real PostgreSQL: a
+// succeeded payment that lowers the tariff limit enforces the limit through
+// the lifecycle bridges identically whether it is delivered by the webhook or
+// applied by the renewal worker's charge — one archive call at the new plan's
+// limit per payer, with the same renewal trigger.
+func TestPaymentFlow_SucceededDowngradeArchivesExcessOnEveryPath(t *testing.T) {
+	t.Parallel()
+	h := newPaymentIntegrationHarness(t)
+	archiver := &capturingArchiver{}
+	slots := &capturingSlots{}
+	// The bridges go to the payment service — the seam every success path,
+	// the webhook and the worker's lifecycle port alike, ends in.
+	h.paymentsSvc.SetLifecycleBridges(archiver, slots)
+	pro, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
+	if err != nil {
+		t.Fatalf("GetByName(pro): %v", err)
+	}
+	business, err := h.tariffs.GetByName(h.ctx(), domain.TariffBusiness)
+	if err != nil {
+		t.Fatalf("GetByName(business): %v", err)
+	}
+
+	webhookUser := applyDowngradeThroughWebhook(t, h, pro)
+	workerUser := applyDowngradeThroughWorker(t, h, pro, business)
+
+	// Both paths enforced the pro limit through the bridges, nothing else.
+	if got := archiver.recorded(); len(got) != 2 ||
+		got[0].ownerID != webhookUser || got[0].limit != pro.ActivePropertyLimit ||
+		got[1].ownerID != workerUser || got[1].limit != pro.ActivePropertyLimit {
+		t.Errorf("archive calls = %+v, want one pro-limit call per payer (webhook then worker)", got)
+	}
+	if got := slots.recorded(); len(got) != 2 || got[0] != "renewal_downgrade" || got[1] != "renewal_downgrade" {
+		t.Errorf("slot triggers = %v, want two renewal_downgrade calls", got)
+	}
+}
+
 // TestPaymentFlow_StaleFailedRenewalAfterManualRenewal proves the freshness
 // guard of issue #426 end to end against real PostgreSQL: a merchant-initiated
 // renewal charge hangs at the provider, a newer manual renewal lands after it,

@@ -1029,6 +1029,114 @@ func TestWebhook_StaleFailedRenewalKeepsRenewedSubscriptionActive(t *testing.T) 
 	}
 }
 
+// seedSupersededChargePair seeds the precondition of a stale success (issue
+// #428): an older pending pro charge hanging at the provider and a newer
+// business payment that lands first through its own webhook, so the
+// subscription is upgraded and the business payment is the last applied one.
+// The newer payment's id is minted one v7 millisecond after the stale
+// charge's, so the creation order the freshness guard reads is deterministic.
+func (h *paymentHarness) seedSupersededChargePair(t *testing.T, sub domain.Subscription) (stale, newer domain.SubscriptionPayment) {
+	t.Helper()
+	stale, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffPro),
+		domain.PeriodMonth, 49000, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("new stale payment: %v", err)
+	}
+	if err := stale.SaveProviderReference("prov_stale", "", h.now); err != nil {
+		t.Fatalf("save stale reference: %v", err)
+	}
+	stale, err = h.stores.payments.Create(t.Context(), stale)
+	if err != nil {
+		t.Fatalf("seed stale payment: %v", err)
+	}
+	newer, err = domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+		domain.PeriodMonth, 99000, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("new business payment: %v", err)
+	}
+	newer.ID = laterPaymentID(stale.ID)
+	if err := newer.SaveProviderReference("prov_business", "", h.now); err != nil {
+		t.Fatalf("save business reference: %v", err)
+	}
+	newer, err = h.stores.payments.Create(t.Context(), newer)
+	if err != nil {
+		t.Fatalf("seed business payment: %v", err)
+	}
+	if err := h.webhookSucceeded(t, newer); err != nil {
+		t.Fatalf("business HandleWebhook() error = %v", err)
+	}
+	return stale, newer
+}
+
+// deliverStaleSuccess feeds the given stale payment a succeeded notification
+// through the webhook path.
+func (h *paymentHarness) deliverStaleSuccess(t *testing.T, stale domain.SubscriptionPayment) {
+	t.Helper()
+	h.setNotification(&PaymentNotification{
+		InternalPaymentID: stale.ID,
+		ProviderPaymentID: *stale.ProviderPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+	})
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("stale HandleWebhook() error = %v", err)
+	}
+}
+
+// TestWebhook_StaleSucceededPaymentIsNoOp proves the freshness guard of issue
+// #428: a succeeded payment older than the last applied one — a pro charge
+// landing after a newer business payment was applied — is recorded on the
+// payment alone. The subscription keeps the newer payment's tariff, period
+// and transition history; the stale success must not be applied as a
+// downgrade. A repeated delivery of the stale success stays a no-op.
+func TestWebhook_StaleSucceededPaymentIsNoOp(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, nil)
+	stale, newer := h.seedSupersededChargePair(t, sub)
+
+	applied, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() after business: %v", err)
+	}
+	wantUntil := applied.ValidUntil
+
+	h.deliverStaleSuccess(t, stale)
+
+	// The money is recorded on the payment, but the subscription state the
+	// newer payment bought is untouched.
+	finalized, err := h.stores.payments.GetByID(t.Context(), stale.ID)
+	if err != nil {
+		t.Fatalf("GetByID(stale) error = %v", err)
+	}
+	if finalized.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("stale payment status = %q, want succeeded (the money is recorded)", finalized.Status)
+	}
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.TariffID != h.tariffID(t, domain.TariffBusiness) {
+		t.Errorf("tariff = %v, want business (a stale success must not downgrade)", stored.TariffID)
+	}
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(*wantUntil) {
+		t.Errorf("valid until = %v, want the newer payment's %v", stored.ValidUntil, wantUntil)
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != newer.ID {
+		t.Errorf("last applied payment = %v, want the newer business payment", stored.LastAppliedPaymentID)
+	}
+	if got := h.transitionCount(t, sub.ID); got != 1 {
+		t.Errorf("transitions = %d, want only the business payment's entry", got)
+	}
+
+	// A repeated delivery of the stale success stays a no-op.
+	h.deliverStaleSuccess(t, stale)
+	if got := h.transitionCount(t, sub.ID); got != 1 {
+		t.Errorf("transitions after the duplicate = %d, want 1", got)
+	}
+}
+
 // TestWebhook_SucceededPersistsProviderPaymentID proves a webhook that
 // arrives before the initiation result was saved still finalizes the payment:
 // the carried provider reference is persisted, then the outcome applied.

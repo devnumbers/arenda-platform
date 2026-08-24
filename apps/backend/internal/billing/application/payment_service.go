@@ -380,13 +380,16 @@ func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment
 // finalizePayment runs the finalizing transaction: it locks the payment,
 // verifies the notification against the persisted provider reference, captures
 // a missing reference, and moves the payment to the notification's status via
-// the per-status handlers below. AllowReconcile marks callers that verified an
-// out-of-order success against the provider; without it a failed payment is
-// never overwritten by this path. Grace events captured along the way are
-// published strictly after the commit — best-effort (issue #284).
+// the per-status handlers below. The transaction carries the lifecycle
+// bridges: a succeeded payment can lower a tariff limit, and the excess
+// archiving belongs to the same commit (issue #428). AllowReconcile marks
+// callers that verified an out-of-order success against the provider; without
+// it a failed payment is never overwritten by this path. Grace events
+// captured along the way are published strictly after the commit —
+// best-effort (issue #284).
 func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotification, allowReconcile bool) error {
 	grace := newGraceEvents(s.publisher, s.log)
-	return grace.run(ctx, s.runInTx, func(stores *txStores) error {
+	return grace.run(ctx, s.runLifecycleTx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
 		if err != nil {
 			return err
@@ -478,11 +481,15 @@ func (s *PaymentService) finalizeFailedPayment(
 }
 
 // finalizeSucceededPayment moves the payment to succeeded and applies the
-// subscription effects of the success: the tariff change or renewal with its
-// transition-log entry and audit record. The persisted-status switch keeps
-// duplicate deliveries idempotent and — without allowReconcile — refuses a
-// success that arrives after the payment was already marked failed, so the
-// provider retries and the verified reconciliation path runs instead.
+// subscription effects of the success through the shared application seam: the
+// tariff change or renewal with its transition-log entry, the tariff-limit
+// enforcement when the applied transition changed the tariff, and the audit
+// record. Every path that finalizes a success — the webhook flow, the
+// reconciliation worker and the renewal worker — lands here (issue #428), so
+// a success applies identically wherever it came from. The persisted-status
+// switch keeps duplicate deliveries idempotent and — without allowReconcile —
+// refuses a success that arrives after the payment was already marked failed,
+// so the provider retries and the verified reconciliation path runs instead.
 func (s *PaymentService) finalizeSucceededPayment(
 	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
 ) error {
@@ -512,7 +519,11 @@ func (s *PaymentService) finalizeSucceededPayment(
 	if err := stores.payments.Update(ctx, payment); err != nil {
 		return fmt.Errorf("mark payment succeeded: %w", err)
 	}
-	if _, err := applySucceededPayment(ctx, stores, payment, now); err != nil {
+	applied, err := applySucceededPayment(ctx, stores, payment, now)
+	if err != nil {
+		return err
+	}
+	if err := enforcePaymentTariffLimit(ctx, stores, payment, applied); err != nil {
 		return err
 	}
 	if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -537,7 +548,13 @@ func (s *PaymentService) finalizeSucceededPayment(
 // log records the applied change with the payment that caused it. A payment
 // the subscription already reflects is a no-op — the zero transition it
 // returns keeps duplicate deliveries, reconciliations and worker retries
-// idempotent. Shared by the webhook flow and the renewal worker (issue #252).
+// idempotent. The freshness guard of issue #428 extends the no-op to a success
+// superseded by a newer applied payment: a late success of an old charge —
+// e.g. a pro payment landing after a newer business payment was applied —
+// must not be applied as a downgrade; the subscription keeps the newer
+// payment's state and the success is recorded on the payment alone. Shared by
+// every path that finalizes a success — the webhook flow, the reconciliation
+// worker and the renewal worker (issues #252, #428).
 func applySucceededPayment(
 	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time,
 ) (domain.Transition, error) {
@@ -546,6 +563,9 @@ func applySucceededPayment(
 		return domain.Transition{}, err
 	}
 	if sub.LastAppliedPaymentID != nil && *sub.LastAppliedPaymentID == payment.ID {
+		return domain.Transition{}, nil
+	}
+	if !sub.SucceededPaymentIsCurrent(payment.ID) {
 		return domain.Transition{}, nil
 	}
 
@@ -579,6 +599,33 @@ func applySucceededPayment(
 	)
 }
 
+// enforcePaymentTariffLimit is the limit tail of the success-application seam
+// (issue #428): when the applied transition switched the tariff, the new
+// plan's limit is enforced in the same transaction — the owner's excess
+// active properties archived and the excess recipient slots suspended. An
+// upgrade to a higher limit archives nothing; a renewal into a cheaper
+// scheduled target archives exactly like the renewal worker did before the
+// seam was shared. A no-op application (a duplicate or a superseded success)
+// changes no tariff, so it enforces nothing.
+func enforcePaymentTariffLimit(
+	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, applied domain.Transition,
+) error {
+	if !transitionChangedTariff(applied, payment.TariffID) {
+		return nil
+	}
+	target, err := stores.tariffs.GetByID(ctx, payment.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return fmt.Errorf("payment %s references missing tariff %s: %w", payment.ID, payment.TariffID, ErrTariffNotFound)
+		}
+		return fmt.Errorf("get applied tariff: %w", err)
+	}
+	if err := stores.enforceTariffLimit(ctx, payment.UserID, target.ActivePropertyLimit, triggerRenewalDowngrade); err != nil {
+		return fmt.Errorf("enforce tariff limit after payment downgrade: %w", err)
+	}
+	return nil
+}
+
 // applyRefundNotification records a full refund reported by the provider and
 // applies the subscription effects of the refund (downgrade to basic with the
 // excess properties archived, issue #254) atomically. Refunds are always
@@ -586,7 +633,7 @@ func applySucceededPayment(
 // reports a provider-side outcome, not an admin action; the admin-triggered
 // refund that landed first is visible in the transition log by its own entry.
 func (s *PaymentService) applyRefundNotification(ctx context.Context, n *PaymentNotification) error {
-	return s.runRefundTx(ctx, func(stores *txStores) error {
+	return s.runLifecycleTx(ctx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
 		if err != nil {
 			return err

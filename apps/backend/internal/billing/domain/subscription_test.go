@@ -667,6 +667,101 @@ func TestSubscriptionFailedRenewalIsCurrent(t *testing.T) {
 	}
 }
 
+// TestSubscriptionSucceededPaymentIsCurrent proves the freshness guard of the
+// success application (issue #428): a succeeded payment is applied only while
+// it is the newest payment reflected in the subscription — no payment created
+// after it has been applied since. Unlike the failure guard, the paid period
+// plays no role: every applied success records itself as the last applied
+// payment, so the last-applied ordering alone decides.
+func TestSubscriptionSucceededPaymentIsCurrent(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	// Byte-ordered payment ids: olderPayment sorts before newerPayment sorts
+	// before newestPayment, the creation order UUIDv7 ids carry.
+	olderPayment := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a21")
+	newerPayment := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22")
+	newestPayment := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a23")
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+
+	tests := []struct {
+		name    string
+		payment func() Subscription
+		want    bool
+	}{
+		{
+			name: "no payment applied yet is current",
+			payment: func() Subscription {
+				return Subscription{
+					ID:     uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13"),
+					UserID: userID, TariffID: proID,
+					Status: SubscriptionStatusActive,
+				}
+			},
+			want: true,
+		},
+		{
+			name: "a payment older than the applied one is not current",
+			payment: func() Subscription {
+				return Subscription{
+					ID:     uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
+					UserID: userID, TariffID: proID,
+					Status:               SubscriptionStatusActive,
+					LastAppliedPaymentID: &newestPayment,
+				}
+			},
+			want: false,
+		},
+		{
+			name: "a payment newer than the applied one is current",
+			payment: func() Subscription {
+				return Subscription{
+					ID:     uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+					UserID: userID, TariffID: proID,
+					Status:               SubscriptionStatusActive,
+					LastAppliedPaymentID: &olderPayment,
+				}
+			},
+			want: true,
+		},
+		{
+			name: "the applied payment itself stays current",
+			payment: func() Subscription {
+				return Subscription{
+					ID:     uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16"),
+					UserID: userID, TariffID: proID,
+					Status:               SubscriptionStatusActive,
+					LastAppliedPaymentID: &newerPayment,
+				}
+			},
+			want: true,
+		},
+		{
+			name: "a paid-up period does not revive a superseded payment",
+			payment: func() Subscription {
+				paidUp := now.Add(30 * 24 * time.Hour)
+				return Subscription{
+					ID:     uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17"),
+					UserID: userID, TariffID: proID,
+					Status: SubscriptionStatusActive, ValidUntil: &paidUp,
+					LastAppliedPaymentID: &newestPayment,
+				}
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sub := tt.payment()
+			if got := sub.SucceededPaymentIsCurrent(newerPayment); got != tt.want {
+				t.Errorf("SucceededPaymentIsCurrent() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // assertAppliedScheduledDowngrade checks the subscription shape after a
 // successful scheduled downgrade: the basic tariff, the free period's
 // validity, auto-renew kept on, the pending change cleared, and the last

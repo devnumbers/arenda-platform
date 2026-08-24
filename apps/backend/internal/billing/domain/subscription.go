@@ -479,6 +479,21 @@ func (s *Subscription) FailedRenewalIsCurrent(paymentID uuid.UUID, now time.Time
 	return paymentIDBefore(*s.LastAppliedPaymentID, paymentID)
 }
 
+// SucceededPaymentIsCurrent reports whether a succeeded payment is still the
+// newest payment the subscription's state reflects: no payment created after
+// it has been applied since. A late success of a superseded payment — e.g. a
+// pro charge landing after a newer business payment was applied — must not be
+// applied as a downgrade (issue #428); the subscription keeps the tariff and
+// period the newer payment bought, and the late success is recorded on the
+// payment alone. With no payment applied yet there is nothing to supersede,
+// so any success is current.
+func (s *Subscription) SucceededPaymentIsCurrent(paymentID uuid.UUID) bool {
+	if s.LastAppliedPaymentID == nil {
+		return true
+	}
+	return !paymentIDBefore(paymentID, *s.LastAppliedPaymentID)
+}
+
 // paymentIDBefore reports whether payment id a was created before payment id
 // b. Repository ids are UUIDv7 — the leading bytes carry the generation
 // timestamp — so byte comparison is creation-time comparison.

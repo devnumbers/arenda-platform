@@ -308,6 +308,12 @@ func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, erro
 	if w.provider == nil {
 		return 0, fmt.Errorf("renewal worker requires a payment provider: %w", ErrPaymentUnavailable)
 	}
+	if w.payments == nil {
+		// The success application runs through the lifecycle port (issue
+		// #428); a wiring that forgets it fails loudly instead of panicking
+		// on the first confirmed charge.
+		return 0, fmt.Errorf("renewal worker requires the payment lifecycle: %w", ErrPaymentUnavailable)
+	}
 
 	processed := 0
 	renewSel := w.phases.renewalDue(now, w.config.WorkerBatchSize)
@@ -649,7 +655,7 @@ func (w *Workers) chargeRenewal(ctx context.Context, plan renewalPlan, now time.
 	}
 	switch status.Status {
 	case domain.PaymentStatusSucceeded:
-		return w.applyRenewalSuccess(ctx, payment, now)
+		return w.finalizeFromProviderStatus(ctx, payment, status)
 	case domain.PaymentStatusFailed:
 		return w.failRenewalPayment(ctx, payment.ID, errorCodeFromResult(status.ErrorCode), now)
 	default:
@@ -668,7 +674,7 @@ func (w *Workers) chargeRenewal(ctx context.Context, plan renewalPlan, now time.
 	}
 	switch charge.Status {
 	case domain.PaymentStatusSucceeded:
-		return w.applyRenewalSuccess(ctx, payment, now)
+		return w.finalizeFromProviderStatus(ctx, payment, PaymentStatusResult{Status: domain.PaymentStatusSucceeded})
 	case domain.PaymentStatusFailed:
 		return w.failRenewalPayment(ctx, payment.ID, errorCodeFromResult(charge.ErrorCode), now)
 	default:
@@ -695,61 +701,6 @@ func (w *Workers) mitInitRequest(payment domain.SubscriptionPayment, tariff doma
 		},
 		Initiator: InitiatorMerchant,
 	}
-}
-
-// applyRenewalSuccess finalizes a provider-confirmed renewal charge and
-// applies its subscription effects in one transaction. A payment another flow
-// finalized first is a no-op — the persisted state wins. When the applied
-// payment switches the tariff (a scheduled downgrade charged at apply time),
-// the excess properties are archived and the recipient slots enforced in the
-// same transaction.
-func (w *Workers) applyRenewalSuccess(ctx context.Context, payment domain.SubscriptionPayment, now time.Time) error {
-	return w.runLifecycleTx(ctx, func(stores *txStores) error {
-		current, err := stores.paymentForUpdate(ctx, payment.ID)
-		if err != nil {
-			return err
-		}
-		if current.Status != domain.PaymentStatusPending {
-			return nil
-		}
-		if err := current.MarkSucceeded(now); err != nil {
-			return err
-		}
-		if err := stores.payments.Update(ctx, current); err != nil {
-			return fmt.Errorf("mark renewal payment succeeded: %w", err)
-		}
-
-		applied, err := applySucceededPayment(ctx, stores, current, now)
-		if err != nil {
-			return err
-		}
-		if transitionChangedTariff(applied, current.TariffID) {
-			target, err := stores.tariffs.GetByID(ctx, current.TariffID)
-			if err != nil {
-				if errors.Is(err, ErrNotFound) {
-					return fmt.Errorf("payment %s references missing tariff %s: %w", current.ID, current.TariffID, ErrTariffNotFound)
-				}
-				return fmt.Errorf("get applied tariff: %w", err)
-			}
-			if err := stores.enforceTariffLimit(ctx, current.UserID, target.ActivePropertyLimit, triggerRenewalDowngrade); err != nil {
-				return fmt.Errorf("enforce tariff limit after renewal downgrade: %w", err)
-			}
-		}
-
-		if err := stores.audit.Record(ctx, auditdomain.Entry{
-			ActorRole:  auditdomain.ActorRoleSystem,
-			Action:     auditdomain.ActionSubscriptionPaymentSucceeded,
-			EntityType: auditdomain.EntitySubscriptionPayment,
-			EntityID:   &current.ID,
-			Context: map[string]any{
-				auditKeyPaymentID: current.ID, auditKeyProvider: string(w.provider.Name()),
-				auditKeyAmountKopecks: current.AmountKopecks,
-			},
-		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
-		}
-		return nil
-	})
 }
 
 // failRenewalPayment finalizes a definitively failed renewal charge and moves
@@ -839,7 +790,7 @@ func (w *Workers) recoverUncertainCharge(ctx context.Context, payment domain.Sub
 	}
 	switch status.Status {
 	case domain.PaymentStatusSucceeded:
-		return w.applyRenewalSuccess(ctx, payment, now)
+		return w.finalizeFromProviderStatus(ctx, payment, status)
 	case domain.PaymentStatusFailed:
 		code := errorCodeFromResult(status.ErrorCode)
 		if code == nil {
@@ -1075,7 +1026,11 @@ func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, 
 
 // finalizeFromProviderStatus routes a provider-confirmed outcome through the
 // lifecycle port's notification application (issue #250, ADR 0039): atomic
-// finalization with the subscription effects, idempotent on repeats.
+// finalization with the subscription effects, idempotent on repeats. Every
+// provider-confirmed success — the stale-payment reconciliation, the renewal
+// charge and its uncertain-charge recovery — lands here, the one seam the
+// webhook flow also ends in, so a success applies identically wherever it
+// came from, tariff-limit enforcement included (issue #428).
 func (w *Workers) finalizeFromProviderStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) error {
 	return w.payments.ApplyPaymentNotification(ctx, notificationFromStatus(payment, status))
 }

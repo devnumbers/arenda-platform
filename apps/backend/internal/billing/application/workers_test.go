@@ -203,6 +203,10 @@ type workersHarness struct {
 	stores   *fakeStores
 	provider *scriptedProvider
 	workers  *Workers
+	// Payments is the payment service behind the workers' lifecycle port —
+	// the success-application seam the renewal charges land in (issue #428);
+	// tests that assert bridge calls hang the bridges on it too.
+	payments *PaymentService
 	cfg      Config
 	now      time.Time
 
@@ -238,17 +242,27 @@ func newWorkersHarness(t *testing.T, cfg Config) *workersHarness {
 	provider := &scriptedProvider{name: testProviderFake}
 	factory := stores.factory(nil)
 	logger := slog.New(slog.DiscardHandler)
+	payments := NewPaymentService(factory, provider, PaymentServiceConfig{Clock: clk, Log: logger})
 	workers := NewWorkers(factory, WorkersConfig{
 		Provider: provider,
-		Payments: NewPaymentService(factory, provider, PaymentServiceConfig{Clock: clk, Log: logger}),
+		Payments: payments,
 		Clock:    clk,
 		Config:   cfg,
 		Logger:   logger,
 	})
 	return &workersHarness{
-		stores: stores, provider: provider, workers: workers, cfg: cfg, now: workersNow,
+		stores: stores, provider: provider, workers: workers, payments: payments, cfg: cfg, now: workersNow,
 		basic: basic, pro: pro, business: business,
 	}
+}
+
+// setLifecycleBridges wires the lifecycle bridges to both the worker phases
+// and the payment service's success-application seam — the way the composition
+// root does (issue #428). The parameters keep the interface types so a nil
+// bridge stays a nil interface.
+func (h *workersHarness) setLifecycleBridges(archiver ExcessPropertyArchiverSource, slots RecipientSlotEnforcerSource) {
+	h.workers.SetLifecycleBridges(archiver, slots)
+	h.payments.SetLifecycleBridges(archiver, slots)
 }
 
 func mustNewUUID() uuid.UUID {
@@ -1004,7 +1018,7 @@ func TestWorkers_ScheduledChangesSkipPaidTargetForRenewalCharge(t *testing.T) {
 	t.Parallel()
 	h := newWorkersHarness(t, Config{})
 	archiver := &fakeArchiverSource{}
-	h.workers.SetLifecycleBridges(archiver, nil)
+	h.setLifecycleBridges(archiver, nil)
 
 	// Tariff business -> pro: a paid downgrade, due now.
 	sub := h.seedSubscription(t, func(s *domain.Subscription) {
