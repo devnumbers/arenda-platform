@@ -133,100 +133,6 @@ func operationSortFromQuery(sort *openapi.OperationListSort) leasesapp.Operation
 	return leasesapp.NormalizeOperationSort(leasesapp.OperationSort(*sort))
 }
 
-// CreateOperation implements POST /properties/{propertyId}/operations.
-func (h *OperationHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	var body openapi.OperationCreateRequest
-	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create operation request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	cmd := leasesapp.CreateOperationCommand{
-		PropertyID:    propertyID,
-		Type:          string(body.Type),
-		CategoryID:    body.CategoryId,
-		Name:          body.Name,
-		AmountKopecks: body.AmountKopecks,
-		OperationDate: body.OperationDate.Time,
-		LeaseID:       uuidPtrFromOpenAPI(body.LeaseId),
-	}
-	if body.Comment != nil {
-		cmd.Comment = body.Comment
-	}
-	if body.ReminderOffsetDays != nil {
-		offset := int(*body.ReminderOffsetDays)
-		cmd.ReminderOffsetDays = &offset
-	}
-
-	op, err := h.svc.CreateOperation(r.Context(), actor, cmd)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	h.respondWithOperation(w, r, actor, op, http.StatusCreated)
-}
-
-// ListOperationsByProperty implements GET /properties/{propertyId}/operations.
-func (h *OperationHandlers) ListOperationsByProperty(
-	w http.ResponseWriter,
-	r *http.Request,
-	propertyID uuid.UUID,
-	params openapi.ListOperationsByPropertyParams,
-) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	limit, offset, fetchLimit := normalizeOperationsPagination(params.Limit, params.Offset)
-	filter := leasesapp.OperationFilter{
-		Limit:  fetchLimit,
-		Offset: offset,
-		Sort:   operationSortFromQuery(params.Sort),
-	}
-	if params.Status != nil {
-		filter.Statuses = make([]domain.OperationStatus, 0, len(*params.Status))
-		for _, s := range *params.Status {
-			filter.Statuses = append(filter.Statuses, domain.OperationStatus(s))
-		}
-	}
-	if params.Type != nil {
-		filter.Types = make([]domain.OperationType, 0, len(*params.Type))
-		for _, t := range *params.Type {
-			filter.Types = append(filter.Types, domain.OperationType(t))
-		}
-	}
-	if params.CategoryId != nil {
-		filter.CategoryIDs = append(filter.CategoryIDs, *params.CategoryId...)
-	}
-	if params.From != nil {
-		filter.FromDate = &params.From.Time
-	}
-	if params.To != nil {
-		filter.ToDate = &params.To.Time
-	}
-
-	ops, err := h.svc.ListOperationsByProperty(r.Context(), actor, propertyID, filter)
-	if err != nil {
-		h.handleOperationError(w, r, err)
-		return
-	}
-
-	h.respondWithOperations(w, r, actor, ops, limit, offset)
-}
-
 // ListOperations implements GET /operations.
 func (h *OperationHandlers) ListOperations(w http.ResponseWriter, r *http.Request, params openapi.ListOperationsParams) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
@@ -300,7 +206,7 @@ func (h *OperationHandlers) GetOperation(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	h.respondWithOperation(w, r, actor, op, http.StatusOK)
+	h.respondWithOperation(w, r, actor, op)
 }
 
 // UpdateOperation implements PATCH /operations/{id}.
@@ -344,7 +250,7 @@ func (h *OperationHandlers) UpdateOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	h.respondWithOperation(w, r, actor, op, http.StatusOK)
+	h.respondWithOperation(w, r, actor, op)
 }
 
 // DeleteOperation implements DELETE /operations/{id}.
@@ -382,7 +288,7 @@ func (h *OperationHandlers) CompleteOperation(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	h.respondWithOperation(w, r, actor, op, http.StatusOK)
+	h.respondWithOperation(w, r, actor, op)
 }
 
 // MarkOperationIncomplete implements POST /operations/{id}/mark-incomplete.
@@ -403,7 +309,7 @@ func (h *OperationHandlers) MarkOperationIncomplete(w http.ResponseWriter, r *ht
 		return
 	}
 
-	h.respondWithOperation(w, r, actor, op, http.StatusOK)
+	h.respondWithOperation(w, r, actor, op)
 }
 
 // MoveOperation implements POST /operations/{id}/move.
@@ -429,13 +335,13 @@ func (h *OperationHandlers) MoveOperation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.respondWithOperation(w, r, actor, op, http.StatusOK)
+	h.respondWithOperation(w, r, actor, op)
 }
 
 // respondWithOperation enriches op with category names and property statuses
-// and writes it with the given status code; enrichment errors map through the
-// shared operation error handler.
-func (h *OperationHandlers) respondWithOperation(w http.ResponseWriter, r *http.Request, actor uuid.UUID, op domain.Operation, status int) {
+// and writes it; enrichment errors map through the shared operation error
+// handler.
+func (h *OperationHandlers) respondWithOperation(w http.ResponseWriter, r *http.Request, actor uuid.UUID, op domain.Operation) {
 	names, err := categoryNamesByID(r.Context(), h.categories, actor)
 	if err != nil {
 		h.handleOperationError(w, r, err)
@@ -448,7 +354,7 @@ func (h *OperationHandlers) respondWithOperation(w http.ResponseWriter, r *http.
 		return
 	}
 
-	httpsupport.WriteJSON(r.Context(), w, status, operationResponse(op, names, statuses))
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(op, names, statuses))
 }
 
 // respondWithOperations enriches a fetched page of operations and writes the

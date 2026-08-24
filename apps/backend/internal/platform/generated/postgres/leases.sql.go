@@ -149,21 +149,6 @@ func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease
 	return i, err
 }
 
-const deleteLeasesByProperty = `-- name: DeleteLeasesByProperty :exec
-DELETE FROM leases
-WHERE owner_id = $1 AND property_id = $2
-`
-
-type DeleteLeasesByPropertyParams struct {
-	OwnerID    pgtype.UUID `json:"owner_id"`
-	PropertyID pgtype.UUID `json:"property_id"`
-}
-
-func (q *Queries) DeleteLeasesByProperty(ctx context.Context, arg DeleteLeasesByPropertyParams) error {
-	_, err := q.db.Exec(ctx, deleteLeasesByProperty, arg.OwnerID, arg.PropertyID)
-	return err
-}
-
 const getLeaseByID = `-- name: GetLeaseByID :one
 SELECT id, owner_id, property_id, tenant_contact_id, status, start_date, end_date, rent_amount_kopecks, deposit_amount_kopecks, payment_day, comment, created_at, updated_at FROM leases
 WHERE id = $1
@@ -661,32 +646,6 @@ func (q *Queries) ListLeasesWithTenantForExport(ctx context.Context, arg ListLea
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listOpenLeasePropertyIDsByOwner = `-- name: ListOpenLeasePropertyIDsByOwner :many
-SELECT DISTINCT property_id FROM leases
-WHERE owner_id = $1
-  AND status IN ('awaiting_start', 'active', 'requires_action')
-`
-
-func (q *Queries) ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listOpenLeasePropertyIDsByOwner, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []pgtype.UUID{}
-	for rows.Next() {
-		var property_id pgtype.UUID
-		if err := rows.Scan(&property_id); err != nil {
-			return nil, err
-		}
-		items = append(items, property_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

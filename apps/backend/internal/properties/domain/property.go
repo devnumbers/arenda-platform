@@ -108,32 +108,22 @@ func (m DeletePropertyMode) Valid() bool {
 	return false
 }
 
-type PropertyOccupancy string
-
-const (
-	OccupancyFree     PropertyOccupancy = "free"
-	OccupancyOccupied PropertyOccupancy = "occupied"
-)
-
 type Property struct {
-	ID               uuid.UUID
-	OwnerID          uuid.UUID
-	Name             string
-	Type             PropertyType
-	Address          string
-	Description      string
-	Attributes       Attributes
-	Status           PropertyStatus
-	Occupancy        PropertyOccupancy
-	Photos           []Photo
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	OverdueRentCount int
+	ID          uuid.UUID
+	OwnerID     uuid.UUID
+	Name        string
+	Type        PropertyType
+	Address     string
+	Description string
+	Attributes  Attributes
+	Status      PropertyStatus
+	Photos      []Photo
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 	// MembersCount is the shared-access participant count: membership rows
 	// (any status; the owner is never a membership row) plus pending email
 	// invitations (issue #163). Filled by the read queries that carry the
-	// members_count projection; zero on write-path responses (create/update),
-	// mirroring OverdueRentCount.
+	// members_count projection; zero on write-path responses (create/update).
 	MembersCount int
 	// AccessRole is the role of the requesting actor on this property
 	// (issue T11): RoleOwner for own properties, the membership role for

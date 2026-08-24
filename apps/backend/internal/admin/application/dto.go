@@ -50,7 +50,6 @@ type AdminPropertyView struct {
 	Description *string
 	Attributes  propertiesdomain.Attributes
 	Status      propertiesdomain.PropertyStatus
-	Occupancy   propertiesdomain.PropertyOccupancy
 	Photos      []propertiesdomain.Photo
 	CreatedAt   time.Time
 	UpdatedAt   time.Time

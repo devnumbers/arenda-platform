@@ -198,7 +198,7 @@ func newInvitationFixture() *invitationFixture {
 	// scenarios never resolve a recipient address, so no lifecycle email is
 	// sent from these paths.
 	lifecycle := NewLifecycleMailer(mailer, fakeEmailResolver{}, fakeTitles(testNevskyTitle), nil)
-	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOccupancy(), newFakeOwnedProps(),
+	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
 		lifecycle, auditapp.Noop{}, noopBeginner{})
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, lifecycle,
 		newTestFactory(repo, invitations, auditapp.Noop{}), nil)

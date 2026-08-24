@@ -107,7 +107,6 @@ func TestSlotCoordinator_RecoverSuspended_OwnArchiveFreesSlotTxVisible(t *testin
 		NewMembershipRepository(testTx),
 		NewOwnerResolver(testTx),
 		limiter,
-		lifecycleNoOccupancy{},
 		ownedProps,
 		nil,
 		auditapp.Noop{},

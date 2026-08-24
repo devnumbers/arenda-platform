@@ -490,7 +490,6 @@ func adminPropertyResponse(view adminapp.AdminPropertyView) openapi.AdminPropert
 		Type:       openapi.PropertyType(view.Type),
 		Address:    view.Address,
 		Status:     openapi.PropertyStatus(view.Status),
-		Occupancy:  openapi.AdminPropertyOccupancy(view.Occupancy),
 		CreatedAt:  view.CreatedAt,
 		UpdatedAt:  view.UpdatedAt,
 	}

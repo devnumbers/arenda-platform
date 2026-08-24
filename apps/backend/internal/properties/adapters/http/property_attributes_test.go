@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
@@ -42,10 +41,7 @@ func TestPropertyResponse_IncludesAttributes(t *testing.T) {
 		Attributes: domain.Attributes{"rooms": "2", "area_total": 50.0},
 	}
 
-	resp, err := h.propertyResponse(context.Background(), property.OwnerID, property, leasesdomain.Lease{})
-	if err != nil {
-		t.Fatalf("propertyResponse error: %v", err)
-	}
+	resp := h.propertyResponse(property)
 
 	if resp.Attributes == nil {
 		t.Fatal("resp.Attributes = nil, want non-nil map")
@@ -76,10 +72,7 @@ func TestPropertyResponse_EmptyAttributesWhenNil(t *testing.T) {
 		Attributes: nil,
 	}
 
-	resp, err := h.propertyResponse(context.Background(), property.OwnerID, property, leasesdomain.Lease{})
-	if err != nil {
-		t.Fatalf("propertyResponse error: %v", err)
-	}
+	resp := h.propertyResponse(property)
 
 	// The required response field must never be nil; an empty object is encoded
 	// as {} rather than null.

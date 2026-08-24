@@ -18,24 +18,22 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
-	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	propertiesdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
 // AdminRepository implements the admin application ports using generated SQLC queries.
 type AdminRepository struct {
-	db        postgres.DBTX
-	enc       encryption.Encryptor
-	clock     clock.Clock
-	occupancy propertiesapp.OccupancyProvider
+	db    postgres.DBTX
+	enc   encryption.Encryptor
+	clock clock.Clock
 }
 
 // NewAdminRepository creates a new admin repository.
 func NewAdminRepository(
-	db postgres.DBTX, enc encryption.Encryptor, clk clock.Clock, occupancy propertiesapp.OccupancyProvider,
+	db postgres.DBTX, enc encryption.Encryptor, clk clock.Clock,
 ) *AdminRepository {
-	return &AdminRepository{db: db, enc: enc, clock: clk, occupancy: occupancy}
+	return &AdminRepository{db: db, enc: enc, clock: clk}
 }
 
 func (r *AdminRepository) q() *postgres.Queries {
@@ -260,17 +258,8 @@ func (r *AdminRepository) propertyViewFromRow(
 		return adminapp.AdminPropertyView{}, err
 	}
 
-	ownerID := pgconv.UUIDFromPgtype(row.OwnerID)
 	propertyID := pgconv.UUIDFromPgtype(row.ID)
-	occupied, err := r.occupancy.IsOccupied(ctx, ownerID, propertyID)
-	if err != nil {
-		return adminapp.AdminPropertyView{}, fmt.Errorf("check occupancy: %w", err)
-	}
-
-	occupancy := propertiesdomain.OccupancyFree
-	if occupied {
-		occupancy = propertiesdomain.OccupancyOccupied
-	}
+	ownerID := pgconv.UUIDFromPgtype(row.OwnerID)
 
 	var description *string
 	if row.Description.Valid {
@@ -297,7 +286,6 @@ func (r *AdminRepository) propertyViewFromRow(
 		Description: description,
 		Attributes:  attrs,
 		Status:      status,
-		Occupancy:   occupancy,
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil

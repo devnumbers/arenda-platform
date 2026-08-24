@@ -21,7 +21,6 @@ import {
   ChoiceChipField,
   OwnerLinkField,
   UserReferenceField,
-  occupancyChoices,
   propertyStatusChoices,
   propertyStatusFilterChoices,
   propertyTypeChoices,
@@ -48,7 +47,6 @@ export const PropertyList = () => (
       <TextField source="address" sortable={false} />
       <SelectField source="type" choices={propertyTypeChoices} sortable={false} />
       <ChoiceChipField source="status" choices={propertyStatusChoices} />
-      <SelectField source="occupancy" choices={occupancyChoices} sortable={false} />
       <OwnerLinkField source="ownerId" sortable={false} />
     </Datagrid>
   </List>
@@ -127,7 +125,6 @@ export const PropertyShow = () => (
         <TextField source="name" />
         <SelectField source="type" choices={propertyTypeChoices} />
         <SelectField source="status" choices={propertyStatusChoices} />
-        <SelectField source="occupancy" choices={occupancyChoices} />
         <TextField source="address" />
         <TextField source="description" />
         <ArrayField source="photos">

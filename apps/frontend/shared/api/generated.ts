@@ -174,7 +174,7 @@ export interface paths {
         get: operations["getProperty"];
         put?: never;
         post?: never;
-        /** @description Deletes the property in the given mode. Both modes are rejected with 409 while the property has an open lease. */
+        /** @description Deletes the property in the given mode. */
         delete: operations["deleteProperty"];
         options?: never;
         head?: never;
@@ -207,54 +207,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["unarchiveProperty"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{id}/leases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listPropertyLeases"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{id}/operations/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getPropertyOperationsSummary"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{id}/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["exportPropertyData"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -433,22 +385,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listOperationsByProperty"];
-        put?: never;
-        post: operations["createOperation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/operations": {
         parameters: {
             query?: never;
@@ -555,22 +491,6 @@ export interface paths {
         get: operations["getFinanceReport"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{propertyId}/recurring-operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listRecurringOperationsByProperty"];
-        put?: never;
-        post: operations["createRecurringOperation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1895,8 +1815,6 @@ export interface components {
             description?: string | null;
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
-            /** @enum {string} */
-            occupancy: "free" | "occupied";
             photos?: components["schemas"]["PropertyPhoto"][] | null;
             /** Format: date-time */
             createdAt: string;
@@ -2144,12 +2062,8 @@ export interface components {
             description?: string;
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
-            /** @enum {string} */
-            occupancy: "free" | "occupied";
             access?: components["schemas"]["PropertyAccessContext"];
             photos?: components["schemas"]["PropertyPhoto"][];
-            active_lease: components["schemas"]["LeaseResponse"] | null;
-            overdue_rent_count: number;
             /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
             members_count: number;
             /** Format: date-time */
@@ -2165,23 +2079,6 @@ export interface components {
         };
         PropertyPhotosResponse: {
             items: components["schemas"]["PropertyPhoto"][];
-        };
-        PropertyLeasesResponse: {
-            items: components["schemas"]["LeaseResponse"][];
-        };
-        PropertyOperationsSummaryResponse: {
-            /** Format: int64 */
-            monthly_profit_kopecks: number;
-            /** Format: int64 */
-            all_time_profit_kopecks: number;
-            /** Format: int64 */
-            all_time_income_kopecks: number;
-            /** Format: int64 */
-            all_time_expense_kopecks: number;
-            overdue_rent_count: number;
-            overdue_total_count: number;
-            /** Format: date */
-            next_payment_date?: string | null;
         };
         LeaseCreateRequest: {
             /** Format: uuid */
@@ -3236,7 +3133,7 @@ export interface operations {
     deleteProperty: {
         parameters: {
             query: {
-                /** @description Deletion mode. `cascade` deletes the property together with its leases, recurring operations and operations. `detach` deletes only the property: its leases, recurring operations and operations are kept with `property_id` set to null, and its recurring operations are paused. */
+                /** @description Deletion mode. `cascade` deletes the property outright. `detach` first suspends the property's billing lifecycle (same as archiving) and then deletes the property. */
                 mode: "cascade" | "detach";
             };
             header?: never;
@@ -3258,15 +3155,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
-            /** @description The property has an open lease and cannot be deleted */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     updateProperty: {
@@ -3346,80 +3234,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listPropertyLeases: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Property leases */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PropertyLeasesResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    getPropertyOperationsSummary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Property operations summary */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PropertyOperationsSummaryResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    exportPropertyData: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Property data export workbook */
-            200: {
-                headers: {
-                    /** @description Attachment header with the xlsx filename */
-                    "Content-Disposition"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
-                };
-            };
-            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3870,69 +3684,6 @@ export interface operations {
             };
         };
     };
-    listOperationsByProperty: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["OperationStatus"][];
-                type?: components["schemas"]["OperationType"][];
-                category_id?: string[];
-                from?: string;
-                to?: string;
-                sort?: components["schemas"]["OperationListSort"];
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Operations list for property */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationsResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OperationCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Operation created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
     listOperations: {
         parameters: {
             query?: {
@@ -4206,60 +3957,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-        };
-    };
-    listRecurringOperationsByProperty: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recurring operations list for property */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecurringOperationsResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createRecurringOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RecurringOperationCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Recurring operation created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecurringOperationResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
         };
     };
     listRecurringOperations: {

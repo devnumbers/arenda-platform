@@ -23,16 +23,11 @@ import type {
   OperationUpdateRequest,
   OperationsPage,
 } from '@/entities/operation';
-import { mapPropertyOperationsSummaryResponse } from '@/entities/property';
-import type { PropertyOperationsSummary } from '@/entities/property';
-
 type OperationResponse = components['schemas']['OperationResponse'];
 type OperationCreateWireRequest = components['schemas']['OperationCreateRequest'];
 type OperationUpdateWireRequest = components['schemas']['OperationUpdateRequest'];
 export type OperationListSort = 'operation_date_desc' | 'operation_date_asc';
 type OperationsResponse = components['schemas']['OperationsResponse'];
-type PropertyOperationsSummaryResponse =
-  components['schemas']['PropertyOperationsSummaryResponse'];
 
 export type OperationsFilters = {
   type?: 'income' | 'expense' | ('income' | 'expense')[];
@@ -192,7 +187,7 @@ export function useOperationsByProperty(
     queryFn: async () =>
       mapOperationsResponse(
         await apiClient<OperationsResponse>(
-          `/properties/${propertyId}/operations${queryString ? `?${queryString}` : ''}`,
+          `/operations?property_id=${propertyId}${queryString ? `&${queryString}` : ''}`,
         ),
       ),
     enabled: Boolean(propertyId),
@@ -241,21 +236,6 @@ export function useOperation(
   });
 }
 
-export function usePropertyOperationsSummary(
-  propertyId: string,
-): UseQueryResult<PropertyOperationsSummary, ApiError> {
-  return useQuery({
-    queryKey: operationKeys.summary(propertyId),
-    queryFn: async () =>
-      mapPropertyOperationsSummaryResponse(
-        await apiClient<PropertyOperationsSummaryResponse>(
-          `/properties/${propertyId}/operations/summary`,
-        ),
-      ),
-    enabled: Boolean(propertyId),
-  });
-}
-
 const PROPERTY_OPERATIONS_PAGE_LIMIT = 100;
 
 /**
@@ -275,7 +255,7 @@ export async function fetchAllPropertyOperations(
     });
     const page = mapOperationsResponse(
       await apiClient<OperationsResponse>(
-        `/properties/${propertyId}/operations?${params.toString()}`,
+        `/operations?property_id=${propertyId}&${params.toString()}`,
       ),
     );
     items.push(...page.items);

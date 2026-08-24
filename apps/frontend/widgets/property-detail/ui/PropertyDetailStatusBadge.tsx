@@ -4,9 +4,6 @@ import clsx from 'clsx';
 import type { JSX, ComponentType } from 'react';
 import {
   ArchiveBold,
-  BadgeDanger,
-  BadgeGood,
-  BadgeInfo,
   StatusDoor,
   StatusWarning,
 } from '@/shared/assets/icons';
@@ -21,17 +18,6 @@ const config: Record<
     icon: ComponentType<{ className?: string }>;
   }
 > = {
-  rented: { label: 'Арендована', className: styles.rented ?? '', icon: BadgeGood },
-  requires_action: {
-    label: 'Требует действия',
-    className: styles.requiresAction ?? '',
-    icon: BadgeDanger,
-  },
-  awaiting_start: {
-    label: 'Аренда скоро начнётся',
-    className: styles.awaitingStart ?? '',
-    icon: BadgeInfo,
-  },
   free: { label: 'Не арендована', className: styles.free ?? '', icon: StatusDoor },
   maintenance: {
     label: 'На ремонте',

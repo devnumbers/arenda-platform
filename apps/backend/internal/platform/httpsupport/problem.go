@@ -77,7 +77,6 @@ var userFacingDetails = []struct {
 	{propertiesapp.ErrArchivedProperty, "Нельзя изменить архивный объект"},
 	{propertiesapp.ErrAlreadyArchived, "Объект уже в архиве"},
 	{propertiesapp.ErrNotArchived, "Объект не в архиве"},
-	{propertiesapp.ErrPropertyHasOpenLease, "У объекта есть открытая аренда"},
 
 	// Leases.
 	{leasesapp.ErrInvalidInput, "Некорректные данные"},

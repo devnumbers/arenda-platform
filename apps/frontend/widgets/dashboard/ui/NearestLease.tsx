@@ -13,7 +13,6 @@ import type {Lease} from '@/entities/lease';
 import {EmptyState} from '@/shared/ui/empty-state';
 import {getEffectiveLeaseStatus, isOpenLeaseStatus,} from '@/entities/lease';
 import {PropertyThumbnail} from '@/entities/property';
-import {PropertyStatusBadge} from '@/features/properties';
 import {SectionHeader} from '@/shared/ui/section-header';
 import {StatusBadge} from '@/entities/lease';
 import {IconActionCard} from './IconActionCard';
@@ -58,9 +57,7 @@ function getPropertyName(
 export function NearestLease({leases, properties, isLoading}: NearestLeaseProps): JSX.Element {
     const lease = getNearestLease(leases);
     const hasLeaseHistory = (leases?.length ?? 0) > 0;
-    const availableProperty = properties?.find(
-        (property) => property.status === 'active' && property.occupancy === 'free',
-    );
+    const availableProperty = properties?.some((property) => property.status === 'active');
     const emptyActionHref = ROUTES.properties;
     const emptyActionText = availableProperty ? 'Создать аренду' : 'К объектам';
 
@@ -111,8 +108,6 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
     }
 
     const propertyName = getPropertyName(lease.propertyId, properties);
-    const property = properties?.find((p) => p.id === lease.propertyId);
-    const overdueRentCount = property?.overdue_rent_count ?? 0;
     const leaseHref = lease.id ? ROUTES.lease(lease.id) : ROUTES.properties;
 
     return (
@@ -123,11 +118,7 @@ export function NearestLease({leases, properties, isLoading}: NearestLeaseProps)
                     <div className={styles.header}>
                         <div className={styles.info}>
                             <span className={styles.propertyName}>{propertyName}</span>
-                            {overdueRentCount > 0 ? (
-                                <PropertyStatusBadge status="overdue" overdueCount={overdueRentCount}/>
-                            ) : (
-                                <StatusBadge status={lease.status}/>
-                            )}
+                            <StatusBadge status={lease.status}/>
                         </div>
                         <PropertyThumbnail size="medium"/>
                     </div>

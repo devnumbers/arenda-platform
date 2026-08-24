@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -92,21 +91,11 @@ type SubscriptionLimiter interface {
 	WithTx(tx transaction.Tx) (SubscriptionLimiter, error)
 }
 
-// OccupancyProvider reports which properties have an open lease.
-type OccupancyProvider interface {
-	IsOccupied(ctx context.Context, scope, propertyID uuid.UUID) (bool, error)
-	OccupiedPropertyIDs(ctx context.Context, scope uuid.UUID) (map[uuid.UUID]bool, error)
-	WithTx(tx transaction.Tx) OccupancyProvider
-}
-
 // PropertyBillingLifecycle manages the billing side effects of archiving and
 // unarchiving a property.
 type PropertyBillingLifecycle interface {
 	Suspend(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error
 	Resume(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error
-	// CompleteOpenLeases force-completes all open leases of the property,
-	// applying the same side effects as a user-initiated lease completion.
-	CompleteOpenLeases(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) error
 	WithTx(tx transaction.Tx) PropertyBillingLifecycle
 }
 
@@ -128,16 +117,7 @@ type PropertyRepository interface {
 	Unarchive(ctx context.Context, id, scope uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error)
 	Delete(ctx context.Context, id, scope uuid.UUID) error
-	DeleteOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
-	DeleteRecurringOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
-	DeleteLeasesByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyRepository
-}
-
-// LeaseRepository provides lease data needed by the properties bounded context.
-type LeaseRepository interface {
-	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID) ([]leasesdomain.Lease, error)
-	GetOpenLeaseByProperty(ctx context.Context, scope, propertyID uuid.UUID) (leasesdomain.Lease, error)
 }
 
 // PhotoStorage persists uploaded property photos and returns their public URL.

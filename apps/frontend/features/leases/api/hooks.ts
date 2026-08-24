@@ -16,7 +16,6 @@ import type { components } from '@/shared/api/dto';
 
 type LeaseResponse = components['schemas']['LeaseResponse'];
 type LeasesResponse = components['schemas']['LeasesResponse'];
-type PropertyLeasesResponse = components['schemas']['PropertyLeasesResponse'];
 type LeaseCreateWireRequest = components['schemas']['LeaseCreateRequest'];
 type LeaseUpdateWireRequest = components['schemas']['LeaseUpdateRequest'];
 type ReminderCreateRequest = components['schemas']['ReminderCreateRequest'];
@@ -97,19 +96,6 @@ export function useLease(id: string): UseQueryResult<Lease, ApiError> {
     queryKey: leaseKeys.detail(id),
     queryFn: () => fetchLease(id),
     enabled: Boolean(id),
-  });
-}
-
-export function usePropertyLeases(
-  propertyId: string,
-): UseQueryResult<Lease[], ApiError> {
-  return useQuery({
-    queryKey: leaseKeys.byProperty(propertyId),
-    queryFn: async () => {
-      const response = await apiClient<PropertyLeasesResponse>(`/properties/${propertyId}/leases`);
-      return response.items.map(mapLeaseResponse);
-    },
-    enabled: Boolean(propertyId),
   });
 }
 

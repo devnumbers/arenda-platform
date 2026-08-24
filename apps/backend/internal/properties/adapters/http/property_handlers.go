@@ -1,29 +1,20 @@
-// Package http holds the properties HTTP adapters: property lifecycle endpoints with photos and contacts,
-// operations summaries and data export.
+// Package http holds the properties HTTP adapters: property lifecycle endpoints with photos and contacts.
 package http
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strings"
-	"unicode"
 
 	"github.com/google/uuid"
-	leaseshttp "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/http"
-	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -32,12 +23,8 @@ import (
 type PropertyHandlers struct {
 	svc              *propertiesapp.PropertyService
 	addressSuggester propertiesapp.AddressSuggester
-	opSvc            *leasesapp.OperationService
-	leaseSvc         *leasesapp.LeaseService
-	exportSvc        *leasesapp.ExportService
 	contactSvc       *propertiesapp.PropertyContactService
 	logger           *slog.Logger
-	presenter        *leaseshttp.LeasePresenter
 	clock            clock.Clock
 	tzResolver       sharedtz.OwnerTimezoneResolver
 }
@@ -46,10 +33,6 @@ type PropertyHandlers struct {
 func NewPropertyHandlers(
 	svc *propertiesapp.PropertyService,
 	addressSuggester propertiesapp.AddressSuggester,
-	tenantContactSvc *leasesapp.TenantContactService,
-	opSvc *leasesapp.OperationService,
-	leaseSvc *leasesapp.LeaseService,
-	exportSvc *leasesapp.ExportService,
 	contactSvc *propertiesapp.PropertyContactService,
 	logger *slog.Logger,
 	clk clock.Clock,
@@ -58,12 +41,8 @@ func NewPropertyHandlers(
 	return &PropertyHandlers{
 		svc:              svc,
 		addressSuggester: addressSuggester,
-		opSvc:            opSvc,
-		leaseSvc:         leaseSvc,
-		exportSvc:        exportSvc,
 		contactSvc:       contactSvc,
 		logger:           logger,
-		presenter:        leaseshttp.NewLeasePresenter(tenantContactSvc),
 		clock:            clk,
 		tzResolver:       tzResolver,
 	}
@@ -103,9 +82,6 @@ var staticPropertyProblems = []struct {
 	{propertiesapp.ErrNotFound, propertyProblem{
 		status: http.StatusNotFound, title: problemTitleNotFound, detail: "Объект не найден",
 	}},
-	{leasesapp.ErrNotFound, propertyProblem{
-		status: http.StatusNotFound, title: problemTitleNotFound, detail: "Объект не найден",
-	}},
 	{propertiesapp.ErrForbidden, propertyProblem{
 		status: http.StatusForbidden, title: problemTitleForbidden, detail: "Недостаточно прав для этого действия",
 	}},
@@ -127,9 +103,6 @@ var staticPropertyProblems = []struct {
 	{propertiesapp.ErrNotArchived, propertyProblem{
 		status: http.StatusConflict, title: problemTitleConflict, detail: "Объект не в архиве",
 	}},
-	{propertiesapp.ErrPropertyHasOpenLease, propertyProblem{
-		status: http.StatusConflict, title: problemTitleConflict, detail: "У объекта есть открытая аренда",
-	}},
 	{propertiesapp.ErrPhotoLimitReached, propertyProblem{
 		status: http.StatusConflict, title: problemTitleConflict, detail: "Достигнут лимит фотографий объекта",
 	}},
@@ -148,8 +121,6 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 		writeInvalidInputProblem(w, r, err)
 	case isInvalidStatusTransition(err), errors.Is(err, propertiesapp.ErrInvalidTransition):
 		writeUserFacingProblem(w, r, err, http.StatusConflict, "Conflict")
-	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
-		writeUserFacingProblem(w, r, err, http.StatusBadRequest, "Bad request")
 	default:
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
@@ -249,7 +220,7 @@ func (h *PropertyHandlers) CreateProperty(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.respondWithProperty(w, r, actor, property, leasesdomain.Lease{}, http.StatusCreated)
+	h.respondWithProperty(w, r, property, http.StatusCreated)
 }
 
 // ListProperties implements GET /properties.
@@ -269,13 +240,7 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 
 	items := make([]openapi.PropertyResponse, 0, len(properties))
 	for _, property := range properties {
-		resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
-		if err != nil {
-			h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		items = append(items, resp)
+		items = append(items, h.propertyResponse(property))
 	}
 
 	// Report how many shared objects are hidden from the recipient by a tariff
@@ -312,13 +277,7 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 
 	items := make([]openapi.PropertyResponse, 0, len(properties))
 	for _, property := range properties {
-		resp, err := h.propertyResponse(r.Context(), actor, property, leasesdomain.Lease{})
-		if err != nil {
-			h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		items = append(items, resp)
+		items = append(items, h.propertyResponse(property))
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{Items: items})
@@ -333,13 +292,13 @@ func (h *PropertyHandlers) GetProperty(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	property, activeLease, err := h.svc.GetPropertyWithOpenLease(r.Context(), actor, id)
+	property, err := h.svc.GetProperty(r.Context(), actor, id)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	h.respondWithProperty(w, r, actor, property, activeLease, http.StatusOK)
+	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
 // UpdateProperty implements PATCH /properties/{id}.
@@ -374,7 +333,7 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.respondWithProperty(w, r, actor, property, leasesdomain.Lease{}, http.StatusOK)
+	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
 // DeleteProperty implements DELETE /properties/{id}.
@@ -418,7 +377,7 @@ func (h *PropertyHandlers) ArchiveProperty(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	h.respondWithProperty(w, r, actor, property, leasesdomain.Lease{}, http.StatusOK)
+	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
 // UnarchiveProperty implements POST /properties/{id}/unarchive.
@@ -436,118 +395,7 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	h.respondWithProperty(w, r, actor, property, leasesdomain.Lease{}, http.StatusOK)
-}
-
-// ListPropertyLeases implements GET /properties/{id}/leases.
-func (h *PropertyHandlers) ListPropertyLeases(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	leases, err := h.svc.ListPropertyLeases(r.Context(), actor, id)
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	contacts, err := h.presenter.TenantContactIDs(r.Context(), actor, leases)
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	loc, err := h.tzResolver.Resolve(r.Context(), actor)
-	if err != nil {
-		h.handlePropertyError(w, r, fmt.Errorf("resolve owner timezone: %w", err))
-		return
-	}
-	asOf := timeutil.DateIn(h.clock.Now(), loc)
-	scheduleIndex, err := h.leaseSvc.LeasePaymentScheduleIndex(r.Context(), actor, leases, asOf)
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.LeaseResponse, 0, len(leases))
-	for _, lease := range leases {
-		schedule := scheduleIndex[lease.ID]
-		resp, err := h.presenter.LeaseResponse(
-			r.Context(), actor, lease, contacts, schedule.OverdueSince, schedule.NextPaymentDate, schedule.HasOverdue)
-		if err != nil {
-			h.handlePropertyError(w, r, err)
-			return
-		}
-		items = append(items, resp)
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertyLeasesResponse{Items: items})
-}
-
-// GetPropertyOperationsSummary implements GET /properties/{id}/operations/summary.
-func (h *PropertyHandlers) GetPropertyOperationsSummary(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	summary, err := h.opSvc.GetPropertyOperationsSummary(r.Context(), actor, id)
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertyOperationsSummaryResponse{
-		MonthlyProfitKopecks:  summary.MonthlyProfitKopecks,
-		AllTimeProfitKopecks:  summary.AllTimeProfitKopecks,
-		AllTimeIncomeKopecks:  summary.AllTimeIncomeKopecks,
-		AllTimeExpenseKopecks: summary.AllTimeExpenseKopecks,
-		OverdueRentCount:      summary.OverdueRentCount,
-		OverdueTotalCount:     summary.OverdueTotalCount,
-		NextPaymentDate:       httpsupport.DatePtrToOpenAPI(summary.NextPaymentDate),
-	})
-}
-
-// ExportPropertyData implements GET /properties/{id}/export.
-func (h *PropertyHandlers) ExportPropertyData(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	file, err := h.exportSvc.ExportProperty(r.Context(), actor, id)
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition",
-		fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", exportASCIIFilename(file.Filename), url.PathEscape(file.Filename)))
-	if _, err := w.Write(file.Content); err != nil {
-		// A truncated export download cannot be retried by the handler (the
-		// status and headers are already sent), so the failure is only logged.
-		h.logger.WarnContext(r.Context(), "failed to write property export body",
-			slog.String("error", httpsupport.SanitizeError(err)))
-	}
-}
-
-// exportASCIIFilename replaces non-ASCII runes with underscores for the
-// legacy filename= parameter of Content-Disposition.
-func exportASCIIFilename(name string) string {
-	return strings.Map(func(r rune) rune {
-		if r > unicode.MaxASCII {
-			return '_'
-		}
-		return r
-	}, name)
+	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
 // UploadPropertyPhoto implements POST /properties/{propertyId}/photos.
@@ -815,20 +663,16 @@ func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.AddressSuggestionsResponse{Suggestions: resp})
 }
 
-func (h *PropertyHandlers) propertyResponse(
-	ctx context.Context, actor uuid.UUID, property domain.Property, activeLease leasesdomain.Lease,
-) (openapi.PropertyResponse, error) {
+func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.PropertyResponse {
 	resp := openapi.PropertyResponse{
-		Id:               property.ID,
-		Name:             property.Name,
-		Type:             openapi.PropertyType(property.Type),
-		Address:          property.Address,
-		Status:           openapi.PropertyStatus(property.Status),
-		Occupancy:        openapi.PropertyResponseOccupancy(property.Occupancy),
-		OverdueRentCount: property.OverdueRentCount,
-		MembersCount:     property.MembersCount,
-		CreatedAt:        property.CreatedAt,
-		UpdatedAt:        property.UpdatedAt,
+		Id:           property.ID,
+		Name:         property.Name,
+		Type:         openapi.PropertyType(property.Type),
+		Address:      property.Address,
+		Status:       openapi.PropertyStatus(property.Status),
+		MembersCount: property.MembersCount,
+		CreatedAt:    property.CreatedAt,
+		UpdatedAt:    property.UpdatedAt,
 	}
 	resp.Attributes = propertyAttributesResponse(property.Attributes)
 	if property.AccessRole != "" {
@@ -849,29 +693,16 @@ func (h *PropertyHandlers) propertyResponse(
 		}
 		resp.Photos = &photos
 	}
-	if activeLease.ID != uuid.Nil {
-		leaseResp, err := h.presenter.LeaseResponse(ctx, actor, activeLease, nil, nil, nil, false)
-		if err != nil {
-			return openapi.PropertyResponse{}, fmt.Errorf("map active lease: %w", err)
-		}
-		resp.ActiveLease = &leaseResp
-	}
-	return resp, nil
+	return resp
 }
 
 // respondWithProperty maps the property through the presenter and writes the
 // response with the given status code — 201 from CreateProperty, 200 from the
 // other property endpoints.
 func (h *PropertyHandlers) respondWithProperty(
-	w http.ResponseWriter, r *http.Request, actor uuid.UUID, property domain.Property, activeLease leasesdomain.Lease, status int,
+	w http.ResponseWriter, r *http.Request, property domain.Property, status int,
 ) {
-	resp, err := h.propertyResponse(r.Context(), actor, property, activeLease)
-	if err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to build property response", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
-	}
-	httpsupport.WriteJSON(r.Context(), w, status, resp)
+	httpsupport.WriteJSON(r.Context(), w, status, h.propertyResponse(property))
 }
 
 // Converts an optional generated PropertyAttributes value to the

@@ -320,8 +320,7 @@ paths:
     delete:
       operationId: deleteProperty
       description: >-
-        Deletes the property in the given mode. Both modes are rejected with
-        409 while the property has an open lease.
+        Deletes the property in the given mode.
       security:
         - sessionCookie: []
       parameters:
@@ -335,11 +334,9 @@ paths:
           in: query
           required: true
           description: >-
-            Deletion mode. `cascade` deletes the property together with its
-            leases, recurring operations and operations. `detach` deletes only
-            the property: its leases, recurring operations and operations are
-            kept with `property_id` set to null, and its recurring operations
-            are paused.
+            Deletion mode. `cascade` deletes the property outright. `detach`
+            first suspends the property's billing lifecycle (same as
+            archiving) and then deletes the property.
           schema:
             type: string
             enum:
@@ -354,12 +351,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          description: The property has an open lease and cannot be deleted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Problem'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{id}/archive:
@@ -412,81 +403,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
-  /properties/{id}/leases:
-    get:
-      operationId: listPropertyLeases
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Property leases
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PropertyLeasesResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /properties/{id}/operations/summary:
-    get:
-      operationId: getPropertyOperationsSummary
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Property operations summary
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PropertyOperationsSummaryResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /properties/{id}/export:
-    get:
-      operationId: exportPropertyData
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Property data export workbook
-          headers:
-            Content-Disposition:
-              description: Attachment header with the xlsx filename
-              schema:
-                type: string
-          content:
-            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
-              schema:
-                type: string
-                format: binary
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/photos:
     post:
       operationId: uploadPropertyPhoto
@@ -956,122 +872,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
-  /properties/{propertyId}/operations:
-    get:
-      operationId: listOperationsByProperty
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: status
-          in: query
-          required: false
-          style: form
-          explode: true
-          schema:
-            type: array
-            items:
-              $ref: '#/components/schemas/OperationStatus'
-        - name: type
-          in: query
-          required: false
-          style: form
-          explode: true
-          schema:
-            type: array
-            items:
-              $ref: '#/components/schemas/OperationType'
-        - name: category_id
-          in: query
-          required: false
-          style: form
-          explode: true
-          schema:
-            type: array
-            items:
-              type: string
-              format: uuid
-        - name: from
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date
-        - name: to
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date
-        - name: sort
-          in: query
-          required: false
-          schema:
-            $ref: '#/components/schemas/OperationListSort'
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 100
-            minimum: 1
-            maximum: 100
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 0
-            minimum: 0
-            maximum: 100000
-      responses:
-        '200':
-          description: Operations list for property
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OperationsResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      operationId: createOperation
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OperationCreateRequest'
-      responses:
-        '201':
-          description: Operation created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OperationResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '403':
-          $ref: '#/components/responses/SubscriptionBlocked'
   /operations:
     get:
       operationId: listOperations
@@ -1416,61 +1216,6 @@ paths:
                 $ref: '#/components/schemas/FinanceReportResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
-  /properties/{propertyId}/recurring-operations:
-    get:
-      operationId: listRecurringOperationsByProperty
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Recurring operations list for property
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RecurringOperationsResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      operationId: createRecurringOperation
-      security:
-        - sessionCookie: []
-      parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RecurringOperationCreateRequest'
-      responses:
-        '201':
-          description: Recurring operation created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RecurringOperationResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '403':
-          $ref: '#/components/responses/SubscriptionBlocked'
   /recurring-operations:
     get:
       operationId: listRecurringOperations
@@ -4442,7 +4187,7 @@ components:
 
     AdminProperty:
       type: object
-      required: [id, ownerId, ownerPhone, name, type, address, attributes, status, occupancy, createdAt, updatedAt]
+      required: [id, ownerId, ownerPhone, name, type, address, attributes, status, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -4465,9 +4210,6 @@ components:
           $ref: '#/components/schemas/PropertyAttributes'
         status:
           $ref: '#/components/schemas/PropertyStatus'
-        occupancy:
-          type: string
-          enum: [free, occupied]
         photos:
           type: array
           nullable: true
@@ -4980,7 +4722,7 @@ components:
 
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, occupancy, active_lease, overdue_rent_count, members_count, attributes, created_at, updated_at]
+      required: [id, name, type, address, status, members_count, attributes, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4997,9 +4739,6 @@ components:
           $ref: '#/components/schemas/PropertyAttributes'
         status:
           $ref: '#/components/schemas/PropertyStatus'
-        occupancy:
-          type: string
-          enum: [free, occupied]
         access:
           allOf:
             - $ref: '#/components/schemas/PropertyAccessContext'
@@ -5007,13 +4746,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PropertyPhoto'
-        active_lease:
-          nullable: true
-          allOf:
-            - $ref: '#/components/schemas/LeaseResponse'
-        overdue_rent_count:
-          type: integer
-          minimum: 0
         members_count:
           type: integer
           minimum: 0
@@ -5047,40 +4779,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PropertyPhoto'
-
-    PropertyLeasesResponse:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/LeaseResponse'
-
-    PropertyOperationsSummaryResponse:
-      type: object
-      required: [monthly_profit_kopecks, all_time_profit_kopecks, all_time_income_kopecks, all_time_expense_kopecks, overdue_rent_count, overdue_total_count]
-      properties:
-        monthly_profit_kopecks:
-          type: integer
-          format: int64
-        all_time_profit_kopecks:
-          type: integer
-          format: int64
-        all_time_income_kopecks:
-          type: integer
-          format: int64
-        all_time_expense_kopecks:
-          type: integer
-          format: int64
-        overdue_rent_count:
-          type: integer
-        overdue_total_count:
-          type: integer
-        next_payment_date:
-          type: string
-          format: date
-          nullable: true
 
     LeaseCreateRequest:
       type: object

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
@@ -55,20 +54,6 @@ type fakeTzResolver struct{}
 
 func (fakeTzResolver) Resolve(_ context.Context, _ uuid.UUID) (*time.Location, error) {
 	return time.UTC, nil
-}
-
-type fakeOccupancyProvider struct{}
-
-func (fakeOccupancyProvider) IsOccupied(_ context.Context, _, _ uuid.UUID) (bool, error) {
-	return false, nil
-}
-
-func (fakeOccupancyProvider) OccupiedPropertyIDs(_ context.Context, _ uuid.UUID) (map[uuid.UUID]bool, error) {
-	return map[uuid.UUID]bool{}, nil
-}
-
-func (p fakeOccupancyProvider) WithTx(_ transaction.Tx) OccupancyProvider {
-	return p
 }
 
 type lockingFakePropertyRepo struct {
@@ -231,10 +216,8 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		fakeOccupancyProvider{},
 		nil,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, fakeOccupancyProvider{}, nil),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -287,7 +270,6 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 
 var (
 	_ PropertyRepository             = (*lockingFakePropertyRepo)(nil)
-	_ OccupancyProvider              = fakeOccupancyProvider{}
 	_ sharedtz.OwnerTimezoneResolver = fakeTzResolver{}
 )
 
@@ -310,10 +292,6 @@ func (fakePropertyBillingLifecycle) Suspend(_ context.Context, _, _ uuid.UUID, _
 }
 
 func (fakePropertyBillingLifecycle) Resume(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
-	return nil
-}
-
-func (fakePropertyBillingLifecycle) CompleteOpenLeases(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
 	return nil
 }
 
@@ -342,11 +320,9 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		fakeOccupancyProvider{},
 		fakePropertyBillingLifecycle{},
-		stubLeaseRepo{},
 		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 10},
-			fakeOccupancyProvider{}, fakePropertyBillingLifecycle{}),
+			fakePropertyBillingLifecycle{}),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -424,11 +400,9 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		fakeOccupancyProvider{},
 		fakePropertyBillingLifecycle{},
-		stubLeaseRepo{},
 		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 1},
-			fakeOccupancyProvider{}, fakePropertyBillingLifecycle{}),
+			fakePropertyBillingLifecycle{}),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -489,18 +463,6 @@ var (
 	_ PropertyBillingLifecycle = fakePropertyBillingLifecycle{}
 )
 
-type stubLeaseRepo struct{}
-
-func (r stubLeaseRepo) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]leasesdomain.Lease, error) {
-	return nil, nil
-}
-
-func (r stubLeaseRepo) GetOpenLeaseByProperty(_ context.Context, _, _ uuid.UUID) (leasesdomain.Lease, error) {
-	return leasesdomain.Lease{}, ErrNotFound
-}
-
-var _ LeaseRepository = stubLeaseRepo{}
-
 type fakePropertyPhotoRepo struct{}
 
 func (fakePropertyPhotoRepo) Create(_ context.Context, _, _ uuid.UUID, _ string) (domain.Photo, error) {
@@ -554,114 +516,6 @@ var (
 	_ PhotoStorage            = fakePropertyPhotoStorage{}
 )
 
-type fakeLeaseRepoForProperties struct {
-	leases []leasesdomain.Lease
-}
-
-func (r fakeLeaseRepoForProperties) ListByProperty(_ context.Context, _, _ uuid.UUID) ([]leasesdomain.Lease, error) {
-	return r.leases, nil
-}
-
-func (r fakeLeaseRepoForProperties) GetOpenLeaseByProperty(_ context.Context, _, propertyID uuid.UUID) (leasesdomain.Lease, error) {
-	for _, lease := range r.leases {
-		if lease.PropertyID == propertyID && lease.Status.IsOpen() {
-			return lease, nil
-		}
-	}
-	return leasesdomain.Lease{}, ErrNotFound
-}
-
-var _ LeaseRepository = fakeLeaseRepoForProperties{}
-
-func TestPropertyService_ListPropertyLeases(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	leaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-
-	property := domain.Property{
-		ID:      propertyID,
-		OwnerID: ownerID,
-		Name:    "Test Property",
-		Address: "Address",
-		Type:    domain.PropertyTypeApartment,
-		Status:  domain.PropertyStatusActive,
-	}
-
-	leases := []leasesdomain.Lease{
-		{
-			ID:                leaseID,
-			OwnerID:           ownerID,
-			PropertyID:        propertyID,
-			Status:            leasesdomain.LeaseStatusActive,
-			StartDate:         time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-			RentAmountKopecks: 10000,
-			PaymentDay:        1,
-		},
-	}
-
-	repo := newLockingFakePropertyRepo(property)
-	svc := NewPropertyService(
-		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		fakeOccupancyProvider{},
-		nil,
-		fakeLeaseRepoForProperties{leases: leases},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, fakeOccupancyProvider{}, nil),
-		fakePropertyClock{now: now},
-		fakeTzResolver{},
-		testOwnerPolicy{},
-		nil,
-	)
-
-	result, err := svc.ListPropertyLeases(ctx, ownerID, propertyID)
-	if err != nil {
-		t.Fatalf("ListPropertyLeases failed: %v", err)
-	}
-	if len(result) != 1 {
-		t.Fatalf("expected 1 lease, got %d", len(result))
-	}
-	if result[0].ID != leaseID {
-		t.Errorf("expected lease id %s, got %s", leaseID, result[0].ID)
-	}
-	if result[0].Status != leasesdomain.LeaseStatusActive {
-		t.Errorf("expected effective status active, got %q", result[0].Status)
-	}
-}
-
-func TestPropertyService_ListPropertyLeases_PropertyNotFound(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	missingPropertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	now := time.Now()
-
-	repo := newLockingFakePropertyRepo()
-	svc := NewPropertyService(
-		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		fakeOccupancyProvider{},
-		nil,
-		fakeLeaseRepoForProperties{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, fakeOccupancyProvider{}, nil),
-		fakePropertyClock{now: now},
-		fakeTzResolver{},
-		testOwnerPolicy{},
-		nil,
-	)
-
-	_, err := svc.ListPropertyLeases(ctx, ownerID, missingPropertyID)
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("expected ErrNotFound, got %v", err)
-	}
-}
-
 func TestPropertyService_ListArchivedProperties(t *testing.T) {
 	t.Parallel()
 
@@ -683,10 +537,8 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		fakeOccupancyProvider{},
 		nil,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, fakeOccupancyProvider{}, nil),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -831,30 +683,10 @@ func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository {
 
 var _ PropertyRepository = (*fakePropertyRepo)(nil)
 
-// occupiedSetOccupancyProvider reports occupancy from a fixed set of property IDs.
-type occupiedSetOccupancyProvider struct {
-	occupied map[uuid.UUID]bool
-}
-
-func (p occupiedSetOccupancyProvider) IsOccupied(_ context.Context, _, propertyID uuid.UUID) (bool, error) {
-	return p.occupied[propertyID], nil
-}
-
-func (p occupiedSetOccupancyProvider) OccupiedPropertyIDs(_ context.Context, _ uuid.UUID) (map[uuid.UUID]bool, error) {
-	return p.occupied, nil
-}
-
-func (p occupiedSetOccupancyProvider) WithTx(_ transaction.Tx) OccupancyProvider {
-	return p
-}
-
-var _ OccupancyProvider = occupiedSetOccupancyProvider{}
-
 // recordingBillingLifecycle records the order and arguments of lifecycle calls.
 type recordingBillingLifecycle struct {
-	calls                 []string
-	completeOpenLeasesIDs []uuid.UUID // Property IDs passed to CompleteOpenLeases.
-	suspendedIDs          []uuid.UUID
+	calls        []string
+	suspendedIDs []uuid.UUID
 }
 
 func (l *recordingBillingLifecycle) Suspend(_ context.Context, propertyID, _ uuid.UUID, _ time.Time) error {
@@ -867,19 +699,13 @@ func (l *recordingBillingLifecycle) Resume(_ context.Context, _, _ uuid.UUID, _ 
 	return nil
 }
 
-func (l *recordingBillingLifecycle) CompleteOpenLeases(_ context.Context, _, propertyID uuid.UUID, _ time.Time) error {
-	l.calls = append(l.calls, "complete_open_leases")
-	l.completeOpenLeasesIDs = append(l.completeOpenLeasesIDs, propertyID)
-	return nil
-}
-
 func (l *recordingBillingLifecycle) WithTx(_ transaction.Tx) PropertyBillingLifecycle {
 	return l
 }
 
 var _ PropertyBillingLifecycle = (*recordingBillingLifecycle)(nil)
 
-func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t *testing.T) {
+func TestPropertyService_ArchiveExcessProperties_ArchivesExcess(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -907,11 +733,8 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{excessID: true}},
 		billing,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil,
-			occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{excessID: true}}, billing),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -939,8 +762,8 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 		}
 	}
 
-	// The open lease must be force-completed before billing is suspended.
-	wantCalls := []string{"complete_open_leases", "suspend"}
+	// Billing is suspended before the property is archived.
+	wantCalls := []string{"suspend"}
 	if len(billing.calls) != len(wantCalls) {
 		t.Fatalf("expected lifecycle calls %v, got %v", wantCalls, billing.calls)
 	}
@@ -948,9 +771,6 @@ func TestPropertyService_ArchiveExcessProperties_CompletesOpenLeaseAndArchives(t
 		if billing.calls[i] != want {
 			t.Errorf("lifecycle call %d: expected %q, got %q (all calls: %v)", i, want, billing.calls[i], billing.calls)
 		}
-	}
-	if len(billing.completeOpenLeasesIDs) != 1 || billing.completeOpenLeasesIDs[0] != excessID {
-		t.Errorf("expected CompleteOpenLeases for %s, got %v", excessID, billing.completeOpenLeasesIDs)
 	}
 	if len(billing.suspendedIDs) != 1 || billing.suspendedIDs[0] != excessID {
 		t.Errorf("expected Suspend for %s, got %v", excessID, billing.suspendedIDs)
@@ -980,11 +800,8 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyAID: true}},
 		billing,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil,
-			occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyAID: true}}, billing),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -1005,52 +822,6 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 		if p.Status != domain.PropertyStatusActive {
 			t.Errorf("property %s should stay active, got %q", id, p.Status)
 		}
-	}
-}
-
-func TestPropertyService_ArchiveProperty_OpenLeaseStillRejected(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-
-	repo := newFakePropertyRepo(
-		domain.Property{
-			ID: propertyID, OwnerID: ownerID, Name: "Occupied", Address: testPropertyAddress,
-			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
-		},
-	)
-	billing := &recordingBillingLifecycle{}
-	svc := NewPropertyService(
-		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyID: true}},
-		billing,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil,
-			occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{propertyID: true}}, billing),
-		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
-		testOwnerPolicy{},
-		nil,
-	)
-
-	_, err := svc.ArchiveProperty(ctx, ownerID, propertyID)
-	if !errors.Is(err, ErrPropertyHasOpenLease) {
-		t.Fatalf("expected ErrPropertyHasOpenLease, got %v", err)
-	}
-
-	p, err := repo.GetByIDAndOwner(ctx, propertyID, ownerID)
-	if err != nil {
-		t.Fatalf("get property: %v", err)
-	}
-	if p.Status != domain.PropertyStatusActive {
-		t.Errorf("property should stay active, got %q", p.Status)
-	}
-	if len(billing.calls) != 0 {
-		t.Errorf("expected no lifecycle calls on rejected manual archive, got %v", billing.calls)
 	}
 }
 
@@ -1092,10 +863,8 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 				repo,
 				fakePropertyPhotoRepo{},
 				fakePropertyPhotoStorage{},
-				fakeOccupancyProvider{},
 				nil,
-				stubLeaseRepo{},
-				newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, fakeOccupancyProvider{}, nil),
+				newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
 				fakePropertyClock{now: time.Now()},
 				fakeTzResolver{},
 				staticRolePolicy{role: tt.role},
@@ -1107,14 +876,14 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 				t.Errorf("GetProperty error = %v, want %v", err, tt.wantErr)
 			}
 
-			// GetPropertyWithOpenLease goes through GetProperty, so a denial
+			// GetProperty denial
 			// must propagate unchanged (the success path is not exercised
 			// here: the shared lease stubs report no-open-lease with the
 			// properties sentinel, which the service does not translate).
 			if tt.wantErr != nil {
-				_, _, err = svc.GetPropertyWithOpenLease(ctx, ownerID, propertyID)
+				_, err = svc.GetProperty(ctx, ownerID, propertyID)
 				if !errors.Is(err, tt.wantErr) {
-					t.Errorf("GetPropertyWithOpenLease error = %v, want %v", err, tt.wantErr)
+					t.Errorf("GetProperty error = %v, want %v", err, tt.wantErr)
 				}
 			}
 		})
@@ -1181,10 +950,8 @@ func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *tes
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}},
 		billing,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}}, billing),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -1279,10 +1046,8 @@ func TestListProperties_AccessRoles(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		fakeOccupancyProvider{},
 		nil,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, fakeOccupancyProvider{}, nil),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -1352,10 +1117,8 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		fakeOccupancyProvider{},
 		nil,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, fakeOccupancyProvider{}, nil),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
 		fakePropertyClock{now: time.Now()},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -1417,10 +1180,8 @@ func TestGetProperty_AccessContext(t *testing.T) {
 			repo,
 			fakePropertyPhotoRepo{},
 			fakePropertyPhotoStorage{},
-			fakeOccupancyProvider{},
 			nil,
-			stubLeaseRepo{},
-			newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, fakeOccupancyProvider{}, nil),
+			newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
 			fakePropertyClock{now: time.Now()},
 			fakeTzResolver{},
 			staticRolePolicy{role: role},
@@ -1516,10 +1277,8 @@ func TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient(t *t
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}},
 		billing,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}}, billing),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		fakeTzResolver{},
 		testOwnerPolicy{},
@@ -1565,10 +1324,8 @@ func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *te
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}},
 		billing,
-		stubLeaseRepo{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}}, billing),
+		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
 		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
 		fakeTzResolver{},
 		testOwnerPolicy{},

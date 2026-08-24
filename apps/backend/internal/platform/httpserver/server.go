@@ -150,10 +150,6 @@ func New(deps Deps) http.Handler {
 	propertyHandlers := propertieshttp.NewPropertyHandlers(
 		deps.Properties,
 		deps.AddressSuggester,
-		deps.TenantContacts,
-		deps.Operations,
-		deps.Leases,
-		deps.Export,
 		deps.PropertyContacts,
 		deps.Logger,
 		deps.Clock,

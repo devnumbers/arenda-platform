@@ -128,13 +128,6 @@ func (f *lifecycleFakeLimiter) WithTx(_ transaction.Tx) (accessapp.RecipientLimi
 	return f, nil
 }
 
-// lifecycleNoOccupancy reports no open leases.
-type lifecycleNoOccupancy struct{}
-
-func (lifecycleNoOccupancy) OccupiedPropertyIDs(context.Context, uuid.UUID) (map[uuid.UUID]bool, error) {
-	return map[uuid.UUID]bool{}, nil
-}
-
 // lifecycleNoOwnedProps reports no own active properties.
 type lifecycleNoOwnedProps struct{}
 
@@ -148,7 +141,6 @@ func (lifecycleNoOwnedProps) WithTx(_ transaction.Tx) (accessapp.OwnedActiveProp
 
 var (
 	_ accessapp.RecipientLimiter          = (*lifecycleFakeLimiter)(nil)
-	_ accessapp.OccupancyPort             = lifecycleNoOccupancy{}
 	_ accessapp.OwnedActivePropertiesPort = lifecycleNoOwnedProps{}
 	_ mailer.Sender                       = (*lifecycleCapturingSender)(nil)
 )
@@ -226,7 +218,7 @@ func newLifecycleMailFixture(t *testing.T) *lifecycleMailFixture {
 	beginner := lifecycleBeginner{tx: tx}
 
 	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter,
-		lifecycleNoOccupancy{}, lifecycleNoOwnedProps{}, lifecycle, auditapp.Noop{}, beginner)
+		lifecycleNoOwnedProps{}, lifecycle, auditapp.Noop{}, beginner)
 	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, lifecycleUoW{beginner})
 	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, lifecycle, factory, nil)
 	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver,

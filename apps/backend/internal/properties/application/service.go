@@ -1,5 +1,5 @@
 // Package application holds the properties use cases and ports: property lifecycle (create, archive, delete),
-// photos, contacts and occupancy.
+// photos and contacts.
 package application
 
 import (
@@ -16,8 +16,6 @@ import (
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
-	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
@@ -63,9 +61,7 @@ type PropertyService struct {
 	repo               PropertyRepository
 	photoRepo          PropertyPhotoRepository
 	photoStorage       PhotoStorage
-	occupancyProvider  OccupancyProvider
 	billingLifecycle   PropertyBillingLifecycle
-	leaseRepo          LeaseRepository
 	audit              auditapp.Recorder
 	clock              clock.Clock
 	tzResolver         sharedtz.OwnerTimezoneResolver
@@ -135,16 +131,14 @@ func (s *PropertyService) SetSharedMembersDeleteMailer(mailer SharedMembersDelet
 
 // NewPropertyService creates a PropertyService. Persistence, the audit
 // recorder and the Unit-of-Work of every mutating use case arrive through the
-// embedded factory (ADR 0033 γ-factory); repo, photoRepo, occupancyProvider
-// and billingLifecycle additionally serve the non-transactional reads and the
+// embedded factory (ADR 0033 γ-factory); repo, photoRepo and
+// billingLifecycle additionally serve the non-transactional reads and the
 // externally-owned transaction of ArchiveExcessProperties.
 func NewPropertyService(
 	repo PropertyRepository,
 	photoRepo PropertyPhotoRepository,
 	photoStorage PhotoStorage,
-	occupancyProvider OccupancyProvider,
 	billingLifecycle PropertyBillingLifecycle,
-	leaseRepo LeaseRepository,
 	factory txStoreFactory,
 	clk clock.Clock,
 	tzResolver sharedtz.OwnerTimezoneResolver,
@@ -155,18 +149,16 @@ func NewPropertyService(
 		logger = slog.Default()
 	}
 	return &PropertyService{
-		txStoreFactory:    factory,
-		repo:              repo,
-		photoRepo:         photoRepo,
-		photoStorage:      photoStorage,
-		occupancyProvider: occupancyProvider,
-		billingLifecycle:  billingLifecycle,
-		leaseRepo:         leaseRepo,
-		audit:             factory.audit,
-		clock:             clk,
-		tzResolver:        tzResolver,
-		policy:            policy,
-		logger:            logger,
+		txStoreFactory:   factory,
+		repo:             repo,
+		photoRepo:        photoRepo,
+		photoStorage:     photoStorage,
+		billingLifecycle: billingLifecycle,
+		audit:            factory.audit,
+		clock:            clk,
+		tzResolver:       tzResolver,
+		policy:           policy,
+		logger:           logger,
 	}
 }
 
@@ -226,7 +218,6 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 		return domain.Property{}, err
 	}
 
-	created.Occupancy = domain.OccupancyFree
 	created.Photos = []domain.Photo{}
 	created.AccessRole = sharedpolicy.RoleOwner
 	return created, nil
@@ -247,12 +238,6 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 	properties, err = s.appendSharedProperties(ctx, actor, properties,
 		domain.PropertyStatusActive, domain.PropertyStatusMaintenance)
 	if err != nil {
-		return nil, err
-	}
-
-	// Occupancy is resolved per owner (scope); for shared properties it reflects
-	// the data owner's leases, which the actor is entitled to see.
-	if err := s.applyOccupancy(ctx, properties); err != nil {
 		return nil, err
 	}
 
@@ -316,36 +301,6 @@ func isSharedAccessRole(role sharedpolicy.Role) bool {
 	return role == sharedpolicy.RoleFullAccess || role == sharedpolicy.RoleViewer
 }
 
-// applyOccupancy sets each property's occupancy from its data owner's open
-// leases. The occupied-id map is resolved once per owner so a list mixing
-// several owners (own + shared) queries each owner once.
-func (s *PropertyService) applyOccupancy(ctx context.Context, properties []domain.Property) error {
-	ownerOccupied := make(map[uuid.UUID]map[uuid.UUID]bool)
-	ensureOccupied := func(owner uuid.UUID) (map[uuid.UUID]bool, error) {
-		if m, ok := ownerOccupied[owner]; ok {
-			return m, nil
-		}
-		m, err := s.occupancyProvider.OccupiedPropertyIDs(ctx, owner)
-		if err != nil {
-			return nil, err
-		}
-		ownerOccupied[owner] = m
-		return m, nil
-	}
-	for i := range properties {
-		occupied, err := ensureOccupied(properties[i].OwnerID)
-		if err != nil {
-			return fmt.Errorf("check occupancy: %w", err)
-		}
-		if occupied[properties[i].ID] {
-			properties[i].Occupancy = domain.OccupancyOccupied
-		} else {
-			properties[i].Occupancy = domain.OccupancyFree
-		}
-	}
-	return nil
-}
-
 func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid.UUID) ([]domain.Property, error) {
 	properties, err := s.repo.ListArchivedByOwner(ctx, actor)
 	if err != nil {
@@ -406,68 +361,11 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 		}
 	}
 
-	occupied, err := s.occupancyProvider.IsOccupied(ctx, property.OwnerID, property.ID)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
-	}
-	if occupied {
-		property.Occupancy = domain.OccupancyOccupied
-	} else {
-		property.Occupancy = domain.OccupancyFree
-	}
-
 	properties, err := s.withPhotos(ctx, property)
 	if err != nil {
 		return domain.Property{}, err
 	}
 	return properties[0], nil
-}
-
-func (s *PropertyService) GetPropertyWithOpenLease(ctx context.Context, actor, id uuid.UUID) (domain.Property, leasesdomain.Lease, error) {
-	property, err := s.GetProperty(ctx, actor, id)
-	if err != nil {
-		return domain.Property{}, leasesdomain.Lease{}, err
-	}
-
-	lease, err := s.leaseRepo.GetOpenLeaseByProperty(ctx, property.OwnerID, property.ID)
-	if err != nil {
-		if errors.Is(err, leasesapp.ErrNotFound) {
-			return property, leasesdomain.Lease{}, nil
-		}
-		return domain.Property{}, leasesdomain.Lease{}, fmt.Errorf("get open lease: %w", err)
-	}
-
-	now := s.clock.Now()
-	lease.Status = lease.EffectiveStatus(now)
-	return property, lease, nil
-}
-
-func (s *PropertyService) ListPropertyLeases(ctx context.Context, actor, propertyID uuid.UUID) ([]leasesdomain.Lease, error) {
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve role: %w", err)
-	}
-	if !sharedpolicy.CanView(role) {
-		return nil, ErrNotFound
-	}
-	property, err := s.repo.GetByID(ctx, propertyID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("get property: %w", err)
-	}
-
-	leases, err := s.leaseRepo.ListByProperty(ctx, property.OwnerID, propertyID)
-	if err != nil {
-		return nil, fmt.Errorf("list property leases: %w", err)
-	}
-
-	now := s.clock.Now()
-	for i := range leases {
-		leases[i].Status = leases[i].EffectiveStatus(now)
-	}
-	return leases, nil
 }
 
 func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {
@@ -594,10 +492,8 @@ func applyPropertyUpdate(ctx context.Context, stores *txStores, property *domain
 	return nil
 }
 
-// applyStatusUpdate parses and applies a requested status transition. Moving an
-// active property to maintenance is additionally refused while a lease is
-// open.
-func applyStatusUpdate(ctx context.Context, stores *txStores, property *domain.Property, rawStatus string) error {
+// applyStatusUpdate parses and applies a requested status transition.
+func applyStatusUpdate(_ context.Context, _ *txStores, property *domain.Property, rawStatus string) error {
 	status, err := domain.ParsePropertyStatus(rawStatus)
 	if err != nil {
 		return fmt.Errorf("%w: invalid property status: %w", ErrInvalidInput, err)
@@ -605,24 +501,7 @@ func applyStatusUpdate(ctx context.Context, stores *txStores, property *domain.P
 	if !isUpdatableStatusTransition(property.Status, status) {
 		return &InvalidStatusTransitionError{From: property.Status, To: status}
 	}
-	if status == domain.PropertyStatusMaintenance && property.Status == domain.PropertyStatusActive {
-		if err := ensureNoOpenLease(ctx, stores.occupancy, property.OwnerID, property.ID); err != nil {
-			return err
-		}
-	}
 	property.Status = status
-	return nil
-}
-
-// ensureNoOpenLease rejects a mutation while the property has an open lease.
-func ensureNoOpenLease(ctx context.Context, occupancy OccupancyProvider, scope, id uuid.UUID) error {
-	occupied, err := occupancy.IsOccupied(ctx, scope, id)
-	if err != nil {
-		return fmt.Errorf("check occupancy: %w", err)
-	}
-	if occupied {
-		return ErrPropertyHasOpenLease
-	}
 	return nil
 }
 
@@ -644,11 +523,9 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 		archived, err = s.archivePropertyInTx(
 			ctx,
 			stores.repo,
-			stores.occupancy,
 			stores.billing,
 			actor,
 			id,
-			false,
 		)
 		if err != nil {
 			return err
@@ -783,8 +660,7 @@ func (s *PropertyService) resolveLifecycleProperty(ctx context.Context, actor, i
 }
 
 // lockDeletableProperty loads the property row for update inside the delete
-// transaction and rejects a property with an open lease: deletion is
-// forbidden while a lease is open (ADR 0025).
+// transaction.
 func lockDeletableProperty(ctx context.Context, stores *txStores, owner, id uuid.UUID) (domain.Property, error) {
 	property, err := stores.repo.GetByIDAndOwnerForUpdate(ctx, id, owner)
 	if err != nil {
@@ -792,9 +668,6 @@ func lockDeletableProperty(ctx context.Context, stores *txStores, owner, id uuid
 			return domain.Property{}, ErrNotFound
 		}
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
-	}
-	if err := ensureNoOpenLease(ctx, stores.occupancy, owner, id); err != nil {
-		return domain.Property{}, err
 	}
 	return property, nil
 }
@@ -834,27 +707,14 @@ func (s *PropertyService) recoverSlotsAfterDelete(ctx context.Context, stores *t
 }
 
 // applyDeleteMode performs the mode-specific pre-delete side effects inside
-// the delete transaction. Cascade removes the property's operations, recurring
-// operations, and leases; detach keeps them (property_id becomes NULL via the
-// FK) but pauses the billing lifecycle, same as archiving does.
+// the delete transaction. Detach first suspends the property's billing
+// lifecycle (same as archiving does); cascade deletes the property outright.
 func (s *PropertyService) applyDeleteMode(
 	ctx context.Context,
 	stores *txStores,
 	actor, id uuid.UUID,
 	mode domain.DeletePropertyMode,
 ) error {
-	if mode == domain.DeletePropertyModeCascade {
-		if err := stores.repo.DeleteOperationsByProperty(ctx, actor, id); err != nil {
-			return fmt.Errorf("delete operations: %w", err)
-		}
-		if err := stores.repo.DeleteRecurringOperationsByProperty(ctx, actor, id); err != nil {
-			return fmt.Errorf("delete recurring operations: %w", err)
-		}
-		if err := stores.repo.DeleteLeasesByProperty(ctx, actor, id); err != nil {
-			return fmt.Errorf("delete leases: %w", err)
-		}
-	}
-
 	if mode == domain.DeletePropertyModeDetach {
 		loc, err := s.tzResolver.Resolve(ctx, actor)
 		if err != nil {
@@ -905,17 +765,11 @@ func (s *PropertyService) cleanupPropertyPhotos(ctx context.Context, id uuid.UUI
 
 // archivePropertyInTx performs the core archive logic inside an existing
 // transaction. The caller is responsible for committing or rolling back tx.
-// When forceCompleteLeases is false, a property with an open lease is rejected
-// with ErrPropertyHasOpenLease; when true, open leases are force-completed
-// with the same side effects as a user-initiated lease completion before the
-// property is archived.
 func (s *PropertyService) archivePropertyInTx(
 	ctx context.Context,
 	repo PropertyRepository,
-	occupancy OccupancyProvider,
 	billing PropertyBillingLifecycle,
 	scope, id uuid.UUID,
-	forceCompleteLeases bool,
 ) (domain.Property, error) {
 	property, err := repo.GetByIDAndOwnerForUpdate(ctx, id, scope)
 	if err != nil {
@@ -929,23 +783,12 @@ func (s *PropertyService) archivePropertyInTx(
 		return domain.Property{}, ErrAlreadyArchived
 	}
 
-	occupied, err := occupancy.IsOccupied(ctx, scope, property.ID)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("check occupancy: %w", err)
-	}
-	if occupied && !forceCompleteLeases {
-		return domain.Property{}, ErrPropertyHasOpenLease
-	}
-
 	loc, err := s.tzResolver.Resolve(ctx, scope)
 	if err != nil {
 		return domain.Property{}, fmt.Errorf("resolve owner timezone: %w", err)
 	}
 	now := s.clock.Now()
 	asOf := timeutil.DateIn(now, loc)
-	if err := billing.CompleteOpenLeases(ctx, scope, id, asOf); err != nil {
-		return domain.Property{}, fmt.Errorf("complete open leases: %w", err)
-	}
 
 	if err := billing.Suspend(ctx, id, scope, asOf); err != nil {
 		return domain.Property{}, fmt.Errorf("suspend billing: %w", err)
@@ -967,9 +810,8 @@ func (s *PropertyService) archivePropertyInTx(
 }
 
 // ArchiveExcessProperties archives active properties beyond the given limit,
-// keeping the most recently updated properties. Properties with an open lease
-// have that lease force-completed (same side effects as a user-initiated lease
-// completion) before archiving, so the tariff limit is always enforced.
+// keeping the most recently updated properties, so the tariff limit is always
+// enforced.
 func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, scope uuid.UUID, limit int) error {
 	if limit < 0 {
 		return nil
@@ -990,12 +832,11 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 		return nil
 	}
 
-	txOccupancy := s.occupancyProvider.WithTx(tx)
 	txBillingLifecycle := s.billingLifecycle.WithTx(tx)
 	txAudit := s.audit.WithTx(tx)
 
 	for _, p := range properties[limit:] {
-		_, err := s.archivePropertyInTx(ctx, txRepo, txOccupancy, txBillingLifecycle, scope, p.ID, true)
+		_, err := s.archivePropertyInTx(ctx, txRepo, txBillingLifecycle, scope, p.ID)
 		if err != nil {
 			if errors.Is(err, ErrAlreadyArchived) {
 				s.logger.WarnContext(ctx, "skipping auto-archive of property",
@@ -1064,16 +905,6 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 		unarchived, err = stores.repo.GetByIDAndOwner(ctx, id, actor)
 		if err != nil {
 			return fmt.Errorf("reload unarchived property: %w", err)
-		}
-
-		occupied, err := stores.occupancy.IsOccupied(ctx, actor, unarchived.ID)
-		if err != nil {
-			return fmt.Errorf("check occupancy: %w", err)
-		}
-		if occupied {
-			unarchived.Occupancy = domain.OccupancyOccupied
-		} else {
-			unarchived.Occupancy = domain.OccupancyFree
 		}
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{

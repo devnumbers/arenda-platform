@@ -5,7 +5,7 @@ import {useRouter} from 'next/navigation';
 import {useQueryClient} from '@tanstack/react-query';
 import {propertyKeys, useProperty} from '@/features/properties';
 
-import {useCreateLease, usePropertyLeases} from '@/features/leases';
+import {useCreateLease, useLeases} from '@/features/leases';
 import {useTenantContacts} from '@/features/tenant-contacts';
 import {isOpenLeaseStatus} from '@/entities/lease';
 import {notify} from '@/shared/lib/notifications';
@@ -36,7 +36,11 @@ export function LeaseCreateWizard({propertyId, preselectedTenantContactId}: Leas
     const [createdLeaseId, setCreatedLeaseId] = useState<string | undefined>(undefined);
 
     const propertyQuery = useProperty(propertyId ?? '');
-    const propertyLeasesQuery = usePropertyLeases(propertyId ?? '');
+    const allLeasesQuery = useLeases();
+    const propertyLeasesQuery = {
+        ...allLeasesQuery,
+        data: allLeasesQuery.data?.filter((lease) => lease.propertyId === propertyId),
+    };
     const createLease = useCreateLease();
 
     useEffect(() => {

@@ -5,14 +5,6 @@ RETURNING *;
 
 -- name: GetPropertyByIDAndOwner :one
 SELECT properties.*,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -36,18 +28,7 @@ WHERE id = $1 AND owner_id = $2;
 -- capability (the application maps "no access" to ErrNotFound to preserve
 -- object privacy). members_count is the shared-access participant count
 -- (membership rows of any status plus pending email invitations, issue #163).
--- overdue_rent_count counts the property's overdue rent operations scoped to
--- the property's data owner so shared properties show the same count to a
--- member as to the owner (issue #157).
 SELECT properties.*,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -62,14 +43,6 @@ SELECT * FROM properties WHERE id = $1 FOR UPDATE;
 
 -- name: ListActivePropertiesByOwner :many
 SELECT properties.*,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -80,14 +53,6 @@ ORDER BY properties.updated_at DESC;
 
 -- name: ListArchivedPropertiesByOwner :many
 SELECT properties.*,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi

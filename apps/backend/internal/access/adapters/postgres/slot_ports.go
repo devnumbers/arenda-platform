@@ -44,32 +44,6 @@ func (a *RecipientLimiterAdapter) WithTx(tx transaction.Tx) (application.Recipie
 // Compile-time check that RecipientLimiterAdapter implements the access port.
 var _ application.RecipientLimiter = (*RecipientLimiterAdapter)(nil)
 
-// OccupancyPortAdapter bridges properties/application.OccupancyProvider to the
-// access OccupancyPort. Occupancy is a read-only, short-lived signal, so the
-// adapter has no WithTx: the coordinator reads it on the main connection,
-// consistent with how the properties service reads occupancy outside its
-// listing transaction. Reading outside the slot-coordinator tx is acceptable
-// because occupancy only gates the eviction/recovery comparator (open lease
-// first), never the slot count itself.
-type OccupancyPortAdapter struct {
-	provider propertiesapp.OccupancyProvider
-}
-
-// NewOccupancyPortAdapter creates an OccupancyPortAdapter over the properties
-// occupancy provider.
-func NewOccupancyPortAdapter(provider propertiesapp.OccupancyProvider) *OccupancyPortAdapter {
-	return &OccupancyPortAdapter{provider: provider}
-}
-
-// OccupiedPropertyIDs returns the set of properties of the data owner that have
-// an open lease.
-func (a *OccupancyPortAdapter) OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error) {
-	return a.provider.OccupiedPropertyIDs(ctx, ownerID)
-}
-
-// Compile-time check that OccupancyPortAdapter implements the access port.
-var _ application.OccupancyPort = (*OccupancyPortAdapter)(nil)
-
 // OwnedActivePropertiesAdapter bridges properties/application.PropertyRepository
 // to the access OwnedActivePropertiesPort. It exposes the recipient's own
 // active+maintenance properties (the own-object half of their tariff pool) as

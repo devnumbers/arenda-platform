@@ -103,12 +103,10 @@ type Querier interface {
 	DeleteFutureGeneratedOperations(ctx context.Context, arg DeleteFutureGeneratedOperationsParams) error
 	DeleteFutureOperationsByLease(ctx context.Context, arg DeleteFutureOperationsByLeaseParams) error
 	DeleteFutureUneditedOperationsByProperty(ctx context.Context, arg DeleteFutureUneditedOperationsByPropertyParams) error
-	DeleteLeasesByProperty(ctx context.Context, arg DeleteLeasesByPropertyParams) error
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
 	DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UUID) error
-	DeleteOperationsByProperty(ctx context.Context, arg DeleteOperationsByPropertyParams) error
 	DeleteOperationsOutsideLeaseRange(ctx context.Context, arg DeleteOperationsOutsideLeaseRangeParams) error
 	// Owner-scoped: the row must belong to the user issuing the deletion.
 	DeletePaymentMethodByID(ctx context.Context, arg DeletePaymentMethodByIDParams) error
@@ -121,7 +119,6 @@ type Querier interface {
 	// the subscription does not exist or belongs to another user (404 in the API).
 	DeletePushSubscriptionByEndpointAndUser(ctx context.Context, arg DeletePushSubscriptionByEndpointAndUserParams) (int64, error)
 	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
-	DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error
 	DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEmailReminderParams) error
 	DeleteSentPushReminder(ctx context.Context, arg DeleteSentPushReminderParams) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
@@ -175,9 +172,6 @@ type Querier interface {
 	// capability (the application maps "no access" to ErrNotFound to preserve
 	// object privacy). members_count is the shared-access participant count
 	// (membership rows of any status plus pending email invitations, issue #163).
-	// overdue_rent_count counts the property's overdue rent operations scoped to
-	// the property's data owner so shared properties show the same count to a
-	// member as to the owner (issue #157).
 	GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPropertyByIDRow, error)
 	GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error)
 	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error)
@@ -279,7 +273,6 @@ type Querier interface {
 	ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
-	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	ListOpenLeasesWithPastEndDate(ctx context.Context, arg ListOpenLeasesWithPastEndDateParams) ([]Lease, error)
 	ListOperationCategoriesByOwner(ctx context.Context, arg ListOperationCategoriesByOwnerParams) ([]OperationCategory, error)
 	ListOperationDatesByLease(ctx context.Context, leaseID pgtype.UUID) ([]pgtype.Date, error)

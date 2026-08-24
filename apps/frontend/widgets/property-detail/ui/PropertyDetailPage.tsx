@@ -2,7 +2,7 @@
 
 import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
-import {useCallback, useMemo, useState} from 'react';
+import React, {useCallback} from 'react';
 import {notify} from '@/shared/lib/notifications';
 import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
@@ -14,37 +14,19 @@ import {
     useUnarchiveProperty,
     useUpdateProperty
 } from '@/features/properties';
-import {useCompleteLease, usePropertyLeases,} from '@/features/leases';
-import {
-    type OperationsFilters,
-    useOperations,
-    usePropertyOperationsSummary,
-} from '@/features/operations';
-import {useOperationCategories} from '@/features/operation-categories';
-import {formatDateForApi} from '@/entities/operation';
 import type {ApiError} from '@/shared/api/errors';
-import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
 import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
 import {PropertyDetailHeader} from './PropertyDetailHeader';
 import {PropertyGallery} from './PropertyGallery';
 import {PropertyStatusSection} from './PropertyStatusSection';
-import {PropertyLeaseCard} from './PropertyLeaseCard';
-import {PropertyTenantCard} from './PropertyTenantCard';
-import {PropertyOperationsSection} from './PropertyOperationsSection';
-import {OverdueOperationsBadge} from './OverdueOperationsBadge';
-import {PropertyOperationsActions} from './PropertyOperationsActions';
-import {PropertyOperationsCard} from './PropertyOperationsCard';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyAttributesSection} from './PropertyAttributesSection';
 import {PropertyContactsSection} from './PropertyContactsSection';
 import {PropertyActionMenu} from './PropertyActionMenu';
-import {PropertyBlockedModal} from './PropertyBlockedModal';
 import {PropertyArchiveModal} from './PropertyArchiveModal';
 import {PropertyDeleteModal} from './PropertyDeleteModal';
-import {PropertyEndLeaseModal} from './PropertyEndLeaseModal';
 import {PropertySharingModal} from './PropertySharingModal';
 import {PropertySharedBanner} from './PropertySharedBanner';
-import {PropertySuccessBanner} from './PropertySuccessBanner';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
 import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
@@ -55,103 +37,27 @@ function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
 }
 
-const EXPORT_FILENAME_STAR_PATTERN = /filename\*=UTF-8''([^;]+)/;
-
-function resolveExportFilename(disposition: string): string {
-    const match = EXPORT_FILENAME_STAR_PATTERN.exec(disposition);
-    if (!match) return 'export.xlsx';
-    const filename = match[1];
-    if (filename === undefined) return 'export.xlsx';
-    try {
-        return decodeURIComponent(filename);
-    } catch {
-        return 'export.xlsx';
-    }
-}
-
 export function PropertyDetailPage(): JSX.Element {
     const params = useParams<{ id: string }>();
     const id = params.id;
     const router = useRouter();
 
     const propertyQuery = useProperty(id);
-    const leasesQuery = usePropertyLeases(id);
-    const summaryQuery = usePropertyOperationsSummary(id);
 
     const updateProperty = useUpdateProperty();
     const archiveProperty = useArchiveProperty();
     const unarchiveProperty = useUnarchiveProperty();
-    const completeLease = useCompleteLease();
     const deleteProperty = useDeleteProperty();
 
-    const [blockedOpen, setBlockedOpen] = useState(false);
-    const [endLeaseOpen, setEndLeaseOpen] = useState(false);
-    const [archiveOpen, setArchiveOpen] = useState(false);
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [successBannerOpen, setSuccessBannerOpen] = useState(false);
-    const [sharingOpen, setSharingOpen] = useState(false);
-    const [selectedLeaseId, setSelectedLeaseId] = useState<string>('');
+    const [archiveOpen, setArchiveOpen] = React.useState(false);
+    const [deleteOpen, setDeleteOpen] = React.useState(false);
+    const [sharingOpen, setSharingOpen] = React.useState(false);
 
     const property = propertyQuery.data;
-    const leases = useMemo(() => leasesQuery.data ?? [], [leasesQuery.data]);
-
-    const pageStatus = useMemo(
-        () => (property ? getPropertyPageStatus(property.status, leases) : 'free'),
-        [property, leases],
-    );
-    const currentLease = useMemo(() => findCurrentLease(leases), [leases]);
-    const categoriesQuery = useOperationCategories('income');
-    // Collect every rent category id across the actor's own and shared-access
-    // accounts: rent operations of a shared object belong to the owner's rent
-    // category, not the member's own, so a single find() would filter them out.
-    const rentCategoryIds = useMemo(
-        () => categoriesQuery.data
-            ?.filter((category) => category.code === 'rent')
-            .map((category) => category.id) ?? [],
-        [categoriesQuery.data],
-    );
-    const payableRentFilters = useMemo<OperationsFilters>(
-        () => ({
-            lease_id: currentLease?.id,
-            category_id: rentCategoryIds.length > 0 ? rentCategoryIds : undefined,
-            status: ['pending', 'overdue'],
-            sort: 'operation_date_asc',
-            limit: 1,
-        }),
-        [currentLease?.id, rentCategoryIds],
-    );
-    const payableRentQuery = useOperations(payableRentFilters, {
-        enabled: Boolean(currentLease?.id) && rentCategoryIds.length > 0,
-    });
-    const isPayRentLoading = Boolean(currentLease) && payableRentQuery.isFetching;
-
-    const overdueFilters = useMemo<Omit<OperationsFilters, 'property_id'>>(
-        () => ({
-            status: ['overdue'],
-            sort: 'operation_date_asc',
-            limit: 3,
-        }),
-        [],
-    );
-    const upcomingFilters = useMemo<Omit<OperationsFilters, 'property_id'>>(
-        () => ({
-            status: ['pending'],
-            from: formatDateForApi(new Date()),
-            sort: 'operation_date_asc',
-            limit: 3,
-        }),
-        [],
-    );
-
-    const overdueCount = summaryQuery.data?.overdueTotalCount ?? 0;
 
     const handleToggleMaintenance = useCallback(() => {
         if (!property) return;
         if (property.status === 'active') {
-            if (currentLease) {
-                setBlockedOpen(true);
-                return;
-            }
             updateProperty.mutate(
                 {id, data: {status: 'maintenance'}},
                 {
@@ -168,7 +74,7 @@ export function PropertyDetailPage(): JSX.Element {
                 },
             );
         }
-    }, [property, currentLease, id, updateProperty]);
+    }, [property, id, updateProperty]);
 
     const handleToggleArchive = useCallback(() => {
         if (!property) return;
@@ -178,13 +84,9 @@ export function PropertyDetailPage(): JSX.Element {
                 onError: showMutationError,
             });
         } else {
-            if (currentLease) {
-                setBlockedOpen(true);
-                return;
-            }
             setArchiveOpen(true);
         }
-    }, [property, currentLease, id, unarchiveProperty]);
+    }, [property, id, unarchiveProperty]);
 
     const handleArchive = useCallback(() => {
         archiveProperty.mutate(id, {
@@ -192,38 +94,9 @@ export function PropertyDetailPage(): JSX.Element {
                 setArchiveOpen(false);
                 notify.scenarios.property.movedToArchive();
             },
-            onError: (error) => {
-                if (error.status === 409) {
-                    // Устаревший кэш: аренда открыта в другой вкладке.
-                    // Закрываем модалку архивации, обновляем список аренд
-                    // и показываем модалку «нельзя изменить статус».
-                    setArchiveOpen(false);
-                    void leasesQuery.refetch();
-                    setBlockedOpen(true);
-                    return;
-                }
-                showMutationError(error);
-            },
-        });
-    }, [archiveProperty, id, leasesQuery]);
-
-    const handleEndLease = useCallback(() => {
-        if (currentLease) {
-            setSelectedLeaseId(currentLease.id);
-            setEndLeaseOpen(true);
-        }
-    }, [currentLease]);
-
-    const confirmEndLease = useCallback(() => {
-        if (!selectedLeaseId) return;
-        completeLease.mutate(selectedLeaseId, {
-            onSuccess: () => {
-                setEndLeaseOpen(false);
-                setSuccessBannerOpen(true);
-            },
             onError: showMutationError,
         });
-    }, [selectedLeaseId, completeLease]);
+    }, [archiveProperty, id]);
 
     const handleEdit = useCallback(() => {
         router.push(ROUTES.propertyEdit(id));
@@ -243,86 +116,20 @@ export function PropertyDetailPage(): JSX.Element {
                     goBack(router, ROUTES.properties);
                 },
                 onError: (error) => {
-                    if (error.status === 409) {
-                        // Устаревший кэш: аренда открыта в другой вкладке.
-                        // Обновляем список аренд — модалка переключится
-                        // в состояние «нельзя удалить».
-                        void leasesQuery.refetch();
-                    }
                     notify.scenarios.property.deleteError({description: error.detail});
                 },
             },
         );
-    }, [deleteProperty, id, router, leasesQuery]);
-
-    const handleExport = useCallback(async (): Promise<void> => {
-        try {
-            const response = await fetch(`/api/properties/${id}/export`);
-            if (!response.ok) {
-                const problem = (await response.json()) as {detail?: string};
-                notify.scenarios.property.exportError(
-                    problem.detail ? {description: problem.detail} : undefined,
-                );
-                return;
-            }
-            const blob = await response.blob();
-            const filename = resolveExportFilename(
-                response.headers.get('Content-Disposition') ?? '',
-            );
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = filename;
-            anchor.click();
-            // Отложенный revoke: в Firefox мгновенный revokeObjectURL после click() может отменить скачивание.
-            setTimeout(() => URL.revokeObjectURL(url), 0);
-        } catch {
-            notify.scenarios.property.exportError();
-        }
-    }, [id]);
-
-    const handlePayRent = useCallback(() => {
-        if (currentLease) {
-            if (payableRentQuery.isFetching) return;
-            const nextRentOperation = payableRentQuery.data?.items[0];
-            router.push(
-                nextRentOperation
-                    ? ROUTES.financeOperation(nextRentOperation.id)
-                    : ROUTES.lease(currentLease.id),
-            );
-            return;
-        }
-
-        router.push(ROUTES.propertyOperations(id));
-    }, [currentLease, id, payableRentQuery.data, payableRentQuery.isFetching, router]);
-
-    const handleBlockedContinue = useCallback(() => {
-        setBlockedOpen(false);
-        handleEndLease();
-    }, [handleEndLease]);
-
-    const handleDeleteEndLease = useCallback(() => {
-        if (!currentLease) return;
-        // Остаёмся в модалке удаления: после инвалидации кэша currentLease
-        // пропадёт, и модалка сама вернётся к выбору режима удаления.
-        const promise = completeLease.mutateAsync(currentLease.id);
-        void notify.scenarios.leases.completed(promise);
-        promise.catch(() => {}); // ошибка уже показана через notify.promise
-    }, [currentLease, completeLease]);
-
-    const hasAnyError =
-        propertyQuery.isError ||
-        leasesQuery.isError ||
-        summaryQuery.isError;
+    }, [deleteProperty, id, router]);
 
     // Разводим только ошибку основного запроса объекта: 404 (нет объекта
     // или нет доступа) и 403 membership_suspended (лимит тарифа) получают
-    // свои экраны; ошибки дочерних запросов остаются на generic-экране.
+    // свои экраны.
     const propertyErrorKind = propertyQuery.isError
         ? resolvePropertyDetailError(propertyQuery.error)
         : null;
 
-    const isLoading = propertyQuery.isPending || leasesQuery.isPending;
+    const isLoading = propertyQuery.isPending;
 
     return (
         <div className={styles.root}>
@@ -331,12 +138,11 @@ export function PropertyDetailPage(): JSX.Element {
                 actions={
                     <PropertyActionMenu
                         status={property?.status}
-                        disabled={isLoading || hasAnyError || !property}
+                        disabled={isLoading || propertyQuery.isError || !property}
                         onEdit={handleEdit}
                         onAccess={handleAccess}
                         onToggleMaintenance={handleToggleMaintenance}
                         onToggleArchive={handleToggleArchive}
-                        onExport={() => void handleExport()}
                         onDelete={() => setDeleteOpen(true)}
                     />
                 }
@@ -357,68 +163,20 @@ export function PropertyDetailPage(): JSX.Element {
             )}
 
             {!isLoading && (propertyErrorKind === null || propertyErrorKind === 'generic') &&
-                (hasAnyError || !property) && (
+                (propertyQuery.isError || !property) && (
                 <PropertyDetailError
                     onRetry={() => {
                         void propertyQuery.refetch();
-                        void leasesQuery.refetch();
-                        void summaryQuery.refetch();
                     }}
-                    isLoading={
-                        propertyQuery.isFetching ||
-                        leasesQuery.isFetching ||
-                        summaryQuery.isFetching
-                    }
+                    isLoading={propertyQuery.isFetching}
                 />
             )}
 
-            {!isLoading && !hasAnyError && property && (
+            {!isLoading && !propertyQuery.isError && property && (
                 <>
                     <PropertyGallery/>
 
-                    <PropertyStatusSection
-                        property={property}
-                        leases={leases}
-                        summary={summaryQuery.data}
-                    />
-
-                    <PropertyLeaseCard
-                        lease={currentLease}
-                        status={pageStatus}
-                        propertyId={id}
-                        onPayRent={handlePayRent}
-                        isPayRentLoading={isPayRentLoading}
-                        onEndLease={handleEndLease}
-                    />
-
-                    <PropertyTenantCard lease={property.activeLease}/>
-
-                    <PropertyOperationsSection
-                        propertyId={id}
-                        title="Просроченные операции"
-                        href={`${ROUTES.financeOperations}?property_id=${id}&status=overdue&period=all`}
-                        emptyText="Просроченных операций нет"
-                        filters={overdueFilters}
-                        badge={overdueCount > 0 ? <OverdueOperationsBadge count={overdueCount}/> : undefined}
-                    />
-
-                    <PropertyOperationsSection
-                        propertyId={id}
-                        title="Запланированные операции"
-                        href={`${ROUTES.financeOperations}?property_id=${id}&status=pending&period=all`}
-                        emptyText="Запланированных операций нет"
-                        filters={upcomingFilters}
-                    />
-
-                    <PropertyOperationsActions
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
-
-                    <PropertyOperationsCard
-                        propertyId={id}
-                        summary={summaryQuery.data}
-                    />
+                    <PropertyStatusSection property={property}/>
 
                     <PropertyInfoCard
                         description={property.description}
@@ -440,12 +198,6 @@ export function PropertyDetailPage(): JSX.Element {
                 </>
             )}
 
-            <PropertyBlockedModal
-                isOpen={blockedOpen}
-                onClose={() => setBlockedOpen(false)}
-                onContinue={handleBlockedContinue}
-            />
-
             <PropertyArchiveModal
                 isOpen={archiveOpen}
                 onClose={() => setArchiveOpen(false)}
@@ -458,21 +210,12 @@ export function PropertyDetailPage(): JSX.Element {
                 isOpen={deleteOpen}
                 onClose={() => setDeleteOpen(false)}
                 onDelete={handleDelete}
-                onEndLease={handleDeleteEndLease}
-                currentLease={currentLease}
                 membersCount={property?.members_count ?? 0}
                 deletingMode={
                     deleteProperty.isPending
                         ? deleteProperty.variables.mode
                         : null
                 }
-                isCompletingLease={completeLease.isPending}
-            />
-
-            <PropertyEndLeaseModal
-                isOpen={endLeaseOpen}
-                onClose={() => setEndLeaseOpen(false)}
-                onConfirm={confirmEndLease}
             />
 
             <PropertySharingModal
@@ -481,12 +224,6 @@ export function PropertyDetailPage(): JSX.Element {
                 onClose={() => setSharingOpen(false)}
                 isArchived={property?.status === 'archived'}
             />
-
-            {successBannerOpen && (
-                <PropertySuccessBanner
-                    onOpenLease={() => router.push(ROUTES.lease(selectedLeaseId))}
-                />
-            )}
         </div>
     );
 }

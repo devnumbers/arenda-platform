@@ -27,11 +27,10 @@ var (
 
 	ErrAddressSuggestFailed = errors.New("address suggestion request failed")
 
-	ErrArchivedProperty     = errors.New("cannot modify an archived property")
-	ErrAlreadyArchived      = errors.New("property is already archived")
-	ErrNotArchived          = errors.New("property is not archived")
-	ErrPropertyHasOpenLease = errors.New("property has an open lease")
-	ErrPhotoLimitReached    = errors.New("property photo limit reached")
+	ErrArchivedProperty  = errors.New("cannot modify an archived property")
+	ErrAlreadyArchived   = errors.New("property is already archived")
+	ErrNotArchived       = errors.New("property is not archived")
+	ErrPhotoLimitReached = errors.New("property photo limit reached")
 )
 
 // InvalidStatusTransitionError describes a status change that is not allowed.

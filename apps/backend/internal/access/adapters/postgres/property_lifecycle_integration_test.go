@@ -9,10 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
-	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 )
 
 // These integration tests cover the issue #163 acceptance criteria against a
@@ -43,17 +41,7 @@ import (
 // mailer and the no-commit beginner — the archived-property branch (slot check
 // skipped) is production code under test here, not a test-side reimplementation.
 //
-// The open-lease 409 uniformity check is DB-level: the leases table has no
-// created_by column — every lease, whoever created it, is stored under the
-// data owner's scope — and CountOpenLeasesByProperty carries no author filter,
-// so the occupancy gate behind ArchiveProperty/DeleteProperty
-// (ErrPropertyHasOpenLease -> 409) cannot depend on the lease author. The
-// application-level archive rejection is already covered by the unit test
-// TestPropertyService_ArchiveProperty_OpenLeaseStillRejected in
-// internal/properties/application; DeleteProperty consumes the same
-// IsOccupied boolean, so the DB-level occupancy assertion below covers both.
-
-// pinSuspendedAt sets an explicit suspended_at on a membership row. Suspend
+// PinSuspendedAt sets an explicit suspended_at on a membership row. Suspend
 // uses now(), which is the transaction start time inside the test tx, so two
 // memberships suspended in the same test get identical timestamps and the FIFO
 // order becomes nondeterministic; pinning the timestamps simulates the passage
@@ -468,63 +456,5 @@ func TestPropertyLifecycle_DeleteDropsMembershipsAndRecoversFIFO(t *testing.T) {
 	}
 	if len(invitations) != 0 {
 		t.Errorf("pending invitations after delete = %d, want 0 (FK cascade)", len(invitations))
-	}
-}
-
-// TestPropertyLifecycle_OpenLeaseOccupancyIgnoresLeaseAuthor covers AC: the
-// open-lease 409 block on archive/delete is independent of who created the
-// lease. The leases table has no created_by column — a lease created by a
-// full_access member is stored under the owner's scope exactly like an
-// owner's own lease — and CountOpenLeasesByProperty behind the real
-// OccupancyProvider has no author filter, so the application-level
-// ErrPropertyHasOpenLease (409) fires uniformly. The archive rejection itself
-// is covered by the unit test
-// TestPropertyService_ArchiveProperty_OpenLeaseStillRejected; DeleteProperty
-// consumes the same IsOccupied gate.
-func TestPropertyLifecycle_OpenLeaseOccupancyIgnoresLeaseAuthor(t *testing.T) {
-	t.Parallel()
-	f := newLifecycleMailFixture(t)
-	ctx := f.bg()
-
-	owner := f.addUserWithEmail(t, f.email("owner"))
-	property := f.addProperty(t, owner, "Квартира на Невском")
-
-	// An open lease under the owner's scope — the only shape a lease can
-	// have, regardless of which user (owner or full_access member) created it.
-	leaseID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	if _, err := f.q.CreateLease(ctx, genpostgres.CreateLeaseParams{
-		ID:                pgUUID(leaseID),
-		OwnerID:           pgUUID(owner),
-		PropertyID:        pgUUID(property),
-		TenantContactID:   pgtype.UUID{},
-		Status:            statusActive,
-		StartDate:         pgtype.Date{Time: time.Now(), Valid: true},
-		EndDate:           pgtype.Date{},
-		RentAmountKopecks: 100000,
-		PaymentDay:        5,
-		Comment:           pgtype.Text{},
-	}); err != nil {
-		t.Fatalf("CreateLease: %v", err)
-	}
-
-	count, err := f.q.CountOpenLeasesByProperty(ctx, pgUUID(property))
-	if err != nil {
-		t.Fatalf("CountOpenLeasesByProperty: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("open leases = %d, want 1 (the query carries no lease-author filter)", count)
-	}
-
-	// The real production occupancy gate both ArchiveProperty and
-	// DeleteProperty consult before answering 409.
-	occupied, err := propertiespg.NewOccupancyProvider(f.tx).IsOccupied(ctx, owner, property)
-	if err != nil {
-		t.Fatalf("IsOccupied: %v", err)
-	}
-	if !occupied {
-		t.Error("IsOccupied must report the property occupied so archive/delete are rejected with 409")
 	}
 }

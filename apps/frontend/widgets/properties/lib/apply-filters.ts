@@ -21,20 +21,11 @@ export function applyFiltersAndSort(
 
   if (mode !== 'archived' && filters.statuses.length > 0) {
     result = result.filter((p) => {
-      const display = getDisplayStatus(
-        p.status,
-        p.occupancy,
-        p.activeLease?.status,
-      );
-      if (!display || display === 'overdue') {
+      const display = getDisplayStatus(p.status);
+      if (!display) {
         return false;
       }
-      const filterStatus =
-        display === 'requires_action' || display === 'awaiting_start'
-          ? 'rented'
-          : display;
-
-      return filters.statuses.includes(filterStatus);
+      return filters.statuses.includes(display);
     });
   }
 

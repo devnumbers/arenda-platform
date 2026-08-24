@@ -17,24 +17,21 @@ import (
 // The selection rule is defined in docs/entities/tarif.md ("Автоархив при
 // понижении" and the recovery counterpart) and PRD #153, issue #158 (T4):
 //
-//   - Eviction keeps objects in this order: first those with an open lease, then
-//     the most recently updated. If open leases exceed the limit, the excess
-//     objects with open leases are evicted too.
+//   - Eviction keeps the most recently updated objects.
 //   - Recovery is FIFO by the suspension moment; the tie-break inside a single
 //     downgrade batch (one trigger that stamped the same SuspendedAt) is again
-//     "open lease first, then most recently updated".
+//     the most recently updated first.
 //
 // IsShared is only a label for the caller: own objects are auto-archived on
 // eviction, shared memberships are suspended. The selection itself treats own and
 // shared candidates identically.
 type SlotCandidate struct {
-	PropertyID   uuid.UUID
-	IsShared     bool // Own property when false; recipient's membership when true.
-	MemberID     uuid.UUID
-	RecipientID  uuid.UUID // IsShared=true only.
-	HasOpenLease bool      // Whether an open lease exists on the object.
-	UpdatedAt    time.Time // own: property.UpdatedAt; shared: membership.UpdatedAt
-	SuspendedAt  time.Time // Recovery only: the moment of suspension.
+	PropertyID  uuid.UUID
+	IsShared    bool // Own property when false; recipient's membership when true.
+	MemberID    uuid.UUID
+	RecipientID uuid.UUID // IsShared=true only.
+	UpdatedAt   time.Time // own: property.UpdatedAt; shared: membership.UpdatedAt
+	SuspendedAt time.Time // Recovery only: the moment of suspension.
 }
 
 // SelectForEviction returns the candidates that do NOT fit into limit — i.e. the
@@ -43,8 +40,7 @@ type SlotCandidate struct {
 // docs/entities/tarif.md and PRD #153.
 //
 // The "best stays" ordering (top of the sorted pool) is:
-//  1. HasOpenLease true ranks above false.
-//  2. Within equal HasOpenLease, more recent UpdatedAt ranks above older.
+//  1. More recent UpdatedAt ranks above older.
 //
 // Edge cases: limit < 0 means an unlimited tariff and nobody is evicted; limit
 // == 0 evicts everyone; len(candidates) <= limit evicts nobody; an empty input
@@ -78,8 +74,8 @@ func SelectForEviction(candidates []SlotCandidate, limit int) []SlotCandidate {
 //
 // The recovery ordering is:
 //  1. Earlier SuspendedAt ranks above later (FIFO).
-//  2. Within the same SuspendedAt (a downgrade batch): HasOpenLease true first,
-//     then more recent UpdatedAt first.
+//  2. Within the same SuspendedAt (a downgrade batch): more recent UpdatedAt
+//     first.
 //
 // Edge cases: freeSlots <= 0 recovers nobody; an empty input yields an empty
 // result. The input slice is never mutated.
@@ -106,24 +102,17 @@ func SelectForRecovery(suspended []SlotCandidate, freeSlots int) []SlotCandidate
 
 // evictionBetter reports whether a "stays better" than b and therefore must sort
 // before b in the eviction pool (i.e. a is closer to the protected top-N). It
-// implements the rule "open lease first, then most recently updated" from
-// docs/entities/tarif.md.
+// implements the rule "most recently updated first" from docs/entities/tarif.md.
 func evictionBetter(a, b SlotCandidate) bool {
-	if a.HasOpenLease != b.HasOpenLease {
-		return a.HasOpenLease
-	}
 	return a.UpdatedAt.After(b.UpdatedAt)
 }
 
 // recoveryBefore reports whether a must be recovered before b. It implements
-// FIFO by SuspendedAt, with the downgrade-batch tie-break "open lease first,
-// then most recently updated" from docs/entities/tarif.md and PRD #153.
+// FIFO by SuspendedAt, with the downgrade-batch tie-break "most recently
+// updated first" from docs/entities/tarif.md and PRD #153.
 func recoveryBefore(a, b SlotCandidate) bool {
 	if !a.SuspendedAt.Equal(b.SuspendedAt) {
 		return a.SuspendedAt.Before(b.SuspendedAt)
-	}
-	if a.HasOpenLease != b.HasOpenLease {
-		return a.HasOpenLease
 	}
 	return a.UpdatedAt.After(b.UpdatedAt)
 }

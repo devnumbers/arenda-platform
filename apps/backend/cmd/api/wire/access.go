@@ -87,12 +87,11 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, p.AuditRecorder, p.UoW)
 
 	// Slot coordinator bridges (issue #158, T4). The billing limiter wraps the
-	// billing application SubscriptionPropertyLimiter; the occupancy and
-	// owned-property ports wrap the properties postgres adapters, rebuilt from
-	// the shared pool (they hold no state beyond the db handle).
+	// billing application SubscriptionPropertyLimiter; the owned-property port
+	// wraps the properties postgres adapter, rebuilt from the shared pool (it
+	// holds no state beyond the db handle).
 	propertyLimiter := billing.Services.Limiter
 	recipientLimiter := accesspg.NewRecipientLimiterAdapter(propertyLimiter)
-	occupancyPort := accesspg.NewOccupancyPortAdapter(propertiespg.NewOccupancyProvider(p.DB))
 	ownedActiveProps := accesspg.NewOwnedActivePropertiesAdapter(propertiespg.NewPropertyRepository(p.DB))
 
 	// The access email sender renders through the shared renderer and platform
@@ -105,7 +104,6 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		memberRepo,
 		ownerResolver,
 		recipientLimiter,
-		occupancyPort,
 		ownedActiveProps,
 		lifecycleMailer,
 		p.AuditRecorder,

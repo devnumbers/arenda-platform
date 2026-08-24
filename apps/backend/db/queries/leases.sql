@@ -67,11 +67,6 @@ WHERE owner_id = $1
 ORDER BY updated_at DESC
 LIMIT 1;
 
--- name: ListOpenLeasePropertyIDsByOwner :many
-SELECT DISTINCT property_id FROM leases
-WHERE owner_id = $1
-  AND status IN ('awaiting_start', 'active', 'requires_action');
-
 -- name: ListOpenLeasesWithPastEndDate :many
 SELECT * FROM leases
 WHERE status IN ('awaiting_start', 'active')
@@ -146,6 +141,3 @@ WHERE l.id = $1;
 -- name: CountLeasesTotalAdmin :one
 SELECT COUNT(*) FROM leases;
 
--- name: DeleteLeasesByProperty :exec
-DELETE FROM leases
-WHERE owner_id = $1 AND property_id = $2;

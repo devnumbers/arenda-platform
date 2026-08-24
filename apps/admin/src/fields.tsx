@@ -71,11 +71,6 @@ export const propertyStatusFilterChoices: Choice[] = [
   { id: 'archived', name: 'В архиве' },
 ];
 
-export const occupancyChoices: Choice[] = [
-  { id: 'free', name: 'Свободен' },
-  { id: 'occupied', name: 'Занят' },
-];
-
 export const leaseStatusChoices: Choice[] = [
   { id: 'awaiting_start', name: 'Ожидает начала' },
   { id: 'active', name: 'Активен' },

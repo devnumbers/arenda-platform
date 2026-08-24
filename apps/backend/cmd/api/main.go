@@ -123,7 +123,7 @@ func run() error {
 	subscribeGraceEvents(eventDispatcher, graceNotifier)
 
 	// 11. Admin service (depends on billing subscriptions + occupancy provider).
-	adminMod := wire.WireAdmin(p, billingMod.Services.Subscriptions, propertiesMod.OccupancyProvider)
+	adminMod := wire.WireAdmin(p, billingMod.Services.Subscriptions)
 
 	// 12. Leases services: lease/operation/recurring/tenant-contact/export.
 	leasesMod := wire.WireLeasesServices(p, leasesRepos, notificationsMod.ReminderScheduler, notificationsMod.ReminderService)

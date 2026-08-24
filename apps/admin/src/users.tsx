@@ -16,7 +16,6 @@ import {
   ChoiceChipField,
   FullNameField,
   auditActionChoices,
-  occupancyChoices,
   operationStatusChoices,
   operationTypeChoices,
   propertyStatusChoices,
@@ -99,7 +98,6 @@ export const UserShow = () => (
             <SelectField source="type" choices={propertyTypeChoices} sortable={false} />
             <ChoiceChipField source="status" choices={propertyStatusChoices} />
             <TextField source="address" sortable={false} />
-            <SelectField source="occupancy" choices={occupancyChoices} sortable={false} />
             <DateField source="createdAt" showTime />
           </Datagrid>
         </ReferenceManyField>

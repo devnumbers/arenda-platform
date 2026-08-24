@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	domain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -30,7 +29,6 @@ type SlotCoordinator struct {
 	members    MembershipRepository
 	owners     PropertyOwnerResolver
 	limiter    RecipientLimiter
-	occupancy  OccupancyPort
 	ownedProps OwnedActivePropertiesPort
 	lifecycle  *LifecycleMailer
 	audit      auditapp.Recorder
@@ -47,7 +45,6 @@ func NewSlotCoordinator(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
 	limiter RecipientLimiter,
-	occupancy OccupancyPort,
 	ownedProps OwnedActivePropertiesPort,
 	lifecycle *LifecycleMailer,
 	audit auditapp.Recorder,
@@ -57,7 +54,6 @@ func NewSlotCoordinator(
 		members:    members,
 		owners:     owners,
 		limiter:    limiter,
-		occupancy:  occupancy,
 		ownedProps: ownedProps,
 		lifecycle:  lifecycle,
 		audit:      audit,
@@ -279,23 +275,15 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 		return nil
 	}
 
-	// Occupancy for recovery: group suspended memberships' properties by their
-	// data owner, fetch each owner's occupied set once, then merge.
-	occupied, err := collectSharedOccupancy(ctx, suspended, c.owners, c.occupancy)
-	if err != nil {
-		return fmt.Errorf("collect shared occupancy: %w", err)
-	}
-
 	candidates := make([]SlotCandidate, 0, len(suspended))
 	for _, m := range suspended {
 		candidates = append(candidates, SlotCandidate{
-			PropertyID:   m.PropertyID,
-			IsShared:     true,
-			MemberID:     m.ID,
-			RecipientID:  recipientID,
-			HasOpenLease: occupied[m.PropertyID],
-			UpdatedAt:    m.UpdatedAt,
-			SuspendedAt:  deref(m.SuspendedAt),
+			PropertyID:  m.PropertyID,
+			IsShared:    true,
+			MemberID:    m.ID,
+			RecipientID: recipientID,
+			UpdatedAt:   m.UpdatedAt,
+			SuspendedAt: deref(m.SuspendedAt),
 		})
 	}
 
@@ -438,8 +426,7 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 
 // buildRecipientPool assembles the recipient's full tariff pool: own active
 // properties (IsShared=false) plus all active shared memberships (IsShared=true)
-// across every owner, each annotated with whether it has an open lease. The pool
-// is the input to SelectForEviction.
+// across every owner. The pool is the input to SelectForEviction.
 func (c *SlotCoordinator) buildRecipientPool(
 	ctx context.Context,
 	txOwned OwnedActivePropertiesPort,
@@ -451,38 +438,26 @@ func (c *SlotCoordinator) buildRecipientPool(
 	if err != nil {
 		return nil, fmt.Errorf("list owned active properties: %w", err)
 	}
-	ownOccupied, err := c.occupancy.OccupiedPropertyIDs(ctx, recipientID)
-	if err != nil {
-		return nil, fmt.Errorf("own occupancy: %w", err)
-	}
-
 	// Active shared memberships across all owners.
 	shared, err := txMembers.ListActiveByUser(ctx, recipientID)
 	if err != nil {
 		return nil, fmt.Errorf("list active shared memberships: %w", err)
 	}
-	sharedOccupied, err := collectSharedOccupancy(ctx, shared, c.owners, c.occupancy)
-	if err != nil {
-		return nil, fmt.Errorf("shared occupancy: %w", err)
-	}
-
 	pool := make([]SlotCandidate, 0, len(owned)+len(shared))
 	for _, p := range owned {
 		pool = append(pool, SlotCandidate{
-			PropertyID:   p.ID,
-			IsShared:     false,
-			HasOpenLease: ownOccupied[p.ID],
-			UpdatedAt:    p.UpdatedAt,
+			PropertyID: p.ID,
+			IsShared:   false,
+			UpdatedAt:  p.UpdatedAt,
 		})
 	}
 	for _, m := range shared {
 		pool = append(pool, SlotCandidate{
-			PropertyID:   m.PropertyID,
-			IsShared:     true,
-			MemberID:     m.ID,
-			RecipientID:  recipientID,
-			HasOpenLease: sharedOccupied[m.PropertyID],
-			UpdatedAt:    m.UpdatedAt,
+			PropertyID:  m.PropertyID,
+			IsShared:    true,
+			MemberID:    m.ID,
+			RecipientID: recipientID,
+			UpdatedAt:   m.UpdatedAt,
 		})
 	}
 	return pool, nil
@@ -505,45 +480,6 @@ func (c *SlotCoordinator) usedSlots(
 		return 0, fmt.Errorf("list active shared memberships: %w", err)
 	}
 	return len(owned) + len(shared), nil
-}
-
-// collectSharedOccupancy merges the open-lease state for a set of shared
-// memberships. Properties are grouped by their data owner (scope) and each
-// owner's occupied set is fetched once via the occupancy port, then merged into
-// a single property-id -> open-lease map. This avoids one occupancy round-trip
-// per membership when several memberships share a data owner.
-func collectSharedOccupancy(
-	ctx context.Context,
-	members []domain.Membership,
-	owners PropertyOwnerResolver,
-	occupancy OccupancyPort,
-) (map[uuid.UUID]bool, error) {
-	// Group property ids by their data owner.
-	byOwner := make(map[uuid.UUID]map[uuid.UUID]struct{})
-	for _, m := range members {
-		ownerID, err := owners.GetOwnerID(ctx, m.PropertyID)
-		if err != nil {
-			return nil, fmt.Errorf("resolve owner of property %s: %w", m.PropertyID, err)
-		}
-		set, ok := byOwner[ownerID]
-		if !ok {
-			set = make(map[uuid.UUID]struct{})
-			byOwner[ownerID] = set
-		}
-		set[m.PropertyID] = struct{}{}
-	}
-
-	merged := make(map[uuid.UUID]bool, len(members))
-	for ownerID, propSet := range byOwner {
-		occupied, err := occupancy.OccupiedPropertyIDs(ctx, ownerID)
-		if err != nil {
-			return nil, fmt.Errorf("occupancy of owner %s: %w", ownerID, err)
-		}
-		for pid := range propSet {
-			merged[pid] = occupied[pid]
-		}
-	}
-	return merged, nil
 }
 
 // deref returns *t, or the zero time when t is nil. A nil SuspendedAt is not

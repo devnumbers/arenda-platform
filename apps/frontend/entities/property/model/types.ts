@@ -1,8 +1,6 @@
 import type { AccessRole } from '@/shared/model/access';
-import type { Lease } from '@/shared/model/lease';
 
 export type PropertyStatus = 'active' | 'maintenance' | 'archived';
-export type Occupancy = 'free' | 'occupied';
 export type PropertyType =
   | 'apartment'
   | 'room'
@@ -36,21 +34,7 @@ export type Property = {
   readonly description?: string;
   readonly attributes: PropertyAttributes;
   readonly status: PropertyStatus;
-  readonly occupancy: Occupancy;
   readonly photos?: PropertyPhoto[];
   readonly access?: PropertyAccess;
-  readonly activeLease: Lease | null;
-  readonly overdue_rent_count: number;
   readonly members_count: number;
-};
-
-/** Сводка операций объекта (entity-модель, camelCase; деньги — копейки). */
-export type PropertyOperationsSummary = {
-  readonly monthlyProfitKopecks: number;
-  readonly allTimeProfitKopecks: number;
-  readonly allTimeIncomeKopecks: number;
-  readonly allTimeExpenseKopecks: number;
-  readonly overdueRentCount: number;
-  readonly overdueTotalCount: number;
-  readonly nextPaymentDate?: string | null;
 };

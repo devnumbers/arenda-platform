@@ -64,7 +64,6 @@ const customMessages = {
         name: 'Название',
         type: 'Тип',
         status: 'Статус',
-        occupancy: 'Заполняемость',
         address: 'Адрес',
         description: 'Описание',
         photos: 'Фотографии',

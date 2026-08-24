@@ -120,6 +120,3 @@ WHERE (recurring_operations.owner_id = $1
   AND recurring_operations.deleted_at IS NULL
 ORDER BY recurring_operations.created_at DESC;
 
--- name: DeleteRecurringOperationsByProperty :exec
-DELETE FROM recurring_operations
-WHERE owner_id = $1 AND property_id = $2;

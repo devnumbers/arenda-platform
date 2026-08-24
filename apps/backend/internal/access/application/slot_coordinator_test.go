@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"errors"
-	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -17,7 +16,7 @@ import (
 // This file holds the SlotCoordinator end-to-end scenarios on in-memory ports
 // (issue #158, T4). The pure selection logic is covered by selection_test.go;
 // here we exercise the coordinator wiring the selection to the repository, the
-// owner resolver, the limiter, and the occupancy port.
+// owner resolver, and the limiter.
 //
 // Reused fixtures from sibling test files (same package):
 //   - memRepo (service_integration_test.go): in-memory MembershipRepository;
@@ -52,32 +51,6 @@ func (f *fakeRecipientLimiter) WithTx(_ transaction.Tx) (RecipientLimiter, error
 	return f, nil
 }
 
-// fakeOccupancy is an in-memory OccupancyPort keyed by data owner: each owner
-// maps to the set of property ids that have an open lease.
-type fakeOccupancy struct {
-	byOwner map[uuid.UUID]map[uuid.UUID]bool
-}
-
-func newFakeOccupancy() *fakeOccupancy {
-	return &fakeOccupancy{byOwner: map[uuid.UUID]map[uuid.UUID]bool{}}
-}
-
-// setOpen marks propertyID as having an open lease under ownerID.
-func (f *fakeOccupancy) setOpen(ownerID, propertyID uuid.UUID) {
-	set, ok := f.byOwner[ownerID]
-	if !ok {
-		set = map[uuid.UUID]bool{}
-		f.byOwner[ownerID] = set
-	}
-	set[propertyID] = true
-}
-
-func (f *fakeOccupancy) OccupiedPropertyIDs(_ context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error) {
-	out := make(map[uuid.UUID]bool, len(f.byOwner[ownerID]))
-	maps.Copy(out, f.byOwner[ownerID])
-	return out, nil
-}
-
 // fakeOwnedProps is an in-memory OwnedActivePropertiesPort: each "owner" maps to
 // the slice of their own active properties (with UpdatedAt for the eviction
 // comparator).
@@ -104,7 +77,6 @@ func (f *fakeOwnedProps) WithTx(_ transaction.Tx) (OwnedActivePropertiesPort, er
 // Compile-time interface checks for the in-memory stubs.
 var (
 	_ RecipientLimiter          = (*fakeRecipientLimiter)(nil)
-	_ OccupancyPort             = (*fakeOccupancy)(nil)
 	_ OwnedActivePropertiesPort = (*fakeOwnedProps)(nil)
 )
 
@@ -116,7 +88,6 @@ type coordinatorFixture struct {
 	repo        *memRepo
 	owners      staticResolver
 	limiter     *fakeRecipientLimiter
-	occupancy   *fakeOccupancy
 	ownedProps  *fakeOwnedProps
 	coordinator *SlotCoordinator
 }
@@ -125,13 +96,11 @@ func newCoordinatorFixture() *coordinatorFixture {
 	repo := newMemRepo()
 	owners := staticResolver{}
 	limiter := newFakeRecipientLimiter()
-	occupancy := newFakeOccupancy()
 	ownedProps := newFakeOwnedProps()
 	coordinator := NewSlotCoordinator(
 		repo,
 		owners,
 		limiter,
-		occupancy,
 		ownedProps,
 		nil,
 		auditapp.Noop{},
@@ -141,15 +110,14 @@ func newCoordinatorFixture() *coordinatorFixture {
 		repo:        repo,
 		owners:      owners,
 		limiter:     limiter,
-		occupancy:   occupancy,
 		ownedProps:  ownedProps,
 		coordinator: coordinator,
 	}
 }
 
 // linkOwner records in every in-memory port that propertyID belongs to ownerID:
-// the repo owner join and the resolver. (occupancy/owned are keyed by owner at
-// query time, so nothing to record there.)
+// the repo owner join and the resolver. (owned is keyed by owner at query
+// time, so nothing to record there.)
 func (f *coordinatorFixture) linkOwner(ownerID, propertyID uuid.UUID) {
 	f.repo.SetOwner(propertyID, ownerID)
 	f.owners[propertyID] = ownerID
@@ -282,8 +250,8 @@ var (
 )
 
 // Scenario A: EnforceRecipientLimit — downgrade suspends the excess shared
-// membership (the one with the earlier UpdatedAt, neither having an open
-// lease). One is suspended, the other stays active.
+// membership (the one with the earlier UpdatedAt). One is suspended, the
+// other stays active.
 func TestSlotCoordinator_EnforceRecipientLimit_DowngradeSuspendsExcess(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
@@ -297,7 +265,7 @@ func TestSlotCoordinator_EnforceRecipientLimit_DowngradeSuspendsExcess(t *testin
 
 	// Recipient holds active shared memberships on both of owner's properties.
 	// M1 is the earlier-updated (recency comparator ranks it "worse", so it is
-	// the eviction candidate when neither has an open lease).
+	// the eviction candidate).
 	f.addActiveMember(t, m1, p1, owner, recipient, t1Old)
 	f.addActiveMember(t, m2, p2, owner, recipient, t2New)
 	f.limiter.set(recipient, 1) // Limit 1, but two shared → 1 excess.
@@ -345,35 +313,6 @@ func TestSlotCoordinator_EnforceRecipientLimit_OwnObjectsNotTouched(t *testing.T
 	// PropertyArchiver's concern and the coordinator never touched it (it has
 	// no membership row to suspend).
 	f.assertStatus(t, sharedMember, sharedProp, domain.MemberStatusSuspended, "excess shared member suspended")
-}
-
-// Scenario C: EnforceRecipientLimit — an open lease protects the membership
-// even when it is the less-recently-updated one. The membership without an open
-// lease is suspended.
-func TestSlotCoordinator_EnforceRecipientLimit_OpenLeaseProtects(t *testing.T) {
-	t.Parallel()
-	f := newCoordinatorFixture()
-
-	owner := uuid.Must(uuid.NewV7())
-	pNoLease := uuid.Must(uuid.NewV7())   // Shared membership, no open lease.
-	pOpenLease := uuid.Must(uuid.NewV7()) // Shared membership, open lease present.
-	recipient := uuid.Must(uuid.NewV7())
-	mNo := uuid.Must(uuid.NewV7())
-	mOpen := uuid.Must(uuid.NewV7())
-
-	// MNo is the more-recently-updated but has no lease; mOpen is older but has
-	// an open lease. The open lease must win and protect mOpen.
-	f.addActiveMember(t, mNo, pNoLease, owner, recipient, t3Newer)
-	f.addActiveMember(t, mOpen, pOpenLease, owner, recipient, t1Old)
-	f.occupancy.setOpen(owner, pOpenLease) // Owner's property pOpenLease has an open lease.
-	f.limiter.set(recipient, 1)
-
-	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, owner, "downgrade"); err != nil {
-		t.Fatalf("EnforceRecipientLimit: %v", err)
-	}
-
-	f.assertStatus(t, mNo, pNoLease, domain.MemberStatusSuspended, "no-lease member suspended")
-	f.assertStatus(t, mOpen, pOpenLease, domain.MemberStatusActive, "open-lease member protected")
 }
 
 // Scenario D: EnforceRecipientLimit — a repeat downgrade does not re-evaluate
@@ -506,37 +445,6 @@ func TestSlotCoordinator_RecoverSuspended_NoFreeSlotRecoverNothing(t *testing.T)
 	f.assertStatus(t, mActive, pActive, domain.MemberStatusActive, "active should stay active")
 
 	f.assertOneActiveOneSuspended(t, recipient)
-}
-
-// Scenario I: RecoverSuspended — tie-break inside a downgrade batch (equal
-// SuspendedAt): the membership whose property has an open lease is recovered
-// first.
-func TestSlotCoordinator_RecoverSuspended_BatchTieBreakOpenLeaseFirst(t *testing.T) {
-	t.Parallel()
-	f := newCoordinatorFixture()
-
-	owner := uuid.Must(uuid.NewV7())
-	pNoLease := uuid.Must(uuid.NewV7())
-	pOpenLease := uuid.Must(uuid.NewV7())
-	recipient := uuid.Must(uuid.NewV7())
-	mNo := uuid.Must(uuid.NewV7())
-	mOpen := uuid.Must(uuid.NewV7())
-
-	// Same SuspendedAt (a downgrade batch). MOpen's property has an open lease,
-	// so the batch tie-break recovers it first. Only one free slot → only one
-	// is recovered.
-	batchSuspended := t1Old
-	f.addSuspendedMember(t, mNo, pNoLease, owner, recipient, batchSuspended, t1Old)
-	f.addSuspendedMember(t, mOpen, pOpenLease, owner, recipient, batchSuspended, t2New)
-	f.occupancy.setOpen(owner, pOpenLease)
-	f.limiter.set(recipient, 1) // Used=0, freeSlots=1.
-
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
-		t.Fatalf("RecoverSuspended: %v", err)
-	}
-
-	f.assertStatus(t, mOpen, pOpenLease, domain.MemberStatusActive, "open-lease suspended should be recovered first")
-	f.assertStatus(t, mNo, pNoLease, domain.MemberStatusSuspended, "no-lease suspended should stay suspended")
 }
 
 // enforceRecipientLimitPool is one seeded membership pool of an

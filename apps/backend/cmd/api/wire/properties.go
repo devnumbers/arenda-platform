@@ -11,20 +11,19 @@ import (
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 )
 
-// Properties holds the properties module's services, the dadata address
-// suggester and the occupancy provider wired by WireProperties.
+// Properties holds the properties module's services and the dadata address
+// suggester wired by WireProperties.
 type Properties struct {
 	PropertyService        *propertiesapp.PropertyService
 	PropertyContactService *propertiesapp.PropertyContactService
 	DadataClient           *dadata.Client
-	OccupancyProvider      *propertiespg.OccupancyProvider
 }
 
 // WireProperties constructs the properties repositories, the subscription
 // limiter (billing-backed), the photo storage (S3 or fake based on config), the
 // property and property-contact services and the dadata address suggester. It
 // takes the billing subscription limiter deps and the leases repos (for the
-// property billing lifecycle and shared lease repo).
+// property billing lifecycle).
 func WireProperties(
 	ctx context.Context,
 	p platformDeps,
@@ -34,7 +33,6 @@ func WireProperties(
 	propertyRepo := propertiespg.NewPropertyRepository(p.DB)
 	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(p.DB)
 	propertyContactRepo := propertiespg.NewPropertyContactRepository(p.DB)
-	occupancyProvider := propertiespg.NewOccupancyProvider(p.DB)
 	propertyLimiter := billing.Services.Limiter
 	limiter := billingpg.NewSubscriptionLimiter(propertyLimiter)
 
@@ -73,7 +71,6 @@ func WireProperties(
 		propertyPhotoRepo,
 		propertyContactRepo,
 		limiter,
-		occupancyProvider,
 		leasesRepos.PropertyBillingLifecycle,
 		p.AuditRecorder,
 		p.UoW,
@@ -83,9 +80,7 @@ func WireProperties(
 		propertyRepo,
 		propertyPhotoRepo,
 		photoStorage,
-		occupancyProvider,
 		leasesRepos.PropertyBillingLifecycle,
-		leasesRepos.LeaseRepo,
 		factory,
 		p.Clock,
 		p.TZResolver,
@@ -107,6 +102,5 @@ func WireProperties(
 		PropertyService:        propertyService,
 		PropertyContactService: propertyContactService,
 		DadataClient:           dadataClient,
-		OccupancyProvider:      occupancyProvider,
 	}, nil
 }

@@ -114,7 +114,7 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		Status:      row.Status,
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
-	}, row.OverdueRentCount, row.MembersCount), nil
+	}, row.MembersCount), nil
 }
 
 func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Property, error) {
@@ -152,7 +152,7 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		Status:      row.Status,
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
-	}, row.OverdueRentCount, row.MembersCount), nil
+	}, row.MembersCount), nil
 }
 
 // GetByIDForUpdate is the pessimistic-lock variant of GetByID (T3, issue #156).
@@ -185,7 +185,7 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.U
 			Status:      row.Status,
 			CreatedAt:   row.CreatedAt,
 			UpdatedAt:   row.UpdatedAt,
-		}, row.OverdueRentCount, row.MembersCount))
+		}, row.MembersCount))
 	}
 	return properties, nil
 }
@@ -208,7 +208,7 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 			Status:      row.Status,
 			CreatedAt:   row.CreatedAt,
 			UpdatedAt:   row.UpdatedAt,
-		}, row.OverdueRentCount, row.MembersCount))
+		}, row.MembersCount))
 	}
 	return properties, nil
 }
@@ -274,27 +274,6 @@ func (r *PropertyRepository) Delete(ctx context.Context, id, scope uuid.UUID) er
 	})
 }
 
-func (r *PropertyRepository) DeleteOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
-	return r.q().DeleteOperationsByProperty(ctx, postgres.DeleteOperationsByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(scope),
-		PropertyID: pgconv.UUIDToPgtype(propertyID),
-	})
-}
-
-func (r *PropertyRepository) DeleteRecurringOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
-	return r.q().DeleteRecurringOperationsByProperty(ctx, postgres.DeleteRecurringOperationsByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(scope),
-		PropertyID: pgconv.UUIDToPgtype(propertyID),
-	})
-}
-
-func (r *PropertyRepository) DeleteLeasesByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
-	return r.q().DeleteLeasesByProperty(ctx, postgres.DeleteLeasesByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(scope),
-		PropertyID: pgconv.UUIDToPgtype(propertyID),
-	})
-}
-
 func propertyFromRow(row postgres.Property) domain.Property {
 	attrs, err := attributesFromJSON(row.Attributes)
 	if err != nil {
@@ -318,11 +297,10 @@ func propertyFromRow(row postgres.Property) domain.Property {
 	}
 }
 
-// propertyFromCountsRow maps a property row plus its scalar projections
-// (overdue rent count, shared-access members count) to the domain model.
-func propertyFromCountsRow(row postgres.Property, overdueRentCount, membersCount int64) domain.Property {
+// propertyFromCountsRow maps a property row plus its shared-access members
+// count projection to the domain model.
+func propertyFromCountsRow(row postgres.Property, membersCount int64) domain.Property {
 	p := propertyFromRow(row)
-	p.OverdueRentCount = int(overdueRentCount)
 	p.MembersCount = int(membersCount)
 	return p
 }

@@ -14,10 +14,10 @@ import (
 // a use case receives inside runInTx, so it is impossible to forget WithTx or
 // to record audit outside the transaction (ADR 0033, ADR 0020).
 //
-// The optional stores (photos, contacts, limiter, occupancy, billing) cover
-// the two services of the context, which need different subsets: the property
-// service never touches contacts, the contact service never touches
-// photos/limiter/occupancy/billing. Production wires the full set once and
+// The optional stores (photos, contacts, limiter, billing) cover the two
+// services of the context, which need different subsets: the property service
+// never touches contacts, the contact service never touches
+// photos/limiter/billing. Production wires the full set once and
 // shares the factory between both services, so every store is bound in every
 // transaction there; runInTx skips binding an unwired optional store instead
 // of panicking on a nil WithTx — same shape as the billing lifecycle bridges —
@@ -30,14 +30,13 @@ import (
 // transaction, so a use case passes stores.tx through when it needs slot
 // enforcement or former-member collection in its transaction.
 type txStores struct {
-	repo      PropertyRepository
-	photos    PropertyPhotoRepository
-	contacts  PropertyContactRepository
-	limiter   SubscriptionLimiter
-	occupancy OccupancyProvider
-	billing   PropertyBillingLifecycle
-	audit     auditapp.Recorder
-	tx        transaction.Tx
+	repo     PropertyRepository
+	photos   PropertyPhotoRepository
+	contacts PropertyContactRepository
+	limiter  SubscriptionLimiter
+	billing  PropertyBillingLifecycle
+	audit    auditapp.Recorder
+	tx       transaction.Tx
 }
 
 // txStoreFactory holds the non-transactional properties repositories, the
@@ -51,14 +50,13 @@ type txStores struct {
 // value to both services, so adding an Nth repository is a change to one
 // constructor call, not several.
 type txStoreFactory struct {
-	repo      PropertyRepository
-	photos    PropertyPhotoRepository
-	contacts  PropertyContactRepository
-	limiter   SubscriptionLimiter
-	occupancy OccupancyProvider
-	billing   PropertyBillingLifecycle
-	audit     auditapp.Recorder
-	uow       transaction.UoW
+	repo     PropertyRepository
+	photos   PropertyPhotoRepository
+	contacts PropertyContactRepository
+	limiter  SubscriptionLimiter
+	billing  PropertyBillingLifecycle
+	audit    auditapp.Recorder
+	uow      transaction.UoW
 }
 
 // NewTxStoreFactory bundles the properties repositories, the cross-context
@@ -73,7 +71,6 @@ func NewTxStoreFactory(
 	photos PropertyPhotoRepository,
 	contacts PropertyContactRepository,
 	limiter SubscriptionLimiter,
-	occupancy OccupancyProvider,
 	billing PropertyBillingLifecycle,
 	audit auditapp.Recorder,
 	uow transaction.UoW,
@@ -82,14 +79,13 @@ func NewTxStoreFactory(
 		audit = auditapp.Noop{}
 	}
 	return txStoreFactory{
-		repo:      repo,
-		photos:    photos,
-		contacts:  contacts,
-		limiter:   limiter,
-		occupancy: occupancy,
-		billing:   billing,
-		audit:     audit,
-		uow:       uow,
+		repo:     repo,
+		photos:   photos,
+		contacts: contacts,
+		limiter:  limiter,
+		billing:  billing,
+		audit:    audit,
+		uow:      uow,
 	}
 }
 
@@ -129,9 +125,6 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 			if err != nil {
 				return fmt.Errorf("bind subscription limiter to tx: %w", err)
 			}
-		}
-		if f.occupancy != nil {
-			stores.occupancy = f.occupancy.WithTx(tx)
 		}
 		if f.billing != nil {
 			stores.billing = f.billing.WithTx(tx)

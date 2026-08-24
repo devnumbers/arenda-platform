@@ -1,8 +1,0 @@
-.actions {
-  display: flex;
-  gap: 12px;
-}
-
-.actions > * {
-  flex: 1 1 0;
-}

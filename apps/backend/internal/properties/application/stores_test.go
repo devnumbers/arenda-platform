@@ -126,10 +126,9 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 	photos := fakePropertyPhotoRepo{}
 	contacts := newFakePropertyContactRepo()
 	limiter := fakeSubscriptionLimiter{limit: 5}
-	occupancy := fakeOccupancyProvider{}
 	billing := &recordingBillingLifecycle{}
 	audit := &countingRecorder{}
-	f := NewTxStoreFactory(repo, photos, contacts, limiter, occupancy, billing, audit, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(repo, photos, contacts, limiter, billing, audit, fakeUoW{beginner: b})
 
 	workCalled := false
 	var got *txStores
@@ -163,9 +162,6 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 	if got.limiter != SubscriptionLimiter(limiter) {
 		t.Error("work received unbound limiter")
 	}
-	if got.occupancy != OccupancyProvider(occupancy) {
-		t.Error("work received unbound occupancy provider")
-	}
 	if got.billing != PropertyBillingLifecycle(billing) {
 		t.Error("work received unbound billing lifecycle")
 	}
@@ -187,7 +183,7 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 
 // TestRunInTx_OptionalStoresStayNilWhenUnwired proves runInTx tolerates the
 // per-use-case collaborators a service does not need (the contact service
-// never wires photos/limiter/occupancy/billing, the property service never
+// never wires photos/limiter/billing, the property service never
 // wires contacts): an unwired optional store stays nil instead of panicking on
 // a nil WithTx, and the core (repo, audit) is still bound.
 func TestRunInTx_OptionalStoresStayNilWhenUnwired(t *testing.T) {
@@ -196,7 +192,7 @@ func TestRunInTx_OptionalStoresStayNilWhenUnwired(t *testing.T) {
 	b := &countingBeginner{}
 	repo := newFakePropertyRepo()
 	audit := &countingRecorder{}
-	f := NewTxStoreFactory(repo, nil, nil, nil, nil, nil, audit, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(repo, nil, nil, nil, nil, audit, fakeUoW{beginner: b})
 
 	var got *txStores
 	err := f.runInTx(t.Context(), func(stores *txStores) error {
@@ -213,7 +209,7 @@ func TestRunInTx_OptionalStoresStayNilWhenUnwired(t *testing.T) {
 	if got.audit == nil {
 		t.Error("audit must be bound even with optional stores unwired")
 	}
-	if got.photos != nil || got.contacts != nil || got.limiter != nil || got.occupancy != nil || got.billing != nil {
+	if got.photos != nil || got.contacts != nil || got.limiter != nil || got.billing != nil {
 		t.Errorf("unwired optional stores must stay nil, got %+v", got)
 	}
 	if b.committed != 1 {
@@ -230,7 +226,7 @@ func TestRunInTx_LimiterBindErrorRollsBack(t *testing.T) {
 	b := &countingBeginner{}
 	f := NewTxStoreFactory(
 		newFakePropertyRepo(), fakePropertyPhotoRepo{}, nil,
-		bindFailingLimiter{}, fakeOccupancyProvider{}, &recordingBillingLifecycle{},
+		bindFailingLimiter{}, &recordingBillingLifecycle{},
 		&countingRecorder{}, fakeUoW{beginner: b},
 	)
 
@@ -266,7 +262,7 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 	t.Parallel()
 
 	b := &countingBeginner{}
-	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, nil, &countingRecorder{}, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, &countingRecorder{}, fakeUoW{beginner: b})
 
 	panicVal := storesSentinelError{"kaboom"}
 	defer func() {
@@ -302,7 +298,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 	t.Parallel()
 
 	b := &countingBeginner{}
-	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, nil, &countingRecorder{}, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, &countingRecorder{}, fakeUoW{beginner: b})
 
 	workErr := errors.New("business rule violated")
 	err := f.runInTx(t.Context(), func(*txStores) error {
@@ -328,7 +324,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
 	t.Parallel()
 
-	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, nil, &countingRecorder{}, nil)
+	f := NewTxStoreFactory(newFakePropertyRepo(), nil, nil, nil, nil, &countingRecorder{}, nil)
 
 	workCalled := false
 	err := f.runInTx(t.Context(), func(*txStores) error {

@@ -102,15 +102,6 @@ type RecipientLimiter interface {
 	WithTx(tx transaction.Tx) (RecipientLimiter, error)
 }
 
-// OccupancyPort reports which properties of a data owner have an open lease.
-// Implemented by a bridge adapter over the properties OccupancyProvider.
-// Occupancy is a read-only, short-lived signal, so the port has no WithTx: the
-// coordinator reads it on the main connection, consistent with how the
-// properties service reads occupancy outside its listing transaction.
-type OccupancyPort interface {
-	OccupiedPropertyIDs(ctx context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error)
-}
-
 // OwnedActivePropertiesPort lists the active property ids owned by a user
 // (their own tariff pool entries). Implemented by a bridge adapter over the
 // properties PropertyRepository.
