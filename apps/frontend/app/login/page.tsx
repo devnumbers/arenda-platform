@@ -86,7 +86,7 @@ export default function LoginPage(): JSX.Element {
                 : {phone: normalizePhone(draft.phone), code},
             {
                 onSuccess: () => {
-                    const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/dashboard";
+                    const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/properties";
                     router.push(target);
                     clearDraft();
                 },

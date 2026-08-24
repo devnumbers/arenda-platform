@@ -1,1 +1,0 @@
-export { TenantDetailPage } from './ui';

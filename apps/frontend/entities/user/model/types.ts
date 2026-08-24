@@ -33,12 +33,8 @@ export type ChangePhoneCommand = {
 
 export type { TariffName } from '@/shared/model/tariff';
 
-export type NotificationEventType =
-  | 'operation_due'
-  | 'operation_overdue'
-  | 'lease_expiring'
-  | 'lease_requires_action'
-  | 'subscription_grace';
+/** Единственное событие доставочных уведомлений после удаления домена аренд (спека #434). */
+export type NotificationEventType = 'subscription_grace';
 
 export type NotificationPreference = {
   readonly eventType: NotificationEventType;

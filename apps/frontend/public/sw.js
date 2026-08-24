@@ -79,19 +79,16 @@ function readStandaloneFlag() {
 }
 
 // Cabinet route prefixes — keep in sync with shared/lib/pwa/cabinet-routes.ts.
+// /dashboard остаётся: это постоянный редирект на /properties, зашитый в
+// start_url манифеста PWA.
 const CABINET_ROUTE_PREFIXES = [
   '/login',
-  '/dashboard',
   '/properties',
-  '/leases',
-  '/tenants',
-  '/finance',
   '/profile',
   '/subscription',
   '/support',
   '/ui-kit',
-  '/calendar',
-  '/reminders',
+  '/dashboard',
 ];
 
 function isCabinetPath(pathname) {
@@ -145,7 +142,7 @@ self.addEventListener('fetch', function (event) {
     event.respondWith(
       readStandaloneFlag().then(function (isStandalone) {
         if (isStandalone) {
-          return Response.redirect('/dashboard', 302);
+          return Response.redirect('/properties', 302);
         }
         // Not a PWA client — let the request go to the network (landing).
         return fetch(request);
@@ -191,8 +188,8 @@ self.addEventListener('fetch', function (event) {
 // Fallbacks — must mirror DEFAULT_PUSH_TITLE / DEFAULT_PUSH_CLICK_URL in
 // shared/lib/pwa/push-payload.ts.
 var DEFAULT_PUSH_TITLE = 'Рентли';
-var DEFAULT_PUSH_CLICK_URL = '/dashboard';
-var DEFAULT_PUSH_TAG = 'rentli-reminder';
+var DEFAULT_PUSH_CLICK_URL = '/properties';
+var DEFAULT_PUSH_TAG = 'rentli-notification';
 var PUSH_ICON_PATH = '/icons/icon-192.png';
 
 // Inline copy of resolveClickTarget: only same-origin absolute paths are kept,

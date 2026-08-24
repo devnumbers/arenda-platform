@@ -5,13 +5,13 @@ import NextLink from 'next/link';
 import {ROUTES} from '@/shared/config/routes';
 import {getDisplayStatus} from '@/features/properties';
 import {AccessRoleBadge} from '@/entities/access';
-import type {PropertyWithLease} from '../lib/use-property-list-data';
+import type {Property} from '@/entities/property';
 import {PropertyStatusBadge} from '@/features/properties';
 import {PropertyThumbnail} from '@/entities/property';
 import styles from './PropertyCard.module.css';
 
 export type PropertyCardProps = {
-    readonly property: PropertyWithLease;
+    readonly property: Property;
 };
 
 export function PropertyCard({property}: PropertyCardProps): JSX.Element {

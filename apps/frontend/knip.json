@@ -1,5 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6.32.2/schema.json",
-  "ignore": ["public/sw.js"],
+  "ignore": [
+    "public/sw.js",
+    "features/popups/**"
+  ],
   "ignoreDependencies": ["@svgr/webpack"]
 }

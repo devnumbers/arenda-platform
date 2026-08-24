@@ -2,11 +2,10 @@
 
 import {type JSX, useCallback, useMemo, useState} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
-import {useProperties, usePropertiesWithMeta} from '@/features/properties';
+import {useArchivedProperties, useProperties, usePropertiesWithMeta} from '@/features/properties';
 import {useSubscription} from '@/features/subscription';
 import {PageHeader} from '@/shared/ui/page-header';
 import {ROUTES} from '@/shared/config/routes';
-import {usePropertyListData} from '../lib/use-property-list-data';
 import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
 import {DEFAULT_PROPERTY_SORT} from '../lib/parse-property-search-params';
 import {formatHiddenSharedFootnote} from '../lib/format-hidden-shared-footnote';
@@ -27,7 +26,10 @@ export type PropertiesPageProps = {
 };
 
 export function PropertiesPage({mode = 'active', initialFilters, initialSort}: PropertiesPageProps): JSX.Element {
-    const {data, isLoading, isFetching, isError, refetch} = usePropertyListData(mode);
+    const propertiesQuery = useProperties({enabled: mode === 'active'});
+    const archivedPropertiesQuery = useArchivedProperties({enabled: mode === 'archived'});
+    const listQuery = mode === 'archived' ? archivedPropertiesQuery : propertiesQuery;
+    const {data, isLoading, isFetching, isError, refetch} = listQuery;
     const {data: activeProperties} = useProperties();
     // Shares the /properties request with useProperties via the shared
     // propertyKeys.list prefix; surfaces how many shared objects are hidden
@@ -107,7 +109,7 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
 
             {isLoading && <PropertiesLoading/>}
 
-            {!isLoading && isError && <PropertiesErrorState onRetry={refetch} isLoading={isFetching}/>}
+            {!isLoading && isError && <PropertiesErrorState onRetry={() => void refetch()} isLoading={isFetching}/>}
 
             {!isLoading && !isError && isEmpty && <PropertiesEmptyState canAdd={canAdd} isLoading={isActionLoading}/>}
 

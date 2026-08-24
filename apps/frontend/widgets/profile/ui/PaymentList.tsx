@@ -89,7 +89,7 @@ export function PaymentList(): JSX.Element {
     return (
       <div className={styles.error}>
         <p className={styles.errorText}>
-          Не удалось загрузить историю операций
+          Не удалось загрузить историю платежей
         </p>
         <Button onClick={() => void refetch()} variant="secondary">
           Повторить
@@ -107,7 +107,7 @@ export function PaymentList(): JSX.Element {
   if (items.length === 0) {
     return (
       <div className={styles.empty}>
-        <p className={styles.emptyText}>У вас пока нет операций</p>
+        <p className={styles.emptyText}>У вас пока нет платежей</p>
       </div>
     );
   }

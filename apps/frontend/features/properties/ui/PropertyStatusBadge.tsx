@@ -14,7 +14,7 @@ type StatusConfig = {
 };
 
 const config: Record<DisplayStatus, StatusConfig> = {
-  free: { label: 'Не арендован', color: '#A1A3A6', icon: StatusDoor },
+  active: { label: 'Активен', color: '#A1A3A6', icon: StatusDoor },
   maintenance: { label: 'На ремонте', color: '#EBB800', icon: StatusWarning },
 };
 

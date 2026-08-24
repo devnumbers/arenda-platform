@@ -15,7 +15,7 @@ import { markStandaloneClient } from './standalone-store';
  *
  * When the app runs in PWA standalone mode, a standalone flag is written to
  * IndexedDB after registration. The SW reads it to redirect any navigation to
- * `/` back to `/dashboard`, keeping PWA users inside the app (hard isolation).
+ * `/` back to `/properties`, keeping PWA users inside the app (hard isolation).
  *
  * `updateViaCache: 'none'` guarantees the SW script bypasses the HTTP cache so
  * updates are picked up promptly. `public/` is already served with
@@ -71,7 +71,7 @@ export function ServiceWorkerRegister(): JSX.Element | null {
             if (!data || typeof data !== 'object') return;
             if (!('type' in data) || data.type !== 'PUSH_NOTIFICATION_CLICK') return;
             // `resolveClickTarget` re-validates the URL the SW sent — same-origin
-            // absolute path only, fallback to /dashboard otherwise.
+            // absolute path only, fallback to /properties otherwise.
             const url = resolveClickTarget('url' in data ? data.url : undefined);
             // Client-side navigation via the History API. The SW already focused
             // this window; we only need to move it to the click target.

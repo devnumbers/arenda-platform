@@ -1,6 +1,5 @@
 import type { JSX } from 'react';
 import type { Property } from '@/entities/property';
-import { getPropertyPageStatus } from '../lib/get-property-page-status';
 import { PropertyDetailStatusBadge } from './PropertyDetailStatusBadge';
 import styles from './PropertyStatusSection.module.css';
 
@@ -11,7 +10,7 @@ export type PropertyStatusSectionProps = {
 export function PropertyStatusSection({
   property,
 }: PropertyStatusSectionProps): JSX.Element {
-  const status = getPropertyPageStatus(property.status);
+  const status = property.status;
 
   return (
     <div className={styles.root}>

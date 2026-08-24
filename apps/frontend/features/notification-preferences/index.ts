@@ -1,5 +1,3 @@
 export { useNotificationPreferences, useUpdateNotificationPreferences } from './api/hooks';
-export { buildChannelPreferencePayload, buildInitialChannelPreferences, buildInitialPreferences, buildPreferencePayload, channelPreferencesEqual } from './lib/preferences';
-export type { NotificationChannelState, NotificationPreferencePayloadItem, NotificationPreferencesState } from './lib/preferences';
-export { NotificationChannelMatrix } from './ui/NotificationChannelMatrix';
-export { NotificationPreferencesFields } from './ui/NotificationPreferencesFields';
+export { buildChannelPreferencePayload, buildInitialChannelPreferences, channelPreferencesEqual, NOTIFICATION_OPTIONS } from './lib/preferences';
+export type { NotificationChannelState } from './lib/preferences';

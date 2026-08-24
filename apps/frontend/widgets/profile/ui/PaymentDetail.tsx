@@ -46,7 +46,7 @@ export function PaymentDetail({ id }: PaymentDetailProps): JSX.Element {
     return (
       <div className={styles.error}>
         <p className={styles.errorText}>
-          Не удалось загрузить операцию
+          Не удалось загрузить платёж
         </p>
         <Button onClick={() => void refetch()} variant="secondary">
           Повторить
@@ -62,7 +62,7 @@ export function PaymentDetail({ id }: PaymentDetailProps): JSX.Element {
   if (!payment) {
     return (
       <div className={styles.error}>
-        <p className={styles.errorText}>Операция не найдена</p>
+        <p className={styles.errorText}>Платёж не найден</p>
         <Button onClick={() => router.back()} variant="secondary">
           Назад
         </Button>

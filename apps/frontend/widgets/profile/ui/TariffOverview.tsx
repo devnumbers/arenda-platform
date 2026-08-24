@@ -276,7 +276,7 @@ export function TariffOverview(): JSX.Element {
                     size="large"
                     fullWidth
                 >
-                    История операций
+                    История платежей
                 </LinkButton>
             </nav>
         </div>

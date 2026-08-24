@@ -12,22 +12,7 @@
   white-space: nowrap;
 }
 
-.rented {
-  background: #dff9e9;
-  color: var(--color-success);
-}
-
-.requiresAction {
-  background: var(--color-error-bg);
-  color: var(--color-error);
-}
-
-.awaitingStart {
-  background: #d9ebff;
-  color: #2b7fff;
-}
-
-.free {
+.active {
   background: #f1f3f6;
   color: #a1a3a6;
 }

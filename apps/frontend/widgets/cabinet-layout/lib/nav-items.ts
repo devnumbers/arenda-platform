@@ -9,11 +9,7 @@ export type NavItemConfig = {
 };
 
 export const navItems: ReadonlyArray<NavItemConfig> = [
-  { label: 'Главная', href: '/dashboard', icon: 'NavHome', bottomIcon: 'BottomHome', showInBottomNav: true },
-  { label: 'Объекты', href: '/properties', match: ['/leases'], icon: 'NavObjects', bottomIcon: 'BottomObjects', showInBottomNav: true },
-  { label: 'Календарь', href: '/calendar', icon: 'Calendar', showInBottomNav: false },
-  { label: 'Арендаторы', href: '/tenants', icon: 'NavTenants', showInBottomNav: false },
-  { label: 'Финансы', href: '/finance', icon: 'NavWallet', bottomIcon: 'BottomWallet', showInBottomNav: true },
+  { label: 'Объекты', href: '/properties', icon: 'NavObjects', bottomIcon: 'BottomObjects', showInBottomNav: true },
   { label: 'Профиль', href: '/profile', icon: 'NavProfile', bottomIcon: 'BottomProfile', showInBottomNav: true },
   { label: 'Поддержка', href: '/support', icon: 'NavSupport', showInBottomNav: false },
 ];

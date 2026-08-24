@@ -1,5 +1,4 @@
 export * from './api';
-export { PropertySelect } from './ui/PropertySelect';
 
 export { usePropertiesWithMeta } from './api/hooks';
 export type { DeletePropertyMode } from './api/hooks';

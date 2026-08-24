@@ -5,8 +5,8 @@ import { ROUTES } from '@/shared/config/routes';
 import { PaymentDetail } from '@/widgets/profile';
 
 export const metadata: Metadata = {
-  title: 'Операция — Рентли',
-  description: 'Детали операции по тарифу',
+  title: 'Платёж — Рентли',
+  description: 'Детали платежа по тарифу',
 };
 
 export default async function PaymentDetailPage({
@@ -18,7 +18,7 @@ export default async function PaymentDetailPage({
 
   return (
     <PageShell>
-      <PageHeader title="Операция" backHref={ROUTES.profilePayments} />
+      <PageHeader title="Платёж" backHref={ROUTES.profilePayments} />
       <PaymentDetail id={id} />
     </PageShell>
   );

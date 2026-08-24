@@ -2,8 +2,6 @@ import type {useRouter} from 'next/navigation';
 
 type AppRouter = ReturnType<typeof useRouter>;
 
-export const RETURN_TO_PARAM = 'returnTo';
-
 /** Allow only internal absolute paths; reject protocol-relative, scheme and backslash tricks. */
 export function sanitizeReturnTo(value: string | undefined): string | undefined {
     if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {

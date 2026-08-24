@@ -44,3 +44,49 @@
   line-height: var(--line-height-text-s);
   color: var(--color-text);
 }
+
+.eventRow {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-input);
+  background-color: var(--color-secondary-bg);
+}
+
+.texts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.description {
+  font-size: var(--font-size-text-s);
+  line-height: var(--line-height-text-s);
+  color: var(--color-text-muted);
+}
+
+.checkbox {
+  justify-self: center;
+}
+
+.checkboxContent {
+  display: flex;
+}
+
+.checkboxControl {
+  border-radius: 6px;
+}
+
+.checkboxIndicator {
+  color: var(--color-white);
+}

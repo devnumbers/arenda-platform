@@ -1,25 +1,25 @@
 import type { PropertyStatus } from '@/entities/property';
 
+/**
+ * Экранное представление статуса объекта. После удаления домена аренд
+ * (спека #434) занятости больше нет: активный объект либо «в работе»
+ * (active), либо «на ремонте» (maintenance); архив скрывает бейдж списка.
+ */
 export type DisplayStatus =
-  | 'free'
+  | 'active'
   | 'maintenance';
-
-export const displayStatusLabels: Record<DisplayStatus, string> = {
-  free: 'Не арендован',
-  maintenance: 'На ремонте',
-};
 
 export function getDisplayStatus(
   status: PropertyStatus,
 ): DisplayStatus | null {
   if (status === 'archived') return null;
   if (status === 'maintenance') return 'maintenance';
-  return 'free';
+  return 'active';
 }
 
-export type StatusFilterValue = 'free' | 'maintenance';
+export type StatusFilterValue = DisplayStatus;
 
 export const statusFilterOptions: { value: StatusFilterValue; label: string }[] = [
-  { value: 'free', label: 'Без аренды' },
+  { value: 'active', label: 'Активные' },
   { value: 'maintenance', label: 'На ремонте' },
 ];

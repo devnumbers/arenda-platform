@@ -94,7 +94,7 @@ export async function proxy(request: NextRequest) {
 
     const me = await fetchMe(request);
     if (me.kind === 'ok') {
-      const target = safeInternalPath(request.nextUrl.searchParams.get('from')) ?? '/dashboard';
+      const target = safeInternalPath(request.nextUrl.searchParams.get('from')) ?? '/properties';
       return appendSetCookies(withReportOnlyCsp(NextResponse.redirect(new URL(target, request.url))), me.setCookies);
     }
     if (me.kind === 'unauthorized') {
@@ -121,9 +121,6 @@ export const config = {
   matcher: [
     '/dashboard/:path*',
     '/properties/:path*',
-    '/leases/:path*',
-    '/tenants/:path*',
-    '/finance/:path*',
     '/profile/:path*',
     '/ui-kit/:path*',
     '/login',

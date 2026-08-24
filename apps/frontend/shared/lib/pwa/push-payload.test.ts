@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import {
     buildShowNotificationOptions,
     DEFAULT_PUSH_CLICK_URL,
+    DEFAULT_PUSH_TAG,
     DEFAULT_PUSH_TITLE,
     parsePushPayload,
     pickClickTargetClient,
@@ -15,19 +16,19 @@ describe('parsePushPayload', () => {
     it('parses a full valid payload', () => {
         const payload = parsePushPayload(
             JSON.stringify({
-                title: 'Окончание аренды',
-                body: 'Аренда заканчивается через 30 дней',
-                tag: 'lease_expiring',
-                url: '/leases/123',
-                eventType: 'lease_expiring',
+                title: 'Оплата подписки',
+                body: 'Списание за тариф не удалось — проверьте карту',
+                tag: 'subscription_grace',
+                url: '/profile/tariff',
+                eventType: 'subscription_grace',
             }),
         );
         expect(payload).toEqual({
-            title: 'Окончание аренды',
-            body: 'Аренда заканчивается через 30 дней',
-            tag: 'lease_expiring',
-            url: '/leases/123',
-            eventType: 'lease_expiring',
+            title: 'Оплата подписки',
+            body: 'Списание за тариф не удалось — проверьте карту',
+            tag: 'subscription_grace',
+            url: '/profile/tariff',
+            eventType: 'subscription_grace',
         });
     });
 
@@ -36,7 +37,7 @@ describe('parsePushPayload', () => {
         expect(payload).toEqual({
             title: DEFAULT_PUSH_TITLE,
             body: 'Привет',
-            tag: 'rentli-reminder',
+            tag: DEFAULT_PUSH_TAG,
             url: DEFAULT_PUSH_CLICK_URL,
             eventType: null,
         });
@@ -44,7 +45,7 @@ describe('parsePushPayload', () => {
 
     it('falls back to the default tag when the tag is an empty string', () => {
         const payload = parsePushPayload(JSON.stringify({ title: 'T', body: 'B', tag: '' }));
-        expect(payload?.tag).toBe('rentli-reminder');
+        expect(payload?.tag).toBe(DEFAULT_PUSH_TAG);
     });
 
     it('returns null for undefined eventData', () => {
@@ -82,16 +83,16 @@ describe('buildShowNotificationOptions', () => {
         const options = buildShowNotificationOptions({
             title: 'T',
             body: 'Тело уведомления',
-            tag: 'operation_overdue',
-            url: '/finance',
-            eventType: 'operation_overdue',
+            tag: 'subscription_grace',
+            url: '/profile/tariff',
+            eventType: 'subscription_grace',
         });
         expect(options).toEqual({
             body: 'Тело уведомления',
-            tag: 'operation_overdue',
+            tag: 'subscription_grace',
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
-            data: { url: '/finance' },
+            data: { url: '/profile/tariff' },
         });
     });
 
@@ -103,13 +104,13 @@ describe('buildShowNotificationOptions', () => {
             url: DEFAULT_PUSH_CLICK_URL,
             eventType: null,
         });
-        expect(options.data.url).toBe('/dashboard');
+        expect(options.data.url).toBe(DEFAULT_PUSH_CLICK_URL);
     });
 });
 
 describe('resolveClickTarget', () => {
     it('accepts an absolute same-origin path', () => {
-        expect(resolveClickTarget('/dashboard')).toBe('/dashboard');
+        expect(resolveClickTarget('/properties')).toBe('/properties');
         expect(resolveClickTarget('/properties/abc-123')).toBe('/properties/abc-123');
         expect(resolveClickTarget('/profile/notifications')).toBe('/profile/notifications');
     });
@@ -122,7 +123,7 @@ describe('resolveClickTarget', () => {
 
     it('rejects non-string values', () => {
         expect(resolveClickTarget(42)).toBe(DEFAULT_PUSH_CLICK_URL);
-        expect(resolveClickTarget({ url: '/dashboard' })).toBe(DEFAULT_PUSH_CLICK_URL);
+        expect(resolveClickTarget({ url: '/properties' })).toBe(DEFAULT_PUSH_CLICK_URL);
     });
 
     it('rejects external absolute URLs', () => {
@@ -141,8 +142,8 @@ describe('resolveClickTarget', () => {
     });
 
     it('rejects relative paths without a leading slash', () => {
-        expect(resolveClickTarget('dashboard')).toBe(DEFAULT_PUSH_CLICK_URL);
-        expect(resolveClickTarget('./dashboard')).toBe(DEFAULT_PUSH_CLICK_URL);
+        expect(resolveClickTarget('properties')).toBe(DEFAULT_PUSH_CLICK_URL);
+        expect(resolveClickTarget('./properties')).toBe(DEFAULT_PUSH_CLICK_URL);
     });
 });
 
@@ -157,11 +158,11 @@ describe('pickClickTargetClient', () => {
     it('returns the first same-origin client', () => {
         const clients = [
             makeClient('https://other.example.com/foo'),
-            makeClient('https://app.rentli.ru/dashboard'),
+            makeClient('https://app.rentli.ru/properties'),
             makeClient('https://app.rentli.ru/profile'),
         ];
         const result = pickClickTargetClient(clients, origin);
-        expect(result?.client.url).toBe('https://app.rentli.ru/dashboard');
+        expect(result?.client.url).toBe('https://app.rentli.ru/properties');
     });
 
     it('returns null when no client matches the origin', () => {
@@ -203,6 +204,12 @@ describe('service worker handlers stay in sync', () => {
     it('public/sw.js references the shared default click url', () => {
         expect(swSource, 'SW must fall back to the default click url').toContain(
             DEFAULT_PUSH_CLICK_URL,
+        );
+    });
+
+    it('public/sw.js references the shared default tag', () => {
+        expect(swSource, 'SW must fall back to the default tag').toContain(
+            `var DEFAULT_PUSH_TAG = '${DEFAULT_PUSH_TAG}'`,
         );
     });
 

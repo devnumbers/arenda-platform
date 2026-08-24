@@ -14,9 +14,10 @@ import type { components } from '@/shared/api/dto';
 type PendingPopupsResponse = components['schemas']['PendingPopupsResponse'];
 
 // Keys returned by GET /popups/pending. The backend may add new keys over
-// time, so the type stays open while the known key gets autocomplete.
-export const REMINDERS_ONBOARDING_POPUP_KEY = 'reminders_onboarding';
-export type PopupKey = typeof REMINDERS_ONBOARDING_POPUP_KEY | (string & {});
+// time, so the type stays open — the server owns the registry of active
+// popups (currently empty; the reminders onboarding popup left the registry
+// with the reminders feature — backend #438, frontend cleanup #439).
+export type PopupKey = string;
 
 export const popupKeys = {
   pending: ['popups', 'pending'] as const,

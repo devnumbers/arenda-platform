@@ -11,7 +11,7 @@ import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapPropertyResponse } from '@/entities/property';
 import type { Property } from '@/entities/property';
-import { financeKeys, leaseKeys, operationKeys, propertyKeys, recurringOperationKeys } from '@/shared/api/query-keys';
+import { propertyKeys } from '@/shared/api/query-keys';
 import type { components, operations } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -142,10 +142,6 @@ export function useArchiveProperty(): UseMutationResult<
     onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
     },
   });
 }
@@ -164,10 +160,6 @@ export function useUnarchiveProperty(): UseMutationResult<
     onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
     },
   });
 }
@@ -234,29 +226,9 @@ export function useDeleteProperty(): UseMutationResult<
       apiClient<void>(`/properties/${id}?mode=${mode}`, {
         method: 'DELETE',
       }),
-    onSuccess: (_, { id, mode }) => {
-      if (mode === 'cascade') {
-        // Каскад удаляет операции объекта на сервере — вычищаем все их
-        // кэши (списки и detail) по префиксу, чтобы страницы удалённых
-        // операций не рефетчились в 404, а списки не показывали фантомов.
-        queryClient.removeQueries({ queryKey: ['operations'] });
-      } else {
-        // При detach операции выживают с property_id: null — инвалидируем
-        // весь префикс операций (списки и detail), чтобы подтянуть
-        // обновлённые property_id/property_status.
-        void queryClient.invalidateQueries({ queryKey: ['operations'] });
-      }
+    onSuccess: (_, { id }) => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
-      void queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-      void queryClient.invalidateQueries({ queryKey: leaseKeys.byProperty(id) });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      void queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
-      void queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
-      void queryClient.invalidateQueries({ queryKey: recurringOperationKeys.lists() });
-      void queryClient.invalidateQueries({ queryKey: recurringOperationKeys.byProperty(id) });
     },
   });
 }

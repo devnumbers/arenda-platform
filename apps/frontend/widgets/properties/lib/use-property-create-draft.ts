@@ -6,8 +6,8 @@ import type { PropertyAttributes, PropertyType } from '@/entities/property';
 import { coerceAttributes } from '@/entities/property';
 import { propertyTypeOptions } from '@/features/properties';
 
-// Step 1 — Тип, 2 — Адрес, 3 — Характеристики, 4 — Информация, 5 — Success.
-export type CreateStep = 1 | 2 | 3 | 4 | 5;
+// Step 1 — Тип, 2 — Адрес, 3 — Характеристики, 4 — Информация.
+export type CreateStep = 1 | 2 | 3 | 4;
 
 export type CreateDraft = {
   step: CreateStep;
@@ -34,7 +34,6 @@ export function usePropertyCreateDraft(): {
     storageKey: STORAGE_KEY,
     createDefault: () => DEFAULT_DRAFT,
     validate: validateDraft,
-    isTerminal: (draft) => draft.step === 5,
   });
   return { draft, setDraft };
 }
@@ -49,7 +48,7 @@ function validateDraft(parsed: unknown): CreateDraft {
   const record = parsed as Record<string, unknown>;
 
   const step = Number(record.step);
-  if (!Number.isInteger(step) || step < 1 || step > 5) return DEFAULT_DRAFT;
+  if (!Number.isInteger(step) || step < 1 || step > 4) return DEFAULT_DRAFT;
 
   if (
     'type' in record &&

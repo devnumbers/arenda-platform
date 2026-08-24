@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState, type JSX } from 'react';
+import { Checkbox } from '@heroui/react';
 import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
@@ -15,19 +16,48 @@ import {
   channelPreferencesEqual,
   type NotificationChannelState,
 } from '@/features/notification-preferences';
-import { NotificationChannelMatrix } from '@/features/notification-preferences';
 import { usePushSubscriptionStatus } from '@/features/push-notifications';
 import { useSubscribePush } from '@/features/push-notifications';
 import { isPushSupported } from '@/features/push-notifications';
-import type {
-  NotificationEventType,
-  NotificationPreference,
-} from '@/entities/user';
+import { NOTIFICATION_OPTIONS } from '@/features/notification-preferences';
+import type { NotificationPreference } from '@/entities/user';
 import styles from './NotificationSettings.module.css';
 
 type NotificationSettingsViewProps = {
   readonly preferences: NotificationPreference[];
 };
+
+type GraceEmailRowProps = {
+  readonly isSelected: boolean;
+  readonly isDisabled?: boolean;
+  readonly onChange?: (allowed: boolean) => void;
+};
+
+/** Единственная строка событий: подпись события + email-чекбокс. */
+function GraceEmailRow({isSelected, isDisabled = false, onChange}: GraceEmailRowProps): JSX.Element {
+  const graceOption = NOTIFICATION_OPTIONS[0];
+  return (
+    <div className={styles.eventRow}>
+      <div className={styles.texts}>
+        <span className={styles.label}>{graceOption.label}</span>
+        <span className={styles.description}>{graceOption.description}</span>
+      </div>
+      <Checkbox
+        isSelected={isSelected}
+        onChange={onChange}
+        isDisabled={isDisabled}
+        aria-label={`${graceOption.label} — Email`}
+        className={styles.checkbox}
+      >
+        <Checkbox.Content className={styles.checkboxContent}>
+          <Checkbox.Control className={styles.checkboxControl}>
+            <Checkbox.Indicator className={styles.checkboxIndicator}/>
+          </Checkbox.Control>
+        </Checkbox.Content>
+      </Checkbox>
+    </div>
+  );
+}
 
 function NotificationSettingsView({ preferences }: NotificationSettingsViewProps): JSX.Element {
   const updateNotificationPreferences = useUpdateNotificationPreferences();
@@ -35,16 +65,16 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
   const { subscribe: subscribePush } = useSubscribePush();
 
   // Push is unavailable when the browser cannot receive push, the user has not
-  // granted permission, or no subscription exists yet. The matrix disables the
-  // push column and the warning block surfaces a one-tap enable action.
+  // granted permission, or no subscription exists yet. The warning block
+  // surfaces a one-tap enable action; the per-event push flag itself is not
+  // exposed — the minimal screen (ticket #439) carries it from the server.
   const pushUnavailable =
     !pushStatus.isPending &&
     (pushStatus.isUnsupported || pushStatus.needsPermission || pushStatus.needsSubscription);
 
   // Checkbox edits live only as an override layer over the server state:
-  // while null, the view follows fresh query data (e.g. the onboarding modal
-  // saved over this open page); once the user touches a checkbox the override
-  // wins until that save settles.
+  // while null, the view follows fresh query data; once the user touches the
+  // checkbox the override wins until that save settles.
   const [editedPrefs, setEditedPrefs] = useState<NotificationChannelState | null>(null);
   const serverPrefs = useMemo(() => buildInitialChannelPreferences(preferences), [preferences]);
   const notificationPrefs = editedPrefs ?? serverPrefs;
@@ -56,10 +86,10 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
   const inFlightRef = useRef(false);
 
   // Single-flight save: at most one PUT in the air, so the server never gets
-  // a race of competing snapshots and the checkboxes never have to be
-  // disabled. Clicks made during a flight only update the override and
-  // latestPrefsRef; the loop keeps re-sending the newest snapshot until the
-  // desired state stops moving (trailing sync after each settle).
+  // a race of competing snapshots and the checkbox never has to be disabled.
+  // Clicks made during a flight only update the override and latestPrefsRef;
+  // the loop keeps re-sending the newest snapshot until the desired state
+  // stops moving (trailing sync after each settle).
   const sync = useCallback(
     (snapshot: NotificationChannelState) => {
       inFlightRef.current = true;
@@ -86,10 +116,8 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
             }
           } catch (error: unknown) {
             notify.scenarios.profile.notificationPreferencesSaveError(error);
-            // Roll the whole override back to the server state, including
-            // any clicks made during the failed request — a deliberate
-            // simple behavior: after a failed save the UI shows what is
-            // actually saved rather than a mix of saved and unsaved toggles.
+            // Roll the whole override back to the server state — after a
+            // failed save the UI shows what is actually saved.
             latestPrefsRef.current = null;
             setEditedPrefs(null);
           }
@@ -108,16 +136,12 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
     [updateNotificationPreferences],
   );
 
-  const updateChannel = useCallback(
-    (
-      eventType: NotificationEventType,
-      channel: 'email' | 'push',
-      allowed: boolean,
-    ) => {
+  const handleEmailChange = useCallback(
+    (allowed: boolean) => {
       const base = editedPrefs ?? serverPrefs;
       const next: NotificationChannelState = {
         ...base,
-        [eventType]: { ...base[eventType], [channel]: allowed },
+        subscription_grace: { ...base.subscription_grace, email: allowed },
       };
       latestPrefsRef.current = next;
       setEditedPrefs(next);
@@ -129,18 +153,6 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
     [editedPrefs, serverPrefs, sync],
   );
 
-  const handleEmailChange = useCallback(
-    (eventType: NotificationEventType, allowed: boolean) =>
-      updateChannel(eventType, 'email', allowed),
-    [updateChannel],
-  );
-
-  const handlePushChange = useCallback(
-    (eventType: NotificationEventType, allowed: boolean) =>
-      updateChannel(eventType, 'push', allowed),
-    [updateChannel],
-  );
-
   const [isEnablingPush, setIsEnablingPush] = useState(false);
 
   const handleEnablePush = useCallback(async () => {
@@ -150,7 +162,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
       const outcome = await subscribePush();
       if (outcome.outcome === 'subscribed' || outcome.outcome === 'already-subscribed') {
         notify.scenarios.profile.pushEnabled();
-        // Re-probe so the banner, push column and hint update without a reload.
+        // Re-probe so the banner and hint update without a reload.
         refreshPushStatus();
       } else if (outcome.outcome === 'ios-needs-install') {
         notify.scenarios.profile.pushIosNeedsInstall();
@@ -179,7 +191,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
   return (
     <div className={styles.container}>
       <p className={styles.notificationsHint}>
-        Напоминания приходят на вашу почту{pushStatus.isReady ? ' и устройство' : ''}.
+        Письма об оплате подписки приходят на вашу почту{pushStatus.isReady ? ' и устройство' : ''}.
       </p>
       {pushUnavailable && (
         <div className={styles.pushWarning}>
@@ -190,7 +202,7 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
                 ? 'Уведомления отключены в настройках браузера. Включите их для сайта, затем нажмите «Проверить разрешение».'
                 : pushStatus.needsPermission
                   ? 'Разрешите уведомления в браузере, чтобы получать пуши.'
-                  : 'Подпишитесь на пуши, чтобы получать напоминания на устройство.'}
+                  : 'Подпишитесь на пуши, чтобы получать уведомления на устройство.'}
           </p>
           {!pushStatus.isUnsupported &&
             (pushStatus.permissionDenied ? (
@@ -209,11 +221,9 @@ function NotificationSettingsView({ preferences }: NotificationSettingsViewProps
             ))}
         </div>
       )}
-      <NotificationChannelMatrix
-        value={notificationPrefs}
-        onChangeEmail={handleEmailChange}
-        onChangePush={handlePushChange}
-        pushUnavailable={pushUnavailable}
+      <GraceEmailRow
+        isSelected={notificationPrefs.subscription_grace.email}
+        onChange={handleEmailChange}
       />
     </div>
   );
@@ -236,9 +246,9 @@ export function NotificationSettings(): JSX.Element {
       {!isError && isPending && (
         <div className={styles.container}>
           <p className={styles.notificationsHint}>
-            Напоминания приходят на вашу почту.
+            Письма об оплате подписки приходят на вашу почту.
           </p>
-          <NotificationChannelMatrix disabled />
+          <GraceEmailRow isSelected={false} isDisabled />
         </div>
       )}
       {!isError && !isPending && (

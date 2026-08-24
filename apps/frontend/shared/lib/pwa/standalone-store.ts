@@ -22,7 +22,7 @@ export const STANDALONE_DB_KEY = 'standalone';
 /**
  * Marks the current context as a PWA client. Called after SW registration when
  * `isStandaloneMode()` is true. The flag persists across SW restarts and is
- * read by `sw.js` to redirect PWA navigations to `/` back to `/dashboard`.
+ * read by `sw.js` to redirect PWA navigations to `/` back to `/properties`.
  *
  * SSR-safe: no-ops when `indexedDB` is unavailable.
  */

@@ -18,13 +18,13 @@ Layers live at the app root (`app/`, `widgets/`, `features/`, `entities/`, `shar
 - **`widgets/<name>/`** composes page blocks out of features, entities, and `shared/ui`.
 - A slice's `index.ts` is its only import surface from other slices (enforced); keep it minimal — export only what other elements actually import.
 
-Adding a new slice: user scenario → feature; domain model shared across scenarios → entity; page block → widget. If it fetches, its keys go into `shared/api/query-keys.ts`. Before adding any component, hook, or helper, search `shared/ui`, `shared/lib`, and existing slices (knip also guards dead exports).
+Adding a new slice: user scenario → feature; domain model shared across scenarios → entity; page block → widget. If it fetches, its keys go into `shared/api/query-keys.ts`. Before adding any component, hook, or helper, search `shared/ui`, `shared/lib`, and existing slices (knip also guards dead exports). The one deliberate exception is `features/popups/**` (ignored in `knip.json`): the popup mechanism is spec-mandated infrastructure (ADR 0023, spec #434) kept alive with no consumers until the next onboarding popup ships.
 
 ## Data flow across the DTO boundary
 
 - `shared/api/generated.ts` is generated and imported only inside `shared/api`; the rest of the app imports DTO types from `shared/api/dto.ts` (the re-export) or, better, not at all.
-- DTO→entity mapping lives in `entities/<name>/model/mappers.ts`: snake_case → camelCase, `?? null` normalization, page-wrapper mapping (`items/limit/offset/has_more/next_offset`). Example: `entities/operation/model/mappers.ts`.
-- Requests use camelCase **Command types** (`UserUpdateCommand` in `entities/user/model/types.ts`); mutations take the command and serialize inside the feature: when the endpoint is snake_case, add an explicit `toCreateWireRequest`/`toUpdateWireRequest` in the feature's `api/` (see `features/operations`), covered by a wire test.
+- DTO→entity mapping lives in `entities/<name>/model/mappers.ts`: snake_case → camelCase, `?? null` normalization, and page-wrapper mapping (`items/limit/offset/has_more/next_offset`) for paginated endpoints. Example: `entities/user/model/mappers.ts`.
+- Requests use camelCase **Command types** (`UserUpdateCommand` in `entities/user/model/types.ts`); mutations take the command and serialize inside the feature: when the endpoint is snake_case, add an explicit `toCreateWireRequest`/`toUpdateWireRequest` in the feature's `api/`, covered by a wire test.
 
 ## react-query conventions
 

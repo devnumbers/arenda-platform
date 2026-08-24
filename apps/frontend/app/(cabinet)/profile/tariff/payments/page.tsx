@@ -5,14 +5,14 @@ import { ROUTES } from '@/shared/config/routes';
 import { PaymentList } from '@/widgets/profile';
 
 export const metadata: Metadata = {
-  title: 'История операций — Рентли',
-  description: 'История операций по тарифу',
+  title: 'История платежей — Рентли',
+  description: 'История платежей по тарифу',
 };
 
 export default function PaymentsPage() {
   return (
     <PageShell>
-      <PageHeader title="История операций" backHref={ROUTES.profileTariff} />
+      <PageHeader title="История платежей" backHref={ROUTES.profileTariff} />
       <PaymentList />
     </PageShell>
   );

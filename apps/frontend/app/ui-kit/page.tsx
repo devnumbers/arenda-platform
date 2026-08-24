@@ -192,10 +192,10 @@ export default function UiKitPage(): JSX.Element {
                     <Button onClick={() => notify.scenarios.demo.error({description: 'Не удалось сохранить изменения. Попробуйте ещё раз'})}>
                         Error
                     </Button>
-                    <Button onClick={() => notify.scenarios.demo.info({description: 'Арендатор внёс оплату за июль'})}>
+                    <Button onClick={() => notify.scenarios.demo.info({description: 'Списание за тариф прошло успешно'})}>
                         Info
                     </Button>
-                    <Button onClick={() => notify.scenarios.demo.warning({description: 'Срок действия договора истекает через 7 дней'})}>
+                    <Button onClick={() => notify.scenarios.demo.warning({description: 'Срок действия подписки истекает через 7 дней'})}>
                         Warning
                     </Button>
                     <Button

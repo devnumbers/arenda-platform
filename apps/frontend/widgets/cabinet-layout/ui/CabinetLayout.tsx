@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, type JSX, type ReactNode } from 'react';
-import { RemindersOnboardingModal } from './RemindersOnboardingModal';
 import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
 import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
 import { PullToRefresh } from '@/shared/ui/pull-to-refresh';
@@ -25,7 +24,6 @@ export function CabinetLayout({ children }: CabinetLayoutProps): JSX.Element {
       <main className={styles.main}>
         <div className={styles.content} ref={contentRef}>{children}</div>
       </main>
-      <RemindersOnboardingModal />
       <BottomNav />
       <ServiceWorkerRegister />
       <ServiceWorkerUpdater />

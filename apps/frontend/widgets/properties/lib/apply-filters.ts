@@ -1,15 +1,15 @@
-import type { PropertyWithLease } from './use-property-list-data';
+import type { Property } from '@/entities/property';
 import type { PropertyFilters, PropertySort } from './filter-types';
 import { getDisplayStatus } from '@/features/properties';
 
 export type PropertiesViewMode = 'active' | 'archived';
 
 export function applyFiltersAndSort(
-  items: readonly PropertyWithLease[],
+  items: readonly Property[],
   mode: PropertiesViewMode,
   filters: PropertyFilters,
   sort: PropertySort,
-): PropertyWithLease[] {
+): Property[] {
   let result = items.filter((p) => {
     if (mode === 'active') return p.status !== 'archived';
     return p.status === 'archived';

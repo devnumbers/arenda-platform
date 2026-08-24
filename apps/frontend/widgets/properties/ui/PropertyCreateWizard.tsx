@@ -15,7 +15,6 @@ import {WizardHeader} from '@/shared/ui/wizard-header';
 import {PropertyAddressStep} from './PropertyAddressStep';
 import {PropertyAttributesStep} from './PropertyAttributesStep';
 import {PropertyInfoStep} from './PropertyInfoStep';
-import {PropertySuccessStep} from './PropertySuccessStep';
 import {PropertyTypeStep} from './PropertyTypeStep';
 import styles from './PropertyCreateWizard.module.css';
 
@@ -80,30 +79,19 @@ export function PropertyCreateWizard({returnTo}: PropertyCreateWizardProps): JSX
                 ...(filteredAttributes !== undefined && {attributes: filteredAttributes}),
             });
 
+            clearPropertyCreateDraft();
             if (returnTo) {
-                clearPropertyCreateDraft();
                 router.replace(buildReturnUrl(returnTo, {propertyId: String(created.id)}));
                 return;
             }
 
-            handleNext();
+            goBack(router, ROUTES.properties);
         } catch (error: unknown) {
             console.error('Failed to create property', error);
         } finally {
             setIsSubmitting(false);
         }
     };
-
-    if (draft.step === 5) {
-        return (
-            <div className={styles.root}>
-                <PropertySuccessStep
-                    onAddLater={() => goBack(router, ROUTES.properties)}
-                    onCreateLease={() => router.replace(ROUTES.tenants)}
-                />
-            </div>
-        );
-    }
 
     return (
         <div className={styles.root}>

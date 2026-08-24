@@ -7,18 +7,18 @@ import {
   StatusDoor,
   StatusWarning,
 } from '@/shared/assets/icons';
-import type { PropertyPageStatus } from '../lib/get-property-page-status';
+import type { PropertyStatus } from '@/entities/property';
 import styles from './PropertyDetailStatusBadge.module.css';
 
 const config: Record<
-  PropertyPageStatus,
+  PropertyStatus,
   {
     label: string;
     className: string;
     icon: ComponentType<{ className?: string }>;
   }
 > = {
-  free: { label: 'Не арендована', className: styles.free ?? '', icon: StatusDoor },
+  active: { label: 'Активен', className: styles.active ?? '', icon: StatusDoor },
   maintenance: {
     label: 'На ремонте',
     className: styles.maintenance ?? '',
@@ -31,7 +31,7 @@ export function PropertyDetailStatusBadge({
   status,
   text,
 }: {
-  readonly status: PropertyPageStatus;
+  readonly status: PropertyStatus;
   readonly text?: string;
 }): JSX.Element {
   const item = config[status];

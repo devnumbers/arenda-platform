@@ -59,13 +59,6 @@ const auth = {
     notify.error('Не удалось начать добавление карты', options)) satisfies ScenarioFn,
 } as const;
 
-const tenants = {
-  tenantUpdated: ((options?) =>
-    notify.success('Арендатор обновлён', options)) satisfies ScenarioFn,
-  tenantUpdateError: errorScenario('Не удалось обновить арендатора'),
-  tenantCreateError: errorScenario('Не удалось создать арендатора'),
-} as const;
-
 const propertyContacts = {
   created: ((options?) =>
     notify.success('Контакт добавлен', options)) satisfies ScenarioFn,
@@ -122,43 +115,6 @@ const property = {
     notify.success('Объект удалён', options)) satisfies ScenarioFn,
   deleteError: ((options?) =>
     notify.error('Не удалось удалить объект', options)) satisfies ScenarioFn,
-  exportError: ((options?) =>
-    notify.error('Не удалось сформировать экспорт', options)) satisfies ScenarioFn,
-} as const;
-
-const leases = {
-  completed: (<T>(promise: Promise<T>, options?: ScenarioOptions): NotificationKey =>
-    runPromiseScenario(promise, {
-      loading: 'Завершаем аренду...',
-      success: 'Аренда завершена',
-      errorFallback: 'Не удалось завершить аренду',
-    }, options)) satisfies PromiseScenarioFn,
-  updated: ((options?) =>
-    notify.success('Аренда обновлена', options)) satisfies ScenarioFn,
-  leaseCreateError: errorScenario('Не удалось создать аренду'),
-  leaseSaveError: errorScenario('Не удалось сохранить аренду'),
-} as const;
-
-const operations = {
-  categoryCreated: ((options?) =>
-    notify.success('Категория создана', options)) satisfies ScenarioFn,
-  categoryAlreadyExists: ((options?) =>
-    notify.success(
-      'Категория уже существует — выбрана существующая',
-      options,
-    )) satisfies ScenarioFn,
-  categoryCreateError: ((options?) =>
-    notify.error('Не удалось создать категорию', options)) satisfies ScenarioFn,
-  operationSaveError: errorScenario('Не удалось сохранить операцию'),
-  operationCreateError: errorScenario('Не удалось создать операцию'),
-  recurringOperationSaveError: errorScenario('Не удалось сохранить регулярную операцию'),
-  recurringOperationCreateError: errorScenario('Не удалось создать регулярную операцию'),
-  recurringOperationDeleted: (<T>(promise: Promise<T>, options?: ScenarioOptions): NotificationKey =>
-    runPromiseScenario(promise, {
-      loading: 'Удаляем серию...',
-      success: 'Серия удалена',
-      errorFallback: 'Не удалось удалить серию',
-    }, options)) satisfies PromiseScenarioFn,
 } as const;
 
 const profile = {
@@ -248,12 +204,9 @@ const demo = {
 
 export type Scenarios = {
   readonly auth: typeof auth;
-  readonly tenants: typeof tenants;
   readonly propertyContacts: typeof propertyContacts;
   readonly property: typeof property;
   readonly access: typeof access;
-  readonly leases: typeof leases;
-  readonly operations: typeof operations;
   readonly profile: typeof profile;
   readonly tariff: typeof tariff;
   readonly paymentMethods: typeof paymentMethods;
@@ -262,12 +215,9 @@ export type Scenarios = {
 
 export const scenarios: Scenarios = {
   auth,
-  tenants,
   propertyContacts,
   property,
   access,
-  leases,
-  operations,
   profile,
   tariff,
   paymentMethods,

@@ -14,17 +14,14 @@
  */
 export const CABINET_ROUTE_PREFIXES: ReadonlyArray<string> = [
     '/login',
-    '/dashboard',
     '/properties',
-    '/leases',
-    '/tenants',
-    '/finance',
     '/profile',
     '/subscription',
     '/support',
     '/ui-kit',
-    '/calendar',
-    '/reminders',
+    // /dashboard — постоянный редирект на /properties (PWA start_url и старые
+    // ссылки); роут живой, поэтому остаётся в списке сервис-воркера.
+    '/dashboard',
 ];
 
 /** The offline fallback page precached by the service worker. */

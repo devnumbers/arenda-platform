@@ -17,8 +17,7 @@ describe('isCabinetRoute', () => {
 
   it('returns true for nested cabinet routes', () => {
     expect(isCabinetRoute('/properties/123')).toBe(true);
-    expect(isCabinetRoute('/finance/2026/01')).toBe(true);
-    expect(isCabinetRoute('/leases/abc-456/edit')).toBe(true);
+    expect(isCabinetRoute('/profile/tariff/payments/abc')).toBe(true);
   });
 
   it('ignores query string and hash', () => {
@@ -43,9 +42,18 @@ describe('isCabinetRoute', () => {
   });
 
   it('returns false for API, static assets, and other origins', () => {
-    expect(isCabinetRoute('/api/reminders')).toBe(false);
+    expect(isCabinetRoute('/api/properties')).toBe(false);
     expect(isCabinetRoute('/_next/static/chunk.js')).toBe(false);
     expect(isCabinetRoute('/icons/icon-192.png')).toBe(false);
+  });
+
+  it('returns false for removed rental routes (dead screens, not cabinet)', () => {
+    // Домен аренд удалён (спека #434): старые пути больше не перехватываются
+    // сервис-воркером и уходят в сеть как обычные 404.
+    expect(isCabinetRoute('/leases')).toBe(false);
+    expect(isCabinetRoute('/tenants')).toBe(false);
+    expect(isCabinetRoute('/finance')).toBe(false);
+    expect(isCabinetRoute('/calendar')).toBe(false);
   });
 });
 

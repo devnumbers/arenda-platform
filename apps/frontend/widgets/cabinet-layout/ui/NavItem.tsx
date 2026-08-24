@@ -4,17 +4,11 @@ import type { ComponentType, JSX } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import {
-  NavHome,
   NavObjects,
-  NavTenants,
-  NavWallet,
   NavProfile,
   NavSupport,
-  BottomHome,
   BottomObjects,
-  BottomWallet,
   BottomProfile,
-  Calendar,
 } from '@/shared/assets/icons';
 import styles from './NavItem.module.css';
 
@@ -30,17 +24,11 @@ export type NavItemProps = {
 type IconComponent = ComponentType<{ readonly className?: string }>;
 
 const iconMap: Record<string, IconComponent> = {
-  NavHome,
   NavObjects,
-  NavTenants,
-  NavWallet,
   NavProfile,
   NavSupport,
-  BottomHome,
   BottomObjects,
-  BottomWallet,
   BottomProfile,
-  Calendar,
 };
 
 export function NavItem({
