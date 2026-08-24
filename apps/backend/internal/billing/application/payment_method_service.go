@@ -53,10 +53,15 @@ type PaymentMethodServiceConfig struct {
 }
 
 // NewPaymentMethodService creates a payment-method service over the shared
-// factory.
+// factory. A zero Config substitutes DefaultConfig, like the sibling billing
+// services — a zero CardBindingSessionLimit would otherwise refuse every
+// binding.
 func NewPaymentMethodService(factory txStoreFactory, provider methodBindingProvider, cfg PaymentMethodServiceConfig) *PaymentMethodService {
 	if cfg.Clock == nil {
 		cfg.Clock = clock.Real{}
+	}
+	if cfg.Config == (Config{}) {
+		cfg.Config = DefaultConfig()
 	}
 	if cfg.Log == nil {
 		cfg.Log = slog.Default()
@@ -126,16 +131,28 @@ func (s *PaymentMethodService) addFromToken(
 }
 
 // startBinding initiates the card-binding session at the provider and persists
-// it with its TTL (issue #251). The provider call runs first: a crash before
-// the row is saved leaves a provider-side session that expires harmlessly —
-// never a local session without a provider counterpart.
+// it with its TTL (issue #251). The provider call runs before the row is
+// saved: a crash in between leaves a provider-side session that expires
+// harmlessly — never a local session without a provider counterpart. The
+// per-user sliding window (ticket #427) is checked before the provider call,
+// so an over-limit request never consumes provider quota. The check is
+// deliberately soft — count and insert share no lock, so parallel requests
+// may slightly overshoot, which an abuse limit tolerates.
 func (s *PaymentMethodService) startBinding(ctx context.Context, userID uuid.UUID) (AddPaymentMethodResult, error) {
+	now := s.clock.Now().UTC()
+	started, err := s.bindings.CountStartedSince(ctx, userID, now.Add(-s.config.CardBindingSessionWindow))
+	if err != nil {
+		return AddPaymentMethodResult{}, fmt.Errorf("check card binding session limit: %w", err)
+	}
+	if started >= s.config.CardBindingSessionLimit {
+		return AddPaymentMethodResult{}, ErrBindingSessionLimitExceeded
+	}
+
 	result, err := s.provider.BindPaymentMethod(ctx, BindMethodRequest{CustomerRef: userID.String()})
 	if err != nil {
 		return AddPaymentMethodResult{}, fmt.Errorf("bind payment method at provider: %w", err)
 	}
 
-	now := s.clock.Now().UTC()
 	session, err := domain.NewCardBindingSession(userID, s.provider.Name(), result.BindingID, now.Add(s.config.CardBindingTTL), now)
 	if err != nil {
 		return AddPaymentMethodResult{}, err

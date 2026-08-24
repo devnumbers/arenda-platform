@@ -637,6 +637,18 @@ func (r *fakeBindingRepo) ListOpenByUserID(_ context.Context, userID uuid.UUID) 
 	return result, nil
 }
 
+func (r *fakeBindingRepo) CountStartedSince(_ context.Context, userID uuid.UUID, since time.Time) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for _, session := range r.sessions {
+		if session.UserID == userID && !session.CreatedAt.Before(since.UTC()) {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (r *fakeBindingRepo) UpdateStatus(_ context.Context, session domain.CardBindingSession) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -52,6 +52,12 @@ var (
 	// deleted before another one is activated, or the database still
 	// references the method (active_payment_method_id FK).
 	ErrPaymentMethodInUse = errors.New("payment method is in use")
+	// ErrBindingSessionLimitExceeded is returned when the user starts more
+	// card-binding sessions than the sliding-window limit allows (ticket
+	// #427, spec #419): the endpoint is abuse-restricted per user on top of
+	// the global IP limit. The HTTP layer answers 429; once the window slides
+	// past the oldest sessions, binding works again.
+	ErrBindingSessionLimitExceeded = errors.New("card binding session limit exceeded")
 
 	// Provider sentinels classify provider outcomes the application acts
 	// on beyond success/failure. They are provider-neutral by contract

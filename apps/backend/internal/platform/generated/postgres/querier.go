@@ -29,6 +29,8 @@ type Querier interface {
 	CountActiveSubscriptionsAdmin(ctx context.Context) (int64, error)
 	CountArchivedPropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountAuditLogsAdmin(ctx context.Context, arg CountAuditLogsAdminParams) (int64, error)
+	// Every started session counts, whatever its later outcome (ticket #427).
+	CountCardBindingSessionsByUserSince(ctx context.Context, arg CountCardBindingSessionsByUserSinceParams) (int64, error)
 	CountLeasesAdmin(ctx context.Context, arg CountLeasesAdminParams) (int64, error)
 	CountLeasesTotalAdmin(ctx context.Context) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
@@ -50,6 +52,9 @@ type Querier interface {
 	// Card binding sessions (issue #251). One row per initiated provider binding;
 	// the request key is unique per provider, and open sessions are resolved by
 	// status polling or the add-card webhook before the TTL expires.
+	// created_at comes from the caller's clock (the domain session), not the
+	// database default: the per-user binding limit's sliding window (ticket #427)
+	// is measured on this timestamp against the service clock.
 	CreateCardBindingSession(ctx context.Context, arg CreateCardBindingSessionParams) (CardBindingSession, error)
 	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
 	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error

@@ -350,15 +350,19 @@ DELETE FROM payment_methods WHERE id = $1 AND user_id = $2;
 -- status polling or the add-card webhook before the TTL expires.
 
 -- name: CreateCardBindingSession :one
+-- created_at comes from the caller's clock (the domain session), not the
+-- database default: the per-user binding limit's sliding window (ticket #427)
+-- is measured on this timestamp against the service clock.
 INSERT INTO card_binding_sessions (
     id,
     user_id,
     provider,
     request_key,
     status,
-    expires_at
+    expires_at,
+    created_at
 )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetCardBindingSessionByRequestKeyForUpdate :one
@@ -368,6 +372,10 @@ SELECT * FROM card_binding_sessions WHERE provider = $1 AND request_key = $2 FOR
 SELECT * FROM card_binding_sessions
 WHERE user_id = $1 AND status = 'new'
 ORDER BY created_at DESC, id DESC;
+
+-- name: CountCardBindingSessionsByUserSince :one
+-- Every started session counts, whatever its later outcome (ticket #427).
+SELECT COUNT(*) FROM card_binding_sessions WHERE user_id = $1 AND created_at >= $2;
 
 -- name: UpdateCardBindingSessionStatus :one
 UPDATE card_binding_sessions

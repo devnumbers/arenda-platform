@@ -923,6 +923,11 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict",
 				"Активный способ оплаты нельзя удалить, пока не выбран другой"))
+	case errors.Is(err, billingapp.ErrBindingSessionLimitExceeded):
+		// The per-user binding-session limit (ticket #427): the sliding
+		// window releases the oldest sessions over time, so the standard
+		// Retry-After cooldown is a safe re-poll hint, not a promise.
+		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит сессий привязки карты, попробуйте позже")
 	case errors.Is(err, billingapp.ErrPaymentUnavailable):
 		// Temporary answer for the flows that need a payment until #250 lands;
 		// deliberately outside the frozen contract's response list because it

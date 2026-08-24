@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -40,7 +41,9 @@ func (r *CardBindingSessionRepository) WithTx(tx transaction.Tx) (application.Ca
 	return NewCardBindingSessionRepository(dbtx), nil
 }
 
-// Create inserts a new binding session. A unique violation on
+// Create inserts a new binding session. The created_at column is written
+// from the domain session (the service clock), not the database default, so
+// the binding limit's sliding window is deterministic. A unique violation on
 // (provider, request_key) surfaces as ErrAlreadyExists: the provider handed
 // out a request key that is already tracked.
 func (r *CardBindingSessionRepository) Create(ctx context.Context, session domain.CardBindingSession) (domain.CardBindingSession, error) {
@@ -51,6 +54,7 @@ func (r *CardBindingSessionRepository) Create(ctx context.Context, session domai
 		RequestKey: session.RequestKey,
 		Status:     string(session.Status),
 		ExpiresAt:  pgtype.Timestamptz{Time: session.ExpiresAt, Valid: true},
+		CreatedAt:  pgtype.Timestamptz{Time: session.CreatedAt, Valid: true},
 	})
 	if err != nil {
 		if pgerr.IsUniqueViolation(err) {
@@ -96,6 +100,20 @@ func (r *CardBindingSessionRepository) ListOpenByUserID(ctx context.Context, use
 		sessions = append(sessions, session)
 	}
 	return sessions, nil
+}
+
+// CountStartedSince returns how many binding sessions the user started at or
+// after the instant — the sliding window of the per-user binding limit
+// (ticket #427).
+func (r *CardBindingSessionRepository) CountStartedSince(ctx context.Context, userID uuid.UUID, since time.Time) (int, error) {
+	count, err := r.q().CountCardBindingSessionsByUserSince(ctx, postgres.CountCardBindingSessionsByUserSinceParams{
+		UserID:    pgtype.UUID{Bytes: userID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: since, Valid: true},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count card binding sessions: %w", err)
+	}
+	return int(count), nil
 }
 
 // UpdateStatus persists the session's status transition. Callers hold the row

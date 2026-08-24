@@ -1678,6 +1678,32 @@ func TestAddPaymentMethod_BindingReturnsConfirmURL(t *testing.T) {
 	}
 }
 
+// TestAddPaymentMethod_SessionLimitIsTooManyRequests proves the per-user
+// binding-session limit surfaces as 429 with a Retry-After header and a
+// user-facing problem detail (ticket #427).
+func TestAddPaymentMethod_SessionLimitIsTooManyRequests(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.Must(uuid.NewV7())
+	h := newTestHandlersOpts(nil, nil, nil, nil, &fakePaymentMethodManager{add: func(
+		_ context.Context, _ uuid.UUID, _ billingapp.AddPaymentMethodRequest,
+	) (billingapp.AddPaymentMethodResult, error) {
+		return billingapp.AddPaymentMethodResult{}, billingapp.ErrBindingSessionLimitExceeded
+	}}, nil)
+
+	w := httptest.NewRecorder()
+	h.AddPaymentMethod(w, ownerJSONRequest(t, http.MethodPost, "/subscription/payment-methods", ownerID, `{}`))
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429; body: %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("Retry-After"); got == "" {
+		t.Errorf("Retry-After header is empty, want the cooldown seconds")
+	}
+	if !strings.Contains(w.Body.String(), "привязки карты") {
+		t.Errorf("problem detail = %q, want a user-facing note about the card binding limit", w.Body.String())
+	}
+}
+
 // TestAddPaymentMethod_TokenReturnsMethod proves the synchronous branch
 // forwards the raw token and answers with the created method (issue #251).
 func TestAddPaymentMethod_TokenReturnsMethod(t *testing.T) {

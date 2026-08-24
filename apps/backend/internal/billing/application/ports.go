@@ -175,6 +175,11 @@ type CardBindingSessionRepository interface {
 	// ListOpenByUserID returns the user's sessions still awaiting an outcome,
 	// newest first — the polling set of the sync flow.
 	ListOpenByUserID(ctx context.Context, userID uuid.UUID) ([]domain.CardBindingSession, error)
+	// CountStartedSince returns how many binding sessions the user started at
+	// or after the instant — the sliding window of the per-user binding limit
+	// (ticket #427). Every started session counts, whatever its later
+	// outcome: a closed session has still consumed the window.
+	CountStartedSince(ctx context.Context, userID uuid.UUID, since time.Time) (int, error)
 	UpdateStatus(ctx context.Context, session domain.CardBindingSession) error
 	WithTx(tx transaction.Tx) (CardBindingSessionRepository, error)
 }

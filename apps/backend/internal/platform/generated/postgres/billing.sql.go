@@ -72,6 +72,23 @@ func (q *Queries) CountActiveSubscriptionsAdmin(ctx context.Context) (int64, err
 	return count, err
 }
 
+const countCardBindingSessionsByUserSince = `-- name: CountCardBindingSessionsByUserSince :one
+SELECT COUNT(*) FROM card_binding_sessions WHERE user_id = $1 AND created_at >= $2
+`
+
+type CountCardBindingSessionsByUserSinceParams struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+// Every started session counts, whatever its later outcome (ticket #427).
+func (q *Queries) CountCardBindingSessionsByUserSince(ctx context.Context, arg CountCardBindingSessionsByUserSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCardBindingSessionsByUserSince, arg.UserID, arg.CreatedAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSubscriptionPaymentsAdmin = `-- name: CountSubscriptionPaymentsAdmin :one
 SELECT COUNT(*)
 FROM subscription_payments sp
@@ -112,9 +129,10 @@ INSERT INTO card_binding_sessions (
     provider,
     request_key,
     status,
-    expires_at
+    expires_at,
+    created_at
 )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, user_id, provider, request_key, status, expires_at, created_at, updated_at
 `
 
@@ -125,11 +143,15 @@ type CreateCardBindingSessionParams struct {
 	RequestKey string             `json:"request_key"`
 	Status     string             `json:"status"`
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 // Card binding sessions (issue #251). One row per initiated provider binding;
 // the request key is unique per provider, and open sessions are resolved by
 // status polling or the add-card webhook before the TTL expires.
+// created_at comes from the caller's clock (the domain session), not the
+// database default: the per-user binding limit's sliding window (ticket #427)
+// is measured on this timestamp against the service clock.
 func (q *Queries) CreateCardBindingSession(ctx context.Context, arg CreateCardBindingSessionParams) (CardBindingSession, error) {
 	row := q.db.QueryRow(ctx, createCardBindingSession,
 		arg.ID,
@@ -138,6 +160,7 @@ func (q *Queries) CreateCardBindingSession(ctx context.Context, arg CreateCardBi
 		arg.RequestKey,
 		arg.Status,
 		arg.ExpiresAt,
+		arg.CreatedAt,
 	)
 	var i CardBindingSession
 	err := row.Scan(

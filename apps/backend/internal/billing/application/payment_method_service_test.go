@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -110,6 +111,17 @@ var (
 	_ paymentFinalizerProvider = (*stubMethodProvider)(nil)
 )
 
+// testMethodServiceConfig is the operational config the payment-method tests
+// build their services with: the production values of the binding fields
+// (DefaultConfig minus the worker knobs irrelevant here).
+func testMethodServiceConfig() Config {
+	return Config{
+		CardBindingTTL:           24 * time.Hour,
+		CardBindingSessionLimit:  5,
+		CardBindingSessionWindow: time.Hour,
+	}
+}
+
 // methodHarness wires the payment-method and payment services over the
 // in-memory stores, a capture audit recorder, a fixed clock and the stub
 // provider (issue #251).
@@ -120,8 +132,11 @@ type methodHarness struct {
 	provider *stubMethodProvider
 	stores   *fakeStores
 	audit    *captureRecorder
-	now      time.Time
-	tariffs  []domain.Tariff
+	// The clock is a pointer so the limit tests can slide the window
+	// mid-test; every service of the harness reads the same mutable instant.
+	clock   *fakeClock
+	now     time.Time
+	tariffs []domain.Tariff
 }
 
 func newMethodHarness(t *testing.T) *methodHarness {
@@ -132,22 +147,24 @@ func newMethodHarness(t *testing.T) *methodHarness {
 	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 	factory := stores.factory(audit)
 	provider := newStubMethodProvider()
-	cfg := Config{CardBindingTTL: 24 * time.Hour}
+	clk := &fakeClock{now: now}
+	cfg := testMethodServiceConfig()
 	return &methodHarness{
 		methods: NewPaymentMethodService(factory, provider, PaymentMethodServiceConfig{
 			Config: cfg,
-			Clock:  fakeClock{now: now},
+			Clock:  clk,
 			Log:    slog.New(slog.DiscardHandler),
 		}),
-		payments: NewPaymentService(factory, provider, PaymentServiceConfig{Clock: fakeClock{now: now}, Log: slog.New(slog.DiscardHandler)}),
+		payments: NewPaymentService(factory, provider, PaymentServiceConfig{Clock: clk, Log: slog.New(slog.DiscardHandler)}),
 		subs: NewSubscriptionService(factory, SubscriptionServiceConfig{
-			Clock:  fakeClock{now: now},
+			Clock:  clk,
 			Config: cfg,
 			Logger: slog.New(slog.DiscardHandler),
 		}),
 		provider: provider,
 		stores:   stores,
 		audit:    audit,
+		clock:    clk,
 		now:      now,
 		tariffs:  tariffs,
 	}
@@ -316,7 +333,7 @@ func TestAddPaymentMethod_TokenIgnoredByBankFormProvider(t *testing.T) {
 		h.stores.factory(h.audit),
 		bankFormStubProvider{stub: h.provider},
 		PaymentMethodServiceConfig{
-			Config: Config{CardBindingTTL: 24 * time.Hour},
+			Config: testMethodServiceConfig(),
 			Clock:  fakeClock{now: h.now},
 			Log:    slog.New(slog.DiscardHandler),
 		},
@@ -383,6 +400,83 @@ func TestAddPaymentMethod_BindingStartsSessionWithTTL(t *testing.T) {
 	}
 	if len(methods) != 0 {
 		t.Errorf("methods after binding start = %d, want 0 (nothing before confirmation)", len(methods))
+	}
+}
+
+// TestAddPaymentMethod_BindingSessionLimitBlocksExcess pins the per-user
+// binding-session abuse limit (ticket #427, spec #419): inside the sliding
+// window the sixth session is refused with ErrBindingSessionLimitExceeded
+// before the provider is even called, and once the window has slid past the
+// earlier sessions binding works again. The ordinary flows — one or two
+// bindings, a retry after a failed one — run far below the limit and are
+// covered by every other binding test in this file.
+func TestAddPaymentMethod_BindingSessionLimitBlocksExcess(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	userID, _ := h.seedMethodSubscription(t)
+
+	startBinding := func(i int) error {
+		t.Helper()
+		h.provider.mu.Lock()
+		h.provider.bindRes = BindMethodResult{
+			FormURL:   "https://pay.example/bind",
+			BindingID: fmt.Sprintf("req_limit_%d", i),
+		}
+		h.provider.mu.Unlock()
+		_, err := h.methods.AddPaymentMethod(t.Context(), userID, AddPaymentMethodRequest{})
+		return err
+	}
+
+	// Five sessions inside the window are the allowed burst. The third is
+	// closed as a failed binding mid-way — the ordinary retry after a failed
+	// binding is just another session and must stay unrestricted.
+	for i := 1; i <= 5; i++ {
+		if err := startBinding(i); err != nil {
+			t.Fatalf("session %d inside the window: AddPaymentMethod() error = %v", i, err)
+		}
+		if i == 3 {
+			failed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, "req_limit_3")
+			if err != nil {
+				t.Fatalf("GetByRequestKeyForUpdate(failed session) error = %v", err)
+			}
+			if err := failed.MarkRejected(h.now); err != nil {
+				t.Fatalf("MarkRejected(failed session) error = %v", err)
+			}
+			if err := h.stores.bindings.UpdateStatus(t.Context(), failed); err != nil {
+				t.Fatalf("UpdateStatus(failed session) error = %v", err)
+			}
+		}
+	}
+
+	// The sixth inside the window is refused before the provider is called.
+	h.provider.mu.Lock()
+	callsBefore := h.provider.bindCalls
+	h.provider.mu.Unlock()
+	if err := startBinding(6); !errors.Is(err, ErrBindingSessionLimitExceeded) {
+		t.Fatalf("sixth session inside the window: error = %v, want ErrBindingSessionLimitExceeded", err)
+	}
+	h.provider.mu.Lock()
+	callsAfter := h.provider.bindCalls
+	h.provider.mu.Unlock()
+	if callsAfter != callsBefore {
+		t.Fatalf("provider BindPaymentMethod calls = %d after the refused session, want %d", callsAfter, callsBefore)
+	}
+
+	// Another user's window is independent: the limit of one user never
+	// restricts another.
+	otherID, _ := h.seedMethodSubscription(t)
+	h.provider.mu.Lock()
+	h.provider.bindRes = BindMethodResult{FormURL: "https://pay.example/bind", BindingID: "req_limit_other"}
+	h.provider.mu.Unlock()
+	if _, err := h.methods.AddPaymentMethod(t.Context(), otherID, AddPaymentMethodRequest{}); err != nil {
+		t.Fatalf("other user's first session: AddPaymentMethod() error = %v", err)
+	}
+
+	// Once the window has fully slid past the five sessions, the same user
+	// can bind again.
+	h.clock.now = h.now.Add(2 * time.Hour)
+	if err := startBinding(7); err != nil {
+		t.Fatalf("after the window slid past the sessions: AddPaymentMethod() error = %v", err)
 	}
 }
 

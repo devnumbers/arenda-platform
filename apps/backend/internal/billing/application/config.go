@@ -24,6 +24,14 @@ type Config struct {
 	// CardBindingTTL is how long a card-binding session stays resolvable after
 	// initiation (issue #251); expired sessions never produce payment methods.
 	CardBindingTTL time.Duration
+	// CardBindingSessionLimit caps how many card-binding sessions one user
+	// may start inside CardBindingSessionWindow (ticket #427, spec #419):
+	// the per-user abuse limit on top of the global IP limit. The ordinary
+	// one-or-two-bindings flows stay far below it.
+	CardBindingSessionLimit int
+	// CardBindingSessionWindow is the sliding window of the per-user binding
+	// limit; sessions older than it stop counting.
+	CardBindingSessionWindow time.Duration
 	// PendingPaymentStaleness is how long a pending payment may linger before
 	// the reconciliation worker asks the provider for its status.
 	PendingPaymentStaleness time.Duration
@@ -48,6 +56,8 @@ func DefaultConfig() Config {
 		ChargeAttemptLimit:        3,
 		WorkerBatchSize:           100,
 		CardBindingTTL:            24 * time.Hour,
+		CardBindingSessionLimit:   5,
+		CardBindingSessionWindow:  time.Hour,
 		PendingPaymentStaleness:   5 * time.Minute,
 		GraceExpiryReminderBefore: 48 * time.Hour,
 		MaxGraceExtensionDays:     90,
