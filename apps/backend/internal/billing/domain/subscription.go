@@ -506,6 +506,21 @@ func (s *Subscription) SucceededPaymentIsCurrent(paymentID uuid.UUID) bool {
 	return !paymentIDBefore(paymentID, *s.LastAppliedPaymentID)
 }
 
+// RefundedPaymentBoughtCurrentPeriod reports whether the refunded payment is
+// the payment the subscription's current paid state reflects — the last
+// applied one. A refund of a superseded payment — the subscription was
+// renewed or upgraded by a newer payment after it — returns the money but must
+// not reset the tariff and period the newer payment bought (issue #430); only
+// the payment the current period was bought with carries the subscription
+// effects of a refund. With no payment applied on record there is nothing to
+// supersede, so the refund keeps its effects.
+func (s *Subscription) RefundedPaymentBoughtCurrentPeriod(paymentID uuid.UUID) bool {
+	if s.LastAppliedPaymentID == nil {
+		return true
+	}
+	return *s.LastAppliedPaymentID == paymentID
+}
+
 // paymentIDBefore reports whether payment id a was created before payment id
 // b. Repository ids are UUIDv7 — the leading bytes carry the generation
 // timestamp — so byte comparison is creation-time comparison.

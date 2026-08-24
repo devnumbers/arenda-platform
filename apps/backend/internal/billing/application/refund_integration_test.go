@@ -163,6 +163,70 @@ func TestRefundFlow_SucceedsAndDowngradesToBasic(t *testing.T) {
 	h.requireRefundTransitionAudit(t, subStored, payment)
 }
 
+// TestRefundFlow_SupersededPaymentKeepsSubscription proves the currency guard
+// of issue #430 against real PostgreSQL: refunding a payment a later payment
+// superseded — an earlier pro charge after a newer business upgrade was
+// applied — returns the money in full but leaves the subscription on the
+// newer payment's tariff and period, with no refund entry in the transition
+// log; the audit log still records the admin-attributed refund.
+func TestRefundFlow_SupersededPaymentKeepsSubscription(t *testing.T) {
+	t.Parallel()
+	h := newRefundIntegrationHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffBasic)
+	proResult, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), sub.UserID, billingapp.ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff(pro): %v", err)
+	}
+	h.confirmFakePayment(t, proResult.PaymentID)
+	proPayment, err := h.payments.GetByID(h.ctx(), proResult.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID(pro): %v", err)
+	}
+	// A newer business payment buys the current paid period.
+	businessResult, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), sub.UserID, billingapp.ChangeTariffRequest{
+		TariffName: domain.TariffBusiness,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff(business): %v", err)
+	}
+	h.confirmFakePayment(t, businessResult.PaymentID)
+	applied, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID(applied): %v", err)
+	}
+	wantUntil := applied.ValidUntil
+	transitionsBefore := h.transitionsOf(t, sub.ID)
+
+	if err := h.paymentsSvc.RefundPayment(h.ctx(), h.adminID, proPayment.ID); err != nil {
+		t.Fatalf("RefundPayment: %v", err)
+	}
+
+	h.requireRefundedPaymentShape(t, proPayment)
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID(final): %v", err)
+	}
+	if stored.TariffID != h.tariffIDByName(t, domain.TariffBusiness) {
+		t.Fatalf("tariff = %v, want business (a superseded refund must not downgrade)", stored.TariffID)
+	}
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(*wantUntil) {
+		t.Fatalf("valid until = %v, want the newer payment's %v", stored.ValidUntil, wantUntil)
+	}
+	if got := h.transitionsOf(t, sub.ID); len(got) != len(transitionsBefore) {
+		t.Fatalf("transitions = %d, want the pre-refund %d (no refund downgrade entry)", len(got), len(transitionsBefore))
+	}
+	refundAudit := h.countRows(
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'subscription_payment.refunded' AND actor_id = $1 AND entity_id = $2",
+		h.adminID, proPayment.ID)
+	if refundAudit != 1 {
+		t.Fatalf("refund audit entries = %d, want 1", refundAudit)
+	}
+}
+
 // TestRefundFlow_DoubleRefundRejected proves the reservation guard on real
 // PostgreSQL: the second refund of the same payment is rejected and the
 // provider is never called twice.

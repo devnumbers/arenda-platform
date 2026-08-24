@@ -210,6 +210,51 @@ func (h *refundHarness) assertDowngradeSideEffects(t *testing.T) {
 	}
 }
 
+// TestRefundPayment_SupersededPaymentKeepsSubscription proves the currency
+// guard of issue #430: a refund of a payment the subscription no longer
+// reflects — a later payment bought the current paid period — returns the
+// money but leaves the tariff, the validity window and the transition history
+// untouched. Only the audit entry records the refund.
+func TestRefundPayment_SupersededPaymentKeepsSubscription(t *testing.T) {
+	t.Parallel()
+	h := newRefundHarness(t)
+	sub := h.seedSubscription(t, nil)
+	stale, newer := h.seedSupersededChargePair(t, sub)
+	// The stale charge settles at the provider after the newer payment was
+	// applied: the late success is a no-op (issue #428), but the money was
+	// captured, so the refund returns it.
+	h.deliverStaleSuccess(t, stale)
+	applied, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	wantUntil := applied.ValidUntil
+
+	if err := h.payments.RefundPayment(t.Context(), h.adminID, stale.ID); err != nil {
+		t.Fatalf("RefundPayment() error = %v", err)
+	}
+
+	h.assertProviderRefund(t, stale)
+	h.assertPaymentRefunded(t, stale)
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() after refund error = %v", err)
+	}
+	if stored.TariffID != h.tariffID(t, domain.TariffBusiness) {
+		t.Errorf("tariff = %v, want business (a superseded refund must not downgrade)", stored.TariffID)
+	}
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(*wantUntil) {
+		t.Errorf("valid until = %v, want the newer payment's %v", stored.ValidUntil, wantUntil)
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != newer.ID {
+		t.Errorf("last applied payment = %v, want the newer business payment", stored.LastAppliedPaymentID)
+	}
+	if got := h.transitionCount(t, sub.ID); got != 1 {
+		t.Errorf("transitions = %d, want only the business payment's entry (no refund downgrade)", got)
+	}
+	h.assertRefundAudit(t)
+}
+
 // TestRefundPayment_DoubleRefundRejected proves the double-refund guard
 // (migrated from TestBilling_RefundPayment_DoubleRefundRejected): a repeated
 // refund of the same payment is rejected by the reservation, and the provider

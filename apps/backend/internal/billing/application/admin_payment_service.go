@@ -66,9 +66,10 @@ func (s *PaymentService) runLifecycleTx(ctx context.Context, work func(*txStores
 //     uncertain outcome keeps it under the сторож of the reconciliation
 //     worker (ReconcileStaleRefunds).
 //  3. Finalize — one transaction with the lifecycle bridges marks the payment
-//     refunded and downgrades the subscription to the basic tariff with its
-//     excess properties archived, the transition-log entry and the audit
-//     record attributing everything to the acting admin.
+//     refunded and, when the payment bought the current paid period (issue
+//     #430), downgrades the subscription to the basic tariff with its excess
+//     properties archived; the transition-log entry and the audit record
+//     attribute everything to the acting admin.
 func (s *PaymentService) RefundPayment(ctx context.Context, adminID, paymentID uuid.UUID) error {
 	reservation, err := s.reserveRefund(ctx, paymentID)
 	if err != nil {
@@ -262,12 +263,16 @@ func (s *PaymentService) finalizeRefund(ctx context.Context, paymentID uuid.UUID
 }
 
 // applyRefundedPayment marks the payment refunded and applies the
-// subscription effects of the refund inside the caller's transaction: the
+// subscription effects of the refund inside the caller's transaction. The
+// money is always returned, but the reset runs only when the refunded payment
+// bought the subscription's current paid period (issue #430): then the
 // subscription falls to the basic tariff (the paid time the payment bought is
 // returned), the excess properties are archived and the recipient slots
-// enforced, the transition log records the downgrade with the refund reason
-// and the audit log records the refunded payment — both with the actor's
-// attribution (issue #254).
+// enforced, and the transition log records the downgrade with the refund
+// reason. A refund of a payment superseded by a newer applied payment touches
+// neither the subscription nor the transition log. The audit log records the
+// refunded payment — with the actor's attribution — in both cases (issue
+// #254).
 func (s *PaymentService) applyRefundedPayment(
 	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, actor refundActor,
 ) error {
@@ -281,6 +286,12 @@ func (s *PaymentService) applyRefundedPayment(
 	sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
 	if err != nil {
 		return err
+	}
+	if !sub.RefundedPaymentBoughtCurrentPeriod(payment.ID) {
+		// A later payment bought the current paid period (issue #430): the
+		// money is returned, but the tariff and period the newer payment
+		// bought stay — only the audit entry records the refund.
+		return s.recordRefundAudit(ctx, stores, payment, actor)
 	}
 	basicTariff, err := stores.tariffs.GetByName(ctx, domain.TariffBasic)
 	if err != nil {
@@ -305,6 +316,15 @@ func (s *PaymentService) applyRefundedPayment(
 		return fmt.Errorf("enforce tariff limit after refund: %w", err)
 	}
 
+	return s.recordRefundAudit(ctx, stores, payment, actor)
+}
+
+// recordRefundAudit writes the refund's audit entry with the actor's
+// attribution — the part of the refund effects that runs for every refunded
+// payment, current or superseded.
+func (s *PaymentService) recordRefundAudit(
+	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, actor refundActor,
+) error {
 	if err := stores.audit.Record(ctx, auditdomain.Entry{
 		ActorID:    actor.initiatorID,
 		ActorRole:  auditRoleOfInitiator(actor.initiator),
