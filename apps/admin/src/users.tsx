@@ -16,8 +16,6 @@ import {
   ChoiceChipField,
   FullNameField,
   auditActionChoices,
-  operationStatusChoices,
-  operationTypeChoices,
   propertyStatusChoices,
   propertyStatusFilterChoices,
   propertyTypeChoices,
@@ -25,8 +23,6 @@ import {
   subscriptionStatusChoices,
 } from './fields';
 import { AuditLogDatagrid } from './auditLogs';
-import { LeaseDatagrid } from './leases';
-import { OperationDatagrid } from './operations';
 import { SubscriptionActions, SubscriptionStateFields, SubscriptionTransitionsPanel } from './userSubscription';
 
 const userFilters = [
@@ -41,16 +37,11 @@ const userFilters = [
   />,
 ];
 
-// Фильтры вложенных табов UserShow: nested-эндпоинты принимают status (properties)
-// и status/type (operations); query-enum статуса объектов — только active/all/archived.
-// alwaysOn обязателен: внутри ReferenceManyField нет FilterButton, иначе фильтры скрыты.
+// Фильтры вложенных табов UserShow: nested-эндпоинт объектов принимает status
+// (query-enum — только active/all/archived). alwaysOn обязателен: внутри
+// ReferenceManyField нет FilterButton, иначе фильтры скрыты.
 const userPropertyTabFilters = [
   <SelectInput key="status" source="status" label="Статус" choices={propertyStatusFilterChoices} alwaysOn />,
-];
-
-const userOperationTabFilters = [
-  <SelectInput key="status" source="status" label="Статус" choices={operationStatusChoices} alwaysOn />,
-  <SelectInput key="type" source="type" label="Тип" choices={operationTypeChoices} alwaysOn />,
 ];
 
 // Фильтры вкладки «Журнал действий»: nested-эндпоинт принимает
@@ -102,42 +93,6 @@ export const UserShow = () => (
           </Datagrid>
         </ReferenceManyField>
       </Tab>
-      <Tab label="Договоры">
-        <ReferenceManyField
-          reference="leases"
-          target="owner_id"
-          label={false}
-          sort={{ field: 'updatedAt', order: 'DESC' }}
-        >
-          <LeaseDatagrid />
-        </ReferenceManyField>
-      </Tab>
-      <Tab label="Контакты">
-        <ReferenceManyField
-          reference="tenantContacts"
-          target="owner_id"
-          label={false}
-          sort={{ field: 'name', order: 'ASC' }}
-        >
-          <Datagrid rowClick="show" bulkActionButtons={false}>
-            <TextField source="name" />
-            <TextField source="surname" sortable={false} />
-            <TextField source="phone" sortable={false} />
-            <TextField source="email" sortable={false} />
-          </Datagrid>
-        </ReferenceManyField>
-      </Tab>
-      <Tab label="Операции">
-        <ReferenceManyField
-          reference="operations"
-          target="owner_id"
-          label={false}
-          sort={{ field: 'operationDate', order: 'DESC' }}
-        >
-          <FilterForm filters={userOperationTabFilters} />
-          <OperationDatagrid />
-        </ReferenceManyField>
-      </Tab>
       <Tab label="Журнал действий">
         <ReferenceManyField
           reference="auditLogs"
@@ -157,9 +112,6 @@ export const UserShow = () => (
       <Tab label="Статистика">
         <TextField source="stats.activePropertiesCount" />
         <TextField source="stats.archivedPropertiesCount" />
-        <TextField source="stats.leasesCount" />
-        <TextField source="stats.tenantContactsCount" />
-        <TextField source="stats.operationsCount" />
       </Tab>
     </TabbedShowLayout>
   </Show>

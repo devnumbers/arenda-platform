@@ -31,12 +31,8 @@ type Querier interface {
 	CountAuditLogsAdmin(ctx context.Context, arg CountAuditLogsAdminParams) (int64, error)
 	// Every started session counts, whatever its later outcome (ticket #427).
 	CountCardBindingSessionsByUserSince(ctx context.Context, arg CountCardBindingSessionsByUserSinceParams) (int64, error)
-	CountLeasesAdmin(ctx context.Context, arg CountLeasesAdminParams) (int64, error)
-	CountLeasesTotalAdmin(ctx context.Context) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
 	CountOpenLeasesByProperty(ctx context.Context, propertyID pgtype.UUID) (int64, error)
-	CountOperationsAdmin(ctx context.Context, arg CountOperationsAdminParams) (int64, error)
-	CountOperationsTotalAdmin(ctx context.Context) (int64, error)
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
 	CountPropertyContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
@@ -50,7 +46,6 @@ type Querier interface {
 	// hidden_shared_count badge). Memberships on archived properties are excluded
 	// (issue #163): those objects are hidden by the archive, not by the tariff.
 	CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
-	CountTenantContactsAdmin(ctx context.Context, arg CountTenantContactsAdminParams) (int64, error)
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
 	CountUsersTotalAdmin(ctx context.Context) (int64, error)
@@ -147,7 +142,6 @@ type Querier interface {
 	// email=$2 equality, but the phone+purpose prefix narrows the scan efficiently).
 	GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByPhoneAndEmailAndPurposeParams) (GetLatestLoginCodeByPhoneAndEmailAndPurposeRow, error)
 	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
-	GetLeaseByIDAdmin(ctx context.Context, id pgtype.UUID) (GetLeaseByIDAdminRow, error)
 	GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndOwnerParams) (Lease, error)
 	GetLeaseByIDAndOwnerForUpdate(ctx context.Context, arg GetLeaseByIDAndOwnerForUpdateParams) (Lease, error)
 	GetLeaseByIDForUpdate(ctx context.Context, id pgtype.UUID) (Lease, error)
@@ -156,7 +150,6 @@ type Querier interface {
 	GetMaxMemberRoleByOwner(ctx context.Context, arg GetMaxMemberRoleByOwnerParams) (int32, error)
 	GetOpenLeaseByProperty(ctx context.Context, arg GetOpenLeaseByPropertyParams) (Lease, error)
 	GetOperationByID(ctx context.Context, id pgtype.UUID) (GetOperationByIDRow, error)
-	GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (GetOperationByIDAdminRow, error)
 	GetOperationByIDAndOwner(ctx context.Context, arg GetOperationByIDAndOwnerParams) (GetOperationByIDAndOwnerRow, error)
 	GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg GetOperationByIDAndOwnerForUpdateParams) (GetOperationByIDAndOwnerForUpdateRow, error)
 	GetOperationCategoryByIDAndOwner(ctx context.Context, arg GetOperationCategoryByIDAndOwnerParams) (OperationCategory, error)
@@ -225,7 +218,6 @@ type Querier interface {
 	// data owner before the policy gate authorizes the actor (Property Sharing
 	// follow-up). Callers must not expose the result without a role check.
 	GetTenantContactByID(ctx context.Context, id pgtype.UUID) (TenantContact, error)
-	GetTenantContactByIDAdmin(ctx context.Context, id pgtype.UUID) (GetTenantContactByIDAdminRow, error)
 	GetTenantContactByIDAndOwner(ctx context.Context, arg GetTenantContactByIDAndOwnerParams) (TenantContact, error)
 	GetUserByEmail(ctx context.Context, dollar_1 string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
@@ -266,7 +258,6 @@ type Querier interface {
 	// value never reaches dispatch even if planted by hand.
 	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
 	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]ListFutureOperationsByLeaseRow, error)
-	ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error)
 	ListLeasesByOwner(ctx context.Context, arg ListLeasesByOwnerParams) ([]Lease, error)
 	ListLeasesByProperty(ctx context.Context, arg ListLeasesByPropertyParams) ([]Lease, error)
 	ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error)
@@ -277,7 +268,6 @@ type Querier interface {
 	ListOperationCategoriesByOwner(ctx context.Context, arg ListOperationCategoriesByOwnerParams) ([]OperationCategory, error)
 	ListOperationDatesByLease(ctx context.Context, leaseID pgtype.UUID) ([]pgtype.Date, error)
 	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]pgtype.Date, error)
-	ListOperationsAdmin(ctx context.Context, arg ListOperationsAdminParams) ([]ListOperationsAdminRow, error)
 	ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID) ([]ListOperationsByLeaseRow, error)
 	ListOperationsByOwner(ctx context.Context, arg ListOperationsByOwnerParams) ([]ListOperationsByOwnerRow, error)
 	ListOperationsByOwnerAsc(ctx context.Context, arg ListOperationsByOwnerAscParams) ([]ListOperationsByOwnerAscRow, error)
@@ -360,7 +350,6 @@ type Querier interface {
 	// User-facing tariff listing: hidden tariffs stay referable by FK but are not
 	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)
-	ListTenantContactsAdmin(ctx context.Context, arg ListTenantContactsAdminParams) ([]ListTenantContactsAdminRow, error)
 	ListTenantContactsByIDs(ctx context.Context, arg ListTenantContactsByIDsParams) ([]TenantContact, error)
 	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
 	ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID pgtype.UUID) ([]ListTenantContactsWithLeaseStatusRow, error)

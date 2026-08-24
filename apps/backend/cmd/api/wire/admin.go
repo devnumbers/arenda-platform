@@ -17,6 +17,6 @@ type Admin struct {
 // subscription state in admin views).
 func WireAdmin(p platformDeps, subscriptions *application.SubscriptionService) *Admin {
 	repo := adminpg.NewAdminRepository(p.DB, p.Encryptor, p.Clock)
-	service := adminapp.NewAdminService(repo, repo, repo, repo, repo, repo, subscriptions, repo, repo, p.Clock)
+	service := adminapp.NewAdminService(repo, repo, repo, subscriptions, repo, repo, p.Clock)
 	return &Admin{Repo: repo, Service: service}
 }

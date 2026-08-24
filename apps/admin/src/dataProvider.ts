@@ -108,9 +108,6 @@ const ensureId = <T extends RaRecord>(item: T): T => {
 const sortableFieldsByResource: Record<string, readonly string[]> = {
   users: ['createdAt', 'updatedAt'],
   properties: ['name', 'createdAt', 'updatedAt', 'status'],
-  leases: ['startDate', 'updatedAt', 'status', 'rentAmountKopecks'],
-  operations: ['operationDate', 'amountKopecks', 'status'],
-  tenantContacts: ['name', 'updatedAt'],
   subscriptionPayments: ['createdAt', 'amountKopecks', 'status'],
   auditLogs: ['createdAt'],
   tariffs: [],
@@ -169,14 +166,8 @@ const listUrl = (resource: string, ownerId?: string | number): string => {
       return `${API_PREFIX}/admin/users`;
     case 'properties':
       return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/properties` : `${API_PREFIX}/admin/properties`;
-    case 'leases':
-      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/leases` : `${API_PREFIX}/admin/leases`;
-    case 'tenantContacts':
-      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/tenant-contacts` : `${API_PREFIX}/admin/tenant-contacts`;
     case 'propertyContacts':
       return `${API_PREFIX}/admin/property-contacts`;
-    case 'operations':
-      return hasOwner ? `${API_PREFIX}/admin/users/${ownerId}/operations` : `${API_PREFIX}/admin/operations`;
     case 'subscriptionPayments':
       return `${API_PREFIX}/admin/subscription/payments`;
     case 'tariffs':
@@ -201,14 +192,8 @@ const oneUrl = (resource: string, id: string | number): string => {
       return `${API_PREFIX}/admin/users/${id}`;
     case 'properties':
       return `${API_PREFIX}/admin/properties/${id}`;
-    case 'leases':
-      return `${API_PREFIX}/admin/leases/${id}`;
-    case 'tenantContacts':
-      return `${API_PREFIX}/admin/tenant-contacts/${id}`;
     case 'propertyContacts':
       return `${API_PREFIX}/admin/property-contacts/${id}`;
-    case 'operations':
-      return `${API_PREFIX}/admin/operations/${id}`;
     case 'subscriptionPayments':
       return `${API_PREFIX}/admin/subscription/payments/${id}`;
     case 'auditLogs':
@@ -265,15 +250,6 @@ export const dataProvider: AdminDataProvider = {
         case 'properties':
           data = (obj.property ?? json) as T;
           break;
-        case 'leases':
-          data = (obj.lease ?? json) as T;
-          break;
-        case 'tenantContacts':
-          data = (obj.contact ?? json) as T;
-          break;
-        case 'operations':
-          data = (obj.operation ?? json) as T;
-          break;
         case 'auditLogs':
           data = (obj.auditLog ?? json) as T;
           break;
@@ -301,7 +277,7 @@ export const dataProvider: AdminDataProvider = {
     resource: string,
     params: GetManyReferenceParams
   ): Promise<GetManyReferenceResult<T>> => {
-    // owner_id — вложенный эндпоинт; property_id/lease_id — плоский эндпоинт с фильтром.
+    // owner_id — вложенный эндпоинт; property_id — плоский эндпоинт с фильтром.
     if (params.target === 'owner_id') {
       const filter: ListFilter = { ...(params.filter ?? {}) as ListFilter, owner_id: params.id };
       const url = `${listUrl(resource, params.id)}${buildListQuery(resource, { ...params, filter })}`;
@@ -309,7 +285,7 @@ export const dataProvider: AdminDataProvider = {
       return parseListResponse<T>(json, headers);
     }
 
-    if (params.target === 'property_id' || params.target === 'lease_id') {
+    if (params.target === 'property_id') {
       const filter: ListFilter = { ...(params.filter ?? {}) as ListFilter, [params.target]: params.id };
       const url = `${listUrl(resource)}${buildListQuery(resource, { ...params, filter })}`;
       const { json, headers } = await httpClient(url, { method: 'GET' });

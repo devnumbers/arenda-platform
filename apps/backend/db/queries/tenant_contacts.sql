@@ -64,33 +64,3 @@ WHERE tc.owner_id = $1
 ORDER BY
     CASE WHEN l.status IN ('awaiting_start', 'active', 'requires_action') THEN 0 ELSE 1 END,
     l.updated_at DESC;
-
--- name: ListTenantContactsAdmin :many
-SELECT tc.*, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
-FROM tenant_contacts tc
-JOIN users u ON tc.owner_id = u.id
-WHERE (sqlc.arg('owner_id')::uuid IS NULL OR tc.owner_id = sqlc.arg('owner_id')::uuid)
-  AND (sqlc.arg('q')::text = '' OR tc.name ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\'
-       OR tc.surname ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\'
-       OR tc.phone ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\')
-ORDER BY
-  CASE WHEN sqlc.arg('sort')::text = 'name' AND sqlc.arg('order')::text = 'asc' THEN tc.name END ASC,
-  CASE WHEN sqlc.arg('sort')::text = 'name' AND sqlc.arg('order')::text = 'desc' THEN tc.name END DESC,
-  CASE WHEN sqlc.arg('sort')::text = 'updatedAt' AND sqlc.arg('order')::text = 'asc' THEN tc.updated_at END ASC,
-  CASE WHEN sqlc.arg('sort')::text = 'updatedAt' AND sqlc.arg('order')::text = 'desc' THEN tc.updated_at END DESC,
-  CASE WHEN sqlc.arg('sort')::text = '' THEN tc.updated_at END DESC,
-  tc.id DESC
-LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
-
--- name: CountTenantContactsAdmin :one
-SELECT COUNT(*) FROM tenant_contacts
-WHERE (sqlc.arg('owner_id')::uuid IS NULL OR owner_id = sqlc.arg('owner_id')::uuid)
-  AND (sqlc.arg('q')::text = '' OR name ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\'
-       OR surname ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\'
-       OR phone ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\');
-
--- name: GetTenantContactByIDAdmin :one
-SELECT tc.*, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
-FROM tenant_contacts tc
-JOIN users u ON tc.owner_id = u.id
-WHERE tc.id = $1;

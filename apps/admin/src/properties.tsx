@@ -25,8 +25,6 @@ import {
   propertyStatusFilterChoices,
   propertyTypeChoices,
 } from './fields';
-import { LeaseDatagrid } from './leases';
-import { OperationDatagrid } from './operations';
 import {
   formatAttributesForCardGrouped,
   isPropertyType,
@@ -136,26 +134,6 @@ export const PropertyShow = () => (
         <DateField source="createdAt" showTime />
         <DateField source="updatedAt" showTime />
         <TextField source="id" />
-      </Tab>
-      <Tab label="Договоры">
-        <ReferenceManyField
-          reference="leases"
-          target="property_id"
-          label={false}
-          sort={{ field: 'updatedAt', order: 'DESC' }}
-        >
-          <LeaseDatagrid />
-        </ReferenceManyField>
-      </Tab>
-      <Tab label="Операции">
-        <ReferenceManyField
-          reference="operations"
-          target="property_id"
-          label={false}
-          sort={{ field: 'operationDate', order: 'DESC' }}
-        >
-          <OperationDatagrid />
-        </ReferenceManyField>
       </Tab>
       <Tab label="Контакты">
         <ReferenceManyField

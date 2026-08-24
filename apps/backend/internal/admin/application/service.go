@@ -23,9 +23,6 @@ var (
 type AdminService struct {
 	users            UserRepository
 	properties       PropertyRepository
-	leases           LeaseRepository
-	tenantContacts   TenantContactRepository
-	operations       OperationRepository
 	stats            StatsRepository
 	subscriptions    SubscriptionProvider
 	auditLogs        AuditLogRepository
@@ -37,9 +34,6 @@ type AdminService struct {
 func NewAdminService(
 	users UserRepository,
 	properties PropertyRepository,
-	leases LeaseRepository,
-	tenantContacts TenantContactRepository,
-	operations OperationRepository,
 	stats StatsRepository,
 	subscriptions SubscriptionProvider,
 	auditLogs AuditLogRepository,
@@ -49,9 +43,6 @@ func NewAdminService(
 	return &AdminService{
 		users:            users,
 		properties:       properties,
-		leases:           leases,
-		tenantContacts:   tenantContacts,
-		operations:       operations,
 		stats:            stats,
 		subscriptions:    subscriptions,
 		auditLogs:        auditLogs,
@@ -85,12 +76,9 @@ const (
 // input is never interpolated into SQL. Extend the SQL CASE arms together with
 // these lists when adding a new sortable column.
 var (
-	adminUserSortFields          = []string{sortFieldCreatedAt, sortFieldUpdatedAt}
-	adminPropertySortFields      = []string{"name", sortFieldCreatedAt, sortFieldUpdatedAt, sortFieldStatus}
-	adminLeaseSortFields         = []string{"startDate", sortFieldUpdatedAt, sortFieldStatus, "rentAmountKopecks"}
-	adminTenantContactSortFields = []string{"name", sortFieldUpdatedAt}
-	adminOperationSortFields     = []string{"operationDate", "amountKopecks", sortFieldStatus}
-	adminAuditLogSortFields      = []string{sortFieldCreatedAt}
+	adminUserSortFields     = []string{sortFieldCreatedAt, sortFieldUpdatedAt}
+	adminPropertySortFields = []string{"name", sortFieldCreatedAt, sortFieldUpdatedAt, sortFieldStatus}
+	adminAuditLogSortFields = []string{sortFieldCreatedAt}
 )
 
 // normalizeSort validates the requested sort field and order against the
@@ -166,18 +154,6 @@ func (s *AdminService) userStats(ctx context.Context, id uuid.UUID) (AdminUserSt
 	if err != nil {
 		return stats, fmt.Errorf("count archived properties: %w", err)
 	}
-	stats.LeasesCount, err = s.users.CountLeasesByOwner(ctx, id)
-	if err != nil {
-		return stats, fmt.Errorf("count leases: %w", err)
-	}
-	stats.OperationsCount, err = s.users.CountOperationsByOwner(ctx, id)
-	if err != nil {
-		return stats, fmt.Errorf("count operations: %w", err)
-	}
-	stats.TenantContactsCount, err = s.users.CountTenantContactsByOwner(ctx, id)
-	if err != nil {
-		return stats, fmt.Errorf("count tenant contacts: %w", err)
-	}
 
 	return stats, nil
 }
@@ -208,50 +184,6 @@ func (s *AdminService) GetProperty(ctx context.Context, id uuid.UUID) (AdminProp
 	return s.properties.GetProperty(ctx, id)
 }
 
-// ListUserLeases returns a paginated list of a user's leases.
-func (s *AdminService) ListUserLeases(ctx context.Context, userID uuid.UUID, filters AdminLeaseFilters) ([]AdminLeaseView, int64, error) {
-	filters.OwnerID = userID
-	return s.ListLeases(ctx, filters)
-}
-
-// ListLeases returns a paginated cross-user list of leases.
-func (s *AdminService) ListLeases(ctx context.Context, filters AdminLeaseFilters) ([]AdminLeaseView, int64, error) {
-	filters.Limit, filters.Offset = normalizePagination(filters.Limit, filters.Offset)
-	var err error
-	if filters.Sort, filters.Order, err = normalizeSort(filters.Sort, filters.Order, adminLeaseSortFields); err != nil {
-		return nil, 0, err
-	}
-	return s.leases.ListLeases(ctx, filters)
-}
-
-// GetLease returns a single lease by ID.
-func (s *AdminService) GetLease(ctx context.Context, id uuid.UUID) (AdminLeaseView, error) {
-	return s.leases.GetLease(ctx, id)
-}
-
-// ListUserTenantContacts returns a paginated list of a user's tenant contacts.
-func (s *AdminService) ListUserTenantContacts(
-	ctx context.Context, userID uuid.UUID, filters AdminTenantContactFilters,
-) ([]AdminTenantContactView, int64, error) {
-	filters.OwnerID = userID
-	return s.ListTenantContacts(ctx, filters)
-}
-
-// ListTenantContacts returns a paginated cross-user list of tenant contacts.
-func (s *AdminService) ListTenantContacts(ctx context.Context, filters AdminTenantContactFilters) ([]AdminTenantContactView, int64, error) {
-	filters.Limit, filters.Offset = normalizePagination(filters.Limit, filters.Offset)
-	var err error
-	if filters.Sort, filters.Order, err = normalizeSort(filters.Sort, filters.Order, adminTenantContactSortFields); err != nil {
-		return nil, 0, err
-	}
-	return s.tenantContacts.ListTenantContacts(ctx, filters)
-}
-
-// GetTenantContact returns a single tenant contact by ID.
-func (s *AdminService) GetTenantContact(ctx context.Context, id uuid.UUID) (AdminTenantContactView, error) {
-	return s.tenantContacts.GetTenantContact(ctx, id)
-}
-
 // ListPropertyContacts returns a paginated list of property contacts for a property.
 // Sort is fixed to created_at ASC; there is no client-controlled sort.
 func (s *AdminService) ListPropertyContacts(
@@ -259,29 +191,6 @@ func (s *AdminService) ListPropertyContacts(
 ) ([]AdminPropertyContactView, int64, error) {
 	filters.Limit, filters.Offset = normalizePagination(filters.Limit, filters.Offset)
 	return s.propertyContacts.ListPropertyContacts(ctx, filters)
-}
-
-// ListUserOperations returns a paginated list of a user's operations.
-func (s *AdminService) ListUserOperations(
-	ctx context.Context, userID uuid.UUID, filters AdminOperationFilters,
-) ([]AdminOperationView, int64, error) {
-	filters.OwnerID = userID
-	return s.ListOperations(ctx, filters)
-}
-
-// ListOperations returns a paginated cross-user list of operations.
-func (s *AdminService) ListOperations(ctx context.Context, filters AdminOperationFilters) ([]AdminOperationView, int64, error) {
-	filters.Limit, filters.Offset = normalizePagination(filters.Limit, filters.Offset)
-	var err error
-	if filters.Sort, filters.Order, err = normalizeSort(filters.Sort, filters.Order, adminOperationSortFields); err != nil {
-		return nil, 0, err
-	}
-	return s.operations.ListOperations(ctx, filters)
-}
-
-// GetOperation returns a single operation by ID.
-func (s *AdminService) GetOperation(ctx context.Context, id uuid.UUID) (AdminOperationView, error) {
-	return s.operations.GetOperation(ctx, id)
 }
 
 // GetStats returns platform-wide counters and recent activity for the admin dashboard.

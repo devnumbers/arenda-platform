@@ -84,10 +84,7 @@ func TestAdminListEnvelopeTagsPinGeneratedResponses(t *testing.T) {
 
 	user := openapi.AdminUser{Phone: "+79001112233"}
 	property := openapi.AdminProperty{Id: user.Id}
-	lease := openapi.AdminLease{Id: user.Id}
-	tenantContact := openapi.AdminTenantContact{Id: user.Id}
 	propertyContact := openapi.AdminPropertyContact{Id: user.Id}
-	operation := openapi.AdminOperation{Id: user.Id}
 	auditLog := openapi.AdminAuditLog{Id: user.Id}
 
 	tests := []struct {
@@ -106,24 +103,9 @@ func TestAdminListEnvelopeTagsPinGeneratedResponses(t *testing.T) {
 			adminListEnvelope[openapi.AdminProperty]{Items: []openapi.AdminProperty{property}, Total: 7},
 		},
 		{
-			"leases",
-			openapi.AdminLeasesResponse{Items: []openapi.AdminLease{lease}, Total: 7},
-			adminListEnvelope[openapi.AdminLease]{Items: []openapi.AdminLease{lease}, Total: 7},
-		},
-		{
-			"tenant contacts",
-			openapi.AdminTenantContactsResponse{Items: []openapi.AdminTenantContact{tenantContact}, Total: 7},
-			adminListEnvelope[openapi.AdminTenantContact]{Items: []openapi.AdminTenantContact{tenantContact}, Total: 7},
-		},
-		{
 			"property contacts",
 			openapi.AdminPropertyContactsResponse{Items: []openapi.AdminPropertyContact{propertyContact}, Total: 7},
 			adminListEnvelope[openapi.AdminPropertyContact]{Items: []openapi.AdminPropertyContact{propertyContact}, Total: 7},
-		},
-		{
-			"operations",
-			openapi.AdminOperationsResponse{Items: []openapi.AdminOperation{operation}, Total: 7},
-			adminListEnvelope[openapi.AdminOperation]{Items: []openapi.AdminOperation{operation}, Total: 7},
 		},
 		{
 			"audit logs",

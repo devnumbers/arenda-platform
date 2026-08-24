@@ -13,9 +13,6 @@ type UserRepository interface {
 	GetUser(ctx context.Context, id uuid.UUID) (AdminUserView, error)
 	CountActivePropertiesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountArchivedPropertiesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
-	CountLeasesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
-	CountOperationsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
-	CountTenantContactsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 }
 
 // PropertyRepository provides cross-user property reads for the admin context.
@@ -24,27 +21,9 @@ type PropertyRepository interface {
 	GetProperty(ctx context.Context, id uuid.UUID) (AdminPropertyView, error)
 }
 
-// LeaseRepository provides cross-user lease reads for the admin context.
-type LeaseRepository interface {
-	ListLeases(ctx context.Context, filters AdminLeaseFilters) ([]AdminLeaseView, int64, error)
-	GetLease(ctx context.Context, id uuid.UUID) (AdminLeaseView, error)
-}
-
-// TenantContactRepository provides cross-user tenant contact reads for the admin context.
-type TenantContactRepository interface {
-	ListTenantContacts(ctx context.Context, filters AdminTenantContactFilters) ([]AdminTenantContactView, int64, error)
-	GetTenantContact(ctx context.Context, id uuid.UUID) (AdminTenantContactView, error)
-}
-
 // PropertyContactRepository provides cross-user property contact reads for the admin context.
 type PropertyContactRepository interface {
 	ListPropertyContacts(ctx context.Context, filters AdminPropertyContactFilters) ([]AdminPropertyContactView, int64, error)
-}
-
-// OperationRepository provides cross-user operation reads for the admin context.
-type OperationRepository interface {
-	ListOperations(ctx context.Context, filters AdminOperationFilters) ([]AdminOperationView, int64, error)
-	GetOperation(ctx context.Context, id uuid.UUID) (AdminOperationView, error)
 }
 
 // StatsRepository provides platform-wide aggregates for the admin dashboard.

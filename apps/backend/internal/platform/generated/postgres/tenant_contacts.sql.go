@@ -11,26 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countTenantContactsAdmin = `-- name: CountTenantContactsAdmin :one
-SELECT COUNT(*) FROM tenant_contacts
-WHERE ($1::uuid IS NULL OR owner_id = $1::uuid)
-  AND ($2::text = '' OR name ILIKE '%' || $2::text || '%' ESCAPE '\'
-       OR surname ILIKE '%' || $2::text || '%' ESCAPE '\'
-       OR phone ILIKE '%' || $2::text || '%' ESCAPE '\')
-`
-
-type CountTenantContactsAdminParams struct {
-	OwnerID pgtype.UUID `json:"owner_id"`
-	Q       string      `json:"q"`
-}
-
-func (q *Queries) CountTenantContactsAdmin(ctx context.Context, arg CountTenantContactsAdminParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countTenantContactsAdmin, arg.OwnerID, arg.Q)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createTenantContact = `-- name: CreateTenantContact :one
 INSERT INTO tenant_contacts (id, owner_id, name, surname, patronymic, phone, email, comment)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -101,48 +81,6 @@ func (q *Queries) GetTenantContactByID(ctx context.Context, id pgtype.UUID) (Ten
 	return i, err
 }
 
-const getTenantContactByIDAdmin = `-- name: GetTenantContactByIDAdmin :one
-SELECT tc.id, tc.owner_id, tc.name, tc.surname, tc.patronymic, tc.phone, tc.email, tc.comment, tc.created_at, tc.updated_at, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
-FROM tenant_contacts tc
-JOIN users u ON tc.owner_id = u.id
-WHERE tc.id = $1
-`
-
-type GetTenantContactByIDAdminRow struct {
-	ID                  pgtype.UUID        `json:"id"`
-	OwnerID             pgtype.UUID        `json:"owner_id"`
-	Name                string             `json:"name"`
-	Surname             pgtype.Text        `json:"surname"`
-	Patronymic          pgtype.Text        `json:"patronymic"`
-	Phone               pgtype.Text        `json:"phone"`
-	Email               pgtype.Text        `json:"email"`
-	Comment             pgtype.Text        `json:"comment"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	OwnerPhone          string             `json:"owner_phone"`
-	OwnerPhoneEncrypted bool               `json:"owner_phone_encrypted"`
-}
-
-func (q *Queries) GetTenantContactByIDAdmin(ctx context.Context, id pgtype.UUID) (GetTenantContactByIDAdminRow, error) {
-	row := q.db.QueryRow(ctx, getTenantContactByIDAdmin, id)
-	var i GetTenantContactByIDAdminRow
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.Name,
-		&i.Surname,
-		&i.Patronymic,
-		&i.Phone,
-		&i.Email,
-		&i.Comment,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.OwnerPhone,
-		&i.OwnerPhoneEncrypted,
-	)
-	return i, err
-}
-
 const getTenantContactByIDAndOwner = `-- name: GetTenantContactByIDAndOwner :one
 SELECT id, owner_id, name, surname, patronymic, phone, email, comment, created_at, updated_at FROM tenant_contacts
 WHERE id = $1 AND owner_id = $2
@@ -169,88 +107,6 @@ func (q *Queries) GetTenantContactByIDAndOwner(ctx context.Context, arg GetTenan
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const listTenantContactsAdmin = `-- name: ListTenantContactsAdmin :many
-SELECT tc.id, tc.owner_id, tc.name, tc.surname, tc.patronymic, tc.phone, tc.email, tc.comment, tc.created_at, tc.updated_at, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
-FROM tenant_contacts tc
-JOIN users u ON tc.owner_id = u.id
-WHERE ($1::uuid IS NULL OR tc.owner_id = $1::uuid)
-  AND ($2::text = '' OR tc.name ILIKE '%' || $2::text || '%' ESCAPE '\'
-       OR tc.surname ILIKE '%' || $2::text || '%' ESCAPE '\'
-       OR tc.phone ILIKE '%' || $2::text || '%' ESCAPE '\')
-ORDER BY
-  CASE WHEN $3::text = 'name' AND $4::text = 'asc' THEN tc.name END ASC,
-  CASE WHEN $3::text = 'name' AND $4::text = 'desc' THEN tc.name END DESC,
-  CASE WHEN $3::text = 'updatedAt' AND $4::text = 'asc' THEN tc.updated_at END ASC,
-  CASE WHEN $3::text = 'updatedAt' AND $4::text = 'desc' THEN tc.updated_at END DESC,
-  CASE WHEN $3::text = '' THEN tc.updated_at END DESC,
-  tc.id DESC
-LIMIT $6::int OFFSET $5::int
-`
-
-type ListTenantContactsAdminParams struct {
-	OwnerID pgtype.UUID `json:"owner_id"`
-	Q       string      `json:"q"`
-	Sort    string      `json:"sort"`
-	Order   string      `json:"order"`
-	Offset  int32       `json:"offset"`
-	Limit   int32       `json:"limit"`
-}
-
-type ListTenantContactsAdminRow struct {
-	ID                  pgtype.UUID        `json:"id"`
-	OwnerID             pgtype.UUID        `json:"owner_id"`
-	Name                string             `json:"name"`
-	Surname             pgtype.Text        `json:"surname"`
-	Patronymic          pgtype.Text        `json:"patronymic"`
-	Phone               pgtype.Text        `json:"phone"`
-	Email               pgtype.Text        `json:"email"`
-	Comment             pgtype.Text        `json:"comment"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	OwnerPhone          string             `json:"owner_phone"`
-	OwnerPhoneEncrypted bool               `json:"owner_phone_encrypted"`
-}
-
-func (q *Queries) ListTenantContactsAdmin(ctx context.Context, arg ListTenantContactsAdminParams) ([]ListTenantContactsAdminRow, error) {
-	rows, err := q.db.Query(ctx, listTenantContactsAdmin,
-		arg.OwnerID,
-		arg.Q,
-		arg.Sort,
-		arg.Order,
-		arg.Offset,
-		arg.Limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListTenantContactsAdminRow{}
-	for rows.Next() {
-		var i ListTenantContactsAdminRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.OwnerID,
-			&i.Name,
-			&i.Surname,
-			&i.Patronymic,
-			&i.Phone,
-			&i.Email,
-			&i.Comment,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.OwnerPhone,
-			&i.OwnerPhoneEncrypted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listTenantContactsByIDs = `-- name: ListTenantContactsByIDs :many

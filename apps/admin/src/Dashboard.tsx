@@ -49,8 +49,6 @@ interface AdminStats {
   subscriptionsActive: number;
   propertiesActive: number;
   propertiesArchived: number;
-  leasesTotal: number;
-  operationsTotal: number;
   paymentsSucceededTotalKopecksLast30d: number;
   paymentsFailedCountLast30d: number;
   paymentsRefundedCountLast30d: number;
@@ -283,12 +281,6 @@ export const Dashboard = () => {
             subtitle={`архивных: ${countFormatter.format(stats.propertiesArchived)}`}
             to="/properties"
           />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-          <StatCard title="Договоры" value={stats.leasesTotal} to="/leases" />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-          <StatCard title="Операции" value={stats.operationsTotal} to="/operations" />
         </Grid>
         <Grid size={{ xs: 12 }}>
           <PaymentsSummaryCard stats={stats} />

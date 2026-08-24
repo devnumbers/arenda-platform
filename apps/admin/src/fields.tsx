@@ -71,27 +71,6 @@ export const propertyStatusFilterChoices: Choice[] = [
   { id: 'archived', name: 'В архиве' },
 ];
 
-export const leaseStatusChoices: Choice[] = [
-  { id: 'awaiting_start', name: 'Ожидает начала' },
-  { id: 'active', name: 'Активен' },
-  { id: 'requires_action', name: 'Требует действия' },
-  { id: 'completed', name: 'Завершён' },
-  { id: 'archived', name: 'В архиве' },
-];
-
-export const operationTypeChoices: Choice[] = [
-  { id: 'income', name: 'Доход' },
-  { id: 'expense', name: 'Расход' },
-];
-
-export const operationStatusChoices: Choice[] = [
-  { id: 'unconfirmed', name: 'Не подтверждена' },
-  { id: 'pending', name: 'Ожидает' },
-  { id: 'overdue', name: 'Просрочена' },
-  { id: 'paid', name: 'Оплачена' },
-  { id: 'received', name: 'Получена' },
-];
-
 // Choices аудита синхронизированы с реестром действий и типов сущностей
 // apps/backend/internal/audit/domain/entry.go (в OpenAPI action/entityType — свободные строки).
 

@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	propertiesdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 )
 
@@ -27,9 +26,6 @@ type AdminUserView struct {
 type AdminUserStats struct {
 	ActivePropertiesCount   int64
 	ArchivedPropertiesCount int64
-	LeasesCount             int64
-	OperationsCount         int64
-	TenantContactsCount     int64
 }
 
 // AdminUserDetailView returns a user together with their subscription and stats.
@@ -55,58 +51,9 @@ type AdminPropertyView struct {
 	UpdatedAt   time.Time
 }
 
-// AdminLeaseView is a read-only view of a lease for admin operations.
-type AdminLeaseView struct {
-	ID                   uuid.UUID
-	OwnerID              uuid.UUID
-	PropertyID           *uuid.UUID
-	PropertyName         *string
-	TenantContactID      *uuid.UUID
-	TenantContact        *leasesdomain.TenantContact
-	Status               leasesdomain.LeaseStatus
-	StartDate            time.Time
-	EndDate              *time.Time
-	RentAmountKopecks    int64
-	DepositAmountKopecks int64
-	PaymentDay           int
-	Comment              string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-}
-
-// AdminTenantContactView is a read-only view of a tenant contact for admin operations.
-// OwnerPhone carries the decrypted phone of the owning user; it is empty when
-// the contact is embedded in another view (e.g. a lease) without a users join.
-type AdminTenantContactView struct {
-	leasesdomain.TenantContact
-	OwnerPhone string
-}
-
 // AdminPropertyContactView is a read-only view of a property contact for admin operations.
 type AdminPropertyContactView struct {
 	propertiesdomain.PropertyContact
-}
-
-// AdminOperationView is a read-only view of a financial operation for admin operations.
-type AdminOperationView struct {
-	ID                   uuid.UUID
-	OwnerID              uuid.UUID
-	PropertyID           *uuid.UUID
-	PropertyName         *string
-	LeaseID              *uuid.UUID
-	RecurringOperationID *uuid.UUID
-	Type                 leasesdomain.OperationType
-	CategoryID           uuid.UUID
-	CategoryName         string
-	Name                 string
-	AmountKopecks        int64
-	OperationDate        time.Time
-	Comment              *string
-	IsException          bool
-	Status               leasesdomain.OperationStatus
-	ReminderOffsetDays   *int
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
 }
 
 // AdminUserFilters carries optional filters for the admin users list.
@@ -133,50 +80,12 @@ type AdminPropertyFilters struct {
 	Order   string
 }
 
-// AdminLeaseFilters carries optional filters for the admin leases list.
-// OwnerID is uuid.Nil for the flat cross-user list.
-type AdminLeaseFilters struct {
-	OwnerID    uuid.UUID
-	PropertyID uuid.UUID
-	Status     string
-	Limit      int
-	Offset     int
-	Sort       string
-	Order      string
-}
-
-// AdminTenantContactFilters carries optional filters for the admin tenant contacts list.
-// OwnerID is uuid.Nil for the flat cross-user list.
-type AdminTenantContactFilters struct {
-	OwnerID uuid.UUID
-	Q       string
-	Limit   int
-	Offset  int
-	Sort    string
-	Order   string
-}
-
 // AdminPropertyContactFilters carries filters for the admin property contacts list.
 // Sort is fixed (created_at ASC) and not configurable.
 type AdminPropertyContactFilters struct {
 	PropertyID uuid.UUID
 	Limit      int
 	Offset     int
-}
-
-// AdminOperationFilters carries optional filters for the admin operations list.
-// OwnerID is uuid.Nil for the flat cross-user list.
-type AdminOperationFilters struct {
-	OwnerID    uuid.UUID
-	Status     string
-	Type       string
-	PropertyID uuid.UUID
-	LeaseID    uuid.UUID
-	Q          string
-	Limit      int
-	Offset     int
-	Sort       string
-	Order      string
 }
 
 // AdminAuditLogView is the admin read model of one audit_log row.
@@ -236,8 +145,6 @@ type AdminStatsView struct {
 	SubscriptionsActive                  int64
 	PropertiesActive                     int64
 	PropertiesArchived                   int64
-	LeasesTotal                          int64
-	OperationsTotal                      int64
 	PaymentsSucceededTotalKopecksLast30d int64
 	PaymentsFailedCountLast30d           int64
 	PaymentsRefundedCountLast30d         int64

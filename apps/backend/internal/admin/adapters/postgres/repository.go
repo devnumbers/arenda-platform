@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
@@ -44,10 +43,7 @@ func (r *AdminRepository) q() *postgres.Queries {
 var (
 	_ adminapp.UserRepository            = (*AdminRepository)(nil)
 	_ adminapp.PropertyRepository        = (*AdminRepository)(nil)
-	_ adminapp.LeaseRepository           = (*AdminRepository)(nil)
-	_ adminapp.TenantContactRepository   = (*AdminRepository)(nil)
 	_ adminapp.PropertyContactRepository = (*AdminRepository)(nil)
-	_ adminapp.OperationRepository       = (*AdminRepository)(nil)
 	_ adminapp.StatsRepository           = (*AdminRepository)(nil)
 	_ adminapp.AuditLogRepository        = (*AdminRepository)(nil)
 )
@@ -151,35 +147,6 @@ func (r *AdminRepository) CountActivePropertiesByOwner(ctx context.Context, owne
 // CountArchivedPropertiesByOwner implements UserRepository.CountArchivedPropertiesByOwner.
 func (r *AdminRepository) CountArchivedPropertiesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error) {
 	return r.q().CountArchivedPropertiesByOwnerAdmin(ctx, pgconv.UUIDToPgtype(ownerID))
-}
-
-// CountLeasesByOwner implements UserRepository.CountLeasesByOwner.
-func (r *AdminRepository) CountLeasesByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error) {
-	return r.q().CountLeasesAdmin(ctx, postgres.CountLeasesAdminParams{
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
-		PropertyID: pgtype.UUID{},
-		Status:     "",
-	})
-}
-
-// CountOperationsByOwner implements UserRepository.CountOperationsByOwner.
-func (r *AdminRepository) CountOperationsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error) {
-	return r.q().CountOperationsAdmin(ctx, postgres.CountOperationsAdminParams{
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
-		Status:     "",
-		Type:       "",
-		PropertyID: pgtype.UUID{},
-		LeaseID:    pgtype.UUID{},
-		Q:          "",
-	})
-}
-
-// CountTenantContactsByOwner implements UserRepository.CountTenantContactsByOwner.
-func (r *AdminRepository) CountTenantContactsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error) {
-	return r.q().CountTenantContactsAdmin(ctx, postgres.CountTenantContactsAdminParams{
-		OwnerID: pgconv.UUIDToPgtype(ownerID),
-		Q:       "",
-	})
 }
 
 // ListProperties implements PropertyRepository.ListProperties.
@@ -291,204 +258,6 @@ func (r *AdminRepository) propertyViewFromRow(
 	}, nil
 }
 
-// ListLeases implements LeaseRepository.ListLeases.
-func (r *AdminRepository) ListLeases(ctx context.Context, filters adminapp.AdminLeaseFilters) ([]adminapp.AdminLeaseView, int64, error) {
-	total, err := r.q().CountLeasesAdmin(ctx, postgres.CountLeasesAdminParams{
-		OwnerID:    pgconv.UUIDToPgtype(filters.OwnerID),
-		PropertyID: pgconv.UUIDToPgtype(filters.PropertyID),
-		Status:     filters.Status,
-	})
-	if err != nil {
-		return nil, 0, fmt.Errorf("count leases: %w", err)
-	}
-
-	rows, err := r.q().ListLeasesAdmin(ctx, postgres.ListLeasesAdminParams{
-		OwnerID:    pgconv.UUIDToPgtype(filters.OwnerID),
-		PropertyID: pgconv.UUIDToPgtype(filters.PropertyID),
-		Status:     filters.Status,
-		Sort:       filters.Sort,
-		Order:      filters.Order,
-		Offset:     toInt32(filters.Offset),
-		Limit:      toInt32(filters.Limit),
-	})
-	if err != nil {
-		return nil, 0, fmt.Errorf("list leases: %w", err)
-	}
-
-	now := r.clock.Now()
-	views := make([]adminapp.AdminLeaseView, 0, len(rows))
-	for _, row := range rows {
-		view, err := r.leaseViewFromRow(row, now)
-		if err != nil {
-			return nil, 0, err
-		}
-		views = append(views, view)
-	}
-
-	return views, total, nil
-}
-
-// GetLease implements LeaseRepository.GetLease.
-func (r *AdminRepository) GetLease(ctx context.Context, id uuid.UUID) (adminapp.AdminLeaseView, error) {
-	row, err := r.q().GetLeaseByIDAdmin(ctx, pgconv.UUIDToPgtype(id))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return adminapp.AdminLeaseView{}, adminapp.ErrNotFound
-		}
-		return adminapp.AdminLeaseView{}, fmt.Errorf("get lease: %w", err)
-	}
-
-	return r.leaseViewFromRow(adminGetLeaseRowToListRow(row), r.clock.Now())
-}
-
-// adminGetLeaseRowToListRow converts the generated get-row type to the
-// list-row type. Both structs carry the same fields because both admin
-// lease queries select leases columns plus property_name and tenant contact
-// columns.
-func adminGetLeaseRowToListRow(row postgres.GetLeaseByIDAdminRow) postgres.ListLeasesAdminRow {
-	return postgres.ListLeasesAdminRow(row)
-}
-
-func (r *AdminRepository) leaseViewFromRow(row postgres.ListLeasesAdminRow, now time.Time) (adminapp.AdminLeaseView, error) {
-	status, err := leasesdomain.ParseLeaseStatus(row.Status)
-	if err != nil {
-		return adminapp.AdminLeaseView{}, fmt.Errorf("invalid lease status: %w", err)
-	}
-
-	lease := leasesdomain.Lease{
-		ID:                   pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:              pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:           pgconv.UUIDFromPgtype(row.PropertyID),
-		TenantContactID:      pgconv.UUIDFromPgtypePtr(row.TenantContactID),
-		Status:               status,
-		StartDate:            row.StartDate.Time,
-		EndDate:              pgconv.DatePtrFromPgtype(row.EndDate),
-		RentAmountKopecks:    row.RentAmountKopecks,
-		DepositAmountKopecks: row.DepositAmountKopecks,
-		PaymentDay:           int(row.PaymentDay),
-		Comment:              pgconv.TextToString(row.Comment),
-		CreatedAt:            row.CreatedAt.Time,
-		UpdatedAt:            row.UpdatedAt.Time,
-	}
-	lease.Status = lease.EffectiveStatus(now)
-
-	view := adminapp.AdminLeaseView{
-		ID:                   lease.ID,
-		OwnerID:              lease.OwnerID,
-		PropertyID:           leasesdomain.PropertyIDPtr(lease.PropertyID),
-		PropertyName:         pgconv.TextToPtrString(row.PropertyName),
-		TenantContactID:      lease.TenantContactID,
-		Status:               lease.Status,
-		StartDate:            lease.StartDate,
-		EndDate:              lease.EndDate,
-		RentAmountKopecks:    lease.RentAmountKopecks,
-		DepositAmountKopecks: lease.DepositAmountKopecks,
-		PaymentDay:           lease.PaymentDay,
-		Comment:              lease.Comment,
-		CreatedAt:            lease.CreatedAt,
-		UpdatedAt:            lease.UpdatedAt,
-	}
-
-	if row.TcID.Valid {
-		contact := leasesdomain.TenantContact{
-			ID:         pgconv.UUIDFromPgtype(row.TcID),
-			OwnerID:    pgconv.UUIDFromPgtype(row.TcOwnerID),
-			Name:       pgconv.TextToString(row.TcName),
-			Surname:    pgconv.TextToPtrString(row.TcSurname),
-			Patronymic: pgconv.TextToPtrString(row.TcPatronymic),
-			Phone:      pgconv.TextToPtrString(row.TcPhone),
-			Email:      pgconv.TextToPtrString(row.TcEmail),
-			Comment:    pgconv.TextToPtrString(row.TcComment),
-			CreatedAt:  row.TcCreatedAt.Time,
-			UpdatedAt:  row.TcUpdatedAt.Time,
-		}
-		view.TenantContact = &contact
-	}
-
-	return view, nil
-}
-
-// ListTenantContacts implements TenantContactRepository.ListTenantContacts.
-func (r *AdminRepository) ListTenantContacts(
-	ctx context.Context, filters adminapp.AdminTenantContactFilters,
-) ([]adminapp.AdminTenantContactView, int64, error) {
-	q := escapeLikePattern(filters.Q)
-	total, err := r.q().CountTenantContactsAdmin(ctx, postgres.CountTenantContactsAdminParams{
-		OwnerID: pgconv.UUIDToPgtype(filters.OwnerID),
-		Q:       q,
-	})
-	if err != nil {
-		return nil, 0, fmt.Errorf("count tenant contacts: %w", err)
-	}
-
-	rows, err := r.q().ListTenantContactsAdmin(ctx, postgres.ListTenantContactsAdminParams{
-		OwnerID: pgconv.UUIDToPgtype(filters.OwnerID),
-		Q:       q,
-		Sort:    filters.Sort,
-		Order:   filters.Order,
-		Offset:  toInt32(filters.Offset),
-		Limit:   toInt32(filters.Limit),
-	})
-	if err != nil {
-		return nil, 0, fmt.Errorf("list tenant contacts: %w", err)
-	}
-
-	views := make([]adminapp.AdminTenantContactView, 0, len(rows))
-	for _, row := range rows {
-		view, err := r.tenantContactViewFromRow(ctx, row)
-		if err != nil {
-			return nil, 0, err
-		}
-		views = append(views, view)
-	}
-
-	return views, total, nil
-}
-
-// GetTenantContact implements TenantContactRepository.GetTenantContact.
-func (r *AdminRepository) GetTenantContact(ctx context.Context, id uuid.UUID) (adminapp.AdminTenantContactView, error) {
-	row, err := r.q().GetTenantContactByIDAdmin(ctx, pgconv.UUIDToPgtype(id))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return adminapp.AdminTenantContactView{}, adminapp.ErrNotFound
-		}
-		return adminapp.AdminTenantContactView{}, fmt.Errorf("get tenant contact: %w", err)
-	}
-	return r.tenantContactViewFromRow(ctx, adminGetTenantContactRowToListRow(row))
-}
-
-// adminGetTenantContactRowToListRow converts the generated get-row type to the
-// list-row type. Both structs carry the same fields because both admin tenant
-// contact queries select tenant_contacts columns plus owner phone columns.
-func adminGetTenantContactRowToListRow(row postgres.GetTenantContactByIDAdminRow) postgres.ListTenantContactsAdminRow {
-	return postgres.ListTenantContactsAdminRow(row)
-}
-
-func (r *AdminRepository) tenantContactViewFromRow(
-	ctx context.Context, row postgres.ListTenantContactsAdminRow,
-) (adminapp.AdminTenantContactView, error) {
-	ownerPhone, err := r.decryptPhone(ctx, row.OwnerPhone, row.OwnerPhoneEncrypted)
-	if err != nil {
-		return adminapp.AdminTenantContactView{}, err
-	}
-
-	return adminapp.AdminTenantContactView{
-		TenantContact: leasesdomain.TenantContact{
-			ID:         pgconv.UUIDFromPgtype(row.ID),
-			OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
-			Name:       row.Name,
-			Surname:    pgconv.TextToPtrString(row.Surname),
-			Patronymic: pgconv.TextToPtrString(row.Patronymic),
-			Phone:      pgconv.TextToPtrString(row.Phone),
-			Email:      pgconv.TextToPtrString(row.Email),
-			Comment:    pgconv.TextToPtrString(row.Comment),
-			CreatedAt:  row.CreatedAt.Time,
-			UpdatedAt:  row.UpdatedAt.Time,
-		},
-		OwnerPhone: ownerPhone,
-	}, nil
-}
-
 // ListPropertyContacts implements PropertyContactRepository.ListPropertyContacts.
 // The property_contacts.phone column is plaintext, so no decryption is needed.
 func (r *AdminRepository) ListPropertyContacts(
@@ -524,112 +293,6 @@ func (r *AdminRepository) ListPropertyContacts(
 	}
 
 	return views, total, nil
-}
-
-// ListOperations implements OperationRepository.ListOperations.
-func (r *AdminRepository) ListOperations(
-	ctx context.Context, filters adminapp.AdminOperationFilters,
-) ([]adminapp.AdminOperationView, int64, error) {
-	q := escapeLikePattern(filters.Q)
-	total, err := r.q().CountOperationsAdmin(ctx, postgres.CountOperationsAdminParams{
-		OwnerID:    pgconv.UUIDToPgtype(filters.OwnerID),
-		Status:     filters.Status,
-		Type:       filters.Type,
-		PropertyID: pgconv.UUIDToPgtype(filters.PropertyID),
-		LeaseID:    pgconv.UUIDToPgtype(filters.LeaseID),
-		Q:          q,
-	})
-	if err != nil {
-		return nil, 0, fmt.Errorf("count operations: %w", err)
-	}
-
-	rows, err := r.q().ListOperationsAdmin(ctx, postgres.ListOperationsAdminParams{
-		OwnerID:    pgconv.UUIDToPgtype(filters.OwnerID),
-		Status:     filters.Status,
-		Type:       filters.Type,
-		PropertyID: pgconv.UUIDToPgtype(filters.PropertyID),
-		LeaseID:    pgconv.UUIDToPgtype(filters.LeaseID),
-		Q:          q,
-		Sort:       filters.Sort,
-		Order:      filters.Order,
-		Offset:     toInt32(filters.Offset),
-		Limit:      toInt32(filters.Limit),
-	})
-	if err != nil {
-		return nil, 0, fmt.Errorf("list operations: %w", err)
-	}
-
-	views := make([]adminapp.AdminOperationView, 0, len(rows))
-	for _, row := range rows {
-		view, err := r.operationViewFromRow(row)
-		if err != nil {
-			return nil, 0, err
-		}
-		views = append(views, view)
-	}
-
-	return views, total, nil
-}
-
-// GetOperation implements OperationRepository.GetOperation.
-func (r *AdminRepository) GetOperation(ctx context.Context, id uuid.UUID) (adminapp.AdminOperationView, error) {
-	row, err := r.q().GetOperationByIDAdmin(ctx, pgconv.UUIDToPgtype(id))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return adminapp.AdminOperationView{}, adminapp.ErrNotFound
-		}
-		return adminapp.AdminOperationView{}, fmt.Errorf("get operation: %w", err)
-	}
-	return r.operationViewFromRow(adminGetOperationRowToListRow(row))
-}
-
-func (r *AdminRepository) operationViewFromRow(row postgres.ListOperationsAdminRow) (adminapp.AdminOperationView, error) {
-	status, err := leasesdomain.ParseOperationStatus(row.Status)
-	if err != nil {
-		return adminapp.AdminOperationView{}, fmt.Errorf("invalid operation status: %w", err)
-	}
-
-	view := adminapp.AdminOperationView{
-		ID:            pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:    pgconv.UUIDFromPgtypePtr(row.PropertyID),
-		PropertyName:  pgconv.TextToPtrString(row.PropertyName),
-		Type:          leasesdomain.OperationType(row.Type),
-		CategoryID:    pgconv.UUIDFromPgtype(row.CategoryID),
-		CategoryName:  row.CategoryName,
-		Status:        status,
-		Name:          row.Name,
-		AmountKopecks: row.AmountKopecks,
-		OperationDate: row.OperationDate.Time,
-		IsException:   row.IsException,
-		CreatedAt:     row.CreatedAt.Time,
-		UpdatedAt:     row.UpdatedAt.Time,
-	}
-
-	if row.LeaseID.Valid {
-		id := pgconv.UUIDFromPgtype(row.LeaseID)
-		view.LeaseID = &id
-	}
-	if row.RecurringOperationID.Valid {
-		id := pgconv.UUIDFromPgtype(row.RecurringOperationID)
-		view.RecurringOperationID = &id
-	}
-	if row.Comment.Valid {
-		view.Comment = &row.Comment.String
-	}
-	if row.ReminderOffsetDays.Valid {
-		offset := int(row.ReminderOffsetDays.Int32)
-		view.ReminderOffsetDays = &offset
-	}
-
-	return view, nil
-}
-
-// adminGetOperationRowToListRow converts the generated get-row type to the
-// list-row type. Both structs carry the same fields because both admin
-// operation queries select operations columns plus category_name.
-func adminGetOperationRowToListRow(row postgres.GetOperationByIDAdminRow) postgres.ListOperationsAdminRow {
-	return postgres.ListOperationsAdminRow(row)
 }
 
 // ListAuditLogs implements AuditLogRepository.ListAuditLogs.
@@ -750,13 +413,6 @@ func (r *AdminRepository) GetStats(ctx context.Context) (adminapp.AdminStatsView
 	}
 	stats.PropertiesActive = propertyStats.ActiveCount
 	stats.PropertiesArchived = propertyStats.ArchivedCount
-
-	if stats.LeasesTotal, err = r.q().CountLeasesTotalAdmin(ctx); err != nil {
-		return stats, fmt.Errorf("count leases: %w", err)
-	}
-	if stats.OperationsTotal, err = r.q().CountOperationsTotalAdmin(ctx); err != nil {
-		return stats, fmt.Errorf("count operations: %w", err)
-	}
 
 	paymentStats, err := r.q().GetSubscriptionPaymentsStatsLast30dAdmin(ctx)
 	if err != nil {
