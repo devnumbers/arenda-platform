@@ -13,8 +13,9 @@ import (
 // dispute/chargeback after it) whose outcome for our subscription payment is
 // that the money left the merchant, so both map to refunded and the refund
 // application seam brings the subscription to the money-consistent state
-// (issue #432, ADR 0017 §Polling). A reversal of a never-captured charge is a
-// no-op there — a failed payment has nothing to refund. In mapCancelStatus
+// (issue #432, ADR 0017 §Polling). On that seam a failed charge is a no-op
+// (nothing was captured), and a still-pending one finalizes as refunded
+// without subscription effects — it bought no period. In mapCancelStatus
 // the same statuses answer a Cancel call we made ourselves, so they equally
 // mean the refund we requested succeeded and map to refunded.
 // PARTIAL_REFUNDED maps to refunded: the new domain has no partial-refund

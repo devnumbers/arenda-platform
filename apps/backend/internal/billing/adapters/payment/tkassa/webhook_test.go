@@ -138,6 +138,11 @@ func TestParseWebhookRefundStatuses(t *testing.T) {
 		// The new domain has no partial-refund status: PARTIAL_REFUNDED lands
 		// in refunded (ADR 0037, issue #246 §3.1).
 		{"partial_refunded", "PARTIAL_REFUNDED", 49000, domain.PaymentStatusRefunded, 49000},
+		// A provider-side reversal — including a chargeback after a locally
+		// successful payment — means the money left the merchant, so it lands
+		// in refunded and the refund seam applies it (issue #432).
+		{"reversed", "REVERSED", 99000, domain.PaymentStatusRefunded, 99000},
+		{"partial_reversed", "PARTIAL_REVERSED", 49000, domain.PaymentStatusRefunded, 49000},
 	}
 
 	for _, tt := range tests {
