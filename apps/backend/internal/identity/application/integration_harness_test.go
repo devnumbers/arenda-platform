@@ -78,36 +78,18 @@ func (p *capturePublisher) PublishUserRegistered(_ context.Context, event identi
 	return nil
 }
 
-// captureRescheduler is a sharedtz.ReminderRescheduler that records calls so a
-// test can assert the profile service triggered a post-commit reschedule.
-type captureRescheduler struct {
-	calls []rescheduleCall
-}
-
-type rescheduleCall struct {
-	userID uuid.UUID
-	oldTZ  string
-	newTZ  string
-}
-
-func (r *captureRescheduler) RescheduleForTimezoneChange(_ context.Context, userID uuid.UUID, oldTZ, newTZ string) error {
-	r.calls = append(r.calls, rescheduleCall{userID: userID, oldTZ: oldTZ, newTZ: newTZ})
-	return nil
-}
-
 // integrationHarness wires every identity service to real PostgreSQL
 // repositories through a postgres-backed Unit-of-Work, sharing one fake clock,
 // one noop encryptor, and capture fakes for the email sender, event publisher,
-// and reminder rescheduler. Each test builds a fresh harness over a clean
+// services. Each test builds a fresh harness over a clean
 // (private template-cloned) database via testdb.Setup.
 type integrationHarness struct {
-	t           *testing.T
-	pool        *pgxpool.Pool
-	enc         encryption.Encryptor
-	clock       *mutableClock
-	sender      *captureSender
-	publisher   *capturePublisher
-	rescheduler *captureRescheduler
+	t         *testing.T
+	pool      *pgxpool.Pool
+	enc       encryption.Encryptor
+	clock     *mutableClock
+	sender    *captureSender
+	publisher *capturePublisher
 
 	users    *postgres.UserRepository
 	codes    *postgres.LoginCodeRepository
@@ -137,7 +119,6 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	clk := &mutableClock{now: integrationBaseTime}
 	sender := &captureSender{}
 	publisher := &capturePublisher{}
-	rescheduler := &captureRescheduler{}
 	logger := slog.New(slog.DiscardHandler)
 
 	users := postgres.NewUserRepository(pool, enc)
@@ -161,19 +142,18 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	})
 
 	return &integrationHarness{
-		t:           t,
-		pool:        pool,
-		enc:         enc,
-		clock:       clk,
-		sender:      sender,
-		publisher:   publisher,
-		rescheduler: rescheduler,
-		users:       users,
-		codes:       codes,
-		attempts:    attempts,
-		sessions:    sessions,
-		uow:         uow,
-		audit:       audit,
+		t:         t,
+		pool:      pool,
+		enc:       enc,
+		clock:     clk,
+		sender:    sender,
+		publisher: publisher,
+		users:     users,
+		codes:     codes,
+		attempts:  attempts,
+		sessions:  sessions,
+		uow:       uow,
+		audit:     audit,
 		auth: identityapp.NewAuthenticationService(factory, identityapp.AuthenticationServiceConfig{
 			LoginCodes: loginCodes,
 			Sessions:   sessionSvc,
@@ -187,9 +167,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 			Hasher:     enc,
 			Logger:     logger,
 		}),
-		profile: identityapp.NewProfileService(factory, identityapp.ProfileServiceConfig{
-			ReminderRescheduler: rescheduler,
-		}),
+		profile: identityapp.NewProfileService(factory),
 		logout: identityapp.NewLogoutService(factory, identityapp.LogoutServiceConfig{
 			Hasher: enc,
 			Logger: slog.New(slog.DiscardHandler),

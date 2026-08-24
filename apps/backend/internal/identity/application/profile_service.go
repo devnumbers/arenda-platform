@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
-	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 )
 
 // ProfileService provides read and update operations for the user's own profile.
@@ -18,38 +17,13 @@ import (
 // business logic. Me is a plain read and stays outside the transaction.
 type ProfileService struct {
 	txStoreFactory
-	reminderRescheduler sharedtz.ReminderRescheduler
-}
-
-// ProfileServiceConfig carries the non-transactional dependencies for
-// ProfileService. The transactional repositories, audit recorder, and UoW
-// live in the shared txStoreFactory passed to NewProfileService.
-type ProfileServiceConfig struct {
-	ReminderRescheduler sharedtz.ReminderRescheduler
 }
 
 // NewProfileService creates a ProfileService. It embeds the shared identity
 // txStoreFactory so UpdateProfile runs through runInTx; the repositories and
-// audit recorder are shared by every identity service (ADR 0033 γ-factory). A
-// nil ReminderRescheduler is replaced with a no-op implementation.
-func NewProfileService(
-	factory txStoreFactory,
-	cfg ProfileServiceConfig,
-) *ProfileService {
-	reminderRescheduler := cfg.ReminderRescheduler
-	if reminderRescheduler == nil {
-		reminderRescheduler = noopReminderRescheduler{}
-	}
-	return &ProfileService{
-		txStoreFactory:      factory,
-		reminderRescheduler: reminderRescheduler,
-	}
-}
-
-type noopReminderRescheduler struct{}
-
-func (noopReminderRescheduler) RescheduleForTimezoneChange(context.Context, uuid.UUID, string, string) error {
-	return nil
+// audit recorder are shared by every identity service (ADR 0033 γ-factory).
+func NewProfileService(factory txStoreFactory) *ProfileService {
+	return &ProfileService{txStoreFactory: factory}
 }
 
 // Me returns the user profile.
@@ -60,21 +34,15 @@ func (s *ProfileService) Me(ctx context.Context, userID uuid.UUID) (domain.User,
 // UpdateProfile updates the user's personal data. The email-change →
 // unverified reset is owned by domain.User.UpdatePersonalData; the mutation
 // and the audit entry run in a single transaction through runInTx (ADR 0033,
-// ADR 0020); the timezone reschedule stays post-commit because it writes to
-// the notifications context, not the identity transaction.
+// ADR 0020).
 func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cmd UpdateProfileCommand) (domain.User, error) {
 	var updated domain.User
-	oldTimezone := ""
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		user, err := stores.users.GetByIDForUpdate(ctx, userID)
 		if err != nil {
 			return fmt.Errorf("get user: %w", err)
 		}
-
-		// Capture the old timezone before mutation so we can reschedule
-		// reminders after commit.
-		oldTimezone = user.Timezone.String()
 
 		if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email, cmd.Timezone); err != nil {
 			return fmt.Errorf("update personal data: %w", err)
@@ -99,18 +67,6 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cm
 	})
 	if err != nil {
 		return domain.User{}, err
-	}
-
-	// Reschedule pending reminders if the timezone changed (wall-clock
-	// semantics). The profile update is already committed; this runs
-	// synchronously so the user sees the reschedule complete within the
-	// request. It belongs to the notifications context, so it stays outside
-	// the identity transaction.
-	newTimezone := updated.Timezone.String()
-	if cmd.Timezone != nil && newTimezone != oldTimezone {
-		if err := s.reminderRescheduler.RescheduleForTimezoneChange(ctx, userID, oldTimezone, newTimezone); err != nil {
-			return domain.User{}, fmt.Errorf("reschedule reminders for timezone change: %w", err)
-		}
 	}
 
 	return updated, nil

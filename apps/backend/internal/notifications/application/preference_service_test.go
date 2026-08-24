@@ -33,14 +33,14 @@ func (r *recordingAudit) Record(_ context.Context, e auditdomain.Entry) error {
 // recording audit and a fakeUoW so ReplaceChannelPreferences runs through
 // runInTx (ADR 0033).
 type preferenceHarness struct {
-	repo  *fakeReminderRepo
+	repo  *fakePreferenceRepo
 	audit *recordingAudit
 	b     *countingBeginner
 	svc   *PreferenceService
 }
 
 func newPreferenceHarness() *preferenceHarness {
-	repo := &fakeReminderRepo{}
+	repo := &fakePreferenceRepo{}
 	audit := &recordingAudit{}
 	b := &countingBeginner{}
 	f := NewTxStoreFactory(repo, audit, fakeUoW{beginner: b})

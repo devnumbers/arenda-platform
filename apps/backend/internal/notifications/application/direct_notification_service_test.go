@@ -21,7 +21,7 @@ const testOwnerEmail = "owner@example.com"
 // channelPrefsRepo embeds the policy-test fake and answers IsChannelAllowed
 // from a per-channel map.
 type channelPrefsRepo struct {
-	fakeReminderRepo
+	fakePreferenceRepo
 	allowed map[domain.NotificationChannel]bool
 }
 

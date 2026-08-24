@@ -11,16 +11,16 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 )
 
-// removedFreeReminderPath is a removed free-reminder detail path with a fixed
-// id; shared by the three method cases below.
-const removedFreeReminderPath = "/free-reminders/ffffffff-0000-0000-0000-000000000001"
+// removedReminderDetailPath is a removed reminder detail path with a fixed id;
+// shared by the method cases below.
+const removedReminderDetailPath = "/reminders/ffffffff-0000-0000-0000-000000000001"
 
-// TestRemovedReminderRoutes_NotFound pins the code contract of the
-// free-reminders removal (issue #382): the generated router no longer
-// registers the removed paths, so any request to them — including old links
-// and stale push deep links — falls through to the router's NotFound (404).
-// The surviving notifications routes stay registered: routed to the
-// Unimplemented stub they answer 501, proving the route still exists.
+// TestRemovedReminderRoutes_NotFound pins the code contract of the reminders
+// removal (issue #438): the generated router no longer registers the reminder
+// paths, so any request to them — including old links and stale push deep
+// links — falls through to the router's NotFound (404). The surviving
+// notifications routes stay registered: routed to the Unimplemented stub they
+// answer 501, proving the route still exists.
 func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 	t.Parallel()
 
@@ -34,14 +34,14 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 	// share this server and only start once this function's body has returned.
 	t.Cleanup(srv.Close)
 
+	propertyID := "11111111-0000-0000-0000-000000000001"
 	removed := []struct{ method, path string }{
-		{http.MethodPost, fmt.Sprintf("/properties/%s/free-reminders", handlerPropertyID)},
-		{http.MethodGet, fmt.Sprintf("/properties/%s/free-reminders", handlerPropertyID)},
-		{http.MethodGet, fmt.Sprintf("/properties/%s/free-reminders/upcoming", handlerPropertyID)},
-		{http.MethodGet, "/free-reminders"},
-		{http.MethodGet, removedFreeReminderPath},
-		{http.MethodPatch, removedFreeReminderPath},
-		{http.MethodDelete, removedFreeReminderPath},
+		{http.MethodGet, "/reminders"},
+		{http.MethodGet, "/reminders/calendar"},
+		{http.MethodGet, removedReminderDetailPath},
+		{http.MethodPatch, removedReminderDetailPath},
+		{http.MethodDelete, removedReminderDetailPath},
+		{http.MethodGet, fmt.Sprintf("/leases/%s/reminders", propertyID)},
 	}
 	for _, tc := range removed {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
@@ -67,7 +67,7 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 
 	// Control: a surviving notifications route is still registered — the
 	// Unimplemented stub answers 501, not the router's 404.
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/reminders", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/notification-preferences", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -81,6 +81,6 @@ func TestRemovedReminderRoutes_NotFound(t *testing.T) {
 		}
 	}()
 	if resp.StatusCode != http.StatusNotImplemented {
-		t.Errorf("GET /reminders: status = %d, want 501 (route registered, stub answer)", resp.StatusCode)
+		t.Errorf("GET /notification-preferences: status = %d, want 501 (route registered, stub answer)", resp.StatusCode)
 	}
 }

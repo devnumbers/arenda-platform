@@ -100,13 +100,13 @@ func (r *countingRecorder) WithTx(transaction.Tx) auditapp.Recorder {
 
 // TestRunInTx_BuildsStoresFromTxAndCommits proves runInTx binds the repository
 // and the audit recorder to the transaction, runs work, and the UoW commits on
-// a nil error. ReminderRepository.WithTx is infallible (it returns the bound
+// a nil error. PreferenceRepository.WithTx is infallible (it returns the bound
 // port directly), so — unlike identity — there are no bind-error paths to cover.
 func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 	t.Parallel()
 
 	b := &countingBeginner{}
-	repo := &fakeReminderRepo{}
+	repo := &fakePreferenceRepo{}
 	audit := &countingRecorder{}
 	f := NewTxStoreFactory(repo, audit, fakeUoW{beginner: b})
 
@@ -130,8 +130,8 @@ func TestRunInTx_BuildsStoresFromTxAndCommits(t *testing.T) {
 	if audit.withTxCalls != 1 {
 		t.Errorf("audit.WithTx calls = %d, want 1", audit.withTxCalls)
 	}
-	if got.repo != ReminderRepository(repo) {
-		t.Error("work received unbound reminder repository")
+	if got.repo != PreferenceRepository(repo) {
+		t.Error("work received unbound preference repository")
 	}
 
 	// UoW commits on nil error and leaves no transaction open.
@@ -152,7 +152,7 @@ func TestRunInTx_PanicRollsBackAndRepanics(t *testing.T) {
 	t.Parallel()
 
 	b := &countingBeginner{}
-	f := NewTxStoreFactory(&fakeReminderRepo{}, &countingRecorder{}, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(&fakePreferenceRepo{}, &countingRecorder{}, fakeUoW{beginner: b})
 
 	panicVal := storesSentinelError{"kaboom"}
 	defer func() {
@@ -188,7 +188,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 	t.Parallel()
 
 	b := &countingBeginner{}
-	f := NewTxStoreFactory(&fakeReminderRepo{}, &countingRecorder{}, fakeUoW{beginner: b})
+	f := NewTxStoreFactory(&fakePreferenceRepo{}, &countingRecorder{}, fakeUoW{beginner: b})
 
 	workErr := errors.New("business rule violated")
 	err := f.runInTx(t.Context(), func(*txStores) error {
@@ -214,7 +214,7 @@ func TestRunInTx_RollsBackOnWorkError(t *testing.T) {
 func TestRunInTx_ReturnsErrorWhenUoWMissing(t *testing.T) {
 	t.Parallel()
 
-	f := NewTxStoreFactory(&fakeReminderRepo{}, &countingRecorder{}, nil)
+	f := NewTxStoreFactory(&fakePreferenceRepo{}, &countingRecorder{}, nil)
 
 	workCalled := false
 	err := f.runInTx(t.Context(), func(*txStores) error {

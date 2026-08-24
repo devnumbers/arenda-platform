@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"io"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
@@ -89,14 +88,6 @@ type SharedMembersDeleteMailer interface {
 type SubscriptionLimiter interface {
 	ActivePropertyLimit(ctx context.Context, userID uuid.UUID) (int, error)
 	WithTx(tx transaction.Tx) (SubscriptionLimiter, error)
-}
-
-// PropertyBillingLifecycle manages the billing side effects of archiving and
-// unarchiving a property.
-type PropertyBillingLifecycle interface {
-	Suspend(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error
-	Resume(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error
-	WithTx(tx transaction.Tx) PropertyBillingLifecycle
 }
 
 type PropertyRepository interface {

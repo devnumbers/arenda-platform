@@ -44,7 +44,7 @@ func TestNotificationChannelPreferences_ListDefaultsAllAllowed(t *testing.T) {
 	ctx := context.Background()
 	q := genpostgres.New(pool)
 	userID := createPushTestUser(t, ctx, q)
-	repo := NewReminderRepository(pool)
+	repo := NewPreferenceRepository(pool)
 
 	// A brand-new user has no stored rows; the repository returns an empty
 	// slice and IsChannelAllowed reads missing rows as allowed.
@@ -76,70 +76,55 @@ func TestNotificationChannelPreferences_UpsertAndList(t *testing.T) {
 	ctx := context.Background()
 	q := genpostgres.New(pool)
 	userID := createPushTestUser(t, ctx, q)
-	repo := NewReminderRepository(pool)
+	repo := NewPreferenceRepository(pool)
 
-	// Disable email for operation_due and push for lease_expiring.
+	// Disable email for subscription_grace.
 	if err := repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
-		EventType: domain.EventOperationDue,
+		EventType: domain.EventSubscriptionGrace,
 		Channel:   domain.ChannelEmail,
 		Allowed:   false,
 	}); err != nil {
-		t.Fatalf("upsert operation_due/email: %v", err)
-	}
-	if err := repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
-		EventType: domain.EventLeaseExpiring,
-		Channel:   domain.ChannelPush,
-		Allowed:   false,
-	}); err != nil {
-		t.Fatalf("upsert lease_expiring/push: %v", err)
+		t.Fatalf("upsert subscription_grace/email: %v", err)
 	}
 
 	prefs, err := repo.ListChannelPreferences(ctx, userID)
 	if err != nil {
 		t.Fatalf("list channel preferences: %v", err)
 	}
-	if len(prefs) != 2 {
-		t.Fatalf("expected 2 stored rows, got %d", len(prefs))
+	if len(prefs) != 1 {
+		t.Fatalf("expected 1 stored row, got %d", len(prefs))
 	}
 
-	emailDueAllowed, err := repo.IsChannelAllowed(ctx, userID, domain.EventOperationDue, domain.ChannelEmail)
+	graceEmailAllowed, err := repo.IsChannelAllowed(ctx, userID, domain.EventSubscriptionGrace, domain.ChannelEmail)
 	if err != nil {
-		t.Fatalf("IsChannelAllowed operation_due/email: %v", err)
+		t.Fatalf("IsChannelAllowed subscription_grace/email: %v", err)
 	}
-	if emailDueAllowed {
-		t.Errorf("expected operation_due/email disabled, got allowed")
-	}
-
-	pushLeaseAllowed, err := repo.IsChannelAllowed(ctx, userID, domain.EventLeaseExpiring, domain.ChannelPush)
-	if err != nil {
-		t.Fatalf("IsChannelAllowed lease_expiring/push: %v", err)
-	}
-	if pushLeaseAllowed {
-		t.Errorf("expected lease_expiring/push disabled, got allowed")
+	if graceEmailAllowed {
+		t.Errorf("expected subscription_grace/email disabled, got allowed")
 	}
 
 	// Untouched pairs remain allowed.
-	pushDueAllowed, err := repo.IsChannelAllowed(ctx, userID, domain.EventOperationDue, domain.ChannelPush)
+	gracePushAllowed, err := repo.IsChannelAllowed(ctx, userID, domain.EventSubscriptionGrace, domain.ChannelPush)
 	if err != nil {
-		t.Fatalf("IsChannelAllowed operation_due/push: %v", err)
+		t.Fatalf("IsChannelAllowed subscription_grace/push: %v", err)
 	}
-	if !pushDueAllowed {
-		t.Errorf("expected operation_due/push still allowed, got disabled")
+	if !gracePushAllowed {
+		t.Errorf("expected subscription_grace/push still allowed, got disabled")
 	}
 
 	// Re-upsert updates the value (idempotent write path).
 	if err := repo.UpsertChannelPreference(ctx, userID, domain.NotificationChannelPreference{
-		EventType: domain.EventOperationDue,
+		EventType: domain.EventSubscriptionGrace,
 		Channel:   domain.ChannelEmail,
 		Allowed:   true,
 	}); err != nil {
-		t.Fatalf("re-upsert operation_due/email: %v", err)
+		t.Fatalf("re-upsert subscription_grace/email: %v", err)
 	}
-	emailDueAllowed, err = repo.IsChannelAllowed(ctx, userID, domain.EventOperationDue, domain.ChannelEmail)
+	graceEmailAllowed, err = repo.IsChannelAllowed(ctx, userID, domain.EventSubscriptionGrace, domain.ChannelEmail)
 	if err != nil {
-		t.Fatalf("IsChannelAllowed operation_due/email after re-upsert: %v", err)
+		t.Fatalf("IsChannelAllowed subscription_grace/email after re-upsert: %v", err)
 	}
-	if !emailDueAllowed {
-		t.Errorf("expected operation_due/email re-enabled, got disabled")
+	if !graceEmailAllowed {
+		t.Errorf("expected subscription_grace/email re-enabled, got disabled")
 	}
 }

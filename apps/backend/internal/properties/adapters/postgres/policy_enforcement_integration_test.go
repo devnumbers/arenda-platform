@@ -140,7 +140,7 @@ func seedContactPolicyScenario(t *testing.T, ctx context.Context, tx pgx.Tx) con
 	propertyRepo := NewPropertyRepository(tx)
 	// The contact service runs its mutations through the properties γ-factory
 	// (ADR 0033); its optional property-service stores stay unwired here.
-	factory := application.NewTxStoreFactory(propertyRepo, nil, contactRepo, nil, nil, nil, contactPolicyUoW{tx: tx})
+	factory := application.NewTxStoreFactory(propertyRepo, nil, contactRepo, nil, nil, contactPolicyUoW{tx: tx})
 	svc := application.NewPropertyContactService(contactRepo, propertyRepo, factory, nil)
 	svc.SetPolicy(policy)
 

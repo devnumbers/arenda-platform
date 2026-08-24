@@ -1,40 +1,25 @@
 # Notifications
 
-Напоминания о важных датах арендной недвижимости и их доставка по каналам (email, Web Push). Контекст живёт внутри супер-контекста Rental (ADR 0029) — напоминания привязаны к объектам, операциям и арендам.
+Каналы доставки уведомлений (email, Web Push), per-channel настройки (ADR 0030) и события подписки. Контекст grace-only (тикет #438, ADR 0046): домен знает единственный тип события — `subscription_grace`; механика напоминаний (reminders) удалена вместе с контекстом аренд.
 
 ## Language
 
-### Reminder
-
-**Reminder / Напоминание**:
-Конкретное запланированное уведомление о дате (предстоящая операция, просрочка, окончание аренды). Lifecycle: `pending → sending → sent` (или `skipped`/`cancelled`/`failed`). Хранится в `reminders`.
-_Avoid_: уведомление (notification — это канал-агностичное сообщение, reminder — конкретный экземпляр)
+### Events
 
 **EventType / Тип события**:
-Категория напоминания. Значения: `operation_due` (предстоящая операция), `operation_overdue` (просроченная операция), `lease_expiring` (аренда заканчивается), `lease_requires_action` (аренда требует действия), `subscription_grace` (grace-события подписки: неудачное списание и истечение льготного периода, issue #253).
+Категория уведомления. Единственное активное значение: `subscription_grace` (grace-события подписки: неудачное списание и истечение льготного периода, issue #253).
 _Avoid_: категория
 
-Мёртвые enum-значения типов БД: `notification_event_type` навсегда содержит `free_reminder`, а `notification_target_type` — `free` (значения свободных напоминаний, удалённых по спеке #380; выпиливать их из PostgreSQL нельзя — #277). Домен и контракты о них не знают; дроп-миграция 000108 (#383) стёрла данные и схему, пересобранный CHECK `exactly_one_target` отклоняет такие строки, а вечный фильтр `target_type <> 'free'` в due-выборке воркера остаётся страховкой от мёртвого значения.
-
-**TargetType / Тип цели**:
-Сущность, к которой привязано напоминание: `operation`, `recurring_operation`, `lease`. CHECK exactly-one-target в таблице `reminders` (ветка `'free'` удалена дроп-миграцией 000108 спеки #380).
-
-**ReminderStatus / Статус напоминания**:
-- `pending` — запланировано, ждёт времени отправки.
-- `sending` — клеймлено воркером, в обработке.
-- `sent` — доставлено (email и/или push).
-- `skipped` — терминальный: получатель отозвал разрешение для event type, отправки не было.
-- `cancelled` — отменено (цель удалена или заменена).
-- `failed` — терминальный после исчерпания попыток.
+Мёртвые enum-значения типов БД: `notification_event_type` навсегда содержит `free_reminder`, `operation_due`, `operation_overdue`, `lease_expiring`, `lease_requires_action`, а `notification_target_type` — `free`, `operation`, `recurring_operation`, `lease` (значения удалённых напоминаний: свободные — спека #380, арендные — тикет #438; выпиливать их из PostgreSQL нельзя — прецедент #277). Домен и контракты о них не знают; дроп-миграции 000108 и 000114 стёрли данные и схему (таблицы `reminders`, `free_reminders`, `sent_email_reminders`, `sent_push_reminders`), хранимые per-channel строки с мёртвыми event type игнорируются при чтении настроек.
 
 ### Channels
 
 **Channel / Канал доставки**:
-Транспорт доставки напоминания. Значения: `email`, `push`. Хранится в `notification_channel` enum.
+Транспорт доставки уведомления. Значения: `email`, `push`. Хранится в `notification_channel` enum.
 _Avoid_: тип доставки
 
 **NotificationChannelPreference / Per-channel настройка**:
-Разрешение пользователю отправлять напоминания данного event type по данному каналу. Opt-out модель: отсутствующая строка = разрешено. Таблица `user_notification_channel_preferences(user_id, event_type, channel, allowed)` (ADR 0030).
+Разрешение пользователю отправлять уведомления данного event type по данному каналу. Opt-out модель: отсутствующая строка = разрешено. Таблица `user_notification_channel_preferences(user_id, event_type, channel, allowed)` (ADR 0030).
 _Avoid_: prefs, настройки уведомлений
 
 ### Web Push
@@ -44,7 +29,7 @@ _Avoid_: prefs, настройки уведомлений
 _Avoid_: устройство, девайс
 
 **PushSender / Отправитель пушей**:
-Порт `application.PushSender`: шифрует payload (RFC 8291), подписывает VAPID JWT (RFC 8292), отправляет POST на endpoint. Маппит коды ответа push-сервиса в доменные ошибки: `ErrSubscriptionGone` (404/410), `ErrRateLimited` (429), `ErrPushPayloadTooLarge` (413). Реализация адаптера — отдельный тикет (своя реализация на stdlib).
+Порт `application.PushSender`: шифрует payload (RFC 8291), подписывает VAPID JWT (RFC 8292), отправляет POST на endpoint. Маппит коды ответа push-сервиса в доменные ошибки: `ErrSubscriptionGone` (404/410), `ErrRateLimited` (429), `ErrPushPayloadTooLarge` (413).
 
 **PushPayload / Payload пуша**:
 JSON-тело, отправляемое в service worker: `title`, `body`, `tag` (для замещения/группировки), `url` (навигация по тапу), `eventType`. Ограничение 3993 байта (практический потолок RFC 8030 после aes128gcm overhead).
@@ -52,40 +37,27 @@ JSON-тело, отправляемое в service worker: `title`, `body`, `tag
 **VAPID / Voluntary Application Server Identification**:
 RFC 8292. P-256 ключ pair для идентификации application server'а перед push-сервисом. Публичный ключ отдаётся фронту через `GET /push/vapid-public-key`; приватный ключ и subject (`mailto:`/`https:` URI) — серверный секрет. Ротация ломает все подписки — не ротировать без миграции.
 
-**sent_push_reminders / Audit-таблица пушей**:
-Запись об успешно отправленном пуше per (reminder, recipient). Дедупликация: при повторной dispatch проверка `IsPushReminderSent` предотвращает дубль. Симметрична `sent_email_reminders`.
-
 ## Architecture
 
 ### Direct notifications
 
 **Прямое уведомление / Direct Notification**:
-Сообщение, доставляемое одному пользователю немедленно, вне жизненного цикла Reminder: без строки в `reminders`, без клейма и без повторов. Отправитель публикует событие один раз — `DirectNotificationService` доставляет оба канала один раз. Оба канала уважают per-channel предпочтения пользователя (ADR 0030); оба best-effort: сбой канала логируется и никогда не валит другой канал и не влияет на переход, вызвавший событие. Текущий отправитель — grace-события billing (issue #253): «вход в grace» доставляется немедленно, «grace истекает» — по расписанию воркера billing.
-
-### Multi-channel dispatch (single worker)
-
-Reminder delivery uses a **single worker, multi-channel dispatch** pattern: the `ReminderWorker` claims a reminder (`MarkReminderSending`, `FOR UPDATE SKIP LOCKED`) and within its per-recipient fan-out loop dispatches both email and push independently. One lifecycle, one claim, one finalize decision. Per-channel audit tables (`sent_email_reminders`, `sent_push_reminders`) provide per-recipient deduplication so retries do not duplicate either channel.
-
-This is a deliberate departure from spec #178's original «parallel sender» design (two independent workers, two fan-out points). The single-worker approach was chosen because it eliminates claim races and keeps the lifecycle coherent — the two-system alternative required a separate `push_deliveries` claim table and its own retry semantics, which was overengineering for a polling-DB single-instance deployment.
-
-### Fan-out
-
-A property reminder is delivered to the owner and to every active (non-suspended) member of the property (`MemberRecipientAdapter.ListActiveRecipientIDs`). Each recipient is checked against their own per-channel preferences independently (`IsChannelAllowed(type, ChannelEmail)`, `IsChannelAllowed(type, ChannelPush)`).
+Сообщение, доставляемое одному пользователю немедленно, вне какого-либо жизненного цикла: без таблицы отправок, без клейма и без повторов. Отправитель публикует событие один раз — `DirectNotificationService` доставляет оба канала один раз. Оба канала уважают per-channel предпочтения пользователя (ADR 0030); оба best-effort: сбой канала логируется и никогда не валит другой канал и не влияет на переход, вызвавший событие. Текущий отправитель — grace-события billing (issue #253): «вход в grace» доставляется немедленно, «grace истекает» — по расписанию grace-воркера billing.
 
 ### Push as best-effort side channel
 
-Push delivery is best-effort: push failures (429, 5xx, no subscription) are logged but never block email delivery or the reminder lifecycle. When push succeeds for at least one recipient but email does not, the reminder is finalized as `sent` (push deduplication via `sent_push_reminders` prevents redelivery). The authoritative finalize decision is driven by email outcome; push is additive.
+Push delivery is best-effort: push failures (429, 5xx, no subscription) are logged but never block email delivery. Dead subscriptions (404/410, `ErrSubscriptionGone`) are deleted on the spot.
 
 ### Push delivery observability
 
-`webpush.Metrics` exposes a single counter `notifications.push.dispatched` with an `outcome` attribute (`sent`/`gone`/`rate_limited`/`failed`). The cleanup rate of dead subscriptions — the volume of subscriptions the worker deletes because the push service returned 404/410 (`ErrSubscriptionGone`) — is observable as `notifications.push.dispatched{outcome=gone}` in Uptrace. The deletion itself happens in `ReminderWorker.dispatchPush` on the `ErrSubscriptionGone` branch; the metric is recorded by the adapter before the domain error is returned, so every gone outcome is counted even if the DB delete fails. To monitor cleanup on prod, alert on a sustained non-zero `gone` rate (indicates subscription churn — devices uninstalled, ITP purges, OS token expiry).
+`webpush.Metrics` exposes a single counter `notifications.push.dispatched` with an `outcome` attribute (`sent`/`gone`/`rate_limited`/`failed`). The cleanup rate of dead subscriptions — the volume of subscriptions the direct-notification service deletes because the push service returned 404/410 (`ErrSubscriptionGone`) — is observable as `notifications.push.dispatched{outcome=gone}` in Uptrace. The metric is recorded by the adapter before the domain error is returned, so every gone outcome is counted even if the DB delete fails. To monitor cleanup on prod, alert on a sustained non-zero `gone` rate (indicates subscription churn — devices uninstalled, ITP purges, OS token expiry).
 
 ### Declarative Web Push — decision (iOS)
 
-**Decision: classic service-worker Web Push only for v1; Declarative Web Push (iOS/iPadOS 18.4+) deferred.** All reminders carry a visible notification (`showNotification` mandatory — iOS revokes the subscription on silent push), so the declarative format's main draw — silent/navigate-only messages without a `push` handler — adds nothing the v1 reminders need. The classic SW-push path (`public/sw.js` push-handler, research `docs/research/ios-pwa-push.md` §1.4) works on Android Chrome and iOS 16.4+ installed PWA alike. Declarative Web Push would primarily help if (a) we shipped silent/technical pushes, or (b) ITP purges of SW registrations started killing subscriptions at scale (the declarative format decouples the subscription from the SW). Neither applies to v1. Re-evaluate when a silent-push use case lands.
+**Decision: classic service-worker Web Push only for v1; Declarative Web Push (iOS/iPadOS 18.4+) deferred.** All notifications carry a visible notification (`showNotification` mandatory — iOS revokes the subscription on silent push), so the declarative format's main draw — silent/navigate-only messages without a `push` handler — adds nothing the v1 notifications need. The classic SW-push path (`public/sw.js` push-handler, research `docs/research/ios-pwa-push.md` §1.4) works on Android Chrome and iOS 16.4+ installed PWA alike. Declarative Web Push would primarily help if (a) we shipped silent/technical pushes, or (b) ITP purges of SW registrations started killing subscriptions at scale (the declarative format decouples the subscription from the SW). Neither applies to v1. Re-evaluate when a silent-push use case lands.
 
 ## ADRs
 
 - ADR 0030 — per-channel notification preferences (email/push independent). Supersedes point 1 of ADR 0022; the expand→contract transition is complete (legacy `user_notification_preferences` table dropped in migration `000102`).
 - ADR 0022 — per-event-type notification preferences. Points 2–6 still apply, generalised to (event type, channel); point 1 superseded by ADR 0030.
-- ADR 0029 — rental super-context (notifications + properties + leases tightly coupled).
+- ADR 0046 — удаление аренд и Операций: reminders-механика удалена, контекст стал grace-only. Supersedes ADR 0029 (rental super-context).

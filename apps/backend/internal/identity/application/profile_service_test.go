@@ -30,48 +30,20 @@ func (r *recordingRecorder) Record(_ context.Context, entry auditdomain.Entry) e
 
 func (r *recordingRecorder) WithTx(transaction.Tx) auditapp.Recorder { return r }
 
-// fakeReminderRescheduler captures RescheduleForTimezoneChange calls so a test
-// can prove the post-commit reschedule runs only on a timezone change.
-type fakeReminderRescheduler struct {
-	calls []rescheduleCall
-	err   error
-}
-
-type rescheduleCall struct {
-	userID      uuid.UUID
-	oldTimezone string
-	newTimezone string
-}
-
-func (r *fakeReminderRescheduler) RescheduleForTimezoneChange(_ context.Context, userID uuid.UUID, oldTimezone, newTimezone string) error {
-	if r.err != nil {
-		return r.err
-	}
-	r.calls = append(r.calls, rescheduleCall{userID: userID, oldTimezone: oldTimezone, newTimezone: newTimezone})
-	return nil
-}
-
 // profileHarness wires a ProfileService to a fakeUoW + the shared identity
 // fakes, returning every piece the tests need to assert behavior.
 type profileHarness struct {
 	*fakeStores
-	svc         *ProfileService
-	audit       *recordingRecorder
-	rescheduler *fakeReminderRescheduler
+	svc   *ProfileService
+	audit *recordingRecorder
 }
 
 func newProfileHarness(t *testing.T) *profileHarness {
 	t.Helper()
 	stores := newFakeStores()
 	audit := &recordingRecorder{}
-	rescheduler := &fakeReminderRescheduler{}
-	svc := NewProfileService(
-		stores.factory(audit),
-		ProfileServiceConfig{
-			ReminderRescheduler: rescheduler,
-		},
-	)
-	return &profileHarness{fakeStores: stores, svc: svc, audit: audit, rescheduler: rescheduler}
+	svc := NewProfileService(stores.factory(audit))
+	return &profileHarness{fakeStores: stores, svc: svc, audit: audit}
 }
 
 // seedProfileUser creates a verified owner in the fake user repo and returns it.
@@ -143,56 +115,6 @@ func TestProfileService_UpdateProfile_EmailChangeResetsVerified(t *testing.T) {
 		}
 		if updated.EmailVerifiedAt == nil {
 			t.Fatal("EmailVerifiedAt = nil, want preserved when email is unchanged")
-		}
-	})
-}
-
-// TestProfileService_UpdateProfile_TimezoneChangeReschedules proves a timezone
-// change triggers the post-commit reminder reschedule, and an unchanged
-// timezone does not.
-func TestProfileService_UpdateProfile_TimezoneChangeReschedules(t *testing.T) {
-	t.Parallel()
-	t.Run("changed timezone reschedules post-commit", func(t *testing.T) {
-		t.Parallel()
-		h := newProfileHarness(t)
-		user := seedProfileUser(t, h.users)
-
-		updated, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Timezone: new("Europe/Moscow")})
-		if err != nil {
-			t.Fatalf("UpdateProfile error = %v", err)
-		}
-		if len(h.rescheduler.calls) != 1 {
-			t.Fatalf("reschedule calls = %d, want 1", len(h.rescheduler.calls))
-		}
-		call := h.rescheduler.calls[0]
-		if call.userID != user.ID {
-			t.Errorf("reschedule userID = %s, want %s", call.userID, user.ID)
-		}
-		if call.oldTimezone != "" {
-			t.Errorf("reschedule oldTimezone = %q, want empty (uninitialized user)", call.oldTimezone)
-		}
-		if call.newTimezone != "Europe/Moscow" {
-			t.Errorf("reschedule newTimezone = %q, want Europe/Moscow", call.newTimezone)
-		}
-		if updated.Timezone.String() != "Europe/Moscow" {
-			t.Fatalf("updated timezone = %q, want Europe/Moscow", updated.Timezone.String())
-		}
-		// The profile mutation is committed before the reschedule runs.
-		if h.beginner.committed != 1 {
-			t.Errorf("committed = %d, want 1", h.beginner.committed)
-		}
-	})
-
-	t.Run("no timezone command does not reschedule", func(t *testing.T) {
-		t.Parallel()
-		h := newProfileHarness(t)
-		user := seedProfileUser(t, h.users)
-
-		if _, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Name: new("Ivan")}); err != nil {
-			t.Fatalf("UpdateProfile error = %v", err)
-		}
-		if len(h.rescheduler.calls) != 0 {
-			t.Fatalf("reschedule calls = %d, want 0 without a timezone change", len(h.rescheduler.calls))
 		}
 	})
 }
@@ -274,27 +196,6 @@ func TestProfileService_UpdateProfile_RollsBackOnAuditError(t *testing.T) {
 	}
 }
 
-// TestProfileService_UpdateProfile_RescheduleErrorAfterCommit proves a
-// post-commit reschedule failure is returned even though the profile mutation
-// was committed. This documents the contract: the reschedule is best-effort
-// synchronous and its error is surfaced to the caller.
-func TestProfileService_UpdateProfile_RescheduleErrorAfterCommit(t *testing.T) {
-	t.Parallel()
-	h := newProfileHarness(t)
-	user := seedProfileUser(t, h.users)
-	rescheduleErr := errors.New("notifications unavailable")
-	h.rescheduler.err = rescheduleErr
-
-	_, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Timezone: new("Europe/Moscow")})
-	if !errors.Is(err, rescheduleErr) {
-		t.Fatalf("UpdateProfile error = %v, want wrap of %v", err, rescheduleErr)
-	}
-	// The identity transaction committed before the reschedule was attempted.
-	if h.beginner.committed != 1 {
-		t.Errorf("committed = %d, want 1 (mutation commits before reschedule)", h.beginner.committed)
-	}
-}
-
 // TestProfileService_UsesRunInTx proves UpdateProfile goes through the UoW seam:
 // the user repository is bound to the transaction exactly once and the UoW
 // commits. This is the core ADR 0033 assertion for the Profile migration.
@@ -306,12 +207,7 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 	sessions := newFakeSessionRepo()
 	beginner := &fakeBeginner{}
 	factory := NewTxStoreFactory(users, codes, attempts, sessions, &recordingRecorder{}, &fakeUoW{beginner: beginner})
-	svc := NewProfileService(
-		factory,
-		ProfileServiceConfig{
-			ReminderRescheduler: &fakeReminderRescheduler{},
-		},
-	)
+	svc := NewProfileService(factory)
 	seedProfileUser(t, users.fakeUserRepo)
 
 	if _, err := svc.UpdateProfile(context.Background(),

@@ -60,15 +60,13 @@ func run() error {
 	// 2. Event dispatcher (shared by identity publisher and subscribers).
 	eventDispatcher := events.NewInProcessDispatcher()
 
-	// 3. Notifications: reminder/calendar/preference services +
-	//    reminder scheduler. Built before identity because Profile depends on
-	//    the reminder service, and before leases because the reminder scheduler
-	//    feeds the property billing lifecycle and lease/operation services.
+	// 3. Notifications (grace-only, issue #438): preference and
+	//    push-subscription services.
 	notificationsMod := wire.WireNotifications(p)
 
 	// 4. Identity: repos, session service, event publisher, email mailer
 	//    switch, auth/phone-change/profile/logout services.
-	identityMod, err := wire.WireIdentity(ctx, p, eventDispatcher, notificationsMod.ReminderService)
+	identityMod, err := wire.WireIdentity(ctx, p, eventDispatcher)
 	if err != nil {
 		return err
 	}
@@ -83,35 +81,29 @@ func run() error {
 		return err
 	}
 
-	// 6. Leases repos: operation/recurring/lease/category repos, category
-	//    service, property billing lifecycle. Built before properties because
-	//    PropertyService depends on the lifecycle and the shared lease repo.
-	leasesRepos := wire.WireLeasesRepos(p, notificationsMod.ReminderScheduler)
-
-	// 7. Access (T3, issue #156): membership repository, property owner
+	// 6. Access (T3, issue #156): membership repository, property owner
 	//    resolver, membership-aware policy and access service. Built before
 	//    properties because the policy replaces the T2 owner-only policy and is
-	//    injected into every property/lease/operation service.
+	//    injected into every property service.
 	accessMod, err := wire.WireAccess(ctx, p, billingMod, identityMod.EmailMailer)
 	if err != nil {
 		return err
 	}
 	p.Policy = accessMod.Policy
-	injectAccessPolicy(notificationsMod, leasesRepos, accessMod)
 
-	// 8. Properties: repos, subscription limiter, photo storage, property and
+	// 7. Properties: repos, subscription limiter, photo storage, property and
 	//    property-contact services, dadata suggester.
-	propertiesMod, err := wire.WireProperties(ctx, p, billingMod, leasesRepos)
+	propertiesMod, err := wire.WireProperties(ctx, p, billingMod)
 	if err != nil {
 		return err
 	}
 	injectPropertyServiceAccess(propertiesMod, accessMod)
 	setBillingLifecycleBridges(billingMod, propertiesMod, accessMod)
 
-	// 9. Cross-module user_registered subscribers.
-	subscribeUserRegistered(eventDispatcher, billingMod, leasesRepos, accessMod)
+	// 8. Cross-module user_registered subscribers.
+	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
 
-	// 10. Grace notifications (issue #253): the billing grace events deliver
+	// 9. Grace notifications (issue #253): the billing grace events deliver
 	//     through the notifications context over push and email, honouring the
 	//     per-channel preferences (ADR 0030). Subscribers are registered before
 	//     the workers start so no grace event fires unwired.
@@ -122,42 +114,30 @@ func run() error {
 	graceNotifier := newGraceNotifier(p.DB, p.Renderer, p.Cfg, p.Logger, notificationsMod, identityMod, pushSender)
 	subscribeGraceEvents(eventDispatcher, graceNotifier)
 
-	// 11. Admin service (depends on billing subscriptions + occupancy provider).
+	// 10. Admin service (depends on billing subscriptions + occupancy provider).
 	adminMod := wire.WireAdmin(p, billingMod.Services.Subscriptions)
 
-	// 12. Leases services: lease/operation/recurring/tenant-contact/export.
-	leasesMod := wire.WireLeasesServices(p, leasesRepos, notificationsMod.ReminderScheduler, notificationsMod.ReminderService)
-	injectCrossContextScopes(leasesMod, propertiesMod, notificationsMod, accessMod)
-
-	// 13. Popups service.
+	// 11. Popups service.
 	popupsMod := wire.WirePopups(p)
 
-	// 14. Background workers (6 goroutines). Started before the HTTP server so
+	// 12. Background workers (3 goroutines). Started before the HTTP server so
 	//     they are live while serving. The Web Push sender was constructed in
-	//     step 10 together with the grace notification delivery; without VAPID
-	//     keys the reminder worker runs email-only and push dispatch is skipped
-	//     (guard in reminder_worker).
+	//     step 9 together with the grace notification delivery.
 	workers := wire.NewWorkers(
 		ctx, p,
-		leasesMod.LeaseService,
-		leasesMod.OperationService,
-		notificationsMod.ReminderRepo,
 		identityMod.SessionRepo,
 		identityMod.CodeRepo,
 		identityMod.AttemptRepo,
-		identityMod.EmailMailer,
 		billingMod.Services.Workers,
-		notificationsMod.PushSubscriptionRepo,
-		pushSender,
 	)
 
-	// 15. HTTP rate limiters.
+	// 13. HTTP rate limiters.
 	limiters := wire.WireRateLimiters(p.Cfg)
 	defer limiters.Stop()
 
 	poolStats := newPoolStats(p.Cfg, p.Pool)
 
-	// 16. HTTP handler + server.
+	// 14. HTTP handler + server.
 	handler := httpserver.New(httpserver.Deps{
 		Auth:                     identityMod.Authentication,
 		PhoneChange:              identityMod.PhoneChange,
@@ -183,14 +163,6 @@ func run() error {
 		AddressSuggester:         propertiesMod.DadataClient,
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
-		Leases:                   leasesMod.LeaseService,
-		TenantContacts:           leasesMod.TenantContactService,
-		Operations:               leasesMod.OperationService,
-		Export:                   leasesMod.ExportService,
-		RecurringOperations:      leasesMod.RecurringOperationService,
-		Categories:               leasesRepos.CategoryService,
-		Reminders:                notificationsMod.ReminderService,
-		Calendar:                 notificationsMod.CalendarService,
 		NotificationPreferences:  notificationsMod.PreferenceService,
 		PushSubscriptions:        notificationsMod.PushSubscriptionService,
 		VAPIDPublicKey:           p.Cfg.VAPIDPublicKey,
@@ -199,7 +171,6 @@ func run() error {
 		CookieSecure:             p.Cfg.CookieSecure,
 		Logger:                   p.Logger,
 		Clock:                    p.Clock,
-		TZResolver:               p.TZResolver,
 		LogSuccessfulRequests:    p.Cfg.LogSuccessfulRequests,
 		IPRateLimiter:            limiters.IPRateLimiter,
 		EmailSendLimiter:         limiters.EmailSendLimiter,
@@ -222,21 +193,6 @@ func run() error {
 	}
 
 	return serveAndWait(ctx, server, workers, p.Logger, p.Cfg)
-}
-
-// injectAccessPolicy re-injects the membership-aware policy into the services
-// built before the access module: they captured the T2 owner-only stub
-// (notifications reminder service, issue #166, and the leases category
-// service, which is needed for the user_registered subscriber, issue #157).
-// The accessible-scopes adapter lands with the category service (issue #157).
-func injectAccessPolicy(
-	notificationsMod *wire.Notifications,
-	leasesRepos *wire.LeasesRepos,
-	accessMod *wire.Access,
-) {
-	notificationsMod.ReminderService.SetPolicy(accessMod.Policy)
-	leasesRepos.CategoryService.SetPolicy(accessMod.Policy)
-	leasesRepos.CategoryService.SetAccessibleScopes(accessMod.AccessibleScopes)
 }
 
 // injectPropertyServiceAccess wires the access-context adapters into the
@@ -271,14 +227,12 @@ func setBillingLifecycleBridges(billingMod *wire.Billing, propertiesMod *wire.Pr
 }
 
 // subscribeUserRegistered registers the user_registered reactions: billing
-// onboarding and default-category seeding, plus the email invitation
-// activation (issue #161, T5; an empty email is skipped by the service). Kept
-// here (not in wire) because the subscribers reference types from identity,
-// billing and leases.
+// onboarding plus the email invitation activation (issue #161, T5; an empty
+// email is skipped by the service). Kept here (not in wire) because the
+// subscribers reference types from identity, billing and access.
 func subscribeUserRegistered(
 	eventDispatcher *events.InProcessDispatcher,
 	billingMod *wire.Billing,
-	leasesRepos *wire.LeasesRepos,
 	accessMod *wire.Access,
 ) {
 	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
@@ -293,20 +247,13 @@ func subscribeUserRegistered(
 		if !ok {
 			return fmt.Errorf("unexpected event type %T", event)
 		}
-		return leasesRepos.CategoryService.SeedDefaultCategories(ctx, e.UserID)
-	})
-	eventDispatcher.Subscribe(events.EventType("user_registered"), func(ctx context.Context, event any) error {
-		e, ok := event.(identityapp.UserRegistered)
-		if !ok {
-			return fmt.Errorf("unexpected event type %T", event)
-		}
 		return accessMod.InvitationService.ActivatePendingInvitations(ctx, e.UserID, e.Email.String())
 	})
 }
 
 // newPushSender builds the Web Push sender when the VAPID keys are configured
-// (RFC 8292); without them it returns a nil sender, push delivery is disabled
-// and the reminder worker runs email-only.
+// (RFC 8292); without them it returns a nil sender and push delivery is
+// disabled.
 func newPushSender(ctx context.Context, cfg *config.Config, logger *slog.Logger) (notificationsapp.PushSender, error) {
 	var sender notificationsapp.PushSender
 	if cfg.VAPIDPublicKey == "" || cfg.VAPIDPrivateKey == "" {
@@ -339,7 +286,7 @@ func newGraceNotifier(
 ) *notificationsapp.DirectNotificationService {
 	queries := platformgenerated.New(db)
 	return notificationsapp.NewDirectNotificationService(
-		notificationsMod.ReminderRepo,
+		notificationsMod.PreferenceRepo,
 		notificationspg.NewContactResolver(queries),
 		emailnotifier.NewNotifier(identityMod.EmailMailer, renderer),
 		pushSender,
@@ -369,25 +316,6 @@ func subscribeGraceEvents(
 		}
 		return graceNotifier.NotifyGraceExpiring(ctx, e.UserID, e.GraceUntil)
 	})
-}
-
-// injectCrossContextScopes wires the membership-aware policy and the
-// shared-property adapters into the aggregate-read services so lists and
-// schedules include the actor's shared-property data (issue #157, T2a/T3).
-func injectCrossContextScopes(
-	leasesMod *wire.Leases,
-	propertiesMod *wire.Properties,
-	notificationsMod *wire.Notifications,
-	accessMod *wire.Access,
-) {
-	leasesMod.TenantContactService.SetPolicy(accessMod.Policy)
-	leasesMod.TenantContactService.SetAccessibleScopes(accessMod.AccessibleScopes)
-	propertiesMod.PropertyContactService.SetPolicy(accessMod.Policy)
-	leasesMod.OperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	notificationsMod.CalendarService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	leasesMod.LeaseService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	leasesMod.RecurringOperationService.SetSharedPropertyIDs(accessMod.SharedProperties)
-	notificationsMod.ReminderService.SetSharedPropertyIDs(accessMod.SharedProperties)
 }
 
 // newPoolStats exposes live pool statistics only in the local environment.

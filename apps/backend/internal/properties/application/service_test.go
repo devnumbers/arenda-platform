@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
-	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -48,12 +47,6 @@ type fakePropertyTxBeginner struct{}
 
 func (fakePropertyTxBeginner) Begin(_ context.Context) (transaction.Tx, error) {
 	return &fakePropertyTx{}, nil
-}
-
-type fakeTzResolver struct{}
-
-func (fakeTzResolver) Resolve(_ context.Context, _ uuid.UUID) (*time.Location, error) {
-	return time.UTC, nil
 }
 
 type lockingFakePropertyRepo struct {
@@ -216,10 +209,10 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		nil,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -268,10 +261,7 @@ func TestUpdateProperty_ConcurrentUpdatesDoNotOverwrite(t *testing.T) {
 	}
 }
 
-var (
-	_ PropertyRepository             = (*lockingFakePropertyRepo)(nil)
-	_ sharedtz.OwnerTimezoneResolver = fakeTzResolver{}
-)
+var _ PropertyRepository = (*lockingFakePropertyRepo)(nil)
 
 type fakeSubscriptionLimiter struct {
 	limit int
@@ -283,20 +273,6 @@ func (l fakeSubscriptionLimiter) ActivePropertyLimit(_ context.Context, _ uuid.U
 
 func (l fakeSubscriptionLimiter) WithTx(_ transaction.Tx) (SubscriptionLimiter, error) {
 	return l, nil
-}
-
-type fakePropertyBillingLifecycle struct{}
-
-func (fakePropertyBillingLifecycle) Suspend(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
-	return nil
-}
-
-func (fakePropertyBillingLifecycle) Resume(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
-	return nil
-}
-
-func (fakePropertyBillingLifecycle) WithTx(_ transaction.Tx) PropertyBillingLifecycle {
-	return fakePropertyBillingLifecycle{}
 }
 
 func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
@@ -320,11 +296,10 @@ func TestArchiveProperty_ConcurrentArchivesDoNotDoubleArchive(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		fakePropertyBillingLifecycle{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 10},
-			fakePropertyBillingLifecycle{}),
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			fakeSubscriptionLimiter{limit: 10}),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -400,11 +375,10 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		fakePropertyBillingLifecycle{},
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, fakeSubscriptionLimiter{limit: 1},
-			fakePropertyBillingLifecycle{}),
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			fakeSubscriptionLimiter{limit: 1}),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -458,10 +432,7 @@ func TestUnarchiveProperty_ConcurrentUnarchivesRespectLimit(t *testing.T) {
 	}
 }
 
-var (
-	_ SubscriptionLimiter      = fakeSubscriptionLimiter{}
-	_ PropertyBillingLifecycle = fakePropertyBillingLifecycle{}
-)
+var _ SubscriptionLimiter = fakeSubscriptionLimiter{}
 
 type fakePropertyPhotoRepo struct{}
 
@@ -537,10 +508,10 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		nil,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -683,28 +654,6 @@ func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository {
 
 var _ PropertyRepository = (*fakePropertyRepo)(nil)
 
-// recordingBillingLifecycle records the order and arguments of lifecycle calls.
-type recordingBillingLifecycle struct {
-	calls        []string
-	suspendedIDs []uuid.UUID
-}
-
-func (l *recordingBillingLifecycle) Suspend(_ context.Context, propertyID, _ uuid.UUID, _ time.Time) error {
-	l.calls = append(l.calls, "suspend")
-	l.suspendedIDs = append(l.suspendedIDs, propertyID)
-	return nil
-}
-
-func (l *recordingBillingLifecycle) Resume(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
-	return nil
-}
-
-func (l *recordingBillingLifecycle) WithTx(_ transaction.Tx) PropertyBillingLifecycle {
-	return l
-}
-
-var _ PropertyBillingLifecycle = (*recordingBillingLifecycle)(nil)
-
 func TestPropertyService_ArchiveExcessProperties_ArchivesExcess(t *testing.T) {
 	t.Parallel()
 
@@ -728,15 +677,21 @@ func TestPropertyService_ArchiveExcessProperties_ArchivesExcess(t *testing.T) {
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 		},
 	)
-	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		billing,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
-		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
-		fakeTzResolver{},
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
+		fakePropertyClock{now: time.Date(2026,
+			6,
+			10,
+			0,
+			0,
+			0,
+			0,
+			time.UTC)},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -761,20 +716,6 @@ func TestPropertyService_ArchiveExcessProperties_ArchivesExcess(t *testing.T) {
 			t.Errorf("property %s should stay active, got %q", id, kept.Status)
 		}
 	}
-
-	// Billing is suspended before the property is archived.
-	wantCalls := []string{"suspend"}
-	if len(billing.calls) != len(wantCalls) {
-		t.Fatalf("expected lifecycle calls %v, got %v", wantCalls, billing.calls)
-	}
-	for i, want := range wantCalls {
-		if billing.calls[i] != want {
-			t.Errorf("lifecycle call %d: expected %q, got %q (all calls: %v)", i, want, billing.calls[i], billing.calls)
-		}
-	}
-	if len(billing.suspendedIDs) != 1 || billing.suspendedIDs[0] != excessID {
-		t.Errorf("expected Suspend for %s, got %v", excessID, billing.suspendedIDs)
-	}
 }
 
 func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testing.T) {
@@ -795,24 +736,20 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 		},
 	)
-	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		billing,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)
 
 	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
 		t.Fatalf("ArchiveExcessProperties failed: %v", err)
-	}
-	if len(billing.calls) != 0 {
-		t.Errorf("expected no lifecycle calls, got %v", billing.calls)
 	}
 	for _, id := range []uuid.UUID{propertyAID, propertyBID} {
 		p, err := repo.GetByIDAndOwner(ctx, id, ownerID)
@@ -863,10 +800,10 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 				repo,
 				fakePropertyPhotoRepo{},
 				fakePropertyPhotoStorage{},
-				nil,
-				newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
+				newPropertyTestFactory(repo,
+					fakePropertyPhotoRepo{},
+					nil),
 				fakePropertyClock{now: time.Now()},
-				fakeTzResolver{},
 				staticRolePolicy{role: tt.role},
 				nil,
 			)
@@ -945,15 +882,21 @@ func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *tes
 		},
 	)
 	slots := &recordingSlotPolicy{}
-	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		billing,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
-		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
-		fakeTzResolver{},
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
+		fakePropertyClock{now: time.Date(2026,
+			6,
+			10,
+			0,
+			0,
+			0,
+			0,
+			time.UTC)},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -1046,10 +989,10 @@ func TestListProperties_AccessRoles(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		nil,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -1117,10 +1060,10 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		nil,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -1180,10 +1123,10 @@ func TestGetProperty_AccessContext(t *testing.T) {
 			repo,
 			fakePropertyPhotoRepo{},
 			fakePropertyPhotoStorage{},
-			nil,
-			newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, nil),
+			newPropertyTestFactory(repo,
+				fakePropertyPhotoRepo{},
+				nil),
 			fakePropertyClock{now: time.Now()},
-			fakeTzResolver{},
 			staticRolePolicy{role: role},
 			nil,
 		)
@@ -1272,15 +1215,21 @@ func TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient(t *t
 		},
 	)
 	slots := &recordingSlotPolicy{}
-	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		billing,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
-		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
-		fakeTzResolver{},
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
+		fakePropertyClock{now: time.Date(2026,
+			6,
+			10,
+			0,
+			0,
+			0,
+			0,
+			time.UTC)},
 		testOwnerPolicy{},
 		nil,
 	)
@@ -1319,15 +1268,21 @@ func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *te
 		},
 	)
 	slots := &recordingSlotPolicy{}
-	billing := &recordingBillingLifecycle{}
 	svc := NewPropertyService(
 		repo,
 		fakePropertyPhotoRepo{},
 		fakePropertyPhotoStorage{},
-		billing,
-		newPropertyTestFactory(repo, fakePropertyPhotoRepo{}, nil, billing),
-		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
-		fakeTzResolver{},
+		newPropertyTestFactory(repo,
+			fakePropertyPhotoRepo{},
+			nil),
+		fakePropertyClock{now: time.Date(2026,
+			6,
+			10,
+			0,
+			0,
+			0,
+			0,
+			time.UTC)},
 		testOwnerPolicy{},
 		nil,
 	)

@@ -18,16 +18,15 @@ const (
 // tests: the same collaborators the service receives for its transactional
 // use cases, over the fakeUoW backed by fakePropertyTxBeginner so the
 // in-memory repositories see the *fakePropertyTx their WithTx expects. A nil
-// limiter/billing matches the pre-factory fixtures: runInTx skips unwired
-// optional stores, and the factory defaults a nil audit to Noop (no property
-// service test asserts audit entries).
+// limiter matches the pre-factory fixtures: runInTx skips unwired optional
+// stores, and the factory defaults a nil audit to Noop (no property service
+// test asserts audit entries).
 func newPropertyTestFactory(
 	repo PropertyRepository,
 	photos PropertyPhotoRepository,
 	limiter SubscriptionLimiter,
-	billing PropertyBillingLifecycle,
 ) txStoreFactory {
-	return NewTxStoreFactory(repo, photos, nil, limiter, billing, nil, fakeUoW{beginner: fakePropertyTxBeginner{}})
+	return NewTxStoreFactory(repo, photos, nil, limiter, nil, fakeUoW{beginner: fakePropertyTxBeginner{}})
 }
 
 // newContactTestFactory builds the txStoreFactory for the property contact
@@ -38,7 +37,7 @@ func newContactTestFactory(
 	contacts PropertyContactRepository,
 	audit auditapp.Recorder,
 ) txStoreFactory {
-	return NewTxStoreFactory(propertyRepo, nil, contacts, nil, nil, audit, fakeUoW{beginner: fakePropertyTxBeginner{}})
+	return NewTxStoreFactory(propertyRepo, nil, contacts, nil, audit, fakeUoW{beginner: fakePropertyTxBeginner{}})
 }
 
 // testOwnerPolicy is the policy used by property service tests that pre-date

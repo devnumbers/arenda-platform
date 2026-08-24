@@ -2,9 +2,7 @@ package application
 
 import (
 	"encoding/json"
-	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 )
 
@@ -25,54 +23,6 @@ type PushPayload struct {
 	Tag       string
 	URL       string
 	EventType domain.EventType
-}
-
-// NewPushPayload builds a push payload from a reminder. The tag collapses
-// repeated notifications of the same kind on the same target so the user sees
-// one current item instead of a stack of stale ones (RFC 8030 §5.4 topic). The
-// URL routes the user to the relevant cabinet page on tap.
-func NewPushPayload(r domain.Reminder) PushPayload {
-	return PushPayload{
-		Title:     r.MessageTitle,
-		Body:      r.MessageBody,
-		Tag:       pushTag(r),
-		URL:       pushURL(r),
-		EventType: r.EventType,
-	}
-}
-
-// pushTag builds a collapse-key scoped to the event type and target so a newer
-// push of the same kind replaces a pending older one (RFC 8030 §5.4). The tag
-// is short and URL-safe (alphanumeric + ':' + '-' as required by push services
-// for the Topic header).
-func pushTag(r domain.Reminder) string {
-	targetID := pushTargetID(r)
-	if targetID == uuid.Nil {
-		return string(r.EventType)
-	}
-	return fmt.Sprintf("%s:%s", r.EventType, targetID)
-}
-
-// pushTargetID returns the id of the concrete target the reminder is attached
-// to, preferring the most specific target available.
-func pushTargetID(r domain.Reminder) uuid.UUID {
-	if r.OperationID != nil {
-		return *r.OperationID
-	}
-	if r.LeaseID != nil {
-		return *r.LeaseID
-	}
-	return uuid.Nil
-}
-
-// pushURL builds the relative cabinet path the user lands on when they tap the
-// push. Operations and leases point at the property card (their detail is
-// visible there).
-func pushURL(r domain.Reminder) string {
-	if r.PropertyID != nil {
-		return fmt.Sprintf("/properties/%s", r.PropertyID)
-	}
-	return "/calendar"
 }
 
 // MarshalJSON encodes the payload as compact JSON. If the encoded size would

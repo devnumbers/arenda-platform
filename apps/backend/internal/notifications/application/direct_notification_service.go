@@ -13,12 +13,11 @@ import (
 )
 
 // Direct notifications (issue #253): messages the platform delivers to one
-// user immediately, outside the reminder lifecycle. They carry no reminders
-// row, no claim and no retry — the sender (a billing grace event subscriber)
-// publishes once, this service dispatches both channels once. Both channels
-// honour the user's per-channel preferences (ADR 0030); both are best-effort:
-// a failing channel is logged and never fails the other channel or the
-// publisher's transition.
+// user immediately. They carry no stored send row, no claim and no retry —
+// the sender (a billing grace event subscriber) publishes once, this service
+// dispatches both channels once. Both channels honour the user's per-channel
+// preferences (ADR 0030); both are best-effort: a failing channel is logged
+// and never fails the other channel or the publisher's transition.
 
 // graceNotificationPath routes the push tap and the email button to the
 // payment methods page — the one screen where the user fixes the failed
@@ -28,10 +27,10 @@ import (
 const graceNotificationPath = "/profile/tariff/payment-methods"
 
 // DirectNotificationService delivers one-off notifications to a single user
-// over push and email. Push requires a wired PushSender (nil keeps the service
-// email-only, mirroring the reminder worker's local-dev behaviour).
+// over push and email. Push requires a wired PushSender (nil keeps the
+// service email-only, the local-dev behaviour without VAPID keys).
 type DirectNotificationService struct {
-	prefs      ReminderRepository
+	prefs      PreferenceRepository
 	resolver   ContactResolver
 	emailer    DirectEmailSender
 	pushSender PushSender
@@ -43,7 +42,7 @@ type DirectNotificationService struct {
 // NewDirectNotificationService creates a direct-notification delivery service.
 // The appBaseURL parameter is the public web app URL the email buttons point at.
 func NewDirectNotificationService(
-	prefs ReminderRepository,
+	prefs PreferenceRepository,
 	resolver ContactResolver,
 	emailer DirectEmailSender,
 	pushSender PushSender,
@@ -142,7 +141,7 @@ func (s *DirectNotificationService) dispatchEmail(
 // dispatchPush delivers the Web Push leg to every subscription of the user.
 // Dead subscriptions (404/410) are deleted; rate limiting stops the device
 // fan-out for this notification; other failures are logged — none of them
-// affect the email leg (mirrors the reminder worker's push semantics).
+// affect the email leg.
 func (s *DirectNotificationService) dispatchPush(
 	ctx context.Context,
 	eventType domain.EventType,

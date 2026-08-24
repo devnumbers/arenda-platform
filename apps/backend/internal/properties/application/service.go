@@ -20,8 +20,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
-	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -61,10 +59,8 @@ type PropertyService struct {
 	repo               PropertyRepository
 	photoRepo          PropertyPhotoRepository
 	photoStorage       PhotoStorage
-	billingLifecycle   PropertyBillingLifecycle
 	audit              auditapp.Recorder
 	clock              clock.Clock
-	tzResolver         sharedtz.OwnerTimezoneResolver
 	policy             sharedpolicy.Policy
 	sharedMemberships  SharedMemberships
 	ownerNames         OwnerDisplayNameResolver
@@ -131,17 +127,15 @@ func (s *PropertyService) SetSharedMembersDeleteMailer(mailer SharedMembersDelet
 
 // NewPropertyService creates a PropertyService. Persistence, the audit
 // recorder and the Unit-of-Work of every mutating use case arrive through the
-// embedded factory (ADR 0033 γ-factory); repo, photoRepo and
-// billingLifecycle additionally serve the non-transactional reads and the
-// externally-owned transaction of ArchiveExcessProperties.
+// embedded factory (ADR 0033 γ-factory); repo and photoRepo additionally
+// serve the non-transactional reads and the externally-owned transaction of
+// ArchiveExcessProperties.
 func NewPropertyService(
 	repo PropertyRepository,
 	photoRepo PropertyPhotoRepository,
 	photoStorage PhotoStorage,
-	billingLifecycle PropertyBillingLifecycle,
 	factory txStoreFactory,
 	clk clock.Clock,
-	tzResolver sharedtz.OwnerTimezoneResolver,
 	policy sharedpolicy.Policy,
 	logger *slog.Logger,
 ) *PropertyService {
@@ -149,16 +143,14 @@ func NewPropertyService(
 		logger = slog.Default()
 	}
 	return &PropertyService{
-		txStoreFactory:   factory,
-		repo:             repo,
-		photoRepo:        photoRepo,
-		photoStorage:     photoStorage,
-		billingLifecycle: billingLifecycle,
-		audit:            factory.audit,
-		clock:            clk,
-		tzResolver:       tzResolver,
-		policy:           policy,
-		logger:           logger,
+		txStoreFactory: factory,
+		repo:           repo,
+		photoRepo:      photoRepo,
+		photoStorage:   photoStorage,
+		audit:          factory.audit,
+		clock:          clk,
+		policy:         policy,
+		logger:         logger,
 	}
 }
 
@@ -520,13 +512,7 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 	var archived domain.Property
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
-		archived, err = s.archivePropertyInTx(
-			ctx,
-			stores.repo,
-			stores.billing,
-			actor,
-			id,
-		)
+		archived, err = s.archivePropertyInTx(ctx, stores.repo, actor, id)
 		if err != nil {
 			return err
 		}
@@ -600,10 +586,6 @@ func (s *PropertyService) DeleteProperty(
 		photos, err = stores.photos.GetByPropertyID(ctx, id)
 		if err != nil {
 			return fmt.Errorf("list photos: %w", err)
-		}
-
-		if err := s.applyDeleteMode(ctx, stores, actor, id, mode); err != nil {
-			return err
 		}
 
 		if formerMemberEmails, err = s.collectFormerMemberEmails(ctx, stores, id); err != nil {
@@ -706,28 +688,6 @@ func (s *PropertyService) recoverSlotsAfterDelete(ctx context.Context, stores *t
 	return nil
 }
 
-// applyDeleteMode performs the mode-specific pre-delete side effects inside
-// the delete transaction. Detach first suspends the property's billing
-// lifecycle (same as archiving does); cascade deletes the property outright.
-func (s *PropertyService) applyDeleteMode(
-	ctx context.Context,
-	stores *txStores,
-	actor, id uuid.UUID,
-	mode domain.DeletePropertyMode,
-) error {
-	if mode == domain.DeletePropertyModeDetach {
-		loc, err := s.tzResolver.Resolve(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("resolve owner timezone: %w", err)
-		}
-		asOf := timeutil.DateIn(s.clock.Now(), loc)
-		if err := stores.billing.Suspend(ctx, id, actor, asOf); err != nil {
-			return fmt.Errorf("suspend billing: %w", err)
-		}
-	}
-	return nil
-}
-
 // notifyPropertyDeleted emails the former shared members (active+suspended)
 // after the delete has committed (issue #162, T6). A send failure is logged
 // and does not affect the delete.
@@ -768,7 +728,6 @@ func (s *PropertyService) cleanupPropertyPhotos(ctx context.Context, id uuid.UUI
 func (s *PropertyService) archivePropertyInTx(
 	ctx context.Context,
 	repo PropertyRepository,
-	billing PropertyBillingLifecycle,
 	scope, id uuid.UUID,
 ) (domain.Property, error) {
 	property, err := repo.GetByIDAndOwnerForUpdate(ctx, id, scope)
@@ -781,17 +740,6 @@ func (s *PropertyService) archivePropertyInTx(
 
 	if property.Status == domain.PropertyStatusArchived {
 		return domain.Property{}, ErrAlreadyArchived
-	}
-
-	loc, err := s.tzResolver.Resolve(ctx, scope)
-	if err != nil {
-		return domain.Property{}, fmt.Errorf("resolve owner timezone: %w", err)
-	}
-	now := s.clock.Now()
-	asOf := timeutil.DateIn(now, loc)
-
-	if err := billing.Suspend(ctx, id, scope, asOf); err != nil {
-		return domain.Property{}, fmt.Errorf("suspend billing: %w", err)
 	}
 
 	if err := repo.Archive(ctx, id, scope); err != nil {
@@ -832,11 +780,10 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 		return nil
 	}
 
-	txBillingLifecycle := s.billingLifecycle.WithTx(tx)
 	txAudit := s.audit.WithTx(tx)
 
 	for _, p := range properties[limit:] {
-		_, err := s.archivePropertyInTx(ctx, txRepo, txBillingLifecycle, scope, p.ID)
+		_, err := s.archivePropertyInTx(ctx, txRepo, scope, p.ID)
 		if err != nil {
 			if errors.Is(err, ErrAlreadyArchived) {
 				s.logger.WarnContext(ctx, "skipping auto-archive of property",
@@ -895,10 +842,6 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 
 		if err := stores.repo.Unarchive(ctx, id, actor); err != nil {
 			return fmt.Errorf("unarchive property: %w", err)
-		}
-
-		if err := s.resumePropertyBilling(ctx, stores.billing, actor, id); err != nil {
-			return err
 		}
 
 		var err error
@@ -971,22 +914,6 @@ func ensureActivePropertySlot(ctx context.Context, stores *txStores, owner uuid.
 	}
 	if count >= limit {
 		return ErrLimitExceeded
-	}
-	return nil
-}
-
-// resumePropertyBilling resumes the property's billing lifecycle from today in
-// the owner's timezone.
-func (s *PropertyService) resumePropertyBilling(
-	ctx context.Context, billing PropertyBillingLifecycle, scope, id uuid.UUID,
-) error {
-	loc, err := s.tzResolver.Resolve(ctx, scope)
-	if err != nil {
-		return fmt.Errorf("resolve owner timezone: %w", err)
-	}
-	resumeAsOf := timeutil.DateIn(s.clock.Now(), loc)
-	if err := billing.Resume(ctx, id, scope, resumeAsOf); err != nil {
-		return fmt.Errorf("resume billing: %w", err)
 	}
 	return nil
 }

@@ -48,6 +48,7 @@ excluded_paths = [
   # в начале файла.
   "*000111_property_contacts_owner_fk.up.sql",       # adding-foreign-key-constraint: FK без NOT VALID (тикет #351, решение #324)
   "*000112_drop_sent_sms_reminders.up.sql",          # ban-drop-table: осознанный drop (ADR 0044, канал SMS удалён)
+  "*000114_drop_leases_and_operations.up.sql",       # ban-drop-table ×8: осознанный drop контекста аренд (тикет #438, спека #434)
 ]
 
 excluded_rules = [

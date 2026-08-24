@@ -214,22 +214,6 @@ type CardBindingSession struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
-type Lease struct {
-	ID                   pgtype.UUID        `json:"id"`
-	OwnerID              pgtype.UUID        `json:"owner_id"`
-	PropertyID           pgtype.UUID        `json:"property_id"`
-	TenantContactID      pgtype.UUID        `json:"tenant_contact_id"`
-	Status               string             `json:"status"`
-	StartDate            pgtype.Date        `json:"start_date"`
-	EndDate              pgtype.Date        `json:"end_date"`
-	RentAmountKopecks    int64              `json:"rent_amount_kopecks"`
-	DepositAmountKopecks int64              `json:"deposit_amount_kopecks"`
-	PaymentDay           int32              `json:"payment_day"`
-	Comment              pgtype.Text        `json:"comment"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-}
-
 type LoginAttempt struct {
 	ID             pgtype.UUID        `json:"id"`
 	Phone          string             `json:"phone"`
@@ -251,37 +235,6 @@ type LoginCode struct {
 	Used           bool               `json:"used"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	PhoneEncrypted bool               `json:"phone_encrypted"`
-}
-
-type Operation struct {
-	ID                   pgtype.UUID        `json:"id"`
-	OwnerID              pgtype.UUID        `json:"owner_id"`
-	PropertyID           pgtype.UUID        `json:"property_id"`
-	LeaseID              pgtype.UUID        `json:"lease_id"`
-	RecurringOperationID pgtype.UUID        `json:"recurring_operation_id"`
-	Type                 string             `json:"type"`
-	AmountKopecks        int64              `json:"amount_kopecks"`
-	OperationDate        pgtype.Date        `json:"operation_date"`
-	Comment              pgtype.Text        `json:"comment"`
-	IsException          bool               `json:"is_exception"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
-	Status               string             `json:"status"`
-	Name                 string             `json:"name"`
-	ReminderOffsetDays   pgtype.Int4        `json:"reminder_offset_days"`
-	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
-	CategoryID           pgtype.UUID        `json:"category_id"`
-}
-
-type OperationCategory struct {
-	ID        pgtype.UUID        `json:"id"`
-	OwnerID   pgtype.UUID        `json:"owner_id"`
-	Type      string             `json:"type"`
-	Name      string             `json:"name"`
-	Code      pgtype.Text        `json:"code"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PaymentMethod struct {
@@ -362,64 +315,6 @@ type PushSubscription struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
-type RecurringOperation struct {
-	ID                 pgtype.UUID        `json:"id"`
-	OwnerID            pgtype.UUID        `json:"owner_id"`
-	PropertyID         pgtype.UUID        `json:"property_id"`
-	LeaseID            pgtype.UUID        `json:"lease_id"`
-	Type               string             `json:"type"`
-	AmountKopecks      int64              `json:"amount_kopecks"`
-	StartDate          pgtype.Date        `json:"start_date"`
-	PaymentDay         int32              `json:"payment_day"`
-	EndDate            pgtype.Date        `json:"end_date"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	Periodicity        string             `json:"periodicity"`
-	Comment            pgtype.Text        `json:"comment"`
-	Status             string             `json:"status"`
-	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
-	Name               string             `json:"name"`
-	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
-	CategoryID         pgtype.UUID        `json:"category_id"`
-}
-
-type Reminder struct {
-	ID                   pgtype.UUID            `json:"id"`
-	OwnerID              pgtype.UUID            `json:"owner_id"`
-	TargetType           NotificationTargetType `json:"target_type"`
-	OperationID          pgtype.UUID            `json:"operation_id"`
-	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
-	LeaseID              pgtype.UUID            `json:"lease_id"`
-	PropertyID           pgtype.UUID            `json:"property_id"`
-	EventType            NotificationEventType  `json:"event_type"`
-	Status               NotificationStatus     `json:"status"`
-	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
-	SentAt               pgtype.Timestamptz     `json:"sent_at"`
-	FailedAttempts       int32                  `json:"failed_attempts"`
-	NextAttemptAt        pgtype.Timestamptz     `json:"next_attempt_at"`
-	MessageTitle         string                 `json:"message_title"`
-	MessageBody          string                 `json:"message_body"`
-	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
-}
-
-type SentEmailReminder struct {
-	ID         pgtype.UUID        `json:"id"`
-	ReminderID pgtype.UUID        `json:"reminder_id"`
-	OwnerID    pgtype.UUID        `json:"owner_id"`
-	Email      string             `json:"email"`
-	Subject    string             `json:"subject"`
-	PlainBody  string             `json:"plain_body"`
-	SentAt     pgtype.Timestamptz `json:"sent_at"`
-}
-
-type SentPushReminder struct {
-	ID          pgtype.UUID        `json:"id"`
-	ReminderID  pgtype.UUID        `json:"reminder_id"`
-	RecipientID pgtype.UUID        `json:"recipient_id"`
-	SentAt      pgtype.Timestamptz `json:"sent_at"`
-}
-
 type Session struct {
 	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`
@@ -472,19 +367,6 @@ type Tariff struct {
 	IsActive            bool               `json:"is_active"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-}
-
-type TenantContact struct {
-	ID         pgtype.UUID        `json:"id"`
-	OwnerID    pgtype.UUID        `json:"owner_id"`
-	Name       string             `json:"name"`
-	Surname    pgtype.Text        `json:"surname"`
-	Patronymic pgtype.Text        `json:"patronymic"`
-	Phone      pgtype.Text        `json:"phone"`
-	Email      pgtype.Text        `json:"email"`
-	Comment    pgtype.Text        `json:"comment"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

@@ -100,10 +100,8 @@ func newPhotoService(t *testing.T, repo PropertyRepository, photoRepo PropertyPh
 		repo,
 		photoRepo,
 		storage,
-		fakePropertyBillingLifecycle{},
-		newPropertyTestFactory(repo, photoRepo, fakeSubscriptionLimiter{limit: 10}, fakePropertyBillingLifecycle{}),
+		newPropertyTestFactory(repo, photoRepo, fakeSubscriptionLimiter{limit: 10}),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)

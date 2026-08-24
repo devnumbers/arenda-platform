@@ -15,7 +15,6 @@ import (
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
-	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -26,7 +25,6 @@ type PropertyHandlers struct {
 	contactSvc       *propertiesapp.PropertyContactService
 	logger           *slog.Logger
 	clock            clock.Clock
-	tzResolver       sharedtz.OwnerTimezoneResolver
 }
 
 // NewPropertyHandlers creates HTTP handlers for the properties API.
@@ -36,7 +34,6 @@ func NewPropertyHandlers(
 	contactSvc *propertiesapp.PropertyContactService,
 	logger *slog.Logger,
 	clk clock.Clock,
-	tzResolver sharedtz.OwnerTimezoneResolver,
 ) *PropertyHandlers {
 	return &PropertyHandlers{
 		svc:              svc,
@@ -44,7 +41,6 @@ func NewPropertyHandlers(
 		contactSvc:       contactSvc,
 		logger:           logger,
 		clock:            clk,
-		tzResolver:       tzResolver,
 	}
 }
 

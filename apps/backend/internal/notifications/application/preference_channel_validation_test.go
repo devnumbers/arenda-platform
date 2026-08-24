@@ -27,7 +27,7 @@ func TestValidateChannelPreferences(t *testing.T) {
 		{
 			name: "partial set rejected",
 			prefs: []domain.NotificationChannelPreference{
-				{EventType: domain.EventOperationDue, Channel: domain.ChannelEmail, Allowed: true},
+				{EventType: domain.EventSubscriptionGrace, Channel: domain.ChannelEmail, Allowed: true},
 			},
 			wantErr: true,
 		},
@@ -36,7 +36,7 @@ func TestValidateChannelPreferences(t *testing.T) {
 			prefs: func() []domain.NotificationChannelPreference {
 				prefs := domain.DefaultNotificationChannelPreferences()
 				prefs = append(prefs, domain.NotificationChannelPreference{
-					EventType: domain.EventOperationDue,
+					EventType: domain.EventSubscriptionGrace,
 					Channel:   domain.ChannelEmail,
 					Allowed:   true,
 				})

@@ -14,10 +14,10 @@ import (
 // a use case receives inside runInTx, so it is impossible to forget WithTx or
 // to record audit outside the transaction (ADR 0033, ADR 0020).
 //
-// The optional stores (photos, contacts, limiter, billing) cover the two
+// The optional stores (photos, contacts, limiter) cover the two
 // services of the context, which need different subsets: the property service
-// never touches contacts, the contact service never touches
-// photos/limiter/billing. Production wires the full set once and
+// never touches contacts, the contact service never touches photos/limiter.
+// Production wires the full set once and
 // shares the factory between both services, so every store is bound in every
 // transaction there; runInTx skips binding an unwired optional store instead
 // of panicking on a nil WithTx — same shape as the billing lifecycle bridges —
@@ -34,7 +34,6 @@ type txStores struct {
 	photos   PropertyPhotoRepository
 	contacts PropertyContactRepository
 	limiter  SubscriptionLimiter
-	billing  PropertyBillingLifecycle
 	audit    auditapp.Recorder
 	tx       transaction.Tx
 }
@@ -54,7 +53,6 @@ type txStoreFactory struct {
 	photos   PropertyPhotoRepository
 	contacts PropertyContactRepository
 	limiter  SubscriptionLimiter
-	billing  PropertyBillingLifecycle
 	audit    auditapp.Recorder
 	uow      transaction.UoW
 }
@@ -71,7 +69,6 @@ func NewTxStoreFactory(
 	photos PropertyPhotoRepository,
 	contacts PropertyContactRepository,
 	limiter SubscriptionLimiter,
-	billing PropertyBillingLifecycle,
 	audit auditapp.Recorder,
 	uow transaction.UoW,
 ) txStoreFactory {
@@ -83,7 +80,6 @@ func NewTxStoreFactory(
 		photos:   photos,
 		contacts: contacts,
 		limiter:  limiter,
-		billing:  billing,
 		audit:    audit,
 		uow:      uow,
 	}
@@ -125,9 +121,6 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 			if err != nil {
 				return fmt.Errorf("bind subscription limiter to tx: %w", err)
 			}
-		}
-		if f.billing != nil {
-			stores.billing = f.billing.WithTx(tx)
 		}
 		return work(stores)
 	})

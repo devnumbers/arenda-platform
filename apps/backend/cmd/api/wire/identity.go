@@ -9,7 +9,6 @@ import (
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
-	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
@@ -42,13 +41,11 @@ type Identity struct {
 // WireIdentity constructs the identity repositories, session service, event
 // publisher, selects the email mailer based on config, and builds the
 // authentication, phone-change, profile and logout services. It takes the event
-// dispatcher (for the publisher) and the reminder service (notifications module)
-// that profile depends on.
+// dispatcher (for the publisher).
 func WireIdentity(
 	_ context.Context,
 	p platformDeps,
 	eventDispatcher *events.InProcessDispatcher,
-	reminderService *notificationsapp.ReminderService,
 ) (*Identity, error) {
 	userRepo := identitypg.NewUserRepository(p.DB, p.Encryptor)
 	codeRepo := identitypg.NewLoginCodeRepository(p.DB, p.Encryptor)
@@ -125,12 +122,7 @@ func WireIdentity(
 		},
 	)
 
-	profileService := identityapp.NewProfileService(
-		factory,
-		identityapp.ProfileServiceConfig{
-			ReminderRescheduler: reminderService,
-		},
-	)
+	profileService := identityapp.NewProfileService(factory)
 
 	logoutService := identityapp.NewLogoutService(
 		factory,

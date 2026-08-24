@@ -134,69 +134,6 @@ func (e AdminUserRole) Valid() bool {
 	}
 }
 
-// Defines values for CalendarReminderItemEventType.
-const (
-	CalendarReminderItemEventTypeLeaseExpiring       CalendarReminderItemEventType = "lease_expiring"
-	CalendarReminderItemEventTypeLeaseRequiresAction CalendarReminderItemEventType = "lease_requires_action"
-	CalendarReminderItemEventTypeOperationDue        CalendarReminderItemEventType = "operation_due"
-	CalendarReminderItemEventTypeOperationOverdue    CalendarReminderItemEventType = "operation_overdue"
-	CalendarReminderItemEventTypeSubscriptionGrace   CalendarReminderItemEventType = "subscription_grace"
-)
-
-// Valid indicates whether the value is a known member of the CalendarReminderItemEventType enum.
-func (e CalendarReminderItemEventType) Valid() bool {
-	switch e {
-	case CalendarReminderItemEventTypeLeaseExpiring:
-		return true
-	case CalendarReminderItemEventTypeLeaseRequiresAction:
-		return true
-	case CalendarReminderItemEventTypeOperationDue:
-		return true
-	case CalendarReminderItemEventTypeOperationOverdue:
-		return true
-	case CalendarReminderItemEventTypeSubscriptionGrace:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CalendarReminderItemStatus.
-const (
-	CalendarReminderItemStatusPending CalendarReminderItemStatus = "pending"
-	CalendarReminderItemStatusSent    CalendarReminderItemStatus = "sent"
-)
-
-// Valid indicates whether the value is a known member of the CalendarReminderItemStatus enum.
-func (e CalendarReminderItemStatus) Valid() bool {
-	switch e {
-	case CalendarReminderItemStatusPending:
-		return true
-	case CalendarReminderItemStatusSent:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CalendarReminderItemType.
-const (
-	CalendarReminderItemTypeOperation CalendarReminderItemType = "operation"
-	CalendarReminderItemTypeSystem    CalendarReminderItemType = "system"
-)
-
-// Valid indicates whether the value is a known member of the CalendarReminderItemType enum.
-func (e CalendarReminderItemType) Valid() bool {
-	switch e {
-	case CalendarReminderItemTypeOperation:
-		return true
-	case CalendarReminderItemTypeSystem:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ClientErrorReportApp.
 const (
 	ClientErrorReportAppAdmin    ClientErrorReportApp = "admin"
@@ -212,33 +149,6 @@ func (e ClientErrorReportApp) Valid() bool {
 	case ClientErrorReportAppFrontend:
 		return true
 	case ClientErrorReportAppLanding:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for LeaseStatus.
-const (
-	LeaseStatusActive         LeaseStatus = "active"
-	LeaseStatusArchived       LeaseStatus = "archived"
-	LeaseStatusAwaitingStart  LeaseStatus = "awaiting_start"
-	LeaseStatusCompleted      LeaseStatus = "completed"
-	LeaseStatusRequiresAction LeaseStatus = "requires_action"
-)
-
-// Valid indicates whether the value is a known member of the LeaseStatus enum.
-func (e LeaseStatus) Valid() bool {
-	switch e {
-	case LeaseStatusActive:
-		return true
-	case LeaseStatusArchived:
-		return true
-	case LeaseStatusAwaitingStart:
-		return true
-	case LeaseStatusCompleted:
-		return true
-	case LeaseStatusRequiresAction:
 		return true
 	default:
 		return false
@@ -265,133 +175,13 @@ func (e MeResponseRole) Valid() bool {
 
 // Defines values for NotificationPreferenceEventType.
 const (
-	NotificationPreferenceEventTypeLeaseExpiring       NotificationPreferenceEventType = "lease_expiring"
-	NotificationPreferenceEventTypeLeaseRequiresAction NotificationPreferenceEventType = "lease_requires_action"
-	NotificationPreferenceEventTypeOperationDue        NotificationPreferenceEventType = "operation_due"
-	NotificationPreferenceEventTypeOperationOverdue    NotificationPreferenceEventType = "operation_overdue"
-	NotificationPreferenceEventTypeSubscriptionGrace   NotificationPreferenceEventType = "subscription_grace"
+	SubscriptionGrace NotificationPreferenceEventType = "subscription_grace"
 )
 
 // Valid indicates whether the value is a known member of the NotificationPreferenceEventType enum.
 func (e NotificationPreferenceEventType) Valid() bool {
 	switch e {
-	case NotificationPreferenceEventTypeLeaseExpiring:
-		return true
-	case NotificationPreferenceEventTypeLeaseRequiresAction:
-		return true
-	case NotificationPreferenceEventTypeOperationDue:
-		return true
-	case NotificationPreferenceEventTypeOperationOverdue:
-		return true
-	case NotificationPreferenceEventTypeSubscriptionGrace:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OperationListSort.
-const (
-	OperationDateAsc  OperationListSort = "operation_date_asc"
-	OperationDateDesc OperationListSort = "operation_date_desc"
-)
-
-// Valid indicates whether the value is a known member of the OperationListSort enum.
-func (e OperationListSort) Valid() bool {
-	switch e {
-	case OperationDateAsc:
-		return true
-	case OperationDateDesc:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OperationResponseReminderOffsetDays.
-const (
-	OperationResponseReminderOffsetDaysN1 OperationResponseReminderOffsetDays = 1
-	OperationResponseReminderOffsetDaysN3 OperationResponseReminderOffsetDays = 3
-	OperationResponseReminderOffsetDaysN7 OperationResponseReminderOffsetDays = 7
-)
-
-// Valid indicates whether the value is a known member of the OperationResponseReminderOffsetDays enum.
-func (e OperationResponseReminderOffsetDays) Valid() bool {
-	switch e {
-	case OperationResponseReminderOffsetDaysN1:
-		return true
-	case OperationResponseReminderOffsetDaysN3:
-		return true
-	case OperationResponseReminderOffsetDaysN7:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OperationStatus.
-const (
-	OperationStatusOverdue     OperationStatus = "overdue"
-	OperationStatusPaid        OperationStatus = "paid"
-	OperationStatusPending     OperationStatus = "pending"
-	OperationStatusReceived    OperationStatus = "received"
-	OperationStatusUnconfirmed OperationStatus = "unconfirmed"
-)
-
-// Valid indicates whether the value is a known member of the OperationStatus enum.
-func (e OperationStatus) Valid() bool {
-	switch e {
-	case OperationStatusOverdue:
-		return true
-	case OperationStatusPaid:
-		return true
-	case OperationStatusPending:
-		return true
-	case OperationStatusReceived:
-		return true
-	case OperationStatusUnconfirmed:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OperationType.
-const (
-	Expense OperationType = "expense"
-	Income  OperationType = "income"
-)
-
-// Valid indicates whether the value is a known member of the OperationType enum.
-func (e OperationType) Valid() bool {
-	switch e {
-	case Expense:
-		return true
-	case Income:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OperationUpdateRequestReminderOffsetDays.
-const (
-	OperationUpdateRequestReminderOffsetDaysN0 OperationUpdateRequestReminderOffsetDays = 0
-	OperationUpdateRequestReminderOffsetDaysN1 OperationUpdateRequestReminderOffsetDays = 1
-	OperationUpdateRequestReminderOffsetDaysN3 OperationUpdateRequestReminderOffsetDays = 3
-	OperationUpdateRequestReminderOffsetDaysN7 OperationUpdateRequestReminderOffsetDays = 7
-)
-
-// Valid indicates whether the value is a known member of the OperationUpdateRequestReminderOffsetDays enum.
-func (e OperationUpdateRequestReminderOffsetDays) Valid() bool {
-	switch e {
-	case OperationUpdateRequestReminderOffsetDaysN0:
-		return true
-	case OperationUpdateRequestReminderOffsetDaysN1:
-		return true
-	case OperationUpdateRequestReminderOffsetDaysN3:
-		return true
-	case OperationUpdateRequestReminderOffsetDaysN7:
+	case SubscriptionGrace:
 		return true
 	default:
 		return false
@@ -578,180 +368,6 @@ func (e PropertyType) Valid() bool {
 	}
 }
 
-// Defines values for RecurringOperationResponsePeriodicity.
-const (
-	RecurringOperationResponsePeriodicityMonthly RecurringOperationResponsePeriodicity = "monthly"
-	RecurringOperationResponsePeriodicityYearly  RecurringOperationResponsePeriodicity = "yearly"
-)
-
-// Valid indicates whether the value is a known member of the RecurringOperationResponsePeriodicity enum.
-func (e RecurringOperationResponsePeriodicity) Valid() bool {
-	switch e {
-	case RecurringOperationResponsePeriodicityMonthly:
-		return true
-	case RecurringOperationResponsePeriodicityYearly:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RecurringOperationResponseReminderOffsetDays.
-const (
-	RecurringOperationResponseReminderOffsetDaysN1 RecurringOperationResponseReminderOffsetDays = 1
-	RecurringOperationResponseReminderOffsetDaysN3 RecurringOperationResponseReminderOffsetDays = 3
-	RecurringOperationResponseReminderOffsetDaysN7 RecurringOperationResponseReminderOffsetDays = 7
-)
-
-// Valid indicates whether the value is a known member of the RecurringOperationResponseReminderOffsetDays enum.
-func (e RecurringOperationResponseReminderOffsetDays) Valid() bool {
-	switch e {
-	case RecurringOperationResponseReminderOffsetDaysN1:
-		return true
-	case RecurringOperationResponseReminderOffsetDaysN3:
-		return true
-	case RecurringOperationResponseReminderOffsetDaysN7:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RecurringOperationResponseStatus.
-const (
-	RecurringOperationResponseStatusActive RecurringOperationResponseStatus = "active"
-	RecurringOperationResponseStatusPaused RecurringOperationResponseStatus = "paused"
-)
-
-// Valid indicates whether the value is a known member of the RecurringOperationResponseStatus enum.
-func (e RecurringOperationResponseStatus) Valid() bool {
-	switch e {
-	case RecurringOperationResponseStatusActive:
-		return true
-	case RecurringOperationResponseStatusPaused:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RecurringOperationUpdateRequestPeriodicity.
-const (
-	RecurringOperationUpdateRequestPeriodicityMonthly RecurringOperationUpdateRequestPeriodicity = "monthly"
-	RecurringOperationUpdateRequestPeriodicityYearly  RecurringOperationUpdateRequestPeriodicity = "yearly"
-)
-
-// Valid indicates whether the value is a known member of the RecurringOperationUpdateRequestPeriodicity enum.
-func (e RecurringOperationUpdateRequestPeriodicity) Valid() bool {
-	switch e {
-	case RecurringOperationUpdateRequestPeriodicityMonthly:
-		return true
-	case RecurringOperationUpdateRequestPeriodicityYearly:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RecurringOperationUpdateRequestReminderOffsetDays.
-const (
-	RecurringOperationUpdateRequestReminderOffsetDaysN0 RecurringOperationUpdateRequestReminderOffsetDays = 0
-	RecurringOperationUpdateRequestReminderOffsetDaysN1 RecurringOperationUpdateRequestReminderOffsetDays = 1
-	RecurringOperationUpdateRequestReminderOffsetDaysN3 RecurringOperationUpdateRequestReminderOffsetDays = 3
-	RecurringOperationUpdateRequestReminderOffsetDaysN7 RecurringOperationUpdateRequestReminderOffsetDays = 7
-)
-
-// Valid indicates whether the value is a known member of the RecurringOperationUpdateRequestReminderOffsetDays enum.
-func (e RecurringOperationUpdateRequestReminderOffsetDays) Valid() bool {
-	switch e {
-	case RecurringOperationUpdateRequestReminderOffsetDaysN0:
-		return true
-	case RecurringOperationUpdateRequestReminderOffsetDaysN1:
-		return true
-	case RecurringOperationUpdateRequestReminderOffsetDaysN3:
-		return true
-	case RecurringOperationUpdateRequestReminderOffsetDaysN7:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ReminderResponseEventType.
-const (
-	LeaseExpiring       ReminderResponseEventType = "lease_expiring"
-	LeaseRequiresAction ReminderResponseEventType = "lease_requires_action"
-	OperationDue        ReminderResponseEventType = "operation_due"
-	OperationOverdue    ReminderResponseEventType = "operation_overdue"
-	SubscriptionGrace   ReminderResponseEventType = "subscription_grace"
-)
-
-// Valid indicates whether the value is a known member of the ReminderResponseEventType enum.
-func (e ReminderResponseEventType) Valid() bool {
-	switch e {
-	case LeaseExpiring:
-		return true
-	case LeaseRequiresAction:
-		return true
-	case OperationDue:
-		return true
-	case OperationOverdue:
-		return true
-	case SubscriptionGrace:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ReminderResponseStatus.
-const (
-	ReminderResponseStatusCancelled ReminderResponseStatus = "cancelled"
-	ReminderResponseStatusFailed    ReminderResponseStatus = "failed"
-	ReminderResponseStatusPending   ReminderResponseStatus = "pending"
-	ReminderResponseStatusSent      ReminderResponseStatus = "sent"
-	ReminderResponseStatusSkipped   ReminderResponseStatus = "skipped"
-)
-
-// Valid indicates whether the value is a known member of the ReminderResponseStatus enum.
-func (e ReminderResponseStatus) Valid() bool {
-	switch e {
-	case ReminderResponseStatusCancelled:
-		return true
-	case ReminderResponseStatusFailed:
-		return true
-	case ReminderResponseStatusPending:
-		return true
-	case ReminderResponseStatusSent:
-		return true
-	case ReminderResponseStatusSkipped:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ReminderResponseTargetType.
-const (
-	ReminderResponseTargetTypeLease              ReminderResponseTargetType = "lease"
-	ReminderResponseTargetTypeOperation          ReminderResponseTargetType = "operation"
-	ReminderResponseTargetTypeRecurringOperation ReminderResponseTargetType = "recurring_operation"
-)
-
-// Valid indicates whether the value is a known member of the ReminderResponseTargetType enum.
-func (e ReminderResponseTargetType) Valid() bool {
-	switch e {
-	case ReminderResponseTargetTypeLease:
-		return true
-	case ReminderResponseTargetTypeOperation:
-		return true
-	case ReminderResponseTargetTypeRecurringOperation:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for SubscriptionSource.
 const (
 	Paid    SubscriptionSource = "paid"
@@ -772,28 +388,28 @@ func (e SubscriptionSource) Valid() bool {
 
 // Defines values for SubscriptionPaymentStatus.
 const (
-	SubscriptionPaymentStatusFailed          SubscriptionPaymentStatus = "failed"
-	SubscriptionPaymentStatusPartialRefunded SubscriptionPaymentStatus = "partial_refunded"
-	SubscriptionPaymentStatusPending         SubscriptionPaymentStatus = "pending"
-	SubscriptionPaymentStatusRefunded        SubscriptionPaymentStatus = "refunded"
-	SubscriptionPaymentStatusRefunding       SubscriptionPaymentStatus = "refunding"
-	SubscriptionPaymentStatusSucceeded       SubscriptionPaymentStatus = "succeeded"
+	Failed          SubscriptionPaymentStatus = "failed"
+	PartialRefunded SubscriptionPaymentStatus = "partial_refunded"
+	Pending         SubscriptionPaymentStatus = "pending"
+	Refunded        SubscriptionPaymentStatus = "refunded"
+	Refunding       SubscriptionPaymentStatus = "refunding"
+	Succeeded       SubscriptionPaymentStatus = "succeeded"
 )
 
 // Valid indicates whether the value is a known member of the SubscriptionPaymentStatus enum.
 func (e SubscriptionPaymentStatus) Valid() bool {
 	switch e {
-	case SubscriptionPaymentStatusFailed:
+	case Failed:
 		return true
-	case SubscriptionPaymentStatusPartialRefunded:
+	case PartialRefunded:
 		return true
-	case SubscriptionPaymentStatusPending:
+	case Pending:
 		return true
-	case SubscriptionPaymentStatusRefunded:
+	case Refunded:
 		return true
-	case SubscriptionPaymentStatusRefunding:
+	case Refunding:
 		return true
-	case SubscriptionPaymentStatusSucceeded:
+	case Succeeded:
 		return true
 	default:
 		return false
@@ -1337,39 +953,6 @@ type AutoRenewRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
-// CalendarReminderItem One calendar entry — an operation or system reminder projected into the requested date range. Orphan reminders (property deleted in detach mode) have property_id = null and has_property = false.
-type CalendarReminderItem struct {
-	EventType   *CalendarReminderItemEventType `json:"event_type,omitempty"`
-	HasProperty bool                           `json:"has_property"`
-
-	// Id The concrete reminder row id.
-	Id          openapi_types.UUID  `json:"id"`
-	LeaseId     *openapi_types.UUID `json:"lease_id,omitempty"`
-	OperationId *openapi_types.UUID `json:"operation_id,omitempty"`
-	PropertyId  *openapi_types.UUID `json:"property_id,omitempty"`
-
-	// PropertyName Resolved property name; null means "Без объекта" (orphan).
-	PropertyName *string                     `json:"property_name,omitempty"`
-	ScheduledAt  time.Time                   `json:"scheduled_at"`
-	Status       *CalendarReminderItemStatus `json:"status,omitempty"`
-	Title        string                      `json:"title"`
-	Type         CalendarReminderItemType    `json:"type"`
-}
-
-// CalendarReminderItemEventType defines model for CalendarReminderItem.EventType.
-type CalendarReminderItemEventType string
-
-// CalendarReminderItemStatus defines model for CalendarReminderItem.Status.
-type CalendarReminderItemStatus string
-
-// CalendarReminderItemType defines model for CalendarReminderItem.Type.
-type CalendarReminderItemType string
-
-// CalendarRemindersResponse defines model for CalendarRemindersResponse.
-type CalendarRemindersResponse struct {
-	Items []CalendarReminderItem `json:"items"`
-}
-
 // ChangePhoneRequest defines model for ChangePhoneRequest.
 type ChangePhoneRequest struct {
 	Code  string `json:"code"`
@@ -1405,117 +988,6 @@ type ClientErrorReport struct {
 
 // ClientErrorReportApp Application that reported the error
 type ClientErrorReportApp string
-
-// FinanceReportCategoryRow defines model for FinanceReportCategoryRow.
-type FinanceReportCategoryRow struct {
-	CategoryId   openapi_types.UUID `json:"category_id"`
-	CategoryName string             `json:"category_name"`
-	TotalKopecks int64              `json:"total_kopecks"`
-	Type         OperationType      `json:"type"`
-}
-
-// FinanceReportMonthRow defines model for FinanceReportMonthRow.
-type FinanceReportMonthRow struct {
-	ExpenseKopecks int64              `json:"expense_kopecks"`
-	IncomeKopecks  int64              `json:"income_kopecks"`
-	Month          openapi_types.Date `json:"month"`
-	ProfitKopecks  int64              `json:"profit_kopecks"`
-}
-
-// FinanceReportPeriod defines model for FinanceReportPeriod.
-type FinanceReportPeriod struct {
-	From openapi_types.Date `json:"from"`
-	To   openapi_types.Date `json:"to"`
-}
-
-// FinanceReportPropertyRow defines model for FinanceReportPropertyRow.
-type FinanceReportPropertyRow struct {
-	ExpenseKopecks int64 `json:"expense_kopecks"`
-	IncomeKopecks  int64 `json:"income_kopecks"`
-	ProfitKopecks  int64 `json:"profit_kopecks"`
-
-	// PropertyId Null groups operations whose property was deleted in detach mode.
-	PropertyId *openapi_types.UUID `json:"property_id,omitempty"`
-}
-
-// FinanceReportResponse defines model for FinanceReportResponse.
-type FinanceReportResponse struct {
-	ByCategory []FinanceReportCategoryRow `json:"by_category"`
-	ByMonth    []FinanceReportMonthRow    `json:"by_month"`
-	ByProperty []FinanceReportPropertyRow `json:"by_property"`
-	Period     FinanceReportPeriod        `json:"period"`
-	Totals     FinanceReportTotals        `json:"totals"`
-}
-
-// FinanceReportTotals defines model for FinanceReportTotals.
-type FinanceReportTotals struct {
-	ExpenseKopecks int64 `json:"expense_kopecks"`
-	IncomeKopecks  int64 `json:"income_kopecks"`
-	ProfitKopecks  int64 `json:"profit_kopecks"`
-}
-
-// LeaseCreateRequest defines model for LeaseCreateRequest.
-type LeaseCreateRequest struct {
-	Comment              *string             `json:"comment,omitempty"`
-	DepositAmountKopecks *int64              `json:"deposit_amount_kopecks,omitempty"`
-	EndDate              *openapi_types.Date `json:"end_date,omitempty"`
-	PaymentDay           int                 `json:"payment_day"`
-	PropertyId           openapi_types.UUID  `json:"property_id"`
-	RentAmountKopecks    int64               `json:"rent_amount_kopecks"`
-	StartDate            openapi_types.Date  `json:"start_date"`
-	TenantContactId      *openapi_types.UUID `json:"tenant_contact_id,omitempty"`
-}
-
-// LeaseResponse defines model for LeaseResponse.
-type LeaseResponse struct {
-	Comment   *string   `json:"comment,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-
-	// CurrentPeriodOverdue Deprecated. Kept for backward compatibility; true when the lease has any overdue rent operation. The frontend no longer relies on it.
-	CurrentPeriodOverdue bool                `json:"current_period_overdue"`
-	DepositAmountKopecks int64               `json:"deposit_amount_kopecks"`
-	EndDate              *openapi_types.Date `json:"end_date,omitempty"`
-
-	// HasOverdue True when the lease has at least one overdue rent operation of any period.
-	HasOverdue bool               `json:"has_overdue"`
-	Id         openapi_types.UUID `json:"id"`
-
-	// NextPaymentDate Nearest pending rent operation date on or after as_of.
-	NextPaymentDate *openapi_types.Date `json:"next_payment_date,omitempty"`
-
-	// OverdueSince Earliest overdue rent operation date of any period.
-	OverdueSince *openapi_types.Date `json:"overdue_since,omitempty"`
-	OwnerId      openapi_types.UUID  `json:"owner_id"`
-	PaymentDay   int                 `json:"payment_day"`
-
-	// PropertyId Null when the property was deleted in detach mode.
-	PropertyId        *openapi_types.UUID    `json:"property_id,omitempty"`
-	RentAmountKopecks int64                  `json:"rent_amount_kopecks"`
-	StartDate         openapi_types.Date     `json:"start_date"`
-	Status            LeaseStatus            `json:"status"`
-	TenantContact     *TenantContactResponse `json:"tenant_contact"`
-	UpdatedAt         time.Time              `json:"updated_at"`
-}
-
-// LeaseStatus defines model for LeaseStatus.
-type LeaseStatus string
-
-// LeaseUpdateRequest defines model for LeaseUpdateRequest.
-type LeaseUpdateRequest struct {
-	ClearTenantContact   *bool               `json:"clear_tenant_contact,omitempty"`
-	Comment              *string             `json:"comment,omitempty"`
-	DepositAmountKopecks *int64              `json:"deposit_amount_kopecks,omitempty"`
-	EndDate              *openapi_types.Date `json:"end_date,omitempty"`
-	PaymentDay           *int                `json:"payment_day,omitempty"`
-	RentAmountKopecks    *int64              `json:"rent_amount_kopecks,omitempty"`
-	StartDate            *openapi_types.Date `json:"start_date,omitempty"`
-	TenantContactId      *openapi_types.UUID `json:"tenant_contact_id,omitempty"`
-}
-
-// LeasesResponse defines model for LeasesResponse.
-type LeasesResponse struct {
-	Items []LeaseResponse `json:"items"`
-}
 
 // MeResponse defines model for MeResponse.
 type MeResponse struct {
@@ -1556,92 +1028,6 @@ type NotificationPreferencesResponse struct {
 // NotificationPreferencesUpdateRequest defines model for NotificationPreferencesUpdateRequest.
 type NotificationPreferencesUpdateRequest struct {
 	Preferences []NotificationPreference `json:"preferences"`
-}
-
-// OperationCategory defines model for OperationCategory.
-type OperationCategory struct {
-	Code      *string            `json:"code,omitempty"`
-	CreatedAt time.Time          `json:"created_at"`
-	Id        openapi_types.UUID `json:"id"`
-	Name      string             `json:"name"`
-	Type      OperationType      `json:"type"`
-}
-
-// OperationCategoryCreateRequest defines model for OperationCategoryCreateRequest.
-type OperationCategoryCreateRequest struct {
-	Name string `json:"name"`
-
-	// PropertyId Optional property context. When set, the category is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the category is created in the actor's own account.
-	PropertyId *openapi_types.UUID `json:"property_id,omitempty"`
-	Type       OperationType       `json:"type"`
-}
-
-// OperationListSort defines model for OperationListSort.
-type OperationListSort string
-
-// OperationMoveRequest defines model for OperationMoveRequest.
-type OperationMoveRequest struct {
-	// PropertyId Target property. Must belong to the same owner as the operation's current property.
-	PropertyId openapi_types.UUID `json:"property_id"`
-}
-
-// OperationResponse defines model for OperationResponse.
-type OperationResponse struct {
-	AmountKopecks int64               `json:"amount_kopecks"`
-	CategoryId    openapi_types.UUID  `json:"category_id"`
-	CategoryName  string              `json:"category_name"`
-	Comment       *string             `json:"comment,omitempty"`
-	CreatedAt     time.Time           `json:"created_at"`
-	Id            openapi_types.UUID  `json:"id"`
-	IsException   bool                `json:"is_exception"`
-	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
-	Name          string              `json:"name"`
-	OperationDate openapi_types.Date  `json:"operation_date"`
-	OwnerId       openapi_types.UUID  `json:"owner_id"`
-
-	// PropertyId Null when the property was deleted in detach mode.
-	PropertyId           *openapi_types.UUID                  `json:"property_id,omitempty"`
-	PropertyStatus       *PropertyStatus                      `json:"property_status,omitempty"`
-	RecurringOperationId *openapi_types.UUID                  `json:"recurring_operation_id,omitempty"`
-	ReminderOffsetDays   *OperationResponseReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	Status               OperationStatus                      `json:"status"`
-	Type                 OperationType                        `json:"type"`
-	UpdatedAt            time.Time                            `json:"updated_at"`
-}
-
-// OperationResponseReminderOffsetDays defines model for OperationResponse.ReminderOffsetDays.
-type OperationResponseReminderOffsetDays int
-
-// OperationStatus defines model for OperationStatus.
-type OperationStatus string
-
-// OperationType defines model for OperationType.
-type OperationType string
-
-// OperationUpdateRequest defines model for OperationUpdateRequest.
-type OperationUpdateRequest struct {
-	AmountKopecks *int64              `json:"amount_kopecks,omitempty"`
-	CategoryId    *openapi_types.UUID `json:"category_id,omitempty"`
-	Comment       *string             `json:"comment,omitempty"`
-	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
-	Name          *string             `json:"name,omitempty"`
-	OperationDate *openapi_types.Date `json:"operation_date,omitempty"`
-
-	// ReminderOffsetDays 0 clears any existing reminder; 1/3/7 reschedules the reminder.
-	ReminderOffsetDays *OperationUpdateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	Type               *OperationType                            `json:"type,omitempty"`
-}
-
-// OperationUpdateRequestReminderOffsetDays 0 clears any existing reminder; 1/3/7 reschedules the reminder.
-type OperationUpdateRequestReminderOffsetDays int
-
-// OperationsResponse defines model for OperationsResponse.
-type OperationsResponse struct {
-	HasMore    bool                `json:"has_more"`
-	Items      []OperationResponse `json:"items"`
-	Limit      int                 `json:"limit"`
-	NextOffset *int                `json:"next_offset,omitempty"`
-	Offset     int                 `json:"offset"`
 }
 
 // PaymentMethod defines model for PaymentMethod.
@@ -1887,107 +1273,6 @@ type PushSubscriptionResponse struct {
 	UpdatedAt time.Time          `json:"updated_at"`
 }
 
-// RecurringOperationResponse defines model for RecurringOperationResponse.
-type RecurringOperationResponse struct {
-	AmountKopecks int64                                 `json:"amount_kopecks"`
-	CategoryId    openapi_types.UUID                    `json:"category_id"`
-	CategoryName  string                                `json:"category_name"`
-	Comment       *string                               `json:"comment,omitempty"`
-	CreatedAt     time.Time                             `json:"created_at"`
-	EndDate       *openapi_types.Date                   `json:"end_date,omitempty"`
-	Id            openapi_types.UUID                    `json:"id"`
-	LeaseId       *openapi_types.UUID                   `json:"lease_id,omitempty"`
-	Name          string                                `json:"name"`
-	OwnerId       openapi_types.UUID                    `json:"owner_id"`
-	PaymentDay    int                                   `json:"payment_day"`
-	Periodicity   RecurringOperationResponsePeriodicity `json:"periodicity"`
-
-	// PropertyId Null when the property was deleted in detach mode.
-	PropertyId         *openapi_types.UUID                           `json:"property_id,omitempty"`
-	ReminderOffsetDays *RecurringOperationResponseReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	StartDate          openapi_types.Date                            `json:"start_date"`
-	Status             RecurringOperationResponseStatus              `json:"status"`
-	Type               OperationType                                 `json:"type"`
-	UpdatedAt          time.Time                                     `json:"updated_at"`
-}
-
-// RecurringOperationResponsePeriodicity defines model for RecurringOperationResponse.Periodicity.
-type RecurringOperationResponsePeriodicity string
-
-// RecurringOperationResponseReminderOffsetDays defines model for RecurringOperationResponse.ReminderOffsetDays.
-type RecurringOperationResponseReminderOffsetDays int
-
-// RecurringOperationResponseStatus defines model for RecurringOperationResponse.Status.
-type RecurringOperationResponseStatus string
-
-// RecurringOperationUpdateRequest defines model for RecurringOperationUpdateRequest.
-type RecurringOperationUpdateRequest struct {
-	AmountKopecks *int64                                      `json:"amount_kopecks,omitempty"`
-	ApplyFromDate *openapi_types.Date                         `json:"apply_from_date,omitempty"`
-	CategoryId    *openapi_types.UUID                         `json:"category_id,omitempty"`
-	Comment       *string                                     `json:"comment,omitempty"`
-	EndDate       *openapi_types.Date                         `json:"end_date,omitempty"`
-	Name          *string                                     `json:"name,omitempty"`
-	PaymentDay    *int                                        `json:"payment_day,omitempty"`
-	Periodicity   *RecurringOperationUpdateRequestPeriodicity `json:"periodicity,omitempty"`
-
-	// ReminderOffsetDays 0 clears any existing reminders; 1/3/7 reschedules reminders for future generated operations.
-	ReminderOffsetDays *RecurringOperationUpdateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	StartDate          *openapi_types.Date                                `json:"start_date,omitempty"`
-	Type               *OperationType                                     `json:"type,omitempty"`
-}
-
-// RecurringOperationUpdateRequestPeriodicity defines model for RecurringOperationUpdateRequest.Periodicity.
-type RecurringOperationUpdateRequestPeriodicity string
-
-// RecurringOperationUpdateRequestReminderOffsetDays 0 clears any existing reminders; 1/3/7 reschedules reminders for future generated operations.
-type RecurringOperationUpdateRequestReminderOffsetDays int
-
-// RecurringOperationsResponse defines model for RecurringOperationsResponse.
-type RecurringOperationsResponse struct {
-	Items []RecurringOperationResponse `json:"items"`
-}
-
-// ReminderResponse defines model for ReminderResponse.
-type ReminderResponse struct {
-	CreatedAt            time.Time                  `json:"created_at"`
-	EventType            ReminderResponseEventType  `json:"event_type"`
-	FailedAttempts       int                        `json:"failed_attempts"`
-	Id                   openapi_types.UUID         `json:"id"`
-	LeaseId              *openapi_types.UUID        `json:"lease_id,omitempty"`
-	MessageBody          string                     `json:"message_body"`
-	MessageTitle         string                     `json:"message_title"`
-	NextAttemptAt        *time.Time                 `json:"next_attempt_at,omitempty"`
-	OperationId          *openapi_types.UUID        `json:"operation_id,omitempty"`
-	OwnerId              openapi_types.UUID         `json:"owner_id"`
-	PropertyId           *openapi_types.UUID        `json:"property_id,omitempty"`
-	RecurringOperationId *openapi_types.UUID        `json:"recurring_operation_id,omitempty"`
-	ScheduledAt          time.Time                  `json:"scheduled_at"`
-	SentAt               *time.Time                 `json:"sent_at,omitempty"`
-	Status               ReminderResponseStatus     `json:"status"`
-	TargetType           ReminderResponseTargetType `json:"target_type"`
-	UpdatedAt            time.Time                  `json:"updated_at"`
-}
-
-// ReminderResponseEventType defines model for ReminderResponse.EventType.
-type ReminderResponseEventType string
-
-// ReminderResponseStatus defines model for ReminderResponse.Status.
-type ReminderResponseStatus string
-
-// ReminderResponseTargetType defines model for ReminderResponse.TargetType.
-type ReminderResponseTargetType string
-
-// ReminderUpdateRequest defines model for ReminderUpdateRequest.
-type ReminderUpdateRequest struct {
-	ReminderDate openapi_types.Date `json:"reminder_date"`
-}
-
-// RemindersResponse defines model for RemindersResponse.
-type RemindersResponse struct {
-	Items []ReminderResponse `json:"items"`
-}
-
 // SendCodeRequest defines model for SendCodeRequest.
 type SendCodeRequest struct {
 	Email *string `json:"email,omitempty"`
@@ -2068,51 +1353,6 @@ type TariffName string
 // TariffsResponse defines model for TariffsResponse.
 type TariffsResponse struct {
 	Items []Tariff `json:"items"`
-}
-
-// TenantContactCreateRequest defines model for TenantContactCreateRequest.
-type TenantContactCreateRequest struct {
-	Comment    *string `json:"comment,omitempty"`
-	Email      *string `json:"email,omitempty"`
-	Name       string  `json:"name"`
-	Patronymic *string `json:"patronymic,omitempty"`
-	Phone      *string `json:"phone,omitempty"`
-
-	// PropertyId Optional property context. When set, the contact is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the contact is created in the actor's own account.
-	PropertyId *openapi_types.UUID `json:"property_id,omitempty"`
-	Surname    *string             `json:"surname,omitempty"`
-}
-
-// TenantContactResponse defines model for TenantContactResponse.
-type TenantContactResponse struct {
-	ActiveLease *LeaseResponse     `json:"active_lease"`
-	Comment     *string            `json:"comment"`
-	CreatedAt   time.Time          `json:"created_at"`
-	Email       *string            `json:"email"`
-	Id          openapi_types.UUID `json:"id"`
-	IsActive    bool               `json:"is_active"`
-	LastLease   *LeaseResponse     `json:"last_lease"`
-	Name        string             `json:"name"`
-	OwnerId     openapi_types.UUID `json:"owner_id"`
-	Patronymic  *string            `json:"patronymic"`
-	Phone       *string            `json:"phone"`
-	Surname     *string            `json:"surname"`
-	UpdatedAt   time.Time          `json:"updated_at"`
-}
-
-// TenantContactUpdateRequest defines model for TenantContactUpdateRequest.
-type TenantContactUpdateRequest struct {
-	Comment    *string `json:"comment,omitempty"`
-	Email      *string `json:"email,omitempty"`
-	Name       *string `json:"name,omitempty"`
-	Patronymic *string `json:"patronymic,omitempty"`
-	Phone      *string `json:"phone,omitempty"`
-	Surname    *string `json:"surname,omitempty"`
-}
-
-// TenantContactsResponse defines model for TenantContactsResponse.
-type TenantContactsResponse struct {
-	Items []TenantContactResponse `json:"items"`
 }
 
 // UserUpdateRequest defines model for UserUpdateRequest.
@@ -2328,39 +1568,6 @@ type GetAddressSuggestionsParams struct {
 	Query string `form:"query" json:"query"`
 }
 
-// GetFinanceReportParams defines parameters for GetFinanceReport.
-type GetFinanceReportParams struct {
-	From *openapi_types.Date `form:"from,omitempty" json:"from,omitempty"`
-	To   *openapi_types.Date `form:"to,omitempty" json:"to,omitempty"`
-}
-
-// ListOperationCategoriesParams defines parameters for ListOperationCategories.
-type ListOperationCategoriesParams struct {
-	Type *OperationType `form:"type,omitempty" json:"type,omitempty"`
-}
-
-// ListOperationsParams defines parameters for ListOperations.
-type ListOperationsParams struct {
-	Type                      *[]OperationType      `form:"type,omitempty" json:"type,omitempty"`
-	Status                    *[]OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
-	CategoryId                *[]openapi_types.UUID `form:"category_id,omitempty" json:"category_id,omitempty"`
-	PropertyId                *openapi_types.UUID   `form:"property_id,omitempty" json:"property_id,omitempty"`
-	From                      *openapi_types.Date   `form:"from,omitempty" json:"from,omitempty"`
-	To                        *openapi_types.Date   `form:"to,omitempty" json:"to,omitempty"`
-	RecurringOperationId      *openapi_types.UUID   `form:"recurring_operation_id,omitempty" json:"recurring_operation_id,omitempty"`
-	LeaseId                   *openapi_types.UUID   `form:"lease_id,omitempty" json:"lease_id,omitempty"`
-	ExcludeArchivedProperties *bool                 `form:"exclude_archived_properties,omitempty" json:"exclude_archived_properties,omitempty"`
-	Sort                      *OperationListSort    `form:"sort,omitempty" json:"sort,omitempty"`
-	Limit                     *int                  `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset                    *int                  `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
-// CompleteOperationJSONBody defines parameters for CompleteOperation.
-type CompleteOperationJSONBody = map[string]interface{}
-
-// MarkOperationIncompleteJSONBody defines parameters for MarkOperationIncomplete.
-type MarkOperationIncompleteJSONBody = map[string]interface{}
-
 // DeletePropertyParams defines parameters for DeleteProperty.
 type DeletePropertyParams struct {
 	// Mode Deletion mode. `cascade` deletes the property outright. `detach` first suspends the property's billing lifecycle (same as archiving) and then deletes the property.
@@ -2373,18 +1580,6 @@ type DeletePropertyParamsMode string
 // UploadPropertyPhotoMultipartBody defines parameters for UploadPropertyPhoto.
 type UploadPropertyPhotoMultipartBody struct {
 	File openapi_types.File `json:"file"`
-}
-
-// ListRemindersParams defines parameters for ListReminders.
-type ListRemindersParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
-// ListCalendarRemindersParams defines parameters for ListCalendarReminders.
-type ListCalendarRemindersParams struct {
-	From openapi_types.Date `form:"from" json:"from"`
-	To   openapi_types.Date `form:"to" json:"to"`
 }
 
 // HandlePaymentWebhookJSONBody defines parameters for HandlePaymentWebhook.
@@ -2414,12 +1609,6 @@ type VerifyCodeJSONRequestBody = VerifyCodeRequest
 // ReportClientErrorJSONRequestBody defines body for ReportClientError for application/json ContentType.
 type ReportClientErrorJSONRequestBody = ClientErrorReport
 
-// CreateLeaseJSONRequestBody defines body for CreateLease for application/json ContentType.
-type CreateLeaseJSONRequestBody = LeaseCreateRequest
-
-// UpdateLeaseJSONRequestBody defines body for UpdateLease for application/json ContentType.
-type UpdateLeaseJSONRequestBody = LeaseUpdateRequest
-
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UserUpdateRequest
 
@@ -2431,21 +1620,6 @@ type SendPhoneChangeCodeJSONRequestBody = SendPhoneChangeCodeRequest
 
 // UpdateNotificationPreferencesJSONRequestBody defines body for UpdateNotificationPreferences for application/json ContentType.
 type UpdateNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdateRequest
-
-// CreateOperationCategoryJSONRequestBody defines body for CreateOperationCategory for application/json ContentType.
-type CreateOperationCategoryJSONRequestBody = OperationCategoryCreateRequest
-
-// UpdateOperationJSONRequestBody defines body for UpdateOperation for application/json ContentType.
-type UpdateOperationJSONRequestBody = OperationUpdateRequest
-
-// CompleteOperationJSONRequestBody defines body for CompleteOperation for application/json ContentType.
-type CompleteOperationJSONRequestBody = CompleteOperationJSONBody
-
-// MarkOperationIncompleteJSONRequestBody defines body for MarkOperationIncomplete for application/json ContentType.
-type MarkOperationIncompleteJSONRequestBody = MarkOperationIncompleteJSONBody
-
-// MoveOperationJSONRequestBody defines body for MoveOperation for application/json ContentType.
-type MoveOperationJSONRequestBody = OperationMoveRequest
 
 // CreatePropertyJSONRequestBody defines body for CreateProperty for application/json ContentType.
 type CreatePropertyJSONRequestBody = PropertyCreateRequest
@@ -2480,12 +1654,6 @@ type DeletePushSubscriptionJSONRequestBody = PushSubscriptionDeleteRequest
 // CreatePushSubscriptionJSONRequestBody defines body for CreatePushSubscription for application/json ContentType.
 type CreatePushSubscriptionJSONRequestBody = PushSubscriptionCreateRequest
 
-// UpdateRecurringOperationJSONRequestBody defines body for UpdateRecurringOperation for application/json ContentType.
-type UpdateRecurringOperationJSONRequestBody = RecurringOperationUpdateRequest
-
-// UpdateReminderJSONRequestBody defines body for UpdateReminder for application/json ContentType.
-type UpdateReminderJSONRequestBody = ReminderUpdateRequest
-
 // ToggleAutoRenewJSONRequestBody defines body for ToggleAutoRenew for application/json ContentType.
 type ToggleAutoRenewJSONRequestBody = AutoRenewRequest
 
@@ -2494,12 +1662,6 @@ type ChangeTariffJSONRequestBody = ChangeTariffRequest
 
 // AddPaymentMethodJSONRequestBody defines body for AddPaymentMethod for application/json ContentType.
 type AddPaymentMethodJSONRequestBody = AddPaymentMethodRequest
-
-// CreateTenantContactJSONRequestBody defines body for CreateTenantContact for application/json ContentType.
-type CreateTenantContactJSONRequestBody = TenantContactCreateRequest
-
-// UpdateTenantContactJSONRequestBody defines body for UpdateTenantContact for application/json ContentType.
-type UpdateTenantContactJSONRequestBody = TenantContactUpdateRequest
 
 // HandlePaymentWebhookJSONRequestBody defines body for HandlePaymentWebhook for application/json ContentType.
 type HandlePaymentWebhookJSONRequestBody HandlePaymentWebhookJSONBody
@@ -2591,27 +1753,6 @@ type ServerInterface interface {
 	// (GET /dadata/suggestions/address)
 	GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params GetAddressSuggestionsParams)
 
-	// (GET /finance/report)
-	GetFinanceReport(w http.ResponseWriter, r *http.Request, params GetFinanceReportParams)
-
-	// (GET /leases)
-	ListLeases(w http.ResponseWriter, r *http.Request)
-
-	// (POST /leases)
-	CreateLease(w http.ResponseWriter, r *http.Request)
-
-	// (GET /leases/{id})
-	GetLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (PATCH /leases/{id})
-	UpdateLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /leases/{id}/complete)
-	CompleteLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /leases/{leaseId}/reminders)
-	ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseId openapi_types.UUID)
-
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
 
@@ -2629,33 +1770,6 @@ type ServerInterface interface {
 
 	// (PUT /notification-preferences)
 	UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request)
-
-	// (GET /operation-categories)
-	ListOperationCategories(w http.ResponseWriter, r *http.Request, params ListOperationCategoriesParams)
-
-	// (POST /operation-categories)
-	CreateOperationCategory(w http.ResponseWriter, r *http.Request)
-
-	// (GET /operations)
-	ListOperations(w http.ResponseWriter, r *http.Request, params ListOperationsParams)
-
-	// (DELETE /operations/{id})
-	DeleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /operations/{id})
-	GetOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (PATCH /operations/{id})
-	UpdateOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /operations/{id}/complete)
-	CompleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /operations/{id}/mark-incomplete)
-	MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /operations/{id}/move)
-	MoveOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /popups/pending)
 	GetPendingPopups(w http.ResponseWriter, r *http.Request)
@@ -2744,36 +1858,6 @@ type ServerInterface interface {
 	// (GET /push/vapid-public-key)
 	GetVapidPublicKey(w http.ResponseWriter, r *http.Request)
 
-	// (GET /recurring-operations)
-	ListRecurringOperations(w http.ResponseWriter, r *http.Request)
-
-	// (DELETE /recurring-operations/{id})
-	DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /recurring-operations/{id})
-	GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (PATCH /recurring-operations/{id})
-	UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /recurring-operations/{id}/pause)
-	PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /recurring-operations/{id}/resume)
-	ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /reminders)
-	ListReminders(w http.ResponseWriter, r *http.Request, params ListRemindersParams)
-
-	// (GET /reminders/calendar)
-	ListCalendarReminders(w http.ResponseWriter, r *http.Request, params ListCalendarRemindersParams)
-
-	// (DELETE /reminders/{reminderId})
-	DeleteReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID)
-
-	// (PATCH /reminders/{reminderId})
-	UpdateReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID)
-
 	// (GET /subscription)
 	GetSubscription(w http.ResponseWriter, r *http.Request)
 
@@ -2806,18 +1890,6 @@ type ServerInterface interface {
 
 	// (GET /tariffs)
 	ListTariffs(w http.ResponseWriter, r *http.Request)
-
-	// (GET /tenant-contacts)
-	ListTenantContacts(w http.ResponseWriter, r *http.Request)
-
-	// (POST /tenant-contacts)
-	CreateTenantContact(w http.ResponseWriter, r *http.Request)
-
-	// (GET /tenant-contacts/{id})
-	GetTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (PATCH /tenant-contacts/{id})
-	UpdateTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (POST /webhooks/payment/{provider})
 	HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, provider string)
@@ -2967,41 +2039,6 @@ func (_ Unimplemented) GetAddressSuggestions(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /finance/report)
-func (_ Unimplemented) GetFinanceReport(w http.ResponseWriter, r *http.Request, params GetFinanceReportParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /leases)
-func (_ Unimplemented) ListLeases(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /leases)
-func (_ Unimplemented) CreateLease(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /leases/{id})
-func (_ Unimplemented) GetLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /leases/{id})
-func (_ Unimplemented) UpdateLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /leases/{id}/complete)
-func (_ Unimplemented) CompleteLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /leases/{leaseId}/reminders)
-func (_ Unimplemented) ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // (GET /me)
 func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -3029,51 +2066,6 @@ func (_ Unimplemented) GetNotificationPreferences(w http.ResponseWriter, r *http
 
 // (PUT /notification-preferences)
 func (_ Unimplemented) UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /operation-categories)
-func (_ Unimplemented) ListOperationCategories(w http.ResponseWriter, r *http.Request, params ListOperationCategoriesParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /operation-categories)
-func (_ Unimplemented) CreateOperationCategory(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /operations)
-func (_ Unimplemented) ListOperations(w http.ResponseWriter, r *http.Request, params ListOperationsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (DELETE /operations/{id})
-func (_ Unimplemented) DeleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /operations/{id})
-func (_ Unimplemented) GetOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /operations/{id})
-func (_ Unimplemented) UpdateOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /operations/{id}/complete)
-func (_ Unimplemented) CompleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /operations/{id}/mark-incomplete)
-func (_ Unimplemented) MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /operations/{id}/move)
-func (_ Unimplemented) MoveOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3231,56 +2223,6 @@ func (_ Unimplemented) GetVapidPublicKey(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /recurring-operations)
-func (_ Unimplemented) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (DELETE /recurring-operations/{id})
-func (_ Unimplemented) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /recurring-operations/{id})
-func (_ Unimplemented) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /recurring-operations/{id})
-func (_ Unimplemented) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /recurring-operations/{id}/pause)
-func (_ Unimplemented) PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /recurring-operations/{id}/resume)
-func (_ Unimplemented) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /reminders)
-func (_ Unimplemented) ListReminders(w http.ResponseWriter, r *http.Request, params ListRemindersParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /reminders/calendar)
-func (_ Unimplemented) ListCalendarReminders(w http.ResponseWriter, r *http.Request, params ListCalendarRemindersParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (DELETE /reminders/{reminderId})
-func (_ Unimplemented) DeleteReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /reminders/{reminderId})
-func (_ Unimplemented) UpdateReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // (GET /subscription)
 func (_ Unimplemented) GetSubscription(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -3333,26 +2275,6 @@ func (_ Unimplemented) ListSubscriptionPayments(w http.ResponseWriter, r *http.R
 
 // (GET /tariffs)
 func (_ Unimplemented) ListTariffs(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /tenant-contacts)
-func (_ Unimplemented) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /tenant-contacts)
-func (_ Unimplemented) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /tenant-contacts/{id})
-func (_ Unimplemented) GetTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /tenant-contacts/{id})
-func (_ Unimplemented) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4759,226 +3681,6 @@ func (siw *ServerInterfaceWrapper) GetAddressSuggestions(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
-// GetFinanceReport operation middleware
-func (siw *ServerInterfaceWrapper) GetFinanceReport(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetFinanceReportParams
-
-	// ------------- Optional query parameter "from" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "to" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFinanceReport(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListLeases operation middleware
-func (siw *ServerInterfaceWrapper) ListLeases(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListLeases(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateLease operation middleware
-func (siw *ServerInterfaceWrapper) CreateLease(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateLease(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetLease operation middleware
-func (siw *ServerInterfaceWrapper) GetLease(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetLease(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateLease operation middleware
-func (siw *ServerInterfaceWrapper) UpdateLease(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateLease(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CompleteLease operation middleware
-func (siw *ServerInterfaceWrapper) CompleteLease(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CompleteLease(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListLeaseReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListLeaseReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "leaseId" -------------
-	var leaseId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "leaseId", chi.URLParam(r, "leaseId"), &leaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "leaseId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListLeaseReminders(w, r, leaseId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
@@ -5090,427 +3792,6 @@ func (siw *ServerInterfaceWrapper) UpdateNotificationPreferences(w http.Response
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateNotificationPreferences(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListOperationCategories operation middleware
-func (siw *ServerInterfaceWrapper) ListOperationCategories(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListOperationCategoriesParams
-
-	// ------------- Optional query parameter "type" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListOperationCategories(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateOperationCategory operation middleware
-func (siw *ServerInterfaceWrapper) CreateOperationCategory(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateOperationCategory(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListOperations operation middleware
-func (siw *ServerInterfaceWrapper) ListOperations(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListOperationsParams
-
-	// ------------- Optional query parameter "type" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "status" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "category_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "category_id", r.URL.Query(), &params.CategoryId, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "category_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "property_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "from" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "to" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "recurring_operation_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "recurring_operation_id", r.URL.Query(), &params.RecurringOperationId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "recurring_operation_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recurring_operation_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "lease_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "lease_id", r.URL.Query(), &params.LeaseId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lease_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lease_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "exclude_archived_properties" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "exclude_archived_properties", r.URL.Query(), &params.ExcludeArchivedProperties, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "exclude_archived_properties"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "exclude_archived_properties", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListOperations(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteOperation operation middleware
-func (siw *ServerInterfaceWrapper) DeleteOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetOperation operation middleware
-func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateOperation operation middleware
-func (siw *ServerInterfaceWrapper) UpdateOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CompleteOperation operation middleware
-func (siw *ServerInterfaceWrapper) CompleteOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CompleteOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// MarkOperationIncomplete operation middleware
-func (siw *ServerInterfaceWrapper) MarkOperationIncomplete(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.MarkOperationIncomplete(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// MoveOperation operation middleware
-func (siw *ServerInterfaceWrapper) MoveOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.MoveOperation(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6461,354 +4742,6 @@ func (siw *ServerInterfaceWrapper) GetVapidPublicKey(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
-// ListRecurringOperations operation middleware
-func (siw *ServerInterfaceWrapper) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRecurringOperations(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) GetRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// PauseRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) PauseRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PauseRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ResumeRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ResumeRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListRemindersParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListReminders(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListCalendarReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListCalendarReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListCalendarRemindersParams
-
-	// ------------- Required query parameter "from" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		}
-		return
-	}
-
-	// ------------- Required query parameter "to" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListCalendarReminders(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteReminder operation middleware
-func (siw *ServerInterfaceWrapper) DeleteReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "reminderId" -------------
-	var reminderId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "reminderId", chi.URLParam(r, "reminderId"), &reminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reminderId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteReminder(w, r, reminderId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateReminder operation middleware
-func (siw *ServerInterfaceWrapper) UpdateReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "reminderId" -------------
-	var reminderId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "reminderId", chi.URLParam(r, "reminderId"), &reminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reminderId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateReminder(w, r, reminderId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetSubscription operation middleware
 func (siw *ServerInterfaceWrapper) GetSubscription(w http.ResponseWriter, r *http.Request) {
 
@@ -7053,110 +4986,6 @@ func (siw *ServerInterfaceWrapper) ListTariffs(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
-// ListTenantContacts operation middleware
-func (siw *ServerInterfaceWrapper) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListTenantContacts(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateTenantContact operation middleware
-func (siw *ServerInterfaceWrapper) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateTenantContact(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetTenantContact operation middleware
-func (siw *ServerInterfaceWrapper) GetTenantContact(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetTenantContact(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateTenantContact operation middleware
-func (siw *ServerInterfaceWrapper) UpdateTenantContact(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateTenantContact(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // HandlePaymentWebhook operation middleware
 func (siw *ServerInterfaceWrapper) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request) {
 
@@ -7381,27 +5210,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/dadata/suggestions/address", wrapper.GetAddressSuggestions)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/finance/report", wrapper.GetFinanceReport)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/leases", wrapper.ListLeases)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/leases", wrapper.CreateLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/leases/{id}", wrapper.GetLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/leases/{id}", wrapper.UpdateLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/leases/{id}/complete", wrapper.CompleteLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/leases/{leaseId}/reminders", wrapper.ListLeaseReminders)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
@@ -7418,33 +5226,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/notification-preferences", wrapper.UpdateNotificationPreferences)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/operation-categories", wrapper.ListOperationCategories)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/operation-categories", wrapper.CreateOperationCategory)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/operations", wrapper.ListOperations)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/operations/{id}", wrapper.DeleteOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/operations/{id}", wrapper.GetOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/operations/{id}", wrapper.UpdateOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/operations/{id}/complete", wrapper.CompleteOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/operations/{id}/mark-incomplete", wrapper.MarkOperationIncomplete)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/operations/{id}/move", wrapper.MoveOperation)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/popups/pending", wrapper.GetPendingPopups)
@@ -7534,36 +5315,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/push/vapid-public-key", wrapper.GetVapidPublicKey)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/recurring-operations", wrapper.ListRecurringOperations)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/recurring-operations/{id}", wrapper.DeleteRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/recurring-operations/{id}", wrapper.GetRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/recurring-operations/{id}", wrapper.UpdateRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/recurring-operations/{id}/pause", wrapper.PauseRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/recurring-operations/{id}/resume", wrapper.ResumeRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/reminders", wrapper.ListReminders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/reminders/calendar", wrapper.ListCalendarReminders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/reminders/{reminderId}", wrapper.DeleteReminder)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/reminders/{reminderId}", wrapper.UpdateReminder)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/subscription", wrapper.GetSubscription)
 	})
 	r.Group(func(r chi.Router) {
@@ -7597,18 +5348,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/tariffs", wrapper.ListTariffs)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/tenant-contacts", wrapper.ListTenantContacts)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/tenant-contacts", wrapper.CreateTenantContact)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/tenant-contacts/{id}", wrapper.GetTenantContact)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/tenant-contacts/{id}", wrapper.UpdateTenantContact)
-	})
-	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/webhooks/payment/{provider}", wrapper.HandlePaymentWebhook)
 	})
 
@@ -7620,228 +5359,177 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -11,7 +11,6 @@ import (
 
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
@@ -78,20 +77,6 @@ var userFacingDetails = []struct {
 	{propertiesapp.ErrAlreadyArchived, "Объект уже в архиве"},
 	{propertiesapp.ErrNotArchived, "Объект не в архиве"},
 
-	// Leases.
-	{leasesapp.ErrInvalidInput, "Некорректные данные"},
-	{leasesapp.ErrInvalidTransition, "Некорректный переход статуса аренды"},
-	{leasesapp.ErrNotFound, detailNotFound},
-	{leasesapp.ErrPropertyNotAvailable, "Объект недоступен для аренды"},
-	{leasesapp.ErrOpenLeaseExists, "У объекта уже есть открытая аренда"},
-	{leasesapp.ErrAlreadyCompleted, "Аренда уже завершена"},
-	{leasesapp.ErrOperationAlreadyCompleted, "Операция уже завершена"},
-	{leasesapp.ErrRecurringOperationLeaseCreated, "Серию, созданную договором аренды, нельзя удалить"},
-	{leasesapp.ErrArchivedLease, "Нельзя изменить архивную аренду"},
-	{leasesapp.ErrArchivedProperty, "Объект в архиве"},
-	{leasesapp.ErrTenantContactNotFound, "Арендатор не найден"},
-	{leasesapp.ErrDuplicatePhone, "Арендатор с таким телефоном уже существует"},
-
 	// Billing / subscriptions.
 	{billingdomain.ErrInvalidPeriod, "Период должен быть месяц или год"},
 	{billingdomain.ErrInvalidTariff, "Некорректное название тарифа"},
@@ -109,10 +94,7 @@ var userFacingDetails = []struct {
 	// Admin.
 	{adminapp.ErrInvalidFilter, "Некорректный параметр фильтра или сортировки"},
 
-	// Notifications / reminders.
-	{notificationsapp.ErrInvalidReminderDate, "Некорректная дата напоминания"},
-	{notificationsapp.ErrReminderNotPending, "Напоминание не в статусе ожидания"},
-	{notificationsapp.ErrConcurrentUpdate, "Напоминание изменено одновременно"},
+	// Notifications (preferences, push subscriptions).
 	{notificationsapp.ErrNotFound, detailNotFound},
 }
 

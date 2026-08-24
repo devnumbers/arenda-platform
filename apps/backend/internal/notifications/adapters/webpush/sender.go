@@ -174,14 +174,13 @@ func (s *Sender) mapResponse(ctx context.Context, resp *http.Response) error {
 	}
 }
 
-// urgencyForEventType maps the reminder event type to a Web Push Urgency header
-// value (RFC 8030 §5.3). Overdue and requires-action events are time-critical
-// (the user is already late) and get "high" so the device wakes immediately;
-// upcoming reminders and free reminders get "normal" to save battery (research
-// #174 §4).
+// urgencyForEventType maps the notification event type to a Web Push Urgency
+// header value (RFC 8030 §5.3). The grace events are time-critical (the
+// subscription window is closing) and get "high" so the device wakes
+// immediately; anything else gets "normal" to save battery (research #174 §4).
 func urgencyForEventType(eventType domain.EventType) string {
 	switch eventType {
-	case domain.EventOperationOverdue, domain.EventLeaseRequiresAction:
+	case domain.EventSubscriptionGrace:
 		return urgencyHigh
 	default:
 		return urgencyNormal

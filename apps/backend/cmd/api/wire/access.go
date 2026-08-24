@@ -7,8 +7,6 @@ import (
 	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
-	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
-	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	propertiespg "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/postgres"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
@@ -42,13 +40,6 @@ var (
 	// T11); the AccessService resolves owner display names for the banner.
 	_ propertiesapp.SharedMemberships        = (*accesspg.SharedProperties)(nil)
 	_ propertiesapp.OwnerDisplayNameResolver = (*accessapp.AccessService)(nil)
-	// The SharedProperties adapter also serves the leases context (operation
-	// list, finance report, lease list, recurring-operations list) and the
-	// notifications context (calendar agenda, reminders list): both consume
-	// the ids of properties shared with the actor to fold shared data into
-	// aggregate reads (issue #157, T3).
-	_ leasesapp.SharedPropertyIDs        = (*accesspg.SharedProperties)(nil)
-	_ notificationsapp.SharedPropertyIDs = (*accesspg.SharedProperties)(nil)
 	// The OwnerResolver doubles as the archived-status resolver of the access
 	// application services (issue #163).
 	_ accessapp.PropertyStatusResolver = (*accesspg.OwnerResolver)(nil)
@@ -59,7 +50,7 @@ var (
 // (over the identity user repository), the membership-aware policy, the access
 // service, and the recipient tariff slot coordinator (issue #158, T4). It
 // returns the policy so the composition root can install it on the shared
-// platform deps before property/lease/operation services are wired (they all
+// platform deps before property services are wired (they all
 // receive the policy). The slot coordinator needs the billing property limiter
 // (built from the billing repos) plus the properties occupancy/owned-property
 // providers, so billingRepos is required; the properties adapters are rebuilt

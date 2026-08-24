@@ -1,4 +1,4 @@
-// Package tzresolver defines the timezone-resolution and reminder-rescheduling ports shared by Rental contexts.
+// Package tzresolver defines the timezone-resolution port shared by the platform contexts.
 package tzresolver
 
 import (
@@ -12,11 +12,4 @@ import (
 // Implementations should cache results since a user's timezone changes rarely.
 type OwnerTimezoneResolver interface {
 	Resolve(ctx context.Context, ownerID uuid.UUID) (*time.Location, error)
-}
-
-// ReminderRescheduler recalculates pending reminder send times when an owner's
-// timezone changes. Wall-clock semantics: the same local date and time-of-day
-// are preserved in the new timezone.
-type ReminderRescheduler interface {
-	RescheduleForTimezoneChange(ctx context.Context, ownerID uuid.UUID, oldTZ, newTZ string) error
 }

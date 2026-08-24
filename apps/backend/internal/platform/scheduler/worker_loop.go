@@ -1,5 +1,5 @@
-// Package scheduler holds the periodic workers: billing subscription phases, payment and lease reconciliation,
-// overdue scanning and reminder dispatch, on advisory-locked ticker loops.
+// Package scheduler holds the periodic workers: billing subscription phases
+// and payment reconciliation on advisory-locked ticker loops.
 package scheduler
 
 import (

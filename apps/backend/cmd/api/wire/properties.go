@@ -22,13 +22,11 @@ type Properties struct {
 // WireProperties constructs the properties repositories, the subscription
 // limiter (billing-backed), the photo storage (S3 or fake based on config), the
 // property and property-contact services and the dadata address suggester. It
-// takes the billing subscription limiter deps and the leases repos (for the
-// property billing lifecycle).
+// takes the billing subscription limiter deps.
 func WireProperties(
 	ctx context.Context,
 	p platformDeps,
 	billing *Billing,
-	leasesRepos *LeasesRepos,
 ) (*Properties, error) {
 	propertyRepo := propertiespg.NewPropertyRepository(p.DB)
 	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(p.DB)
@@ -71,7 +69,6 @@ func WireProperties(
 		propertyPhotoRepo,
 		propertyContactRepo,
 		limiter,
-		leasesRepos.PropertyBillingLifecycle,
 		p.AuditRecorder,
 		p.UoW,
 	)
@@ -80,10 +77,8 @@ func WireProperties(
 		propertyRepo,
 		propertyPhotoRepo,
 		photoStorage,
-		leasesRepos.PropertyBillingLifecycle,
 		factory,
 		p.Clock,
-		p.TZResolver,
 		p.Policy,
 		p.Logger,
 	)

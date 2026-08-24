@@ -17,8 +17,6 @@ import (
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
-	leaseshttp "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/http"
-	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationshttp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/http"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
@@ -28,7 +26,6 @@ import (
 	propertieshttp "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/http"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
-	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -62,14 +59,6 @@ type Deps struct {
 	AddressSuggester         propertiesapp.AddressSuggester
 	Access                   *accessapp.AccessService
 	Invitations              *accessapp.InvitationService
-	Leases                   *leasesapp.LeaseService
-	TenantContacts           *leasesapp.TenantContactService
-	Operations               *leasesapp.OperationService
-	Export                   *leasesapp.ExportService
-	RecurringOperations      *leasesapp.RecurringOperationService
-	Categories               *leasesapp.CategoryService
-	Reminders                *notificationsapp.ReminderService
-	Calendar                 *notificationsapp.CalendarService
 	NotificationPreferences  *notificationsapp.PreferenceService
 	PushSubscriptions        *notificationsapp.PushSubscriptionService
 	VAPIDPublicKey           string
@@ -78,7 +67,6 @@ type Deps struct {
 	CookieSecure             bool
 	Logger                   *slog.Logger
 	Clock                    clock.Clock
-	TZResolver               sharedtz.OwnerTimezoneResolver
 	LogSuccessfulRequests    bool
 	IPRateLimiter            *httpsupport.RateLimiter
 	EmailSendLimiter         *httpsupport.RateLimiter
@@ -153,17 +141,9 @@ func New(deps Deps) http.Handler {
 		deps.PropertyContacts,
 		deps.Logger,
 		deps.Clock,
-		deps.TZResolver,
 	)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
-	leaseHandlers := leaseshttp.NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock, deps.TZResolver)
-	operationHandlers := leaseshttp.NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
-	recurringOperationHandlers := leaseshttp.NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
-	categoryHandlers := leaseshttp.NewCategoryHandlers(deps.Categories, deps.Logger)
-	reminderHandlers := notificationshttp.NewReminderHandlers(
-		deps.Reminders, deps.Calendar, deps.Operations,
-		deps.RecurringOperations, deps.Leases, deps.Logger)
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
@@ -171,7 +151,6 @@ func New(deps Deps) http.Handler {
 		deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers,
 		deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments,
 		deps.AdminSubscriptions, deps.Logger)
-	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
@@ -180,17 +159,11 @@ func New(deps Deps) http.Handler {
 		PropertyHandlers:               propertyHandlers,
 		MemberHandlers:                 accessMemberHandlers,
 		InvitationHandlers:             accessInvitationHandlers,
-		LeaseHandlers:                  leaseHandlers,
-		OperationHandlers:              operationHandlers,
-		RecurringOperationHandlers:     recurringOperationHandlers,
-		ReminderHandlers:               reminderHandlers,
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
 		PushSubscriptionHandlers:       pushSubscriptionHandlers,
 		PopupHandlers:                  popupHandlers,
 		BillingHandlers:                billingHandlers,
-		FinanceHandlers:                financeHandlers,
 		AdminHandlers:                  adminHandlers,
-		CategoryHandlers:               categoryHandlers,
 		ClientErrorsHandlers:           clientErrorsHandlers,
 	}
 
@@ -305,16 +278,10 @@ type composedHandler struct {
 	*propertieshttp.PropertyHandlers
 	*accesshttp.MemberHandlers
 	*accesshttp.InvitationHandlers
-	*leaseshttp.LeaseHandlers
-	*leaseshttp.OperationHandlers
-	*leaseshttp.RecurringOperationHandlers
-	*notificationshttp.ReminderHandlers
 	*notificationshttp.NotificationPreferenceHandlers
 	*notificationshttp.PushSubscriptionHandlers
 	*popupshttp.PopupHandlers
 	*billinghttp.BillingHandlers
-	*leaseshttp.FinanceHandlers
 	*adminhttp.AdminHandlers
-	*leaseshttp.CategoryHandlers
 	*httpsupport.ClientErrorsHandlers
 }

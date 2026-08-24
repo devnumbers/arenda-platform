@@ -25,7 +25,10 @@ const preDropFreeRemindersVersion = 107
 // Like the cycle test it always starts its own PostgreSQL container: it
 // plants pre-removal data at version 107 and then steps 108 up and down, so
 // the shared testdb fixture (already at the latest version, where planting
-// is structurally impossible) cannot serve it.
+// is structurally impossible) cannot serve it. The steps target version 108
+// exactly (not the chain tail): 000114 later drops the reminders table
+// altogether, and this contract is about 108's own erase-and-rebuild pair.
+// A final MigrateUp then proves the rest of the chain still applies.
 func TestFreeRemindersDropContract(t *testing.T) {
 	t.Parallel()
 
@@ -69,9 +72,7 @@ func TestFreeRemindersDropContract(t *testing.T) {
 	f := seedFreeRemindersFixture(t, pool)
 
 	// Up: 000108 erases the free-reminders data and drops the schema.
-	if err := MigrateUp(url, dir); err != nil {
-		t.Fatalf("migrate up: %v", err)
-	}
+	migrateToVersion(t, url, dir, 108)
 	assertFreeRemindersDropped(t, pool, f)
 
 	// Down: the paired migration recreates the structure — never the data.
@@ -80,11 +81,15 @@ func TestFreeRemindersDropContract(t *testing.T) {
 
 	// The second up must also work on a database that went through down and
 	// carries the free rows planted by the down assertions.
+	migrateToVersion(t, url, dir, 108)
+	assertFreeRemindersReErased(t, pool, replanted)
+
+	// The tail of the chain (109..114, including the leases drop of #438)
+	// must still apply cleanly on top of the 108 state.
 	if err := MigrateUp(url, dir); err != nil {
-		t.Fatalf("migrate up again: %v", err)
+		t.Fatalf("migrate up to latest: %v", err)
 	}
 	assertSchemaAtLatestVersion(t, url, dir)
-	assertFreeRemindersReErased(t, pool, replanted)
 }
 
 // migrateToVersion applies migrations up or down until the schema sits at

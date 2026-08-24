@@ -1,12 +1,21 @@
+// Package domain defines the notifications vocabulary: the event types,
+// delivery channels, per-channel preferences and push subscriptions.
 package domain
+
+// EventType identifies the kind of a notification. The domain knows only
+// subscription_grace (issue #438): the rental event types were removed with
+// the leases context, but their values remain as dead rows in the
+// notification_event_type enum in PostgreSQL (the #277 precedent) — stored
+// preference rows referencing them are simply ignored.
+type EventType string
+
+// EventSubscriptionGrace covers the billing grace lifecycle notifications:
+// a failed renewal charge entering grace and the grace window closing.
+const EventSubscriptionGrace EventType = "subscription_grace"
 
 // AllEventTypes lists every notification event type in stable order.
 func AllEventTypes() []EventType {
 	return []EventType{
-		EventOperationDue,
-		EventOperationOverdue,
-		EventLeaseExpiring,
-		EventLeaseRequiresAction,
 		EventSubscriptionGrace,
 	}
 }
@@ -14,7 +23,7 @@ func AllEventTypes() []EventType {
 // IsValid reports whether the event type is a known notification event type.
 func (e EventType) IsValid() bool {
 	switch e {
-	case EventOperationDue, EventOperationOverdue, EventLeaseExpiring, EventLeaseRequiresAction, EventSubscriptionGrace:
+	case EventSubscriptionGrace:
 		return true
 	default:
 		return false

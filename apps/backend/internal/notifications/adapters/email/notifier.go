@@ -1,16 +1,16 @@
-// Package email renders reminder emails and sends them through the platform mailer.
+// Package email renders direct notification emails and sends them through
+// the platform mailer.
 package email
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 )
 
-// Notifier sends reminders via email.
+// Notifier sends direct notifications via email.
 type Notifier struct {
 	sender   mailer.Sender
 	renderer *mailer.Renderer
@@ -21,13 +21,9 @@ func NewNotifier(sender mailer.Sender, renderer *mailer.Renderer) *Notifier {
 	return &Notifier{sender: sender, renderer: renderer}
 }
 
-func reminderSubject(title string) string {
-	return "Напоминание от Рентли: " + title
-}
-
-// SendDirect renders the named template and sends a one-off email outside the
-// reminder lifecycle (issue #253): the direct-notification service owns the
-// subject and content, so unlike Notify it carries no reminder subject prefix.
+// SendDirect renders the named template and sends a one-off email outside any
+// worker lifecycle (issue #253): the direct-notification service owns the
+// subject and content.
 func (n *Notifier) SendDirect(ctx context.Context, to, subject, template string, data map[string]any) error {
 	plain, html, err := n.renderer.Render(template, data)
 	if err != nil {
@@ -44,37 +40,5 @@ func (n *Notifier) SendDirect(ctx context.Context, to, subject, template string,
 	}
 	return nil
 }
-
-// Notify sends a reminder email.
-func (n *Notifier) Notify(
-	ctx context.Context,
-	notification application.Notification,
-) error {
-	if notification.Contact == nil || notification.Contact.Email == "" {
-		return errors.New("notification contact missing email")
-	}
-
-	plain, html, err := n.renderer.Render("reminder", map[string]any{
-		"Subject": notification.Title,
-		"Title":   notification.Title,
-		"Body":    notification.Body,
-	})
-	if err != nil {
-		return fmt.Errorf("render reminder email: %w", err)
-	}
-
-	msg := mailer.Message{
-		To:       []string{notification.Contact.Email},
-		Subject:  reminderSubject(notification.Title),
-		TextBody: plain,
-		HTMLBody: html,
-	}
-	if err := n.sender.Send(ctx, msg); err != nil {
-		return fmt.Errorf("send reminder email: %w", err)
-	}
-	return nil
-}
-
-var _ application.Notifier = (*Notifier)(nil)
 
 var _ application.DirectEmailSender = (*Notifier)(nil)
