@@ -658,7 +658,11 @@ func (p *Provider) ParseWebhook(_ context.Context, payload []byte) (application.
 	}
 
 	status := domain.PaymentStatus(raw.Status)
-	if status != domain.PaymentStatusSucceeded && status != domain.PaymentStatusFailed {
+	switch status {
+	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed, domain.PaymentStatusRefunded:
+		// Refunded is the provider-side money-left event a real provider
+		// delivers as a REFUNDED/REVERSED webhook (issue #432).
+	default:
 		return application.WebhookEvent{}, fmt.Errorf("fake: unsupported webhook status %q", raw.Status)
 	}
 

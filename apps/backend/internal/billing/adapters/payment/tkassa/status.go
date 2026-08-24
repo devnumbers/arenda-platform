@@ -9,14 +9,18 @@ import (
 
 // mapStatus maps T-Kassa payment statuses to the domain status model.
 // REVERSED/PARTIAL_REVERSED here come from GetState/webhook: the provider
-// reports a reversal of the payment (a dispute or chargeback) whose outcome for
-// our subscription payment is unclear, so both are treated as failed
-// (ADR 0017 §Polling). In mapCancelStatus the same statuses answer a Cancel
-// call we made ourselves, so they mean the refund we requested succeeded and
-// map to refunded instead. PARTIAL_REFUNDED maps to refunded: the new domain
-// has no partial-refund status (ADR 0037 — refunds are full-amount only), and
-// a provider-side partial outcome still ends the refund flow with the payment
-// in its terminal refunded state.
+// reports a reversal of the payment (a hold cancelled before capture, or a
+// dispute/chargeback after it) whose outcome for our subscription payment is
+// that the money left the merchant, so both map to refunded and the refund
+// application seam brings the subscription to the money-consistent state
+// (issue #432, ADR 0017 §Polling). A reversal of a never-captured charge is a
+// no-op there — a failed payment has nothing to refund. In mapCancelStatus
+// the same statuses answer a Cancel call we made ourselves, so they equally
+// mean the refund we requested succeeded and map to refunded.
+// PARTIAL_REFUNDED maps to refunded: the new domain has no partial-refund
+// status (ADR 0037 — refunds are full-amount only), and a provider-side
+// partial outcome still ends the refund flow with the payment in its terminal
+// refunded state.
 func mapStatus(status string) domain.PaymentStatus {
 	switch status {
 	case statusNew, statusAuthorized, statusAuthorizing, status3DSChecking,
@@ -33,10 +37,10 @@ func mapStatus(status string) domain.PaymentStatus {
 		return domain.PaymentStatusPending
 	case statusConfirmed:
 		return domain.PaymentStatusSucceeded
-	case statusRefunded, statusPartialRefunded:
+	case statusRefunded, statusPartialRefunded, statusReversed, statusPartialReversed:
 		return domain.PaymentStatusRefunded
 	case statusRejected, statusAuthFail, statusCanceled, statusDeadlineExpired,
-		statusReversed, statusPartialReversed, status3DSFailed:
+		status3DSFailed:
 		return domain.PaymentStatusFailed
 	default:
 		return domain.PaymentStatusPending

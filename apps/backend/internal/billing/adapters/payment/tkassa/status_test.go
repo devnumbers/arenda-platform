@@ -8,11 +8,12 @@ import (
 )
 
 // TestMapStatus pins the full payment-status mapping, including the deliberate
-// decisions: REVERSED and PARTIAL_REVERSED from GetState/webhook are failed
-// (ADR 0017 §Polling — a reversal of unclear origin is not a refund for our
-// subscription payment), unknown statuses default to pending, and
-// PARTIAL_REFUNDED lands in refunded because the new domain has no
-// partial-refund status (ADR 0037, issue #246 §3.1).
+// decisions: REVERSED and PARTIAL_REVERSED from GetState/webhook are refunded
+// (ADR 0017 §Polling, issue #432 — a provider-side reversal, including a
+// chargeback after a locally successful payment, means the money left the
+// merchant, so the refund seam applies it to the subscription), unknown
+// statuses default to pending, and PARTIAL_REFUNDED lands in refunded because
+// the new domain has no partial-refund status (ADR 0037, issue #246 §3.1).
 func TestMapStatus(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -46,8 +47,8 @@ func TestMapStatus(t *testing.T) {
 		{statusAuthFail, domain.PaymentStatusFailed},
 		{statusDeadlineExpired, domain.PaymentStatusFailed},
 		{statusCanceled, domain.PaymentStatusFailed},
-		{statusReversed, domain.PaymentStatusFailed},
-		{statusPartialReversed, domain.PaymentStatusFailed},
+		{statusReversed, domain.PaymentStatusRefunded},
+		{statusPartialReversed, domain.PaymentStatusRefunded},
 		{status3DSFailed, domain.PaymentStatusFailed},
 	}
 	for _, tt := range tests {

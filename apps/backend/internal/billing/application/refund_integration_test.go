@@ -598,3 +598,102 @@ func TestAdminPayments_GetAdminPaymentAndInvalidFilters(t *testing.T) {
 		t.Fatalf("unknown payment err = %v, want ErrPaymentNotFound", err)
 	}
 }
+
+// refundTransitionCount counts the subscription's refunded transitions —
+// the idempotency probe of the chargeback scenarios.
+func (h *refundIntegrationHarness) refundTransitionCount(t *testing.T, subscriptionID uuid.UUID) int {
+	t.Helper()
+	count := 0
+	for _, tr := range h.transitionsOf(t, subscriptionID) {
+		if tr.Reason == domain.TransitionReasonRefunded {
+			count++
+		}
+	}
+	return count
+}
+
+// TestChargebackReversed_AfterSucceededDowngrades proves the terminal
+// processing of a bank-side money reversal (issue #432): a REVERSED delivery
+// after a locally successful payment maps to a refund, so the payment becomes
+// refunded, the subscription falls to the basic tariff and the transition log
+// records the downgrade with the refunded reason attributed to the system. A
+// repeated delivery of the same reversal is an idempotent no-op.
+func TestChargebackReversed_AfterSucceededDowngrades(t *testing.T) {
+	t.Parallel()
+	h := newRefundIntegrationHarness(t)
+	payment := h.succeededUpgradePayment(t)
+
+	h.deliverWebhook(t, *payment.ProviderPaymentID, domain.PaymentStatusRefunded, payment.ID)
+
+	h.requireRefundedPaymentShape(t, payment)
+	subStored := h.requireRefundDowngradedSubscription(t, payment.UserID)
+
+	// The reversal is a provider-reported outcome, not an admin action: the
+	// transition entry and the audit record attribute it to the system.
+	transitions := h.transitionsOf(t, subStored.ID)
+	if len(transitions) == 0 {
+		t.Fatal("no transitions recorded")
+	}
+	refundTransition := transitions[0]
+	if refundTransition.Reason != domain.TransitionReasonRefunded {
+		t.Fatalf("latest transition reason = %q, want refunded", refundTransition.Reason)
+	}
+	if refundTransition.Initiator != domain.InitiatorSystem || refundTransition.InitiatorID != nil {
+		t.Fatalf("refund transition initiator = %q/%v, want the system", refundTransition.Initiator, refundTransition.InitiatorID)
+	}
+	if refundTransition.PaymentID == nil || *refundTransition.PaymentID != payment.ID {
+		t.Fatalf("refund transition payment = %v, want %v", refundTransition.PaymentID, payment.ID)
+	}
+
+	// A repeated delivery of the same reversal changes nothing: the payment
+	// stays refunded and no second refund transition appears.
+	h.deliverWebhook(t, *payment.ProviderPaymentID, domain.PaymentStatusRefunded, payment.ID)
+	h.requireRefundedPaymentShape(t, payment)
+	if got := h.refundTransitionCount(t, subStored.ID); got != 1 {
+		t.Fatalf("refund transitions = %d after redelivery, want 1", got)
+	}
+}
+
+// TestChargebackReversed_ConflictWithAdminRefund proves the deterministic
+// resolution of a refund that was already administered when the provider-side
+// reversal arrives (issue #432): the persisted refunded state wins, the
+// redelivery-like reversal is a no-op, and the transition log keeps the
+// admin-attributed entry without a duplicate.
+func TestChargebackReversed_ConflictWithAdminRefund(t *testing.T) {
+	t.Parallel()
+	h := newRefundIntegrationHarness(t)
+	payment := h.succeededUpgradePayment(t)
+
+	if err := h.paymentsSvc.RefundPayment(h.ctx(), h.adminID, payment.ID); err != nil {
+		t.Fatalf("RefundPayment: %v", err)
+	}
+	h.requireRefundedPaymentShape(t, payment)
+	subStored := h.requireRefundDowngradedSubscription(t, payment.UserID)
+	if got := h.refundTransitionCount(t, subStored.ID); got != 1 {
+		t.Fatalf("refund transitions = %d after the admin refund, want 1", got)
+	}
+
+	// The bank reversal of the same money arrives afterwards: the already
+	// finalized refund wins — nothing changes, no second transition.
+	h.deliverWebhook(t, *payment.ProviderPaymentID, domain.PaymentStatusRefunded, payment.ID)
+	h.requireRefundedPaymentShape(t, payment)
+	subStored = h.requireRefundDowngradedSubscription(t, payment.UserID)
+	if got := h.refundTransitionCount(t, subStored.ID); got != 1 {
+		t.Fatalf("refund transitions = %d after the conflicting reversal, want 1", got)
+	}
+
+	// The single entry keeps the admin attribution of the refund that
+	// finalized first.
+	adminTransitions := 0
+	for _, tr := range h.transitionsOf(t, subStored.ID) {
+		if tr.Reason == domain.TransitionReasonRefunded {
+			if tr.Initiator != domain.InitiatorAdmin || tr.InitiatorID == nil || *tr.InitiatorID != h.adminID {
+				t.Fatalf("refund transition initiator = %q/%v, want the acting admin", tr.Initiator, tr.InitiatorID)
+			}
+			adminTransitions++
+		}
+	}
+	if adminTransitions != 1 {
+		t.Fatalf("admin refund transitions = %d, want 1", adminTransitions)
+	}
+}
