@@ -50,7 +50,9 @@ const (
 	// PaymentPurposeSubscription is the first payment for a tariff change.
 	PaymentPurposeSubscription PaymentPurposeKind = "subscription_payment"
 	// PaymentPurposeRenewal is an automatic or manual renewal of the
-	// current tariff.
+	// current tariff, including the same-tariff reactivation of a
+	// cancelled subscription (issue #429): the payer continues the plan
+	// they are already on.
 	PaymentPurposeRenewal PaymentPurposeKind = "subscription_renewal"
 )
 

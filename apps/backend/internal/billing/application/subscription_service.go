@@ -195,9 +195,12 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 // on an active subscription is rejected; upgrades and same-tariff grace
 // renewals go through the payment flow (issue #250): the pending payment is
 // persisted before the provider is called, so a crash between the provider
-// initiation and the save is recoverable on retry. An upgrade on top of a
-// service subscription takes the payment path too (issue #255): the applied
-// payment converts the subscription into a paid one from the new period.
+// initiation and the save is recoverable on retry. A same-tariff request on a
+// cancelled subscription is its reactivation (issue #429, ADR 0008:
+// restoration goes through paying for a tariff) and shares that payment path.
+// An upgrade on top of a service subscription takes the payment path too
+// (issue #255): the applied payment converts the subscription into a paid one
+// from the new period.
 func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResult, error) {
 	var plan changeTariffPlan
 	if err := s.runInTx(ctx, func(stores *txStores) error {
@@ -244,9 +247,10 @@ func (s *SubscriptionService) planTariffChange(
 	}
 
 	now := s.clock.Now().UTC()
-	// A same-tariff request is a manual renewal while the subscription is
-	// in grace; it shares the payment path with upgrades (issue #250).
-	graceRenewal, err := sameTariffGraceRenewal(sub, newTariff, now)
+	// A same-tariff request is a manual payment while the subscription is in
+	// grace (a renewal, issue #250) or cancelled (its reactivation, issue
+	// #429); both share the payment path with upgrades.
+	manualPayment, err := sameTariffManualPayment(sub, newTariff, now)
 	if err != nil {
 		return changeTariffPlan{}, err
 	}
@@ -257,7 +261,7 @@ func (s *SubscriptionService) planTariffChange(
 	}
 
 	changeType := domain.ClassifyTariffChange(currentTariff, newTariff)
-	needsPayment := graceRenewal || changeType == domain.TariffChangeUpgrade
+	needsPayment := manualPayment || changeType == domain.TariffChangeUpgrade
 	if !sub.IsPaidSource() && !needsPayment {
 		// Service subscriptions are assigned and withdrawn by an admin
 		// (#255): the user controls neither their deferred changes nor
@@ -269,7 +273,7 @@ func (s *SubscriptionService) planTariffChange(
 		return changeTariffPlan{}, scheduleDeferredDowngrade(ctx, stores, userID, sub, currentTariff, newTariff, req.Period)
 	}
 
-	if err := s.checkPaymentInitiable(sub, changeType, now); err != nil {
+	if err := s.checkPaymentInitiable(sub, now); err != nil {
 		return changeTariffPlan{}, err
 	}
 	created, existing, err := s.planPayment(ctx, stores, sub, currentTariff, newTariff, req.Period)
@@ -277,7 +281,7 @@ func (s *SubscriptionService) planTariffChange(
 		return changeTariffPlan{}, err
 	}
 	paymentPurpose := PaymentPurposeSubscription
-	if graceRenewal {
+	if manualPayment {
 		paymentPurpose = PaymentPurposeRenewal
 	}
 	return changeTariffPlan{
@@ -306,15 +310,22 @@ func selectableTariff(ctx context.Context, stores *txStores, name domain.TariffN
 	return tariff, nil
 }
 
-// sameTariffGraceRenewal reports whether a same-tariff request is a manual
-// renewal of a subscription currently in its grace window (issue #250). The
-// expired window and the active same-tariff state are rejections.
-func sameTariffGraceRenewal(sub domain.Subscription, newTariff domain.Tariff, now time.Time) (bool, error) {
+// sameTariffManualPayment reports whether a same-tariff request is the manual
+// payment path: a renewal of a subscription currently in its grace window
+// (issue #250) or the reactivation of a cancelled one (issue #429, ADR 0008:
+// restoration goes through paying for a tariff). The expired grace window and
+// the active same-tariff state are rejections.
+func sameTariffManualPayment(sub domain.Subscription, newTariff domain.Tariff, now time.Time) (bool, error) {
 	if sub.TariffID != newTariff.ID {
 		return false, nil
 	}
 	switch {
 	case sub.IsInGrace(now):
+		return true, nil
+	case sub.Status == domain.SubscriptionStatusCancelled:
+		// Paying for the plan the subscription is already on restores it:
+		// the "already on this tariff" rejection is reserved for active
+		// subscriptions.
 		return true, nil
 	case sub.Status == domain.SubscriptionStatusGrace:
 		// The grace window has expired; the worker downgrade to basic
@@ -339,13 +350,13 @@ func currentTariffOf(ctx context.Context, stores *txStores, sub domain.Subscript
 }
 
 // checkPaymentInitiable guards the payment path: payments start from a live
-// subscription or as the recovery-upgrade of a cancelled one (ADR 0008:
-// restoration goes through paying for a tariff), and a provider must be wired
-// before any payment is planned (no pending row is left behind).
-func (s *SubscriptionService) checkPaymentInitiable(sub domain.Subscription, changeType domain.TariffChangeType, now time.Time) error {
-	recoveryUpgrade := changeType == domain.TariffChangeUpgrade &&
-		sub.Status == domain.SubscriptionStatusCancelled
-	if !sub.CanInitiatePayment(now) && !recoveryUpgrade {
+// subscription — active, in grace, or cancelled awaiting its restoration
+// payment (ADR 0008: restoration goes through paying for a tariff; the
+// recovery upgrade and the same-tariff reactivation of issue #429) — and a
+// provider must be wired before any payment is planned (no pending row is
+// left behind).
+func (s *SubscriptionService) checkPaymentInitiable(sub domain.Subscription, now time.Time) error {
+	if !sub.CanInitiatePayment(now) {
 		return domain.ErrInvalidSubscriptionState
 	}
 	if s.provider == nil {

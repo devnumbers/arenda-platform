@@ -158,9 +158,12 @@ func (s *Subscription) IsPaidSource() bool {
 }
 
 // CanInitiatePayment reports whether the subscription status allows a new
-// payment to be started at the given moment.
+// payment to be started at the given moment. A cancelled subscription pays
+// too: its restoration goes through paying for a tariff (ADR 0008, billing
+// CONTEXT.md, issue #429). Only a grace window that has expired — the worker
+// downgrade to basic is due — refuses to start one.
 func (s *Subscription) CanInitiatePayment(now time.Time) bool {
-	if s.Status == SubscriptionStatusActive {
+	if s.Status == SubscriptionStatusActive || s.Status == SubscriptionStatusCancelled {
 		return true
 	}
 	return s.IsInGrace(now)
@@ -251,7 +254,11 @@ func (s *Subscription) ApplyTariffChange(
 // applied payment. For an active subscription the extension stacks on the
 // current valid_until when it exists and is in the future, so an early renewal
 // keeps the paid remainder. Renewals in grace or after expiry start from now:
-// grace is not paid time and must not be gifted. A successful renewal also
+// grace is not paid time and must not be gifted. A renewal landing on a
+// cancelled subscription is its reactivation (issue #429): the paid period
+// starts from the payment moment — the cancelled remainder does not stack —
+// the status returns to active and auto-renew switches back on, putting the
+// subscription on the normal renewal cycle again. A successful renewal also
 // clears any scheduled downgrade. Like every applied payment, it puts the
 // subscription on the paid track (issue #255).
 func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeriod, now time.Time) error {
@@ -265,6 +272,11 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 	validUntil := addSubscriptionPeriod(base, period)
 	s.ValidUntil = &validUntil
 	s.Source = SubscriptionSourcePaid
+	if s.Status == SubscriptionStatusCancelled {
+		// Reactivation (#429): the payment puts the subscription back on
+		// the normal renewal cycle.
+		s.AutoRenewEnabled = true
+	}
 	s.LastAppliedPaymentID = &paymentID
 	s.CurrentPeriod = &period
 	s.Status = SubscriptionStatusActive

@@ -171,6 +171,82 @@ func TestPaymentFlow_UpgradeEndToEnd(t *testing.T) {
 	}
 }
 
+// TestPaymentFlow_CancelledSameTariffReactivationEndToEnd proves the
+// reactivation of issue #429 against real PostgreSQL through the full webhook
+// path: a cancelled subscription paying for the plan it is already on goes
+// through the payment flow (no "already on this tariff" rejection), and the
+// confirmed payment returns it to active with auto-renew on, the period
+// counted from the payment moment, and the transition log recording the move
+// out of cancelled.
+func TestPaymentFlow_CancelledSameTariffReactivationEndToEnd(t *testing.T) {
+	t.Parallel()
+	h := newPaymentIntegrationHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffPro)
+	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), sub.UserID); err != nil {
+		t.Fatalf("CancelSubscription(): %v", err)
+	}
+
+	result, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), sub.UserID, billingapp.ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff(reactivation): %v", err)
+	}
+	if result.PaymentID == uuid.Nil || result.ConfirmURL == "" {
+		t.Fatalf("result = %+v, want a payment id and a payer url", result)
+	}
+	payment, err := h.payments.GetByID(h.ctx(), result.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if payment.AmountKopecks != 49000 {
+		t.Fatalf("amount = %d, want the full pro month price 49000", payment.AmountKopecks)
+	}
+
+	h.confirmFakePayment(t, payment.ID)
+
+	finalized, err := h.payments.GetByID(h.ctx(), payment.ID)
+	if err != nil {
+		t.Fatalf("GetByID(finalized): %v", err)
+	}
+	if finalized.Status != domain.PaymentStatusSucceeded {
+		t.Fatalf("payment status = %q, want succeeded", finalized.Status)
+	}
+	h.requireAppliedProSubscription(t, sub.UserID, payment.ID)
+	h.requireCancelledReactivationTransition(t, sub.ID, payment.ID)
+}
+
+// requireCancelledReactivationTransition proves the transition log carries
+// exactly one payment_applied entry for the reactivation payment, recording
+// the move out of cancelled next to the cancellation entry that preceded it
+// (issue #429).
+func (h *paymentIntegrationHarness) requireCancelledReactivationTransition(
+	t *testing.T, subscriptionID, paymentID uuid.UUID,
+) {
+	t.Helper()
+	transitions, err := h.transitions.ListBySubscriptionID(h.ctx(), subscriptionID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID: %v", err)
+	}
+	applied := 0
+	for _, tr := range transitions {
+		if tr.Reason != domain.TransitionReasonPaymentApplied {
+			continue
+		}
+		applied++
+		if tr.PaymentID == nil || *tr.PaymentID != paymentID {
+			t.Errorf("payment_applied entry references %v, want %v", tr.PaymentID, paymentID)
+		}
+		if tr.FromStatus == nil || *tr.FromStatus != domain.SubscriptionStatusCancelled {
+			t.Errorf("payment_applied from_status = %v, want cancelled", tr.FromStatus)
+		}
+	}
+	if applied != 1 {
+		t.Errorf("payment_applied transitions = %d, want 1 (in %+v)", applied, transitions)
+	}
+}
+
 // TestPaymentFlow_WebhookDuplicateIsIdempotent proves the webhook dedup
 // acceptance criterion against real PostgreSQL: delivering the fake
 // provider's raw succeeded payload twice applies the tariff once.

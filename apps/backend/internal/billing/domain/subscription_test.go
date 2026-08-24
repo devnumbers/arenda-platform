@@ -125,6 +125,42 @@ func TestSubscriptionIsInGrace(t *testing.T) {
 	}
 }
 
+// TestSubscriptionCanInitiatePayment pins the statuses a new payment can start
+// from: active and grace pay by default, and a cancelled subscription pays as
+// its restoration — «восстановление возможно через оплату тарифа» (billing
+// CONTEXT.md, issue #429). Only an expired grace window — the worker downgrade
+// to basic is due — refuses to start one.
+func TestSubscriptionCanInitiatePayment(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
+	future := now.Add(24 * time.Hour)
+	past := now.Add(-24 * time.Hour)
+
+	tests := []struct {
+		name       string
+		status     SubscriptionStatus
+		validUntil *time.Time
+		want       bool
+	}{
+		{"active", SubscriptionStatusActive, &future, true},
+		{"active without valid_until", SubscriptionStatusActive, nil, true},
+		{"grace in window", SubscriptionStatusGrace, &future, true},
+		{"grace expired", SubscriptionStatusGrace, &past, false},
+		{"cancelled", SubscriptionStatusCancelled, &future, true},
+		{"cancelled with expired period", SubscriptionStatusCancelled, &past, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sub := Subscription{Status: tt.status, ValidUntil: tt.validUntil}
+			if got := sub.CanInitiatePayment(now); got != tt.want {
+				t.Errorf("CanInitiatePayment() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSubscriptionHasPendingChange(t *testing.T) {
 	t.Parallel()
 	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
@@ -350,6 +386,42 @@ func renewalFromGraceStartsAtNow(
 	}
 }
 
+// renewalFromCancelledReactivates proves a same-tariff payment on a cancelled
+// subscription is the reactivation (issue #429): the subscription returns to
+// active with auto-renew back on, and the paid period starts from the payment
+// moment — the cancelled remainder does not stack onto it, exactly like the
+// recovery upgrade of ADR 0008.
+func renewalFromCancelledReactivates(
+	t *testing.T, tariffID, paymentID uuid.UUID, now, remainingValidUntil time.Time,
+) {
+	t.Helper()
+	sub := Subscription{
+		TariffID:         tariffID,
+		Status:           SubscriptionStatusCancelled,
+		ValidUntil:       &remainingValidUntil,
+		AutoRenewEnabled: false,
+	}
+	if err := sub.ApplyRenewal(paymentID, PeriodMonth, now); err != nil {
+		t.Fatalf("ApplyRenewal() error = %v", err)
+	}
+	if sub.Status != SubscriptionStatusActive {
+		t.Errorf("Status = %q, want active (the payment reactivates the subscription)", sub.Status)
+	}
+	if !sub.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = false, want true (reactivation renews on the normal cycle)")
+	}
+	wantValidUntil := now.AddDate(0, 1, 0)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("ValidUntil = %v, want %v (the period from the payment moment)", sub.ValidUntil, wantValidUntil)
+	}
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
+		t.Errorf("LastAppliedPaymentID = %v, want %v", sub.LastAppliedPaymentID, paymentID)
+	}
+	if sub.CurrentPeriod == nil || *sub.CurrentPeriod != PeriodMonth {
+		t.Errorf("CurrentPeriod = %v, want %s", sub.CurrentPeriod, PeriodMonth)
+	}
+}
+
 func TestSubscriptionApplyRenewal(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -360,6 +432,7 @@ func TestSubscriptionApplyRenewal(t *testing.T) {
 	renewalStacksOntoExistingValidity(t, tariffID, paymentID, now, existingValidUntil)
 	renewalFromPastValidityStartsAtNow(t, tariffID, paymentID, now)
 	renewalFromGraceStartsAtNow(t, tariffID, paymentID, now, existingValidUntil)
+	renewalFromCancelledReactivates(t, tariffID, paymentID, now, existingValidUntil)
 
 	sub := Subscription{TariffID: tariffID, Status: SubscriptionStatusActive, ValidUntil: &existingValidUntil}
 	if err := sub.ApplyRenewal(paymentID, "invalid", now); !errors.Is(err, ErrInvalidPeriod) {

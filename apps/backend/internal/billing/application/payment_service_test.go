@@ -718,6 +718,89 @@ func TestChangeTariff_CancelledUpgradeIsRecovery(t *testing.T) {
 	}
 }
 
+// TestChangeTariff_CancelledSameTariffIsReactivation proves the same-tariff
+// counterpart of the recovery path (issue #429): paying for the plan a
+// cancelled subscription is already on starts the reactivation payment — the
+// "already on this tariff" rejection is reserved for active subscriptions —
+// and the subscription stays cancelled until the payment succeeds.
+func TestChangeTariff_CancelledSameTariffIsReactivation(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.Status = domain.SubscriptionStatusCancelled
+		s.AutoRenewEnabled = false
+	})
+
+	result, err := h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff(reactivation) error = %v", err)
+	}
+	if result.PaymentID == uuid.Nil || result.ConfirmURL == "" {
+		t.Fatalf("result = %+v, want a reactivation payment", result)
+	}
+	if h.provider.initCalls != 1 {
+		t.Fatalf("init calls = %d, want 1", h.provider.initCalls)
+	}
+	if h.provider.initReqs[0].Purpose.Kind != PaymentPurposeRenewal {
+		t.Errorf("purpose kind = %q, want renewal", h.provider.initReqs[0].Purpose.Kind)
+	}
+	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if payment.Status != domain.PaymentStatusPending {
+		t.Errorf("payment status = %q, want pending", payment.Status)
+	}
+	if payment.TariffID != h.tariffID(t, domain.TariffPro) || payment.AmountKopecks != 49000 {
+		t.Errorf("payment = tariff %v amount %d, want pro/49000", payment.TariffID, payment.AmountKopecks)
+	}
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusCancelled {
+		t.Errorf("status = %q, want cancelled until the payment succeeds", stored.Status)
+	}
+}
+
+// TestChangeTariff_CancelledBasicSameTariffRefused proves the free-plan edge
+// of the reactivation path (issue #429): a cancelled subscription on the free
+// basic plan has nothing to restore by payment — basic is the default state,
+// not a paid period — and the zero price cannot form a payment, so the request
+// is refused before any payment row or provider call exists.
+func TestChangeTariff_CancelledBasicSameTariffRefused(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.TariffID = h.tariffID(t, domain.TariffBasic)
+		s.Status = domain.SubscriptionStatusCancelled
+		s.AutoRenewEnabled = false
+		s.ValidUntil = nil
+		s.CurrentPeriod = nil
+	})
+
+	_, err := h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffBasic,
+		Period:     domain.PeriodMonth,
+	})
+	if !errors.Is(err, domain.ErrInvalidAmount) {
+		t.Fatalf("err = %v, want domain.ErrInvalidAmount (no payment exists for a free plan)", err)
+	}
+	if h.provider.initCalls != 0 {
+		t.Error("provider must not be called for a zero-price plan")
+	}
+	payments, err := h.stores.payments.ListByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("ListByUserID() error = %v", err)
+	}
+	if len(payments) != 0 {
+		t.Errorf("payments = %d, want 0 (the refused request leaves no row)", len(payments))
+	}
+}
+
 // webhookSucceeded prepares the stub provider to deliver a succeeded
 // notification for the payment.
 func (h *paymentHarness) webhookSucceeded(t *testing.T, payment domain.SubscriptionPayment) error {
@@ -801,6 +884,84 @@ func TestWebhook_SucceededAppliesGraceRenewal(t *testing.T) {
 	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
 		t.Errorf("valid until = %v, want %v (renewal from the payment moment, not from grace end)", stored.ValidUntil, wantUntil)
 	}
+}
+
+// TestWebhook_SucceededReactivatesCancelledSameTariff proves the reactivation
+// acceptance criterion of issue #429 end to end through the shared application
+// seam: a succeeded payment for the plan a cancelled subscription is already on
+// returns it to active with auto-renew back on, the period counted from the
+// payment moment (the cancelled remainder does not stack), and the transition
+// log records the payment-applied move out of cancelled.
+func TestWebhook_SucceededReactivatesCancelledSameTariff(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.Status = domain.SubscriptionStatusCancelled
+		s.AutoRenewEnabled = false
+	})
+
+	result, err := h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff(reactivation) error = %v", err)
+	}
+	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if err := h.webhookSucceeded(t, payment); err != nil {
+		t.Fatalf("HandleWebhook() error = %v", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("status = %q, want active after reactivation", stored.Status)
+	}
+	if !stored.AutoRenewEnabled {
+		t.Error("auto-renew = false, want true (reactivation renews on the normal cycle)")
+	}
+	// The cancelled remainder does not stack: the paid period starts at the
+	// payment moment.
+	wantUntil := h.now.AddDate(0, 1, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("valid until = %v, want %v", stored.ValidUntil, wantUntil)
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != payment.ID {
+		t.Errorf("last applied payment = %v, want %v", stored.LastAppliedPaymentID, payment.ID)
+	}
+	h.requireReactivationTransition(t, sub, payment.ID)
+}
+
+// requireReactivationTransition proves the single transition is the
+// reactivation's payment-applied entry: the payment_applied move out of
+// cancelled referencing the payment (issue #429).
+func (h *paymentHarness) requireReactivationTransition(
+	t *testing.T, sub domain.Subscription, paymentID uuid.UUID,
+) domain.Transition {
+	t.Helper()
+	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID() error = %v", err)
+	}
+	if len(transitions) != 1 {
+		t.Fatalf("transitions = %d, want 1 (the reactivation's payment_applied)", len(transitions))
+	}
+	tr := transitions[0]
+	if tr.Reason != domain.TransitionReasonPaymentApplied || tr.PaymentID == nil || *tr.PaymentID != paymentID {
+		t.Errorf("transition = %+v, want payment_applied referencing the payment", tr)
+	}
+	if tr.FromStatus == nil || *tr.FromStatus != domain.SubscriptionStatusCancelled {
+		t.Errorf("transition from_status = %v, want cancelled", tr.FromStatus)
+	}
+	if tr.ToStatus != domain.SubscriptionStatusActive {
+		t.Errorf("transition to_status = %q, want active", tr.ToStatus)
+	}
+	return tr
 }
 
 // TestWebhook_DuplicateSucceededIsIdempotent proves the deduplication
