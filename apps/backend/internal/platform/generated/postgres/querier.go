@@ -336,6 +336,17 @@ type Querier interface {
 	// the batches. A non-NULL user_id narrows the selection to one subscription:
 	// the under-lock re-check of a phase, run in the transaction that locked the
 	// row.
+	//
+	// The grace_retry_due bound (ticket #431, spec #419) selects grace
+	// subscriptions with a due dunning retry: the retry schedule is anchored at
+	// the latest grace entry (the newest reason='grace_entered' transition) and
+	// fires twice — +24 h and +72 h — each boundary consumed by any payment
+	// created at or after the entry (a prior retry or a manual payment; a
+	// successful manual payment also removes the row through the status bound).
+	// The window must still be open and an active payment method linked: without
+	// one there is nothing to charge. The 24/72-hour offsets are product
+	// constants mirrored by graceRetryFirstAfter/graceRetrySecondAfter in
+	// billing/application/phases.go — no schema or config knob.
 	ListSubscriptionsBySelection(ctx context.Context, arg ListSubscriptionsBySelectionParams) ([]UserSubscription, error)
 	// The FIFO recovery queue. Memberships on archived properties are excluded:
 	// an archived object does not occupy a recipient slot (issue #163), so a free

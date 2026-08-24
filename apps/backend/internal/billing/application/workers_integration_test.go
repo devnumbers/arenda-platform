@@ -782,3 +782,186 @@ func TestWorkers_Integration_RenewalDoubleChargeGuardOnCrash(t *testing.T) {
 	}
 	requireRecoveredWithoutSecondCharge(t, h, userID, payment.ID)
 }
+
+// pinGraceEpisode anchors a grace episode to the fake clock (ticket #431):
+// the subscription_transitions and subscription_payments rows carry the
+// database clock's now() by default, while the dunning schedule runs on the
+// harness clock — the same pinning agePaymentRow applies to stale payments.
+// The log is append-only (updates are rejected), so the grace-entered entry is
+// re-logged with the pinned instant: the same rows, the fake clock's times.
+// Every payment created before the entry stays before it (the failed renewal
+// charge that caused the grace).
+func pinGraceEpisode(t *testing.T, h *integrationHarness, subID uuid.UUID, enteredAt time.Time) {
+	t.Helper()
+	if _, err := h.pool.Exec(h.ctx(),
+		`DELETE FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'grace_entered'`,
+		subID); err != nil {
+		t.Fatalf("drop grace entry for re-pin: %v", err)
+	}
+	var tariffID uuid.UUID
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT tariff_id FROM user_subscriptions WHERE id = $1`, subID).Scan(&tariffID); err != nil {
+		t.Fatalf("read subscription tariff: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(), `
+		INSERT INTO subscription_transitions (id, subscription_id, to_status, to_tariff_id, reason, initiator_type, created_at)
+		VALUES ($1, $2, 'grace', $3, 'grace_entered', 'system', $4)`,
+		uuid.Must(uuid.NewV7()), subID, tariffID, enteredAt); err != nil {
+		t.Fatalf("re-log grace entry: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE subscription_payments SET created_at = $1, updated_at = $1
+		 WHERE subscription_id = $2 AND created_at > $3`,
+		enteredAt.Add(-time.Minute), subID, enteredAt); err != nil {
+		t.Fatalf("pin pre-entry payments: %v", err)
+	}
+}
+
+// TestWorkers_Integration_GraceRetryRescuesSubscription proves the dunning
+// acceptance scenario (ticket #431) end to end on the real schema: a declined
+// renewal enters grace, the +24 h retry charges whatever method is active by
+// then (a card switched after the failure), the success applies through the
+// single seam and the subscription leaves grace renewed for a month from the
+// retry. The +24 h boundary itself is pinned: an episode younger than a day
+// retries nothing.
+func TestWorkers_Integration_GraceRetryRescuesSubscription(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	userID, sub := seedExpiredProSubscription(t, h, time.Hour)
+	seedActiveMethod(t, h, userID, "fake_fail_card")
+
+	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	requireGraceEnteredAfterFailedCharge(t, h, userID, sub.ID)
+
+	// Younger than the +24 h boundary: the schedule retries nothing yet.
+	pinGraceEpisode(t, h, sub.ID, h.clock.Now().Add(-23*time.Hour))
+	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessGraceRetries() (too young) error = %v", err)
+	} else if count != 0 {
+		t.Fatalf("ProcessGraceRetries() (too young) = %d, want 0", count)
+	}
+
+	// The boundary passes and the user switched cards in between.
+	pinGraceEpisode(t, h, sub.ID, h.clock.Now().Add(-25*time.Hour))
+	seedActiveMethod(t, h, userID, "tok_retry_ok")
+
+	count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now())
+	if err != nil {
+		t.Fatalf("ProcessGraceRetries() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ProcessGraceRetries() = %d, want 1", count)
+	}
+
+	payments, err := h.payments.ListByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("ListByUserID() error = %v", err)
+	}
+	if len(payments) != 2 {
+		t.Fatalf("payments = %d, want 2 (failed renewal + retry)", len(payments))
+	}
+	var retry *domain.SubscriptionPayment
+	for i, p := range payments {
+		if p.Status == domain.PaymentStatusSucceeded {
+			retry = &payments[i]
+		}
+	}
+	if retry == nil {
+		t.Fatal("no succeeded retry payment")
+	}
+	requireRenewedActiveSubscription(t, h, userID, retry.ID)
+
+	// The retry consumed the boundary: nothing is due anymore.
+	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("second ProcessGraceRetries() error = %v", err)
+	} else if count != 0 {
+		t.Fatalf("second ProcessGraceRetries() = %d, want 0", count)
+	}
+}
+
+// TestWorkers_Integration_GraceRetryFailureThenSecondRetry proves the rest of
+// the dunning schedule: a declined +24 h retry leaves the subscription in
+// grace with the window untouched, the +72 h retry fires with the card the
+// user switched to meanwhile, and its success ends the episode. After the
+// schedule is spent the phase charges nothing — the expired-grace phase keeps
+// its old behaviour from there.
+func TestWorkers_Integration_GraceRetryFailureThenSecondRetry(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	userID, sub := seedExpiredProSubscription(t, h, time.Hour)
+	seedActiveMethod(t, h, userID, "fake_fail_card")
+
+	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	graceEnd := requireGraceEnteredAfterFailedCharge(t, h, userID, sub.ID)
+
+	// The +24 h retry is declined: the subscription stays in its grace window.
+	pinGraceEpisode(t, h, sub.ID, h.clock.Now().Add(-25*time.Hour))
+	requireDeclinedGraceRetryKeepsWindow(t, h, userID, graceEnd)
+
+	// The +72 h boundary passes and the user switched cards: the second retry
+	// succeeds and ends the episode.
+	h.clock.now = h.clock.Now().Add(48 * time.Hour) // Entry + 73 h.
+	seedActiveMethod(t, h, userID, "tok_retry_late")
+	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("second ProcessGraceRetries() error = %v", err)
+	} else if count != 1 {
+		t.Fatalf("second ProcessGraceRetries() = %d, want 1", count)
+	}
+
+	requireDunningEpisodePayments(t, h, userID)
+
+	// The schedule is spent: a third tick charges nothing.
+	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("third ProcessGraceRetries() error = %v", err)
+	} else if count != 0 {
+		t.Fatalf("third ProcessGraceRetries() = %d, want 0", count)
+	}
+}
+
+// requireDeclinedGraceRetryKeepsWindow runs the +24 h retry against the
+// failing card and asserts the declined charge left the subscription in its
+// grace window untouched.
+func requireDeclinedGraceRetryKeepsWindow(t *testing.T, h *integrationHarness, userID uuid.UUID, graceEnd time.Time) {
+	t.Helper()
+	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessGraceRetries() error = %v", err)
+	} else if count != 1 {
+		t.Fatalf("ProcessGraceRetries() = %d, want 1", count)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusGrace || stored.ValidUntil == nil || !stored.ValidUntil.Equal(graceEnd) {
+		t.Errorf("subscription = %s until %v, want grace until %v (unchanged)", stored.Status, stored.ValidUntil, graceEnd)
+	}
+}
+
+// requireDunningEpisodePayments asserts the ended episode's payment history —
+// the failed renewal, the declined +24 h retry and the succeeded +72 h one —
+// and the active renewal the success bought.
+func requireDunningEpisodePayments(t *testing.T, h *integrationHarness, userID uuid.UUID) {
+	t.Helper()
+	payments, err := h.payments.ListByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("ListByUserID() error = %v", err)
+	}
+	succeeded := 0
+	for _, p := range payments {
+		switch p.Status {
+		case domain.PaymentStatusSucceeded:
+			succeeded++
+			requireRenewedActiveSubscription(t, h, userID, p.ID)
+		case domain.PaymentStatusFailed:
+		default:
+			t.Errorf("payment %s status = %q, want terminal", p.ID, p.Status)
+		}
+	}
+	if succeeded != 1 || len(payments) != 3 {
+		t.Fatalf("payments = %d (%d succeeded), want 3 (1 succeeded)", len(payments), succeeded)
+	}
+}

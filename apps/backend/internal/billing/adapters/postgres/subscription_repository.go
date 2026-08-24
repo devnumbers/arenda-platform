@@ -92,6 +92,7 @@ func subscriptionSelectionParams(sel application.SubscriptionSelection) postgres
 	params.ValidUntilBefore = pgconv.TimePtrToPgtype(sel.ValidUntilBefore)
 	params.ValidUntilAfter = pgconv.TimePtrToPgtype(sel.ValidUntilAfter)
 	params.PendingChangeDue = pgconv.TimePtrToPgtype(sel.PendingChangeDue)
+	params.GraceRetryDue = pgconv.TimePtrToPgtype(sel.GraceRetryDue)
 	return params
 }
 

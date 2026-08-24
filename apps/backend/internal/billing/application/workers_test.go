@@ -1707,3 +1707,257 @@ type testProviderError struct{ code string }
 
 func (e *testProviderError) Error() string             { return "provider error " + e.code }
 func (e *testProviderError) ProviderErrorCode() string { return e.code }
+
+// seedGraceEpisode puts a subscription into a dunning-ready grace episode
+// (ticket #431): the grace entry logged enteredAgo ago, the window open for
+// the rest of the week, auto-renew on, a linked active method and the original
+// renewal payment failed just before the entry — old enough to consume no
+// retry boundary. It returns the stored subscription and the linked method.
+func (h *workersHarness) seedGraceEpisode(t *testing.T) (domain.Subscription, domain.PaymentMethod) {
+	t.Helper()
+	entered := h.now.Add(-25 * time.Hour)
+	graceUntil := entered.Add(7 * 24 * time.Hour)
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.Status = domain.SubscriptionStatusGrace
+		s.ValidUntil = &graceUntil
+	})
+	method := h.seedActiveMethod(t, sub, testProviderFake, "rebill_"+sub.UserID.String())
+	sub, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("re-read subscription: %v", err)
+	}
+	if err := h.stores.transitions.Append(t.Context(), domain.Transition{
+		ID:             mustNewUUID(),
+		SubscriptionID: sub.ID,
+		ToStatus:       domain.SubscriptionStatusGrace,
+		ToTariffID:     sub.TariffID,
+		Reason:         domain.TransitionReasonGraceEntered,
+		Initiator:      domain.InitiatorSystem,
+		CreatedAt:      entered,
+	}); err != nil {
+		t.Fatalf("seed grace entry: %v", err)
+	}
+	original, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+		h.pro.MonthlyPriceKopecks, testProviderFake, entered.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("new original payment: %v", err)
+	}
+	if err := original.MarkFailed(nil, entered); err != nil {
+		t.Fatalf("fail original payment: %v", err)
+	}
+	if _, err := h.stores.payments.Create(t.Context(), original); err != nil {
+		t.Fatalf("seed original payment: %v", err)
+	}
+	return sub, method
+}
+
+// TestWorkers_GraceRetrySucceedsAndLeavesGrace proves the happy dunning path
+// (ticket #431): 25 hours after the grace entry the retry charges the active
+// method, the success applies through the single seam and the subscription
+// leaves grace active, renewed for a month from the retry — the original
+// failed payment stays untouched and the retry boundary is consumed (a second
+// run charges nothing).
+func TestWorkers_GraceRetrySucceedsAndLeavesGrace(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	sub, method := h.seedGraceEpisode(t)
+
+	count, err := h.workers.ProcessGraceRetries(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessGraceRetries: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+	if _, charges, _ := h.provider.calls(); charges != 1 {
+		t.Fatalf("charge calls = %d, want 1", charges)
+	}
+	h.requireGraceRescued(t, sub, method)
+	h.requireGraceRetryBoundaryConsumed(t)
+}
+
+// requireGraceRescued asserts the succeeded retry ended the grace episode: the
+// subscription active and renewed for a month, the succeeded retry charged on
+// the active method and linked as the last applied payment.
+func (h *workersHarness) requireGraceRescued(t *testing.T, sub domain.Subscription, method domain.PaymentMethod) {
+	t.Helper()
+	stored := h.storedSubscription(t, sub)
+	wantUntil := h.now.AddDate(0, 1, 0)
+	if stored.Status != domain.SubscriptionStatusActive || stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("subscription = %s until %v, want active until %v", stored.Status, stored.ValidUntil, wantUntil)
+	}
+
+	payments, err := h.stores.payments.ListByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("list payments: %v", err)
+	}
+	if len(payments) != 2 {
+		t.Fatalf("payments = %d, want 2 (original + retry)", len(payments))
+	}
+	var retry *domain.SubscriptionPayment
+	for i, p := range payments {
+		if p.Status == domain.PaymentStatusSucceeded {
+			retry = &payments[i]
+		}
+	}
+	if retry == nil {
+		t.Fatal("no succeeded retry payment")
+	}
+	if retry.PaymentMethodID == nil || *retry.PaymentMethodID != method.ID {
+		t.Errorf("retry method = %v, want the active method", retry.PaymentMethodID)
+	}
+	if stored.LastAppliedPaymentID == nil || *stored.LastAppliedPaymentID != retry.ID {
+		t.Errorf("LastAppliedPaymentID = %v, want the retry payment", stored.LastAppliedPaymentID)
+	}
+}
+
+// requireGraceRetryBoundaryConsumed asserts a further retry run charges
+// nothing: the retry payment consumed the boundary.
+func (h *workersHarness) requireGraceRetryBoundaryConsumed(t *testing.T) {
+	t.Helper()
+	again, err := h.workers.ProcessGraceRetries(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("second ProcessGraceRetries: %v", err)
+	}
+	if again != 0 {
+		t.Errorf("second run count = %d, want 0", again)
+	}
+	if _, charges, _ := h.provider.calls(); charges != 1 {
+		t.Errorf("charge calls after second run = %d, want 1", charges)
+	}
+}
+
+// TestWorkers_GraceRetryFailedStaysGrace proves a declined retry keeps the
+// subscription in its grace window: the retry payment fails, the window and
+// the schedule are untouched, and the boundary stays consumed — the next
+// scheduled retry is the +72 h one, not an immediate re-charge.
+func TestWorkers_GraceRetryFailedStaysGrace(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	sub, _ := h.seedGraceEpisode(t)
+	graceUntil := sub.ValidUntil
+	h.provider.chargeFn = func(req ChargeRequest) (ChargeResult, error) {
+		return ChargeResult{ProviderPaymentID: req.ProviderPaymentID, Status: domain.PaymentStatusFailed, ErrorCode: "insufficient_funds"}, nil
+	}
+
+	count, err := h.workers.ProcessGraceRetries(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessGraceRetries: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusGrace || stored.ValidUntil == nil || !stored.ValidUntil.Equal(*graceUntil) {
+		t.Errorf("subscription = %s until %v, want grace until %v (unchanged)", stored.Status, stored.ValidUntil, *graceUntil)
+	}
+
+	// The failed retry consumed the boundary: nothing re-charges at this tick.
+	again, err := h.workers.ProcessGraceRetries(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("second ProcessGraceRetries: %v", err)
+	}
+	if again != 0 {
+		t.Errorf("second run count = %d, want 0", again)
+	}
+	if _, charges, _ := h.provider.calls(); charges != 1 {
+		t.Errorf("charge calls after second run = %d, want 1", charges)
+	}
+}
+
+// TestWorkers_GraceRetryPicksUpSwitchedCard proves the retry charges whatever
+// method is active by retry time: a card bound after the grace entry is the
+// token the charge carries.
+func TestWorkers_GraceRetryPicksUpSwitchedCard(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	sub, _ := h.seedGraceEpisode(t)
+	switched := h.seedActiveMethod(t, sub, testProviderFake, "rebill_switched_"+sub.UserID.String())
+
+	var chargedToken string
+	h.provider.chargeFn = func(req ChargeRequest) (ChargeResult, error) {
+		chargedToken = req.ChargeToken
+		return ChargeResult{ProviderPaymentID: req.ProviderPaymentID, Status: domain.PaymentStatusSucceeded}, nil
+	}
+
+	if _, err := h.workers.ProcessGraceRetries(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessGraceRetries: %v", err)
+	}
+	if chargedToken != switched.ProviderToken {
+		t.Errorf("charged token = %q, want the switched method's %q", chargedToken, switched.ProviderToken)
+	}
+}
+
+// TestWorkers_GraceRetrySkipsWhenGraceLeft proves the retry never fires for a
+// subscription that left grace — a manual payment renewed it — and charges
+// nothing: the selection's status bound is the guard.
+func TestWorkers_GraceRetrySkipsWhenGraceLeft(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	sub, _ := h.seedGraceEpisode(t)
+	until := h.now.AddDate(0, 1, 0)
+	sub.Status = domain.SubscriptionStatusActive
+	sub.ValidUntil = &until
+	if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
+		t.Fatalf("store active: %v", err)
+	}
+
+	count, err := h.workers.ProcessGraceRetries(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessGraceRetries: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count = %d, want 0", count)
+	}
+	if _, charges, _ := h.provider.calls(); charges != 0 {
+		t.Errorf("charge calls = %d, want 0", charges)
+	}
+}
+
+// TestWorkers_GraceRetryRequiresProvider proves a wiring without the provider
+// fails loudly instead of charging blindly.
+func TestWorkers_GraceRetryRequiresProvider(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	h.workers.provider = nil
+	if _, err := h.workers.ProcessGraceRetries(t.Context(), h.now); !errors.Is(err, ErrPaymentUnavailable) {
+		t.Fatalf("ProcessGraceRetries error = %v, want ErrPaymentUnavailable", err)
+	}
+}
+
+// TestWorkers_GraceRetryManualPaymentCancelsRetries pins the manual-payment
+// boundary of ticket #431: a payment the user started since the grace entry —
+// whatever its outcome — consumes the scheduled retry, the way the spec words
+// it ("ручная оплата до повтора отменяет дальнейшие повторы"); a pending one
+// keeps the subscription in grace yet charges nothing on the dunning schedule.
+func TestWorkers_GraceRetryManualPaymentCancelsRetries(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	sub, _ := h.seedGraceEpisode(t)
+	manual, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.pro.ID, domain.PeriodMonth,
+		h.pro.MonthlyPriceKopecks, testProviderFake, h.now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("new manual payment: %v", err)
+	}
+	if _, err := h.stores.payments.Create(t.Context(), manual); err != nil {
+		t.Fatalf("seed manual payment: %v", err)
+	}
+
+	count, err := h.workers.ProcessGraceRetries(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessGraceRetries: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("count = %d, want 0 (the manual payment consumed the retry)", count)
+	}
+	if _, charges, _ := h.provider.calls(); charges != 0 {
+		t.Errorf("charge calls = %d, want 0", charges)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("status = %q, want grace (the manual payment is still pending)", stored.Status)
+	}
+}

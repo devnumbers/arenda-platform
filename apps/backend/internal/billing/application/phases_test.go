@@ -377,3 +377,121 @@ func TestPhaseScheduler_ReconciliationStaleness(t *testing.T) {
 	requireBoundary(t, "staleRefunding UpdatedBefore", refundSel.UpdatedBefore, cutoff)
 	requireSelection(t, h.listedPaymentIDs(t, refundSel), []string{stuck.ID.String()}, stale.ID.String())
 }
+
+// seedGraceEntered logs the subscription's grace entry at the instant — the
+// dunning anchor the grace-retry schedule counts from (ticket #431).
+func (h *phasesHarness) seedGraceEntered(t *testing.T, sub domain.Subscription, enteredAt time.Time) {
+	t.Helper()
+	transition := domain.Transition{
+		ID:             mustNewUUID(),
+		SubscriptionID: sub.ID,
+		ToStatus:       domain.SubscriptionStatusGrace,
+		ToTariffID:     sub.TariffID,
+		Reason:         domain.TransitionReasonGraceEntered,
+		Initiator:      domain.InitiatorSystem,
+		CreatedAt:      enteredAt,
+	}
+	if err := h.stores.transitions.Append(t.Context(), transition); err != nil {
+		t.Fatalf("seed grace entry: %v", err)
+	}
+}
+
+// linkActiveMethod stores an active payment method and links it as the
+// subscription's charge target — the grace-retry bound requires one.
+func (h *phasesHarness) linkActiveMethod(t *testing.T, sub domain.Subscription) {
+	t.Helper()
+	method, err := domain.NewPaymentMethod(sub.UserID, testProviderFake, "rebill_"+sub.UserID.String(), phasesNow)
+	if err != nil {
+		t.Fatalf("new method: %v", err)
+	}
+	method.IsActive = true
+	stored, err := h.stores.methods.UpsertByTokenHash(t.Context(), method)
+	if err != nil {
+		t.Fatalf("seed method: %v", err)
+	}
+	sub.ActivePaymentMethodID = &stored.ID
+	if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
+		t.Fatalf("link method: %v", err)
+	}
+}
+
+// graceSub seeds a grace subscription entered at the instant, on the pro
+// tariff with auto-renew on, a seven-day window and a linked active method.
+func (h *phasesHarness) graceSub(t *testing.T, enteredAt time.Time) domain.Subscription {
+	t.Helper()
+	sub := h.seedSub(t, func(s *domain.Subscription) {
+		s.TariffID = h.pro.ID
+		s.Status = domain.SubscriptionStatusGrace
+		s.AutoRenewEnabled = true
+		until := enteredAt.Add(7 * 24 * time.Hour)
+		s.ValidUntil = &until
+	})
+	h.seedGraceEntered(t, sub, enteredAt)
+	h.linkActiveMethod(t, sub)
+	return sub
+}
+
+// TestPhaseScheduler_GraceRetrySchedule pins the dunning schedule of ticket
+// #431: the first retry is due at +24 h from the grace entry, the second at
+// +72 h, each boundary consumed by a payment created since the entry (a prior
+// retry or a manual one), and never a third. The batch keeps only rows with
+// auto-renew on, a linked active method and a still-open window.
+func TestPhaseScheduler_GraceRetrySchedule(t *testing.T) {
+	t.Parallel()
+	h := newPhasesHarness(t)
+	now := h.scheduler.now()
+	entered := now.Add(-48 * time.Hour)
+
+	// The +24 h boundary passed with nothing charged since the entry.
+	firstDue := h.graceSub(t, entered)
+	// A retry payment since the entry consumed the +24 h boundary; the +72 h
+	// one is still ahead (entered + 72 h > now).
+	firstConsumed := h.graceSub(t, entered)
+	h.seedPayment(t, firstConsumed, func(p *domain.SubscriptionPayment) {
+		p.CreatedAt = entered.Add(25 * time.Hour)
+	})
+	// Both boundaries passed with one payment since the entry: the second
+	// retry is due.
+	secondDue := h.graceSub(t, now.Add(-73*time.Hour))
+	h.seedPayment(t, secondDue, func(p *domain.SubscriptionPayment) {
+		p.CreatedAt = now.Add(-48 * time.Hour)
+	})
+	// Two payments since the entry: the schedule is spent.
+	spent := h.graceSub(t, now.Add(-73*time.Hour))
+	h.seedPayment(t, spent, func(p *domain.SubscriptionPayment) {
+		p.CreatedAt = now.Add(-70 * time.Hour)
+		if err := p.MarkFailed(nil, p.CreatedAt); err != nil {
+			t.Errorf("mark failed: %v", err)
+		}
+	})
+	h.seedPayment(t, spent, func(p *domain.SubscriptionPayment) {
+		p.CreatedAt = now.Add(-48 * time.Hour)
+	})
+
+	// Entered less than 24 h ago: nothing due yet.
+	fresh := h.graceSub(t, now.Add(-23*time.Hour))
+	// Auto-renew off: the user opted out of charges.
+	optedOut := h.graceSub(t, entered)
+	optedOut.AutoRenewEnabled = false
+	if err := h.stores.subscriptions.Update(t.Context(), optedOut); err != nil {
+		t.Fatalf("store opted out: %v", err)
+	}
+	// No active method linked: nothing to charge.
+	noMethod := h.graceSub(t, entered)
+	noMethod.ActivePaymentMethodID = nil
+	if err := h.stores.subscriptions.Update(t.Context(), noMethod); err != nil {
+		t.Fatalf("store no-method: %v", err)
+	}
+	// The grace window ended: the expired-grace phase owns the row now.
+	windowOver := h.graceSub(t, now.Add(-8*24*time.Hour))
+	until := now.Add(-time.Hour)
+	windowOver.ValidUntil = &until
+	if err := h.stores.subscriptions.Update(t.Context(), windowOver); err != nil {
+		t.Fatalf("store window over: %v", err)
+	}
+
+	sel := h.scheduler.graceRetryDue(now, 100)
+	requireBoundary(t, "graceRetryDue GraceRetryDue", sel.GraceRetryDue, now)
+	requireSelection(t, h.listedUserIDs(t, sel), idsOf(firstDue, secondDue),
+		idsOf(firstConsumed, spent, fresh, optedOut, noMethod, windowOver)...)
+}

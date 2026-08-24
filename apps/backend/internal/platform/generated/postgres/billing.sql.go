@@ -1254,19 +1254,45 @@ const listSubscriptionsBySelection = `-- name: ListSubscriptionsBySelection :man
 
 SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at FROM user_subscriptions
 WHERE ($1::uuid IS NULL OR user_id = $1)
-  AND status = $2
+  AND user_subscriptions.status = $2
   AND ($3::bool IS NULL OR auto_renew_enabled = $3)
   AND ($4::timestamptz IS NULL OR valid_until <= $4)
   AND ($5::timestamptz IS NULL OR valid_until > $5)
   AND ($6::bool = false OR grace_reminded_at IS NULL)
   AND ($7::timestamptz IS NULL
        OR (pending_tariff_id IS NOT NULL AND pending_change_at IS NOT NULL AND pending_change_at <= $7))
+  AND ($8::timestamptz IS NULL OR (
+       valid_until IS NOT NULL
+       AND valid_until > $8
+       AND active_payment_method_id IS NOT NULL
+       AND EXISTS (
+           SELECT 1 FROM subscription_transitions gt
+           WHERE gt.subscription_id = user_subscriptions.id
+             AND gt.to_status = 'grace'
+             AND gt.reason = 'grace_entered'
+             AND gt.created_at = (
+                 SELECT max(g2.created_at) FROM subscription_transitions g2
+                 WHERE g2.subscription_id = user_subscriptions.id
+                   AND g2.to_status = 'grace'
+                   AND g2.reason = 'grace_entered')
+             AND (
+                 (gt.created_at + interval '24 hours' <= $8
+                  AND (SELECT count(*) FROM subscription_payments p
+                       WHERE p.subscription_id = user_subscriptions.id
+                         AND p.created_at >= gt.created_at) = 0)
+                 OR
+                 (gt.created_at + interval '72 hours' <= $8
+                  AND (SELECT count(*) FROM subscription_payments p
+                       WHERE p.subscription_id = user_subscriptions.id
+                         AND p.created_at >= gt.created_at) <= 1)
+             )
+       )))
 ORDER BY
   CASE WHEN $7::timestamptz IS NOT NULL THEN pending_change_at END ASC,
   CASE WHEN $7::timestamptz IS NOT NULL THEN id END ASC,
   valid_until ASC,
   id ASC
-LIMIT $8
+LIMIT $9
 `
 
 type ListSubscriptionsBySelectionParams struct {
@@ -1277,6 +1303,7 @@ type ListSubscriptionsBySelectionParams struct {
 	ValidUntilAfter  pgtype.Timestamptz `json:"valid_until_after"`
 	Unreminded       bool               `json:"unreminded"`
 	PendingChangeDue pgtype.Timestamptz `json:"pending_change_due"`
+	GraceRetryDue    pgtype.Timestamptz `json:"grace_retry_due"`
 	BatchLimit       int32              `json:"batch_limit"`
 }
 
@@ -1295,6 +1322,17 @@ type ListSubscriptionsBySelectionParams struct {
 // the batches. A non-NULL user_id narrows the selection to one subscription:
 // the under-lock re-check of a phase, run in the transaction that locked the
 // row.
+//
+// The grace_retry_due bound (ticket #431, spec #419) selects grace
+// subscriptions with a due dunning retry: the retry schedule is anchored at
+// the latest grace entry (the newest reason='grace_entered' transition) and
+// fires twice — +24 h and +72 h — each boundary consumed by any payment
+// created at or after the entry (a prior retry or a manual payment; a
+// successful manual payment also removes the row through the status bound).
+// The window must still be open and an active payment method linked: without
+// one there is nothing to charge. The 24/72-hour offsets are product
+// constants mirrored by graceRetryFirstAfter/graceRetrySecondAfter in
+// billing/application/phases.go — no schema or config knob.
 func (q *Queries) ListSubscriptionsBySelection(ctx context.Context, arg ListSubscriptionsBySelectionParams) ([]UserSubscription, error) {
 	rows, err := q.db.Query(ctx, listSubscriptionsBySelection,
 		arg.UserID,
@@ -1304,6 +1342,7 @@ func (q *Queries) ListSubscriptionsBySelection(ctx context.Context, arg ListSubs
 		arg.ValidUntilAfter,
 		arg.Unreminded,
 		arg.PendingChangeDue,
+		arg.GraceRetryDue,
 		arg.BatchLimit,
 	)
 	if err != nil {

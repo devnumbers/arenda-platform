@@ -112,6 +112,32 @@ func (s *phaseScheduler) pendingChangesDue(now time.Time, limit int) Subscriptio
 	}
 }
 
+// The dunning retry schedule of spec #419 (ticket #431): two planned
+// auto-retries of the failed renewal charge inside the grace window, +24 h and
+// +72 h from the grace entry. Product constants, not config — no new settings
+// (spec decision); the values are mirrored in the grace_retry_due bound of
+// ListSubscriptionsBySelection.
+const (
+	graceRetryFirstAfter  = 24 * time.Hour
+	graceRetrySecondAfter = 72 * time.Hour
+)
+
+// graceRetryDue is the dunning batch (ticket #431): grace subscriptions whose
+// next scheduled retry is due — anchored at the latest grace entry, consumed
+// by any payment created since it (a prior retry or a manual one) — with the
+// window still open, auto-renew on and an active method linked (without one
+// there is nothing to charge; the phase re-picks the row once the user binds
+// a card).
+func (s *phaseScheduler) graceRetryDue(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusGrace,
+		AutoRenewEnabled: new(true),
+		ValidUntilAfter:  new(now),
+		GraceRetryDue:    new(now),
+		Limit:            limit,
+	}
+}
+
 // stalePending is the lost-webhook batch: pending payments with a provider
 // reference unresolved past the configured staleness (issue #252).
 func (s *phaseScheduler) stalePending(now time.Time, limit int) PaymentSelection {

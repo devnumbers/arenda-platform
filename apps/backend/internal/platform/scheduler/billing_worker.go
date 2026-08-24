@@ -24,10 +24,11 @@ type ScheduledChangeProcessor interface {
 }
 
 // RenewalProcessor drives the subscription lifecycle phases of the billing
-// worker: auto-renewal charges, pending upgrade payments, grace-expiry
-// reminders and expired grace handling (ADR 0008).
+// worker: auto-renewal charges, grace dunning retries, pending upgrade
+// payments, grace-expiry reminders and expired grace handling (ADR 0008).
 type RenewalProcessor interface {
 	ProcessRenewals(ctx context.Context, now time.Time) (int, error)
+	ProcessGraceRetries(ctx context.Context, now time.Time) (int, error)
 	ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error)
 	ProcessGraceExpiryReminders(ctx context.Context, now time.Time) (int, error)
 	ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error)
@@ -101,6 +102,11 @@ func (w *BillingWorker) processTick(ctx context.Context) error {
 	for _, phase := range []func(context.Context, time.Time) error{
 		w.processScheduledChanges,
 		w.processRenewals,
+		// The dunning retries run right after the renewals: a charge that
+		// entered grace this tick is not retried today (the schedule anchors at
+		// the grace entry, +24 h out), a window whose retry is due is (ticket
+		// #431).
+		w.processGraceRetries,
 		w.processPendingUpgrades,
 		// The grace-expiry reminder runs before the expired-grace downgrade:
 		// a window closing this tick is reminded first, and once the window
@@ -142,6 +148,20 @@ func (w *BillingWorker) processRenewals(ctx context.Context, now time.Time) erro
 	}
 	if count > 0 {
 		w.logger.InfoContext(ctx, "billing worker processed renewals", "count", count)
+	}
+	return nil
+}
+
+// processGraceRetries charges the due dunning retries of grace subscriptions
+// and wraps a failure for the joined tick error.
+func (w *BillingWorker) processGraceRetries(ctx context.Context, now time.Time) error {
+	count, err := w.renewals.ProcessGraceRetries(ctx, now)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "billing worker grace retry processing failed", "error", sanitize.Error(err))
+		return fmt.Errorf("grace retries: %w", err)
+	}
+	if count > 0 {
+		w.logger.InfoContext(ctx, "billing worker charged grace retries", "count", count)
 	}
 	return nil
 }

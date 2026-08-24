@@ -179,6 +179,12 @@ type fakeSubscriptionRepo struct {
 	mu             sync.Mutex
 	subs           map[uuid.UUID]domain.Subscription
 	forUpdateCalls int
+	// GraceRetryDue mirrors the SQL grace-retry bound (ticket #431): the
+	// latest grace-entered transition anchors the schedule, payments since it
+	// consume the boundaries. The fakeStores constructor wires it over the
+	// transition and payment fakes, the way the SQL query joins the same
+	// tables.
+	graceRetryDue func(sub domain.Subscription, now time.Time) bool
 }
 
 func newFakeSubscriptionRepo() *fakeSubscriptionRepo {
@@ -210,7 +216,7 @@ func (r *fakeSubscriptionRepo) List(_ context.Context, sel SubscriptionSelection
 	defer r.mu.Unlock()
 	result := make([]domain.Subscription, 0)
 	for _, s := range r.subs {
-		if subscriptionInSelection(s, sel) {
+		if subscriptionInSelection(s, sel, r.graceRetryDue) {
 			result = append(result, s)
 		}
 	}
@@ -250,11 +256,12 @@ var farFuture = time.Unix(1<<62, 0)
 // subscriptionInSelection is the fake's reading of the worker selection — the
 // Go mirror of ListSubscriptionsBySelection's predicate — composed of the
 // sub-predicates below (identity, toggles, validity window, pending change).
-func subscriptionInSelection(s domain.Subscription, sel SubscriptionSelection) bool {
+func subscriptionInSelection(s domain.Subscription, sel SubscriptionSelection, graceRetry func(domain.Subscription, time.Time) bool) bool {
 	return subscriptionIdentityInSelection(s, sel) &&
 		subscriptionTogglesInSelection(s, sel) &&
 		subscriptionValidityInSelection(s, sel) &&
-		subscriptionPendingChangeInSelection(s, sel)
+		subscriptionPendingChangeInSelection(s, sel) &&
+		subscriptionGraceRetryInSelection(s, sel, graceRetry)
 }
 
 // subscriptionIdentityInSelection matches the user filter and the exact status.
@@ -293,6 +300,32 @@ func subscriptionPendingChangeInSelection(s domain.Subscription, sel Subscriptio
 		return true
 	}
 	return s.PendingTariffID != nil && s.PendingChangeAt != nil && !s.PendingChangeAt.After(*sel.PendingChangeDue)
+}
+
+// subscriptionGraceRetryInSelection matches the dunning-retry bound of the
+// grace-retry batch (ticket #431) — the Go mirror of the grace_retry_due
+// predicate: an open window, a linked active method, a grace entry old enough
+// for the next scheduled retry (+24 h / +72 h) and no payment created since
+// the entry consuming that boundary. The cross-table halves (the latest
+// grace-entered transition and the payments since it) resolve through the
+// hook fakeStores wires; without it the bound matches nothing, the way a row
+// without a grace-entered transition never matches in SQL.
+func subscriptionGraceRetryInSelection(
+	s domain.Subscription, sel SubscriptionSelection, graceRetry func(domain.Subscription, time.Time) bool,
+) bool {
+	if sel.GraceRetryDue == nil {
+		return true
+	}
+	if s.ValidUntil == nil || !s.ValidUntil.After(*sel.GraceRetryDue) {
+		return false
+	}
+	if s.ActivePaymentMethodID == nil {
+		return false
+	}
+	if graceRetry == nil {
+		return false
+	}
+	return graceRetry(s, *sel.GraceRetryDue)
 }
 
 func (r *fakeSubscriptionRepo) Create(_ context.Context, sub domain.Subscription) (domain.Subscription, error) {
@@ -694,6 +727,7 @@ type fakeStores struct {
 
 func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
 	subs := newFakeSubscriptionRepo()
+	transitions := newFakeTransitionRepo()
 	payments := newFakePaymentRepo()
 	// The upgrade-reconciliation listing joins the subscription's current
 	// tariff in SQL; the fakes express the same join through this lookup.
@@ -704,10 +738,40 @@ func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
 		}
 		return sub.TariffID, true
 	}
+	// The grace-retry listing joins the subscription's latest grace-entered
+	// transition and its payments since that entry in SQL (ticket #431); the
+	// fake expresses the same joins through these lookups.
+	subs.graceRetryDue = func(sub domain.Subscription, now time.Time) bool {
+		list, err := transitions.ListBySubscriptionID(context.Background(), sub.ID)
+		if err != nil {
+			return false
+		}
+		var entered *time.Time
+		for _, t := range list {
+			if t.ToStatus != domain.SubscriptionStatusGrace || t.Reason != domain.TransitionReasonGraceEntered {
+				continue
+			}
+			if entered == nil || t.CreatedAt.After(*entered) {
+				created := t.CreatedAt
+				entered = &created
+			}
+		}
+		if entered == nil {
+			return false
+		}
+		sinceEntry := 0
+		for _, p := range payments.payments {
+			if p.SubscriptionID == sub.ID && !p.CreatedAt.Before(*entered) {
+				sinceEntry++
+			}
+		}
+		return (!now.Before(entered.Add(graceRetryFirstAfter)) && sinceEntry == 0) ||
+			(!now.Before(entered.Add(graceRetrySecondAfter)) && sinceEntry <= 1)
+	}
 	return &fakeStores{
 		tariffs:       newFakeTariffRepo(tariffs...),
 		subscriptions: subs,
-		transitions:   newFakeTransitionRepo(),
+		transitions:   transitions,
 		payments:      payments,
 		methods:       newFakePaymentMethodRepo(),
 		bindings:      newFakeBindingRepo(),

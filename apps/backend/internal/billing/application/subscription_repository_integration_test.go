@@ -436,3 +436,111 @@ func TestSubscriptionRepository_Integration_ReminderFlagDropsRow(t *testing.T) {
 	requireSelectionUserIDs(t, h, reminderSel, []uuid.UUID{unreminded.UserID})
 	requireReminderFlagDropsRow(t, h, unreminded, reminderSel, now)
 }
+
+// TestSubscriptionRepository_Integration_GraceRetrySelection pins the dunning
+// selection's SQL predicate (ticket #431) to the Go mirror of phases_test: the
+// batch keeps grace subscriptions whose next scheduled retry (+24 h / +72 h
+// from the latest grace-entered transition) is due and not consumed by a
+// payment created since the entry, with auto-renew on, an active method linked
+// and the window still open.
+func TestSubscriptionRepository_Integration_GraceRetrySelection(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	now := h.clock.Now()
+	pro, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
+	if err != nil {
+		t.Fatalf("GetByName(pro) error = %v", err)
+	}
+
+	// Episode seeding: onboarding a user, putting their subscription into
+	// grace with auto-renew on and a linked active method, logging the grace
+	// entry enteredAgo ago and inserting paymentsSinceEntry payments after
+	// it.
+	seedEpisode := func(name string, enteredAgo time.Duration, paymentsSinceEntry int, mutate func(*domain.Subscription)) uuid.UUID {
+		t.Helper()
+		userID := h.seedUser()
+		if err := h.onboarding.OnUserRegistered(h.ctx(), userID); err != nil {
+			t.Fatalf("OnUserRegistered(%s) error = %v", name, err)
+		}
+		sub, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+		if err != nil {
+			t.Fatalf("GetByUserID(%s) error = %v", name, err)
+		}
+		entered := now.Add(-enteredAgo)
+		graceUntil := entered.Add(7 * 24 * time.Hour)
+		sub.TariffID = pro.ID
+		sub.Status = domain.SubscriptionStatusGrace
+		sub.AutoRenewEnabled = true
+		sub.ValidUntil = &graceUntil
+		sub.CurrentPeriod = &[]domain.SubscriptionPeriod{domain.PeriodMonth}[0]
+		if mutate != nil {
+			mutate(&sub)
+		}
+		methodID := uuid.Must(uuid.NewV7())
+		if _, err := h.pool.Exec(h.ctx(), `
+			INSERT INTO payment_methods (id, user_id, provider, provider_token, token_hash, is_active)
+			VALUES ($1, $2, 'fake', $3, $3, true)`, methodID, userID, "tok_"+name); err != nil {
+			t.Fatalf("seed method(%s): %v", name, err)
+		}
+		sub.ActivePaymentMethodID = &methodID
+		if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
+			t.Fatalf("Update(%s) error = %v", name, err)
+		}
+		if _, err := h.pool.Exec(h.ctx(), `
+			INSERT INTO subscription_transitions (id, subscription_id, to_status, to_tariff_id, reason, initiator_type, created_at)
+			VALUES ($1, $2, 'grace', $3, 'grace_entered', 'system', $4)`,
+			uuid.Must(uuid.NewV7()), sub.ID, pro.ID, entered); err != nil {
+			t.Fatalf("seed grace entry(%s): %v", name, err)
+		}
+		for i := range paymentsSinceEntry {
+			createdAt := entered.Add(time.Duration(i+1) * time.Hour)
+			if _, err := h.pool.Exec(h.ctx(), `
+				INSERT INTO subscription_payments (
+					id, user_id, subscription_id, tariff_id, period,
+					amount_kopecks, provider, status, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, 'month', 49000, 'fake', 'failed', $5, $5)`,
+				uuid.Must(uuid.NewV7()), userID, sub.ID, pro.ID, createdAt); err != nil {
+				t.Fatalf("seed payment %d(%s): %v", i, name, err)
+			}
+		}
+		return userID
+	}
+
+	firstDue := seedEpisode("first due", 25*time.Hour, 0, nil)
+	secondDue := seedEpisode("second due", 73*time.Hour, 1, nil)
+	tooYoung := seedEpisode("too young", 23*time.Hour, 0, nil)
+	firstConsumed := seedEpisode("first consumed", 25*time.Hour, 1, nil)
+	spent := seedEpisode("spent", 73*time.Hour, 2, nil)
+	optedOut := seedEpisode("auto-renew off", 25*time.Hour, 0, func(s *domain.Subscription) {
+		s.AutoRenewEnabled = false
+	})
+	windowOver := seedEpisode("window over", 8*24*time.Hour, 0, func(s *domain.Subscription) {
+		until := now.Add(-time.Hour)
+		s.ValidUntil = &until
+	})
+
+	autoRenew, validAfter, retryDue := true, now, now
+	sel := billingapp.SubscriptionSelection{
+		Status:           domain.SubscriptionStatusGrace,
+		AutoRenewEnabled: &autoRenew,
+		ValidUntilAfter:  &validAfter,
+		GraceRetryDue:    &retryDue,
+		Limit:            100,
+	}
+	// The batch order follows the grace window clock: the older episode first.
+	requireSelectionUserIDs(t, h, sel, []uuid.UUID{secondDue, firstDue})
+
+	// The under-lock re-check narrows to the due row and answers miss for
+	// every other state.
+	narrowed := sel
+	narrowed.UserID = &firstDue
+	if found, err := h.subscriptions.List(h.ctx(), narrowed); err != nil || len(found) != 1 {
+		t.Errorf("List(narrowed to due) = %d (err %v), want 1", len(found), err)
+	}
+	for _, id := range []uuid.UUID{tooYoung, firstConsumed, spent, optedOut, windowOver} {
+		narrowed.UserID = &id
+		if found, err := h.subscriptions.List(h.ctx(), narrowed); err != nil || len(found) != 0 {
+			t.Errorf("List(narrowed to %s) = %d (err %v), want 0", id, len(found), err)
+		}
+	}
+}

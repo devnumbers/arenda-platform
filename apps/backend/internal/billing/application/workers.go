@@ -349,6 +349,88 @@ func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, erro
 	return processed, nil
 }
 
+// ProcessGraceRetries drives the dunning minimum of spec #419 (ticket #431):
+// a subscription that entered grace after a failed renewal charge is retried
+// twice on the fixed schedule — +24 h and +72 h from the grace entry — on its
+// active payment method, whatever it is by then (a card switch between
+// retries is picked up at charge time). A retry runs through the same
+// planning and charging half as a renewal: the planning transaction locks the
+// subscription in the dunning selection (so a subscription that left grace —
+// a manual payment, an upgrade, an admin move — is a no-op), resolves the
+// current renewal terms and persists a fresh pending payment (the retry
+// boundary is consumed by any payment since the grace entry), and the charge
+// finalizes through the single success-application seam. A failed retry
+// leaves the subscription in grace — the failure freshness guard sees the
+// open grace window and does not re-enter it — and after the schedule and the
+// window are spent, the expired-grace phase keeps its old behaviour. Returns
+// the number of subscriptions charged.
+func (w *Workers) ProcessGraceRetries(ctx context.Context, now time.Time) (int, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("grace retry worker requires a payment provider: %w", ErrPaymentUnavailable)
+	}
+	if w.payments == nil {
+		return 0, fmt.Errorf("grace retry worker requires the payment lifecycle: %w", ErrPaymentUnavailable)
+	}
+
+	processed := 0
+	sel := w.phases.graceRetryDue(now, w.config.WorkerBatchSize)
+	// A retried row does not always leave the selection this tick — a payment
+	// reused from a crashed run consumes nothing — so the loop tracks the users
+	// it already attempted and stops instead of spinning on them.
+	attempted := make(map[uuid.UUID]bool)
+	for {
+		subs, err := w.subscriptions.List(ctx, sel)
+		if err != nil {
+			return processed, fmt.Errorf("list subscriptions with due grace retry: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		retried := 0
+		for _, sub := range subs {
+			if attempted[sub.UserID] {
+				continue
+			}
+			attempted[sub.UserID] = true
+			if err := w.retryGraceCharge(ctx, sub, now); err != nil {
+				w.log.ErrorContext(ctx, "grace retry failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			retried++
+			processed++
+		}
+		if len(subs) < sel.Limit {
+			break
+		}
+		if retried == 0 {
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "grace retries"))
+			break
+		}
+	}
+	return processed, nil
+}
+
+// retryGraceCharge plans and charges one dunning retry of a grace
+// subscription — the two-transaction shape of renewSubscription over the
+// dunning selection instead of the renewal onset.
+func (w *Workers) retryGraceCharge(ctx context.Context, sub domain.Subscription, now time.Time) error {
+	var plan renewalPlan
+	grace := newGraceEvents(w.publisher, w.log)
+	err := grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
+		var planErr error
+		plan, planErr = w.planRenewal(ctx, grace, stores, sub, now, w.phases.graceRetryDue(now, 1))
+		return planErr
+	})
+	if err != nil || !plan.ready {
+		return err
+	}
+	return w.chargeRenewal(ctx, plan, now)
+}
+
 // processSubscriptionBatch loops a worker selection in batches and processes
 // every row. A full batch with zero progress stays in the selection, so the
 // loop stops and defers to the next tick instead of spinning on the same
@@ -410,7 +492,7 @@ func (w *Workers) renewSubscription(ctx context.Context, sub domain.Subscription
 	grace := newGraceEvents(w.publisher, w.log)
 	err := grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
 		var planErr error
-		plan, planErr = w.planRenewal(ctx, grace, stores, sub, now)
+		plan, planErr = w.planRenewal(ctx, grace, stores, sub, now, w.phases.renewalDue(now, 1))
 		return planErr
 	})
 	if err != nil || !plan.ready {
@@ -434,11 +516,14 @@ type renewalPlan struct {
 // planRenewal runs inside the planning transaction. A plan that comes back
 // not ready is an early exit: the subscription renewed or changed since
 // listing, its terms are free (applied right here), or it entered grace — so
-// no charge is due.
+// no charge is due. The selection names the batch the lock re-checks: the
+// renewal onset for the renewal phase, the dunning schedule for the grace
+// retry phase (ticket #431).
 func (w *Workers) planRenewal(
 	ctx context.Context, grace *graceEvents, stores *txStores, listed domain.Subscription, now time.Time,
+	sel SubscriptionSelection,
 ) (renewalPlan, error) {
-	sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, w.phases.renewalDue(now, 1))
+	sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, sel)
 	if err != nil {
 		return renewalPlan{}, err
 	}

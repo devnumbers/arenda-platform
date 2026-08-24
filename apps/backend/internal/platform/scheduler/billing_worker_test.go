@@ -25,11 +25,13 @@ const (
 type fakeBillingRunner struct {
 	scheduledErr        error
 	renewalErr          error
+	graceRetryErr       error
 	pendingUpgradeErr   error
 	graceReminderErr    error
 	expiredGraceErr     error
 	scheduledCount      int
 	renewalCount        int
+	graceRetryCount     int
 	pendingUpgradeCount int
 	graceReminderCount  int
 	expiredGraceCount   int
@@ -55,6 +57,10 @@ func (s *fakeBillingRunner) ProcessScheduledChanges(ctx context.Context, _ time.
 
 func (s *fakeBillingRunner) ProcessRenewals(context.Context, time.Time) (int, error) {
 	return s.renewalCount, s.renewalErr
+}
+
+func (s *fakeBillingRunner) ProcessGraceRetries(context.Context, time.Time) (int, error) {
+	return s.graceRetryCount, s.graceRetryErr
 }
 
 func (s *fakeBillingRunner) ProcessExpiredGrace(context.Context, time.Time) (int, error) {
