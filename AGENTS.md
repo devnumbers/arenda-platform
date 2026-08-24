@@ -107,7 +107,7 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 - Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`. On the schema side this is enforced by `make migrations-lint` (`tools/migration-lint/domain-rules.mjs`, config `apps/backend/.squawk.toml`).
 - All amounts are in RUB; there is no multi-currency support (`docs/adr/0036-fintech-domain-language.md`).
 - Format money for display only at the UI layer: frontend — `formatMoneyKopecks` (`apps/frontend/shared/lib/format-money.ts`); admin — `formatKopecks` / `MoneyField` (`apps/admin/src/fields.tsx`).
-- Two money vocabularies (`docs/adr/0036-fintech-domain-language.md`): rental money records are Операции — «платёж»/«транзакция» belong to Billing (T-Kassa processing) only. Canonical terms and `_Avoid_` lists live in `CONTEXT-MAP.md` and the per-context `CONTEXT.md` files.
+- Two money vocabularies (`docs/adr/0036-fintech-domain-language.md`, updated by ADR 0046): the record-keeping vocabulary (Операция, Доход, Расход) left the active language with the removed leases domain and is empty until the new domain is designed; «платёж»/«транзакция» belong to Billing (T-Kassa processing) only. Canonical terms and `_Avoid_` lists live in `CONTEXT-MAP.md` and the per-context `CONTEXT.md` files.
 
 ## Agent skills
 

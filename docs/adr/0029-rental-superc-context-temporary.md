@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by ADR 0046 (аренды и Операции удалены под переписывание, супер-контекст Rental распался)
 
 ## Context
 
