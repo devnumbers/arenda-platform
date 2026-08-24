@@ -19,14 +19,15 @@ Multi-context repo (this repo). The root `CONTEXT-MAP.md` points at one `CONTEXT
 ├── docs/adr/                                      ← system-wide decisions
 └── apps/backend/internal/
     ├── identity/CONTEXT.md
-    ├── properties/CONTEXT.md                      ← rental super-context (ADR 0029)
+    ├── properties/CONTEXT.md
     ├── billing/CONTEXT.md
     ├── access/CONTEXT.md
     ├── audit/CONTEXT.md
+    ├── notifications/CONTEXT.md
     └── popups/CONTEXT.md
 ```
 
-`properties/CONTEXT.md` documents the rental super-context (properties + leases + notifications) as one glossary until the bidirectional domain cycles are broken via ports (ADR 0029).
+Each `CONTEXT.md` documents exactly one bounded context (ADR 0046 dissolved the former rental super-context of ADR 0029; the removed leases domain will return as its own context behind future specs).
 
 ## Use the glossary's vocabulary
 

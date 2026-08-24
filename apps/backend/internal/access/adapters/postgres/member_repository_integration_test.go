@@ -87,7 +87,7 @@ func createAccessTestUser(t *testing.T, ctx context.Context, q *genpostgres.Quer
 }
 
 // propertyTypeApartment and statusActive are the column fixture values used by
-// createAccessTestProperty, its inline copies, and the lease fixtures.
+// createAccessTestProperty and its inline copies.
 const (
 	propertyTypeApartment = "apartment"
 	statusActive          = "active"

@@ -231,7 +231,7 @@ export const UserLinkField = (props: FieldProps) => {
 /**
  * Владелец записи: ссылка на Show пользователя, текст — ownerPhone.
  * source указывает на поле ownerId; запросов не выполняет,
- * используются ownerPhone/ownerId текущей записи (AdminProperty, AdminTenantContact).
+ * используются ownerPhone/ownerId текущей записи (AdminProperty).
  */
 export const OwnerLinkField = (props: FieldProps) => {
   const record = useRecordContext();
@@ -249,30 +249,6 @@ export const OwnerLinkField = (props: FieldProps) => {
     </Link>
   );
 };
-
-interface TenantContactValue extends PersonName {
-  phone?: string | null;
-}
-
-/** Вложенный tenantContact договора: «Фамилия Имя Отчество, телефон». */
-export const TenantContactField = (props: FieldProps) => (
-  <FunctionField
-    {...props}
-    render={(record) => {
-      const contact: unknown = record[props.source];
-      if (!contact || typeof contact !== 'object') {
-        return null;
-      }
-      const value = contact as TenantContactValue;
-      const name = fullName(value);
-      const phone = typeof value.phone === 'string' ? value.phone : '';
-      if (name && phone) {
-        return `${name}, ${phone}`;
-      }
-      return name || phone || null;
-    }}
-  />
-);
 
 /** Плейсхолдер для записей, чей объект был удалён без сохранения имени (propertyName пуст). */
 const deletedPropertyPlaceholder = 'объект удалён';
@@ -313,12 +289,6 @@ const renderUser = (user: RaRecord) => {
   return name ? `${phone} (${name})` : phone;
 };
 
-const renderLease = (lease: RaRecord) => {
-  const propertyName = typeof lease.propertyName === 'string' ? lease.propertyName : '';
-  const tenantName = fullName(asPersonName(lease.tenantContact));
-  return tenantName ? `${propertyName} → ${tenantName}` : propertyName;
-};
-
 type ReferenceProps = Omit<ReferenceFieldProps, 'reference' | 'children'>;
 
 /** Владелец/пользователь: ссылка на Show пользователя, телефон (+ ФИО). */
@@ -344,10 +314,3 @@ export const PropertyReferenceField = (props: ReferenceProps) => {
     </ReferenceField>
   );
 };
-
-/** Договор аренды: ссылка на Show договора, «{propertyName} → {ФИО арендатора}». */
-export const LeaseReferenceField = (props: ReferenceProps) => (
-  <ReferenceField reference="leases" link="show" {...props}>
-    <FunctionField render={renderLease} />
-  </ReferenceField>
-);

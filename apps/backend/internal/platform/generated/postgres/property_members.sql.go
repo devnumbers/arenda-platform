@@ -240,34 +240,6 @@ func (q *Queries) GetPropertyMemberRole(ctx context.Context, arg GetPropertyMemb
 	return role, err
 }
 
-const listAccessibleOwners = `-- name: ListAccessibleOwners :many
-SELECT DISTINCT p.owner_id
-FROM property_members m
-JOIN properties p ON p.id = m.property_id
-WHERE m.user_id = $1::uuid
-  AND m.status = 'active'
-`
-
-func (q *Queries) ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listAccessibleOwners, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []pgtype.UUID{}
-	for rows.Next() {
-		var owner_id pgtype.UUID
-		if err := rows.Scan(&owner_id); err != nil {
-			return nil, err
-		}
-		items = append(items, owner_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listActiveMembersByPropertyOwner = `-- name: ListActiveMembersByPropertyOwner :many
 SELECT m.id, m.property_id, m.user_id, m.role, m.granted_by, m.created_at, m.updated_at, m.status, m.suspended_at
 FROM property_members m

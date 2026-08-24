@@ -13,8 +13,8 @@ import (
 // relative to a data owner (owner-wide data) or a specific property
 // (property-scoped data, issue #156).
 //
-// Owner-wide data (operation categories, tenant contacts and other account-level
-// entities) is resolved as follows: the owner (actor == scope) gets RoleOwner;
+// Owner-wide data (account-level entities not scoped to a single property) is
+// resolved as follows: the owner (actor == scope) gets RoleOwner;
 // for any other actor the role is derived from the strongest membership the
 // actor holds across all of the scope's properties — full access to at least
 // one property grants RoleFullAccess over the scope's owner-wide data, view-only
@@ -34,8 +34,8 @@ func NewMembershipPolicy(owners PropertyOwnerResolver, members MembershipReposit
 	return &MembershipPolicy{owners: owners, members: members}
 }
 
-// Role returns the actor's role over owner-wide data (operation categories,
-// tenant contacts and other account-level entities). For the owner's own data
+// Role returns the actor's role over owner-wide data (account-level entities
+// not scoped to a single property). For the owner's own data
 // (actor == scope) it is RoleOwner. For any other actor the role is derived
 // from the strongest membership the actor holds across all of the scope's
 // properties: full access to at least one property grants RoleFullAccess over

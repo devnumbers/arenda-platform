@@ -36,8 +36,8 @@ const (
 type Policy interface {
 	// Role returns the authorization role of the actor relative to the scope
 	// (the data owner). The role determines which capabilities the actor has
-	// over the scope's owner-wide data (operation categories, tenant contacts
-	// and other account-level entities). For the owner's own data actor ==
+	// over the scope's owner-wide data (account-level entities not scoped to a
+	// single property). For the owner's own data actor ==
 	// scope and the role is RoleOwner; for an actor with property memberships the
 	// role is derived as the strongest role across the scope's properties;
 	// otherwise RoleNone.

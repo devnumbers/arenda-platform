@@ -54,13 +54,6 @@ WHERE m.user_id = sqlc.arg('user_id')::uuid
   AND p.owner_id = sqlc.arg('owner_id')::uuid
   AND m.status = 'active';
 
--- name: ListAccessibleOwners :many
-SELECT DISTINCT p.owner_id
-FROM property_members m
-JOIN properties p ON p.id = m.property_id
-WHERE m.user_id = sqlc.arg('user_id')::uuid
-  AND m.status = 'active';
-
 -- name: SuspendPropertyMember :exec
 UPDATE property_members
 SET status = 'suspended', suspended_at = now()

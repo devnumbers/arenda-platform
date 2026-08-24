@@ -31,9 +31,9 @@ type txStores struct {
 }
 
 // archiveExcessProperties archives the owner's active properties beyond the
-// limit (open leases force-completed by the implementation) inside the current
-// transaction. Without a wired bridge it is a no-op: the subscription-side
-// phase still applies, only the excess properties wait (issue #252).
+// limit inside the current transaction. Without a wired bridge it is a no-op:
+// the subscription-side phase still applies, only the excess properties wait
+// (issue #252).
 func (s *txStores) archiveExcessProperties(ctx context.Context, ownerID uuid.UUID, limit int) error {
 	if s.archiver == nil {
 		return nil
@@ -51,8 +51,8 @@ func (s *txStores) enforceRecipientSlots(ctx context.Context, userID uuid.UUID, 
 }
 
 // enforceTariffLimit is the shared tail of every worker phase that lowers a
-// tariff limit: the owner's excess active properties are archived (open leases
-// force-completed) and the affected recipients' excess shared memberships
+// tariff limit: the owner's excess active properties are archived and the
+// affected recipients' excess shared memberships
 // suspended, inside the caller's transaction so a bridge failure rolls the
 // whole phase back (issue #252).
 func (s *txStores) enforceTariffLimit(ctx context.Context, ownerID uuid.UUID, limit int, trigger string) error {

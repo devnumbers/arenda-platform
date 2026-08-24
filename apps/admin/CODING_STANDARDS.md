@@ -10,7 +10,7 @@ Not duplicated here — single sources of truth elsewhere:
 
 ## Resource file anatomy
 
-- One `.tsx` per resource at `src/`, colocating List/Show views and their components. Pattern: `src/leases.tsx` — export the shared columns (`LeaseDatagrid`) for reuse by both the resource's `List` and other resources' embedded tabs (`ReferenceManyField` in `Show`).
+- One `.tsx` per resource at `src/`, colocating List/Show views and their components. Pattern: `src/properties.tsx` — colocated `PropertyList`/`PropertyShow` plus shared blocks (`PropertyAttributesBlock`) reused by other views.
 - `List` uses `rowClick="show"` and `bulkActionButtons={false}` (the app is read-only — see below). Columns outside the backend sort whitelist get `sortable={false}`.
 - Every `<Resource>` in `App.tsx` gets an MUI icon and an explicit `recordRepresentation` (a string field or a helper function with JSDoc) — without one, RA renders bare ids in references.
 - Cross-resource panels (e.g. subscription panels in `UserShow`) are exported components from a colocated module, not routed resources.
@@ -32,7 +32,7 @@ All backend calls go through `src/dataProvider.ts` (or `authProvider.ts`) — th
 
 ## fields.tsx — choices and display
 
-- Choice catalogs (`roleChoices`, `leaseStatusChoices`, …) mirror `openapi.yaml` and the audit registry, with Russian labels. **Every catalog ships a sync contract test** (in `src/lib/*.test.ts`): enum values from the backend source asserted to be covered exactly once with non-empty labels — drift fails the suite, not production.
+- Choice catalogs (`roleChoices`, `propertyStatusChoices`, …) mirror `openapi.yaml` and the audit registry, with Russian labels. **Every catalog ships a sync contract test** (in `src/lib/*.test.ts`): enum values from the backend source asserted to be covered exactly once with non-empty labels — drift fails the suite, not production.
 - Money displays only through `MoneyField` / `formatKopecks` (`Intl` ru-RU); never ad-hoc `/100` — enforced by the money selectors (raw `/100`/`*100` and `.toFixed` banned outside `fields.tsx`).
 - Link and Reference wrappers (`UserLinkField`, `UserReferenceField`, …) avoid extra requests; the documented exception is `ReferenceField` in list views, where RA batches `getMany`.
 - Names through `fullName`/`asPersonName`; enum chips through `ChoiceChipField`.

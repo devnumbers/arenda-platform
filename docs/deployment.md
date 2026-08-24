@@ -193,14 +193,14 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
   релизами; `CREATE INDEX CONCURRENTLY` на больших таблицах. Авто-rollback
   никогда не делает `migrate down`; `down` прогоняется только в CI на
   эфемерной БД. Контроль — чеклист в `.github/PULL_REQUEST_TEMPLATE.md`.
-- Down-миграция `000086_property_deletion_detach` **необратима после первого
-  реального удаления объекта в режиме detach**: она выполняет `SET NOT NULL`
-  на `property_id` в `leases`, `operations` и `recurring_operations` и упадёт,
-  пока в БД есть отвязанные строки (`property_id IS NULL`). Ручной откат за
-  пределы 000086 возможен только после ручной чистки таких строк
-  (перепривязка или удаление). Стандартный rollback это не ломает:
-  автоматический откат `migrate down` не выполняет никогда, а откат БД —
-  только restore из дампа (см. ниже).
+- Down-миграция `000086_property_deletion_detach` выполняет `SET NOT NULL` на
+  `property_id` в таблицах арендного домена и исторически падала, пока в БД
+  есть отвязанные строки (`property_id IS NULL`). После drop-миграции
+  `000114` (спека #434) откат за 000086 всегда проходит через 000114-down,
+  который восстанавливает эти таблицы пустыми — ручная чистка строк больше не
+  нужна. Стандартный rollback это не ломает: автоматический откат
+  `migrate down` не выполняет никогда, а откат БД — только restore из дампа
+  (см. ниже).
 
 ### Restore из дампа
 
@@ -282,7 +282,7 @@ rentlee.ru {
 		reverse_proxy 127.0.0.1:18080
 	}
 
-	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
+	@frontend path /login* /dashboard* /properties* /profile* /subscription* /support* /ui-kit* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
 	handle @frontend {
 		reverse_proxy 127.0.0.1:13000
 	}
@@ -315,7 +315,7 @@ dev.rentlee.ru {
 		reverse_proxy 127.0.0.1:28080
 	}
 
-	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
+	@frontend path /login* /dashboard* /properties* /profile* /subscription* /support* /ui-kit* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
 	handle @frontend {
 		reverse_proxy 127.0.0.1:23000
 	}

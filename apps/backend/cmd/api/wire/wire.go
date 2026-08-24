@@ -33,7 +33,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/observability"
 	platformpolicy "github.com/nambers/arenda-planform/apps/backend/internal/platform/policy"
-	platformtz "github.com/nambers/arenda-planform/apps/backend/internal/platform/tzresolver"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -58,7 +57,6 @@ type platformDeps struct {
 	Encryptor     encryption.Encryptor
 	Renderer      *mailer.Renderer
 	AuditRecorder auditapp.Recorder
-	TZResolver    *platformtz.OwnerTimezone
 	Policy        sharedpolicy.Policy
 	Clock         clock.Clock
 	Beginner      transaction.Beginner
@@ -91,7 +89,7 @@ func NewAppLogger(cfg *config.Config) (*slog.Logger, error) {
 
 // WirePlatform builds the platform foundation: config, logger, signal context,
 // OpenTelemetry SDK, email renderer, encryptor, auto-migration, database pool,
-// instrumented pool, audit writer/recorder and the shared timezone resolver.
+// instrumented pool and audit writer/recorder.
 // It returns the platform bundle plus the signal-scoped lifecycle context that
 // main.go selects on for shutdown.
 func WirePlatform() (*Platform, context.Context, error) {
@@ -172,7 +170,6 @@ func WirePlatform() (*Platform, context.Context, error) {
 		"idle_in_transaction_session_timeout", poolConfig.IdleInTransactionSessionTimeout.String(),
 	)
 
-	tzResolver := platformtz.NewOwnerTimezone(db)
 	policy := platformpolicy.NewOwnerOnlyPolicy()
 
 	deps := platformDeps{
@@ -183,7 +180,6 @@ func WirePlatform() (*Platform, context.Context, error) {
 		Encryptor:     encryptor,
 		Renderer:      renderer,
 		AuditRecorder: auditRecorder,
-		TZResolver:    tzResolver,
 		Policy:        policy,
 		Clock:         clock.Real{},
 		Beginner:      platformpostgres.NewBeginner(pool, appLogger),

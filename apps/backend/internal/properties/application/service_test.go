@@ -164,18 +164,6 @@ func (r *lockingFakePropertyRepo) Delete(_ context.Context, _, _ uuid.UUID) erro
 	return errors.New("not implemented")
 }
 
-func (r *lockingFakePropertyRepo) DeleteOperationsByProperty(_ context.Context, _, _ uuid.UUID) error {
-	return errors.New("not implemented")
-}
-
-func (r *lockingFakePropertyRepo) DeleteRecurringOperationsByProperty(_ context.Context, _, _ uuid.UUID) error {
-	return errors.New("not implemented")
-}
-
-func (r *lockingFakePropertyRepo) DeleteLeasesByProperty(_ context.Context, _, _ uuid.UUID) error {
-	return errors.New("not implemented")
-}
-
 func (r *lockingFakePropertyRepo) WithTx(tx transaction.Tx) PropertyRepository {
 	ftx, ok := tx.(*fakePropertyTx)
 	if !ok {
@@ -636,18 +624,6 @@ func (r *fakePropertyRepo) Delete(_ context.Context, id, _ uuid.UUID) error {
 	return nil
 }
 
-func (r *fakePropertyRepo) DeleteOperationsByProperty(_ context.Context, _, _ uuid.UUID) error {
-	return nil
-}
-
-func (r *fakePropertyRepo) DeleteRecurringOperationsByProperty(_ context.Context, _, _ uuid.UUID) error {
-	return nil
-}
-
-func (r *fakePropertyRepo) DeleteLeasesByProperty(_ context.Context, _, _ uuid.UUID) error {
-	return nil
-}
-
 func (r *fakePropertyRepo) WithTx(_ transaction.Tx) PropertyRepository {
 	return r
 }
@@ -813,10 +789,7 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 				t.Errorf("GetProperty error = %v, want %v", err, tt.wantErr)
 			}
 
-			// GetProperty denial
-			// must propagate unchanged (the success path is not exercised
-			// here: the shared lease stubs report no-open-lease with the
-			// properties sentinel, which the service does not translate).
+			// The GetProperty denial must propagate unchanged.
 			if tt.wantErr != nil {
 				_, err = svc.GetProperty(ctx, ownerID, propertyID)
 				if !errors.Is(err, tt.wantErr) {

@@ -34,7 +34,9 @@ type Identity struct {
 	Profile        *identityapp.ProfileService
 	Logout         *identityapp.LogoutService
 	// EmailMailer is the configured mailer.Sender (smtp or fake). It is exposed
-	// because the notification reminder worker reuses it to send emails.
+	// because other modules reuse it: the access email sender (invite and
+	// sharing lifecycle emails) and the notifications email notifier (grace
+	// letters).
 	EmailMailer mailer.Sender
 }
 

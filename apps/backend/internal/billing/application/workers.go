@@ -21,9 +21,9 @@ import (
 // port.
 
 // ExcessPropertyArchiver archives the owner's active properties beyond a tariff
-// limit — force-completing the open leases on them — inside the caller's
-// transaction. Declared here, at the consumer (the worker phases), per
-// ADR 0035; the composition root adapts the properties context to it.
+// limit inside the caller's transaction. Declared here, at the consumer (the
+// worker phases), per ADR 0035; the composition root adapts the properties
+// context to it.
 type ExcessPropertyArchiver interface {
 	ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int) error
 }
@@ -929,9 +929,8 @@ func (w *Workers) recoverUncertainCharge(ctx context.Context, payment domain.Sub
 }
 
 // ProcessExpiredGrace downgrades subscriptions whose grace window ended to the
-// basic tariff and archives their excess properties (open leases on them
-// force-completed) — the shared expiry path of ADR 0008. Returns the number of
-// subscriptions processed.
+// basic tariff and archives their excess properties — the shared expiry path
+// of ADR 0008. Returns the number of subscriptions processed.
 func (w *Workers) ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error) {
 	basicTariff, err := w.tariffs.GetByName(ctx, domain.TariffBasic)
 	if err != nil {

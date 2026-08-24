@@ -7,7 +7,7 @@ Rules for the react-admin back-office SPA in `apps/admin`. Also follow the root 
 ## Stack & References
 
 - Vite 6, React 19, TypeScript `^5.7`, react-admin 5 (`react-admin`, `ra-i18n-polyglot`, `ra-language-russian`), MUI 7 with Emotion.
-- Entry point `src/main.tsx`; root component `src/App.tsx`; backend integration lives in `src/dataProvider.ts`; authentication in `src/authProvider.ts`; login UI in `src/LoginPage.tsx`; resources are declared per domain (for example `src/leases.tsx`, `src/operations.tsx`).
+- Entry point `src/main.tsx`; root component `src/App.tsx`; backend integration lives in `src/dataProvider.ts`; authentication in `src/authProvider.ts`; login UI in `src/LoginPage.tsx`; resources are declared per domain (for example `src/properties.tsx`, `src/users.tsx`).
 - Russian UI localization via `ra-i18n-polyglot` + `ra-language-russian`; keep new user-facing strings localized.
 - Official react-admin docs (https://marmelab.com/react-admin/documentation.html) and MUI docs (https://mui.com/material-ui/) take precedence over training data.
 - For non-obvious third-party behavior, use `context7` for current docs.

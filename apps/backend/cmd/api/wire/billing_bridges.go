@@ -36,8 +36,8 @@ func (s propertyArchiverSource) WithTx(tx transaction.Tx) (billingapp.ExcessProp
 }
 
 // propertyArchiver runs the properties context's archiver on the bound
-// transaction: active properties beyond the limit are archived (their open
-// leases force-completed), keeping the newest.
+// transaction: active properties beyond the limit are archived, keeping the
+// newest.
 type propertyArchiver struct {
 	svc *propertiesapp.PropertyService
 	tx  transaction.Tx

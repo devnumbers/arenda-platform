@@ -56,7 +56,7 @@ Before implementing or reviewing backend code, read `CODING_STANDARDS.md` (same 
 
 - Use DDD, Clean Architecture, layered architecture, clean code, and idiomatic Go.
 - Keep the backend a DDD modular monolith until an ADR records a real reason to split services.
-- Current bounded contexts under `internal` include `identity`, `properties`, `leases`, `billing`, `notifications`, and `platform`. Add new contexts according to docs, glossary, and ADR boundaries.
+- Current bounded contexts under `internal` include `identity`, `properties`, `billing`, `notifications`, `access`, and `platform`. Add new contexts according to docs, glossary, and ADR boundaries.
 - `internal/audit` is the audit log module: `domain` holds the `Entry` model and the action registry, `application` exposes the `Recorder` port, `adapters/postgres` writes entries. Audit records go in the business operation's transaction (fail-safe: an insert error rolls the operation back); see `docs/adr/0020-audit-log.md`.
 - Layer direction is inward only: transport/adapters → application → domain.
 - Domain packages contain business language and rules only. They must not import HTTP, OpenAPI generated types, `pgx`, `sqlc`, `database/sql`, config, or adapters (enforced by depguard `domain-clean` in `.golangci.yml`).

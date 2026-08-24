@@ -47,8 +47,8 @@ Before implementing or reviewing frontend code, read `CODING_STANDARDS.md` (same
 - `app/` — Next.js App Router pages, layouts, loading/error boundaries, and route handlers.
 - `pages/` — only if an explicit ADR adds the Pages Router; the default is App Router.
 - `widgets/` — self-contained page blocks composed of features, entities, and shared UI.
-- `features/` — user scenarios and use cases (for example: "create operation", "pay subscription").
-- `entities/` — domain models mapped from the backend: owner, property, lease, operation, subscription.
+- `features/` — user scenarios and use cases (for example: "create property", "pay subscription").
+- `entities/` — domain models mapped from the backend: user (owner profile), property, property-contact, billing (subscription), access.
 - `shared/` — reusable infrastructure: UI kit, API client, config, helpers, types, and hooks not tied to a specific feature. Cross-entity model types referenced by several entity slices (`shared/model/`) and the react-query key registry (`shared/api/query-keys.ts`) live here because cross-slice imports are banned above `shared`.
 - Dependency direction is inward only: `app/widgets` → `features` → `entities` → `shared`. No imports upward or sideways between slices — cross-slice imports inside a layer are banned too (enforced by `boundaries/dependencies` in `eslint.config.mjs`, `eslint-plugin-boundaries`).
 - Every slice in `widgets/`, `features/`, and `entities/` is consumed from outside only through its public API — the slice's `index.ts` (enforced by the `fileInternalPath: "!index.ts"` policy of `boundaries/dependencies` in `eslint.config.mjs`). Keep the index minimal: export only what other elements actually import. `shared/` modules are entry points themselves and are imported directly.

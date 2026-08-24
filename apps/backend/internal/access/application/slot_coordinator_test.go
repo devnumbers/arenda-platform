@@ -297,7 +297,7 @@ func TestSlotCoordinator_EnforceRecipientLimit_OwnObjectsNotTouched(t *testing.T
 	// Recipient has one own property (registered with ownedProps only — it is
 	// NOT a membership row, the coordinator never sees it in memRepo) and one
 	// shared membership. The own property is the more-recently-updated of the
-	// two (no open lease on either), so it is the "best stays" entry and the
+	// two, so it is the "best stays" entry and the
 	// shared membership is the eviction candidate — which the coordinator
 	// suspends. The own object is never suspended (PropertyArchiver's job).
 	f.linkOwner(owner, sharedProp)

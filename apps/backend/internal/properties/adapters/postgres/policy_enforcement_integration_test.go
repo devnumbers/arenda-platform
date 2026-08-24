@@ -19,8 +19,8 @@ import (
 )
 
 // These integration tests run against a real Postgres via TEST_DATABASE_URL
-// and are skipped when it is unset (same convention as the leases integration
-// tests). They exercise the shared-access enforcement on property contacts
+// and are skipped when it is unset. They exercise the shared-access
+// enforcement on property contacts
 // (Property Sharing follow-up) end-to-end: real MembershipPolicy over real
 // repositories, with the service called as owner, full-access member, viewer,
 // outsider and suspended member.

@@ -22,7 +22,6 @@ type Access struct {
 	PropertyDeleteMailer *accessapp.PropertyDeleteMailer
 	SharedProperties     *accesspg.SharedProperties
 	SuspendedCounter     *accesspg.SuspendedCounter
-	AccessibleScopes     *accesspg.AccessibleScopes
 }
 
 // Compile-time checks that the access SlotCoordinator satisfies the cross-
@@ -67,7 +66,6 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 	emailResolver := accesspg.NewUserEmailResolver(userRepo)
 	sharedProperties := accesspg.NewSharedProperties(p.DB)
 	suspendedCounter := accesspg.NewSuspendedCounter(p.DB)
-	accessibleScopes := accesspg.NewAccessibleScopes(p.DB)
 
 	policy := accessapp.NewMembershipPolicy(ownerResolver, memberRepo)
 
@@ -143,6 +141,5 @@ func WireAccess(_ context.Context, p platformDeps, billing *Billing, emailMailer
 		PropertyDeleteMailer: propertyDeleteMailer,
 		SharedProperties:     sharedProperties,
 		SuspendedCounter:     suspendedCounter,
-		AccessibleScopes:     accessibleScopes,
 	}, nil
 }

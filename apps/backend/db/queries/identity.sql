@@ -13,9 +13,6 @@ SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at
 -- name: GetUserByEmail :one
 SELECT id, phone, role, name, surname, patronymic, email, created_at, updated_at, phone_encrypted, email_verified_at, timezone FROM users WHERE LOWER(email) = LOWER($1::text);
 
--- name: GetUserTimezone :one
-SELECT timezone FROM users WHERE id = $1;
-
 -- name: CreateUser :one
 INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)

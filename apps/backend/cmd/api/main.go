@@ -210,7 +210,7 @@ func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire
 
 // setBillingLifecycleBridges wires the billing worker's cross-context
 // lifecycle bridges (issue #252): the expiry and downgrade phases archive
-// excess properties (open leases force-completed) and suspend excess shared
+// excess properties and suspend excess shared
 // memberships in the same transaction as the subscription change. Billing is
 // built before the properties and access modules, so the bridges land here.
 // The workers, the payment service and the subscription service share the

@@ -172,7 +172,6 @@ type Querier interface {
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
 	GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error)
-	GetUserTimezone(ctx context.Context, id pgtype.UUID) (string, error)
 	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
 	// IncrementLoginAttempt atomically increments the failure counter on the
 	// existing row, so concurrent upserts cannot lose an increment (issue #215).
@@ -181,7 +180,6 @@ type Querier interface {
 	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
-	ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
 	// archived properties are excluded: an archived object does not occupy a
