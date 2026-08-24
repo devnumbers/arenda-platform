@@ -495,3 +495,21 @@ func TestPhaseScheduler_GraceRetrySchedule(t *testing.T) {
 	requireSelection(t, h.listedUserIDs(t, sel), idsOf(firstDue, secondDue),
 		idsOf(firstConsumed, spent, fresh, optedOut, noMethod, windowOver)...)
 }
+
+// TestPhaseScheduler_ExpiredBindings pins the hygiene batch of ticket #433:
+// the cleanup selection is bounded by the tick's now — every session whose
+// lifetime ended by the instant is cleanup-eligible — and capped by the
+// worker batch size.
+func TestPhaseScheduler_ExpiredBindings(t *testing.T) {
+	t.Parallel()
+	h := newPhasesHarness(t)
+	now := h.scheduler.now()
+
+	sel := h.scheduler.expiredBindings(now, 100)
+	if !sel.ExpiredBefore.Equal(now) {
+		t.Fatalf("ExpiredBefore = %v, want the tick now %v", sel.ExpiredBefore, now)
+	}
+	if sel.Limit != 100 {
+		t.Fatalf("Limit = %d, want 100", sel.Limit)
+	}
+}

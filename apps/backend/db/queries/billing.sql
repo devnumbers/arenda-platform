@@ -420,6 +420,35 @@ SET status = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: DeleteExpiredCardBindingSessions :execrows
+-- The hygiene batch (ticket #433): sessions past their lifetime, whatever
+-- their status — an expired session never produces a payment method, and the
+-- only later read of an old row is the binding limit's sliding window, which
+-- is measured on created_at and long past for an expired session (TTL 24 h vs
+-- window 1 h). The subselect keeps the delete batched; the loop re-runs it
+-- until fewer than the batch limit rows remain, so repeated runs are safe.
+DELETE FROM card_binding_sessions
+WHERE id IN (
+    SELECT c.id FROM card_binding_sessions c
+    WHERE c.expires_at < $1
+    ORDER BY c.expires_at
+    LIMIT $2
+);
+
+-- name: CountSubscriptionPaymentsBySelection :one
+-- The count twin of ListSubscriptionPaymentsBySelection for the stuck-payment
+-- gauges (ticket #433): the WHERE clause mirrors the list query's one — keep
+-- the two in sync when a selection field changes. The limit of the selection
+-- value is ignored: a gauge counts the whole batch.
+SELECT COUNT(*) FROM subscription_payments sp
+LEFT JOIN user_subscriptions us ON us.id = sp.subscription_id
+WHERE sp.status = sqlc.arg('status')
+  AND sp.provider_payment_id IS NOT NULL
+  AND sp.provider_payment_id <> ''
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR sp.created_at < sqlc.narg('created_before'))
+  AND (sqlc.narg('updated_before')::timestamptz IS NULL OR sp.updated_at < sqlc.narg('updated_before'))
+  AND (sqlc.arg('tariff_change_only')::bool = false OR us.tariff_id IS DISTINCT FROM sp.tariff_id);
+
 -- Admin dashboard stats. These queries are consumed by the admin context's
 -- repository, not by the billing module itself.
 

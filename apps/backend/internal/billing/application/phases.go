@@ -138,6 +138,19 @@ func (s *phaseScheduler) graceRetryDue(now time.Time, limit int) SubscriptionSel
 	}
 }
 
+// expiredBindings is the hygiene batch (ticket #433): card-binding sessions
+// whose lifetime has ended, whatever their status — the cleanup phase deletes
+// them so the table stops growing without bound. The cutoff is the tick's
+// now: an expired session never produces a payment method, and the binding
+// limit's sliding window (created_at-based, 1 h) is long past for a session
+// expired by its 24 h TTL, so deleting at expiry weakens nothing.
+func (s *phaseScheduler) expiredBindings(now time.Time, limit int) CardBindingSelection {
+	return CardBindingSelection{
+		ExpiredBefore: now,
+		Limit:         limit,
+	}
+}
+
 // stalePending is the lost-webhook batch: pending payments with a provider
 // reference unresolved past the configured staleness (issue #252).
 func (s *phaseScheduler) stalePending(now time.Time, limit int) PaymentSelection {

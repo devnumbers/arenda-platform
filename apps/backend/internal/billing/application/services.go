@@ -52,6 +52,9 @@ type ServicesConfig struct {
 	// (issue #253); nil keeps the pre-#253 behaviour of no grace
 	// notifications.
 	Publisher EventPublisher
+	// Metrics records the stuck-payment gauges of the worker hygiene phase
+	// (ticket #433); nil keeps the phases running without gauges.
+	Metrics *Metrics
 	// AdminPayments reads the cross-user payment rows behind the admin views
 	// (issue #254); nil keeps the admin read methods answered by an explicit
 	// wiring error.
@@ -90,6 +93,7 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 			Provider:  cfg.Provider,
 			Payments:  payments,
 			Clock:     cfg.Clock,
+			Metrics:   cfg.Metrics,
 			Config:    cfg.Config,
 			Logger:    cfg.Logger,
 			Publisher: cfg.Publisher,

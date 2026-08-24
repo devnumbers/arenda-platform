@@ -446,6 +446,27 @@ esac
 - Healthcheck-cron (`tools/healthcheck/healthcheck.sh`) пишет JSON при
   сбое в `/var/log/arenda/healthcheck.log`, откуда Vector забирает запись.
 
+### Метрики гигиены воркеров billing (тикет #433)
+
+Backend экспортирует гейдж `billing.payments.stuck` (OTel, атрибут `kind`)
+— число «висящих в полёте» исходов под сторожем reconciliation-воркера,
+без чувствительных данных:
+
+- `kind=pending` — оплаты без зафиксированного исхода дольше
+  `PendingPaymentStaleness` (5 минут, конфиг billing): потерянный вебхук,
+  незавершённая оплата. Порог алерта: > 0 дольше 1 часа — reconciliation
+  не разрешает зависимости, дежурный смотрит раньше пользователя.
+- `kind=refunding` — возвраты, зависшие в резервировании `refunding` дольше
+  5 минут: возврат в полёте или неопределённый исход. Порог алерта: > 0
+  дольше 1 часа — деньги пользователя в подвешенном состоянии, нужен ручной
+  разбор (неопределённый исход при failed-статусе провайдера).
+
+Оба гейджа пишет фаза `ExportStuckPaymentMetrics` billing-воркера в конце
+каждого тика. Истёкшие сессии привязки карты удаляются фазой
+`ProcessExpiredBindingSessions` того же тика (таблица не растёт неограниченно);
+алерта на чистку нет — сбой фазы виден в логах воркера и росте таблицы
+`card_binding_sessions`.
+
 Решение об observability зафиксировано в
 `docs/adr/0021-centralized-observability-uptrace.md` (superseded —
 перенесено в devnumbers/observability, ADR 0001).

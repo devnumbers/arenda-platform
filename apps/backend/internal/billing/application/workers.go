@@ -91,6 +91,9 @@ type Workers struct {
 	phases *phaseScheduler
 	config Config
 	log    *slog.Logger
+	// Metrics records the hygiene gauges (ticket #433); nil keeps the phases
+	// running without metrics.
+	metrics *Metrics
 	// Publisher emits the grace lifecycle events best-effort (issue #253);
 	// nil keeps the pre-#253 behaviour of no grace notifications.
 	publisher EventPublisher
@@ -114,9 +117,15 @@ type WorkersConfig struct {
 	Payments PaymentLifecycle
 	// Clock is the time source of the phase scheduler — the workers' only
 	// seam for time (issue #421). Nil defaults to the real clock.
-	Clock  clock.Clock
-	Config Config
-	Logger *slog.Logger
+	Clock clock.Clock
+	// Metrics records the stuck-payment gauges of the hygiene phase (ticket
+	// #433). Nil keeps the phases running without gauges — every Record
+	// method is nil-safe — the shape of local dev and tests; the composition
+	// root builds the instruments from the global OTel MeterProvider the way
+	// it builds the provider metrics.
+	Metrics *Metrics
+	Config  Config
+	Logger  *slog.Logger
 	// Publisher emits the grace lifecycle events (issue #253); nil keeps the
 	// pre-#253 behaviour.
 	Publisher EventPublisher
@@ -143,6 +152,7 @@ func NewWorkers(factory txStoreFactory, cfg WorkersConfig) *Workers {
 		phases:         newPhaseScheduler(cfg.Clock, cfg.Config),
 		config:         cfg.Config,
 		log:            cfg.Logger,
+		metrics:        cfg.Metrics,
 		publisher:      cfg.Publisher,
 	}
 }
@@ -1228,4 +1238,49 @@ func errorCodeFromResult(code string) *string {
 		return nil
 	}
 	return &code
+}
+
+// ProcessExpiredBindingSessions is the hygiene phase of ticket #433: it
+// deletes card-binding sessions past their lifetime in batches, so the table
+// stops growing without bound. Every status is cleaned — an expired session
+// never produces a payment method, and the only later read of an old row (the
+// binding limit's sliding window, ticket #427) is measured on created_at and
+// is long past for a session expired by its TTL. A delete is idempotent, so a
+// crashed or repeated run just re-runs the remaining batches. Returns the
+// number of sessions deleted.
+func (w *Workers) ProcessExpiredBindingSessions(ctx context.Context, now time.Time) (int, error) {
+	deleted := 0
+	// A non-positive configured batch size would trap the drain loop (every
+	// short batch still satisfies n < size at zero), so it floors at one.
+	batch := max(w.config.WorkerBatchSize, 1)
+	for {
+		n, err := w.bindings.DeleteExpired(ctx, w.phases.expiredBindings(now, batch))
+		if err != nil {
+			return deleted, fmt.Errorf("delete expired card binding sessions: %w", err)
+		}
+		deleted += n
+		if n < batch {
+			return deleted, nil
+		}
+	}
+}
+
+// ExportStuckPaymentMetrics records the hygiene gauges of ticket #433: how
+// many payments sit unresolved past the reconciliation staleness (the lost
+// webhook watchdog's own selections) and how many refunds are stuck in the
+// refunding reservation — the "in flight" outcomes a duty engineer watches
+// before users report them. The counts carry no sensitive data; the gauges
+// are no-ops without a configured meter provider.
+func (w *Workers) ExportStuckPaymentMetrics(ctx context.Context, now time.Time) error {
+	pending, err := w.txStoreFactory.payments.Count(ctx, w.phases.stalePending(now, 0))
+	if err != nil {
+		return fmt.Errorf("count stale pending payments: %w", err)
+	}
+	refunding, err := w.txStoreFactory.payments.Count(ctx, w.phases.staleRefunding(now, 0))
+	if err != nil {
+		return fmt.Errorf("count stale refunding payments: %w", err)
+	}
+	w.metrics.RecordStuck(ctx, stuckKindPending, pending)
+	w.metrics.RecordStuck(ctx, stuckKindRefunding, refunding)
+	return nil
 }

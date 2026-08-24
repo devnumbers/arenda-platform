@@ -65,6 +65,10 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 	if err != nil {
 		return nil, fmt.Errorf("payment metrics: %w", err)
 	}
+	workerMetrics, err := billingapp.NewMetrics()
+	if err != nil {
+		return nil, fmt.Errorf("billing worker metrics: %w", err)
+	}
 	provider, err := wirePaymentProvider(p.Cfg, p.Logger, p.Clock, paymentMetrics)
 	if err != nil {
 		return nil, err
@@ -87,6 +91,7 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 		Logger:        p.Logger,
 		Provider:      provider,
 		Publisher:     billingevents.NewPublisher(eventDispatcher),
+		Metrics:       workerMetrics,
 		AdminPayments: paymentRepo,
 	})
 

@@ -41,6 +41,11 @@ type Querier interface {
 	CountPropertyContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
+	// The count twin of ListSubscriptionPaymentsBySelection for the stuck-payment
+	// gauges (ticket #433): the WHERE clause mirrors the list query's one — keep
+	// the two in sync when a selection field changes. The limit of the selection
+	// value is ignored: a gauge counts the whole batch.
+	CountSubscriptionPaymentsBySelection(ctx context.Context, arg CountSubscriptionPaymentsBySelectionParams) (int64, error)
 	// Shared objects hidden from the recipient by a tariff slot shortage (the
 	// hidden_shared_count badge). Memberships on archived properties are excluded
 	// (issue #163): those objects are hidden by the archive, not by the tariff.
@@ -85,6 +90,13 @@ type Querier interface {
 	CreateTenantContact(ctx context.Context, arg CreateTenantContactParams) (TenantContact, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
+	// The hygiene batch (ticket #433): sessions past their lifetime, whatever
+	// their status — an expired session never produces a payment method, and the
+	// only later read of an old row is the binding limit's sliding window, which
+	// is measured on created_at and long past for an expired session (TTL 24 h vs
+	// window 1 h). The subselect keeps the delete batched; the loop re-runs it
+	// until fewer than the batch limit rows remain, so repeated runs are safe.
+	DeleteExpiredCardBindingSessions(ctx context.Context, arg DeleteExpiredCardBindingSessionsParams) (int64, error)
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
 	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)

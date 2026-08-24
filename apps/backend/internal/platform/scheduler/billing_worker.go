@@ -34,6 +34,14 @@ type RenewalProcessor interface {
 	ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error)
 }
 
+// BillingHygienist is the worker-hygiene slice of the billing module (ticket
+// #433): the expired card-binding-session cleanup and the stuck-payment
+// gauges.
+type BillingHygienist interface {
+	ProcessExpiredBindingSessions(ctx context.Context, now time.Time) (int, error)
+	ExportStuckPaymentMetrics(ctx context.Context, now time.Time) error
+}
+
 // billingWorkerLockKey is a stable application-level key for the PostgreSQL
 // advisory lock used to ensure only one billing worker runs at a time.
 const billingWorkerLockKey int64 = 0xB111
@@ -44,6 +52,7 @@ const billingWorkerLockKey int64 = 0xB111
 type BillingWorker struct {
 	renewals  RenewalProcessor
 	scheduled ScheduledChangeProcessor
+	hygienist BillingHygienist
 	pool      *pgxpool.Pool
 	clock     clock.Clock
 	interval  time.Duration
@@ -59,6 +68,7 @@ type BillingWorker struct {
 func NewBillingWorker(
 	renewals RenewalProcessor,
 	scheduled ScheduledChangeProcessor,
+	hygienist BillingHygienist,
 	pool *pgxpool.Pool,
 	clk clock.Clock,
 	interval time.Duration,
@@ -73,6 +83,7 @@ func NewBillingWorker(
 	return &BillingWorker{
 		renewals:  renewals,
 		scheduled: scheduled,
+		hygienist: hygienist,
 		pool:      pool,
 		clock:     clk,
 		interval:  interval,
@@ -113,6 +124,12 @@ func (w *BillingWorker) processTick(ctx context.Context) error {
 		// has ended the reminder is moot (issue #253).
 		w.processGraceExpiryReminders,
 		w.processExpiredGrace,
+		// The hygiene phases close the tick (ticket #433): the expired
+		// binding-session cleanup runs after every lifecycle phase, and the
+		// stuck-payment gauges are exported last so they observe the state
+		// this tick's reconciliation left behind.
+		w.processExpiredBindingSessions,
+		w.processStuckPaymentMetrics,
 	} {
 		if err := phase(ctx, now); err != nil {
 			errs = append(errs, err)
@@ -204,6 +221,38 @@ func (w *BillingWorker) processExpiredGrace(ctx context.Context, now time.Time) 
 	}
 	if count > 0 {
 		w.logger.InfoContext(ctx, "billing worker downgraded expired grace subscriptions", "count", count)
+	}
+	return nil
+}
+
+// processExpiredBindingSessions deletes expired card-binding sessions
+// (ticket #433) and wraps a failure for the joined tick error. A missing
+// hygienist (pre-#433 wiring) is skipped, not an error.
+func (w *BillingWorker) processExpiredBindingSessions(ctx context.Context, now time.Time) error {
+	if w.hygienist == nil {
+		return nil
+	}
+	count, err := w.hygienist.ProcessExpiredBindingSessions(ctx, now)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "billing worker expired binding session cleanup failed", "error", sanitize.Error(err))
+		return fmt.Errorf("expired binding sessions: %w", err)
+	}
+	if count > 0 {
+		w.logger.InfoContext(ctx, "billing worker deleted expired card binding sessions", "count", count)
+	}
+	return nil
+}
+
+// processStuckPaymentMetrics exports the stuck-payment gauges (ticket #433)
+// and wraps a failure for the joined tick error. A missing hygienist
+// (pre-#433 wiring) is skipped, not an error.
+func (w *BillingWorker) processStuckPaymentMetrics(ctx context.Context, now time.Time) error {
+	if w.hygienist == nil {
+		return nil
+	}
+	if err := w.hygienist.ExportStuckPaymentMetrics(ctx, now); err != nil {
+		w.logger.ErrorContext(ctx, "billing worker stuck payment metrics export failed", "error", sanitize.Error(err))
+		return fmt.Errorf("stuck payment metrics: %w", err)
 	}
 	return nil
 }

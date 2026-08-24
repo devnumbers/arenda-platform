@@ -13,6 +13,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+	"go.opentelemetry.io/otel"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 // The worker-phase scenarios ported from the pre-rewrite module's renewal and
@@ -1959,5 +1962,137 @@ func TestWorkers_GraceRetryManualPaymentCancelsRetries(t *testing.T) {
 	stored := h.storedSubscription(t, sub)
 	if stored.Status != domain.SubscriptionStatusGrace {
 		t.Errorf("status = %q, want grace (the manual payment is still pending)", stored.Status)
+	}
+}
+
+// TestWorkers_ExpiredBindingSessionsDeleted pins the hygiene phase of ticket
+// #433: sessions past their lifetime are deleted whatever their status — an
+// expired session never produces a payment method — while live sessions stay,
+// and a repeated run is a safe no-op. The batching loop drains a table bigger
+// than one worker batch in a single phase call.
+func TestWorkers_ExpiredBindingSessionsDeleted(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{WorkerBatchSize: 2})
+
+	seed := func(t *testing.T, ttl time.Duration) domain.CardBindingSession {
+		t.Helper()
+		session, err := domain.NewCardBindingSession(
+			mustNewUUID(), testProviderFake, "rk_"+mustNewUUID().String(),
+			h.now.Add(ttl), h.now.Add(-2*ttl))
+		if err != nil {
+			t.Fatalf("new session: %v", err)
+		}
+		if _, err := h.stores.bindings.Create(t.Context(), session); err != nil {
+			t.Fatalf("seed session: %v", err)
+		}
+		return session
+	}
+	// Three expired sessions — more than one batch at size 2 — in both
+	// statuses the table holds at expiry: open and closed.
+	expiredOpen := seed(t, -3*time.Hour)
+	expiredRejected := seed(t, -3*time.Hour)
+	expiredRejected.Status = domain.CardBindingRejected
+	if err := h.stores.bindings.UpdateStatus(t.Context(), expiredRejected); err != nil {
+		t.Fatalf("reject session: %v", err)
+	}
+	seed(t, -2*time.Hour)
+	// A live session stays: its lifetime has not ended.
+	live := seed(t, time.Hour)
+
+	count, err := h.workers.ProcessExpiredBindingSessions(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessExpiredBindingSessions: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("count = %d, want 3", count)
+	}
+	for _, gone := range []domain.CardBindingSession{expiredOpen, expiredRejected} {
+		if _, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), gone.Provider, gone.RequestKey); !errors.Is(err, ErrNotFound) {
+			t.Errorf("expired session %s must be deleted, got err %v", gone.ID, err)
+		}
+	}
+	if _, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), live.Provider, live.RequestKey); err != nil {
+		t.Fatalf("live session must survive the cleanup: %v", err)
+	}
+
+	// The re-run is a safe no-op: nothing left to delete.
+	count, err = h.workers.ProcessExpiredBindingSessions(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("re-run ProcessExpiredBindingSessions: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("re-run count = %d, want 0", count)
+	}
+}
+
+// TestWorkers_ExportStuckPaymentMetrics pins the hygiene gauges of ticket
+// #433: the phase counts the payments and refunds the reconciliation
+// watchdog owns — stale pending payments and payments stuck in the refunding
+// reservation — and records them on the stuck gauge by kind, nothing else.
+func TestWorkers_ExportStuckPaymentMetrics(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	previous := otel.GetMeterProvider()
+	otel.SetMeterProvider(provider)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(previous)
+		if err := reader.Shutdown(t.Context()); err != nil {
+			t.Logf("shutdown manual metric reader: %v", err)
+		}
+	})
+
+	// The harness leaves the workers gauge-less; the test wires the
+	// instruments built from the provider it just installed.
+	metrics, err := NewMetrics()
+	if err != nil {
+		t.Fatalf("new metrics: %v", err)
+	}
+	h := newWorkersHarness(t, Config{})
+	h.workers.metrics = metrics
+	sub := h.seedSubscription(t, nil)
+	h.seedStalePendingUpgrade(t, sub, "prov_gauge_1") // Stale pending: counted.
+	refund := h.seedStuckRefundPayment(t)             // Stuck refund: counted.
+	// The refunding staleness clock is updated_at: age the reservation past
+	// the configured staleness the way a lost refund outcome does.
+	refund.UpdatedAt = h.now.Add(-10 * time.Minute)
+	if err := h.stores.payments.Update(t.Context(), refund); err != nil {
+		t.Fatalf("age refund: %v", err)
+	}
+	h.provider.statusFn = func(uuid.UUID, string) (PaymentStatusResult, error) {
+		t.Error("the gauge phase must not talk to the provider")
+		return PaymentStatusResult{}, nil
+	}
+
+	if err := h.workers.ExportStuckPaymentMetrics(t.Context(), h.now); err != nil {
+		t.Fatalf("ExportStuckPaymentMetrics: %v", err)
+	}
+
+	var data metricdata.ResourceMetrics
+	if err := reader.Collect(t.Context(), &data); err != nil {
+		t.Fatalf("collect metrics: %v", err)
+	}
+	gauges := map[string]int64{}
+	for _, scope := range data.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			g, ok := m.Data.(metricdata.Gauge[int64])
+			if !ok {
+				continue
+			}
+			for _, point := range g.DataPoints {
+				kind := "unknown"
+				if v, ok := point.Attributes.Value("kind"); ok {
+					kind = v.AsString()
+				}
+				gauges[m.Name+"/"+kind] = point.Value
+			}
+		}
+	}
+	if got := gauges["billing.payments.stuck/pending"]; got != 1 {
+		t.Errorf("stuck pending = %d, want 1", got)
+	}
+	if got := gauges["billing.payments.stuck/refunding"]; got != 1 {
+		t.Errorf("stuck refunding = %d, want 1", got)
 	}
 }

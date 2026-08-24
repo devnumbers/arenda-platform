@@ -13,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -114,6 +115,20 @@ func (r *CardBindingSessionRepository) CountStartedSince(ctx context.Context, us
 		return 0, fmt.Errorf("count card binding sessions: %w", err)
 	}
 	return int(count), nil
+}
+
+// DeleteExpired removes a batch of sessions past their lifetime (ticket
+// #433), oldest first, and returns the deleted row count. A batch smaller
+// than the selection's limit means the table is clean for this tick.
+func (r *CardBindingSessionRepository) DeleteExpired(ctx context.Context, sel application.CardBindingSelection) (int, error) {
+	deleted, err := r.q().DeleteExpiredCardBindingSessions(ctx, postgres.DeleteExpiredCardBindingSessionsParams{
+		ExpiresAt: pgtype.Timestamptz{Time: sel.ExpiredBefore, Valid: true},
+		Limit:     shared.ToInt32Clamped(sel.Limit),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("delete expired card binding sessions: %w", err)
+	}
+	return int(deleted), nil
 }
 
 // UpdateStatus persists the session's status transition. Callers hold the row

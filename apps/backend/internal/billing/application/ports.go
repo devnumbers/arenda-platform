@@ -143,6 +143,10 @@ type SubscriptionPaymentRepository interface {
 	// #286) — the single parameterized query behind every reconciliation
 	// batch.
 	List(ctx context.Context, sel PaymentSelection) ([]domain.SubscriptionPayment, error)
+	// Count returns how many payments match the worker selection ignoring its
+	// limit — the stuck-payment gauges of the hygiene phase (ticket #433)
+	// count the whole batch, not one page of it.
+	Count(ctx context.Context, sel PaymentSelection) (int64, error)
 	Update(ctx context.Context, payment domain.SubscriptionPayment) error
 	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }
@@ -172,6 +176,20 @@ type PaymentMethodRepository interface {
 	WithTx(tx transaction.Tx) (PaymentMethodRepository, error)
 }
 
+// CardBindingSelection is the parameterized batch of the binding-session
+// hygiene phase (ticket #433): the values the cleanup selects its batch by,
+// shaped after the subscription and payment selections (issue #286) so the
+// predicate lives once in SQL.
+type CardBindingSelection struct {
+	// ExpiredBefore selects sessions whose lifetime has ended by the instant
+	// (expires_at < t), whatever their status: an expired session never
+	// produces a payment method.
+	ExpiredBefore time.Time
+	// Limit caps the batch; the hygiene loop re-runs the delete until the
+	// selection is exhausted.
+	Limit int
+}
+
 // CardBindingSessionRepository is the persistence port for card-binding
 // sessions (issue #251). The ForUpdate variant acquires a row-level
 // pessimistic lock and must only be called inside a transaction.
@@ -188,6 +206,10 @@ type CardBindingSessionRepository interface {
 	// (ticket #427). Every started session counts, whatever its later
 	// outcome: a closed session has still consumed the window.
 	CountStartedSince(ctx context.Context, userID uuid.UUID, since time.Time) (int, error)
+	// DeleteExpired removes a batch of sessions past their lifetime (ticket
+	// #433) and returns how many rows it deleted. Repeated runs are safe: the
+	// batch shrinks to zero once the table is clean.
+	DeleteExpired(ctx context.Context, sel CardBindingSelection) (int, error)
 	UpdateStatus(ctx context.Context, session domain.CardBindingSession) error
 	WithTx(tx transaction.Tx) (CardBindingSessionRepository, error)
 }

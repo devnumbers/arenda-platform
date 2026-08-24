@@ -127,6 +127,22 @@ func (r *SubscriptionPaymentRepository) List(ctx context.Context, sel applicatio
 	return mapSubscriptionPayments(rows)
 }
 
+// Count returns how many payments match the worker selection ignoring its
+// limit (ticket #433): the stuck-payment gauges of the hygiene phase count
+// the whole batch. The predicate mirrors List's one in SQL.
+func (r *SubscriptionPaymentRepository) Count(ctx context.Context, sel application.PaymentSelection) (int64, error) {
+	count, err := r.q().CountSubscriptionPaymentsBySelection(ctx, postgres.CountSubscriptionPaymentsBySelectionParams{
+		Status:           string(sel.Status),
+		CreatedBefore:    pgconv.TimePtrToPgtype(sel.CreatedBefore),
+		UpdatedBefore:    pgconv.TimePtrToPgtype(sel.UpdatedBefore),
+		TariffChangeOnly: sel.TariffChangeOnly,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count subscription payments by selection: %w", err)
+	}
+	return count, nil
+}
+
 // adminPaymentQueryParams maps the validated application filters to the SQL
 // parameters. The phone filter is encrypted deterministically so it matches
 // the stored ciphertext; a plaintext row still matches its own form.

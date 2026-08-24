@@ -116,6 +116,11 @@ func (r *gatePaymentRepo) List(context.Context, billingapp.PaymentSelection) ([]
 	return nil, nil
 }
 
+// The hygiene gauge count is unused by the gate; zero satisfies the port.
+func (r *gatePaymentRepo) Count(context.Context, billingapp.PaymentSelection) (int64, error) {
+	return 0, nil
+}
+
 func (r *gatePaymentRepo) Update(context.Context, domain.SubscriptionPayment) error { return nil }
 
 func (r *gatePaymentRepo) WithTx(transaction.Tx) (billingapp.SubscriptionPaymentRepository, error) {

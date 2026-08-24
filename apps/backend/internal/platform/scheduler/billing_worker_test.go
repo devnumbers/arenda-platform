@@ -75,6 +75,14 @@ func (s *fakeBillingRunner) ProcessPendingUpgradePayments(context.Context, time.
 	return s.pendingUpgradeCount, s.pendingUpgradeErr
 }
 
+func (s *fakeBillingRunner) ProcessExpiredBindingSessions(context.Context, time.Time) (int, error) {
+	return 0, nil
+}
+
+func (s *fakeBillingRunner) ExportStuckPaymentMetrics(context.Context, time.Time) error {
+	return nil
+}
+
 func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	t.Parallel()
 
@@ -100,7 +108,7 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 		expiredGraceErr: errors.New("expired grace failed: " + sensitive),
 	}
 
-	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w := NewBillingWorker(nil, nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 	w.renewals = svc
 	w.scheduled = svc
 	w.lockKey = billingSanitizeTestLockKey
@@ -150,7 +158,7 @@ func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	svc := &fakeBillingRunner{pendingUpgradeCount: 3}
-	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w := NewBillingWorker(nil, nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 	w.renewals = svc
 	w.scheduled = svc
 	w.lockKey = billingUpgradeTestLockKey
@@ -171,7 +179,7 @@ func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 func TestBillingWorker_Tick_RequiresPool(t *testing.T) {
 	t.Parallel()
 
-	w := NewBillingWorker(nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	w := NewBillingWorker(nil, nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
 	if err := w.tick(context.Background()); err == nil {
 		t.Fatal("expected tick to error when pool is nil")
 	}
@@ -201,7 +209,7 @@ func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 		scheduledDelay:   scheduledDelay,
 	}
 
-	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	w := NewBillingWorker(nil, nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
 	w.renewals = svc
 	w.scheduled = svc
 	w.lockKey = billingHoldTestLockKey

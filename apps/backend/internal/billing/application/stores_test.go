@@ -501,6 +501,19 @@ func (r *fakePaymentRepo) List(_ context.Context, sel PaymentSelection) ([]domai
 	return result, nil
 }
 
+// Count counts the whole selection, ignoring its limit — the gauge shape of
+// the hygiene phase (ticket #433).
+func (r *fakePaymentRepo) Count(ctx context.Context, sel PaymentSelection) (int64, error) {
+	// A zero limit would truncate the fake's List, so the count re-lists
+	// through an unbounded copy of the selection.
+	sel.Limit = int(^uint(0) >> 1)
+	payments, err := r.List(ctx, sel)
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(payments)), nil
+}
+
 // paymentInSelection is the fake's reading of the worker selection — the Go
 // mirror of ListSubscriptionPaymentsBySelection's predicate, including the
 // tariff-change join the fake resolves through tariffOfSubscription.
@@ -680,6 +693,29 @@ func (r *fakeBindingRepo) CountStartedSince(_ context.Context, userID uuid.UUID,
 		}
 	}
 	return count, nil
+}
+
+// DeleteExpired mirrors the SQL hygiene batch (ticket #433): sessions past
+// their lifetime go, oldest first, capped by the selection's limit.
+func (r *fakeBindingRepo) DeleteExpired(_ context.Context, sel CardBindingSelection) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	expired := make([]domain.CardBindingSession, 0)
+	for _, session := range r.sessions {
+		if session.IsExpired(sel.ExpiredBefore) {
+			expired = append(expired, session)
+		}
+	}
+	slices.SortFunc(expired, func(a, b domain.CardBindingSession) int {
+		return a.ExpiresAt.Compare(b.ExpiresAt)
+	})
+	if len(expired) > sel.Limit {
+		expired = expired[:sel.Limit]
+	}
+	for _, session := range expired {
+		delete(r.sessions, session.ID)
+	}
+	return len(expired), nil
 }
 
 func (r *fakeBindingRepo) UpdateStatus(_ context.Context, session domain.CardBindingSession) error {

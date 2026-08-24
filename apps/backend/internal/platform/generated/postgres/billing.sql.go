@@ -121,6 +121,40 @@ func (q *Queries) CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountS
 	return count, err
 }
 
+const countSubscriptionPaymentsBySelection = `-- name: CountSubscriptionPaymentsBySelection :one
+SELECT COUNT(*) FROM subscription_payments sp
+LEFT JOIN user_subscriptions us ON us.id = sp.subscription_id
+WHERE sp.status = $1
+  AND sp.provider_payment_id IS NOT NULL
+  AND sp.provider_payment_id <> ''
+  AND ($2::timestamptz IS NULL OR sp.created_at < $2)
+  AND ($3::timestamptz IS NULL OR sp.updated_at < $3)
+  AND ($4::bool = false OR us.tariff_id IS DISTINCT FROM sp.tariff_id)
+`
+
+type CountSubscriptionPaymentsBySelectionParams struct {
+	Status           string             `json:"status"`
+	CreatedBefore    pgtype.Timestamptz `json:"created_before"`
+	UpdatedBefore    pgtype.Timestamptz `json:"updated_before"`
+	TariffChangeOnly bool               `json:"tariff_change_only"`
+}
+
+// The count twin of ListSubscriptionPaymentsBySelection for the stuck-payment
+// gauges (ticket #433): the WHERE clause mirrors the list query's one — keep
+// the two in sync when a selection field changes. The limit of the selection
+// value is ignored: a gauge counts the whole batch.
+func (q *Queries) CountSubscriptionPaymentsBySelection(ctx context.Context, arg CountSubscriptionPaymentsBySelectionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubscriptionPaymentsBySelection,
+		arg.Status,
+		arg.CreatedBefore,
+		arg.UpdatedBefore,
+		arg.TariffChangeOnly,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCardBindingSession = `-- name: CreateCardBindingSession :one
 
 INSERT INTO card_binding_sessions (
@@ -393,6 +427,35 @@ WHERE user_id = $1
 func (q *Queries) DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deactivateAllPaymentMethodsForUser, userID)
 	return err
+}
+
+const deleteExpiredCardBindingSessions = `-- name: DeleteExpiredCardBindingSessions :execrows
+DELETE FROM card_binding_sessions
+WHERE id IN (
+    SELECT c.id FROM card_binding_sessions c
+    WHERE c.expires_at < $1
+    ORDER BY c.expires_at
+    LIMIT $2
+)
+`
+
+type DeleteExpiredCardBindingSessionsParams struct {
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	Limit     int32              `json:"limit"`
+}
+
+// The hygiene batch (ticket #433): sessions past their lifetime, whatever
+// their status — an expired session never produces a payment method, and the
+// only later read of an old row is the binding limit's sliding window, which
+// is measured on created_at and long past for an expired session (TTL 24 h vs
+// window 1 h). The subselect keeps the delete batched; the loop re-runs it
+// until fewer than the batch limit rows remain, so repeated runs are safe.
+func (q *Queries) DeleteExpiredCardBindingSessions(ctx context.Context, arg DeleteExpiredCardBindingSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredCardBindingSessions, arg.ExpiresAt, arg.Limit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deletePaymentMethodByID = `-- name: DeletePaymentMethodByID :exec
