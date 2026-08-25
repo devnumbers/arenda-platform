@@ -83,6 +83,12 @@ type Querier interface {
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
 	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
+	// Future-planned rebuild, no-survivor variant: the rule is paused or ended,
+	// no future planned may remain.
+	DeleteFuturePlannedAll(ctx context.Context, arg DeleteFuturePlannedAllParams) (int64, error)
+	// Future-planned rebuild: remove every future planned operation of the rule
+	// except the single allowed one (stale rows left by rule edits).
+	DeleteFuturePlannedExcept(ctx context.Context, arg DeleteFuturePlannedExceptParams) (int64, error)
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
@@ -117,6 +123,10 @@ type Querier interface {
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
 	GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone string) (LoginAttempt, error)
 	GetMaxMemberRoleByOwner(ctx context.Context, arg GetMaxMemberRoleByOwnerParams) (int32, error)
+	// The data owner's IANA timezone (ADR 0048): the tick's "today" is the
+	// calendar date in the property owner's timezone. NOT NULL with the
+	// 'Europe/Moscow' default (migration 000088); IANA-validated on write.
+	GetOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	// "active" mirrors CountActivePropertiesByOwnerAdmin: active plus maintenance.
@@ -179,6 +189,10 @@ type Querier interface {
 	// untouched on the conflict branch because the window is not being reset.
 	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
+	// Idempotent by the partial unique (payment_id, date): a concurrent or
+	// repeated run inserts nothing. Always planned — the auto-pay closes today's
+	// occurrence separately, strictly on its day (ADR 0049 §2).
+	InsertMaterializedOperation(ctx context.Context, arg InsertMaterializedOperationParams) error
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
@@ -258,13 +272,41 @@ type Querier interface {
 	// User-facing tariff listing: hidden tariffs stay referable by FK but are not
 	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)
+	// Dedup keys and statuses of the listed payments' operations: existence by
+	// (payment_id, date), status for the future-planned rebuild.
+	ListTickOperationStatuses(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickOperationStatusesRow, error)
+	// Pause intervals of the listed payments (ADR 0002 of the prototype: the
+	// holes are reproducible from the rule plus intervals).
+	ListTickPausesByPaymentIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickPausesByPaymentIDsRow, error)
+	// The owner's payment rules on non-archived properties, with the user
+	// category's current name resolved for the materialization snapshot. Pauses
+	// are listed separately (ListTickPausesByPaymentIDs).
+	ListTickPaymentsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickPaymentsByOwnerRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
+	// Payments context queries (ADR 0049, ticket #454).
+	//
+	// This file carries the materialization tick's persistence: the owner-level
+	// payment listing with pauses resolved, the operation dedup keys, the
+	// idempotent insert, the auto-pay day payment and the future-planned rebuild.
+	// CRUD and listing queries arrive with their tickets (#457, #461).
+	// Serialization point of the tick (ADR 0049 §3): the run locks the owner's
+	// active/maintenance property rows, ordered by id, before reading or writing
+	// anything. Context mutations take the same lock per property through
+	// GetPropertyByIDAndOwnerForUpdate, so update-vs-tick, archive-vs-tick and
+	// delete-vs-tick serialize on one point. Archived properties are skipped by
+	// the tick entirely.
+	LockOwnerTickProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	// Serializes activation switches per user: the deactivate-all / activate-one
 	// pair must not interleave with a concurrent switch, or the one-active
 	// partial unique index rejects the second committer.
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
+	// The auto-pay day payment (ADR 0049 §2): planned with date = today becomes
+	// paid, paid_date = today. Strictly today — never backdated; the active
+	// pause is excluded by the caller (the domain plan), and occurrences inside
+	// a pause are not generated at all.
+	PayOperationDueToday(ctx context.Context, arg PayOperationDueTodayParams) (int64, error)
 	ReactivatePropertyMember(ctx context.Context, arg ReactivatePropertyMemberParams) (PropertyMember, error)
 	// ResetLoginAttempt writes the absolute attempt-window state, used when the
 	// window is new or has expired (TTL reset) and the failure counter must be set

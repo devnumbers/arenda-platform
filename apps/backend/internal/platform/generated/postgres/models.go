@@ -237,6 +237,51 @@ type LoginCode struct {
 	PhoneEncrypted bool               `json:"phone_encrypted"`
 }
 
+type Operation struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	PaymentID     pgtype.UUID        `json:"payment_id"`
+	Origin        string             `json:"origin"`
+	Date          pgtype.Date        `json:"date"`
+	PaidDate      pgtype.Date        `json:"paid_date"`
+	Status        string             `json:"status"`
+	Type          string             `json:"type"`
+	Title         string             `json:"title"`
+	AmountKopecks int64              `json:"amount_kopecks"`
+	PaymentForm   pgtype.Text        `json:"payment_form"`
+	CategoryLabel string             `json:"category_label"`
+	CategorySlug  pgtype.Text        `json:"category_slug"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Payment struct {
+	ID             pgtype.UUID        `json:"id"`
+	OwnerID        pgtype.UUID        `json:"owner_id"`
+	PropertyID     pgtype.UUID        `json:"property_id"`
+	Type           string             `json:"type"`
+	Title          string             `json:"title"`
+	AmountKopecks  int64              `json:"amount_kopecks"`
+	Recurrence     []byte             `json:"recurrence"`
+	Since          pgtype.Date        `json:"since"`
+	EndDate        pgtype.Date        `json:"end_date"`
+	AutoPay        bool               `json:"auto_pay"`
+	PaymentForm    string             `json:"payment_form"`
+	CategorySlug   pgtype.Text        `json:"category_slug"`
+	UserCategoryID pgtype.UUID        `json:"user_category_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PaymentCategory struct {
+	ID        pgtype.UUID        `json:"id"`
+	OwnerID   pgtype.UUID        `json:"owner_id"`
+	Name      string             `json:"name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type PaymentMethod struct {
 	ID             pgtype.UUID        `json:"id"`
 	UserID         pgtype.UUID        `json:"user_id"`
@@ -249,6 +294,15 @@ type PaymentMethod struct {
 	IsActive       bool               `json:"is_active"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PaymentPause struct {
+	ID        pgtype.UUID        `json:"id"`
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	FromDate  pgtype.Date        `json:"from_date"`
+	ToDate    pgtype.Date        `json:"to_date"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Property struct {
