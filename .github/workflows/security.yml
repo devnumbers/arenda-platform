@@ -23,7 +23,7 @@ jobs:
       HOME: /tmp
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # p/ci — CI/CD hardening rules; p/xss (dependency contour, #331/#389) —
       # taint source→sink rules for JS/React DOM-XSS patterns: a nightly
@@ -41,7 +41,7 @@ jobs:
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # vuln scanner only: secrets are covered by gitleaks, misconfig by hadolint (ci.yml).
       - name: Scan filesystem
