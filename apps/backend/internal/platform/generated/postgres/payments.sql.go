@@ -11,41 +11,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteFuturePlannedAll = `-- name: DeleteFuturePlannedAll :execrows
-DELETE FROM operations
-WHERE payment_id = $1 AND status = 'planned' AND date > $2
-`
-
-type DeleteFuturePlannedAllParams struct {
-	PaymentID pgtype.UUID `json:"payment_id"`
-	Date      pgtype.Date `json:"date"`
-}
-
-// Future-planned rebuild, no-survivor variant: the rule is paused or ended,
-// no future planned may remain.
-func (q *Queries) DeleteFuturePlannedAll(ctx context.Context, arg DeleteFuturePlannedAllParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteFuturePlannedAll, arg.PaymentID, arg.Date)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteFuturePlannedExcept = `-- name: DeleteFuturePlannedExcept :execrows
 DELETE FROM operations
-WHERE payment_id = $1 AND status = 'planned' AND date > $2 AND date <> $3
+WHERE payment_id = $1
+  AND status = 'planned'
+  AND date > $2
+  AND ($3::date IS NULL OR date <> $3)
 `
 
 type DeleteFuturePlannedExceptParams struct {
 	PaymentID pgtype.UUID `json:"payment_id"`
 	Date      pgtype.Date `json:"date"`
-	Date_2    pgtype.Date `json:"date_2"`
+	Column3   pgtype.Date `json:"column_3"`
 }
 
-// Future-planned rebuild: remove every future planned operation of the rule
-// except the single allowed one (stale rows left by rule edits).
+// Future-planned rebuild in one statement: remove every future planned
+// operation of the rule except the single allowed one. A NULL keep removes
+// them all — the rule is paused or ended, no future planned may remain
+// (ADR 0049 §2).
 func (q *Queries) DeleteFuturePlannedExcept(ctx context.Context, arg DeleteFuturePlannedExceptParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteFuturePlannedExcept, arg.PaymentID, arg.Date, arg.Date_2)
+	result, err := q.db.Exec(ctx, deleteFuturePlannedExcept, arg.PaymentID, arg.Date, arg.Column3)
 	if err != nil {
 		return 0, err
 	}

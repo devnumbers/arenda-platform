@@ -83,11 +83,10 @@ type Querier interface {
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
 	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
-	// Future-planned rebuild, no-survivor variant: the rule is paused or ended,
-	// no future planned may remain.
-	DeleteFuturePlannedAll(ctx context.Context, arg DeleteFuturePlannedAllParams) (int64, error)
-	// Future-planned rebuild: remove every future planned operation of the rule
-	// except the single allowed one (stale rows left by rule edits).
+	// Future-planned rebuild in one statement: remove every future planned
+	// operation of the rule except the single allowed one. A NULL keep removes
+	// them all — the rule is paused or ended, no future planned may remain
+	// (ADR 0049 §2).
 	DeleteFuturePlannedExcept(ctx context.Context, arg DeleteFuturePlannedExceptParams) (int64, error)
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error

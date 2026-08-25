@@ -1,6 +1,6 @@
 // Package postgres holds the payments persistence adapters: the tick store
-// (materialization queries of ADR 0049 §3) and the owner-timezone resolver
-// (ADR 0048). Payment CRUD repositories arrive with their tickets (#457).
+// (materialization queries of ADR 0049 §3) and the owner calendar (ADR 0048).
+// Payment CRUD repositories arrive with their tickets (#457).
 package postgres
 
 import (
@@ -17,11 +17,15 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// Compile-time conformance of the adapter to the consumer-declared ports.
-var _ application.TickStore = (*TickStore)(nil)
+// Compile-time conformance of the adapters to the consumer-declared ports.
+var (
+	_ application.TickStore     = (*TickStore)(nil)
+	_ application.OwnerCalendar = (*OwnerCalendar)(nil)
+)
 
 // TickStore is the postgres adapter of the materialization tick port.
 type TickStore struct {
@@ -55,85 +59,139 @@ func (s *TickStore) LockOwnerProperties(ctx context.Context, ownerID uuid.UUID) 
 	return nil
 }
 
-// LoadOwnerPayments returns the owner's payment rules on non-archived
-// properties with pause intervals attached.
-func (s *TickStore) LoadOwnerPayments(ctx context.Context, ownerID uuid.UUID) ([]domain.Payment, error) {
+// LoadOwnerSnapshot returns the owner's payment rules on non-archived
+// properties with pause intervals and existing operation statuses — the
+// tick's read side in one call.
+func (s *TickStore) LoadOwnerSnapshot(ctx context.Context, ownerID uuid.UUID) (application.OwnerSnapshot, error) {
 	rows, err := s.q().ListTickPaymentsByOwner(ctx, pgconv.UUIDToPgtype(ownerID))
 	if err != nil {
-		return nil, fmt.Errorf("list tick payments: %w", err)
+		return application.OwnerSnapshot{}, fmt.Errorf("list tick payments: %w", err)
 	}
 	payments := make([]domain.Payment, 0, len(rows))
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
 		payment, err := mapTickPayment(row)
 		if err != nil {
-			return nil, err
+			return application.OwnerSnapshot{}, err
 		}
 		payments = append(payments, payment)
 		ids = append(ids, payment.ID)
 	}
+	snapshot := application.OwnerSnapshot{
+		Payments: payments,
+		Statuses: make(map[uuid.UUID]map[time.Time]domain.OperationStatus, len(rows)),
+	}
 	if len(ids) == 0 {
-		return payments, nil
+		return snapshot, nil
 	}
-	pauses, err := s.listPauses(ctx, ids)
-	if err != nil {
-		return nil, err
+	if err := s.attachPauses(ctx, payments); err != nil {
+		return application.OwnerSnapshot{}, err
 	}
-	for i := range payments {
-		payments[i].Pauses = pauses[payments[i].ID]
+	if err := s.attachStatuses(ctx, ids, snapshot.Statuses); err != nil {
+		return application.OwnerSnapshot{}, err
 	}
-	return payments, nil
+	return snapshot, nil
 }
 
-// listPauses loads the pause intervals of the listed payments grouped by
-// payment id.
-func (s *TickStore) listPauses(ctx context.Context, paymentIDs []uuid.UUID) (map[uuid.UUID][]domain.PauseInterval, error) {
-	rows, err := s.q().ListTickPausesByPaymentIDs(ctx, pgconv.UUIDSliceToPgtype(paymentIDs))
+// attachPauses loads the pause intervals of the listed payments and attaches
+// them to the rules.
+func (s *TickStore) attachPauses(ctx context.Context, payments []domain.Payment) error {
+	rows, err := s.q().ListTickPausesByPaymentIDs(ctx, pgconv.UUIDSliceToPgtype(paymentIDs(payments)))
 	if err != nil {
-		return nil, fmt.Errorf("list tick pauses: %w", err)
+		return fmt.Errorf("list tick pauses: %w", err)
 	}
-	out := make(map[uuid.UUID][]domain.PauseInterval, len(rows))
+	pauses := make(map[uuid.UUID][]domain.PauseInterval, len(rows))
 	for _, row := range rows {
 		interval := domain.PauseInterval{
 			From: pgconv.DateFromPgtype(row.FromDate),
 			To:   pgconv.DatePtrFromPgtype(row.ToDate),
 		}
 		id := pgconv.UUIDFromPgtype(row.PaymentID)
-		out[id] = append(out[id], interval)
+		pauses[id] = append(pauses[id], interval)
 	}
-	return out, nil
+	for i := range payments {
+		payments[i].Pauses = pauses[payments[i].ID]
+	}
+	return nil
 }
 
-// ListOperationStatuses returns the listed payments' operations keyed by
-// payment and date.
-func (s *TickStore) ListOperationStatuses(
-	ctx context.Context, paymentIDs []uuid.UUID,
-) (map[uuid.UUID]map[time.Time]domain.OperationStatus, error) {
-	rows, err := s.q().ListTickOperationStatuses(ctx, pgconv.UUIDSliceToPgtype(paymentIDs))
+// attachStatuses loads the listed payments' operation statuses into the
+// snapshot map, keyed by payment and date.
+func (s *TickStore) attachStatuses(
+	ctx context.Context, ids []uuid.UUID, into map[uuid.UUID]map[time.Time]domain.OperationStatus,
+) error {
+	rows, err := s.q().ListTickOperationStatuses(ctx, pgconv.UUIDSliceToPgtype(ids))
 	if err != nil {
-		return nil, fmt.Errorf("list tick operation statuses: %w", err)
+		return fmt.Errorf("list tick operation statuses: %w", err)
 	}
-	out := make(map[uuid.UUID]map[time.Time]domain.OperationStatus, len(rows))
 	for _, row := range rows {
 		id := pgconv.UUIDFromPgtype(row.PaymentID)
-		if out[id] == nil {
-			out[id] = make(map[time.Time]domain.OperationStatus)
+		if into[id] == nil {
+			into[id] = make(map[time.Time]domain.OperationStatus)
 		}
-		out[id][pgconv.DateFromPgtype(row.Date)] = domain.OperationStatus(row.Status)
+		into[id][pgconv.DateFromPgtype(row.Date)] = domain.OperationStatus(row.Status)
 	}
-	return out, nil
+	return nil
 }
 
-// InsertOperation inserts a materialized occurrence; the partial unique
-// (payment_id, date) with ON CONFLICT DO NOTHING keeps it idempotent.
-func (s *TickStore) InsertOperation(ctx context.Context, op domain.Operation) error {
+// ApplyTickPlan applies one rule's tick plan inside the caller's
+// transaction: the idempotent occurrence inserts (due dates and the missing
+// future planned), the auto-pay day payment — strictly today (ADR 0049 §2) —
+// and the future-planned rebuild in one keep-or-none statement. The call
+// order and the keep-or-none duality are this implementation's business.
+func (s *TickStore) ApplyTickPlan(
+	ctx context.Context, p domain.Payment, today time.Time, plan domain.PaymentTickPlan,
+) error {
+	for _, date := range plan.Materialize {
+		if err := s.insertOccurrence(ctx, p, date); err != nil {
+			return err
+		}
+	}
+	if plan.InsertFuture != nil {
+		if err := s.insertOccurrence(ctx, p, *plan.InsertFuture); err != nil {
+			return err
+		}
+	}
+	if plan.AutoPayToday {
+		if _, err := s.q().PayOperationDueToday(ctx, postgres.PayOperationDueTodayParams{
+			PaymentID: pgconv.UUIDToPgtype(p.ID),
+			PaidDate:  pgconv.DateToPgtype(today),
+		}); err != nil {
+			return fmt.Errorf("auto-pay occurrence of payment %s due today: %w", p.ID, err)
+		}
+	}
+	var keep pgtype.Date
+	if plan.KeepFuture != nil {
+		keep = pgconv.DateToPgtype(*plan.KeepFuture)
+	}
+	if _, err := s.q().DeleteFuturePlannedExcept(ctx, postgres.DeleteFuturePlannedExceptParams{
+		PaymentID: pgconv.UUIDToPgtype(p.ID),
+		Date:      pgconv.DateToPgtype(today),
+		Column3:   keep,
+	}); err != nil {
+		return fmt.Errorf("rebuild future planned of payment %s: %w", p.ID, err)
+	}
+	return nil
+}
+
+// insertOccurrence materializes one planned occurrence of the rule; the
+// insert is idempotent through the (payment_id, date) partial unique index.
+func (s *TickStore) insertOccurrence(ctx context.Context, p domain.Payment, date time.Time) error {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("mint operation id: %w", err)
+	}
+	op := domain.NewMaterializedOperation(p, date)
+	op.ID = id
 	if op.PaymentID == nil {
-		return errors.New("insert materialized operation: payment id is required")
+		return fmt.Errorf("materialize occurrence %s of payment %s: payment id is required",
+			date.Format(time.DateOnly), p.ID)
 	}
 	if op.PaymentForm == nil {
-		return errors.New("insert materialized operation: payment form snapshot is required")
+		return fmt.Errorf("materialize occurrence %s of payment %s: payment form snapshot is required",
+			date.Format(time.DateOnly), p.ID)
 	}
-	err := s.q().InsertMaterializedOperation(ctx, postgres.InsertMaterializedOperationParams{
+	err = s.q().InsertMaterializedOperation(ctx, postgres.InsertMaterializedOperationParams{
 		ID:            pgconv.UUIDToPgtype(op.ID),
 		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
 		PropertyID:    pgconv.UUIDToPgtype(op.PropertyID),
@@ -147,47 +205,19 @@ func (s *TickStore) InsertOperation(ctx context.Context, op domain.Operation) er
 		CategorySlug:  pgconv.StringPtrToPgtype(op.CategorySlug),
 	})
 	if err != nil {
-		return fmt.Errorf("insert materialized operation: %w", err)
+		return fmt.Errorf("materialize occurrence %s of payment %s: %w",
+			date.Format(time.DateOnly), p.ID, err)
 	}
 	return nil
 }
 
-// PayDueToday closes the rule's planned occurrence dated today (the auto-pay
-// day payment, ADR 0049 §2).
-func (s *TickStore) PayDueToday(ctx context.Context, paymentID uuid.UUID, today time.Time) error {
-	if _, err := s.q().PayOperationDueToday(ctx, postgres.PayOperationDueTodayParams{
-		PaymentID: pgconv.UUIDToPgtype(paymentID),
-		PaidDate:  pgconv.DateToPgtype(today),
-	}); err != nil {
-		return fmt.Errorf("pay operation due today: %w", err)
+// paymentIDs collects the rules' identifiers for the batch listings.
+func paymentIDs(payments []domain.Payment) []uuid.UUID {
+	ids := make([]uuid.UUID, len(payments))
+	for i, p := range payments {
+		ids[i] = p.ID
 	}
-	return nil
-}
-
-// DeleteFuturePlannedExcept removes the rule's future planned operations
-// except the single allowed date.
-func (s *TickStore) DeleteFuturePlannedExcept(
-	ctx context.Context, paymentID uuid.UUID, today, keep time.Time,
-) error {
-	if _, err := s.q().DeleteFuturePlannedExcept(ctx, postgres.DeleteFuturePlannedExceptParams{
-		PaymentID: pgconv.UUIDToPgtype(paymentID),
-		Date:      pgconv.DateToPgtype(today),
-		Date_2:    pgconv.DateToPgtype(keep),
-	}); err != nil {
-		return fmt.Errorf("delete future planned except: %w", err)
-	}
-	return nil
-}
-
-// DeleteFuturePlannedAll removes every future planned operation of the rule.
-func (s *TickStore) DeleteFuturePlannedAll(ctx context.Context, paymentID uuid.UUID, today time.Time) error {
-	if _, err := s.q().DeleteFuturePlannedAll(ctx, postgres.DeleteFuturePlannedAllParams{
-		PaymentID: pgconv.UUIDToPgtype(paymentID),
-		Date:      pgconv.DateToPgtype(today),
-	}); err != nil {
-		return fmt.Errorf("delete future planned all: %w", err)
-	}
-	return nil
+	return ids
 }
 
 // mapTickPayment maps a tick listing row to the domain rule. The recurrence
@@ -219,41 +249,40 @@ func mapTickPayment(row postgres.ListTickPaymentsByOwnerRow) (domain.Payment, er
 	}, nil
 }
 
-// OwnerTimezoneResolver is the postgres adapter of the owner-timezone port
+// OwnerCalendar is the postgres adapter of the owner calendar port
 // (ADR 0048): users.timezone, NOT NULL with the Europe/Moscow default,
-// IANA-validated on write. A row that fails to load as a location is a data
-// integrity error, not a fallback case.
-type OwnerTimezoneResolver struct {
-	db postgres.DBTX
+// IANA-validated on write, plus the injected clock. A row that fails to load
+// as a location is a data integrity error, not a fallback case.
+type OwnerCalendar struct {
+	db    postgres.DBTX
+	clock clock.Clock
 }
 
-// Compile-time conformance to the consumer-declared port.
-var _ application.OwnerTimezoneResolver = (*OwnerTimezoneResolver)(nil)
-
-// NewOwnerTimezoneResolver creates a resolver over the given connection or
-// pool.
-func NewOwnerTimezoneResolver(db postgres.DBTX) *OwnerTimezoneResolver {
-	return &OwnerTimezoneResolver{db: db}
+// NewOwnerCalendar creates a calendar over the given connection or pool.
+func NewOwnerCalendar(db postgres.DBTX, clk clock.Clock) *OwnerCalendar {
+	return &OwnerCalendar{db: db, clock: clk}
 }
 
-func (r *OwnerTimezoneResolver) q() *postgres.Queries {
-	return postgres.New(r.db)
+func (c *OwnerCalendar) q() *postgres.Queries {
+	return postgres.New(c.db)
 }
 
-// OwnerTimezone loads the owner's IANA timezone name and resolves it to a
-// location. The date itself is computed by the application in Go (ADR 0048
-// p.2) — no AT TIME ZONE in SQL.
-func (r *OwnerTimezoneResolver) OwnerTimezone(ctx context.Context, ownerID uuid.UUID) (*time.Location, error) {
-	name, err := r.q().GetOwnerTimezone(ctx, pgconv.UUIDToPgtype(ownerID))
+// Today returns the owner's calendar date at the clock's now: the date in
+// the owner's timezone, rebuilt at UTC midnight so it compares correctly
+// against the UTC-midnight dates stored in DATE columns (ADR 0048 p.2 —
+// computed in Go, no AT TIME ZONE in SQL).
+func (c *OwnerCalendar) Today(ctx context.Context, ownerID uuid.UUID) (time.Time, error) {
+	name, err := c.q().GetOwnerTimezone(ctx, pgconv.UUIDToPgtype(ownerID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("load owner timezone: owner %s has no users row: %w", ownerID, err)
+			return time.Time{}, fmt.Errorf("load owner timezone: owner %s has no users row: %w", ownerID, err)
 		}
-		return nil, fmt.Errorf("load owner timezone: %w", err)
+		return time.Time{}, fmt.Errorf("load owner timezone: %w", err)
 	}
 	loc, err := time.LoadLocation(name)
 	if err != nil {
-		return nil, fmt.Errorf("load owner timezone %q as location: %w", name, err)
+		return time.Time{}, fmt.Errorf("load owner timezone %q as location: %w", name, err)
 	}
-	return loc, nil
+	now := c.clock.Now().In(loc)
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), nil
 }

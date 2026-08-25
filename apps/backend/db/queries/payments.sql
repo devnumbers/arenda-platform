@@ -77,16 +77,15 @@ SET status = 'paid', paid_date = $2
 WHERE payment_id = $1 AND status = 'planned' AND date = $2;
 
 -- name: DeleteFuturePlannedExcept :execrows
--- Future-planned rebuild: remove every future planned operation of the rule
--- except the single allowed one (stale rows left by rule edits).
+-- Future-planned rebuild in one statement: remove every future planned
+-- operation of the rule except the single allowed one. A NULL keep removes
+-- them all — the rule is paused or ended, no future planned may remain
+-- (ADR 0049 §2).
 DELETE FROM operations
-WHERE payment_id = $1 AND status = 'planned' AND date > $2 AND date <> $3;
-
--- name: DeleteFuturePlannedAll :execrows
--- Future-planned rebuild, no-survivor variant: the rule is paused or ended,
--- no future planned may remain.
-DELETE FROM operations
-WHERE payment_id = $1 AND status = 'planned' AND date > $2;
+WHERE payment_id = $1
+  AND status = 'planned'
+  AND date > $2
+  AND ($3::date IS NULL OR date <> $3);
 
 -- name: GetOwnerTimezone :one
 -- The data owner's IANA timezone (ADR 0048): the tick's "today" is the

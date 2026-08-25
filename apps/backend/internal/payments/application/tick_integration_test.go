@@ -59,14 +59,14 @@ func newTickHarness(t *testing.T) *tickHarness {
 
 	tickStore := paymentspg.NewTickStore(pool)
 	uow := pgdb.NewUoW(pool, logger)
-	tz := paymentspg.NewOwnerTimezoneResolver(pool)
+	calendar := paymentspg.NewOwnerCalendar(pool, clk)
 	factory := paymentsapp.NewTxStoreFactory(tickStore, uow)
 
 	return &tickHarness{
 		t:     t,
 		pool:  pool,
 		clock: clk,
-		tick:  paymentsapp.NewTickService(factory, tz, clk),
+		tick:  paymentsapp.NewTickService(factory, calendar),
 	}
 }
 
