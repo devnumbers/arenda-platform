@@ -49,6 +49,121 @@
     --breakpoint-desktop: 1201px;
 }
 
+/* Дизайн-слой новых экранов (ADR 0050): Tailwind-утилиты поверх токенов
+   shared/styles/tokens.css. `inline` — утилиты ссылаются на var(--dl-*)
+   напрямую, Tailwind не эмитит собственные :root-переменные и не конфликтует
+   с легаси-палитрой tokens.css. `--font-sans` ведёт на Onest (next/font
+   кладёт var(--font-onest) на <html>, layout.tsx); font-sans до сих пор
+   никем не использовался, переопределение безопасно. */
+@theme inline {
+    --font-sans: var(--font-onest), var(--font-manrope), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    --color-primary: var(--dl-primary);
+    --color-primary-hover: var(--dl-primary-hover);
+    --color-primary-active: var(--dl-primary-active);
+
+    --color-content: var(--dl-text-primary);
+    --color-content-secondary: var(--dl-text-secondary);
+    --color-content-tertiary: var(--dl-text-tertiary);
+
+    --color-surface: var(--dl-surface);
+    --color-surface-muted: var(--dl-surface-muted);
+    --color-surface-muted-hover: var(--dl-surface-muted-hover);
+    --color-surface-muted-active: var(--dl-surface-muted-active);
+    --color-surface-danger: var(--dl-surface-danger);
+    --color-surface-info: var(--dl-surface-info);
+
+    --color-danger: var(--dl-danger);
+    --color-error: var(--dl-error);
+
+    --color-overlay: var(--dl-overlay);
+    --color-input-border: var(--dl-input-border);
+
+    /* Типографика дизайн-слоя (Onest, Figma): R 16/18, M 14/16, S 13/15,
+       H3 20/24 — базовая шкала переопределяется под дизайн-систему;
+       легаси-экраны Tailwind-утилиты шрифта не используют (CSS-модули). */
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: 0.9375rem;
+    --text-sm: 0.875rem;
+    --text-sm--line-height: 1rem;
+    --text-base: 1rem;
+    --text-base--line-height: 1.125rem;
+    --text-lg: 1.25rem;
+    --text-lg--line-height: 1.5rem;
+
+    --radius-button: 16px;
+    --radius-pill: 100px;
+    --radius-card: 24px;
+    --radius-sheet: 40px;
+}
+
+/* Адаптивная модалка-шелл (дизайн-слой): узкие экраны — нижний шит
+   (выезд снизу), широкие (≥ tablet) — центрированная модалка
+   (масштаб + проявление). Имена переключаются медиа-запросом. */
+@keyframes modal-overlay-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes modal-sheet-in {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+@keyframes modal-card-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes modal-overlay-out {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes modal-sheet-out {
+    from {
+        transform: translateY(0);
+    }
+
+    to {
+        transform: translateY(100%);
+    }
+}
+
+@keyframes modal-card-out {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+}
+
 /* Document
    ========================================================================== */
 

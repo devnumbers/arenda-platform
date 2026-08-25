@@ -56,4 +56,33 @@
      guard is what prevents the zoom. */
   --font-size-input: 1rem;
   --line-height-input: 1.25rem;
+
+  /* Дизайн-слой новых экранов (ADR 0050): палитра Figma-файла
+     «Рентли. Новые экраны сервиса». Значения намеренно отдельные от
+     легаси-палитры выше (#1e1e1e/#f1f3f6): старые экраны продолжают читать
+     свои переменные, новые — эти; проброс в Tailwind — @theme inline в
+     app/globals.css. */
+  --dl-primary: #2b7fff;
+  --dl-primary-hover: #2175f5;
+  --dl-primary-active: #176beb;
+
+  --dl-text-primary: #171a1c;
+  --dl-text-secondary: #6f787c;
+  --dl-text-tertiary: #9fa8ac;
+
+  --dl-surface: #ffffff;
+  --dl-surface-muted: #f3f4f6;
+  --dl-surface-muted-hover: #e9eaec;
+  --dl-surface-muted-active: #dfe0e2;
+  --dl-surface-danger: #ffe2e2;
+  --dl-surface-info: #eff6ff;
+
+  /* Два красных — намеренно: danger (#FB2C36, текст на розовой кнопке) —
+     интерактивная деструктивная кнопка; error (#FF383C) — текст ошибок
+     валидации и переполненных счётчиков под полем. */
+  --dl-danger: #fb2c36;
+  --dl-error: #ff383c;
+
+  --dl-input-border: #d3d7d9;
+  --dl-overlay: rgba(23, 26, 28, 0.5);
 }

@@ -9,6 +9,7 @@ import {LinkButton} from '@/shared/ui/link-button';
 import {notify} from '@/shared/lib/notifications';
 import {TextField} from '@/shared/ui/text-field';
 import {ArrowRight, Home, Loading, Search, Settings, Support,} from '@/shared/assets/icons';
+import {DesignLayerShowcase} from './design-layer';
 import styles from './page.module.css';
 
 const buttonVariants = ['primary', 'secondary', 'clear', 'icon-black'] as const;
@@ -22,6 +23,8 @@ export default function UiKitPage(): JSX.Element {
     return (
         <main className={styles.page}>
             <h1 className={styles.title}>UI Kit</h1>
+
+            <DesignLayerShowcase/>
 
             <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Button</h2>

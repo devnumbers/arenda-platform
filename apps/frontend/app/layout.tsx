@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { JSX, ReactNode } from 'react';
-import { Inter, Manrope } from 'next/font/google';
+import { Inter, Manrope, Onest } from 'next/font/google';
 import { ErrorReporter } from '@/shared/lib/error-reporting/ErrorReporter';
 import { ScrollToTop } from '@/shared/lib/scroll/ScrollToTop';
 import { I18nProvider } from '@/shared/providers/i18n-provider';
@@ -20,6 +20,15 @@ const manrope = Manrope({
     variable: '--font-manrope',
     subsets: ['latin', 'cyrillic'],
     weight: ['400', '500', '600', '700', '800'],
+    display: 'swap',
+});
+
+// Шрифт новых экранов (ADR 0050): дизайн-слой платежей и весь новый UI
+// верстаются на Onest; Manrope остаётся на старых экранах до миграции.
+// next/font самохостит файлы — внешних запросов нет, CSP не затрагивается.
+const onest = Onest({
+    variable: '--font-onest',
+    subsets: ['latin', 'cyrillic'],
     display: 'swap',
 });
 
@@ -64,7 +73,7 @@ export default function RootLayout({
     children: ReactNode;
 }>): JSX.Element {
     return (
-        <html lang="ru" className={`${inter.variable} ${manrope.variable}`}>
+        <html lang="ru" className={`${inter.variable} ${manrope.variable} ${onest.variable}`}>
             <body>
                 <ErrorReporter />
                 <ScrollToTop />

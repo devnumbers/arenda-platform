@@ -69,3 +69,19 @@ export { default as BoldTv } from './bold-tv.svg';
 export { default as BoldWarning } from './bold-warning.svg';
 export { default as BoldWater } from './bold-water.svg';
 export { default as BoldWrench } from './bold-wrench.svg';
+
+// Дизайн-слой платежей (ADR 0050, тикет #455): монохромные Regular-иконки
+// 24×24 из Figma «Рентли. Новые экраны сервиса» (currentColor) и пять
+// градиентных статус-бейджей 24×24 (цвета запечены в SVG).
+export { default as Check } from './check.svg';
+export { default as Edit } from './edit.svg';
+export { default as ArrowDown } from './arrow-down.svg';
+export { default as SortingDown } from './sorting-down.svg';
+export { default as Move } from './move.svg';
+export { default as Star } from './star.svg';
+export { default as StarOff } from './star-off.svg';
+export { default as StatusIconDanger } from './status-icon-danger.svg';
+export { default as StatusIconWarning } from './status-icon-warning.svg';
+export { default as StatusIconGood } from './status-icon-good.svg';
+export { default as StatusIconCheck } from './status-icon-check.svg';
+export { default as StatusIconInfo } from './status-icon-info.svg';
