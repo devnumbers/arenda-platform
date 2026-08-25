@@ -59,7 +59,7 @@ The following MCP servers are configured in the harness MCP config (`~/.kimi-cod
 - `context7` — official library and framework documentation. Fallback when unavailable: official docs via `FetchURL` or `WebSearch`.
 - `playwright` — browser automation and UI verification. Used by frontend work. Fallback when unavailable: manual inspection, build logs, or native browser tools.
 - `figma` — Figma design data and image exports. Fallback when unavailable: manual design references.
-- `heroui-react` — HeroUI v3 component docs, source, and theme tokens for the Next.js frontend. HeroUI v3 is beta and not covered by model training data, so verify components through this server before writing HeroUI code. Fallback when unavailable: official docs at https://v3.heroui.com via `FetchURL` or `WebSearch`.
+- `heroui-react` — HeroUI v3 docs for the **legacy widget layer only** (ADR 0050: new UI is built on shadcn/ui over Radix; do not use HeroUI in new code). Fallback when unavailable: official docs at https://v3.heroui.com via `FetchURL` or `WebSearch`. For new components, the source is shadcn/ui docs (https://ui.shadcn.com/docs) and Radix.
 - `serena` — code semantics for the whole stack (TS + Go): symbol navigation, references, rename, diagnostics, symbol-level editing. Pinned `serena-agent` 1.7.0 (`uv` + managed Python 3.13); committed project config `.serena/project.yml`, one project at the repo root. Boundary rule: code semantics (symbols, references, rename, diagnostics, symbol editing) → `serena`; read/output compression, semantic search, dependency graph, session intelligence → `lean-ctx`. If the `mcp__serena__*` tools are unavailable, stop and tell the user (they can inspect `/mcp`) — no silent substitution with text search or other tools.
 
 ## Commands
@@ -107,7 +107,7 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 - Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`. On the schema side this is enforced by `make migrations-lint` (`tools/migration-lint/domain-rules.mjs`, config `apps/backend/.squawk.toml`).
 - All amounts are in RUB; there is no multi-currency support (`docs/adr/0036-fintech-domain-language.md`).
 - Format money for display only at the UI layer: frontend — `formatMoneyKopecks` (`apps/frontend/shared/lib/format-money.ts`); admin — `formatKopecks` / `MoneyField` (`apps/admin/src/fields.tsx`).
-- Two money vocabularies (`docs/adr/0036-fintech-domain-language.md`, updated by ADR 0046): the record-keeping vocabulary (Операция, Доход, Расход) left the active language with the removed leases domain and is empty until the new domain is designed; «платёж»/«транзакция» belong to Billing (T-Kassa processing) only. Canonical terms and `_Avoid_` lists live in `CONTEXT-MAP.md` and the per-context `CONTEXT.md` files.
+- Two money vocabularies (`docs/adr/0036-fintech-domain-language.md`, updated by ADR 0046 and ADR 0047): record-keeping is the Payments context (`apps/backend/internal/payments/CONTEXT.md`) — Платёж (правило), Операция (вхождение), Доход/Расход, Категория, Форма оплаты; «транзакция» and «Способ оплаты» belong to Billing (T-Kassa processing) only. Canonical terms and `_Avoid_` lists live in `CONTEXT-MAP.md` and the per-context `CONTEXT.md` files.
 
 ## Agent skills
 

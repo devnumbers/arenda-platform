@@ -7,7 +7,7 @@ Not duplicated here — single sources of truth elsewhere:
 - Import boundaries, the DTO isolation gates, and the `@heroui/styles` ban are enforced by `eslint.config.mjs` (`boundaries/dependencies`, `no-restricted-imports`); review does not re-report what lint blocks.
 - The security lint gates — no `rehype-raw` / no `urlTransform` prop (react-markdown secure by default), `NEXT_PUBLIC_*` only via the `PUBLIC_ENV_ALLOWLIST` in the config, web storage only in `features/auth/lib/**` and `useDraftStore` — are enforced by `eslint.config.mjs` (decision #331; see the Security contour section below).
 - Invariants and commands: `AGENTS.md` (same directory). Domain language: per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`). Decisions: `docs/adr/`.
-- HeroUI v3 component APIs: verify through the `heroui-react` MCP server — v3 is beta and not in model training data.
+- New UI (payments design layer onward) is built on shadcn/ui over Radix primitives, styled with Tailwind utilities on top of our tokens (ADR 0050). Legacy HeroUI v3 widgets: verify APIs through the `heroui-react` MCP server until migrated — v3 is beta and not in model training data.
 
 ## FSD slice anatomy
 
@@ -44,9 +44,9 @@ No form library and no schema validator — this is deliberate, not a gap:
 
 ## Components, styling, and React Compiler
 
-- Styling is CSS Modules + design tokens (`shared/styles/tokens.css`). Tailwind utilities are HeroUI's engine, not ours — no utility classes in app components.
+- Styling: existing components use CSS Modules + design tokens (`shared/styles/tokens.css`); new design-layer components (ADR 0050) are shadcn/ui over Radix, styled with Tailwind utilities on the same tokens. The transitional mix is accepted until the app-wide migration.
 - `shared/ui/` is the app's own kit: folder-per-component (`Button.tsx` + `Button.module.css` + `index.ts`), ~23 wrappers. Wrap, don't bypass; `/ui-kit` is the gallery route.
-- HeroUI v3 is provider-less: import `@heroui/react` components directly. `@heroui/styles` appears exactly once — the `@import` in `app/globals.css` — and never in TSX.
+- HeroUI v3 (legacy widgets only, ADR 0050): provider-less — import `@heroui/react` components directly. `@heroui/styles` appears exactly once — the `@import` in `app/globals.css` — and never in TSX.
 - **React Compiler is on** (`next.config.ts`). Manual `useMemo`/`useCallback`/`memo` is not the default: write plain code and let the compiler memoize. Reach for manual memoization only where the compiler provably can't help (values escaping to non-React code) and justify it with a comment.
 - The memoization, derived-state, and effect-synchronizer smells are enforced by the tool, not the review rubric: the react-hooks v7 compiler rules already run through `eslint-config-next` 16.3.1 (the plugin's `recommended` preset is spread whole) — `purity`, `set-state-in-effect`, `set-state-in-render`, `use-memo`, `immutability`, `refs`, `preserve-manual-memoization`, `static-components`, `globals`, `error-boundaries`, `gating` at error; `rules-of-hooks` at error; `incompatible-library`/`unsupported-syntax` at warn; `exhaustive-deps` at error (quality bar wave A). Fix them at lint time.
 
