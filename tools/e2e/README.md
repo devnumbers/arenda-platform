@@ -9,12 +9,20 @@ tools/e2e/
 ├── run-e2e-with-db-checks.sh       # main orchestrator
 ├── README.md                        # this file
 ├── sql/                             # SQL verification checks
+├── frontend/                        # Playwright e2e of the frontend screens
+│   ├── run-frontend-e2e.sh          # `make frontend-e2e` orchestrator
+│   ├── seed.sql                     # deterministic seed (owner, session, properties)
+│   └── e2e-crypto.mjs               # seed crypto: token HMAC, phone ciphertext
 └── bruno/
     └── arenda-api-e2e/              # Bruno E2E collections
         ├── environments/            # Local environment (copy)
         ├── system-e2e/              # happy-path system scenario
         └── system-e2e-edge/         # negative and boundary tests
 ```
+
+The frontend screen suite itself (specs and fixtures) lives with the app in
+`apps/frontend/e2e`; see `frontend/README.md` here and the «Экранные e2e
+(Playwright)» section of `docs/testing-strategy.md`.
 
 Manual API request collections live separately in `tools/bruno/arenda-api/`.
 

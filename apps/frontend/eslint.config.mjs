@@ -265,6 +265,15 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/consistent-type-imports": "error",
     },
   },
+  // Playwright specs and fixtures (e2e/**) are Node-side test code, not React:
+  // the fixture delivery callback is spelled `use(...)` by Playwright's API,
+  // which trips the rules-of-hooks name heuristic.
+  {
+    files: ["e2e/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
+    },
+  },
   // The type-checked block (projectService). Wave A brought
   // switch-exhaustiveness-check; wave B (tickets #393, #394, #395 and #396,
   // bar #330) added the type-checked families fix-then-flip: every family was

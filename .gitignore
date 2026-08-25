@@ -20,6 +20,10 @@ tools/bruno/arenda-api/environments/Local.bru
 .playwright-mcp
 screenshots
 
+# Playwright e2e run artifacts (frontend)
+apps/frontend/playwright-report
+apps/frontend/test-results
+
 docs/plans
 docs/reviews
 

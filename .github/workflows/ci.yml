@@ -322,6 +322,55 @@ jobs:
         working-directory: apps/frontend
         run: npm run test
 
+  # Экранные e2e фронта (тикет #456): make frontend-e2e поднимает отдельную
+  # одноразовую среду (postgres arenda-e2e + бекенд + прод-сборка фронта),
+  # сеет данные SQL-сидом и гоняет Playwright; выгружает HTML-отчёт и
+  # скриншоты экранов (артефакты для сверки дизайна с Figma — решение
+  # владельца 2026-08-25, ревизия спеки #453).
+  frontend-e2e:
+    name: Frontend e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: Install
+        working-directory: apps/frontend
+        run: npm ci
+
+      # Системные зависимости Chromium ставит --with-deps; сами браузеры не
+      # кэшируются сознательно — версия привязана к @playwright/test из
+      # lockfile, загрузка ~120 МБ дешевле поддержки кэша.
+      - name: Install Playwright browsers
+        working-directory: apps/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e
+        run: make frontend-e2e
+
+      - name: Upload report and screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frontend-e2e-report
+          path: |
+            apps/frontend/playwright-report
+            apps/frontend/test-results
+          if-no-files-found: warn
+
   admin:
     name: Admin
     runs-on: ubuntu-latest

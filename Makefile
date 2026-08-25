@@ -93,7 +93,7 @@ DEFAULT_GOAL := help
 	backend-run backend-lint backend-vulncheck backend-nolint \
 	backend-tkassa-spec-check backend-openapi-check backend-sqlc-check \
 	migrate-up migrate-down check-env \
-	frontend-install frontend-dev frontend-build frontend-test frontend-api-check \
+	frontend-install frontend-dev frontend-build frontend-test frontend-api-check frontend-e2e \
 	admin-install admin-dev admin-build admin-typecheck admin-test \
 	landing-install landing-dev landing-build \
 	test backend-test backend-test-integration tools-test \
@@ -310,6 +310,15 @@ backend-test-integration: ## Run backend integration tests (testcontainers; Dock
 # frontend-test runs the Vitest suite (pure-logic tests, no DOM).
 frontend-test: ## Run the frontend test suite (vitest)
 	cd $(FRONTEND_DIR) && npm run test
+
+# frontend-e2e runs the Playwright screen suite (ticket #456): brings up a
+# dedicated disposable stack — postgres (compose project arenda-e2e, port
+# 5436), the backend (migrations on boot, fake email/payment providers), a
+# production standalone build of the frontend — seeds the owner/session/
+# properties fixtures, runs apps/frontend/e2e, and tears everything down.
+# Requires Docker. Docs: docs/testing-strategy.md "Экранные e2e (Playwright)".
+frontend-e2e: ## Run frontend Playwright e2e (dedicated stack; Docker required)
+	./tools/e2e/frontend/run-frontend-e2e.sh
 
 # admin-test runs the Vitest suite.
 admin-test: ## Run the admin test suite (vitest)
