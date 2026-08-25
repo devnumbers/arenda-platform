@@ -76,6 +76,10 @@ ATTRIBUTES_ARTIFACTS := \
 	apps/admin/src/lib/generated/catalog.ts \
 	apps/admin/src/lib/generated/labels.ts \
 	apps/admin/src/lib/generated/format.ts
+CATEGORIES_DIR := tools/payment-categories
+CATEGORIES_ARTIFACTS := \
+	apps/backend/internal/payments/domain/zz_categories.gen.go \
+	apps/frontend/features/payment-categories/lib/generated/categories.ts
 
 # Every file versions-sync owns; versions-check hashes these before/after a
 # sync run (git hash-object, the freshness-gate idiom).
@@ -94,6 +98,7 @@ DEFAULT_GOAL := help
 	landing-install landing-dev landing-build \
 	test backend-test backend-test-integration tools-test \
 	attributes-gen attributes-check \
+	categories-gen categories-check \
 	migrations-lint ts-suppressions squawk-install npm-audit trivy-fs knip hooks-install
 
 ##@ Help
@@ -370,6 +375,30 @@ attributes-check: ## Fail if the property-attributes catalog artifacts are stale
 		exit 1; \
 	fi && \
 		echo "attributes-check: catalog generated files are fresh"
+
+# Regenerates the payment-categories catalog artifacts (validate catalog.json
+# then emit Go + frontend TS). Same self-sufficient pattern as attributes-gen:
+# `npm run generate` validates the catalog (incl. the icon-asset existence
+# check) before writing anything; node_modules is installed when missing.
+categories-gen: ## Regenerate the payment-categories catalog artifacts
+	@{ [ -d $(CATEGORIES_DIR)/node_modules ] || npm --prefix $(CATEGORIES_DIR) install; } && \
+	npm --prefix $(CATEGORIES_DIR) run generate
+
+# Payment-categories freshness gate (attributes-check pattern): regenerate and
+# compare content hashes (git hash-object) so a catalog.json change whose
+# generated files were not committed fails in CI.
+categories-check: ## Fail if the payment-categories catalog artifacts are stale
+	@before=$$(git hash-object $(CATEGORIES_ARTIFACTS)) && \
+	{ [ -d $(CATEGORIES_DIR)/node_modules ] || npm --prefix $(CATEGORIES_DIR) install; } && \
+	npm --prefix $(CATEGORIES_DIR) run generate && \
+	after=$$(git hash-object $(CATEGORIES_ARTIFACTS)) && \
+	if [ "$$before" != "$$after" ]; then \
+		echo "ERROR: payment-categories catalog generated files are stale — regenerating changed them:"; \
+		git status --porcelain -- $(CATEGORIES_ARTIFACTS); \
+		echo "Run 'make categories-gen' and commit the regenerated files."; \
+		exit 1; \
+	fi && \
+		echo "categories-check: catalog generated files are fresh"
 
 ##@ Quality and security
 # TS suppression gate (quality mode #378, gate #399): an eslint-disable

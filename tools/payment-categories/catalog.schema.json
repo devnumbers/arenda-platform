@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "payment-categories.catalog.schema.json",
+  "title": "Payment categories catalog",
+  "description": "Дефолтный каталог категорий платежей: слаг (ссылка из БД), название, иконка (имя SVG-ассета из Figma-набора Icon/Bold), цвет подложки иконки (HEX). Категория нейтральна к направлению: доход/расход выбирает пользователь на платеже.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "categories", "userCategoryDefault"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/category"
+      }
+    },
+    "userCategoryDefault": {
+      "$ref": "#/$defs/userCategoryDefault"
+    }
+  },
+  "$defs": {
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "label", "icon", "color"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "icon": {
+          "$ref": "#/$defs/iconName"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        }
+      }
+    },
+    "userCategoryDefault": {
+      "type": "object",
+      "description": "Дефолтный внешний вид пользовательской категории: одна иконка на серой подложке (решение карты «Платежи и операции» №4).",
+      "additionalProperties": false,
+      "required": ["icon", "color"],
+      "properties": {
+        "icon": {
+          "$ref": "#/$defs/iconName"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        }
+      }
+    },
+    "iconName": {
+      "type": "string",
+      "description": "Имя SVG-ассета в apps/frontend/shared/assets/icons/ (файл <icon>.svg, экспорт в index.ts). Серия bold-* — набор Figma Icon/Bold/*.",
+      "pattern": "^bold-[a-z0-9]+(-[a-z0-9]+)*$"
+    }
+  }
+}

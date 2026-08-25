@@ -261,6 +261,11 @@ jobs:
       - name: Property attributes catalog freshness
         run: make attributes-check
 
+      # Каталог дефолтных категорий платежей (tools/payment-categories) —
+      # единый источник для Go/frontend. Та же проверка свежести артефактов.
+      - name: Payment categories catalog freshness
+        run: make categories-check
+
       - name: Build
         working-directory: apps/frontend
         run: npm run build
