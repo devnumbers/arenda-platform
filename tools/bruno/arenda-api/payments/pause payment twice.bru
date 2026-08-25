@@ -1,0 +1,25 @@
+meta {
+  name: Pause Payment Twice
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{paymentId}}/pause
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // Run payments/pause payment first: a second pause on an open one is 409.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 409 on a repeated pause", function() {
+    expect(res.status).to.equal(409);
+  });
+}

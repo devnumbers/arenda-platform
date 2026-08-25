@@ -277,6 +277,70 @@ export interface paths {
         patch: operations["updatePropertyContact"];
         trace?: never;
     };
+    "/properties/{propertyId}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPayments"];
+        put?: never;
+        post: operations["createPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPayment"];
+        put?: never;
+        post?: never;
+        delete: operations["deletePayment"];
+        options?: never;
+        head?: never;
+        patch: operations["updatePayment"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pausePayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumePayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/access/members": {
         parameters: {
             query?: never;
@@ -1540,6 +1604,116 @@ export interface components {
         PropertyContactsResponse: {
             items: components["schemas"]["PropertyContactResponse"][];
         };
+        /** @description The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts. */
+        Recurrence: components["schemas"]["RecurrenceDaily"] | components["schemas"]["RecurrenceWeekly"] | components["schemas"]["RecurrenceMonthly"] | components["schemas"]["RecurrenceYearly"];
+        RecurrenceDaily: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "daily";
+        };
+        RecurrenceWeekly: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "weekly";
+            weekdays: number[];
+        };
+        RecurrenceMonthly: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "monthly";
+            dayOfMonth: number;
+        };
+        RecurrenceYearly: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "yearly";
+            month: number;
+            day: number;
+        };
+        /** @description A payment rule on a property. The since date is server-set (today in the property owner's timezone) and never accepted from the client; backdated occurrences are not generated. */
+        PaymentCreateRequest: {
+            /** @enum {string} */
+            type: "income" | "expense";
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            recurrence: components["schemas"]["Recurrence"];
+            /** @enum {string} */
+            paymentForm: "transfer" | "cash";
+            /** @description Slug of the default category catalog (user categories arrive in a later slice). */
+            categorySlug: string;
+            /** Format: date */
+            endDate?: string | null;
+            /** @default false */
+            autoPay: boolean;
+        };
+        /** @description Partial payment update: an omitted field is left unchanged. endDate is tri-state — omitted keeps it, null clears it (open-ended), a date sets it. The since date is not editable. */
+        PaymentUpdateRequest: {
+            /** @enum {string} */
+            type?: "income" | "expense";
+            title?: string;
+            /** Format: int64 */
+            amountKopecks?: number;
+            recurrence?: components["schemas"]["Recurrence"];
+            /** @enum {string} */
+            paymentForm?: "transfer" | "cash";
+            categorySlug?: string;
+            /** Format: date */
+            endDate?: string | null;
+            autoPay?: boolean;
+        };
+        /** @description The payment's category reference resolved by the server: a default catalog slug (label from the code catalog; a slug removed from the catalog falls back to the label «Прочее») or a user category. Icon and color are frontend catalog metadata keyed by slug. */
+        CategoryView: {
+            /** @enum {string} */
+            source: "default" | "custom";
+            slug?: string;
+            /** Format: uuid */
+            id?: string;
+            label: string;
+        };
+        /** @description One pause interval [fromDate, toDate); a null toDate is the active open-ended pause. */
+        PauseIntervalView: {
+            /** Format: date */
+            fromDate: string;
+            /** Format: date */
+            toDate?: string | null;
+        };
+        PaymentResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** @enum {string} */
+            type: "income" | "expense";
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            recurrence: components["schemas"]["Recurrence"];
+            /** Format: date */
+            since: string;
+            /** Format: date */
+            endDate?: string | null;
+            autoPay: boolean;
+            /** @enum {string} */
+            paymentForm: "transfer" | "cash";
+            category: components["schemas"]["CategoryView"];
+            pauses: components["schemas"]["PauseIntervalView"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PaymentsResponse: {
+            items: components["schemas"]["PaymentResponse"][];
+        };
         /**
          * @description The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
          * @enum {string}
@@ -2422,6 +2596,201 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPayments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payments list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Payment created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deletePayment: {
+        parameters: {
+            query?: {
+                /** @description Keep overdue planned operations as debt (true) or delete them together with the payment (false). Future planned operations are always deleted. */
+                keep_overdue?: boolean;
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updatePayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Payment updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    pausePayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment paused */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    resumePayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };

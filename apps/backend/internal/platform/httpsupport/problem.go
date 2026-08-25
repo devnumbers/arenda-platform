@@ -12,6 +12,7 @@ import (
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
@@ -96,6 +97,9 @@ var userFacingDetails = []struct {
 
 	// Notifications (preferences, push subscriptions).
 	{notificationsapp.ErrNotFound, detailNotFound},
+
+	// Payments (payment rules, ADR 0047).
+	{paymentsapp.ErrInvalidInput, "Некорректные данные платежа"},
 }
 
 // UserFacingDetail maps known domain errors to fixed, non-sensitive messages

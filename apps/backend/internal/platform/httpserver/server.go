@@ -19,6 +19,8 @@ import (
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	notificationshttp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/http"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	paymentshttp "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/http"
+	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	popupshttp "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/http"
@@ -57,6 +59,7 @@ type Deps struct {
 	Properties               *propertiesapp.PropertyService
 	PropertyContacts         *propertiesapp.PropertyContactService
 	AddressSuggester         propertiesapp.AddressSuggester
+	PropertyPayments         *paymentsapp.PaymentService
 	Access                   *accessapp.AccessService
 	Invitations              *accessapp.InvitationService
 	NotificationPreferences  *notificationsapp.PreferenceService
@@ -151,6 +154,7 @@ func New(deps Deps) http.Handler {
 		deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers,
 		deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments,
 		deps.AdminSubscriptions, deps.Logger)
+	paymentHandlers := paymentshttp.NewPaymentHandlers(deps.PropertyPayments, deps.Logger)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
@@ -163,6 +167,7 @@ func New(deps Deps) http.Handler {
 		PushSubscriptionHandlers:       pushSubscriptionHandlers,
 		PopupHandlers:                  popupHandlers,
 		BillingHandlers:                billingHandlers,
+		PaymentHandlers:                paymentHandlers,
 		AdminHandlers:                  adminHandlers,
 		ClientErrorsHandlers:           clientErrorsHandlers,
 	}
@@ -282,6 +287,7 @@ type composedHandler struct {
 	*notificationshttp.PushSubscriptionHandlers
 	*popupshttp.PopupHandlers
 	*billinghttp.BillingHandlers
+	*paymentshttp.PaymentHandlers
 	*adminhttp.AdminHandlers
 	*httpsupport.ClientErrorsHandlers
 }

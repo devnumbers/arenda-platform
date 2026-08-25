@@ -1,0 +1,31 @@
+meta {
+  name: Delete Payment With Overdue
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{paymentId}}
+  body: none
+  auth: none
+}
+
+params:query {
+  keep_overdue: false
+}
+
+script:pre-request {
+  // Run payments/create payment again first: the previous file already
+  // deleted the last payment, this one exercises the keep_overdue=false
+  // branch on a fresh rule.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 204", function() {
+    expect(res.status).to.equal(204);
+  });
+}

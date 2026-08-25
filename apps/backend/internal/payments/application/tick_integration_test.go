@@ -58,9 +58,11 @@ func newTickHarness(t *testing.T) *tickHarness {
 	logger := slog.New(slog.DiscardHandler)
 
 	tickStore := paymentspg.NewTickStore(pool)
+	paymentStore := paymentspg.NewPaymentStore(pool)
+	propertyStore := paymentspg.NewPropertyStore(pool)
 	uow := pgdb.NewUoW(pool, logger)
 	calendar := paymentspg.NewOwnerCalendar(pool, clk)
-	factory := paymentsapp.NewTxStoreFactory(tickStore, uow)
+	factory := paymentsapp.NewTxStoreFactory(tickStore, paymentStore, propertyStore, nil, uow)
 
 	return &tickHarness{
 		t:     t,

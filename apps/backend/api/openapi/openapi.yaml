@@ -624,6 +624,238 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/payments:
+    post:
+      operationId: createPayment
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreateRequest'
+      responses:
+        '201':
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      operationId: listPayments
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payments list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/payments/{paymentId}:
+    get:
+      operationId: getPayment
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updatePayment
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentUpdateRequest'
+      responses:
+        '200':
+          description: Payment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: deletePayment
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: keep_overdue
+          in: query
+          required: false
+          description: >-
+            Keep overdue planned operations as debt (true) or delete them
+            together with the payment (false). Future planned operations are
+            always deleted.
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '204':
+          description: Payment deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/payments/{paymentId}/pause:
+    post:
+      operationId: pausePayment
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/payments/{paymentId}/resume:
+    post:
+      operationId: resumePayment
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment resumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/access/members:
     post:
       operationId: createPropertyAccessMember
@@ -3280,6 +3512,235 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PropertyContactResponse'
+
+    Recurrence:
+      description: >-
+        The schedule anchor of a payment rule, discriminated by kind. The
+        anchor lives in the recurrence itself; the lower bound of generation
+        is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday.
+        Day 31 clamps to the month's last day; Feb 29 clamps in non-leap
+        years — the schedule never drifts.
+      oneOf:
+        - $ref: '#/components/schemas/RecurrenceDaily'
+        - $ref: '#/components/schemas/RecurrenceWeekly'
+        - $ref: '#/components/schemas/RecurrenceMonthly'
+        - $ref: '#/components/schemas/RecurrenceYearly'
+      discriminator:
+        propertyName: kind
+        mapping:
+          daily: '#/components/schemas/RecurrenceDaily'
+          weekly: '#/components/schemas/RecurrenceWeekly'
+          monthly: '#/components/schemas/RecurrenceMonthly'
+          yearly: '#/components/schemas/RecurrenceYearly'
+
+    RecurrenceDaily:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [daily]
+
+    RecurrenceWeekly:
+      type: object
+      required: [kind, weekdays]
+      properties:
+        kind:
+          type: string
+          enum: [weekly]
+        weekdays:
+          type: array
+          minItems: 1
+          maxItems: 7
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+
+    RecurrenceMonthly:
+      type: object
+      required: [kind, dayOfMonth]
+      properties:
+        kind:
+          type: string
+          enum: [monthly]
+        dayOfMonth:
+          type: integer
+          minimum: 1
+          maximum: 31
+
+    RecurrenceYearly:
+      type: object
+      required: [kind, month, day]
+      properties:
+        kind:
+          type: string
+          enum: [yearly]
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        day:
+          type: integer
+          minimum: 1
+          maximum: 31
+
+    PaymentCreateRequest:
+      description: >-
+        A payment rule on a property. The since date is server-set (today in
+        the property owner's timezone) and never accepted from the client;
+        backdated occurrences are not generated.
+      type: object
+      required: [type, title, amountKopecks, recurrence, paymentForm, categorySlug]
+      properties:
+        type:
+          type: string
+          enum: [income, expense]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amountKopecks:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000000000
+        recurrence:
+          $ref: '#/components/schemas/Recurrence'
+        paymentForm:
+          type: string
+          enum: [transfer, cash]
+        categorySlug:
+          type: string
+          description: Slug of the default category catalog (user categories arrive in a later slice).
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        autoPay:
+          type: boolean
+          default: false
+
+    PaymentUpdateRequest:
+      description: >-
+        Partial payment update: an omitted field is left unchanged. endDate is
+        tri-state — omitted keeps it, null clears it (open-ended), a date sets
+        it. The since date is not editable.
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [income, expense]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amountKopecks:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000000000
+        recurrence:
+          $ref: '#/components/schemas/Recurrence'
+        paymentForm:
+          type: string
+          enum: [transfer, cash]
+        categorySlug:
+          type: string
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        autoPay:
+          type: boolean
+
+    CategoryView:
+      description: >-
+        The payment's category reference resolved by the server: a default
+        catalog slug (label from the code catalog; a slug removed from the
+        catalog falls back to the label «Прочее») or a user category. Icon and
+        color are frontend catalog metadata keyed by slug.
+      type: object
+      required: [source, label]
+      properties:
+        source:
+          type: string
+          enum: [default, custom]
+        slug:
+          type: string
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+
+    PauseIntervalView:
+      description: One pause interval [fromDate, toDate); a null toDate is the active open-ended pause.
+      type: object
+      required: [fromDate]
+      properties:
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+          nullable: true
+
+    PaymentResponse:
+      type: object
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, pauses, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [income, expense]
+        title:
+          type: string
+        amountKopecks:
+          type: integer
+          format: int64
+        recurrence:
+          $ref: '#/components/schemas/Recurrence'
+        since:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        autoPay:
+          type: boolean
+        paymentForm:
+          type: string
+          enum: [transfer, cash]
+        category:
+          $ref: '#/components/schemas/CategoryView'
+        pauses:
+          type: array
+          items:
+            $ref: '#/components/schemas/PauseIntervalView'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PaymentsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentResponse'
 
     PropertyAccessMemberRole:
       type: string

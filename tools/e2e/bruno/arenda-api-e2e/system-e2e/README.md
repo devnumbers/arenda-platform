@@ -23,7 +23,11 @@ The folders are numbered so they run sequentially when invoked recursively:
    for the positive webhook is created by the runner, which queries Postgres for `provider_payment_id`
    and passes both ids into the folder as environment variables.
 10. `80-readonly-recovery` — cancel subscription, verify mutation block, recover to Business.
-11. `99-final-cleanup` — downgrade, remove payment methods, logout.
+11. `85-payments` — payment rule CRUD: create, list, get, partial update
+    (endDate null clears), pause/resume with the 409 repeats, delete with
+    keep_overdue; negatives: zero amount, bad recurrence, unknown category,
+    missing payment (ticket #457).
+12. `99-final-cleanup` — downgrade, remove payment methods, logout.
 
 ## Requirements
 

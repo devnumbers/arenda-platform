@@ -116,6 +116,17 @@ const (
 
 	ActionOperationCategoryCreated Action = "operation_category.created"
 
+	// ActionPaymentCreated and its neighbours below record the Payments
+	// context user mutations (ADR 0049 §5, ticket #457): in-tx fail-safe; the
+	// bulk tick never writes audit (the extended ADR 0020 gap). The old
+	// recurring_operation.* vocabulary above belongs to the removed finance
+	// context; payment.* is the Payments context of ADR 0047.
+	ActionPaymentCreated Action = "payment.created"
+	ActionPaymentUpdated Action = "payment.updated"
+	ActionPaymentDeleted Action = "payment.deleted"
+	ActionPaymentPaused  Action = "payment.paused"
+	ActionPaymentResumed Action = "payment.resumed"
+
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
@@ -161,10 +172,13 @@ const (
 	EntityOperation                EntityType = "operation"
 	EntityRecurringOperation       EntityType = "recurring_operation"
 	EntityOperationCategory        EntityType = "operation_category"
-	EntitySubscription             EntityType = "subscription"
-	EntityPaymentMethod            EntityType = "payment_method"
-	EntitySubscriptionPayment      EntityType = "subscription_payment"
-	EntityTariff                   EntityType = "tariff"
+	// EntityPayment is a payment rule of the Payments context (ADR 0047):
+	// the rule itself, not its materialized operations.
+	EntityPayment             EntityType = "payment"
+	EntitySubscription        EntityType = "subscription"
+	EntityPaymentMethod       EntityType = "payment_method"
+	EntitySubscriptionPayment EntityType = "subscription_payment"
+	EntityTariff              EntityType = "tariff"
 )
 
 // Entry is a single audit log record.

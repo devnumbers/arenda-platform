@@ -1,0 +1,25 @@
+meta {
+  name: Get Missing Payment
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/00000000-0000-7000-8000-000000000000
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 404", function() {
+    expect(res.status).to.equal(404);
+  });
+}

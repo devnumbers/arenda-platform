@@ -1,0 +1,41 @@
+meta {
+  name: Update Payment
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{paymentId}}
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "title": "{{paymentUpdatedTitle}}",
+    "amountKopecks": {{paymentUpdatedAmountKopecks}},
+    "endDate": null
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should apply the partial update and clear endDate", function() {
+    expect(res.body.title).to.equal(bru.getEnvVar("paymentUpdatedTitle"));
+    expect(res.body.endDate).to.be.null;
+  });
+}

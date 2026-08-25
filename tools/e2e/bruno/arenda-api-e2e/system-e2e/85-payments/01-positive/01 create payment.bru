@@ -1,0 +1,59 @@
+meta {
+  name: Create Payment
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "expense",
+    "title": "E2E аренда",
+    "amountKopecks": 5000000,
+    "recurrence": {"kind": "monthly", "dayOfMonth": 10},
+    "paymentForm": "transfer",
+    "categorySlug": "rent",
+    "autoPay": false
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("paymentId", res.body.id);
+    bru.setVar("paymentId", res.body.id);
+    console.log("saved paymentId =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should set since to the owner's today", function() {
+    expect(res.body.since).to.be.a("string");
+  });
+
+  test("should resolve the default category view", function() {
+    expect(res.body.category.source).to.equal("default");
+    expect(res.body.category.slug).to.equal("rent");
+    expect(res.body.category.label).to.equal("Арендная плата");
+  });
+}

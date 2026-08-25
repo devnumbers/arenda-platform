@@ -1,0 +1,30 @@
+meta {
+  name: Resume Payment
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{paymentId}}/resume
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should close the pause interval", function() {
+    const pauses = res.body.pauses || [];
+    const active = pauses.find(p => p.toDate === null);
+    expect(active).to.be.undefined;
+  });
+}

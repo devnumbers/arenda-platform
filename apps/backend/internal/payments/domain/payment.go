@@ -85,6 +85,16 @@ func (r CategoryRef) SnapshotLabel() string {
 	return fallbackCategoryLabel
 }
 
+// SlugString returns the default-catalog slug, or "" when the reference is a
+// user category. The CRUD validation reads it; user-category references
+// arrive with the categories slice (#447 follow-up).
+func (r CategoryRef) SlugString() string {
+	if r.Slug != nil {
+		return *r.Slug
+	}
+	return ""
+}
+
 // Payment is the rule: what, how much, when and how often must happen on a
 // property — income or expense (ADR 0047). It is never itself paid, overdue
 // or cancelled; those are states of its operations. Pauses travel with the
@@ -108,4 +118,9 @@ type Payment struct {
 	PaymentForm PaymentForm
 	Category    CategoryRef
 	Pauses      []PauseInterval
+	// CreatedAt/UpdatedAt are the rule row's timestamps (updated_at is
+	// trigger-maintained on write); they exist for the CRUD read side — the
+	// tick never reads them.
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

@@ -15,6 +15,9 @@ type Querier interface {
 	// transition of a subscription has no prior status or tariff.
 	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
+	// Resume: close the open interval with today's date (the resume day is
+	// already outside the pause, [from, to)).
+	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
 	// Occupied recipient tariff slots: memberships on archived properties do not
 	// occupy a slot (issue #163).
 	CountActiveMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
@@ -92,8 +95,24 @@ type Querier interface {
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
 	DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UUID) error
+	// Hard delete of the rule. Pauses cascade; operations keep their snapshots
+	// with payment_id set to NULL by the FK — the "платёж удалён" mark is
+	// origin='payment' AND payment_id IS NULL (ticket #446). Planned operations
+	// are removed by the caller per keep_overdue before this runs.
+	DeletePayment(ctx context.Context, arg DeletePaymentParams) (int64, error)
+	// The edit invalidation of the future planned (date > today, strictly): the
+	// mutation deletes it and the in-transaction tick stands it again with fresh
+	// snapshots (spec: "правка пересоздаёт будущее planned"). Today's occurrence
+	// is not future — its snapshot is frozen.
+	DeletePaymentFuturePlanned(ctx context.Context, arg DeletePaymentFuturePlannedParams) (int64, error)
 	// Owner-scoped: the row must belong to the user issuing the deletion.
 	DeletePaymentMethodByID(ctx context.Context, arg DeletePaymentMethodByIDParams) error
+	// keep_overdue=false: the overdue planned (the accumulated debt) goes too.
+	// Paid operations are never touched.
+	DeletePaymentPlannedBefore(ctx context.Context, arg DeletePaymentPlannedBeforeParams) (int64, error)
+	// Deletion of the rule's planned operations from a date on (today): future
+	// planned always goes with the rule.
+	DeletePaymentPlannedFrom(ctx context.Context, arg DeletePaymentPlannedFromParams) (int64, error)
 	DeleteProperty(ctx context.Context, arg DeletePropertyParams) error
 	DeletePropertyContact(ctx context.Context, arg DeletePropertyContactParams) error
 	DeletePropertyMember(ctx context.Context, arg DeletePropertyMemberParams) error
@@ -126,6 +145,13 @@ type Querier interface {
 	// calendar date in the property owner's timezone. NOT NULL with the
 	// 'Europe/Moscow' default (migration 000088); IANA-validated on write.
 	GetOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
+	// Payment CRUD and pause/resume (ticket #457, ADR 0049 §4). Reads and writes
+	// are scoped by the data owner (ADR 0028: SQL filters by scope, the policy
+	// port has already resolved the actor's role); the nested path payment→property
+	// is enforced in the WHERE clause.
+	// One rule by id within the owner's scope on the given property, with the
+	// user category's current name resolved for the CategoryView.
+	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	// "active" mirrors CountActivePropertiesByOwnerAdmin: active plus maintenance.
@@ -145,6 +171,13 @@ type Querier interface {
 	// via the policy port before applying scope = owner_id (T3, issue #156).
 	GetPropertyByIDForUpdate(ctx context.Context, id pgtype.UUID) (Property, error)
 	GetPropertyContact(ctx context.Context, arg GetPropertyContactParams) (PropertyContact, error)
+	// The read side of the payments property port: the data owner of a property
+	// (the SQL scope, ADR 0028) and its lifecycle state for the read gates.
+	GetPropertyForPayment(ctx context.Context, id pgtype.UUID) (GetPropertyForPaymentRow, error)
+	// The mutation's serialization point (ADR 0049 §3): the property row is
+	// locked FOR UPDATE before the rule is read or written, so mutation-vs-tick,
+	// mutation-vs-mutation and archive-vs-mutation serialize on one point.
+	GetPropertyForPaymentMutation(ctx context.Context, id pgtype.UUID) (GetPropertyForPaymentMutationRow, error)
 	GetPropertyMember(ctx context.Context, arg GetPropertyMemberParams) (PropertyMember, error)
 	GetPropertyMemberByPropertyAndUser(ctx context.Context, arg GetPropertyMemberByPropertyAndUserParams) (PropertyMember, error)
 	GetPropertyMemberInvitation(ctx context.Context, arg GetPropertyMemberInvitationParams) (PropertyMemberInvitation, error)
@@ -192,6 +225,14 @@ type Querier interface {
 	// repeated run inserts nothing. Always planned — the auto-pay closes today's
 	// occurrence separately, strictly on its day (ADR 0049 §2).
 	InsertMaterializedOperation(ctx context.Context, arg InsertMaterializedOperationParams) error
+	// ids and since are app-side (UUIDv7, the owner's today); recurrence is the
+	// domain-validated jsonb; the category arrives as a default-catalog slug in
+	// this slice (user_category_id stays NULL).
+	InsertPayment(ctx context.Context, arg InsertPaymentParams) error
+	// The open-ended pause [from, ∞): exactly one may exist per rule — the
+	// partial unique index (to_date IS NULL) makes a double pause a constraint
+	// violation even past the application check.
+	InsertPaymentPause(ctx context.Context, arg InsertPaymentPauseParams) error
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
@@ -206,6 +247,8 @@ type Querier interface {
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
+	// The property's rules in creation order (stable for the list response).
+	ListPaymentsByProperty(ctx context.Context, arg ListPaymentsByPropertyParams) ([]ListPaymentsByPropertyRow, error)
 	// All pending invitations for an email, oldest first: activation at
 	// registration is FIFO across properties (T5, issue #161).
 	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
@@ -314,6 +357,10 @@ type Querier interface {
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error)
+	// Partial PATCH is resolved by the application layer; the statement always
+	// writes the full editable set (since is never among it — server-set,
+	// prototype decision №17).
+	UpdatePayment(ctx context.Context, arg UpdatePaymentParams) error
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
 	UpdatePropertyContact(ctx context.Context, arg UpdatePropertyContactParams) (PropertyContact, error)

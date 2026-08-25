@@ -1,0 +1,40 @@
+meta {
+  name: Create Payment Bad Recurrence
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "expense",
+    "title": "Сломанная периодичность",
+    "amountKopecks": 100000,
+    "recurrence": {"kind": "monthly", "dayOfMonth": 32},
+    "paymentForm": "transfer",
+    "categorySlug": "rent"
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 400", function() {
+    expect(res.status).to.equal(400);
+  });
+}

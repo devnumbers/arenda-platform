@@ -100,6 +100,11 @@ func run() error {
 	injectPropertyServiceAccess(propertiesMod, accessMod)
 	setBillingLifecycleBridges(billingMod, propertiesMod, accessMod)
 
+	// 7.5 Payments (ADR 0049): the payment rule CRUD service with its tick
+	//     stores and the owner calendar; wired after access so the
+	//     membership-aware policy resolves the actor/scope matrix (ADR 0028).
+	paymentsMod := wire.WirePayments(p)
+
 	// 8. Cross-module user_registered subscribers.
 	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
 
@@ -161,6 +166,7 @@ func run() error {
 		Properties:               propertiesMod.PropertyService,
 		PropertyContacts:         propertiesMod.PropertyContactService,
 		AddressSuggester:         propertiesMod.DadataClient,
+		PropertyPayments:         paymentsMod.PaymentService,
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
 		NotificationPreferences:  notificationsMod.PreferenceService,
