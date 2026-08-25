@@ -7,83 +7,66 @@
 //
 // (или из корня монорепо: make categories-gen)
 //
-// Самодостаточный модуль без импортов: дефолтный каталог категорий платежей
-// (слаг для ссылки из БД, название, иконка и цвет подложки из Figma-набора)
-// и дефолтный внешний вид пользовательской категории. Категория нейтральна к
-// направлению: доход/расход выбирается на платеже, а не в каталоге.
+// Самодостаточный модуль без импортов: словарь дефолтного каталога категорий
+// платежей для бекенда — слаг (каноническая ссылка из БД) → название (снапшот
+// в операцию при материализации). UI-метаданные каталога (иконка, цвет
+// подложки, порядок UI) — только во фронтенд-артефакте генератора
+// (features/payment-categories/lib/generated/categories.ts). Категория
+// нейтральна к направлению: доход/расход выбирается на платеже, а не в каталоге.
 
 package domain
 
-// CategoryCatalogEntry — запись дефолтного каталога категорий платежей.
-// Slug — каноническая ссылка из БД; Icon — имя SVG-ассета из Figma-набора
-// Icon/Bold (apps/frontend/shared/assets/icons); Color — HEX цвета подложки
-// иконки.
+// CategoryCatalogEntry — запись словаря дефолтного каталога категорий
+// платежей: слаг — каноническая ссылка из БД, название — источник снапшота
+// category_label при материализации операции.
 type CategoryCatalogEntry struct {
 	Slug  string
 	Label string
-	Icon  string
-	Color string
 }
 
-// UserCategoryStyle — внешний вид пользовательской категории: у своих
-// категорий одна дефолтная иконка (решение карты «Платежи и операции» №4).
-type UserCategoryStyle struct {
-	Icon  string
-	Color string
-}
-
-// defaultCategories — дефолтный каталог в каноническом порядке (порядок UI
-// из Figma). Общий для всех вызовов: не мутировать.
+// defaultCategories — словарь дефолтного каталога. Общий для всех вызовов:
+// не мутировать.
 var defaultCategories = []CategoryCatalogEntry{
-	{Slug: "rent", Label: "Арендная плата", Icon: "bold-key", Color: "#2B7FFF"},
-	{Slug: "utilities", Label: "Коммунальные услуги", Icon: "bold-calculator", Color: "#00D5BE"},
-	{Slug: "electricity", Label: "Электроэнергия", Icon: "bold-light", Color: "#00D5BE"},
-	{Slug: "water-supply", Label: "Водоснабжение", Icon: "bold-water", Color: "#00D5BE"},
-	{Slug: "sewerage", Label: "Канализация", Icon: "bold-pipeline", Color: "#00D5BE"},
-	{Slug: "heating", Label: "Отопление", Icon: "bold-temperature", Color: "#00D5BE"},
-	{Slug: "gas", Label: "Газ", Icon: "bold-gas", Color: "#00D5BE"},
-	{Slug: "garbage-removal", Label: "Вывоз мусора", Icon: "bold-trash", Color: "#00D5BE"},
-	{Slug: "utilities-compensation", Label: "Компенсация коммунальных услуг", Icon: "bold-hand-coin", Color: "#00D5BE"},
-	{Slug: "mortgage", Label: "Ипотека", Icon: "bold-home", Color: "#7C86FF"},
-	{Slug: "loan", Label: "Кредит", Icon: "bold-credit", Color: "#7C86FF"},
-	{Slug: "bank-fees", Label: "Услуги банка", Icon: "bold-percent", Color: "#7C86FF"},
-	{Slug: "insurance", Label: "Страхование", Icon: "bold-shield", Color: "#F6339A"},
-	{Slug: "taxes", Label: "Налоги", Icon: "bold-bill", Color: "#0069A8"},
-	{Slug: "legal-services", Label: "Юридические услуги", Icon: "bold-court", Color: "#AD46FF"},
-	{Slug: "notary-services", Label: "Нотариальные услуги", Icon: "bold-stamp", Color: "#AD46FF"},
-	{Slug: "deposit", Label: "Залог", Icon: "bold-money-lock", Color: "#FFB900"},
-	{Slug: "commission", Label: "Комиссия", Icon: "bold-percent", Color: "#FFB900"},
-	{Slug: "advertising", Label: "Реклама", Icon: "bold-megaphone", Color: "#FFB900"},
-	{Slug: "repairs", Label: "Ремонт", Icon: "bold-wrench", Color: "#FF8904"},
-	{Slug: "capital-repairs", Label: "Капитальный ремонт", Icon: "bold-paint-roller", Color: "#FF8904"},
-	{Slug: "capital-repairs-fee", Label: "Взнос на капитальный ремонт", Icon: "bold-hammer", Color: "#FF8904"},
-	{Slug: "cleaning", Label: "Клининг", Icon: "bold-broom", Color: "#00BCFF"},
-	{Slug: "misc-services", Label: "Различные услуги", Icon: "bold-box", Color: "#00BCFF"},
-	{Slug: "internet", Label: "Интернет", Icon: "bold-internet", Color: "#ED6AFF"},
-	{Slug: "tv", Label: "Телевидение", Icon: "bold-tv", Color: "#ED6AFF"},
-	{Slug: "furniture", Label: "Мебель", Icon: "bold-sofa", Color: "#C98F55"},
-	{Slug: "appliances", Label: "Техника", Icon: "bold-fridge", Color: "#C98F55"},
-	{Slug: "equipment", Label: "Оборудование", Icon: "bold-printer", Color: "#C98F55"},
-	{Slug: "security", Label: "Охрана", Icon: "bold-security", Color: "#00D492"},
-	{Slug: "concierge", Label: "Консьерж", Icon: "bold-person", Color: "#00D492"},
-	{Slug: "parking", Label: "Парковка", Icon: "bold-car", Color: "#00D492"},
-	{Slug: "management-company", Label: "Управляющая компания", Icon: "bold-build", Color: "#00C950"},
-	{Slug: "grounds-maintenance", Label: "Обслуживание территории", Icon: "bold-fence", Color: "#00C950"},
-	{Slug: "intercom", Label: "Домофон", Icon: "bold-bell", Color: "#00C950"},
-	{Slug: "landscaping", Label: "Благоустройство", Icon: "bold-leaf", Color: "#00C950"},
-	{Slug: "damage-compensation", Label: "Возмещение ущерба", Icon: "bold-heart-broken", Color: "#FB2C36"},
-	{Slug: "penalty", Label: "Неустойка", Icon: "bold-coins", Color: "#FB2C36"},
-	{Slug: "late-fees", Label: "Пени", Icon: "bold-clock", Color: "#FB2C36"},
-	{Slug: "fines", Label: "Штрафы", Icon: "bold-warning", Color: "#FB2C36"},
-}
-
-// userCategoryDefaultStyle — дефолтный внешний вид пользовательской категории.
-var userCategoryDefaultStyle = UserCategoryStyle{Icon: "bold-other", Color: "#ABAB9C"}
-
-// DefaultCategories возвращает дефолтный каталог категорий в каноническом
-// порядке UI. Возвращённый слайс общий для всех вызовов — не мутировать.
-func DefaultCategories() []CategoryCatalogEntry {
-	return defaultCategories
+	{Slug: "rent", Label: "Арендная плата"},
+	{Slug: "utilities", Label: "Коммунальные услуги"},
+	{Slug: "electricity", Label: "Электроэнергия"},
+	{Slug: "water-supply", Label: "Водоснабжение"},
+	{Slug: "sewerage", Label: "Канализация"},
+	{Slug: "heating", Label: "Отопление"},
+	{Slug: "gas", Label: "Газ"},
+	{Slug: "garbage-removal", Label: "Вывоз мусора"},
+	{Slug: "utilities-compensation", Label: "Компенсация коммунальных услуг"},
+	{Slug: "mortgage", Label: "Ипотека"},
+	{Slug: "loan", Label: "Кредит"},
+	{Slug: "bank-fees", Label: "Услуги банка"},
+	{Slug: "insurance", Label: "Страхование"},
+	{Slug: "taxes", Label: "Налоги"},
+	{Slug: "legal-services", Label: "Юридические услуги"},
+	{Slug: "notary-services", Label: "Нотариальные услуги"},
+	{Slug: "deposit", Label: "Залог"},
+	{Slug: "commission", Label: "Комиссия"},
+	{Slug: "advertising", Label: "Реклама"},
+	{Slug: "repairs", Label: "Ремонт"},
+	{Slug: "capital-repairs", Label: "Капитальный ремонт"},
+	{Slug: "capital-repairs-fee", Label: "Взнос на капитальный ремонт"},
+	{Slug: "cleaning", Label: "Клининг"},
+	{Slug: "misc-services", Label: "Различные услуги"},
+	{Slug: "internet", Label: "Интернет"},
+	{Slug: "tv", Label: "Телевидение"},
+	{Slug: "furniture", Label: "Мебель"},
+	{Slug: "appliances", Label: "Техника"},
+	{Slug: "equipment", Label: "Оборудование"},
+	{Slug: "security", Label: "Охрана"},
+	{Slug: "concierge", Label: "Консьерж"},
+	{Slug: "parking", Label: "Парковка"},
+	{Slug: "management-company", Label: "Управляющая компания"},
+	{Slug: "grounds-maintenance", Label: "Обслуживание территории"},
+	{Slug: "intercom", Label: "Домофон"},
+	{Slug: "landscaping", Label: "Благоустройство"},
+	{Slug: "damage-compensation", Label: "Возмещение ущерба"},
+	{Slug: "penalty", Label: "Неустойка"},
+	{Slug: "late-fees", Label: "Пени"},
+	{Slug: "fines", Label: "Штрафы"},
 }
 
 // CategoryBySlug ищет запись дефолтного каталога по слагу.
@@ -100,10 +83,4 @@ func CategoryBySlug(slug string) (CategoryCatalogEntry, bool) {
 func IsValidDefaultCategorySlug(slug string) bool {
 	_, ok := CategoryBySlug(slug)
 	return ok
-}
-
-// UserCategoryDefaultStyle возвращает дефолтный внешний вид пользовательской
-// категории (иконка и цвет подложки).
-func UserCategoryDefaultStyle() UserCategoryStyle {
-	return userCategoryDefaultStyle
 }
