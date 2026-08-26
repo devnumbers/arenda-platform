@@ -103,23 +103,6 @@ type PaymentStore interface {
 	WithTx(tx transaction.Tx) (PaymentStore, error)
 }
 
-// OperationsListQuery is the normalized operations listing request: view
-// status filter (empty = any), an inclusive period on the operation date, the
-// pagination window and the sort direction; Today carries the owner's today
-// the overdue semantics are computed against.
-type OperationsListQuery struct {
-	// Status filters on the computed view status; empty means no filter.
-	Status   domain.OperationViewStatus
-	DateFrom *time.Time
-	DateTo   *time.Time
-	Today    time.Time
-	Limit    int
-	Offset   int
-	// Desc sorts newest-first when true; false means ascending, oldest
-	// first.
-	Desc bool
-}
-
 // OperationStore is the persistence port of the operations (ticket #461).
 // Reads and writes are scoped by the data owner and the nested property path
 // lives in the queries themselves. The mutating methods must run inside the

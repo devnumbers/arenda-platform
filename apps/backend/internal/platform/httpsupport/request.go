@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+
+	"github.com/google/uuid"
 )
 
 const MaxRequestBodySize = 16 << 10 // 16 KiB.
@@ -43,4 +45,22 @@ func UserFacingDetailOrDefault(err error, defaultDetail string) string {
 		return detail
 	}
 	return defaultDetail
+}
+
+// RequireUser resolves the acting user from the request context and writes
+// the canonical 401 problem itself when the session middleware stored none.
+// The bool verdict is the handler's early-return signal:
+//
+//	actor, ok := httpsupport.RequireUser(w, r)
+//	if !ok { return }
+//
+// One home for the preamble every authenticated handler otherwise repeats.
+func RequireUser(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	id, ok := UserIDFromContext(r.Context())
+	if !ok {
+		WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return uuid.Nil, false
+	}
+	return id, true
 }

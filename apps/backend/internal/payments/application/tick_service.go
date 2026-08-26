@@ -42,14 +42,13 @@ func NewTickService(
 
 // RunOwnerTick materializes one owner's payment rules as of the owner's
 // today (ADR 0048): one calendar lookup, then one transaction serialized on
-// the owner's property rows.
+// the owner's property rows. The production door is RunZoneTicks (the hourly
+// worker); this single-owner form serves the integration suite and bespoke
+// tooling — not any production caller.
 func (s *TickService) RunOwnerTick(ctx context.Context, ownerID uuid.UUID) error {
-	if s.calendar == nil {
-		return errors.New("payments tick: owner calendar must be configured")
-	}
-	today, err := s.calendar.Today(ctx, ownerID)
+	today, err := ownerToday(s.calendar, ctx, ownerID)
 	if err != nil {
-		return fmt.Errorf("resolve owner today: %w", err)
+		return err
 	}
 	return s.runInTx(ctx, func(stores *txStores) error {
 		return stores.tickOwner(ctx, ownerID, today)

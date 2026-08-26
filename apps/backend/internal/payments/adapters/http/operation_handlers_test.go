@@ -27,11 +27,11 @@ type fakeOperationsManager struct {
 	pay   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (domain.Operation, error)
 	byPay func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
-		cmd application.ListOperationsCommand,
+		cmd application.OperationsListQuery,
 	) ([]application.OperationListItem, error)
 	byProp func(
 		ctx context.Context, actor, propertyID uuid.UUID,
-		cmd application.ListOperationsCommand,
+		cmd application.OperationsListQuery,
 	) ([]application.OperationListItem, error)
 }
 
@@ -46,7 +46,7 @@ func (f *fakeOperationsManager) PayOperation(
 
 func (f *fakeOperationsManager) ListPaymentOperations(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
-	cmd application.ListOperationsCommand,
+	cmd application.OperationsListQuery,
 ) ([]application.OperationListItem, error) {
 	if f.byPay == nil {
 		return nil, errors.New("unexpected ListPaymentOperations call")
@@ -55,7 +55,7 @@ func (f *fakeOperationsManager) ListPaymentOperations(
 }
 
 func (f *fakeOperationsManager) ListPropertyOperations(
-	ctx context.Context, actor, propertyID uuid.UUID, cmd application.ListOperationsCommand,
+	ctx context.Context, actor, propertyID uuid.UUID, cmd application.OperationsListQuery,
 ) ([]application.OperationListItem, error) {
 	if f.byProp == nil {
 		return nil, errors.New("unexpected ListPropertyOperations call")
@@ -122,10 +122,10 @@ func TestOperationsHandlers_RequireAuth(t *testing.T) {
 func TestListPaymentOperations_FoldsParamsIntoCommand(t *testing.T) {
 	t.Parallel()
 
-	var gotCmd application.ListOperationsCommand
+	var gotCmd application.OperationsListQuery
 	svc := &fakeOperationsManager{
 		byPay: func(
-			_ context.Context, _, _, _ uuid.UUID, cmd application.ListOperationsCommand,
+			_ context.Context, _, _, _ uuid.UUID, cmd application.OperationsListQuery,
 		) ([]application.OperationListItem, error) {
 			gotCmd = cmd
 			return []application.OperationListItem{
@@ -187,10 +187,10 @@ func TestListPaymentOperations_FoldsParamsIntoCommand(t *testing.T) {
 func TestListPaymentOperations_DefaultsAreDescPage50(t *testing.T) {
 	t.Parallel()
 
-	var gotCmd application.ListOperationsCommand
+	var gotCmd application.OperationsListQuery
 	svc := &fakeOperationsManager{
 		byPay: func(
-			_ context.Context, _, _, _ uuid.UUID, cmd application.ListOperationsCommand,
+			_ context.Context, _, _, _ uuid.UUID, cmd application.OperationsListQuery,
 		) ([]application.OperationListItem, error) {
 			gotCmd = cmd
 			return []application.OperationListItem{}, nil
@@ -215,12 +215,11 @@ func TestListPaymentOperations_DefaultsAreDescPage50(t *testing.T) {
 	if gotCmd.Status != nil {
 		t.Errorf("status = %v, want none", gotCmd.Status)
 	}
-	q, err := application.NormalizeOperationsCommand(gotCmd)
-	if err != nil {
-		t.Fatalf("normalize default command: %v", err)
+	if err := application.PrepareOperationsQuery(&gotCmd); err != nil {
+		t.Fatalf("prepare default command: %v", err)
 	}
-	if q.Limit != application.DefaultOperationsPageSize {
-		t.Errorf("default limit = %d, want %d", q.Limit, application.DefaultOperationsPageSize)
+	if gotCmd.Limit != application.DefaultOperationsPageSize {
+		t.Errorf("default limit = %d, want %d", gotCmd.Limit, application.DefaultOperationsPageSize)
 	}
 }
 
@@ -229,10 +228,10 @@ func TestListPropertyOperations_ForwardsToPort(t *testing.T) {
 
 	planned := openapi.ListPropertyOperationsParamsStatus(openapi.Planned)
 	var gotActor, gotProp uuid.UUID
-	var gotCmd application.ListOperationsCommand
+	var gotCmd application.OperationsListQuery
 	svc := &fakeOperationsManager{
 		byProp: func(
-			_ context.Context, actor, prop uuid.UUID, cmd application.ListOperationsCommand,
+			_ context.Context, actor, prop uuid.UUID, cmd application.OperationsListQuery,
 		) ([]application.OperationListItem, error) {
 			gotActor, gotProp, gotCmd = actor, prop, cmd
 			return []application.OperationListItem{
@@ -295,7 +294,7 @@ func TestListPropertyOperations_MapsApplicationErrors(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeOperationsManager{
-		byProp: func(context.Context, uuid.UUID, uuid.UUID, application.ListOperationsCommand) ([]application.OperationListItem, error) {
+		byProp: func(context.Context, uuid.UUID, uuid.UUID, application.OperationsListQuery) ([]application.OperationListItem, error) {
 			return nil, application.ErrNotFound
 		},
 	}

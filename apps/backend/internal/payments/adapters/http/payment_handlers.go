@@ -116,10 +116,8 @@ func (h *PaymentHandlers) handlePaymentError(w http.ResponseWriter, r *http.Requ
 
 // CreatePayment implements POST /properties/{propertyId}/payments.
 func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -149,10 +147,8 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 
 // ListPayments implements GET /properties/{propertyId}/payments.
 func (h *PaymentHandlers) ListPayments(w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -176,10 +172,8 @@ func (h *PaymentHandlers) ListPayments(w http.ResponseWriter, r *http.Request, p
 
 // GetPayment implements GET /properties/{propertyId}/payments/{paymentId}.
 func (h *PaymentHandlers) GetPayment(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -194,10 +188,8 @@ func (h *PaymentHandlers) GetPayment(w http.ResponseWriter, r *http.Request, pro
 
 // UpdatePayment implements PATCH /properties/{propertyId}/payments/{paymentId}.
 func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -230,10 +222,8 @@ func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, 
 func (h *PaymentHandlers) DeletePayment(
 	w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID, params openapi.DeletePaymentParams,
 ) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -254,10 +244,8 @@ func (h *PaymentHandlers) DeletePayment(
 
 // PausePayment implements POST /properties/{propertyId}/payments/{paymentId}/pause.
 func (h *PaymentHandlers) PausePayment(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -272,10 +260,8 @@ func (h *PaymentHandlers) PausePayment(w http.ResponseWriter, r *http.Request, p
 
 // ResumePayment implements POST /properties/{propertyId}/payments/{paymentId}/resume.
 func (h *PaymentHandlers) ResumePayment(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -291,10 +277,8 @@ func (h *PaymentHandlers) ResumePayment(w http.ResponseWriter, r *http.Request, 
 // SetPaymentFavorite implements PUT /properties/{propertyId}/payments/{paymentId}/favorite
 // (ticket #461): the atomic favorite star write; the updated rule travels back.
 func (h *PaymentHandlers) SetPaymentFavorite(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 

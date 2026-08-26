@@ -24,11 +24,11 @@ type OperationsManager interface {
 	PayOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (domain.Operation, error)
 	ListPaymentOperations(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
-		cmd application.ListOperationsCommand,
+		cmd application.OperationsListQuery,
 	) ([]application.OperationListItem, error)
 	ListPropertyOperations(
 		ctx context.Context, actor, propertyID uuid.UUID,
-		cmd application.ListOperationsCommand,
+		cmd application.OperationsListQuery,
 	) ([]application.OperationListItem, error)
 }
 
@@ -54,10 +54,8 @@ func (h *OperationsHandlers) ListPaymentOperations(
 	w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID,
 	params openapi.ListPaymentOperationsParams,
 ) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -82,10 +80,8 @@ func (h *OperationsHandlers) ListPropertyOperations(
 	w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID,
 	params openapi.ListPropertyOperationsParams,
 ) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -109,10 +105,8 @@ func (h *OperationsHandlers) ListPropertyOperations(
 func (h *OperationsHandlers) PayOperation(
 	w http.ResponseWriter, r *http.Request, propertyID, operationID openapi_types.UUID,
 ) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -144,58 +138,89 @@ func (h *OperationsHandlers) handleOperationError(w http.ResponseWriter, r *http
 		httpsupport.InternalError(r.Context(), err))
 }
 
-// listOperationsFromPaymentParams folds the generated per-rule list params
-// into the application command; out-of-vocabulary values are contract 400s.
-func listOperationsFromPaymentParams(params openapi.ListPaymentOperationsParams) (application.ListOperationsCommand, error) {
-	cmd := application.ListOperationsCommand{Desc: true}
-	if params.Status != nil {
-		if !params.Status.Valid() {
-			return cmd, application.ErrInvalidInput
-		}
-		cmd.Status = new(domain.OperationViewStatus(*params.Status))
+// newListOperationsQuery folds the shared query-parameter shape onto the
+// listing request. The generated enums differ per endpoint, so callers hand
+// over already-decoded primitives; the pagination numbers travel raw and are
+// bounded by the service (PrepareOperationsQuery) — one validation home.
+func newListOperationsQuery(
+	status *domain.OperationViewStatus,
+	dateFrom, dateTo *openapi_types.Date,
+	asc bool,
+	limit, offset *int,
+) application.OperationsListQuery {
+	query := application.OperationsListQuery{
+		Status:   status,
+		DateFrom: datePtrFromWire(dateFrom),
+		DateTo:   datePtrFromWire(dateTo),
+		// Contract default: anything but an explicit asc sorts descending.
+		Desc: !asc,
 	}
-	cmd.DateFrom = datePtrFromWire(params.DateFrom)
-	cmd.DateTo = datePtrFromWire(params.DateTo)
-	if params.Order != nil {
-		if !params.Order.Valid() {
-			return cmd, application.ErrInvalidInput
-		}
-		cmd.Desc = *params.Order != openapi.Asc // Contract default: anything but asc sorts descending.
+	if limit != nil {
+		query.Limit = *limit
 	}
-	if params.Limit != nil {
-		cmd.Limit = *params.Limit
+	if offset != nil {
+		query.Offset = *offset
 	}
-	if params.Offset != nil {
-		cmd.Offset = *params.Offset
-	}
-	return cmd, nil
+	return query
 }
 
-// listOperationsFromPropertyParams is the property-scope twin of
-// listOperationsFromPaymentParams.
-func listOperationsFromPropertyParams(params openapi.ListPropertyOperationsParams) (application.ListOperationsCommand, error) {
-	cmd := application.ListOperationsCommand{Desc: true}
-	if params.Status != nil {
-		if !params.Status.Valid() {
-			return cmd, application.ErrInvalidInput
+// foldStatus checks a generated status enum against its own vocabulary and
+// lifts it into the domain view-status pointer; a missing filter simply means
+// no filter — not an error.
+func foldStatus[T ~string](status *T, valid func(T) bool) (*domain.OperationViewStatus, error) {
+	var lifted *domain.OperationViewStatus
+	if status != nil {
+		if !valid(*status) {
+			return lifted, application.ErrInvalidInput
 		}
-		cmd.Status = new(domain.OperationViewStatus(*params.Status))
+		value := domain.OperationViewStatus(*status)
+		lifted = &value
 	}
-	cmd.DateFrom = datePtrFromWire(params.DateFrom)
-	cmd.DateTo = datePtrFromWire(params.DateTo)
-	if params.Order != nil {
-		if !params.Order.Valid() {
-			return cmd, application.ErrInvalidInput
-		}
-		cmd.Desc = *params.Order != openapi.ListPropertyOperationsParamsOrderAsc
+	return lifted, nil
+}
+
+// foldOrder decodes the sort direction: asc when explicitly asked, desc as
+// the contract default; out-of-vocabulary values are contract 400s.
+func foldOrder[T ~string](order *T, valid func(T) bool) (bool, error) {
+	if order == nil {
+		return false, nil
 	}
-	if params.Limit != nil {
-		cmd.Limit = *params.Limit
+	if !valid(*order) {
+		return false, application.ErrInvalidInput
 	}
-	if params.Offset != nil {
-		cmd.Offset = *params.Offset
+	return *order == "asc", nil
+}
+
+// listOperationsFromPaymentParams adapts the per-rule endpoint's params onto
+// the shared builder.
+func listOperationsFromPaymentParams(
+	params openapi.ListPaymentOperationsParams,
+) (application.OperationsListQuery, error) {
+	status, err := foldStatus(params.Status, openapi.ListPaymentOperationsParamsStatus.Valid)
+	if err != nil {
+		return application.OperationsListQuery{}, err
 	}
-	return cmd, nil
+	asc, err := foldOrder(params.Order, openapi.ListPaymentOperationsParamsOrder.Valid)
+	if err != nil {
+		return application.OperationsListQuery{}, err
+	}
+	return newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset), nil
+}
+
+// listOperationsFromPropertyParams is the property-scope adapter onto the
+// same builder.
+func listOperationsFromPropertyParams(
+	params openapi.ListPropertyOperationsParams,
+) (application.OperationsListQuery, error) {
+	status, err := foldStatus(params.Status, openapi.ListPropertyOperationsParamsStatus.Valid)
+	if err != nil {
+		return application.OperationsListQuery{}, err
+	}
+	asc, err := foldOrder(params.Order, openapi.ListPropertyOperationsParamsOrder.Valid)
+	if err != nil {
+		return application.OperationsListQuery{}, err
+	}
+	return newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset), nil
 }
 
 // writeOperations maps the listed items onto the wire response shape.

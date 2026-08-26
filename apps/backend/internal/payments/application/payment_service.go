@@ -58,15 +58,17 @@ type UpdatePaymentCommand struct {
 
 // PaymentService orchestrates the payment rule use cases (ticket #457,
 // ADR 0049 §4): create, read, list, partial update, delete with keep_overdue,
-// pause and resume. Every mutation runs through the mutateRule conveyor,
-// which owns the ordering invariants structurally: the role gate, the
-// property row lock, the owner's today, the change step, its audit entry in
-// the same transaction and the materialization tick after the change. Reads
-// never tick and never write.
+// pause, resume and favorite. Every mutation runs through the shared
+// runMutation conveyor, which owns the ordering invariants structurally: the
+// role gate, the property row lock, the owner's today, the change step, its
+// audit entry in the same transaction and the materialization tick when the
+// step's verdict asks for it. Reads never tick and never write.
 type PaymentService struct {
 	txStoreFactory
-	policy   sharedpolicy.Policy
-	calendar OwnerCalendar
+	policy    sharedpolicy.Policy
+	calendar  OwnerCalendar
+	writeGate gateFunc // Full Access+: create/edit/pause/resume/favorite.
+	delGate   gateFunc // Owner alone: deletion.
 }
 
 // NewPaymentService builds the payment use case service over the shared
@@ -75,18 +77,25 @@ type PaymentService struct {
 // first use rather than writing with a zero date. A nil policy keeps the
 // historical owner-only behaviour (the owner acts on their own scope).
 func NewPaymentService(factory txStoreFactory, calendar OwnerCalendar, policy sharedpolicy.Policy) *PaymentService {
-	return &PaymentService{txStoreFactory: factory, calendar: calendar, policy: policy}
+	return &PaymentService{
+		txStoreFactory: factory,
+		policy:         policy,
+		calendar:       calendar,
+		writeGate:      newCapabilityGate(policy, sharedpolicy.CanEdit),
+		delGate:        newCapabilityGate(policy, sharedpolicy.CanLifecycle),
+	}
 }
 
-// mutateRule runs the shared mutation conveyor (conveyor.go) over this
-// service's factory and calendar.
-func (s *PaymentService) mutateRule(
-	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
-	gate func(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error),
-	change changeStep,
-) (domain.Payment, error) {
-	gates := mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
-	return gates.runMutation(ctx, actor, propertyID, paymentID, gate, change)
+// conveyor bundles this service's factory and calendar for the shared
+// mutation conveyor.
+func (s *PaymentService) conveyor() mutationGates {
+	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
+}
+
+// readScope applies the read gate and returns the data owner whose scope the
+// SQL reads filter by (ADR 0028).
+func (s *PaymentService) readScope(ctx context.Context, actor, propertyID uuid.UUID) (uuid.UUID, error) {
+	return resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
 }
 
 // CreatePayment creates a payment rule on the property. The rule acts from
@@ -96,8 +105,8 @@ func (s *PaymentService) mutateRule(
 func (s *PaymentService) CreatePayment(
 	ctx context.Context, actor, propertyID uuid.UUID, cmd CreatePaymentCommand,
 ) (domain.Payment, error) {
-	return s.mutateRule(ctx, actor, propertyID, uuid.Nil, s.writeGate,
-		func(ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.Payment, today time.Time) (domain.Payment, mutationOutcome, error) {
+	return runMutation(s.conveyor(), ctx, actor, propertyID, uuid.Nil, s.writeGate,
+		func(ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
 			draft := domain.Payment{
 				OwnerID:       scope,
 				PropertyID:    propertyID,
@@ -112,17 +121,22 @@ func (s *PaymentService) CreatePayment(
 				Category:      domain.CategoryRef{Slug: &cmd.CategorySlug},
 			}
 			if err := validateRule(draft); err != nil {
-				return domain.Payment{}, mutationOutcome{}, err
+				return mutationOutcome[domain.Payment]{}, err
 			}
 			id, err := uuid.NewV7()
 			if err != nil {
-				return domain.Payment{}, mutationOutcome{}, fmt.Errorf("mint payment id: %w", err)
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("mint payment id: %w", err)
 			}
 			draft.ID = id
 			if err := stores.payments.Create(ctx, draft); err != nil {
-				return domain.Payment{}, mutationOutcome{}, fmt.Errorf("create payment: %w", err)
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("create payment: %w", err)
 			}
-			return draft, mutationOutcome{audit: auditdomain.ActionPaymentCreated, tick: true, reread: true}, nil
+			return mutationOutcome[domain.Payment]{
+				Response:     draft,
+				Audit:        auditdomain.ActionPaymentCreated,
+				Tick:         true,
+				RereadRuleID: &draft.ID,
+			}, nil
 		})
 }
 
@@ -160,30 +174,31 @@ func (s *PaymentService) GetPayment(
 
 // UpdatePayment applies a diff-patch to the rule: omitted fields are left
 // unchanged, since is not editable. The change invalidates the strictly
-// future planned and the conveyor's tick stands it again with fresh
-// snapshots; the already due occurrences keep their frozen snapshots (user
-// story #32), and paid operations are never touched. Full Access and Owner
-// may edit.
+// future planned and the verdict keeps Tick=true so the tick stands it again
+// with fresh snapshots; the already due occurrences keep their frozen
+// snapshots (user story #32), and paid operations are never touched. Full
+// Access and Owner may edit.
 func (s *PaymentService) UpdatePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd UpdatePaymentCommand,
 ) (domain.Payment, error) {
-	return s.mutateRule(ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (domain.Payment, mutationOutcome, error) {
+	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
+		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
 			applyUpdate(&rule, cmd)
 			if err := validateRule(rule); err != nil {
-				return domain.Payment{}, mutationOutcome{}, err
+				return mutationOutcome[domain.Payment]{}, err
 			}
 			if err := stores.payments.Update(ctx, rule); err != nil {
-				return domain.Payment{}, mutationOutcome{}, fmt.Errorf("update payment: %w", err)
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("update payment: %w", err)
 			}
 			if err := stores.payments.DeleteFuturePlanned(ctx, rule.ID, today); err != nil {
-				return domain.Payment{}, mutationOutcome{}, err
+				return mutationOutcome[domain.Payment]{}, err
 			}
-			return rule, mutationOutcome{
-				audit:    auditdomain.ActionPaymentUpdated,
-				auditCtx: map[string]any{"fields": updatedFields(cmd)},
-				tick:     true,
-				reread:   true,
+			return mutationOutcome[domain.Payment]{
+				Response:     rule,
+				Audit:        auditdomain.ActionPaymentUpdated,
+				AuditCtx:     map[string]any{"fields": updatedFields(cmd)},
+				Tick:         true,
+				RereadRuleID: &rule.ID,
 			}, nil
 		})
 }
@@ -192,29 +207,30 @@ func (s *PaymentService) UpdatePayment(
 // with it; the overdue planned debt goes too when keepOverdue is false, and
 // paid operations stay in history marked «платёж удалён» (payment_id set to
 // NULL by the FK, origin unchanged — ticket #446). Deletion is Owner-only
-// (the ADR 0028 matrix) and is the one mutation without a tick: the rule is
-// gone and its plan was resolved explicitly by the change step.
+// (the ADR 0028 matrix) and its verdict states Tick=false explicitly: the
+// rule is gone and its plan was resolved by the change step itself.
 func (s *PaymentService) DeletePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool,
 ) error {
-	_, err := s.mutateRule(ctx, actor, propertyID, paymentID, s.deleteGate,
+	_, err := runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.delGate,
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
-		) (domain.Payment, mutationOutcome, error) {
+		) (mutationOutcome[domain.Payment], error) {
 			if err := stores.payments.DeletePlannedFrom(ctx, rule.ID, today); err != nil {
-				return domain.Payment{}, mutationOutcome{}, err
+				return mutationOutcome[domain.Payment]{}, err
 			}
 			if !keepOverdue {
 				if err := stores.payments.DeletePlannedBefore(ctx, rule.ID, today); err != nil {
-					return domain.Payment{}, mutationOutcome{}, err
+					return mutationOutcome[domain.Payment]{}, err
 				}
 			}
 			if err := stores.payments.Delete(ctx, rule.ID, scope); err != nil {
-				return domain.Payment{}, mutationOutcome{}, fmt.Errorf("delete payment: %w", err)
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("delete payment: %w", err)
 			}
-			return rule, mutationOutcome{
-				audit:    auditdomain.ActionPaymentDeleted,
-				auditCtx: map[string]any{"keep_overdue": keepOverdue},
+			return mutationOutcome[domain.Payment]{
+				Response: rule,
+				Audit:    auditdomain.ActionPaymentDeleted,
+				AuditCtx: map[string]any{"keep_overdue": keepOverdue},
 			}, nil
 		})
 	return err
@@ -222,87 +238,74 @@ func (s *PaymentService) DeletePayment(
 
 // PausePayment opens the open-ended pause from the owner's today on: nothing
 // generates inside the pause — no operations, no debt, no auto-pay — and the
-// debt accumulated before it stays (CONTEXT.md «Пауза»). The conveyor's tick
-// removes the future planned. A second pause on a rule with an open one is
-// ErrAlreadyPaused.
+// debt accumulated before it stays (CONTEXT.md «Пауза»). The verdict carries
+// Tick=true: the tick removes the future planned. A second pause on a rule
+// with an open one is ErrAlreadyPaused.
 func (s *PaymentService) PausePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 ) (domain.Payment, error) {
-	return s.mutateRule(ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (domain.Payment, mutationOutcome, error) {
+	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
+		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
 			if _, active := domain.ActivePause(rule.Pauses); active {
-				return domain.Payment{}, mutationOutcome{}, ErrAlreadyPaused
+				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
 			}
 			if err := stores.payments.InsertPause(ctx, rule.ID, today); err != nil {
-				return domain.Payment{}, mutationOutcome{}, fmt.Errorf("insert pause: %w", err)
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("insert pause: %w", err)
 			}
-			return rule, mutationOutcome{audit: auditdomain.ActionPaymentPaused, tick: true, reread: true}, nil
+			return mutationOutcome[domain.Payment]{
+				Response:     rule,
+				Audit:        auditdomain.ActionPaymentPaused,
+				Tick:         true,
+				RereadRuleID: &rule.ID,
+			}, nil
 		})
 }
 
 // ResumePayment closes the open pause with the owner's today (the resume day
 // is already outside the half-open interval; anchors never shift) and the
-// conveyor's tick stands the future planned back. Resuming a rule without an
-// open pause is ErrNotPaused.
+// tick stands the future planned back. Resuming a rule without an open pause
+// is ErrNotPaused.
 func (s *PaymentService) ResumePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 ) (domain.Payment, error) {
-	return s.mutateRule(ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (domain.Payment, mutationOutcome, error) {
+	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
+		func(ctx context.Context, stores *txStores, _ uuid.UUID, rule domain.Payment, today time.Time) (mutationOutcome[domain.Payment], error) {
 			if _, active := domain.ActivePause(rule.Pauses); !active {
-				return domain.Payment{}, mutationOutcome{}, ErrNotPaused
+				return mutationOutcome[domain.Payment]{}, ErrNotPaused
 			}
 			if err := stores.payments.CloseActivePause(ctx, rule.ID, today); err != nil {
-				return domain.Payment{}, mutationOutcome{}, fmt.Errorf("close active pause: %w", err)
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("close active pause: %w", err)
 			}
-			return rule, mutationOutcome{audit: auditdomain.ActionPaymentResumed, tick: true, reread: true}, nil
+			return mutationOutcome[domain.Payment]{
+				Response:     rule,
+				Audit:        auditdomain.ActionPaymentResumed,
+				Tick:         true,
+				RereadRuleID: &rule.ID,
+			}, nil
 		})
-}
-
-// readScope applies the read gate and returns the data owner whose scope the
-// SQL reads filter by (ADR 0028).
-func (s *PaymentService) readScope(ctx context.Context, actor, propertyID uuid.UUID) (uuid.UUID, error) {
-	return resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
-}
-
-// writeGate applies the ADR 0028 mutation gate (CanEdit): Full Access and
-// Owner may mutate; a viewer is ErrForbidden.
-func (s *PaymentService) writeGate(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
-	return newCapabilityGate(s.policy, sharedpolicy.CanEdit)(ctx, actor, propertyID)
-}
-
-// deleteGate applies the ADR 0028 deletion gate: deletion is the owner's
-// alone (CanLifecycle).
-func (s *PaymentService) deleteGate(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
-	return newCapabilityGate(s.policy, sharedpolicy.CanLifecycle)(ctx, actor, propertyID)
 }
 
 // SetPaymentFavorite writes the rule's favorite star atomically (PUT
 // favorite, ticket #461): one UPDATE inside the conveyor's transaction — never
 // a read-modify-write through the full PATCH. The star is a pure read-side
-// flag: generation is unaffected, so the conveyor's tick does not run and no
-// re-read is needed — the rule resolved under the property lock travels back.
-// Full Access and Owner may favorite.
+// flag: generation is unaffected, so the verdict states Tick=false explicitly
+// and asks for no re-read — the rule resolved under the property lock travels
+// out through Response. Full Access and Owner may favorite.
 func (s *PaymentService) SetPaymentFavorite(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool,
 ) (domain.Payment, error) {
-	var updated domain.Payment
-	_, err := s.mutateRule(ctx, actor, propertyID, paymentID, s.writeGate,
-		func(ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, _ time.Time) (domain.Payment, mutationOutcome, error) {
+	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
+		func(ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, _ time.Time) (mutationOutcome[domain.Payment], error) {
 			if err := stores.payments.SetFavorite(ctx, rule.ID, scope, favorite); err != nil {
-				return domain.Payment{}, mutationOutcome{}, fmt.Errorf("set payment favorite: %w", err)
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("set payment favorite: %w", err)
 			}
 			rule.IsFavorite = favorite
-			updated = rule
-			return rule, mutationOutcome{
-				audit:    auditdomain.ActionPaymentUpdated,
-				auditCtx: map[string]any{"fields": []string{"favorite"}},
+			return mutationOutcome[domain.Payment]{
+				Response: rule,
+				Audit:    auditdomain.ActionPaymentUpdated,
+				AuditCtx: map[string]any{"fields": []string{"favorite"}},
 			}, nil
 		})
-	if err != nil {
-		return domain.Payment{}, err
-	}
-	return updated, nil
 }
 
 // validateRule is the single validator of the create/update contract

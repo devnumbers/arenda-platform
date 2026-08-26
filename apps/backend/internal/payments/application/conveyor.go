@@ -19,31 +19,37 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
-// changeStep is the use-case-specific part of the mutation conveyor: it
+// changeStep is the use-case-specific part of the mutation conveyor. It
 // receives the loaded rule (a zero rule when there is no rule to load: at
-// creation the new draft travels back, and in the operation mutations the
-// change proves existence from its own store), applies its change inside the
-// open transaction and tells the conveyor the audit entry, the tick and the
-// re-read verdicts.
-type changeStep func(
+// creation the new draft travels out with the outcome, and in the operation
+// mutations the change proves existence from its own store), applies its
+// change inside the open transaction and produces one typed outcome: the
+// caller-facing response payload plus the audit entry, the tick verdict and
+// the optional post-commit re-read.
+type changeStep[T any] func(
 	ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
-) (domain.Payment, mutationOutcome, error)
+) (mutationOutcome[T], error)
 
-// mutationOutcome is the change step's verdict for the conveyor: the audit
-// entry to record in the same transaction (the entity defaults to the rule;
-// an operation-level change overrides it), whether the materialization tick
-// runs after the change, and whether the stored rule is re-read after commit
-// for the response.
-type mutationOutcome struct {
-	audit    auditdomain.Action
-	auditCtx map[string]any
-	tick     bool
-	reread   bool
-	// The auditEntity and auditEntityID fields retarget the entry away from
-	// the rule: operation.paid targets the operation row, not its originating
-	// rule.
-	auditEntity   auditdomain.EntityType
-	auditEntityID *uuid.UUID
+// mutationOutcome is the change step's single verdict channel: everything the
+// caller and the machine need after the transaction — no side channels.
+type mutationOutcome[T any] struct {
+	// Response travels to the use case's caller verbatim unless RereadRuleID
+	// asks for a post-commit re-read; then the freshly read rule replaces it.
+	Response T
+	// Audit records this mutation inside the same transaction (fail-safe,
+	// ADR 0020). AuditEntity/AuditEntityID retarget the entry away from the
+	// rule: operation.paid targets the operation row, not its originating
+	// rule. Empty entity type defaults to the payment.
+	Audit         auditdomain.Action
+	AuditCtx      map[string]any
+	AuditEntity   auditdomain.EntityType
+	AuditEntityID *uuid.UUID
+	// Tick runs the materialization tick for the owner after the change;
+	// every use case states its need explicitly (deletion sets false).
+	Tick bool
+	// RereadRuleID asks the conveyor to re-read this stored rule after commit
+	// so the response carries persisted timestamps, pauses and category view.
+	RereadRuleID *uuid.UUID
 }
 
 // mutationGates bundles the dependencies the conveyor needs beyond the
@@ -55,25 +61,25 @@ type mutationGates struct {
 }
 
 // runMutation is the mutation conveyor shared by every use case of this
-// context — rules and operations alike.
-// It runs, in one transaction and in this order: the role gate, the property
-// serialization lock (FOR UPDATE — ADR 0049 §3), the owner's today, the load
-// of the target rule (skipped for a zero paymentID — creation mints its own),
-// the change step, its audit entry, and the materialization tick after the
-// change. The change step is the only use-case-specific part; after commit
-// the conveyor re-reads the stored rule so the response carries the persisted
-// timestamps, pauses and category view.
-func (g mutationGates) runMutation(
+// context — rules and operations alike. It runs, in one transaction and in
+// this order: the role gate, the property serialization lock (FOR UPDATE —
+// ADR 0049 §3), the owner's today, the load of the target rule (skipped for a
+// zero paymentID), the change step, its audit entry, and the materialization
+// tick when the step asked for it. After commit it returns the step's
+// response, post-commit-re-read applied.
+func runMutation[T any](
+	g mutationGates,
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
-	gate func(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error),
-	change changeStep,
-) (domain.Payment, error) {
+	gate gateFunc,
+	change changeStep[T],
+) (T, error) {
+	var zero T
 	role, err := gate(ctx, actor, propertyID)
 	if err != nil {
-		return domain.Payment{}, err
+		return zero, err
 	}
-	var scope, ruleID uuid.UUID
-	var outcome mutationOutcome
+	var scope uuid.UUID
+	var out mutationOutcome[T]
 	err = g.factory.runInTx(ctx, func(stores *txStores) error {
 		prop, today, err := lockActiveProperty(ctx, stores, g.calendar, propertyID)
 		if err != nil {
@@ -87,34 +93,55 @@ func (g mutationGates) runMutation(
 				return err
 			}
 		}
-		rule, outcome, err = change(ctx, stores, scope, rule, today)
+		out, err = change(ctx, stores, scope, rule, today)
 		if err != nil {
 			return err
 		}
-		ruleID = rule.ID
-		entityType := outcome.auditEntity
+		entityType := out.AuditEntity
 		if entityType == "" {
 			entityType = auditdomain.EntityPayment
 		}
-		entityID := outcome.auditEntityID
+		entityID := out.AuditEntityID
 		if entityID == nil {
-			entityID = &rule.ID
+			if p, ok := any(out.Response).(domain.Payment); ok && p.ID != uuid.Nil {
+				entityID = &p.ID
+			}
 		}
-		if err := recordAudit(ctx, stores, actor, role, outcome.audit, entityType, entityID, outcome.auditCtx); err != nil {
+		if err := recordAudit(ctx, stores, actor, role, out.Audit, entityType, entityID, out.AuditCtx); err != nil {
 			return err
 		}
-		if outcome.tick {
-			return stores.tickOwner(ctx, scope, today)
+		if !out.Tick {
+			return nil
 		}
-		return nil
+		return stores.tickOwner(ctx, scope, today)
 	})
 	if err != nil {
-		return domain.Payment{}, err
+		return zero, err
 	}
-	if !outcome.reread {
-		return domain.Payment{}, nil
+	if out.RereadRuleID == nil {
+		return out.Response, nil
 	}
-	return g.factory.payments.Get(ctx, ruleID, scope, propertyID)
+	return rereadPayment[T](g, ctx, scope, propertyID, *out.RereadRuleID)
+}
+
+// rereadPayment re-reads the stored rule after commit so the response carries
+// persisted timestamps, pauses and category view. A re-read always yields a
+// payment; only payment-shaped outcomes ask for one, so the assertion holds
+// by construction.
+func rereadPayment[T any](
+	g mutationGates,
+	ctx context.Context, scope, propertyID, ruleID uuid.UUID,
+) (T, error) {
+	var zero T
+	stored, err := g.factory.payments.Get(ctx, ruleID, scope, propertyID)
+	if err != nil {
+		return zero, err
+	}
+	resp, ok := any(stored).(T)
+	if !ok {
+		return zero, errors.New("payments conveyor: reread requires a payment-shaped response")
+	}
+	return resp, nil
 }
 
 // lockActiveProperty loads the property with its row locked — the mutation's
@@ -130,14 +157,25 @@ func lockActiveProperty(
 	if prop.Archived {
 		return PropertyRef{}, time.Time{}, ErrArchivedProperty
 	}
-	if calendar == nil {
-		return PropertyRef{}, time.Time{}, errors.New("payments: owner calendar must be configured")
-	}
-	today, err := calendar.Today(ctx, prop.OwnerID)
+	today, err := ownerToday(calendar, ctx, prop.OwnerID)
 	if err != nil {
-		return PropertyRef{}, time.Time{}, fmt.Errorf("resolve owner today: %w", err)
+		return PropertyRef{}, time.Time{}, err
 	}
 	return prop, today, nil
+}
+
+// ownerToday resolves the data owner's calendar date (ADR 0048), failing
+// loudly when the calendar was never wired — a construction mistake, not a
+// runtime condition.
+func ownerToday(calendar OwnerCalendar, ctx context.Context, ownerID uuid.UUID) (time.Time, error) {
+	if calendar == nil {
+		return time.Time{}, errors.New("payments: owner calendar must be configured")
+	}
+	today, err := calendar.Today(ctx, ownerID)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("resolve owner today: %w", err)
+	}
+	return today, nil
 }
 
 // recordAudit writes the mutation's audit entry inside the transaction
@@ -162,15 +200,17 @@ func recordAudit(
 	return nil
 }
 
+// gateFunc is what the gates produce for the audit trail: the resolved role
+// of an actor on a property.
+type gateFunc = func(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error)
+
 // newCapabilityGate returns the ADR 0028 gate closure over the policy and one
 // capability predicate. The decision mapping is the payments error vocabulary
 // over the shared gate skeleton (policy.GateFor): none/suspended stay
 // privacy-preserving (ErrNotFound — the existence of the data is never
 // revealed), a role without the capability is a straight ErrForbidden. A nil
 // policy keeps the historical owner-only behaviour.
-func newCapabilityGate(
-	policy sharedpolicy.Policy, can func(sharedpolicy.Role) bool,
-) func(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
+func newCapabilityGate(policy sharedpolicy.Policy, can func(sharedpolicy.Role) bool) gateFunc {
 	return func(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
 		if policy == nil {
 			return sharedpolicy.RoleOwner, nil

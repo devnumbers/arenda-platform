@@ -3,7 +3,9 @@ package postgres
 // OperationStore is the postgres adapter of the operations port (ticket #461,
 // ADR 0049 §4). Reads and writes are scoped by the data owner and the nested
 // property→operation path lives in the queries; the mutating methods run
-// inside the transaction holding the property serialization lock.
+// inside the transaction holding the property serialization lock. The two
+// listing scopes share one SQL query behind the port — a NULL payment widens
+// it from one rule to the whole property.
 
 import (
 	"context"
@@ -88,57 +90,85 @@ func (s *OperationStore) MarkPaid(ctx context.Context, id, scope uuid.UUID, paid
 func (s *OperationStore) ListByPayment(
 	ctx context.Context, scope, propertyID, paymentID uuid.UUID, q application.OperationsListQuery,
 ) ([]domain.Operation, error) {
-	params := postgres.ListOperationsByPaymentParams{
+	rows, err := s.q().ListOperations(ctx, listOperationsParams(postgres.ListOperationsParams{
 		Owner:    pgconv.UUIDToPgtype(scope),
 		Property: pgconv.UUIDToPgtype(propertyID),
 		Payment:  pgconv.UUIDToPgtype(paymentID),
-		Status:   operationsStatusFilter(q.Status),
-		Today:    pgconv.DateToPgtype(q.Today),
-		DateFrom: pgconv.DatePtrToPgtype(q.DateFrom),
-		DateTo:   pgconv.DatePtrToPgtype(q.DateTo),
-		Order:    operationsOrder(q.Desc),
-		Offset:   paginationToInt32(q.Offset),
-		Limit:    paginationToInt32(q.Limit),
-	}
-	rows, err := s.q().ListOperationsByPayment(ctx, params)
+	}, q))
 	if err != nil {
 		return nil, fmt.Errorf("list operations of payment %s: %w", paymentID, err)
 	}
-	out := make([]domain.Operation, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, mapOperationRow(operationRowFieldsFromList(row)))
-	}
-	return out, nil
+	return mapOperationRows(rows), nil
 }
 
-// ListByProperty returns the property's operations across its rules.
+// ListByProperty returns the property's operations across its rules; the
+// payment filter stays NULL so every rule's rows come through.
 func (s *OperationStore) ListByProperty(
 	ctx context.Context, scope, propertyID uuid.UUID, q application.OperationsListQuery,
 ) ([]domain.Operation, error) {
-	params := postgres.ListOperationsByPropertyParams{
+	rows, err := s.q().ListOperations(ctx, listOperationsParams(postgres.ListOperationsParams{
 		Owner:    pgconv.UUIDToPgtype(scope),
 		Property: pgconv.UUIDToPgtype(propertyID),
-		Status:   operationsStatusFilter(q.Status),
-		Today:    pgconv.DateToPgtype(q.Today),
-		DateFrom: pgconv.DatePtrToPgtype(q.DateFrom),
-		DateTo:   pgconv.DatePtrToPgtype(q.DateTo),
-		Order:    operationsOrder(q.Desc),
-		Offset:   paginationToInt32(q.Offset),
-		Limit:    paginationToInt32(q.Limit),
-	}
-	rows, err := s.q().ListOperationsByProperty(ctx, params)
+	}, q))
 	if err != nil {
 		return nil, fmt.Errorf("list operations of property %s: %w", propertyID, err)
 	}
+	return mapOperationRows(rows), nil
+}
+
+// listOperationsParams folds the normalized query into the merged SQL
+// parameters; the pagination width clamp and the direction/status encodings
+// are this adapter's business.
+func listOperationsParams(
+	params postgres.ListOperationsParams, q application.OperationsListQuery,
+) postgres.ListOperationsParams {
+	params.Status = operationsStatusFilter(q.Status)
+	params.Today = pgconv.DateToPgtype(q.Today)
+	params.DateFrom = pgconv.DatePtrToPgtype(q.DateFrom)
+	params.DateTo = pgconv.DatePtrToPgtype(q.DateTo)
+	params.Order = operationsOrder(q.Desc)
+	params.Offset = paginationToInt32(q.Offset)
+	params.Limit = paginationToInt32(q.Limit)
+	return params
+}
+
+// mapOperationRows projects listed rows onto the domain shape.
+func mapOperationRows(rows []postgres.ListOperationsRow) []domain.Operation {
 	out := make([]domain.Operation, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, mapOperationRow(operationRowFieldsFromPropertyList(row)))
+		out = append(out, mapOperationRow(operationRowFields{
+			ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID,
+			PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
+			PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
+			Title: row.Title, AmountKopecks: row.AmountKopecks,
+			PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
+			CategorySlug: row.CategorySlug,
+		}))
 	}
-	return out, nil
+	return out
+}
+
+// operationsStatusFilter encodes the view status filter for the SQL: nil is
+// any status; planned/paid/overdue split against the query's today inside the
+// WHERE clause (ticket #461).
+func operationsStatusFilter(status *domain.OperationViewStatus) string {
+	if status == nil {
+		return ""
+	}
+	return string(*status)
+}
+
+// operationsOrder encodes the sort direction ('asc' | 'desc'); the default in
+// the domain is desc — newest first.
+func operationsOrder(desc bool) string {
+	if desc {
+		return "desc"
+	}
+	return "asc"
 }
 
 // paginationToInt32 narrows the validated pagination values onto SQL's LIMIT/
-// OFFSET width. NormalizeOperationsCommand has already bounded both at the
+// OFFSET width. PrepareOperationsQuery has already bounded both at the
 // application boundary; the clamp keeps this adapter total regardless.
 func paginationToInt32(v int) int32 {
 	const maxInt32 = int64(^uint32(0) >> 1)
@@ -150,20 +180,4 @@ func paginationToInt32(v int) int32 {
 	default:
 		return int32(v)
 	}
-}
-
-// operationsStatusFilter encodes the view status filter for the SQL: empty is
-// any status; planned/paid/overdue split against the query's today inside the
-// WHERE clause (ticket #461).
-func operationsStatusFilter(status domain.OperationViewStatus) string {
-	return string(status)
-}
-
-// operationsOrder encodes the sort direction ('asc' | 'desc'); the default in
-// the domain is desc — newest first.
-func operationsOrder(desc bool) string {
-	if desc {
-		return "desc"
-	}
-	return "asc"
 }

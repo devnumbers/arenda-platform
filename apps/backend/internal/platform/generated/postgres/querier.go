@@ -141,6 +141,12 @@ type Querier interface {
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
 	GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone string) (LoginAttempt, error)
 	GetMaxMemberRoleByOwner(ctx context.Context, arg GetMaxMemberRoleByOwnerParams) (int32, error)
+	// Payments context queries: operations and favorites-facing operation reads
+	// (ticket #461, the second contracts slice of ADR 0049 §4). Reads are scoped
+	// by the data owner and by the nested path property→payment→operation;
+	// "overdue" is not stored anywhere — the status filter and every response
+	// item's view status resolve against the owner's today passed in by the
+	// application layer (ADR 0048). Rule CRUD lives in payments_rules.sql.
 	// One operation by id within the owner's scope on the given property — the
 	// pay-now use case's load step (manual operations have no payment, so the
 	// payment link is not a filter).
@@ -149,10 +155,12 @@ type Querier interface {
 	// calendar date in the property owner's timezone. NOT NULL with the
 	// 'Europe/Moscow' default (migration 000088); IANA-validated on write.
 	GetOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
-	// Payment CRUD and pause/resume (ticket #457, ADR 0049 §4). Reads and writes
-	// are scoped by the data owner (ADR 0028: SQL filters by scope, the policy
-	// port has already resolved the actor's role); the nested path payment→property
-	// is enforced in the WHERE clause.
+	// Payments context queries: payment rule CRUD, pause/resume and the favorite
+	// flag (ADR 0049 §4; tickets #457, #461). Reads and writes are scoped by the
+	// data owner (ADR 0028: SQL filters by scope, the policy port has already
+	// resolved the actor's role); the nested path payment→property is enforced in
+	// the WHERE clause. The materialization tick lives in payments_tick.sql,
+	// operations in payments_operations.sql.
 	// One rule by id within the owner's scope on the given property, with the
 	// user category's current name resolved for the CategoryView.
 	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
@@ -250,16 +258,14 @@ type Querier interface {
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
-	// One payment rule's operations with pagination (limit/offset), the view
-	// status filter ('' is any), an inclusive period on the operation date and
-	// the sort direction. "planned" and "overdue" split the stored planned rows
-	// against the owner's today — overdue is computed here from the same truth
-	// the response items report (ticket #461).
-	ListOperationsByPayment(ctx context.Context, arg ListOperationsByPaymentParams) ([]ListOperationsByPaymentRow, error)
-	// The property's operations across its rules with the same pagination,
-	// filters and direction as the per-payment listing. Serves the debt section
-	// (status='overdue') and any full operation list of the object.
-	ListOperationsByProperty(ctx context.Context, arg ListOperationsByPropertyParams) ([]ListOperationsByPropertyRow, error)
+	// The operations of one scope with pagination (limit/offset), the view status
+	// filter ('' is any), an inclusive period on the operation date and the sort
+	// direction. A NULL payment widens the scope from one rule to every rule of
+	// the property: "planned" and "overdue" split the stored planned rows against
+	// the owner's today — overdue is computed here from the same truth the
+	// response items report, in exactly one place (domain.OperationView mirrors
+	// this predicate for already-loaded rows; ticket #461).
+	ListOperations(ctx context.Context, arg ListOperationsParams) ([]ListOperationsRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
 	// The property's rules in creation order (stable for the list response).
 	ListPaymentsByProperty(ctx context.Context, arg ListPaymentsByPropertyParams) ([]ListPaymentsByPropertyRow, error)
@@ -345,11 +351,11 @@ type Querier interface {
 	// run re-lists, no per-zone or per-owner tick state is kept.
 	ListTickZones(ctx context.Context) ([]ListTickZonesRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
-	// Payments context queries (ADR 0049). This file carries the materialization
-	// tick's persistence (the owner-level payment listing with pauses resolved,
-	// the operation dedup keys, the idempotent insert, the auto-pay day payment,
-	// the future-planned rebuild), the CRUD and pause/resume queries (#457), and
-	// the operations/favorites contracts of the second slice (#461).
+	// Payments context queries: the materialization tick's persistence
+	// (ADR 0049 §3, ticket #458). The owner-level payment listing with pauses
+	// resolved, the operation dedup keys, the idempotent insert, the auto-pay day
+	// payment and the future-planned rebuild. Rule CRUD lives in
+	// payments_rules.sql, operations/favorites in payments_operations.sql.
 	// Serialization point of the tick (ADR 0049 §3): the run locks the owner's
 	// active/maintenance property rows, ordered by id, before reading or writing
 	// anything. Context mutations take the same lock per property through
@@ -377,11 +383,6 @@ type Querier interface {
 	// window is new or has expired (TTL reset) and the failure counter must be set
 	// to an absolute value rather than incremented.
 	ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error
-	// Operations and favorites (ticket #461, the second contracts slice of
-	// ADR 0049 §4). Reads are scoped by the data owner and by the nested path
-	// property→payment→operation; "overdue" is not stored anywhere — the status
-	// filter and every response item's view status are resolved against the
-	// owner's today passed in by the application layer (ADR 0048).
 	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 	// Existence is already proven inside the same transaction under the property
 	// lock; :execrows keeps the store honest independently of that ordering.
@@ -391,7 +392,7 @@ type Querier interface {
 	UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error)
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set (since is never among it — server-set,
-	// prototype decision №17).
+	// prototype decision №17). The favorite star has its own atomic UPDATE.
 	UpdatePayment(ctx context.Context, arg UpdatePaymentParams) error
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)

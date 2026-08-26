@@ -90,8 +90,8 @@ func (h *paymentsHarness) seedOperation(paymentID uuid.UUID, date, status string
 
 // listCmd folds the common command shape: nil status means any, limit/offset
 // carry the pagination window and asc overrides the default desc direction.
-func (h *paymentsHarness) listCmd(status *domain.OperationViewStatus, limit, offset int, asc bool) paymentsapp.ListOperationsCommand {
-	return paymentsapp.ListOperationsCommand{
+func (h *paymentsHarness) listCmd(status *domain.OperationViewStatus, limit, offset int, asc bool) paymentsapp.OperationsListQuery {
+	return paymentsapp.OperationsListQuery{
 		Status: status,
 		Limit:  limit,
 		Offset: offset,
@@ -337,7 +337,7 @@ func TestOperationsListing_PeriodFilterIsInclusive(t *testing.T) {
 
 	from := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
-	cmd := paymentsapp.ListOperationsCommand{DateFrom: &from, DateTo: &to, Limit: 50, Desc: true}
+	cmd := paymentsapp.OperationsListQuery{DateFrom: &from, DateTo: &to, Limit: 50, Desc: true}
 	window, err := h.ops.ListPaymentOperations(h.ctx(), h.owner, h.propID, pay, cmd)
 	if err != nil {
 		t.Fatalf("period filter: %v", err)

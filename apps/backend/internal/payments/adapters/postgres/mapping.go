@@ -181,32 +181,6 @@ func operationRowFieldsFromGet(row postgres.GetOperationByIDRow) operationRowFie
 	}
 }
 
-func operationRowFieldsFromList(
-	row postgres.ListOperationsByPaymentRow,
-) operationRowFields {
-	return operationRowFields{
-		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID,
-		PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
-		PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
-		Title: row.Title, AmountKopecks: row.AmountKopecks,
-		PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
-		CategorySlug: row.CategorySlug,
-	}
-}
-
-func operationRowFieldsFromPropertyList(
-	row postgres.ListOperationsByPropertyRow,
-) operationRowFields {
-	return operationRowFields{
-		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID,
-		PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
-		PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
-		Title: row.Title, AmountKopecks: row.AmountKopecks,
-		PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
-		CategorySlug: row.CategorySlug,
-	}
-}
-
 // mapOperationRow maps the shared row shape to the domain operation.
 func mapOperationRow(row operationRowFields) domain.Operation {
 	return domain.Operation{
