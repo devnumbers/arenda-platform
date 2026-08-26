@@ -324,7 +324,7 @@ export function DesignLayerShowcase(): JSX.Element {
                         Один выбранный месяц, без бесконечной сетки; месяц и год — колёсами в шите, как в
                         таймере Apple (Figma 835:20007, 848:8720).
                     </p>
-                    <div className={styles.column} style={{ maxWidth: 480 }}>
+                    <div className={styles.column}>
                         <div className="flex gap-1.5 px-6 pb-2">
                             <ChipButton trailingIcon={<ArrowDown />} onClick={() => setWheelOpen(true)}>
                                 {monthTitle(calendarYear, calendarMonth)}
@@ -367,7 +367,7 @@ export function DesignLayerShowcase(): JSX.Element {
                         Мини-грид дней 1..N с нескольких выбранными + опция «Последний день месяца»
                         (Figma 823:11422).
                     </p>
-                    <div className={styles.column} style={{ maxWidth: 480 }}>
+                    <div className={styles.column}>
                         <MonthDaysGrid
                             days={30}
                             selectedDays={monthDays}
