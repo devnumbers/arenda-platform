@@ -15,11 +15,11 @@ import (
 )
 
 // MaxAmountKopecks is the create/update amount ceiling: 10⁹ kopecks = 10
-// million rubles (ADR 0049 §4). Shared with the transport.
+// million rubles (ADR 0049 §4).
 const MaxAmountKopecks = 1_000_000_000
 
-// MaxTitleLength bounds the rule title, counted in characters. Shared with
-// the transport.
+// MaxTitleLength bounds the rule title, counted in characters — a product
+// copy limit, not a byte limit.
 const MaxTitleLength = 255
 
 // CreatePaymentCommand is the validated create payload of a payment rule.
@@ -363,7 +363,10 @@ func (s *PaymentService) readScope(ctx context.Context, actor, propertyID uuid.U
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
 	}
-	if !sharedpolicy.CanView(role) {
+	// Every non-allow outcome hides the payment's existence: none and
+	// suspended are the privacy 404, forbidden (unreachable for view today)
+	// would mean the same for reads.
+	if sharedpolicy.GateFor(role, sharedpolicy.CanView) != sharedpolicy.GateAllow {
 		return uuid.Nil, ErrNotFound
 	}
 	prop, err := s.properties.Get(ctx, propertyID)
@@ -373,29 +376,26 @@ func (s *PaymentService) readScope(ctx context.Context, actor, propertyID uuid.U
 	return prop.OwnerID, nil
 }
 
-// writeGate applies the ADR 0028 mutation gate: none/suspended map to
-// ErrNotFound (object privacy), a view-only role to ErrForbidden. The
-// resolved role returns for the audit entry.
+// writeGate applies the ADR 0028 mutation gate (CanEdit) and returns the
+// resolved role for the audit entry. The decision mapping is the payments
+// error vocabulary over the shared gate skeleton (policy.GateFor).
 func (s *PaymentService) writeGate(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
-	if s.policy == nil {
-		return sharedpolicy.RoleOwner, nil
-	}
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
-	if err != nil {
-		return "", fmt.Errorf("resolve role: %w", err)
-	}
-	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
-		return "", ErrNotFound
-	}
-	if !sharedpolicy.CanEdit(role) {
-		return "", ErrForbidden
-	}
-	return role, nil
+	return s.capabilityGate(ctx, actor, propertyID, sharedpolicy.CanEdit)
 }
 
 // deleteGate applies the ADR 0028 deletion gate: deletion is the owner's
-// alone (CanLifecycle); none/suspended still map to ErrNotFound.
+// alone (CanLifecycle).
 func (s *PaymentService) deleteGate(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
+	return s.capabilityGate(ctx, actor, propertyID, sharedpolicy.CanLifecycle)
+}
+
+// capabilityGate resolves the actor's role and maps the shared gate decision
+// for the capability onto the payments errors: none/suspended stay
+// privacy-preserving (ErrNotFound — the existence of a payment is never
+// revealed), a role without the capability is a straight ErrForbidden.
+func (s *PaymentService) capabilityGate(
+	ctx context.Context, actor, propertyID uuid.UUID, can func(sharedpolicy.Role) bool,
+) (sharedpolicy.Role, error) {
 	if s.policy == nil {
 		return sharedpolicy.RoleOwner, nil
 	}
@@ -403,13 +403,14 @@ func (s *PaymentService) deleteGate(ctx context.Context, actor, propertyID uuid.
 	if err != nil {
 		return "", fmt.Errorf("resolve role: %w", err)
 	}
-	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
+	switch sharedpolicy.GateFor(role, can) {
+	case sharedpolicy.GateAllow:
+		return role, nil
+	case sharedpolicy.GateForbidden:
+		return "", ErrForbidden
+	default: // GateNone, GateSuspended.
 		return "", ErrNotFound
 	}
-	if !sharedpolicy.CanLifecycle(role) {
-		return "", ErrForbidden
-	}
-	return role, nil
 }
 
 // recordAudit writes the mutation's audit entry inside the transaction

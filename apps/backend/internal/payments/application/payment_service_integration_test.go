@@ -3,216 +3,19 @@
 package application_test
 
 import (
-	"context"
 	"errors"
-	"fmt"
-	"log/slog"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
-	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
-	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
-	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
-// stubPropertyPolicy resolves every actor to one configured role — the
-// payments role-matrix double. The real membership policy is the access
-// context's own seam; here only the role resolution contract matters.
-type stubPropertyPolicy struct{ role sharedpolicy.Role }
-
-func (p stubPropertyPolicy) Role(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
-	return sharedpolicy.RoleNone, nil
-}
-
-func (p stubPropertyPolicy) RoleForProperty(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
-	return p.role, nil
-}
-
-// serviceHarness wires the payment use case service to real PostgreSQL with
-// the real audit recorder, a mutable clock and an injectable policy
-// (testcontainers PostgreSQL 18 or TEST_DATABASE_URL).
-type serviceHarness struct {
-	t      *testing.T
-	pool   *pgxpool.Pool
-	clock  *mutableClock
-	svc    *paymentsapp.PaymentService
-	owner  uuid.UUID
-	propID uuid.UUID
-}
-
-func newServiceHarness(t *testing.T) *serviceHarness {
-	t.Helper()
-	return newServiceHarnessWithPolicy(t, nil)
-}
-
-func newServiceHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *serviceHarness {
-	t.Helper()
-
-	pool := testdb.Setup(t)
-	clk := &mutableClock{now: tickBaseTime}
-
-	tickStore := paymentspg.NewTickStore(pool)
-	paymentStore := paymentspg.NewPaymentStore(pool)
-	propertyStore := paymentspg.NewPropertyStore(pool)
-	audit := auditapp.NewService(auditpg.NewWriter(pool), clk)
-	uow := pgdb.NewUoW(pool, slog.New(slog.DiscardHandler))
-	calendar := paymentspg.NewOwnerCalendar(pool, clk)
-	factory := paymentsapp.NewTxStoreFactory(tickStore, paymentStore, propertyStore, audit, uow)
-
-	return &serviceHarness{
-		t:     t,
-		pool:  pool,
-		clock: clk,
-		svc:   paymentsapp.NewPaymentService(factory, calendar, policy),
-	}
-}
-
-// withOwner seeds a user (the data owner) in Moscow and one active property.
-func (h *serviceHarness) withOwner() *serviceHarness {
-	t := h.t
-	t.Helper()
-
-	owner, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
-	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
-		owner, phone, actor.RoleOwner,
-	); err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
-	propID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO properties (id, owner_id, name, type, address, status)
-		 VALUES ($1, $2, 'Квартира', 'apartment', 'Москва, Тверская 1', 'active')`,
-		propID, owner,
-	); err != nil {
-		t.Fatalf("seed property: %v", err)
-	}
-	h.owner = owner
-	h.propID = propID
-	return h
-}
-
-// createCmd is the canonical valid create fixture: weekly rent.
-func (h *serviceHarness) createCmd() paymentsapp.CreatePaymentCommand {
-	slug := "rent"
-	return paymentsapp.CreatePaymentCommand{
-		Type:          domain.TypeExpense,
-		Title:         "Аренда",
-		AmountKopecks: 5000000,
-		Recurrence:    domain.NewDailyRecurrence(),
-		PaymentForm:   domain.FormTransfer,
-		CategorySlug:  slug,
-	}
-}
-
-func (h *serviceHarness) ctx() context.Context { return context.Background() }
-
-// standaloneTick builds the worker-path tick service over the harness's pool.
-func (h *serviceHarness) standaloneTick() *paymentsapp.TickService {
-	tickStore := paymentspg.NewTickStore(h.pool)
-	uow := pgdb.NewUoW(h.pool, slog.New(slog.DiscardHandler))
-	return paymentsapp.NewTickService(
-		paymentsapp.NewTxStoreFactory(tickStore, paymentspg.NewPaymentStore(h.pool), paymentspg.NewPropertyStore(h.pool), nil, uow),
-		paymentspg.NewOwnerCalendar(h.pool, h.clock),
-	)
-}
-
-// seedActor seeds a bare user row so audit_log's actor FK holds.
-func (h *serviceHarness) seedActor(id uuid.UUID) {
-	t := h.t
-	t.Helper()
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
-	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
-		id, phone, actor.RoleOwner,
-	); err != nil {
-		t.Fatalf("seed actor: %v", err)
-	}
-}
-
-// svcOp is the operation projection of the service tests.
-type svcOp struct {
-	date   string
-	status string
-	amount int64
-}
-
-// opsOf loads the payment's operations ordered by date.
-func (h *serviceHarness) opsOf(t *testing.T, paymentID uuid.UUID) []svcOp {
-	t.Helper()
-	rows, err := h.pool.Query(h.ctx(), `
-		SELECT date::text, status, amount_kopecks
-		FROM operations WHERE payment_id = $1 ORDER BY date`, paymentID)
-	if err != nil {
-		t.Fatalf("query operations: %v", err)
-	}
-	defer rows.Close()
-	out := []svcOp{}
-	for rows.Next() {
-		var r svcOp
-		if err := rows.Scan(&r.date, &r.status, &r.amount); err != nil {
-			t.Fatalf("scan operation: %v", err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate operations: %v", err)
-	}
-	return out
-}
-
-// opStatuses projects the operations into a date-to-status map.
-func opStatuses(ops []svcOp) map[string]string {
-	out := make(map[string]string, len(ops))
-	for _, op := range ops {
-		out[op.date] = op.status
-	}
-	return out
-}
-
-// auditActions loads the payment's audit trail actions in recording order.
-func (h *serviceHarness) auditActions(t *testing.T, entityID uuid.UUID) []string {
-	t.Helper()
-	rows, err := h.pool.Query(h.ctx(),
-		`SELECT action FROM audit_log WHERE entity_type = 'payment' AND entity_id = $1 ORDER BY created_at, id`,
-		entityID)
-	if err != nil {
-		t.Fatalf("query audit: %v", err)
-	}
-	defer rows.Close()
-	actions := []string{}
-	for rows.Next() {
-		var action string
-		if err := rows.Scan(&action); err != nil {
-			t.Fatalf("scan audit: %v", err)
-		}
-		actions = append(actions, action)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate audit: %v", err)
-	}
-	return actions
-}
-
 func TestPaymentCRUD_FullLifecycle(t *testing.T) {
 	t.Parallel()
-	h := newServiceHarness(t).withOwner()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 
 	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 	if err != nil {
@@ -257,7 +60,7 @@ func TestPaymentCRUD_FullLifecycle(t *testing.T) {
 
 // assertPaymentReadBack checks the read side: the single rule reads back
 // whole (with its category reference) and lists first in creation order.
-func assertPaymentReadBack(t *testing.T, h *serviceHarness, created domain.Payment) {
+func assertPaymentReadBack(t *testing.T, h *paymentsHarness, created domain.Payment) {
 	t.Helper()
 	got, err := h.svc.GetPayment(h.ctx(), h.owner, h.propID, created.ID)
 	if err != nil {
@@ -277,7 +80,7 @@ func assertPaymentReadBack(t *testing.T, h *serviceHarness, created domain.Payme
 
 func TestPaymentUpdate_RebuildsScheduleAndAudits(t *testing.T) {
 	t.Parallel()
-	h := newServiceHarness(t).withOwner()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 	if err != nil {
 		t.Fatalf("create payment: %v", err)
@@ -341,7 +144,7 @@ func TestPaymentUpdate_RebuildsScheduleAndAudits(t *testing.T) {
 
 func TestCreatePayment_RejectsEndDateBeforeToday(t *testing.T) {
 	t.Parallel()
-	h := newServiceHarness(t).withOwner()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 
 	past := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
 	cmd := h.createCmd()
@@ -356,59 +159,28 @@ func TestCreatePayment_RejectsEndDateBeforeToday(t *testing.T) {
 	}
 }
 
-func TestCreatePayment_RejectsInvalidRules(t *testing.T) {
+// The rule-level validation table lives at the validator's own fast seam
+// (payment_rule_test.go, TestValidateRule); these are the conveyor
+// sentinels — the create and update paths really reject an invalid rule
+// through the full mutation pipeline.
+func TestPaymentMutations_RejectInvalidRules(t *testing.T) {
 	t.Parallel()
-	// The single validator of the create/update contract rules is the
-	// payment rule module (validateRule) — this is its seam. The rune-count
-	// cases pin the drift fix: the limit counts characters, not bytes.
-	badEnumType := domain.PaymentType("profit")
-	badForm := domain.PaymentForm("crypto")
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
 	unknownSlug := "not-a-catalog-slug"
-	cases := []struct {
-		name   string
-		mutate func(cmd *paymentsapp.CreatePaymentCommand)
-	}{
-		{"bad type enum", func(c *paymentsapp.CreatePaymentCommand) { c.Type = badEnumType }},
-		{"bad payment form enum", func(c *paymentsapp.CreatePaymentCommand) { c.PaymentForm = badForm }},
-		{"empty title", func(c *paymentsapp.CreatePaymentCommand) { c.Title = "   " }},
-		{"title over 255 characters", func(c *paymentsapp.CreatePaymentCommand) { c.Title = strings.Repeat("а", 256) }},
-		{"zero amount", func(c *paymentsapp.CreatePaymentCommand) { c.AmountKopecks = 0 }},
-		{"amount over 10^9", func(c *paymentsapp.CreatePaymentCommand) { c.AmountKopecks = 1_000_000_001 }},
-		{"negative amount", func(c *paymentsapp.CreatePaymentCommand) { c.AmountKopecks = -5 }},
-		{"unknown category slug", func(c *paymentsapp.CreatePaymentCommand) { c.CategorySlug = unknownSlug }},
-		{"zero recurrence", func(c *paymentsapp.CreatePaymentCommand) { c.Recurrence = domain.Recurrence{} }},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			hh := newServiceHarness(t).withOwner()
-			cmd := hh.createCmd()
-			tc.mutate(&cmd)
-			if _, err := hh.svc.CreatePayment(hh.ctx(), hh.owner, hh.propID, cmd); !errors.Is(err, paymentsapp.ErrInvalidInput) {
-				t.Fatalf("create = %v, want ErrInvalidInput", err)
-			}
-		})
+	cmd := h.createCmd()
+	cmd.CategorySlug = unknownSlug
+	if _, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, cmd); !errors.Is(err, paymentsapp.ErrInvalidInput) {
+		t.Fatalf("create with unknown slug = %v, want ErrInvalidInput", err)
 	}
 
-	// The drift regression: 130 Cyrillic characters are 260 bytes but a
-	// valid title — the limit counts runes.
-	long := newServiceHarness(t).withOwner()
-	cmd := long.createCmd()
-	cmd.Title = strings.Repeat("а", 130)
-	if _, err := long.svc.CreatePayment(long.ctx(), long.owner, long.propID, cmd); err != nil {
-		t.Fatalf("create with 130-character Cyrillic title: %v — the limit counts characters, not bytes", err)
-	}
-
-	// The update path validates through the same rule module after the diff
-	// is applied.
-	upd := newServiceHarness(t).withOwner()
-	created, err := upd.svc.CreatePayment(upd.ctx(), upd.owner, upd.propID, upd.createCmd())
+	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 	if err != nil {
 		t.Fatalf("create payment: %v", err)
 	}
-	emptyTitle := " "
-	if _, err := upd.svc.UpdatePayment(upd.ctx(), upd.owner, upd.propID, created.ID, paymentsapp.UpdatePaymentCommand{
-		Title: &emptyTitle,
+	blankTitle := " "
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, created.ID, paymentsapp.UpdatePaymentCommand{
+		Title: &blankTitle,
 	}); !errors.Is(err, paymentsapp.ErrInvalidInput) {
 		t.Fatalf("update with blank title = %v, want ErrInvalidInput", err)
 	}
@@ -416,7 +188,7 @@ func TestCreatePayment_RejectsInvalidRules(t *testing.T) {
 
 func TestPauseResume_Lifecycle(t *testing.T) {
 	t.Parallel()
-	h := newServiceHarness(t).withOwner()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 	if err != nil {
 		t.Fatalf("create payment: %v", err)
@@ -450,7 +222,7 @@ func TestPauseResume_Lifecycle(t *testing.T) {
 
 func TestResume_ClosesPauseAndStandsFuture(t *testing.T) {
 	t.Parallel()
-	h := newServiceHarness(t).withOwner()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 	if err != nil {
 		t.Fatalf("create payment: %v", err)
@@ -487,7 +259,7 @@ func TestDeletePayment_KeepOverdueMatrix(t *testing.T) {
 	t.Parallel()
 	// One payment accumulates overdue debt (the clock moves two days ahead
 	// after creation), then is deleted with each keep_overdue value.
-	h := newServiceHarness(t).withOwner()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 	if err != nil {
 		t.Fatalf("create payment: %v", err)
@@ -501,10 +273,8 @@ func TestDeletePayment_KeepOverdueMatrix(t *testing.T) {
 		t.Fatalf("pay today: %v", err)
 	}
 	h.clock.now = tickBaseTime.AddDate(0, 0, 2)
-	// Materialize the debt of the missed days through the standalone tick
-	// driver (the worker's path).
-	tick := h.standaloneTick()
-	if err := tick.RunOwnerTick(h.ctx(), h.owner); err != nil {
+	// Materialize the debt of the missed days through the worker-path tick.
+	if err := h.tick.RunOwnerTick(h.ctx(), h.owner); err != nil {
 		t.Fatalf("run tick: %v", err)
 	}
 
@@ -530,13 +300,13 @@ func TestDeletePayment_KeepOverdueMatrix(t *testing.T) {
 	}
 
 	// The second variant: the debt goes with the rule.
-	h2 := newServiceHarness(t).withOwner()
+	h2 := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	created2, err := h2.svc.CreatePayment(h2.ctx(), h2.owner, h2.propID, h2.createCmd())
 	if err != nil {
 		t.Fatalf("create payment 2: %v", err)
 	}
 	h2.clock.now = tickBaseTime.AddDate(0, 0, 2)
-	if err := h2.standaloneTick().RunOwnerTick(h2.ctx(), h2.owner); err != nil {
+	if err := h2.tick.RunOwnerTick(h2.ctx(), h2.owner); err != nil {
 		t.Fatalf("run tick 2: %v", err)
 	}
 	if err := h2.svc.DeletePayment(h2.ctx(), h2.owner, h2.propID, created2.ID, false); err != nil {
@@ -556,7 +326,7 @@ func TestDeletePayment_KeepOverdueMatrix(t *testing.T) {
 
 func TestPaymentRoleMatrix(t *testing.T) {
 	t.Parallel()
-	viewer := newServiceHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleViewer}).withOwner()
+	viewer := newPaymentsHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleViewer}).withOwner("Europe/Moscow")
 	member := uuid.Must(uuid.NewV7())
 
 	if _, err := viewer.svc.ListPayments(viewer.ctx(), member, viewer.propID); err != nil {
@@ -566,7 +336,7 @@ func TestPaymentRoleMatrix(t *testing.T) {
 		t.Fatalf("viewer create = %v, want ErrForbidden", err)
 	}
 
-	full := newServiceHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleFullAccess}).withOwner()
+	full := newPaymentsHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleFullAccess}).withOwner("Europe/Moscow")
 	full.seedActor(member)
 	created, err := full.svc.CreatePayment(full.ctx(), member, full.propID, full.createCmd())
 	if err != nil {
@@ -591,14 +361,14 @@ func TestPaymentRoleMatrix(t *testing.T) {
 		t.Fatalf("audit actor_role = %q, want full_access", actorRole)
 	}
 
-	none := newServiceHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleNone}).withOwner()
+	none := newPaymentsHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleNone}).withOwner("Europe/Moscow")
 	stranger := uuid.Must(uuid.NewV7())
 	if _, err := none.svc.GetPayment(none.ctx(), stranger, none.propID, created.ID); !errors.Is(err, paymentsapp.ErrNotFound) {
 		t.Fatalf("stranger get = %v, want the privacy-preserving ErrNotFound", err)
 	}
 
 	// The owner (the policy's RoleOwner) may delete.
-	ownerH := newServiceHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleOwner}).withOwner()
+	ownerH := newPaymentsHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleOwner}).withOwner("Europe/Moscow")
 	owned, err := ownerH.svc.CreatePayment(ownerH.ctx(), ownerH.owner, ownerH.propID, ownerH.createCmd())
 	if err != nil {
 		t.Fatalf("owner create: %v", err)
@@ -610,7 +380,7 @@ func TestPaymentRoleMatrix(t *testing.T) {
 
 func TestArchivedProperty_IsFinancialReadOnly(t *testing.T) {
 	t.Parallel()
-	h := newServiceHarness(t).withOwner()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 	if err != nil {
 		t.Fatalf("create payment: %v", err)
@@ -648,7 +418,7 @@ func TestUpdatePayment_RebuildsFuturePlannedInTx(t *testing.T) {
 	// The future planned is rebuilt with the NEW snapshot; the already
 	// materialized occurrences keep theirs (ADR 0049 §1: snapshots are frozen
 	// at materialization).
-	h := newServiceHarness(t).withOwner()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 	if err != nil {
 		t.Fatalf("create payment: %v", err)

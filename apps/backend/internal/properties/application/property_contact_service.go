@@ -205,7 +205,9 @@ func (s *PropertyContactService) readScope(ctx context.Context, actor, propertyI
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
 	}
-	if !sharedpolicy.CanView(role) {
+	// Every non-allow outcome hides the contact's existence (reads have no
+	// distinguishable forbidden — same privacy 404).
+	if sharedpolicy.GateFor(role, sharedpolicy.CanView) != sharedpolicy.GateAllow {
 		return uuid.Nil, ErrNotFound
 	}
 	property, err := s.propertyRepo.GetByID(ctx, propertyID)
@@ -410,17 +412,19 @@ func (s *PropertyContactService) propertyForUpdate(
 	return repo.GetByIDAndOwnerForUpdate(ctx, propertyID, actor)
 }
 
-// propertyContactWriteGate maps a resolved role to the write-gate outcome for
-// property contacts (Property Sharing follow-up): none/suspended map to
-// ErrNotFound (object privacy), a view-only role to ErrForbidden.
+// propertyContactWriteGate maps the shared gate decision (policy.GateFor,
+// CanEdit — the ADR 0028 matrix in one place) onto the properties error
+// vocabulary: none/suspended stay privacy-preserving (ErrNotFound), a
+// view-only role is a straight ErrForbidden.
 func propertyContactWriteGate(role sharedpolicy.Role) error {
-	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
+	switch sharedpolicy.GateFor(role, sharedpolicy.CanEdit) {
+	case sharedpolicy.GateAllow:
+		return nil
+	case sharedpolicy.GateForbidden:
+		return ErrForbidden
+	default: // GateNone, GateSuspended.
 		return ErrNotFound
 	}
-	if !sharedpolicy.CanEdit(role) {
-		return ErrForbidden
-	}
-	return nil
 }
 
 // updatedPropertyContactFields lists the names of the fields a command changes.
