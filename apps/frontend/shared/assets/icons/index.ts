@@ -57,6 +57,7 @@ export { default as BoldOther } from './bold-other.svg';
 export { default as BoldPaintRoller } from './bold-paint-roller.svg';
 export { default as BoldPercent } from './bold-percent.svg';
 export { default as BoldPerson } from './bold-person.svg';
+export { default as BoldUser } from './bold-user.svg';
 export { default as BoldPipeline } from './bold-pipeline.svg';
 export { default as BoldPrinter } from './bold-printer.svg';
 export { default as BoldSecurity } from './bold-security.svg';

@@ -8,6 +8,7 @@
  */
 export { Button, type ButtonProps } from './button';
 export { IconButton, type IconButtonProps } from './icon-button';
+export { UserButton, type UserButtonProps } from './user-button';
 export { TextField, type TextFieldProps, type TextFieldVariant } from './text-field';
 export { Checkbox, type CheckboxProps } from './checkbox';
 export { RadioGroup, type RadioGroupProps, RadioGroupItem, type RadioGroupItemProps } from './radio';

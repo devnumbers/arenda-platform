@@ -30,6 +30,7 @@ import {
     RadioGroupItem,
     SearchField,
     StatusIcon,
+    UserButton,
     StepsChip,
     StickyBottomBar,
     Switch,
@@ -272,6 +273,14 @@ export function DesignLayerShowcase(): JSX.Element {
                         {statusGradations.map((status) => (
                             <StatusIcon key={status} status={status} />
                         ))}
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>UserButton</h3>
+                    <div className={styles.links}>
+                        <UserButton name="Даниил" />
+                        <UserButton name="Профиль" disabled />
                     </div>
                 </div>
 
