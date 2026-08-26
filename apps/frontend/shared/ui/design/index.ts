@@ -16,6 +16,7 @@ export { Switch, type SwitchProps } from './switch';
 export { SearchField, type SearchFieldProps } from './search-field';
 export { ChipButton, type ChipButtonProps } from './chip-button';
 export { StepsChip, type StepsChipProps, type StepsChipSize } from './steps-chip';
+export { CalendarButton, type CalendarButtonProps, type CalendarButtonState } from './calendar-button';
 export { ListRow, type ListRowProps } from './list-row';
 export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar';
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';

@@ -29,6 +29,7 @@ import {
     RadioGroup,
     RadioGroupItem,
     SearchField,
+    CalendarButton,
     StatusIcon,
     UserButton,
     StepsChip,
@@ -281,6 +282,21 @@ export function DesignLayerShowcase(): JSX.Element {
                     <div className={styles.links}>
                         <UserButton name="Даниил" />
                         <UserButton name="Профиль" disabled />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>CalendarButton</h3>
+                    <div className={styles.links}>
+                        {[26, 27, 28, 29, 30, 31, 1].map((day, i) => (
+                            <CalendarButton
+                                key={day}
+                                state={i === 2 ? 'today' : i === 4 ? 'selected' : 'default'}
+                                disabled={i === 6}
+                            >
+                                {day}
+                            </CalendarButton>
+                        ))}
                     </div>
                 </div>
 
