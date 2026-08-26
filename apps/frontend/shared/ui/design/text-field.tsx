@@ -8,9 +8,10 @@ import { IconButton } from './icon-button';
 
 /** Поле ввода дизайн-слоя (Figma 948:46646, «Input Field»): бокс фиксированной
  * высоты 56px в обоих вариантах. Title Out — заголовок над боксом, строка по
- * центру. Title In — плавающий лейбл: в покое плейсхолдер (16px) лежит на
- * строке ввода, при фокусе или непустом значении уменьшается до 13px и
- * уезжает наверх (раскладка строки: 10px + лейбл 15 + 2 + значение 18).
+ * центру. Title In — плавающий лейбл: в покое плейсхолдер (16px) стоит по
+ * вертикальному центру бокса (Default: alignItems center), при фокусе или
+ * непустом значении уменьшается до 13px и уходит наверх; строка значения —
+ * 27..45 (Typing: 10 + лейбл 15 + 2 + значение 18).
  * Состояния: Error (красный бокс + текст ошибки), Limited (счётчик красным),
  * Disabled (opacity 0.5), Hover (inset-обводка 2px) — фокус-кольца у поля
  * нет намеренно (решение владельца 2026-08-26): видимый признак фокуса —
@@ -74,13 +75,16 @@ export function TextField({
         {variant === 'titleIn' && title !== undefined && (
           <div className="relative h-full min-w-0 flex-1">
             {/* Инпут идёт перед лейблом: peer-варианты требуют, чтобы peer
-                предшествовал цели (~). Лейбл — плавающий: в покое крупный
-                «плейсхолдер» на строке ввода; при фокусе или значении —
-                мелкий, наверху. Плейсхолдер самого инпута прозрачен: его
+                предшествовал цели (~). Строка значения заперта на 27..45
+                (pt-27 + lh-18 + pb-11 = 56), как раскладка Typing в Figma:
+                10 + лейбл 15 + 2 + значение 18. Лейбл — плавающий: в покое
+                плейсхолдер стоит по вертикальному центру бокса (Default:
+                alignItems center), при фокусе/значении уменьшается до 13px
+                и уходит наверх (10px). Плейсхолдер инпута прозрачен: его
                 роль играет лейбл. */}
             <input
               id={inputId}
-              className="peer h-full w-full border-none bg-transparent pt-[27px] text-base leading-[18px] text-content outline-none placeholder:text-transparent"
+              className="peer h-full w-full border-none bg-transparent pb-[11px] pt-[27px] text-base leading-[18px] text-content outline-none placeholder:text-transparent"
               disabled={disabled}
               value={value}
               placeholder={title}
@@ -90,7 +94,7 @@ export function TextField({
               htmlFor={inputId}
               className={cn(
                 'pointer-events-none absolute left-0 text-content-secondary transition-all duration-200',
-                'top-[27px] text-base leading-[18px]',
+                'top-[19px] text-base leading-[18px]',
                 'peer-focus:top-[10px] peer-focus:text-[13px] peer-focus:leading-[15px]',
                 'peer-[:not(:placeholder-shown)]:top-[10px] peer-[:not(:placeholder-shown)]:text-[13px] peer-[:not(:placeholder-shown)]:leading-[15px]',
               )}
