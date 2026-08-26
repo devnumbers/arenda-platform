@@ -17,6 +17,7 @@ import {
     StarOff,
 } from '@/shared/assets/icons';
 import {
+    AmountField,
     Button,
     CalendarButton,
     CalendarMonth,
@@ -30,7 +31,6 @@ import {
     ModalTrigger,
     MonthDaysGrid,
     MonthYearPicker,
-    Numpad,
     PageContent,
     RadioGroup,
     RadioGroupItem,
@@ -43,10 +43,8 @@ import {
     TextField,
     TopNav,
     TopNavTitle,
-    inputNumpadKey,
+    amountKopecks,
     monthTitle,
-    numpadKopecks,
-    type NumpadKey,
 } from '@/shared/ui/design';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import styles from './page.module.css';
@@ -80,6 +78,7 @@ export function DesignLayerShowcase(): JSX.Element {
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
     const [lastDayOfMonth, setLastDayOfMonth] = useState(false);
     const [amount, setAmount] = useState('');
+    const [paymentForm, setPaymentForm] = useState<'transfer' | 'cash'>('transfer');
     const [direction, setDirection] = useState<'income' | 'expense'>('income');
 
     return (
@@ -397,34 +396,52 @@ export function DesignLayerShowcase(): JSX.Element {
                 </div>
 
                 <div className={styles.group}>
-                    <h3 className={styles.groupTitle}>Numpad · ввод суммы</h3>
+                    <h3 className={styles.groupTitle}>AmountField · ввод суммы</h3>
                     <p className={styles.groupTitle}>
-                        Кнопка «Создать платеж» заблокирована, пока сумма не введена (Figma 834:19662).
+                        Ввод с клавиатуры, только цифры и запятая (маска до 9 999 999,99 ₽); под
+                        суммой — две пары чипов: форма оплаты и направление (Figma 834:19662,
+                        835:19795). Кнопка заблокирована, пока сумма не введена.
                     </p>
-                    <div className={styles.column} style={{ maxWidth: 420 }}>
-                        <p className="text-center font-sans text-[2.75rem] font-semibold leading-12 text-content">
-                            {formatMoneyKopecks(numpadKopecks(amount))}
-                        </p>
-                        <div className="flex justify-center gap-1.5">
-                            <ChipButton
-                                trailingIcon={<ChangeHorizontal />}
-                                selected={direction === 'income'}
-                                onClick={() => setDirection('income')}
-                            >
-                                Доход
-                            </ChipButton>
-                            <ChipButton
-                                trailingIcon={<ChangeHorizontal />}
-                                selected={direction === 'expense'}
-                                onClick={() => setDirection('expense')}
-                            >
-                                Расход
-                            </ChipButton>
+                    <div className={styles.column} style={{ maxWidth: 560 }}>
+                        <AmountField value={amount} onChange={setAmount} label="Сумма" />
+                        <div className="flex flex-col items-center gap-3">
+                            <div role="group" aria-label="Форма оплаты" className="flex justify-center gap-2">
+                                <ChipButton
+                                    trailingIcon={<ChangeHorizontal />}
+                                    selected={paymentForm === 'transfer'}
+                                    onClick={() => setPaymentForm('transfer')}
+                                >
+                                    Перевод
+                                </ChipButton>
+                                <ChipButton
+                                    trailingIcon={<ChangeHorizontal />}
+                                    selected={paymentForm === 'cash'}
+                                    onClick={() => setPaymentForm('cash')}
+                                >
+                                    Наличные
+                                </ChipButton>
+                            </div>
+                            <div role="group" aria-label="Направление" className="flex justify-center gap-2">
+                                <ChipButton
+                                    trailingIcon={<ChangeHorizontal />}
+                                    selected={direction === 'income'}
+                                    onClick={() => setDirection('income')}
+                                >
+                                    Доход
+                                </ChipButton>
+                                <ChipButton
+                                    trailingIcon={<ChangeHorizontal />}
+                                    selected={direction === 'expense'}
+                                    onClick={() => setDirection('expense')}
+                                >
+                                    Расход
+                                </ChipButton>
+                            </div>
                         </div>
-                        <Numpad
-                            onKey={(key: NumpadKey) => setAmount((prev) => inputNumpadKey(prev, key))}
-                        />
-                        <Button disabled={numpadKopecks(amount) === 0}>Создать платеж</Button>
+                        <p className="text-center text-sm text-content-secondary">
+                            К оплате: {formatMoneyKopecks(amountKopecks(amount))}
+                        </p>
+                        <Button disabled={amountKopecks(amount) === 0}>Создать платеж</Button>
                     </div>
                 </div>
 

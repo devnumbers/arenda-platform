@@ -10,7 +10,9 @@ import { CalendarButton } from './calendar-button';
  * Опция «Последний день месяца» — строка с чекбоксом под гридом на экране
  * (ListRow + Checkbox), сюда не входит. Ячейки квадратные, как в макете:
  * ширина колонки, высота следует за ней; блок тянется во всю доступную
- * ширину, на широких экранах ограничен max-w-[420px] по центру. */
+ * ширину, максимум — ширина контента страницы 560 − 2×24 = 512px
+ * (решение владельца 2026-08-26), на узких экранах ужимается
+ * пропорционально и не выходит за экран. */
 export type MonthDaysGridProps = {
   /** Число дней: 28..31. */
   readonly days: number;
@@ -26,7 +28,7 @@ export function MonthDaysGrid({
   className,
 }: MonthDaysGridProps): JSX.Element {
   return (
-    <div className={cn('mx-auto grid w-full max-w-[420px] grid-cols-7 gap-0.5 px-4', className)}>
+    <div className={cn('mx-auto grid w-full max-w-[512px] grid-cols-7 gap-0.5 px-4', className)}>
       {Array.from({ length: days }, (_, index) => {
         const day = index + 1;
         const selected = selectedDays?.has(day) === true;

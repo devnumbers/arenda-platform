@@ -87,7 +87,6 @@ export { default as StatusIconGood } from './status-icon-good.svg';
 export { default as StatusIconCheck } from './status-icon-check.svg';
 export { default as StatusIconInfo } from './status-icon-info.svg';
 
-// Дизайн-слой платежей, тикет #459: ластик numpad 32×32 и «смена
-// направления» 24×24 (currentColor) — Figma 766:9625, 835:19789.
-export { default as Eraser } from './eraser.svg';
+// Дизайн-слой платежей, тикет #459: «смена направления» 24×24 чипов суммы
+// (currentColor) — Figma 835:19789.
 export { default as ChangeHorizontal } from './change-horizontal.svg';
