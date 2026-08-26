@@ -51,55 +51,39 @@ func NewPaymentHandlers(svc PaymentManager, logger *slog.Logger) *PaymentHandler
 	return &PaymentHandlers{svc: svc, logger: logger}
 }
 
-// Problem titles and details reused by the static payments error mapping.
-const (
-	problemTitleForbidden = "Forbidden"
-	problemTitleNotFound  = "Not found"
-	problemTitleConflict  = "Conflict"
-	detailNotFound        = "Не найдено"
-)
-
-// paymentProblem is the fixed wire outcome of a payments application error.
-type paymentProblem struct {
-	status int
-	title  string
-	detail string
-}
-
 // staticPaymentProblems maps the payments application errors with a fixed
-// outcome onto status and problem details. Invalid input is handled
-// dynamically through the shared user-facing table like in every context.
-var staticPaymentProblems = []struct {
-	err  error
-	prob paymentProblem
-}{
-	{application.ErrNotFound, paymentProblem{
-		status: http.StatusNotFound, title: problemTitleNotFound, detail: detailNotFound,
-	}},
-	{application.ErrForbidden, paymentProblem{
-		status: http.StatusForbidden, title: problemTitleForbidden, detail: "Недостаточно прав для этого действия",
-	}},
-	{application.ErrArchivedProperty, paymentProblem{
-		status: http.StatusConflict, title: problemTitleConflict, detail: "Нельзя изменить архивный объект",
-	}},
-	{application.ErrAlreadyPaused, paymentProblem{
-		status: http.StatusConflict, title: problemTitleConflict, detail: "Платёж уже на паузе",
-	}},
-	{application.ErrNotPaused, paymentProblem{
-		status: http.StatusConflict, title: problemTitleConflict, detail: "Платёж не на паузе",
-	}},
+// outcome onto their wire status, title and detail (the shared ErrorProblem
+// table shape). Invalid input is handled dynamically through the shared
+// user-facing table like in every context.
+var staticPaymentProblems = []httpsupport.ErrorProblem{
+	{
+		Err: application.ErrNotFound, Status: http.StatusNotFound,
+		Title: httpsupport.ProblemTitleNotFound, Detail: "Не найдено",
+	},
+	{
+		Err: application.ErrForbidden, Status: http.StatusForbidden,
+		Title: httpsupport.ProblemTitleForbidden, Detail: "Недостаточно прав для этого действия",
+	},
+	{
+		Err: application.ErrArchivedProperty, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Нельзя изменить архивный объект",
+	},
+	{
+		Err: application.ErrAlreadyPaused, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Платёж уже на паузе",
+	},
+	{
+		Err: application.ErrNotPaused, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Платёж не на паузе",
+	},
 }
 
 // handlePaymentError maps an application error onto the wire contract: the
 // fixed table first, invalid input through its user-facing detail, anything
 // else an opaque 500.
 func (h *PaymentHandlers) handlePaymentError(w http.ResponseWriter, r *http.Request, err error) {
-	for _, m := range staticPaymentProblems {
-		if errors.Is(err, m.err) {
-			httpsupport.WriteProblem(r.Context(), w, m.prob.status,
-				httpsupport.Problem(r.Context(), m.prob.title, m.prob.detail))
-			return
-		}
+	if httpsupport.WriteErrorProblem(r.Context(), w, err, staticPaymentProblems) {
+		return
 	}
 	if errors.Is(err, application.ErrInvalidInput) {
 		detail, ok := httpsupport.UserFacingDetail(err)
@@ -287,27 +271,16 @@ func (h *PaymentHandlers) ResumePayment(w http.ResponseWriter, r *http.Request, 
 	h.respondWithPayment(w, r, payment, http.StatusOK)
 }
 
-// createCommand validates the create body against the OpenAPI constraints —
-// enums, amount bounds, title length, the recurrence oneOf per kind and the
-// default-catalog slug — and folds it into the application command. A
-// violation is application.ErrInvalidInput (the shared 400 detail).
+// createCommand folds the decoded body into the application command. The
+// contract rules — enums, amount bounds, title length, the catalog slug, the
+// end date against since — are the payment rule module's single
+// responsibility (validateRule); the transport only builds the wire-only
+// parts: the recurrence (int weekdays → domain constructors) and the optional
+// flag default.
 func createCommand(body openapi.PaymentCreateRequest) (application.CreatePaymentCommand, error) {
-	if !body.Type.Valid() || !body.PaymentForm.Valid() {
-		return application.CreatePaymentCommand{}, application.ErrInvalidInput
-	}
-	title := []rune(body.Title)
-	if len(title) == 0 || len(title) > application.MaxTitleLength {
-		return application.CreatePaymentCommand{}, application.ErrInvalidInput
-	}
-	if body.AmountKopecks < 1 || body.AmountKopecks > application.MaxAmountKopecks {
-		return application.CreatePaymentCommand{}, application.ErrInvalidInput
-	}
 	recurrence, err := parseRecurrence(body.Recurrence)
 	if err != nil {
 		return application.CreatePaymentCommand{}, err
-	}
-	if !domain.IsValidDefaultCategorySlug(body.CategorySlug) {
-		return application.CreatePaymentCommand{}, application.ErrInvalidInput
 	}
 	autoPay := false
 	if body.AutoPay != nil {
@@ -355,9 +328,10 @@ func (h *PaymentHandlers) decodeUpdateBody(
 	return shadow.EndDate, nil
 }
 
-// UpdateCommand validates the PATCH body the same way as create and resolves
-// the tri-state endDate from its raw wire bytes: omitted keeps (nil raw),
-// null clears, a date sets.
+// updateCommand folds the PATCH body into the application command and
+// resolves the tri-state endDate from its raw wire bytes: omitted keeps (nil
+// raw), null clears, a date sets. The contract rules live in the payment
+// rule module (validateRule); the transport only builds.
 func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw json.RawMessage) (application.UpdatePaymentCommand, error) {
 	cmd := application.UpdatePaymentCommand{}
 	if len(endDateRaw) > 0 {
@@ -367,12 +341,8 @@ func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw json.RawMessage
 		}
 		cmd.EndDate = endDate
 	}
-	if err := validateUpdateScalars(body); err != nil {
-		return application.UpdatePaymentCommand{}, err
-	}
 	if body.Type != nil {
-		t := domain.PaymentType(*body.Type)
-		cmd.Type = &t
+		cmd.Type = new(domain.PaymentType(*body.Type))
 	}
 	if body.Title != nil {
 		cmd.Title = body.Title
@@ -388,8 +358,7 @@ func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw json.RawMessage
 		cmd.Recurrence = &recurrence
 	}
 	if body.PaymentForm != nil {
-		f := domain.PaymentForm(*body.PaymentForm)
-		cmd.PaymentForm = &f
+		cmd.PaymentForm = new(domain.PaymentForm(*body.PaymentForm))
 	}
 	if body.CategorySlug != nil {
 		cmd.CategorySlug = body.CategorySlug
@@ -398,31 +367,6 @@ func updateCommand(body openapi.PaymentUpdateRequest, endDateRaw json.RawMessage
 		cmd.AutoPay = body.AutoPay
 	}
 	return cmd, nil
-}
-
-// validateUpdateScalars checks the non-recurrence fields a PATCH may carry,
-// each exactly as at creation.
-func validateUpdateScalars(body openapi.PaymentUpdateRequest) error {
-	if body.Type != nil && !body.Type.Valid() {
-		return application.ErrInvalidInput
-	}
-	if body.Title != nil {
-		if title := []rune(*body.Title); len(title) == 0 || len(title) > application.MaxTitleLength {
-			return application.ErrInvalidInput
-		}
-	}
-	if body.AmountKopecks != nil {
-		if *body.AmountKopecks < 1 || *body.AmountKopecks > application.MaxAmountKopecks {
-			return application.ErrInvalidInput
-		}
-	}
-	if body.PaymentForm != nil && !body.PaymentForm.Valid() {
-		return application.ErrInvalidInput
-	}
-	if body.CategorySlug != nil && !domain.IsValidDefaultCategorySlug(*body.CategorySlug) {
-		return application.ErrInvalidInput
-	}
-	return nil
 }
 
 // parseRecurrence converts the generated oneOf union into the domain
@@ -481,8 +425,7 @@ func endDateUpdateFromWire(raw json.RawMessage) (*application.EndDateUpdate, err
 	if err := json.Unmarshal(trimmed, &date); err != nil {
 		return nil, application.ErrInvalidInput
 	}
-	value := date.Time
-	return &application.EndDateUpdate{Value: &value}, nil
+	return &application.EndDateUpdate{Value: new(date.Time)}, nil
 }
 
 // datePtrFromWire converts an optional request date into a *time.Time.
@@ -490,8 +433,7 @@ func datePtrFromWire(d *openapi_types.Date) *time.Time {
 	if d == nil {
 		return nil
 	}
-	value := d.Time
-	return &value
+	return new(d.Time)
 }
 
 // paymentResponse maps the domain rule onto the wire response: the category

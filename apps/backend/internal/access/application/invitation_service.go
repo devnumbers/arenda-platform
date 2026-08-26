@@ -208,7 +208,7 @@ func (s *InvitationService) createPendingInvitation(
 		// invitee email is PII and must never appear in context (ADR 0020).
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
 			Action:     auditdomain.ActionPropertyMemberInvitationInvited,
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &created.ID,
@@ -259,7 +259,7 @@ func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propert
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
 			Action:     auditdomain.ActionPropertyMemberInvitationResent,
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &invitation.ID,
@@ -301,7 +301,7 @@ func (s *InvitationService) ChangeInvitationRole(
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
 			Action:     auditdomain.ActionPropertyMemberInvitationRoleChanged,
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &updated.ID,
@@ -339,7 +339,7 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
 			Action:     auditdomain.ActionPropertyMemberInvitationCancelled,
 			EntityType: auditdomain.EntityPropertyMemberInvitation,
 			EntityID:   &invitationID,

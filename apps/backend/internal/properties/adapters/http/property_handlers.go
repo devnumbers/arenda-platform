@@ -44,106 +44,73 @@ func NewPropertyHandlers(
 	}
 }
 
-// problemTitle constants name the RFC 7807 titles reused by the static
-// property error mappings below (the mapping table literals are not function
-// calls, so the repeated titles need named constants).
-const (
-	problemTitleConflict  = "Conflict"
-	problemTitleForbidden = "Forbidden"
-	problemTitleNotFound  = "Not found"
-)
-
-// propertyProblem is the wire mapping of a property application error with a
-// fixed outcome: a status plus problem details. The code field carries the
-// extension code of the single coded mapping (the suspended membership, T9).
-type propertyProblem struct {
-	status int
-	title  string
-	detail string
-	code   string
-}
-
 // staticPropertyProblems maps the property application errors whose wire
-// outcome is fixed onto their status and problem details, grouped by outcome:
-// access outcomes (issue #156 T3, T9 — the privacy-preserving 404, the
-// edit-permission 403, and the suspended membership's distinguishable coded
-// 403), the tariff limit, and the domain lifecycle conflicts. Errors whose
-// details are derived at runtime (invalid input, transitions, tenant
-// contacts) are handled by handlePropertyError's dynamic branches instead.
-var staticPropertyProblems = []struct {
-	err  error
-	prob propertyProblem
-}{
+// outcome is fixed onto their status, title and detail (the shared
+// ErrorProblem table shape), grouped by outcome: access outcomes (issue #156
+// T3 — the privacy-preserving 404 and the edit-permission 403), the tariff
+// limit, and the domain lifecycle conflicts. Errors whose details are derived
+// at runtime (invalid input, transitions, tenant contacts) are handled by
+// handlePropertyError's dynamic branches instead; the suspended membership's
+// coded 403 (T9) is the one outcome the flat table cannot carry, so it stays
+// an explicit branch.
+var staticPropertyProblems = []httpsupport.ErrorProblem{
 	// Access outcomes.
-	{propertiesapp.ErrNotFound, propertyProblem{
-		status: http.StatusNotFound, title: problemTitleNotFound, detail: "Объект не найден",
-	}},
-	{propertiesapp.ErrForbidden, propertyProblem{
-		status: http.StatusForbidden, title: problemTitleForbidden, detail: "Недостаточно прав для этого действия",
-	}},
-	{propertiesapp.ErrAccessSuspended, propertyProblem{
-		status: http.StatusForbidden, title: problemTitleForbidden,
-		detail: "Доступ к объекту приостановлен: превышен лимит объектов по тарифу", code: "membership_suspended",
-	}},
+	{
+		Err: propertiesapp.ErrNotFound, Status: http.StatusNotFound,
+		Title: httpsupport.ProblemTitleNotFound, Detail: "Объект не найден",
+	},
+	{
+		Err: propertiesapp.ErrForbidden, Status: http.StatusForbidden,
+		Title: httpsupport.ProblemTitleForbidden, Detail: "Недостаточно прав для этого действия",
+	},
 	// Tariff limit.
-	{propertiesapp.ErrLimitExceeded, propertyProblem{
-		status: http.StatusPaymentRequired, title: "Limit exceeded", detail: "Превышен лимит активных объектов",
-	}},
+	{
+		Err: propertiesapp.ErrLimitExceeded, Status: http.StatusPaymentRequired,
+		Title: "Limit exceeded", Detail: "Превышен лимит активных объектов",
+	},
 	// Domain lifecycle conflicts.
-	{propertiesapp.ErrArchivedProperty, propertyProblem{
-		status: http.StatusConflict, title: problemTitleConflict, detail: "Нельзя изменить архивный объект",
-	}},
-	{propertiesapp.ErrAlreadyArchived, propertyProblem{
-		status: http.StatusConflict, title: problemTitleConflict, detail: "Объект уже в архиве",
-	}},
-	{propertiesapp.ErrNotArchived, propertyProblem{
-		status: http.StatusConflict, title: problemTitleConflict, detail: "Объект не в архиве",
-	}},
-	{propertiesapp.ErrPhotoLimitReached, propertyProblem{
-		status: http.StatusConflict, title: problemTitleConflict, detail: "Достигнут лимит фотографий объекта",
-	}},
+	{
+		Err: propertiesapp.ErrArchivedProperty, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Нельзя изменить архивный объект",
+	},
+	{
+		Err: propertiesapp.ErrAlreadyArchived, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Объект уже в архиве",
+	},
+	{
+		Err: propertiesapp.ErrNotArchived, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Объект не в архиве",
+	},
+	{
+		Err: propertiesapp.ErrPhotoLimitReached, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Достигнут лимит фотографий объекта",
+	},
 }
 
 // handlePropertyError maps an application error of the property endpoints onto
-// the wire contract: a fixed mapping first, then the dynamic ones whose detail
-// derives from the error itself.
+// the wire contract: the coded suspended-membership 403 first (T9 — the flat
+// table cannot carry the extension code), then the fixed table, then the
+// dynamic ones whose detail derives from the error itself.
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
-	if prob, ok := lookupStaticPropertyProblem(err); ok {
-		writePropertyProblem(w, r, prob)
+	if errors.Is(err, propertiesapp.ErrAccessSuspended) {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.ProblemWithCode(r.Context(),
+				httpsupport.ProblemTitleForbidden,
+				"Доступ к объекту приостановлен: превышен лимит объектов по тарифу",
+				"membership_suspended"))
+		return
+	}
+	if httpsupport.WriteErrorProblem(r.Context(), w, err, staticPropertyProblems) {
 		return
 	}
 	switch {
 	case errors.Is(err, propertiesapp.ErrInvalidInput):
 		writeInvalidInputProblem(w, r, err)
 	case isInvalidStatusTransition(err), errors.Is(err, propertiesapp.ErrInvalidTransition):
-		writeUserFacingProblem(w, r, err, http.StatusConflict, "Conflict")
+		writeUserFacingProblem(w, r, err, http.StatusConflict, httpsupport.ProblemTitleConflict)
 	default:
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
-}
-
-// lookupStaticPropertyProblem resolves an error to its fixed wire outcome. The
-// table is walked with errors.Is so wrapped sentinels keep matching; ok is
-// false for the errors whose details are derived dynamically.
-func lookupStaticPropertyProblem(err error) (propertyProblem, bool) {
-	for _, m := range staticPropertyProblems {
-		if errors.Is(err, m.err) {
-			return m.prob, true
-		}
-	}
-	return propertyProblem{}, false
-}
-
-// writePropertyProblem writes a fixed property outcome; the coded variant (the
-// suspended membership, T9, issue #158) is the only one carrying an extension
-// code.
-func writePropertyProblem(w http.ResponseWriter, r *http.Request, prob propertyProblem) {
-	if prob.code != "" {
-		httpsupport.WriteProblem(r.Context(), w, prob.status,
-			httpsupport.ProblemWithCode(r.Context(), prob.title, prob.detail, prob.code))
-		return
-	}
-	httpsupport.WriteProblem(r.Context(), w, prob.status, httpsupport.Problem(r.Context(), prob.title, prob.detail))
 }
 
 // writeUserFacingProblem maps an error whose user-facing message comes from

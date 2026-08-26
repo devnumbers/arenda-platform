@@ -195,7 +195,7 @@ func (s *AccessService) createMembershipInTx(
 	// member's email/phone are PII and must never appear in context (ADR 0020).
 	if err := stores.audit.Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
+		ActorRole:  sharedpolicy.AuditActorRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberAdded,
 		EntityType: auditdomain.EntityPropertyMember,
 		EntityID:   &created.ID,
@@ -240,7 +240,7 @@ func (s *AccessService) ChangeMemberRole(
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
 			Action:     auditdomain.ActionPropertyMemberUpdated,
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &updated.ID,
@@ -293,7 +293,7 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(actorRole),
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
 			Action:     auditdomain.ActionPropertyMemberRemoved,
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &membership.ID,
@@ -367,7 +367,7 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(role),
+			ActorRole:  sharedpolicy.AuditActorRole(role),
 			Action:     auditdomain.ActionPropertyMemberLeft,
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &membership.ID,
@@ -523,22 +523,6 @@ func toSharedRole(r domain.Role) sharedpolicy.Role {
 		return sharedpolicy.RoleViewer
 	default:
 		return sharedpolicy.RoleNone
-	}
-}
-
-// actorRoleFromPolicyRole maps a policy role to the audit actor role so
-// actions of shared-access members are attributed to their real role instead
-// of being masked as the owner's own (issue #166 follow-up). Roles that never
-// reach a Record call through the gates (suspended, none) and any unknown role
-// fall back to the historical owner attribution.
-func actorRoleFromPolicyRole(role sharedpolicy.Role) auditdomain.ActorRole {
-	switch role {
-	case sharedpolicy.RoleFullAccess:
-		return auditdomain.ActorRoleFullAccess
-	case sharedpolicy.RoleViewer:
-		return auditdomain.ActorRoleViewer
-	default:
-		return auditdomain.ActorRoleOwner
 	}
 }
 

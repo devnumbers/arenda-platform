@@ -16,11 +16,13 @@ import (
 // hourly worker (#458) and the in-mutation reruns safe.
 //
 // The tick body itself is txStores.tickOwner, a capability of any open
-// transaction of this context: RunOwnerTick is the standalone driver (the
-// worker's), while context mutations (#457) run the same body inside their
-// own transaction after their change (ADR 0048, decision №1) — with the
-// owner's property rows already locked, so a nested standalone run would
-// self-deadlock on the same FOR UPDATE.
+// transaction of this context. RunOwnerTick is the standalone driver — the
+// worker's door (ticket #458) and the only caller outside the package;
+// context mutations reach the same body exclusively through the mutateRule
+// conveyor, inside their own transaction after their change (ADR 0048,
+// decision №1). Calling RunOwnerTick from inside a mutation transaction
+// would self-deadlock on the second FOR UPDATE of the owner's property rows
+// — the conveyor makes that path unreachable.
 type TickService struct {
 	txStoreFactory
 	calendar OwnerCalendar

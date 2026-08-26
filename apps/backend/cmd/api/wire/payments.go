@@ -6,16 +6,20 @@ import (
 )
 
 // Payments holds the payments module's services wired by WirePayments: the
-// payment rule use cases now, the hourly tick worker with its ticket (#458).
+// payment rule use cases now and the materialization tick service — the
+// worker's single door to the tick (ticket #458 registers it in the
+// scheduler).
 type Payments struct {
 	PaymentService *paymentsapp.PaymentService
+	TickService    *paymentsapp.TickService
 }
 
 // WirePayments constructs the payments context (ADR 0049): the tick store,
-// the payment and property stores, the owner calendar (ADR 0048) and the
+// the payment and property stores, the owner calendar (ADR 0048), the
 // single canonical txStoreFactory shared by every payments service
-// (ADR 0033 γ-factory). The policy comes from the access module — payments is
-// wired after it, so the membership-aware policy is already resolved.
+// (ADR 0033 γ-factory) and the tick service the future worker drives. The
+// policy comes from the access module — payments is wired after it, so the
+// membership-aware policy is already resolved.
 func WirePayments(p platformDeps) *Payments {
 	tickStore := paymentspg.NewTickStore(p.DB)
 	paymentStore := paymentspg.NewPaymentStore(p.DB)
@@ -32,5 +36,6 @@ func WirePayments(p platformDeps) *Payments {
 
 	return &Payments{
 		PaymentService: paymentsapp.NewPaymentService(factory, calendar, p.Policy),
+		TickService:    paymentsapp.NewTickService(factory, calendar),
 	}
 }

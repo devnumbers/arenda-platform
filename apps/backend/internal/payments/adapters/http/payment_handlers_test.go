@@ -192,6 +192,10 @@ func TestCreatePayment_RejectsMalformedBodies(t *testing.T) {
 	}
 }
 
+// The rule-level rejections (enums, amount bounds, title length, catalog
+// slug, endDate before since) live in the payment rule module and are
+// covered by the application integration tests; these transport cases cover
+// what the wire decode and the recurrence construction reject.
 func TestCreatePayment_RejectsInvalidBodies(t *testing.T) {
 	t.Parallel()
 	h := NewPaymentHandlers(&fakePaymentManager{}, nil)
@@ -225,30 +229,20 @@ func TestCreatePayment_RejectsInvalidBodies(t *testing.T) {
 	}
 
 	cases := []struct {
-		name   string
-		body   string
-		wantIn string
+		name string
+		body string
 	}{
-		{"bad type enum", mutate("type", `"profit"`), ""},
-		{"bad payment form enum", mutate("paymentForm", `"crypto"`), ""},
-		{"empty title", mutate("title", `""`), ""},
-		{"title over 255 runes", mutate("title", `"`+strings.Repeat("а", 256)+`"`), ""},
-		{"zero amount", mutate("amountKopecks", `0`), ""},
-		{"amount over 10^9", mutate("amountKopecks", `1000000001`), ""},
-		{"negative amount", mutate("amountKopecks", `-5`), ""},
-		{"amount not an integer", mutate("amountKopecks", `500.5`), ""},
-		{"unknown category slug", mutate("categorySlug", `"not-a-catalog-slug"`), ""},
-		{"missing category slug", mutate("categorySlug", "<delete>"), ""},
-		{"recurrence unknown kind", mutate("recurrence", `{"kind":"hourly"}`), ""},
-		{"recurrence weekly empty", mutate("recurrence", `{"kind":"weekly","weekdays":[]}`), ""},
-		{"recurrence weekly duplicate days", mutate("recurrence", `{"kind":"weekly","weekdays":[1,1]}`), ""},
-		{"recurrence weekly day out of range", mutate("recurrence", `{"kind":"weekly","weekdays":[7]}`), ""},
-		{"recurrence monthly zero day", mutate("recurrence", `{"kind":"monthly","dayOfMonth":0}`), ""},
-		{"recurrence monthly day 32", mutate("recurrence", `{"kind":"monthly","dayOfMonth":32}`), ""},
-		{"recurrence monthly day missing", mutate("recurrence", `{"kind":"monthly"}`), ""},
-		{"recurrence yearly month 13", mutate("recurrence", `{"kind":"yearly","month":13,"day":1}`), ""},
-		{"recurrence yearly day 32", mutate("recurrence", `{"kind":"yearly","month":5,"day":32}`), ""},
-		{"bad endDate format", mutate("endDate", `"31.01.2027"`), ""},
+		{"amount not an integer", mutate("amountKopecks", `500.5`)},
+		{"bad endDate format", mutate("endDate", `"31.01.2027"`)},
+		{"recurrence unknown kind", mutate("recurrence", `{"kind":"hourly"}`)},
+		{"recurrence weekly empty", mutate("recurrence", `{"kind":"weekly","weekdays":[]}`)},
+		{"recurrence weekly duplicate days", mutate("recurrence", `{"kind":"weekly","weekdays":[1,1]}`)},
+		{"recurrence weekly day out of range", mutate("recurrence", `{"kind":"weekly","weekdays":[7]}`)},
+		{"recurrence monthly zero day", mutate("recurrence", `{"kind":"monthly","dayOfMonth":0}`)},
+		{"recurrence monthly day 32", mutate("recurrence", `{"kind":"monthly","dayOfMonth":32}`)},
+		{"recurrence monthly day missing", mutate("recurrence", `{"kind":"monthly"}`)},
+		{"recurrence yearly month 13", mutate("recurrence", `{"kind":"yearly","month":13,"day":1}`)},
+		{"recurrence yearly day 32", mutate("recurrence", `{"kind":"yearly","month":5,"day":32}`)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -522,16 +516,14 @@ func TestDeletePayment_KeepOverdueDefault(t *testing.T) {
 	propertyID := uuid.Must(uuid.NewV7())
 	paymentID := uuid.Must(uuid.NewV7())
 
-	notKeep := false
-	keep := true
 	cases := []struct {
 		name     string
 		params   openapi.DeletePaymentParams
 		wantKeep bool
 	}{
 		{"default keeps the debt", openapi.DeletePaymentParams{}, true},
-		{"explicit false deletes the debt", openapi.DeletePaymentParams{KeepOverdue: &notKeep}, false},
-		{"explicit true keeps the debt", openapi.DeletePaymentParams{KeepOverdue: &keep}, true},
+		{"explicit false deletes the debt", openapi.DeletePaymentParams{KeepOverdue: new(false)}, false},
+		{"explicit true keeps the debt", openapi.DeletePaymentParams{KeepOverdue: new(true)}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

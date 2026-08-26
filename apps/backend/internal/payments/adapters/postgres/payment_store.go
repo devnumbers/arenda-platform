@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
@@ -62,20 +61,15 @@ func (s *PaymentStore) Get(
 		}
 		return domain.Payment{}, fmt.Errorf("get payment %s: %w", id, err)
 	}
-	payment, err := mapPaymentRow(paymentRowFields{
-		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
-		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
-		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
-		PaymentForm: row.PaymentForm, CategorySlug: row.CategorySlug,
-		UserCategoryID:   row.UserCategoryID,
-		UserCategoryName: row.UserCategoryName,
-		CreatedAt:        row.CreatedAt,
-		UpdatedAt:        row.UpdatedAt,
-	})
+	payment, err := mapPaymentRow(paymentFieldsFromGetRow(row))
 	if err != nil {
 		return domain.Payment{}, err
 	}
-	return s.withPauses(ctx, payment)
+	payments, err := attachPausesAsSlice(ctx, s, payment)
+	if err != nil {
+		return domain.Payment{}, err
+	}
+	return payments[0], nil
 }
 
 // ListByProperty returns the property's rules in creation order, each with
@@ -92,22 +86,13 @@ func (s *PaymentStore) ListByProperty(
 	}
 	payments := make([]domain.Payment, 0, len(rows))
 	for _, row := range rows {
-		payment, err := mapPaymentRow(paymentRowFields{
-			ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID, Type: row.Type,
-			Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
-			Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
-			PaymentForm: row.PaymentForm, CategorySlug: row.CategorySlug,
-			UserCategoryID:   row.UserCategoryID,
-			UserCategoryName: row.UserCategoryName,
-			CreatedAt:        row.CreatedAt,
-			UpdatedAt:        row.UpdatedAt,
-		})
+		payment, err := mapPaymentRow(paymentFieldsFromListRow(row))
 		if err != nil {
 			return nil, err
 		}
 		payments = append(payments, payment)
 	}
-	return s.attachPauses(ctx, payments)
+	return attachPausesAsSlice(ctx, s, payments...)
 }
 
 // Create inserts a new rule; the recurrence jsonb goes through the domain's
@@ -233,6 +218,16 @@ func (s *PaymentStore) DeleteFuturePlanned(ctx context.Context, paymentID uuid.U
 	return nil
 }
 
+// attachPausesAsSlice loads the pause intervals of the given rules over the
+// store's connection and returns them back (the shared attachPauses mutates
+// in place; this adapts it to the value-returning store methods).
+func attachPausesAsSlice(ctx context.Context, s *PaymentStore, payments ...domain.Payment) ([]domain.Payment, error) {
+	if err := attachPauses(ctx, s.q(), payments); err != nil {
+		return nil, err
+	}
+	return payments, nil
+}
+
 // marshalRecurrence encodes the rule's recurrence through the json.Marshaler
 // interface. The domain MarshalJSON has a pointer receiver — marshaling the
 // bare value would fall back to the empty struct (the fields are
@@ -241,89 +236,4 @@ func (s *PaymentStore) DeleteFuturePlanned(ctx context.Context, paymentID uuid.U
 func marshalRecurrence(p domain.Payment) ([]byte, error) {
 	var marshaler json.Marshaler = &p.Recurrence
 	return json.Marshal(marshaler)
-}
-
-// withPauses loads the single rule's pause intervals.
-func (s *PaymentStore) withPauses(ctx context.Context, payment domain.Payment) (domain.Payment, error) {
-	payments, err := s.attachPauses(ctx, []domain.Payment{payment})
-	if err != nil {
-		return domain.Payment{}, err
-	}
-	return payments[0], nil
-}
-
-// attachPauses loads the pause intervals of the listed rules and attaches
-// them, keyed by rule id.
-func (s *PaymentStore) attachPauses(ctx context.Context, payments []domain.Payment) ([]domain.Payment, error) {
-	if len(payments) == 0 {
-		return payments, nil
-	}
-	ids := paymentIDs(payments)
-	rows, err := s.q().ListTickPausesByPaymentIDs(ctx, pgconv.UUIDSliceToPgtype(ids))
-	if err != nil {
-		return nil, fmt.Errorf("list pauses: %w", err)
-	}
-	pauses := make(map[uuid.UUID][]domain.PauseInterval, len(rows))
-	for _, row := range rows {
-		id := pgconv.UUIDFromPgtype(row.PaymentID)
-		pauses[id] = append(pauses[id], domain.PauseInterval{
-			From: pgconv.DateFromPgtype(row.FromDate),
-			To:   pgconv.DatePtrFromPgtype(row.ToDate),
-		})
-	}
-	for i := range payments {
-		payments[i].Pauses = pauses[payments[i].ID]
-	}
-	return payments, nil
-}
-
-// paymentRowFields decouples the two CRUD row shapes (Get and List select the
-// same columns, sqlc generates one struct per query) from the shared mapper.
-type paymentRowFields struct {
-	ID               pgtype.UUID
-	OwnerID          pgtype.UUID
-	PropertyID       pgtype.UUID
-	Type             string
-	Title            string
-	AmountKopecks    int64
-	Recurrence       []byte
-	Since            pgtype.Date
-	EndDate          pgtype.Date
-	AutoPay          bool
-	PaymentForm      string
-	CategorySlug     pgtype.Text
-	UserCategoryID   pgtype.UUID
-	UserCategoryName pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-}
-
-// mapPaymentRow maps a CRUD row to the domain rule: the recurrence jsonb goes
-// through the domain constructors, so a stored row can never resurrect an
-// invalid variant (same guarantee as the tick mapping).
-func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
-	var recurrence domain.Recurrence
-	if err := json.Unmarshal(row.Recurrence, &recurrence); err != nil {
-		return domain.Payment{}, fmt.Errorf("parse recurrence of payment %s: %w", pgconv.UUIDFromPgtype(row.ID), err)
-	}
-	return domain.Payment{
-		ID:            pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
-		Type:          domain.PaymentType(row.Type),
-		Title:         row.Title,
-		AmountKopecks: row.AmountKopecks,
-		Recurrence:    recurrence,
-		Since:         pgconv.DateFromPgtype(row.Since),
-		EndDate:       pgconv.DatePtrFromPgtype(row.EndDate),
-		AutoPay:       row.AutoPay,
-		PaymentForm:   domain.PaymentForm(row.PaymentForm),
-		Category: domain.CategoryRef{
-			Slug:             pgconv.TextToPtrString(row.CategorySlug),
-			UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
-			UserCategoryName: pgconv.TextToPtrString(row.UserCategoryName),
-		},
-		CreatedAt: pgconv.TimestamptzToTime(row.CreatedAt),
-		UpdatedAt: pgconv.TimestamptzToTime(row.UpdatedAt),
-	}, nil
 }

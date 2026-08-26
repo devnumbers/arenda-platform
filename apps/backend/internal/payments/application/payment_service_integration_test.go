@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -352,6 +353,64 @@ func TestCreatePayment_RejectsEndDateBeforeToday(t *testing.T) {
 	cmd.EndDate = &same
 	if _, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, cmd); err != nil {
 		t.Fatalf("create with today endDate: %v", err)
+	}
+}
+
+func TestCreatePayment_RejectsInvalidRules(t *testing.T) {
+	t.Parallel()
+	// The single validator of the create/update contract rules is the
+	// payment rule module (validateRule) — this is its seam. The rune-count
+	// cases pin the drift fix: the limit counts characters, not bytes.
+	badEnumType := domain.PaymentType("profit")
+	badForm := domain.PaymentForm("crypto")
+	unknownSlug := "not-a-catalog-slug"
+	cases := []struct {
+		name   string
+		mutate func(cmd *paymentsapp.CreatePaymentCommand)
+	}{
+		{"bad type enum", func(c *paymentsapp.CreatePaymentCommand) { c.Type = badEnumType }},
+		{"bad payment form enum", func(c *paymentsapp.CreatePaymentCommand) { c.PaymentForm = badForm }},
+		{"empty title", func(c *paymentsapp.CreatePaymentCommand) { c.Title = "   " }},
+		{"title over 255 characters", func(c *paymentsapp.CreatePaymentCommand) { c.Title = strings.Repeat("а", 256) }},
+		{"zero amount", func(c *paymentsapp.CreatePaymentCommand) { c.AmountKopecks = 0 }},
+		{"amount over 10^9", func(c *paymentsapp.CreatePaymentCommand) { c.AmountKopecks = 1_000_000_001 }},
+		{"negative amount", func(c *paymentsapp.CreatePaymentCommand) { c.AmountKopecks = -5 }},
+		{"unknown category slug", func(c *paymentsapp.CreatePaymentCommand) { c.CategorySlug = unknownSlug }},
+		{"zero recurrence", func(c *paymentsapp.CreatePaymentCommand) { c.Recurrence = domain.Recurrence{} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			hh := newServiceHarness(t).withOwner()
+			cmd := hh.createCmd()
+			tc.mutate(&cmd)
+			if _, err := hh.svc.CreatePayment(hh.ctx(), hh.owner, hh.propID, cmd); !errors.Is(err, paymentsapp.ErrInvalidInput) {
+				t.Fatalf("create = %v, want ErrInvalidInput", err)
+			}
+		})
+	}
+
+	// The drift regression: 130 Cyrillic characters are 260 bytes but a
+	// valid title — the limit counts runes.
+	long := newServiceHarness(t).withOwner()
+	cmd := long.createCmd()
+	cmd.Title = strings.Repeat("а", 130)
+	if _, err := long.svc.CreatePayment(long.ctx(), long.owner, long.propID, cmd); err != nil {
+		t.Fatalf("create with 130-character Cyrillic title: %v — the limit counts characters, not bytes", err)
+	}
+
+	// The update path validates through the same rule module after the diff
+	// is applied.
+	upd := newServiceHarness(t).withOwner()
+	created, err := upd.svc.CreatePayment(upd.ctx(), upd.owner, upd.propID, upd.createCmd())
+	if err != nil {
+		t.Fatalf("create payment: %v", err)
+	}
+	emptyTitle := " "
+	if _, err := upd.svc.UpdatePayment(upd.ctx(), upd.owner, upd.propID, created.ID, paymentsapp.UpdatePaymentCommand{
+		Title: &emptyTitle,
+	}); !errors.Is(err, paymentsapp.ErrInvalidInput) {
+		t.Fatalf("update with blank title = %v, want ErrInvalidInput", err)
 	}
 }
 

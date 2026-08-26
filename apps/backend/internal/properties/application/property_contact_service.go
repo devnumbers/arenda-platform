@@ -127,7 +127,7 @@ func (s *PropertyContactService) CreatePropertyContact(
 		// PII (name, phone) is never written to the audit context.
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(role),
+			ActorRole:  sharedpolicy.AuditActorRole(role),
 			Action:     auditdomain.ActionPropertyContactCreated,
 			EntityType: auditdomain.EntityPropertyContact,
 			EntityID:   &created.ID,
@@ -253,7 +253,7 @@ func (s *PropertyContactService) UpdatePropertyContact(
 		// PII (name, phone) is never written to the audit context.
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(role),
+			ActorRole:  sharedpolicy.AuditActorRole(role),
 			Action:     auditdomain.ActionPropertyContactUpdated,
 			EntityType: auditdomain.EntityPropertyContact,
 			EntityID:   &updated.ID,
@@ -387,7 +387,7 @@ func (s *PropertyContactService) DeletePropertyContact(ctx context.Context, acto
 		// PII (name, phone) is never written to the audit context.
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
-			ActorRole:  actorRoleFromPolicyRole(role),
+			ActorRole:  sharedpolicy.AuditActorRole(role),
 			Action:     auditdomain.ActionPropertyContactDeleted,
 			EntityType: auditdomain.EntityPropertyContact,
 			EntityID:   &contactID,

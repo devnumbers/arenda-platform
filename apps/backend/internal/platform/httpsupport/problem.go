@@ -62,6 +62,39 @@ func InternalError(ctx context.Context, err error) openapi.Problem {
 // every context.
 const detailNotFound = "Не найдено"
 
+// Shared problem titles of the fixed error mappings: the same RFC 7807 titles
+// recur in every context's table, so they are named once here.
+const (
+	ProblemTitleConflict  = "Conflict"
+	ProblemTitleForbidden = "Forbidden"
+	ProblemTitleNotFound  = "Not found"
+)
+
+// ErrorProblem pairs an application error sentinel with its fixed wire
+// outcome: the status, problem title and detail every occurrence of the error
+// maps to. The shape is shared by every context's HTTP adapter; the tables
+// themselves stay per-context — which errors map where is the context's own
+// knowledge.
+type ErrorProblem struct {
+	Err    error
+	Status int
+	Title  string
+	Detail string
+}
+
+// WriteErrorProblem writes the fixed outcome for err by walking the table
+// with errors.Is (wrapped sentinels keep matching). It returns false when
+// nothing matched, so the caller falls through to its dynamic mappings.
+func WriteErrorProblem(ctx context.Context, w http.ResponseWriter, err error, table []ErrorProblem) bool {
+	for _, m := range table {
+		if errors.Is(err, m.Err) {
+			WriteProblem(ctx, w, m.Status, Problem(ctx, m.Title, m.Detail))
+			return true
+		}
+	}
+	return false
+}
+
 // userFacingDetails maps known domain errors to fixed, non-sensitive messages
 // for RFC 7807 problem details. Entries are checked in order, so the table
 // preserves the previous switch's precedence exactly.

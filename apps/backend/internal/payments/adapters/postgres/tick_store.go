@@ -5,7 +5,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -70,7 +69,7 @@ func (s *TickStore) LoadOwnerSnapshot(ctx context.Context, ownerID uuid.UUID) (a
 	payments := make([]domain.Payment, 0, len(rows))
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
-		payment, err := mapTickPayment(row)
+		payment, err := mapPaymentRow(paymentFieldsFromTickRow(row))
 		if err != nil {
 			return application.OwnerSnapshot{}, err
 		}
@@ -84,35 +83,13 @@ func (s *TickStore) LoadOwnerSnapshot(ctx context.Context, ownerID uuid.UUID) (a
 	if len(ids) == 0 {
 		return snapshot, nil
 	}
-	if err := s.attachPauses(ctx, payments); err != nil {
+	if err := attachPauses(ctx, s.q(), payments); err != nil {
 		return application.OwnerSnapshot{}, err
 	}
 	if err := s.attachStatuses(ctx, ids, snapshot.Statuses); err != nil {
 		return application.OwnerSnapshot{}, err
 	}
 	return snapshot, nil
-}
-
-// attachPauses loads the pause intervals of the listed payments and attaches
-// them to the rules.
-func (s *TickStore) attachPauses(ctx context.Context, payments []domain.Payment) error {
-	rows, err := s.q().ListTickPausesByPaymentIDs(ctx, pgconv.UUIDSliceToPgtype(paymentIDs(payments)))
-	if err != nil {
-		return fmt.Errorf("list tick pauses: %w", err)
-	}
-	pauses := make(map[uuid.UUID][]domain.PauseInterval, len(rows))
-	for _, row := range rows {
-		interval := domain.PauseInterval{
-			From: pgconv.DateFromPgtype(row.FromDate),
-			To:   pgconv.DatePtrFromPgtype(row.ToDate),
-		}
-		id := pgconv.UUIDFromPgtype(row.PaymentID)
-		pauses[id] = append(pauses[id], interval)
-	}
-	for i := range payments {
-		payments[i].Pauses = pauses[payments[i].ID]
-	}
-	return nil
 }
 
 // attachStatuses loads the listed payments' operation statuses into the
@@ -209,44 +186,6 @@ func (s *TickStore) insertOccurrence(ctx context.Context, p domain.Payment, date
 			date.Format(time.DateOnly), p.ID, err)
 	}
 	return nil
-}
-
-// paymentIDs collects the rules' identifiers for the batch listings.
-func paymentIDs(payments []domain.Payment) []uuid.UUID {
-	ids := make([]uuid.UUID, len(payments))
-	for i, p := range payments {
-		ids[i] = p.ID
-	}
-	return ids
-}
-
-// mapTickPayment maps a tick listing row to the domain rule. The recurrence
-// jsonb goes through the domain constructors, so a stored row can never
-// resurrect an invalid variant.
-func mapTickPayment(row postgres.ListTickPaymentsByOwnerRow) (domain.Payment, error) {
-	var recurrence domain.Recurrence
-	if err := json.Unmarshal(row.Recurrence, &recurrence); err != nil {
-		return domain.Payment{}, fmt.Errorf("parse recurrence of payment %s: %w",
-			pgconv.UUIDFromPgtype(row.ID), err)
-	}
-	return domain.Payment{
-		ID:            pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
-		Type:          domain.PaymentType(row.Type),
-		Title:         row.Title,
-		AmountKopecks: row.AmountKopecks,
-		Recurrence:    recurrence,
-		Since:         pgconv.DateFromPgtype(row.Since),
-		EndDate:       pgconv.DatePtrFromPgtype(row.EndDate),
-		AutoPay:       row.AutoPay,
-		PaymentForm:   domain.PaymentForm(row.PaymentForm),
-		Category: domain.CategoryRef{
-			Slug:             pgconv.TextToPtrString(row.CategorySlug),
-			UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
-			UserCategoryName: pgconv.TextToPtrString(row.UserCategoryName),
-		},
-	}, nil
 }
 
 // OwnerCalendar is the postgres adapter of the owner calendar port
