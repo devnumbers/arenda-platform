@@ -7,6 +7,7 @@ import {
     ArrowLeft,
     BoldPerson,
     BoldSofa,
+    ChangeHorizontal,
     Edit,
     Home,
     Move,
@@ -17,6 +18,8 @@ import {
 } from '@/shared/assets/icons';
 import {
     Button,
+    CalendarButton,
+    CalendarMonth,
     Checkbox,
     ChipButton,
     IconButton,
@@ -25,11 +28,13 @@ import {
     ModalClose,
     ModalContent,
     ModalTrigger,
+    MonthDaysGrid,
+    MonthYearPicker,
+    Numpad,
     PageContent,
     RadioGroup,
     RadioGroupItem,
     SearchField,
-    CalendarButton,
     StatusIcon,
     UserButton,
     StepsChip,
@@ -38,7 +43,12 @@ import {
     TextField,
     TopNav,
     TopNavTitle,
+    inputNumpadKey,
+    monthTitle,
+    numpadKopecks,
+    type NumpadKey,
 } from '@/shared/ui/design';
+import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import styles from './page.module.css';
 
 const dlButtonVariants = ['primary', 'secondary', 'danger', 'clear', 'white'] as const;
@@ -63,6 +73,14 @@ export function DesignLayerShowcase(): JSX.Element {
     const [autoPay, setAutoPay] = useState(true);
     const [paused, setPaused] = useState(false);
     const [chip, setChip] = useState('name');
+    const [calendarYear, setCalendarYear] = useState(2026);
+    const [calendarMonth, setCalendarMonth] = useState(7);
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date(2026, 7, 17));
+    const [wheelOpen, setWheelOpen] = useState(false);
+    const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
+    const [lastDayOfMonth, setLastDayOfMonth] = useState(false);
+    const [amount, setAmount] = useState('');
+    const [direction, setDirection] = useState<'income' | 'expense'>('income');
 
     return (
         <>
@@ -297,6 +315,116 @@ export function DesignLayerShowcase(): JSX.Element {
                                 {day}
                             </CalendarButton>
                         ))}
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>CalendarMonth · выбор даты + крутилка месяц/год</h3>
+                    <p className={styles.groupTitle}>
+                        Один выбранный месяц, без бесконечной сетки; месяц и год — колёсами в шите, как в
+                        таймере Apple (Figma 835:20007, 848:8720).
+                    </p>
+                    <div className={styles.column} style={{ maxWidth: 480 }}>
+                        <div className="flex gap-1.5 px-6 pb-2">
+                            <ChipButton trailingIcon={<ArrowDown />} onClick={() => setWheelOpen(true)}>
+                                {monthTitle(calendarYear, calendarMonth)}
+                            </ChipButton>
+                        </div>
+                        <CalendarMonth
+                            year={calendarYear}
+                            month={calendarMonth}
+                            value={selectedDate}
+                            today={new Date()}
+                            onDateSelect={setSelectedDate}
+                        />
+                    </div>
+                    <Modal open={wheelOpen} onOpenChange={setWheelOpen}>
+                        <ModalContent title={<span className="sr-only">Месяц и год</span>}>
+                            <MonthYearPicker
+                                month={calendarMonth}
+                                year={calendarYear}
+                                onConfirm={(month, year) => {
+                                    setCalendarMonth(month);
+                                    setCalendarYear(year);
+                                    // выбранная дата жила в старом месяце —
+                                    // в новом блоке ничего не выбрано
+                                    if (
+                                        selectedDate !== undefined &&
+                                        (selectedDate.getMonth() !== month || selectedDate.getFullYear() !== year)
+                                    ) {
+                                        setSelectedDate(undefined);
+                                    }
+                                    setWheelOpen(false);
+                                }}
+                            />
+                        </ModalContent>
+                    </Modal>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>MonthDaysGrid · «Каждый месяц»</h3>
+                    <p className={styles.groupTitle}>
+                        Мини-грид дней 1..N с нескольких выбранными + опция «Последний день месяца»
+                        (Figma 823:11422).
+                    </p>
+                    <div className={styles.column} style={{ maxWidth: 480 }}>
+                        <MonthDaysGrid
+                            days={30}
+                            selectedDays={monthDays}
+                            onDayToggle={(day) =>
+                                setMonthDays((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(day)) {
+                                        next.delete(day);
+                                    } else {
+                                        next.add(day);
+                                    }
+                                    return next;
+                                })
+                            }
+                        />
+                        <ListRow
+                            title="Последний день месяца"
+                            trailing={
+                                <Checkbox
+                                    id="dl-last-day"
+                                    checked={lastDayOfMonth}
+                                    onCheckedChange={(value) => setLastDayOfMonth(value === true)}
+                                />
+                            }
+                        />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>Numpad · ввод суммы</h3>
+                    <p className={styles.groupTitle}>
+                        Кнопка «Создать платеж» заблокирована, пока сумма не введена (Figma 834:19662).
+                    </p>
+                    <div className={styles.column} style={{ maxWidth: 420 }}>
+                        <p className="text-center font-sans text-[2.75rem] font-semibold leading-12 text-content">
+                            {formatMoneyKopecks(numpadKopecks(amount))}
+                        </p>
+                        <div className="flex justify-center gap-1.5">
+                            <ChipButton
+                                trailingIcon={<ChangeHorizontal />}
+                                selected={direction === 'income'}
+                                onClick={() => setDirection('income')}
+                            >
+                                Доход
+                            </ChipButton>
+                            <ChipButton
+                                trailingIcon={<ChangeHorizontal />}
+                                selected={direction === 'expense'}
+                                onClick={() => setDirection('expense')}
+                            >
+                                Расход
+                            </ChipButton>
+                        </div>
+                        <Numpad
+                            onKey={(key: NumpadKey) => setAmount((prev) => inputNumpadKey(prev, key))}
+                        />
+                        <Button disabled={numpadKopecks(amount) === 0}>Создать платеж</Button>
                     </div>
                 </div>
 
