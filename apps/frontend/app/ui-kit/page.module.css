@@ -1,4 +1,5 @@
 .page {
+  width: 100%;
   padding: 48px 24px;
   max-width: 1200px;
   margin: 0 auto;
@@ -52,7 +53,9 @@
 
 .textFields {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* min(280px, 100%): на узких экранах колонка сжимается до контейнера,
+     витрина не распирает страницу за вьюпорт */
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 24px;
   align-items: start;
 }

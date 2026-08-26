@@ -405,7 +405,7 @@ export function DesignLayerShowcase(): JSX.Element {
                     <div className={styles.column} style={{ maxWidth: 560 }}>
                         <AmountField value={amount} onChange={setAmount} label="Сумма" />
                         <div className="flex flex-col items-center gap-3">
-                            <div role="group" aria-label="Форма оплаты" className="flex justify-center gap-2">
+                            <div role="group" aria-label="Форма оплаты" className="flex flex-wrap justify-center gap-2">
                                 <ChipButton
                                     trailingIcon={<ChangeHorizontal />}
                                     selected={paymentForm === 'transfer'}
@@ -421,7 +421,7 @@ export function DesignLayerShowcase(): JSX.Element {
                                     Наличные
                                 </ChipButton>
                             </div>
-                            <div role="group" aria-label="Направление" className="flex justify-center gap-2">
+                            <div role="group" aria-label="Направление" className="flex flex-wrap justify-center gap-2">
                                 <ChipButton
                                     trailingIcon={<ChangeHorizontal />}
                                     selected={direction === 'income'}
@@ -472,12 +472,7 @@ export function DesignLayerShowcase(): JSX.Element {
                             subtitleIcon={<StarOff />}
                             value="2 500 ₽"
                             description="11 сентября"
-                            trailing={
-                                <span className={styles.links}>
-                                    <IconButton icon={<StarOff />} label="В избранное" />
-                                    <IconButton icon={<Move />} label="Переставить" />
-                                </span>
-                            }
+                            trailing={<IconButton icon={<Move />} label="Переставить" />}
                         />
                         <ListRow
                             leading={<StatusIcon status="danger" />}

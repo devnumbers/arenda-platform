@@ -585,6 +585,15 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Страница — flex-item body с min-width:auto: без обнуления любой
+   несжимаемый контент (широкий ListRow, input с intrinsic-размером)
+   распирает всё тело и молча обрезается overflow-x: hidden вместо
+   сжатия. Ширину дальше контролируют сами страницы (max-width,
+   overflow-стратегии списков/таблиц). */
+body > * {
+    min-width: 0;
+}
+
 @layer base {
     * {
         box-sizing: border-box;
