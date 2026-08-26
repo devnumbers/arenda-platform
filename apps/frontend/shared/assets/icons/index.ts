@@ -90,3 +90,7 @@ export { default as StatusIconInfo } from './status-icon-info.svg';
 // Дизайн-слой платежей, тикет #459: «смена направления» 24×24 чипов суммы
 // (currentColor) — Figma 835:19789.
 export { default as ChangeHorizontal } from './change-horizontal.svg';
+
+// Глобальный хром новых экранов (#460): цветной лого «Рентли» 112×28
+// десктопного top-header — Figma I948:48576;934:19655 (цвета запечены в SVG).
+export { default as RentlyLogo } from './rently-logo.svg';
