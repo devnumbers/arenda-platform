@@ -269,3 +269,94 @@ func TestTick_CategorySnapshotFromCatalog(t *testing.T) {
 		t.Fatalf("category label = %q, want the catalog label for slug utilities", label)
 	}
 }
+
+func TestTickZoneSweep_MaterializesEveryZoneOnItsOwnToday(t *testing.T) {
+	t.Parallel()
+	// The worker's hourly sweep (ADR 0048 p.3, ticket #458) over one
+	// database: the same instant is already the 26th in Kamchatka and still
+	// the 25th in Moscow, and every zone's owners materialize on their own
+	// zone's date in their own unit of work.
+	h := newPaymentsHarness(t)
+	kamchatka := h.withOwner("Asia/Kamchatka")
+	kPayment := kamchatka.seedPayment("2026-08-20", `{"kind":"daily"}`, false)
+	moscow := h.withOwner("Europe/Moscow")
+	mPayment := moscow.seedPayment("2026-08-20", `{"kind":"daily"}`, false)
+
+	if err := h.tick.RunZoneTicks(h.ctx(), h.clock.now); err != nil {
+		t.Fatalf("run zone sweep: %v", err)
+	}
+
+	kOps := statusesOf(h.operationsOf(kPayment))
+	if got := kOps[day26]; got != opPlanned {
+		t.Fatalf("Kamchatka today (2026-08-26) = %q, want planned — the sweep's today follows the zone", got)
+	}
+	if got := kOps["2026-08-27"]; got != opPlanned {
+		t.Fatalf("Kamchatka future planned (2026-08-27) = %q, want planned", got)
+	}
+	if len(kOps) != 8 {
+		t.Fatalf("Kamchatka operations = %d, want 8 (due 20th–26th + one future)", len(kOps))
+	}
+
+	mOps := statusesOf(h.operationsOf(mPayment))
+	if got := mOps[day25]; got != opPlanned {
+		t.Fatalf("Moscow today (2026-08-25) = %q, want planned", got)
+	}
+	if got := mOps[day26]; got != opPlanned {
+		t.Fatalf("Moscow future planned (2026-08-26) = %q, want planned", got)
+	}
+	if got := mOps["2026-08-27"]; got != "" {
+		t.Fatalf("Moscow 2026-08-27 = %q, want absent — Moscow is still on the 25th", got)
+	}
+
+	// The rerun between the zones' midnights is a full no-op (ADR 0048 p.3):
+	// same rows, same timestamps — the dedup key converges without writing.
+	before := append([]opRow(nil), h.operationsOf(kPayment)...)
+	before = append(before, h.operationsOf(mPayment)...)
+	if err := h.tick.RunZoneTicks(h.ctx(), h.clock.now); err != nil {
+		t.Fatalf("rerun zone sweep: %v", err)
+	}
+	after := append([]opRow(nil), h.operationsOf(kPayment)...)
+	after = append(after, h.operationsOf(mPayment)...)
+	if len(before) != len(after) {
+		t.Fatalf("rerun changed row count: %d → %d", len(before), len(after))
+	}
+	for i := range before {
+		if before[i] != after[i] {
+			t.Fatalf("rerun rewrote row %+v → %+v", before[i], after[i])
+		}
+	}
+}
+
+func TestTickZoneSweep_ArchivedPropertyOwnerIsNotATarget(t *testing.T) {
+	t.Parallel()
+	// The zone listing follows the tick's own scope (ADR 0049 §3): an owner
+	// whose only rules hang on an archived property is not a sweep target at
+	// all — no unit of work is opened for the zone-less owner.
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	paymentID := h.seedPayment(day22, `{"kind":"daily"}`, false)
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE properties SET status = 'archived' WHERE id = $1`, h.propID,
+	); err != nil {
+		t.Fatalf("archive property: %v", err)
+	}
+
+	if err := h.tick.RunZoneTicks(h.ctx(), h.clock.now); err != nil {
+		t.Fatalf("run zone sweep: %v", err)
+	}
+
+	if ops := h.operationsOf(paymentID); len(ops) != 0 {
+		t.Fatalf("archived property got %d operations, want 0 — its owner is not a sweep target", len(ops))
+	}
+}
+
+func TestTickZoneSweep_NoZonesIsSuccessfulNoop(t *testing.T) {
+	t.Parallel()
+	// An empty zone list is a successful no-op run, not an error: the
+	// heartbeat of a healthy-but-empty platform still advances (ADR 0048
+	// p.3 — the alert watches a silent worker, not an empty one).
+	h := newPaymentsHarness(t)
+
+	if err := h.tick.RunZoneTicks(h.ctx(), h.clock.now); err != nil {
+		t.Fatalf("run zone sweep over no zones: %v", err)
+	}
+}

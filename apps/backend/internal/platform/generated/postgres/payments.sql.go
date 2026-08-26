@@ -614,6 +614,45 @@ func (q *Queries) ListTickPaymentsByOwner(ctx context.Context, ownerID pgtype.UU
 	return items, nil
 }
 
+const listTickZones = `-- name: ListTickZones :many
+SELECT DISTINCT u.timezone, pay.owner_id
+FROM payments pay
+JOIN properties pr ON pr.id = pay.property_id
+JOIN users u ON u.id = pay.owner_id
+WHERE pr.status IN ('active', 'maintenance')
+ORDER BY u.timezone, pay.owner_id
+`
+
+type ListTickZonesRow struct {
+	Timezone string      `json:"timezone"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
+}
+
+// The hourly zone sweep of the tick worker (ADR 0048 p.3): the distinct owner
+// timezones having payment rules on active/maintenance properties, with the
+// data owners of each zone. One "today" is computed per zone in Go; owners
+// without rules on such properties are not sweep targets. Stateless — every
+// run re-lists, no per-zone or per-owner tick state is kept.
+func (q *Queries) ListTickZones(ctx context.Context) ([]ListTickZonesRow, error) {
+	rows, err := q.db.Query(ctx, listTickZones)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTickZonesRow{}
+	for rows.Next() {
+		var i ListTickZonesRow
+		if err := rows.Scan(&i.Timezone, &i.OwnerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockOwnerTickProperties = `-- name: LockOwnerTickProperties :many
 
 SELECT id FROM properties

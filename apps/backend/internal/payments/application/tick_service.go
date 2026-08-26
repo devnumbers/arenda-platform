@@ -16,23 +16,28 @@ import (
 // hourly worker (#458) and the in-mutation reruns safe.
 //
 // The tick body itself is txStores.tickOwner, a capability of any open
-// transaction of this context. RunOwnerTick is the standalone driver — the
-// worker's door (ticket #458) and the only caller outside the package;
-// context mutations reach the same body exclusively through the mutateRule
-// conveyor, inside their own transaction after their change (ADR 0048,
-// decision №1). Calling RunOwnerTick from inside a mutation transaction
-// would self-deadlock on the second FOR UPDATE of the owner's property rows
-// — the conveyor makes that path unreachable.
+// transaction of this context. RunZoneTicks is the worker's hourly door
+// (ticket #458) — the only production caller outside a mutation; the tests'
+// single-owner door is RunOwnerTick; context mutations reach the same body
+// exclusively through the mutateRule conveyor, inside their own transaction
+// after their change (ADR 0048, decision №1). Calling RunOwnerTick from
+// inside a mutation transaction would self-deadlock on the second FOR UPDATE
+// of the owner's property rows — the conveyor makes that path unreachable.
 type TickService struct {
 	txStoreFactory
+	zones    TickZoneDirectory
 	calendar OwnerCalendar
+	metrics  *Metrics
 }
 
-// NewTickService builds the tick service over the transactional store factory
-// and the owner calendar. A nil calendar is a wiring mistake; the service
-// fails on first use rather than silently writing with a zero date.
-func NewTickService(factory txStoreFactory, calendar OwnerCalendar) *TickService {
-	return &TickService{txStoreFactory: factory, calendar: calendar}
+// NewTickService builds the tick service over the transactional store factory,
+// the tick zone directory of the hourly sweep (ADR 0048 p.3), the owner
+// calendar and the heartbeat metrics. A nil calendar is a wiring mistake; the
+// service fails on first use rather than silently writing with a zero date.
+func NewTickService(
+	factory txStoreFactory, zones TickZoneDirectory, calendar OwnerCalendar, metrics *Metrics,
+) *TickService {
+	return &TickService{txStoreFactory: factory, zones: zones, calendar: calendar, metrics: metrics}
 }
 
 // RunOwnerTick materializes one owner's payment rules as of the owner's
@@ -49,6 +54,56 @@ func (s *TickService) RunOwnerTick(ctx context.Context, ownerID uuid.UUID) error
 	return s.runInTx(ctx, func(stores *txStores) error {
 		return stores.tickOwner(ctx, ownerID, today)
 	})
+}
+
+// RunZoneTicks is the hourly worker sweep of the whole context (ticket #458,
+// ADR 0048 p.3): list the zones, compute one today per zone from the passed
+// instant, and materialize every owner of the zone in its own unit of work.
+// Failures are isolated — a broken zone or owner does not stop the rest; the
+// joined error reports everything that failed. A run without failures
+// records the heartbeat (an empty zone list included: a no-op run is a
+// successful run, a silent worker is the alert's business).
+func (s *TickService) RunZoneTicks(ctx context.Context, now time.Time) error {
+	if s.zones == nil {
+		return errors.New("payments tick: tick zone directory must be configured")
+	}
+	zones, err := s.zones.ListTickZones(ctx)
+	if err != nil {
+		return fmt.Errorf("list tick zones: %w", err)
+	}
+	var errs []error
+	for _, zone := range zones {
+		today, err := zoneToday(now, zone.Timezone)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		for _, ownerID := range zone.Owners {
+			if err := s.runInTx(ctx, func(stores *txStores) error {
+				return stores.tickOwner(ctx, ownerID, today)
+			}); err != nil {
+				errs = append(errs, fmt.Errorf("tick owner %s of zone %s: %w", ownerID, zone.Timezone, err))
+			}
+		}
+	}
+	err = errors.Join(errs...)
+	if err == nil {
+		s.metrics.RecordTickSuccess(ctx, now)
+	}
+	return err
+}
+
+// zoneToday computes the sweep's "today" for one zone (ADR 0048 p.2): the
+// calendar date of the instant in the zone's IANA location under the
+// module's UTC-midnight date convention. An unknown zone name is a data
+// integrity error, not a fallback case: users.timezone is IANA-validated on
+// write.
+func zoneToday(now time.Time, timezone string) (time.Time, error) {
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("load tick zone %q as location: %w", timezone, err)
+	}
+	return DateAtUTCMidnight(now, loc), nil
 }
 
 // tickOwner is the materialization tick body inside an open transaction of

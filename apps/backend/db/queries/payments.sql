@@ -93,6 +93,19 @@ WHERE payment_id = $1
 -- 'Europe/Moscow' default (migration 000088); IANA-validated on write.
 SELECT timezone FROM users WHERE id = $1;
 
+-- name: ListTickZones :many
+-- The hourly zone sweep of the tick worker (ADR 0048 p.3): the distinct owner
+-- timezones having payment rules on active/maintenance properties, with the
+-- data owners of each zone. One "today" is computed per zone in Go; owners
+-- without rules on such properties are not sweep targets. Stateless — every
+-- run re-lists, no per-zone or per-owner tick state is kept.
+SELECT DISTINCT u.timezone, pay.owner_id
+FROM payments pay
+JOIN properties pr ON pr.id = pay.property_id
+JOIN users u ON u.id = pay.owner_id
+WHERE pr.status IN ('active', 'maintenance')
+ORDER BY u.timezone, pay.owner_id;
+
 -- Payment CRUD and pause/resume (ticket #457, ADR 0049 §4). Reads and writes
 -- are scoped by the data owner (ADR 0028: SQL filters by scope, the policy
 -- port has already resolved the actor's role); the nested path payment→property

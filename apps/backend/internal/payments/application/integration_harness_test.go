@@ -94,13 +94,14 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 	audit := auditapp.NewService(auditpg.NewWriter(pool), clk)
 	uow := pgdb.NewUoW(pool, logger)
 	calendar := paymentspg.NewOwnerCalendar(pool, clk)
+	zones := paymentspg.NewTickZoneDirectory(pool)
 	factory := paymentsapp.NewTxStoreFactory(tickStore, paymentStore, propertyStore, audit, uow)
 
 	return &paymentsHarness{
 		t:     t,
 		pool:  pool,
 		clock: clk,
-		tick:  paymentsapp.NewTickService(factory, calendar),
+		tick:  paymentsapp.NewTickService(factory, zones, calendar, nil),
 		svc:   paymentsapp.NewPaymentService(factory, calendar, policy),
 	}
 }

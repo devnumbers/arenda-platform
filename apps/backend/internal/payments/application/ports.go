@@ -139,3 +139,30 @@ type TickStore interface {
 type OwnerCalendar interface {
 	Today(ctx context.Context, ownerID uuid.UUID) (time.Time, error)
 }
+
+// DateAtUTCMidnight is the module's date convention (ADR 0048 p.2): read
+// the instant's calendar date in loc, then rebuild it at UTC midnight, so
+// the result compares correctly against the UTC-midnight dates stored in
+// DATE columns. The single home of the normalization both calendar paths —
+// the owner lookup and the zone sweep — share.
+func DateAtUTCMidnight(t time.Time, loc *time.Location) time.Time {
+	zoned := t.In(loc)
+	return time.Date(zoned.Year(), zoned.Month(), zoned.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// TickZone is one work item of the tick's hourly zone sweep (ADR 0048 p.3):
+// a distinct owner timezone and the data owners in it that have payment rules
+// on active/maintenance properties. One "today" is computed per zone and
+// every owner of the zone is materialized on it.
+type TickZone struct {
+	Timezone string
+	Owners   []uuid.UUID
+}
+
+// TickZoneDirectory lists the hourly sweep targets of the materialization
+// tick (ADR 0048 p.3). Stateless by design: every run re-lists the zones —
+// idempotent materialization makes the midnights-between runs no-ops, so no
+// per-zone or per-owner tick state is kept.
+type TickZoneDirectory interface {
+	ListTickZones(ctx context.Context) ([]TickZone, error)
+}

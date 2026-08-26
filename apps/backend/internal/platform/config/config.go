@@ -65,6 +65,7 @@ type Config struct {
 	EncryptionKey                       string
 	BillingWorkerInterval               time.Duration
 	PaymentReconciliationWorkerInterval time.Duration
+	PaymentsTickWorkerInterval          time.Duration
 	IdentityCleanerInterval             time.Duration
 	IdentityCleanerRetention            time.Duration
 	LogSuccessfulRequests               bool
@@ -822,53 +823,44 @@ func (c *Config) loadPhotoStorage() error {
 	return nil
 }
 
+// workerInterval loads one worker interval env: the default when unset, a
+// parsed positive duration when set. Shared by every scheduler-interval
+// knob of loadSchedulerIntervals.
+func workerInterval(env string, def time.Duration) (time.Duration, error) {
+	v := os.Getenv(env)
+	if v == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s %q: %w", env, v, err)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("%s must be positive", env)
+	}
+	return d, nil
+}
+
 func (c *Config) loadSchedulerIntervals() error {
-	c.BillingWorkerInterval = time.Hour
-	if v := os.Getenv("BILLING_WORKER_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid BILLING_WORKER_INTERVAL %q: %w", v, err)
-		}
-		if d <= 0 {
-			return errors.New("BILLING_WORKER_INTERVAL must be positive")
-		}
-		c.BillingWorkerInterval = d
+	var err error
+	if c.BillingWorkerInterval, err = workerInterval("BILLING_WORKER_INTERVAL", time.Hour); err != nil {
+		return err
 	}
-
-	c.PaymentReconciliationWorkerInterval = 5 * time.Minute
-	if v := os.Getenv("PAYMENT_RECONCILIATION_WORKER_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid PAYMENT_RECONCILIATION_WORKER_INTERVAL %q: %w", v, err)
-		}
-		if d <= 0 {
-			return errors.New("PAYMENT_RECONCILIATION_WORKER_INTERVAL must be positive")
-		}
-		c.PaymentReconciliationWorkerInterval = d
+	if c.PaymentReconciliationWorkerInterval, err = workerInterval("PAYMENT_RECONCILIATION_WORKER_INTERVAL", 5*time.Minute); err != nil {
+		return err
 	}
-
-	c.IdentityCleanerInterval = time.Hour
-	if v := os.Getenv("IDENTITY_CLEANER_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid IDENTITY_CLEANER_INTERVAL %q: %w", v, err)
-		}
-		if d <= 0 {
-			return errors.New("IDENTITY_CLEANER_INTERVAL must be positive")
-		}
-		c.IdentityCleanerInterval = d
+	// The payments materialization tick sweeps hourly by default (ADR 0048
+	// p.3): one pass over the owner timezones per hour, idempotent between
+	// the zones' midnights, with an automatic catch-up after a missed hour.
+	if c.PaymentsTickWorkerInterval, err = workerInterval("PAYMENTS_TICK_WORKER_INTERVAL", time.Hour); err != nil {
+		return err
 	}
-
-	c.IdentityCleanerRetention = 7 * 24 * time.Hour
-	if v := os.Getenv("IDENTITY_CLEANER_RETENTION"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid IDENTITY_CLEANER_RETENTION %q: %w", v, err)
-		}
-		if d <= 0 {
-			return errors.New("IDENTITY_CLEANER_RETENTION must be positive")
-		}
-		c.IdentityCleanerRetention = d
+	if c.IdentityCleanerInterval, err = workerInterval("IDENTITY_CLEANER_INTERVAL", time.Hour); err != nil {
+		return err
+	}
+	// The retention keeps its own week-long default, not the cleaner's hour.
+	if c.IdentityCleanerRetention, err = workerInterval("IDENTITY_CLEANER_RETENTION", 7*24*time.Hour); err != nil {
+		return err
 	}
 	return nil
 }

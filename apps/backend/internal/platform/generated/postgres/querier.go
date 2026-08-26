@@ -324,6 +324,12 @@ type Querier interface {
 	// category's current name resolved for the materialization snapshot. Pauses
 	// are listed separately (ListTickPausesByPaymentIDs).
 	ListTickPaymentsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickPaymentsByOwnerRow, error)
+	// The hourly zone sweep of the tick worker (ADR 0048 p.3): the distinct owner
+	// timezones having payment rules on active/maintenance properties, with the
+	// data owners of each zone. One "today" is computed per zone in Go; owners
+	// without rules on such properties are not sweep targets. Stateless — every
+	// run re-lists, no per-zone or per-owner tick state is kept.
+	ListTickZones(ctx context.Context) ([]ListTickZonesRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
 	// Payments context queries (ADR 0049, ticket #454).
 	//

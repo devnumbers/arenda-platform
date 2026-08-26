@@ -22,8 +22,9 @@ import (
 
 // Compile-time conformance of the adapters to the consumer-declared ports.
 var (
-	_ application.TickStore     = (*TickStore)(nil)
-	_ application.OwnerCalendar = (*OwnerCalendar)(nil)
+	_ application.TickStore         = (*TickStore)(nil)
+	_ application.OwnerCalendar     = (*OwnerCalendar)(nil)
+	_ application.TickZoneDirectory = (*TickZoneDirectory)(nil)
 )
 
 // TickStore is the postgres adapter of the materialization tick port.
@@ -222,6 +223,37 @@ func (c *OwnerCalendar) Today(ctx context.Context, ownerID uuid.UUID) (time.Time
 	if err != nil {
 		return time.Time{}, fmt.Errorf("load owner timezone %q as location: %w", name, err)
 	}
-	now := c.clock.Now().In(loc)
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), nil
+	return application.DateAtUTCMidnight(c.clock.Now(), loc), nil
+}
+
+// TickZoneDirectory is the postgres adapter of the hourly sweep port
+// (ADR 0048 p.3): the distinct owner timezones with payment rules on
+// active/maintenance properties, each with its owners. The grouping of the
+// flat DISTINCT rows into zones is this adapter's business.
+type TickZoneDirectory struct {
+	db postgres.DBTX
+}
+
+// NewTickZoneDirectory creates a zone directory over the given connection or
+// pool.
+func NewTickZoneDirectory(db postgres.DBTX) *TickZoneDirectory {
+	return &TickZoneDirectory{db: db}
+}
+
+// ListTickZones returns the sweep targets grouped by timezone, in the
+// query's timezone order; owners within a zone keep the query's owner order.
+func (d *TickZoneDirectory) ListTickZones(ctx context.Context) ([]application.TickZone, error) {
+	rows, err := postgres.New(d.db).ListTickZones(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tick zones: %w", err)
+	}
+	zones := make([]application.TickZone, 0, len(rows))
+	for _, row := range rows {
+		if len(zones) == 0 || zones[len(zones)-1].Timezone != row.Timezone {
+			zones = append(zones, application.TickZone{Timezone: row.Timezone})
+		}
+		last := &zones[len(zones)-1]
+		last.Owners = append(last.Owners, pgconv.UUIDFromPgtype(row.OwnerID))
+	}
+	return zones, nil
 }

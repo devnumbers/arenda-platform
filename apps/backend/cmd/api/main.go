@@ -101,9 +101,13 @@ func run() error {
 	setBillingLifecycleBridges(billingMod, propertiesMod, accessMod)
 
 	// 7.5 Payments (ADR 0049): the payment rule CRUD service with its tick
-	//     stores and the owner calendar; wired after access so the
-	//     membership-aware policy resolves the actor/scope matrix (ADR 0028).
-	paymentsMod := wire.WirePayments(p)
+	//     stores, the owner calendar and the tick zone sweep with its
+	//     heartbeat metrics; wired after access so the membership-aware
+	//     policy resolves the actor/scope matrix (ADR 0028).
+	paymentsMod, err := wire.WirePayments(p)
+	if err != nil {
+		return err
+	}
 
 	// 8. Cross-module user_registered subscribers.
 	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
@@ -125,7 +129,7 @@ func run() error {
 	// 11. Popups service.
 	popupsMod := wire.WirePopups(p)
 
-	// 12. Background workers (3 goroutines). Started before the HTTP server so
+	// 12. Background workers (4 goroutines). Started before the HTTP server so
 	//     they are live while serving. The Web Push sender was constructed in
 	//     step 9 together with the grace notification delivery.
 	workers := wire.NewWorkers(
@@ -134,6 +138,7 @@ func run() error {
 		identityMod.CodeRepo,
 		identityMod.AttemptRepo,
 		billingMod.Services.Workers,
+		paymentsMod.TickService,
 	)
 
 	// 13. HTTP rate limiters.
