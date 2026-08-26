@@ -132,7 +132,7 @@
     background-color: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition: background-color var(--dl-duration-fast) var(--dl-ease), color var(--dl-duration-fast) var(--dl-ease);
 }
 
 @media (hover: hover) {
@@ -287,12 +287,12 @@
     position: absolute;
     width: 100%;
     transform: translate3d(0, var(--y), 0) scale(var(--s));
-    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform var(--dl-duration-move) var(--dl-ease);
 }
 
 .toast[data-collapsed] .body,
 .toast[data-collapsed] .closeButton {
-    transition: opacity 0.1s;
+    transition: opacity var(--dl-duration-fast) var(--dl-ease);
 }
 
 .toast[data-collapsed='false'] {

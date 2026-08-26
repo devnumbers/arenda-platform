@@ -24,7 +24,7 @@
   border-radius: 24px;
   background: var(--color-white);
   box-shadow: none;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition: background-color var(--dl-duration-fast) var(--dl-ease), border-color var(--dl-duration-fast) var(--dl-ease);
 }
 
 @media (hover: hover) {

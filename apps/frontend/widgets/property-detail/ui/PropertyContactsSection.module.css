@@ -11,7 +11,7 @@
   background: var(--color-secondary-bg);
   text-decoration: none;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--dl-duration-fast) var(--dl-ease);
 }
 
 @media (hover: hover) {

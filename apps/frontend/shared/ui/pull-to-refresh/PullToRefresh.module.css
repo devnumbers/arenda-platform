@@ -23,7 +23,7 @@
    inline). Opacity ramps to 1 as the pull grows. */
 .pulling {
     opacity: 1;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--dl-duration-fast) var(--dl-ease);
 }
 
 /* Armed: pull crossed the threshold; spinner is at full scale, about to start

@@ -64,7 +64,7 @@
   background-color: var(--color-white);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dl-duration-fast) var(--dl-ease);
 }
 
 @media (hover: hover) {

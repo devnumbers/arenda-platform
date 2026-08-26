@@ -12,7 +12,7 @@
   color: #1e1e1e;
   text-decoration: none;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dl-duration-fast) var(--dl-ease);
 }
 
 @media (hover: hover) {

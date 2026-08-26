@@ -43,7 +43,7 @@
   line-height: var(--line-height-text-m);
   color: var(--color-text);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dl-duration-fast) var(--dl-ease);
 }
 
 .listItem[data-active='true'] {

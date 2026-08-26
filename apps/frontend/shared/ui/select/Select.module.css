@@ -40,7 +40,7 @@
   border: 2px solid transparent;
   border-radius: var(--radius-input);
   padding: 10px 44px 10px 16px;
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color var(--dl-duration-fast) var(--dl-ease), border-color var(--dl-duration-fast) var(--dl-ease), box-shadow var(--dl-duration-fast) var(--dl-ease);
 }
 
 @media (hover: hover) {
@@ -111,7 +111,7 @@
   line-height: var(--line-height-text-m);
   color: var(--color-text);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dl-duration-fast) var(--dl-ease);
 }
 
 @media (hover: hover) {

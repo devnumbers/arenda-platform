@@ -55,7 +55,7 @@
   height: 6px;
   border-radius: 32px;
   background: var(--color-secondary-bg);
-  transition: background-color 0.2s ease;
+  transition: background-color var(--dl-duration-fast) var(--dl-ease);
 }
 
 .segment.active {

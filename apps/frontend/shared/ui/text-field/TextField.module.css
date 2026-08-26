@@ -28,7 +28,7 @@
   background-color: var(--color-secondary-bg);
   border: 2px solid transparent;
   border-radius: var(--radius-input);
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color var(--dl-duration-fast) var(--dl-ease), border-color var(--dl-duration-fast) var(--dl-ease), box-shadow var(--dl-duration-fast) var(--dl-ease);
 }
 
 @media (hover: hover) {
@@ -134,7 +134,7 @@
   line-height: var(--line-height-text-m);
   color: var(--color-text-muted);
   pointer-events: none;
-  transition: top 0.15s ease, transform 0.15s ease, font-size 0.15s ease, line-height 0.15s ease;
+  transition: top var(--dl-duration-fast) var(--dl-ease), transform var(--dl-duration-fast) var(--dl-ease), font-size var(--dl-duration-fast) var(--dl-ease), line-height var(--dl-duration-fast) var(--dl-ease);
 }
 
 .withIcon .floatingLabel {
