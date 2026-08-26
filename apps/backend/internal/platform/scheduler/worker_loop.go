@@ -1,5 +1,6 @@
-// Package scheduler holds the periodic workers: billing subscription phases
-// and payment reconciliation on advisory-locked ticker loops.
+// Package scheduler holds the periodic workers: billing subscription phases,
+// payment reconciliation and the payments tick on advisory-locked,
+// wall-clock aligned loops.
 package scheduler
 
 import (
@@ -10,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
 // advisoryLockReleaseTimeout bounds the lock-release call. It runs on a context
@@ -18,15 +20,14 @@ import (
 const advisoryLockReleaseTimeout = 5 * time.Second
 
 // runTickerLoop drives a periodic scheduler worker: one tick immediately at
-// startup, then one tick per interval, until ctx is cancelled. A tick error is
-// logged (with the worker name) and does not stop the loop — the next tick
-// retries. It is the shared Run skeleton extracted from the billing and
-// payment reconciliation workers (issue #337).
+// startup — a restart does not postpone catch-up until the next boundary —
+// then one tick per wall-clock boundary of the interval (hourly workers at
+// the top of each hour; the deploy time no longer sets the phase), until ctx
+// is cancelled. A tick error is logged (with the worker name) and does not
+// stop the loop — the next boundary retries. It is the shared Run skeleton
+// extracted from the billing and payment reconciliation workers (issue #337).
 func runTickerLoop(ctx context.Context, worker string, interval time.Duration, logger *slog.Logger, tick func(context.Context) error) {
 	logger.InfoContext(ctx, "worker started", "worker", worker, "interval", interval.String())
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
 
 	runTick := func() {
 		if err := tick(ctx); err != nil {
@@ -36,10 +37,15 @@ func runTickerLoop(ctx context.Context, worker string, interval time.Duration, l
 	runTick()
 
 	for {
+		// A timer, not a ticker: each round re-aims at the next wall-clock
+		// boundary, so a slow tick or a clock correction cannot desynchronize
+		// the schedule from the wall.
+		timer := time.NewTimer(time.Until(timeutil.NextBoundary(time.Now(), interval)))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			runTick()
 		}
 	}

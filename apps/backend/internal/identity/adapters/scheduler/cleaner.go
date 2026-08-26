@@ -9,6 +9,7 @@ import (
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/timeutil"
 )
 
 // Consumer-side, single-method ports (ADR 0035). The Cleaner is the only
@@ -67,19 +68,23 @@ func NewCleaner(
 }
 
 // Run starts the cleanup loop and blocks until ctx is cancelled. The first
-// cycle runs immediately so a restart does not postpone cleanup by a full
-// interval; subsequent cycles run on the ticker.
+// cycle runs immediately so a restart does not postpone cleanup until the
+// next boundary; subsequent cycles run on the wall-clock boundaries of the
+// interval (top of the hour for the hourly default) — the same wall-aligned
+// schedule rule as the platform scheduler workers, so no run time depends on
+// the deploy.
 func (c *Cleaner) Run(ctx context.Context) {
 	c.clean(ctx)
 
-	ticker := time.NewTicker(c.interval)
-	defer ticker.Stop()
-
 	for {
+		// A timer re-aimed at the next wall-clock boundary each round, not a
+		// deploy-anchored ticker (see platform/scheduler worker_loop.go).
+		timer := time.NewTimer(time.Until(timeutil.NextBoundary(time.Now(), c.interval)))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			c.clean(ctx)
 		}
 	}

@@ -35,3 +35,15 @@ func BeforeDay(a, b time.Time) bool {
 	}
 	return a.Day() < b.Day()
 }
+
+// NextBoundary returns the first wall-clock instant strictly after now that
+// lies on the interval grid anchored at the Unix epoch: hourly workers fire
+// at the top of each hour, five-minute ones on the xx:00/:05/:10 grid, and
+// intervals that do not divide the hour (90m) keep their own stable grid
+// (00:00, 01:30, 03:00…). Scheduling against these boundaries keeps a
+// worker's phase independent of its deploy time. The grid is absolute
+// (UTC), not local: a wall clock in another location shows the same
+// instants at shifted wall times.
+func NextBoundary(now time.Time, interval time.Duration) time.Time {
+	return now.Truncate(interval).Add(interval)
+}

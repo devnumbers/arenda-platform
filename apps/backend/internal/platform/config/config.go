@@ -849,12 +849,6 @@ func (c *Config) loadSchedulerIntervals() error {
 	if c.PaymentReconciliationWorkerInterval, err = workerInterval("PAYMENT_RECONCILIATION_WORKER_INTERVAL", 5*time.Minute); err != nil {
 		return err
 	}
-	// The payments materialization tick sweeps hourly by default (ADR 0048
-	// p.3): one pass over the owner timezones per hour, idempotent between
-	// the zones' midnights, with an automatic catch-up after a missed hour.
-	if c.PaymentsTickWorkerInterval, err = workerInterval("PAYMENTS_TICK_WORKER_INTERVAL", time.Hour); err != nil {
-		return err
-	}
 	if c.IdentityCleanerInterval, err = workerInterval("IDENTITY_CLEANER_INTERVAL", time.Hour); err != nil {
 		return err
 	}
@@ -862,6 +856,13 @@ func (c *Config) loadSchedulerIntervals() error {
 	if c.IdentityCleanerRetention, err = workerInterval("IDENTITY_CLEANER_RETENTION", 7*24*time.Hour); err != nil {
 		return err
 	}
+
+	// The payments tick cadence is fixed by ADR 0048 p.3 — one sweep over
+	// the owner timezones per hour, idempotent between the zones' midnights,
+	// with an automatic catch-up after a missed hour. Unlike the workers
+	// above it is a domain decision, not an operational knob: deliberately
+	// not tunable through the environment.
+	c.PaymentsTickWorkerInterval = time.Hour
 	return nil
 }
 
