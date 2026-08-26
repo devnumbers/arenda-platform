@@ -46,7 +46,6 @@ import {
     amountKopecks,
     monthTitle,
 } from '@/shared/ui/design';
-import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import styles from './page.module.css';
 
 const dlButtonVariants = ['primary', 'secondary', 'danger', 'clear', 'white'] as const;
@@ -405,8 +404,12 @@ export function DesignLayerShowcase(): JSX.Element {
                     </p>
                     <div className={styles.column} style={{ maxWidth: 560 }}>
                         <AmountField value={amount} onChange={setAmount} label="Сумма" />
+                        {/* одинаковая ширина обеих кнопок: при переключении
+                            значений (Перевод↔Наличные, Доход↔Расход) вёрстка
+                            не дёргается */}
                         <div className="flex justify-center gap-2">
                             <ChipButton
+                                className="w-40"
                                 trailingIcon={<ChangeHorizontal />}
                                 aria-label={`Форма оплаты: ${paymentForm === 'transfer' ? 'Перевод' : 'Наличные'}. Нажмите, чтобы переключить`}
                                 onClick={() => setPaymentForm((prev) => (prev === 'transfer' ? 'cash' : 'transfer'))}
@@ -414,6 +417,7 @@ export function DesignLayerShowcase(): JSX.Element {
                                 {paymentForm === 'transfer' ? 'Перевод' : 'Наличные'}
                             </ChipButton>
                             <ChipButton
+                                className="w-40"
                                 trailingIcon={<ChangeHorizontal />}
                                 aria-label={`Направление: ${direction === 'income' ? 'Доход' : 'Расход'}. Нажмите, чтобы переключить`}
                                 onClick={() => setDirection((prev) => (prev === 'income' ? 'expense' : 'income'))}
@@ -421,9 +425,6 @@ export function DesignLayerShowcase(): JSX.Element {
                                 {direction === 'income' ? 'Доход' : 'Расход'}
                             </ChipButton>
                         </div>
-                        <p className="text-center text-sm text-content-secondary">
-                            К оплате: {formatMoneyKopecks(amountKopecks(amount))}
-                        </p>
                         <Button disabled={amountKopecks(amount) === 0}>Создать платеж</Button>
                     </div>
                 </div>
