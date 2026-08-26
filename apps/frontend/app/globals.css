@@ -113,13 +113,13 @@
 
     /* Единое движение (см. --dl-ease в tokens.css, решение 2026-08-26):
        переопределение дефолтов делает ВСЕ transition-* утилиты дизайн-слоя
-       наследующими кривую Apple и 250ms без правки компонентов; именованные
-       длительности/кривая — для явного использования (движение 350ms). */
+       наследующими кривую Apple и 250ms без правки компонентов; явная
+       кривая — утилита ease-apple; токен-зависимая длительность — v4-шорткат
+       вида duration-(--dl-duration-move) (именные --duration-* ключи
+       утилит не генерируют). */
     --default-transition-duration: var(--dl-duration-fast);
     --default-transition-timing-function: var(--dl-ease);
     --ease-apple: var(--dl-ease);
-    --duration-fast: var(--dl-duration-fast);
-    --duration-move: var(--dl-duration-move);
 }
 
 /* Адаптивная модалка-шелл (дизайн-слой): узкие экраны — нижний шит
