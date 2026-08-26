@@ -21,7 +21,7 @@ import (
 // application service satisfies it; the handler tests run against func-backed
 // fakes.
 type OperationsManager interface {
-	PayOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (domain.Operation, error)
+	PayOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	ListPaymentOperations(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 		cmd application.OperationsListQuery,
@@ -110,18 +110,13 @@ func (h *OperationsHandlers) PayOperation(
 		return
 	}
 
-	op, err := h.svc.PayOperation(r.Context(), actor, propertyID, operationID)
+	item, err := h.svc.PayOperation(r.Context(), actor, propertyID, operationID)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	resp := operationResponse(application.OperationListItem{
-		Operation: op,
-		// The pay result is paid by contract — no recomputation needed.
-		ViewStatus: domain.ViewStatusPaid,
-	})
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(item))
 }
 
 // handleOperationError maps an application error onto the wire contract via
@@ -152,8 +147,9 @@ func newListOperationsQuery(
 		Status:   status,
 		DateFrom: datePtrFromWire(dateFrom),
 		DateTo:   datePtrFromWire(dateTo),
-		// Contract default: anything but an explicit asc sorts descending.
-		Desc: !asc,
+		// Zero value = the contract's descending default; an explicit asc
+		// parameter is the only thing that can flip it, and only here.
+		Asc: asc,
 	}
 	if limit != nil {
 		query.Limit = *limit

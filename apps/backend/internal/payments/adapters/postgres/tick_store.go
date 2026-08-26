@@ -1,6 +1,7 @@
 // Package postgres holds the payments persistence adapters: the tick store
-// (materialization queries of ADR 0049 §3) and the owner calendar (ADR 0048).
-// Payment CRUD repositories arrive with their tickets (#457).
+// (materialization queries of ADR 0049 §3), the owner calendar (ADR 0048),
+// the payment rule CRUD store with its favorite flag (#457, #461), and the
+// operation store of the second contracts slice (#461).
 package postgres
 
 import (

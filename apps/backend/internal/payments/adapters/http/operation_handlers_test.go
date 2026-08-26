@@ -24,7 +24,7 @@ import (
 
 // fakeOperationsManager is the func-backed OperationsManager double.
 type fakeOperationsManager struct {
-	pay   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (domain.Operation, error)
+	pay   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	byPay func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 		cmd application.OperationsListQuery,
@@ -37,9 +37,9 @@ type fakeOperationsManager struct {
 
 func (f *fakeOperationsManager) PayOperation(
 	ctx context.Context, actor, propertyID, operationID uuid.UUID,
-) (domain.Operation, error) {
+) (application.OperationListItem, error) {
 	if f.pay == nil {
-		return domain.Operation{}, errors.New("unexpected PayOperation call")
+		return application.OperationListItem{}, errors.New("unexpected PayOperation call")
 	}
 	return f.pay(ctx, actor, propertyID, operationID)
 }
@@ -160,8 +160,8 @@ func TestListPaymentOperations_FoldsParamsIntoCommand(t *testing.T) {
 	if gotCmd.Status == nil || *gotCmd.Status != domain.ViewStatusOverdue {
 		t.Errorf("cmd.Status = %v, want overdue", gotCmd.Status)
 	}
-	if gotCmd.Desc {
-		t.Error("order=asc lost: Desc = true, want false")
+	if gotCmd.Asc != true {
+		t.Errorf("order=asc lost: Asc = %v, want true", gotCmd.Asc)
 	}
 	if gotCmd.DateFrom == nil || gotCmd.DateTo == nil {
 		t.Errorf("period = %v..%v, want both bounds carried", gotCmd.DateFrom, gotCmd.DateTo)
@@ -209,8 +209,8 @@ func TestListPaymentOperations_DefaultsAreDescPage50(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
-	if !gotCmd.Desc {
-		t.Error("default direction = asc, want desc")
+	if gotCmd.Asc {
+		t.Error("default direction = asc, want the descending contract default")
 	}
 	if gotCmd.Status != nil {
 		t.Errorf("status = %v, want none", gotCmd.Status)
@@ -321,9 +321,12 @@ func TestPayOperation_HappyPathAndConflicts(t *testing.T) {
 		t.Parallel()
 		var gotID uuid.UUID
 		svc := &fakeOperationsManager{
-			pay: func(_ context.Context, _, _, operationID uuid.UUID) (domain.Operation, error) {
+			pay: func(_ context.Context, _, _, operationID uuid.UUID) (application.OperationListItem, error) {
 				gotID = operationID
-				return paidOp, nil
+				return application.OperationListItem{
+					Operation:  paidOp,
+					ViewStatus: domain.ViewStatusPaid,
+				}, nil
 			},
 		}
 		h := NewOperationsHandlers(svc, nil)
@@ -357,8 +360,8 @@ func TestPayOperation_HappyPathAndConflicts(t *testing.T) {
 	t.Run("a repeated pay maps to 409", func(t *testing.T) {
 		t.Parallel()
 		svc := &fakeOperationsManager{
-			pay: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domain.Operation, error) {
-				return domain.Operation{}, application.ErrAlreadyPaid
+			pay: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (application.OperationListItem, error) {
+				return application.OperationListItem{}, application.ErrAlreadyPaid
 			},
 		}
 		h := NewOperationsHandlers(svc, nil)
@@ -378,8 +381,8 @@ func TestPayOperation_HappyPathAndConflicts(t *testing.T) {
 	t.Run("a viewer pays nothing", func(t *testing.T) {
 		t.Parallel()
 		svc := &fakeOperationsManager{
-			pay: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domain.Operation, error) {
-				return domain.Operation{}, application.ErrForbidden
+			pay: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (application.OperationListItem, error) {
+				return application.OperationListItem{}, application.ErrForbidden
 			},
 		}
 		h := NewOperationsHandlers(svc, nil)

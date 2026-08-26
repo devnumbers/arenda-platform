@@ -132,10 +132,11 @@ func (s *PaymentService) CreatePayment(
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("create payment: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{
-				Response:     draft,
-				Audit:        auditdomain.ActionPaymentCreated,
-				Tick:         true,
-				RereadRuleID: &draft.ID,
+				Response:        draft,
+				Audit:           auditdomain.ActionPaymentCreated,
+				AuditEntityID:   &draft.ID,
+				Tick:            true,
+				RereadPaymentID: &draft.ID,
 			}, nil
 		})
 }
@@ -194,11 +195,12 @@ func (s *PaymentService) UpdatePayment(
 				return mutationOutcome[domain.Payment]{}, err
 			}
 			return mutationOutcome[domain.Payment]{
-				Response:     rule,
-				Audit:        auditdomain.ActionPaymentUpdated,
-				AuditCtx:     map[string]any{"fields": updatedFields(cmd)},
-				Tick:         true,
-				RereadRuleID: &rule.ID,
+				Response:        rule,
+				Audit:           auditdomain.ActionPaymentUpdated,
+				AuditEntityID:   &rule.ID,
+				AuditCtx:        map[string]any{"fields": updatedFields(cmd)},
+				Tick:            true,
+				RereadPaymentID: &rule.ID,
 			}, nil
 		})
 }
@@ -228,9 +230,10 @@ func (s *PaymentService) DeletePayment(
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("delete payment: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{
-				Response: rule,
-				Audit:    auditdomain.ActionPaymentDeleted,
-				AuditCtx: map[string]any{"keep_overdue": keepOverdue},
+				Response:      rule, // The pre-delete state; nothing re-reads it.
+				Audit:         auditdomain.ActionPaymentDeleted,
+				AuditEntityID: &rule.ID,
+				AuditCtx:      map[string]any{"keep_overdue": keepOverdue},
 			}, nil
 		})
 	return err
@@ -253,10 +256,11 @@ func (s *PaymentService) PausePayment(
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("insert pause: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{
-				Response:     rule,
-				Audit:        auditdomain.ActionPaymentPaused,
-				Tick:         true,
-				RereadRuleID: &rule.ID,
+				Response:        rule,
+				Audit:           auditdomain.ActionPaymentPaused,
+				AuditEntityID:   &rule.ID,
+				Tick:            true,
+				RereadPaymentID: &rule.ID,
 			}, nil
 		})
 }
@@ -277,10 +281,11 @@ func (s *PaymentService) ResumePayment(
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("close active pause: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{
-				Response:     rule,
-				Audit:        auditdomain.ActionPaymentResumed,
-				Tick:         true,
-				RereadRuleID: &rule.ID,
+				Response:        rule,
+				Audit:           auditdomain.ActionPaymentResumed,
+				AuditEntityID:   &rule.ID,
+				Tick:            true,
+				RereadPaymentID: &rule.ID,
 			}, nil
 		})
 }
@@ -301,9 +306,10 @@ func (s *PaymentService) SetPaymentFavorite(
 			}
 			rule.IsFavorite = favorite
 			return mutationOutcome[domain.Payment]{
-				Response: rule,
-				Audit:    auditdomain.ActionPaymentUpdated,
-				AuditCtx: map[string]any{"fields": []string{"favorite"}},
+				Response:      rule,
+				Audit:         auditdomain.ActionPaymentUpdated,
+				AuditEntityID: &rule.ID,
+				AuditCtx:      map[string]any{"fields": []string{"favorite"}},
 			}, nil
 		})
 }

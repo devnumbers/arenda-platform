@@ -23,8 +23,8 @@ func TestPrepareOperationsQuery(t *testing.T) {
 		if q.Offset != 0 {
 			t.Errorf("offset = %d, want 0", q.Offset)
 		}
-		if q.Desc {
-			t.Error("Desc set by prepare, want untouched — the direction is the transport's default")
+		if q.Asc {
+			t.Error("Asc set by prepare, want untouched — zero value already IS the descending default")
 		}
 	})
 

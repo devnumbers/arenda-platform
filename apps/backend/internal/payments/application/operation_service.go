@@ -30,7 +30,9 @@ type OperationsListQuery struct {
 	DateTo   *time.Time
 	Limit    int
 	Offset   int
-	Desc     bool
+	// Asc is false by default and by contract: sorting is newest-first unless
+	// explicitly requested otherwise.
+	Asc bool
 	// Today carries the owner's today the overdue semantics are resolved
 	// against; set by the service, never by callers.
 	Today time.Time
@@ -93,9 +95,9 @@ func NewOperationService(factory txStoreFactory, calendar OwnerCalendar, policy 
 // ErrNotFound.
 func (s *OperationService) PayOperation(
 	ctx context.Context, actor, propertyID, operationID uuid.UUID,
-) (domain.Operation, error) {
+) (OperationListItem, error) {
 	conveyor := s.conveyor()
-	return runMutation(conveyor, ctx, actor, propertyID, uuid.Nil, s.writeGate,
+	paidOp, err := runMutation(conveyor, ctx, actor, propertyID, uuid.Nil, s.writeGate,
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.Payment, today time.Time,
 		) (mutationOutcome[domain.Operation], error) {
@@ -124,6 +126,13 @@ func (s *OperationService) PayOperation(
 			}
 			return outcome, nil
 		})
+	if err != nil {
+		return OperationListItem{}, err
+	}
+	return OperationListItem{
+		Operation:  paidOp,
+		ViewStatus: domain.OperationView(paidOp, *paidOp.PaidDate),
+	}, nil
 }
 
 // ListPaymentOperations returns one rule's operations paginated, filtered and

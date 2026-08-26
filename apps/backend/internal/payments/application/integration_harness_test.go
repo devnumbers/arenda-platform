@@ -217,42 +217,57 @@ func (h *paymentsHarness) runTick() {
 	}
 }
 
-// opRow is the tick family's projection of one materialized operation: the
-// full row identity, so a no-op rerun can be proven by comparing timestamps.
+// operationFullRow is the projection-free row of the shared operations
+// loader: everything any test family needs, read once.
+type operationFullRow struct {
+	Date                 string
+	Status               string
+	PaidDate             *string
+	AmountKopecks        int64
+	CreatedAt, UpdatedAt time.Time
+}
+
+// loadOperations reads a rule's ordered operations straight from the table —
+// the single SQL home of both families' fixtures inspection.
+func (h *paymentsHarness) loadOperations(t *testing.T, paymentID uuid.UUID) []operationFullRow {
+	t.Helper()
+	rows, err := h.pool.Query(h.ctx(), `
+		SELECT date::text, status, paid_date::text, amount_kopecks, created_at, updated_at
+		FROM operations WHERE payment_id = $1 ORDER BY date`, paymentID)
+	if err != nil {
+		t.Fatalf("query operations: %v", err)
+	}
+	defer rows.Close()
+
+	out := []operationFullRow{}
+	for rows.Next() {
+		var r operationFullRow
+		var paid *string
+		if err := rows.Scan(&r.Date, &r.Status, &paid, &r.AmountKopecks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			t.Fatalf("scan operation: %v", err)
+		}
+		r.PaidDate = paid
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate operations: %v", err)
+	}
+	return out
+}
+
+// opRow is the tick family's projection of one materialized operation.
 type opRow struct {
 	date     string
 	status   string
 	paidDate *string
 }
 
-// operationsOf loads the payment's operations with full row identity
-// (created_at, updated_at included).
+// operationsOf projects the shared loader onto the tick family's shape.
 func (h *paymentsHarness) operationsOf(paymentID uuid.UUID) []opRow {
-	h.t.Helper()
-	rows, err := h.pool.Query(h.ctx(), `
-		SELECT date::text, status, paid_date::text, created_at, updated_at
-		FROM operations WHERE payment_id = $1 ORDER BY date`, paymentID)
-	if err != nil {
-		h.t.Fatalf("query operations: %v", err)
-	}
-	defer rows.Close()
-
-	out := []opRow{}
-	for rows.Next() {
-		var (
-			r       opRow
-			created time.Time
-			updated time.Time
-			paid    *string
-		)
-		if err := rows.Scan(&r.date, &r.status, &paid, &created, &updated); err != nil {
-			h.t.Fatalf("scan operation: %v", err)
-		}
-		r.paidDate = paid
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		h.t.Fatalf("iterate operations: %v", err)
+	rows := h.loadOperations(h.t, paymentID)
+	out := make([]opRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, opRow{date: row.Date, status: row.Status, paidDate: row.PaidDate})
 	}
 	return out
 }
@@ -274,26 +289,13 @@ type svcOp struct {
 	amount int64
 }
 
-// opsOf loads the payment's operations ordered by date.
+// opsOf projects the shared loader onto the use-case family's shape.
 func (h *paymentsHarness) opsOf(t *testing.T, paymentID uuid.UUID) []svcOp {
 	t.Helper()
-	rows, err := h.pool.Query(h.ctx(), `
-		SELECT date::text, status, amount_kopecks
-		FROM operations WHERE payment_id = $1 ORDER BY date`, paymentID)
-	if err != nil {
-		t.Fatalf("query operations: %v", err)
-	}
-	defer rows.Close()
-	out := []svcOp{}
-	for rows.Next() {
-		var r svcOp
-		if err := rows.Scan(&r.date, &r.status, &r.amount); err != nil {
-			t.Fatalf("scan operation: %v", err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate operations: %v", err)
+	rows := h.loadOperations(t, paymentID)
+	out := make([]svcOp, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, svcOp{date: row.Date, status: row.Status, amount: row.AmountKopecks})
 	}
 	return out
 }

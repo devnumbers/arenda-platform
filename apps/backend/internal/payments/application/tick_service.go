@@ -19,7 +19,7 @@ import (
 // transaction of this context. RunZoneTicks is the worker's hourly door
 // (ticket #458) — the only production caller outside a mutation; the tests'
 // single-owner door is RunOwnerTick; context mutations reach the same body
-// exclusively through the mutateRule conveyor, inside their own transaction
+// exclusively through the runMutation conveyor, inside their own transaction
 // after their change (ADR 0048, decision №1). Calling RunOwnerTick from
 // inside a mutation transaction would self-deadlock on the second FOR UPDATE
 // of the owner's property rows — the conveyor makes that path unreachable.

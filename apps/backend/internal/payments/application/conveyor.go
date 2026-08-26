@@ -24,8 +24,8 @@ import (
 // creation the new draft travels out with the outcome, and in the operation
 // mutations the change proves existence from its own store), applies its
 // change inside the open transaction and produces one typed outcome: the
-// caller-facing response payload plus the audit entry, the tick verdict and
-// the optional post-commit re-read.
+// caller-facing response payload plus its explicit audit target, the tick
+// verdict and the optional post-commit re-read.
 type changeStep[T any] func(
 	ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
 ) (mutationOutcome[T], error)
@@ -33,13 +33,13 @@ type changeStep[T any] func(
 // mutationOutcome is the change step's single verdict channel: everything the
 // caller and the machine need after the transaction — no side channels.
 type mutationOutcome[T any] struct {
-	// Response travels to the use case's caller verbatim unless RereadRuleID
+	// Response travels to the use case's caller verbatim unless RereadPaymentID
 	// asks for a post-commit re-read; then the freshly read rule replaces it.
 	Response T
 	// Audit records this mutation inside the same transaction (fail-safe,
-	// ADR 0020). AuditEntity/AuditEntityID retarget the entry away from the
-	// rule: operation.paid targets the operation row, not its originating
-	// rule. Empty entity type defaults to the payment.
+	// ADR 0020). Every step states its audit target explicitly: there is no
+	// derivation from Response, so reshaping an outcome can never silently
+	// NULL the audit trail. Empty entity type defaults to the payment.
 	Audit         auditdomain.Action
 	AuditCtx      map[string]any
 	AuditEntity   auditdomain.EntityType
@@ -47,9 +47,10 @@ type mutationOutcome[T any] struct {
 	// Tick runs the materialization tick for the owner after the change;
 	// every use case states its need explicitly (deletion sets false).
 	Tick bool
-	// RereadRuleID asks the conveyor to re-read this stored rule after commit
-	// so the response carries persisted timestamps, pauses and category view.
-	RereadRuleID *uuid.UUID
+	// RereadPaymentID asks the conveyor to re-read this stored payment after
+	// commit so the response carries persisted timestamps, pauses and category
+	// view. Only payment-shaped outcomes set it — the name carries that fact.
+	RereadPaymentID *uuid.UUID
 }
 
 // mutationGates bundles the dependencies the conveyor needs beyond the
@@ -102,11 +103,6 @@ func runMutation[T any](
 			entityType = auditdomain.EntityPayment
 		}
 		entityID := out.AuditEntityID
-		if entityID == nil {
-			if p, ok := any(out.Response).(domain.Payment); ok && p.ID != uuid.Nil {
-				entityID = &p.ID
-			}
-		}
 		if err := recordAudit(ctx, stores, actor, role, out.Audit, entityType, entityID, out.AuditCtx); err != nil {
 			return err
 		}
@@ -118,10 +114,10 @@ func runMutation[T any](
 	if err != nil {
 		return zero, err
 	}
-	if out.RereadRuleID == nil {
+	if out.RereadPaymentID == nil {
 		return out.Response, nil
 	}
-	return rereadPayment[T](g, ctx, scope, propertyID, *out.RereadRuleID)
+	return rereadPayment[T](g, ctx, scope, propertyID, *out.RereadPaymentID)
 }
 
 // rereadPayment re-reads the stored rule after commit so the response carries

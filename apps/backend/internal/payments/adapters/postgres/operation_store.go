@@ -126,7 +126,7 @@ func listOperationsParams(
 	params.Today = pgconv.DateToPgtype(q.Today)
 	params.DateFrom = pgconv.DatePtrToPgtype(q.DateFrom)
 	params.DateTo = pgconv.DatePtrToPgtype(q.DateTo)
-	params.Order = operationsOrder(q.Desc)
+	params.Order = operationsOrder(q.Asc)
 	params.Offset = paginationToInt32(q.Offset)
 	params.Limit = paginationToInt32(q.Limit)
 	return params
@@ -158,13 +158,13 @@ func operationsStatusFilter(status *domain.OperationViewStatus) string {
 	return string(*status)
 }
 
-// operationsOrder encodes the sort direction ('asc' | 'desc'); the default in
-// the domain is desc — newest first.
-func operationsOrder(desc bool) string {
-	if desc {
-		return "desc"
+// operationsOrder encodes the sort direction ('asc' | 'desc'); false encodes
+// the contract default — desc, newest first.
+func operationsOrder(asc bool) string {
+	if asc {
+		return "asc"
 	}
-	return "asc"
+	return "desc"
 }
 
 // paginationToInt32 narrows the validated pagination values onto SQL's LIMIT/

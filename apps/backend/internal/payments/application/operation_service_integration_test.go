@@ -95,7 +95,7 @@ func (h *paymentsHarness) listCmd(status *domain.OperationViewStatus, limit, off
 		Status: status,
 		Limit:  limit,
 		Offset: offset,
-		Desc:   !asc,
+		Asc:    asc,
 	}
 }
 
@@ -131,10 +131,10 @@ func TestPayOperation_PaysOnOwnersTodayAndConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pay now: %v", err)
 	}
-	gotDate := paid.PaidDate.Format(time.DateOnly)
-	if paid.Status != domain.StatusPaid || gotDate != day25 {
+	gotDate := paid.Operation.PaidDate.Format(time.DateOnly)
+	if paid.Operation.Status != domain.StatusPaid || gotDate != day25 {
 		t.Fatalf("paid state = %s/%s, want paid on the Moscow today (%s)",
-			paid.Status, gotDate, day25)
+			paid.Operation.Status, gotDate, day25)
 	}
 
 	_, err = h.ops.PayOperation(h.ctx(), h.owner, h.propID, target)
@@ -189,7 +189,7 @@ func TestPayOperation_PaidDateFollowsOwnerTimezone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pay now: %v", err)
 	}
-	if got := paid.PaidDate.Format(time.DateOnly); got != day26 {
+	if got := paid.Operation.PaidDate.Format(time.DateOnly); got != day26 {
 		t.Fatalf("paid_date = %s, want the Kamchatka today (%s)", got, day26)
 	}
 }
@@ -337,7 +337,7 @@ func TestOperationsListing_PeriodFilterIsInclusive(t *testing.T) {
 
 	from := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
-	cmd := paymentsapp.OperationsListQuery{DateFrom: &from, DateTo: &to, Limit: 50, Desc: true}
+	cmd := paymentsapp.OperationsListQuery{DateFrom: &from, DateTo: &to, Limit: 50}
 	window, err := h.ops.ListPaymentOperations(h.ctx(), h.owner, h.propID, pay, cmd)
 	if err != nil {
 		t.Fatalf("period filter: %v", err)
@@ -456,8 +456,8 @@ func TestOperationsRoleMatrix_FullAccessMemberActs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("full access pay: %v", err)
 	}
-	if paid.Status != domain.StatusPaid {
-		t.Fatal("full access pay produced a non-paid operation")
+	if paid.Operation.Status != domain.StatusPaid {
+		full.t.Fatal("full access pay produced a non-paid operation")
 	}
 	if _, err := full.ops.ListPaymentOperations(full.ctx(), member, full.propID, created.ID, full.listCmd(nil, 50, 0, false)); err != nil {
 		t.Fatalf("full access listing: %v", err)
