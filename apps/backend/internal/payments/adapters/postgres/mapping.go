@@ -39,6 +39,7 @@ type paymentRowFields struct {
 	UserCategoryName pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	IsFavorite       bool
 }
 
 // paymentFieldsFromTickRow converts a tick listing row; the tick's rows carry
@@ -65,6 +66,7 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		UserCategoryName: row.UserCategoryName,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
+		IsFavorite:       row.IsFavorite,
 	}
 }
 
@@ -79,6 +81,7 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		UserCategoryName: row.UserCategoryName,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
+		IsFavorite:       row.IsFavorite,
 	}
 }
 
@@ -107,8 +110,9 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 			UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
 			UserCategoryName: pgconv.TextToPtrString(row.UserCategoryName),
 		},
-		CreatedAt: pgconv.TimestamptzToTime(row.CreatedAt),
-		UpdatedAt: pgconv.TimestamptzToTime(row.UpdatedAt),
+		CreatedAt:  pgconv.TimestamptzToTime(row.CreatedAt),
+		UpdatedAt:  pgconv.TimestamptzToTime(row.UpdatedAt),
+		IsFavorite: row.IsFavorite,
 	}, nil
 }
 
@@ -144,4 +148,91 @@ func paymentIDs(payments []domain.Payment) []uuid.UUID {
 		ids[i] = p.ID
 	}
 	return ids
+}
+
+// operationRowFields is the column shape shared by the operation reads of the
+// adapter (the single get and the two paginated lists select the same
+// columns; sqlc generates one row struct per query).
+type operationRowFields struct {
+	ID            pgtype.UUID
+	OwnerID       pgtype.UUID
+	PropertyID    pgtype.UUID
+	PaymentID     pgtype.UUID
+	Origin        string
+	Date          pgtype.Date
+	PaidDate      pgtype.Date
+	Status        string
+	Type          string
+	Title         string
+	AmountKopecks int64
+	PaymentForm   pgtype.Text
+	CategoryLabel string
+	CategorySlug  pgtype.Text
+}
+
+func operationRowFieldsFromGet(row postgres.GetOperationByIDRow) operationRowFields {
+	return operationRowFields{
+		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID,
+		PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
+		PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
+		Title: row.Title, AmountKopecks: row.AmountKopecks,
+		PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
+		CategorySlug: row.CategorySlug,
+	}
+}
+
+func operationRowFieldsFromList(
+	row postgres.ListOperationsByPaymentRow,
+) operationRowFields {
+	return operationRowFields{
+		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID,
+		PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
+		PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
+		Title: row.Title, AmountKopecks: row.AmountKopecks,
+		PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
+		CategorySlug: row.CategorySlug,
+	}
+}
+
+func operationRowFieldsFromPropertyList(
+	row postgres.ListOperationsByPropertyRow,
+) operationRowFields {
+	return operationRowFields{
+		ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID,
+		PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
+		PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
+		Title: row.Title, AmountKopecks: row.AmountKopecks,
+		PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
+		CategorySlug: row.CategorySlug,
+	}
+}
+
+// mapOperationRow maps the shared row shape to the domain operation.
+func mapOperationRow(row operationRowFields) domain.Operation {
+	return domain.Operation{
+		ID:            pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
+		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
+		PaymentID:     pgconv.UUIDFromPgtypePtr(row.PaymentID),
+		Origin:        domain.OperationOrigin(row.Origin),
+		Date:          pgconv.DateFromPgtype(row.Date),
+		PaidDate:      pgconv.DatePtrFromPgtype(row.PaidDate),
+		Status:        domain.OperationStatus(row.Status),
+		Type:          domain.PaymentType(row.Type),
+		Title:         row.Title,
+		AmountKopecks: row.AmountKopecks,
+		PaymentForm:   formFromPgText(row.PaymentForm),
+		CategoryLabel: row.CategoryLabel,
+		CategorySlug:  pgconv.TextToPtrString(row.CategorySlug),
+	}
+}
+
+// formFromPgText converts the nullable payment_form snapshot; an absent value
+// leaves room for manual operations (ADR 0049 §1).
+func formFromPgText(t pgtype.Text) *domain.PaymentForm {
+	if !t.Valid || t.String == "" {
+		return nil
+	}
+	form := domain.PaymentForm(t.String)
+	return &form
 }

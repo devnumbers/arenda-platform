@@ -17,6 +17,7 @@ import (
 type txStores struct {
 	tick       TickStore
 	payments   PaymentStore
+	operations OperationStore
 	properties PropertyStore
 	audit      auditapp.Recorder
 }
@@ -25,11 +26,12 @@ type txStores struct {
 // Unit-of-Work and builds a transactional txStores from each runInTx call
 // (ADR 0033 γ-factory). Build it once with NewTxStoreFactory at the wire
 // layer and pass the same value to every payments service, so adding the Nth
-// repository (ticket #461) is a change to one constructor call. The
-// non-transactional stores also serve the read side of the use cases.
+// repository is a change to one constructor call. The non-transactional
+// stores also serve the read side of the use cases.
 type txStoreFactory struct {
 	tick       TickStore
 	payments   PaymentStore
+	operations OperationStore
 	properties PropertyStore
 	audit      auditapp.Recorder
 	uow        transaction.UoW
@@ -42,8 +44,8 @@ type txStoreFactory struct {
 // callers use := to hold it (standard Go pattern for a factory returning an
 // unexported type).
 func NewTxStoreFactory(
-	tick TickStore, payments PaymentStore, properties PropertyStore,
-	audit auditapp.Recorder, uow transaction.UoW,
+	tick TickStore, payments PaymentStore, operations OperationStore,
+	properties PropertyStore, audit auditapp.Recorder, uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
@@ -51,6 +53,7 @@ func NewTxStoreFactory(
 	return txStoreFactory{
 		tick:       tick,
 		payments:   payments,
+		operations: operations,
 		properties: properties,
 		audit:      audit,
 		uow:        uow,
@@ -74,6 +77,10 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind payment store to tx: %w", err)
 		}
+		operations, err := f.operations.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind operation store to tx: %w", err)
+		}
 		properties, err := f.properties.WithTx(tx)
 		if err != nil {
 			return fmt.Errorf("bind property store to tx: %w", err)
@@ -81,6 +88,7 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		return work(&txStores{
 			tick:       tick,
 			payments:   payments,
+			operations: operations,
 			properties: properties,
 			audit:      f.audit.WithTx(tx),
 		})

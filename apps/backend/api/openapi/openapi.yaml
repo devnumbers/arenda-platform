@@ -856,6 +856,148 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/payments/{paymentId}/operations:
+    get:
+      operationId: listPaymentOperations
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/OperationsStatusFilter'
+        - $ref: '#/components/parameters/OperationsDateFrom'
+        - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsOrder'
+        - $ref: '#/components/parameters/OperationsLimit'
+        - $ref: '#/components/parameters/OperationsOffset'
+      responses:
+        '200':
+          description: Payment operations list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/payments/{paymentId}/favorite:
+    put:
+      operationId: setPaymentFavorite
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FavoriteUpdateRequest'
+      responses:
+        '200':
+          description: Payment favorite state set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/operations:
+    get:
+      operationId: listPropertyOperations
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/OperationsStatusFilter'
+        - $ref: '#/components/parameters/OperationsDateFrom'
+        - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsOrder'
+        - $ref: '#/components/parameters/OperationsLimit'
+        - $ref: '#/components/parameters/OperationsOffset'
+      responses:
+        '200':
+          description: Property operations list (overdue included with status=overdue)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/operations/{operationId}/pay:
+    post:
+      operationId: payOperation
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Operation paid now (planned → paid, paidDate = today in the owner's timezone; the schedule does not shift)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/access/members:
     post:
       operationId: createPropertyAccessMember
@@ -2482,6 +2624,61 @@ components:
         type: string
         format: uuid
 
+    OperationsStatusFilter:
+      name: status
+      in: query
+      required: false
+      description: >-
+        Filter by the operation's view status. overdue is not stored anywhere —
+        the server computes it against today in the property owner's timezone
+        (planned with the date already past), so clients never need the owner's
+        timezone.
+      schema:
+        type: string
+        enum: [planned, paid, overdue]
+    OperationsDateFrom:
+      name: date_from
+      in: query
+      required: false
+      description: Inclusive lower bound of the period on the operation date.
+      schema:
+        type: string
+        format: date
+    OperationsDateTo:
+      name: date_to
+      in: query
+      required: false
+      description: Inclusive upper bound of the period on the operation date.
+      schema:
+        type: string
+        format: date
+    OperationsOrder:
+      name: order
+      in: query
+      required: false
+      description: Sort by the operation date; asc (oldest first) or desc (default, newest first).
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+    OperationsLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 100
+    OperationsOffset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+
   schemas:
 
     SendCodeRequest:
@@ -3690,7 +3887,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -3722,6 +3919,9 @@ components:
           enum: [transfer, cash]
         category:
           $ref: '#/components/schemas/CategoryView'
+        isFavorite:
+          type: boolean
+          description: The rule's favorite star (PUT favorite); returned in the reads and the lists.
         pauses:
           type: array
           items:
@@ -3741,6 +3941,75 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentResponse'
+
+    FavoriteUpdateRequest:
+      description: >-
+        The favorite toggle body of PUT favorite (an atomic UPDATE on the
+        server — never a read-modify-write PATCH).
+      type: object
+      required: [favorite]
+      properties:
+        favorite:
+          type: boolean
+
+    OperationResponse:
+      description: >-
+        One operation of the Payments context: a payment occurrence or a
+        manual fact. status carries overdue as a server-computed view status
+        (planned with the date already past in the property owner's timezone).
+      type: object
+      required: [id, propertyId, paymentId, date, paidDate, status, type, title, amountKopecks, paymentForm, categoryLabel, categorySlug]
+      properties:
+        id:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        paymentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The originating rule; null marks it deleted or the fact manual.
+        date:
+          type: string
+          format: date
+        paidDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [planned, paid, overdue]
+        type:
+          type: string
+          enum: [income, expense]
+        title:
+          type: string
+        amountKopecks:
+          type: integer
+          format: int64
+        paymentForm:
+          type: string
+          enum: [transfer, cash]
+          nullable: true
+          description: Snapshot of the rule's form; null leaves room for manual operations.
+        categoryLabel:
+          type: string
+          description: Category label snapshot frozen at materialization time.
+        categorySlug:
+          type: string
+          nullable: true
+          description: Default-catalog slug snapshot for icon rendering; null when absent.
+
+    OperationsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationResponse'
 
     PropertyAccessMemberRole:
       type: string

@@ -1,11 +1,11 @@
 meta {
-  name: List Payments
+  name: Get Payment Favorite Readback
   type: http
-  seq: 2
+  seq: 15
 }
 
 get {
-  url: {{baseUrl}}/properties/{{propertyId}}/payments
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{opsPaymentId}}
   body: none
   auth: none
 }
@@ -23,14 +23,7 @@ tests {
     expect(res.status).to.equal(200);
   });
 
-  test("should include the created payment", function() {
-    const items = res.body.items || [];
-    expect(items.some(p => p.id === bru.getEnvVar("paymentId"))).to.be.true;
-  });
-
-  test("should carry isFavorite on every listed rule", function() {
-    for (const item of res.body.items) {
-      expect(item.isFavorite).to.be.a("boolean");
-    }
+  test("should read back the favorite star", function() {
+    expect(res.body.isFavorite).to.equal(true);
   });
 }

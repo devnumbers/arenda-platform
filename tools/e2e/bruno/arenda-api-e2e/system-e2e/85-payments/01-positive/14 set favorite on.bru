@@ -1,0 +1,39 @@
+meta {
+  name: Set Payment Favorite On
+  type: http
+  seq: 13
+}
+
+put {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{opsPaymentId}}/favorite
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "favorite": true
+  }
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should carry the favorite star", function() {
+    expect(res.body.isFavorite).to.equal(true);
+  });
+}

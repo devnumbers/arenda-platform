@@ -8,11 +8,13 @@ import (
 )
 
 // Payments holds the payments module's services wired by WirePayments: the
-// payment rule use cases and the materialization tick service — the worker's
-// single door to the tick (ticket #458 registers it in the scheduler).
+// payment rule use cases, the operation use cases (pay now and the listings,
+// ticket #461) and the materialization tick service — the worker's single
+// door to the tick (ticket #458 registers it in the scheduler).
 type Payments struct {
-	PaymentService *paymentsapp.PaymentService
-	TickService    *paymentsapp.TickService
+	PaymentService   *paymentsapp.PaymentService
+	OperationService *paymentsapp.OperationService
+	TickService      *paymentsapp.TickService
 }
 
 // WirePayments constructs the payments context (ADR 0049): the tick store,
@@ -25,6 +27,7 @@ type Payments struct {
 func WirePayments(p platformDeps) (*Payments, error) {
 	tickStore := paymentspg.NewTickStore(p.DB)
 	paymentStore := paymentspg.NewPaymentStore(p.DB)
+	operationStore := paymentspg.NewOperationStore(p.DB)
 	propertyStore := paymentspg.NewPropertyStore(p.DB)
 	calendar := paymentspg.NewOwnerCalendar(p.DB, p.Clock)
 	zones := paymentspg.NewTickZoneDirectory(p.DB)
@@ -32,6 +35,7 @@ func WirePayments(p platformDeps) (*Payments, error) {
 	factory := paymentsapp.NewTxStoreFactory(
 		tickStore,
 		paymentStore,
+		operationStore,
 		propertyStore,
 		p.AuditRecorder,
 		p.UoW,
@@ -43,7 +47,8 @@ func WirePayments(p platformDeps) (*Payments, error) {
 	}
 
 	return &Payments{
-		PaymentService: paymentsapp.NewPaymentService(factory, calendar, p.Policy),
-		TickService:    paymentsapp.NewTickService(factory, zones, calendar, metrics),
+		PaymentService:   paymentsapp.NewPaymentService(factory, calendar, p.Policy),
+		OperationService: paymentsapp.NewOperationService(factory, calendar, p.Policy),
+		TickService:      paymentsapp.NewTickService(factory, zones, calendar, metrics),
 	}, nil
 }

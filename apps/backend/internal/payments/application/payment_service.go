@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -79,77 +78,15 @@ func NewPaymentService(factory txStoreFactory, calendar OwnerCalendar, policy sh
 	return &PaymentService{txStoreFactory: factory, calendar: calendar, policy: policy}
 }
 
-// changeStep is the use-case-specific part of the mutation conveyor: it
-// receives the loaded rule (a zero rule for creation), applies its change
-// inside the open transaction and tells the conveyor the audit entry, the
-// tick and the re-read verdicts.
-type changeStep func(
-	ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
-) (domain.Payment, mutationOutcome, error)
-
-// mutationOutcome is the change step's verdict for the conveyor: the audit
-// entry to record in the same transaction, whether the materialization tick
-// runs after the change (deletion resolves its plan explicitly and skips
-// it), and whether the stored rule is re-read after commit for the response.
-type mutationOutcome struct {
-	audit    auditdomain.Action
-	auditCtx map[string]any
-	tick     bool
-	reread   bool
-}
-
-// mutateRule is the mutation conveyor shared by every payment use case. It
-// runs, in one transaction and in this order: the role gate, the property
-// serialization lock (FOR UPDATE — ADR 0049 §3), the owner's today, the load
-// of the target rule (skipped for a zero paymentID — creation mints its
-// own), the change step, its audit entry, and the materialization tick after
-// the change. The change step is the only use-case-specific part; after
-// commit the conveyor re-reads the stored rule so the response carries the
-// persisted timestamps, pauses and category view.
+// mutateRule runs the shared mutation conveyor (conveyor.go) over this
+// service's factory and calendar.
 func (s *PaymentService) mutateRule(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 	gate func(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error),
 	change changeStep,
 ) (domain.Payment, error) {
-	role, err := gate(ctx, actor, propertyID)
-	if err != nil {
-		return domain.Payment{}, err
-	}
-	var scope, ruleID uuid.UUID
-	var outcome mutationOutcome
-	err = s.runInTx(ctx, func(stores *txStores) error {
-		prop, today, err := s.lockActiveProperty(ctx, stores, propertyID)
-		if err != nil {
-			return err
-		}
-		scope = prop.OwnerID
-		rule := domain.Payment{}
-		if paymentID != uuid.Nil {
-			rule, err = stores.payments.Get(ctx, paymentID, scope, propertyID)
-			if err != nil {
-				return err
-			}
-		}
-		rule, outcome, err = change(ctx, stores, scope, rule, today)
-		if err != nil {
-			return err
-		}
-		ruleID = rule.ID
-		if err := recordAudit(ctx, stores, actor, role, outcome.audit, &rule.ID, outcome.auditCtx); err != nil {
-			return err
-		}
-		if outcome.tick {
-			return stores.tickOwner(ctx, scope, today)
-		}
-		return nil
-	})
-	if err != nil {
-		return domain.Payment{}, err
-	}
-	if !outcome.reread {
-		return domain.Payment{}, nil
-	}
-	return s.payments.Get(ctx, ruleID, scope, propertyID)
+	gates := mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
+	return gates.runMutation(ctx, actor, propertyID, paymentID, gate, change)
 }
 
 // CreatePayment creates a payment rule on the property. The rule acts from
@@ -322,116 +259,50 @@ func (s *PaymentService) ResumePayment(
 		})
 }
 
-// lockActiveProperty loads the property with its row locked — the mutation's
-// serialization point (ADR 0049 §3) — resolves the owner's today and rejects
-// the financial read-only archived state.
-func (s *PaymentService) lockActiveProperty(
-	ctx context.Context, stores *txStores, propertyID uuid.UUID,
-) (PropertyRef, time.Time, error) {
-	prop, err := stores.properties.GetForUpdate(ctx, propertyID)
-	if err != nil {
-		return PropertyRef{}, time.Time{}, err
-	}
-	if prop.Archived {
-		return PropertyRef{}, time.Time{}, ErrArchivedProperty
-	}
-	if s.calendar == nil {
-		return PropertyRef{}, time.Time{}, errors.New("payments: owner calendar must be configured")
-	}
-	today, err := s.calendar.Today(ctx, prop.OwnerID)
-	if err != nil {
-		return PropertyRef{}, time.Time{}, fmt.Errorf("resolve owner today: %w", err)
-	}
-	return prop, today, nil
-}
-
 // readScope applies the read gate and returns the data owner whose scope the
-// SQL reads filter by (ADR 0028). A role without the view capability maps to
-// ErrNotFound so the existence of a payment is never revealed.
+// SQL reads filter by (ADR 0028).
 func (s *PaymentService) readScope(ctx context.Context, actor, propertyID uuid.UUID) (uuid.UUID, error) {
-	if s.policy == nil {
-		prop, err := s.properties.Get(ctx, propertyID)
-		if err != nil {
-			return uuid.Nil, err
-		}
-		if prop.OwnerID != actor {
-			return uuid.Nil, ErrNotFound
-		}
-		return actor, nil
-	}
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
-	}
-	// Every non-allow outcome hides the payment's existence: none and
-	// suspended are the privacy 404, forbidden (unreachable for view today)
-	// would mean the same for reads.
-	if sharedpolicy.GateFor(role, sharedpolicy.CanView) != sharedpolicy.GateAllow {
-		return uuid.Nil, ErrNotFound
-	}
-	prop, err := s.properties.Get(ctx, propertyID)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	return prop.OwnerID, nil
+	return resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
 }
 
-// writeGate applies the ADR 0028 mutation gate (CanEdit) and returns the
-// resolved role for the audit entry. The decision mapping is the payments
-// error vocabulary over the shared gate skeleton (policy.GateFor).
+// writeGate applies the ADR 0028 mutation gate (CanEdit): Full Access and
+// Owner may mutate; a viewer is ErrForbidden.
 func (s *PaymentService) writeGate(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
-	return s.capabilityGate(ctx, actor, propertyID, sharedpolicy.CanEdit)
+	return newCapabilityGate(s.policy, sharedpolicy.CanEdit)(ctx, actor, propertyID)
 }
 
 // deleteGate applies the ADR 0028 deletion gate: deletion is the owner's
 // alone (CanLifecycle).
 func (s *PaymentService) deleteGate(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
-	return s.capabilityGate(ctx, actor, propertyID, sharedpolicy.CanLifecycle)
+	return newCapabilityGate(s.policy, sharedpolicy.CanLifecycle)(ctx, actor, propertyID)
 }
 
-// capabilityGate resolves the actor's role and maps the shared gate decision
-// for the capability onto the payments errors: none/suspended stay
-// privacy-preserving (ErrNotFound — the existence of a payment is never
-// revealed), a role without the capability is a straight ErrForbidden.
-func (s *PaymentService) capabilityGate(
-	ctx context.Context, actor, propertyID uuid.UUID, can func(sharedpolicy.Role) bool,
-) (sharedpolicy.Role, error) {
-	if s.policy == nil {
-		return sharedpolicy.RoleOwner, nil
-	}
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
+// SetPaymentFavorite writes the rule's favorite star atomically (PUT
+// favorite, ticket #461): one UPDATE inside the conveyor's transaction — never
+// a read-modify-write through the full PATCH. The star is a pure read-side
+// flag: generation is unaffected, so the conveyor's tick does not run and no
+// re-read is needed — the rule resolved under the property lock travels back.
+// Full Access and Owner may favorite.
+func (s *PaymentService) SetPaymentFavorite(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool,
+) (domain.Payment, error) {
+	var updated domain.Payment
+	_, err := s.mutateRule(ctx, actor, propertyID, paymentID, s.writeGate,
+		func(ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, _ time.Time) (domain.Payment, mutationOutcome, error) {
+			if err := stores.payments.SetFavorite(ctx, rule.ID, scope, favorite); err != nil {
+				return domain.Payment{}, mutationOutcome{}, fmt.Errorf("set payment favorite: %w", err)
+			}
+			rule.IsFavorite = favorite
+			updated = rule
+			return rule, mutationOutcome{
+				audit:    auditdomain.ActionPaymentUpdated,
+				auditCtx: map[string]any{"fields": []string{"favorite"}},
+			}, nil
+		})
 	if err != nil {
-		return "", fmt.Errorf("resolve role: %w", err)
+		return domain.Payment{}, err
 	}
-	switch sharedpolicy.GateFor(role, can) {
-	case sharedpolicy.GateAllow:
-		return role, nil
-	case sharedpolicy.GateForbidden:
-		return "", ErrForbidden
-	default: // GateNone, GateSuspended.
-		return "", ErrNotFound
-	}
-}
-
-// recordAudit writes the mutation's audit entry inside the transaction
-// (fail-safe: an insert error rolls the mutation back, ADR 0020). The role is
-// the one the gate resolved before the transaction opened. Context carries
-// whitelisted keys only — never the rule's title or amount.
-func recordAudit(
-	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
-	action auditdomain.Action, entityID *uuid.UUID, auditCtx map[string]any,
-) error {
-	if err := stores.audit.Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  sharedpolicy.AuditActorRole(role),
-		Action:     action,
-		EntityType: auditdomain.EntityPayment,
-		EntityID:   entityID,
-		Context:    auditCtx,
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-	return nil
+	return updated, nil
 }
 
 // validateRule is the single validator of the create/update contract

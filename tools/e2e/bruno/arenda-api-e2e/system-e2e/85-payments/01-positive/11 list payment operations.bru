@@ -1,0 +1,41 @@
+meta {
+  name: List Payment Operations
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{opsPaymentId}}/operations?status=planned&limit=5&order=asc
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.items && res.body.items.length > 0) {
+    bru.setEnvVar("opsOperationId", res.body.items[0].id);
+    bru.setVar("opsOperationId", res.body.items[0].id);
+    console.log("saved opsOperationId =", res.body.items[0].id);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should list at least today and one future planned occurrence", function() {
+    expect(res.body.items).to.be.an("array");
+    expect(res.body.items.length).to.be.at.least(2);
+    for (const item of res.body.items) {
+      expect(["planned", "overdue"]).to.include(item.status);
+    }
+  });
+}

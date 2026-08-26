@@ -60,6 +60,7 @@ type Deps struct {
 	PropertyContacts         *propertiesapp.PropertyContactService
 	AddressSuggester         propertiesapp.AddressSuggester
 	PropertyPayments         *paymentsapp.PaymentService
+	PropertyOperations       *paymentsapp.OperationService
 	Access                   *accessapp.AccessService
 	Invitations              *accessapp.InvitationService
 	NotificationPreferences  *notificationsapp.PreferenceService
@@ -155,6 +156,7 @@ func New(deps Deps) http.Handler {
 		deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments,
 		deps.AdminSubscriptions, deps.Logger)
 	paymentHandlers := paymentshttp.NewPaymentHandlers(deps.PropertyPayments, deps.Logger)
+	operationHandlers := paymentshttp.NewOperationsHandlers(deps.PropertyOperations, deps.Logger)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
@@ -168,6 +170,7 @@ func New(deps Deps) http.Handler {
 		PopupHandlers:                  popupHandlers,
 		BillingHandlers:                billingHandlers,
 		PaymentHandlers:                paymentHandlers,
+		OperationsHandlers:             operationHandlers,
 		AdminHandlers:                  adminHandlers,
 		ClientErrorsHandlers:           clientErrorsHandlers,
 	}
@@ -288,6 +291,7 @@ type composedHandler struct {
 	*popupshttp.PopupHandlers
 	*billinghttp.BillingHandlers
 	*paymentshttp.PaymentHandlers
+	*paymentshttp.OperationsHandlers
 	*adminhttp.AdminHandlers
 	*httpsupport.ClientErrorsHandlers
 }

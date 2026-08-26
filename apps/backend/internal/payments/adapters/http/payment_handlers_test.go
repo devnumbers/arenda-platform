@@ -32,13 +32,14 @@ const (
 //
 //nolint:dupl // the fields mirror the PaymentManager method set — implementing the port
 type fakePaymentManager struct {
-	create func(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error)
-	list   func(ctx context.Context, actor, propertyID uuid.UUID) ([]domain.Payment, error)
-	get    func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
-	update func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error)
-	del    func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
-	pause  func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
-	resume func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	create   func(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error)
+	list     func(ctx context.Context, actor, propertyID uuid.UUID) ([]domain.Payment, error)
+	get      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	update   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error)
+	del      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
+	pause    func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	resume   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	favorite func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 }
 
 // The method set mirrors the port; the long signatures are the contract's.
@@ -94,6 +95,15 @@ func (f *fakePaymentManager) ResumePayment(ctx context.Context, actor, propertyI
 		return domain.Payment{}, errors.New("unexpected ResumePayment call")
 	}
 	return f.resume(ctx, actor, propertyID, paymentID)
+}
+
+func (f *fakePaymentManager) SetPaymentFavorite(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool,
+) (domain.Payment, error) {
+	if f.favorite == nil {
+		return domain.Payment{}, errors.New("unexpected SetPaymentFavorite call")
+	}
+	return f.favorite(ctx, actor, propertyID, paymentID, favorite)
 }
 
 // paymentRequest builds an authenticated request against the payments
@@ -153,6 +163,9 @@ func TestPaymentHandlers_RequireAuth(t *testing.T) {
 		}},
 		{"resume", func(w http.ResponseWriter, r *http.Request) {
 			h.ResumePayment(w, r, propertyID, paymentID)
+		}},
+		{"favorite", func(w http.ResponseWriter, r *http.Request) {
+			h.SetPaymentFavorite(w, r, propertyID, paymentID)
 		}},
 	}
 	for _, tc := range cases {

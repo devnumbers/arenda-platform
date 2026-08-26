@@ -117,7 +117,10 @@ type Payment struct {
 	// PaymentForm is how the payment passes; operations snapshot it.
 	PaymentForm PaymentForm
 	Category    CategoryRef
-	Pauses      []PauseInterval
+	// IsFavorite is the rule's favorite star (ticket #461): a pure read-side
+	// flag — it never changes generation, pauses or the tick's behaviour.
+	IsFavorite bool
+	Pauses     []PauseInterval
 	// CreatedAt/UpdatedAt are the rule row's timestamps (updated_at is
 	// trigger-maintained on write); they exist for the CRUD read side — the
 	// tick never reads them.

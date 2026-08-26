@@ -126,6 +126,11 @@ const (
 	ActionPaymentDeleted Action = "payment.deleted"
 	ActionPaymentPaused  Action = "payment.paused"
 	ActionPaymentResumed Action = "payment.resumed"
+	// ActionOperationPaid records the manual «Оплатить сейчас» of an
+	// operation (ticket #461): planned → paid with paid_date = today in the
+	// owner's timezone. The auto-pay day payment is tick bulk, never audited
+	// (the extended ADR 0020 gap); it has no action here.
+	ActionOperationPaid Action = "operation.paid"
 
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"

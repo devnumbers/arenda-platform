@@ -1,0 +1,27 @@
+meta {
+  name: Pay Already Paid Operation
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/operations/{{opsOperationId}}/pay
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  // The positive flow paid exactly this operation just before — the repeat is
+  // the contract's 409.
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 409", function() {
+    expect(res.status).to.equal(409);
+  });
+}

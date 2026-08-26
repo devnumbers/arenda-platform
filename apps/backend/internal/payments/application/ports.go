@@ -1,8 +1,8 @@
 // Package application holds the payments use cases and ports: the
 // materialization tick run (ADR 0049 §3) with its persistence port, the owner
-// calendar (ADR 0048), and the payment CRUD store with the property
-// serialization port (ticket #457). The pay-now use case arrives with its
-// ticket (#461).
+// calendar (ADR 0048), the payment CRUD store with the property serialization
+// port (ticket #457), and the operations/favorites use cases of the second
+// contracts slice (ticket #461).
 package application
 
 import (
@@ -36,6 +36,9 @@ var (
 	ErrAlreadyPaused = errors.New("payments: payment already paused")
 	// ErrNotPaused marks a resume of a rule without an open pause.
 	ErrNotPaused = errors.New("payments: payment is not paused")
+	// ErrAlreadyPaid marks «Оплатить сейчас» on an operation that is already
+	// paid — the contract's 409 on a repeated pay (ticket #461).
+	ErrAlreadyPaid = errors.New("payments: operation already paid")
 )
 
 // PropertyRef is the payments view of the property a use case targets: the
@@ -94,7 +97,47 @@ type PaymentStore interface {
 	// operations (date > today): the edit invalidation whose in-transaction
 	// tick then stands the single future planned again with fresh snapshots.
 	DeleteFuturePlanned(ctx context.Context, paymentID uuid.UUID, today time.Time) error
+	// SetFavorite writes the favorite star in one atomic UPDATE (PUT favorite,
+	// ticket #461 — never a read-modify-write through the full rule update).
+	SetFavorite(ctx context.Context, id, scope uuid.UUID, favorite bool) error
 	WithTx(tx transaction.Tx) (PaymentStore, error)
+}
+
+// OperationsListQuery is the normalized operations listing request: view
+// status filter (empty = any), an inclusive period on the operation date, the
+// pagination window and the sort direction; Today carries the owner's today
+// the overdue semantics are computed against.
+type OperationsListQuery struct {
+	// Status filters on the computed view status; empty means no filter.
+	Status   domain.OperationViewStatus
+	DateFrom *time.Time
+	DateTo   *time.Time
+	Today    time.Time
+	Limit    int
+	Offset   int
+	// Desc sorts newest-first when true; false means ascending, oldest
+	// first.
+	Desc bool
+}
+
+// OperationStore is the persistence port of the operations (ticket #461).
+// Reads and writes are scoped by the data owner and the nested property path
+// lives in the queries themselves. The mutating methods must run inside the
+// transaction holding the property serialization lock.
+type OperationStore interface {
+	// Get loads one operation; ErrNotFound when the id is unknown, foreign or
+	// hangs on another property.
+	Get(ctx context.Context, id, scope, propertyID uuid.UUID) (domain.Operation, error)
+	// MarkPaid flips the still-planned operation to paid with the given date;
+	// rows affected = 0 surfaces as ErrAlreadyPaid.
+	MarkPaid(ctx context.Context, id, scope uuid.UUID, paidDate time.Time) error
+	// ListByPayment returns one rule's operations ordered per the query.
+	ListByPayment(
+		ctx context.Context, scope, propertyID, paymentID uuid.UUID, q OperationsListQuery,
+	) ([]domain.Operation, error)
+	// ListByProperty returns the property's operations across its rules.
+	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, q OperationsListQuery) ([]domain.Operation, error)
+	WithTx(tx transaction.Tx) (OperationStore, error)
 }
 
 // OwnerSnapshot is the tick's read side in one interface fact: the owner's

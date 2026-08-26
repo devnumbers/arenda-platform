@@ -272,6 +272,7 @@ type Payment struct {
 	UserCategoryID pgtype.UUID        `json:"user_category_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	IsFavorite     bool               `json:"is_favorite"`
 }
 
 type PaymentCategory struct {

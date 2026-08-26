@@ -84,8 +84,40 @@ func (noopPaymentStore) DeleteFuturePlanned(context.Context, uuid.UUID, time.Tim
 	panic("unused")
 }
 
+func (noopPaymentStore) SetFavorite(context.Context, uuid.UUID, uuid.UUID, bool) error {
+	panic("unused")
+}
+
 func (noopPaymentStore) WithTx(tx transaction.Tx) (PaymentStore, error) {
 	return noopPaymentStore{}, nil
+}
+
+// noopOperationStore fills the operations seat of txStoreFactory in the sweep
+// fixture: the tick binds it per unit of work but never calls it.
+type noopOperationStore struct{}
+
+func (noopOperationStore) Get(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domain.Operation, error) {
+	panic("unused")
+}
+
+func (noopOperationStore) MarkPaid(context.Context, uuid.UUID, uuid.UUID, time.Time) error {
+	panic("unused")
+}
+
+func (noopOperationStore) ListByPayment(
+	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, OperationsListQuery,
+) ([]domain.Operation, error) {
+	panic("unused")
+}
+
+func (noopOperationStore) ListByProperty(
+	context.Context, uuid.UUID, uuid.UUID, OperationsListQuery,
+) ([]domain.Operation, error) {
+	panic("unused")
+}
+
+func (noopOperationStore) WithTx(tx transaction.Tx) (OperationStore, error) {
+	return noopOperationStore{}, nil
 }
 
 type noopPropertyStore struct{}
@@ -116,7 +148,7 @@ func newSweepFixture(t *testing.T, zones []TickZone, snapshot OwnerSnapshot) *sw
 	t.Helper()
 	store := &fakeTickStore{snapshot: snapshot}
 	uow := &fakeUoW{}
-	factory := NewTxStoreFactory(store, noopPaymentStore{}, noopPropertyStore{}, nil, uow)
+	factory := NewTxStoreFactory(store, noopPaymentStore{}, noopOperationStore{}, noopPropertyStore{}, nil, uow)
 	return &sweepFixture{
 		tick:  NewTickService(factory, &fakeTickZoneDirectory{zones: zones}, nil, nil),
 		store: store,

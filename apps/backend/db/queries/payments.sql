@@ -1,9 +1,8 @@
--- Payments context queries (ADR 0049, ticket #454).
---
--- This file carries the materialization tick's persistence: the owner-level
--- payment listing with pauses resolved, the operation dedup keys, the
--- idempotent insert, the auto-pay day payment and the future-planned rebuild.
--- CRUD and listing queries arrive with their tickets (#457, #461).
+-- Payments context queries (ADR 0049). This file carries the materialization
+-- tick's persistence (the owner-level payment listing with pauses resolved,
+-- the operation dedup keys, the idempotent insert, the auto-pay day payment,
+-- the future-planned rebuild), the CRUD and pause/resume queries (#457), and
+-- the operations/favorites contracts of the second slice (#461).
 
 -- name: LockOwnerTickProperties :many
 -- Serialization point of the tick (ADR 0049 §3): the run locks the owner's
@@ -127,6 +126,7 @@ SELECT pay.id,
        pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
+       pay.is_favorite,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -149,6 +149,7 @@ SELECT pay.id,
        pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
+       pay.is_favorite,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -232,3 +233,122 @@ SELECT id, owner_id, status FROM properties WHERE id = $1;
 -- locked FOR UPDATE before the rule is read or written, so mutation-vs-tick,
 -- mutation-vs-mutation and archive-vs-mutation serialize on one point.
 SELECT id, owner_id, status FROM properties WHERE id = $1 FOR UPDATE;
+
+-- Operations and favorites (ticket #461, the second contracts slice of
+-- ADR 0049 §4). Reads are scoped by the data owner and by the nested path
+-- property→payment→operation; "overdue" is not stored anywhere — the status
+-- filter and every response item's view status are resolved against the
+-- owner's today passed in by the application layer (ADR 0048).
+
+-- name: SetPaymentFavorite :execrows
+-- Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
+-- Existence is already proven inside the same transaction under the property
+-- lock; :execrows keeps the store honest independently of that ordering.
+UPDATE payments SET is_favorite = $3
+WHERE id = $1 AND owner_id = $2;
+
+-- name: GetOperationByID :one
+-- One operation by id within the owner's scope on the given property — the
+-- pay-now use case's load step (manual operations have no payment, so the
+-- payment link is not a filter).
+SELECT op.id,
+       op.owner_id,
+       op.property_id,
+       op.payment_id,
+       op.origin,
+       op.date,
+       op.paid_date,
+       op.status,
+       op.type,
+       op.title,
+       op.amount_kopecks,
+       op.payment_form,
+       op.category_label,
+       op.category_slug
+FROM operations op
+WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3;
+
+-- name: PayOperationByID :execrows
+-- «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
+-- timezone). The planned guard is belt-and-suspenders over the application's
+-- loaded check: rows affected = 0 means already paid or gone.
+UPDATE operations
+SET status = 'paid', paid_date = $3
+WHERE id = $1 AND owner_id = $2 AND status = 'planned';
+
+-- name: ListOperationsByPayment :many
+-- One payment rule's operations with pagination (limit/offset), the view
+-- status filter ('' is any), an inclusive period on the operation date and
+-- the sort direction. "planned" and "overdue" split the stored planned rows
+-- against the owner's today — overdue is computed here from the same truth
+-- the response items report (ticket #461).
+SELECT op.id,
+       op.owner_id,
+       op.property_id,
+       op.payment_id,
+       op.origin,
+       op.date,
+       op.paid_date,
+       op.status,
+       op.type,
+       op.title,
+       op.amount_kopecks,
+       op.payment_form,
+       op.category_label,
+       op.category_slug
+FROM operations op
+WHERE op.owner_id = sqlc.arg('owner')
+  AND op.property_id = sqlc.arg('property')
+  AND op.payment_id = sqlc.arg('payment')
+  AND (
+    sqlc.arg('status')::text = ''
+    OR (sqlc.arg('status')::text = 'paid' AND op.status = 'paid')
+    OR (sqlc.arg('status')::text = 'planned' AND op.status = 'planned'
+        AND op.date >= sqlc.arg('today'))
+    OR (sqlc.arg('status')::text = 'overdue' AND op.status = 'planned'
+        AND op.date < sqlc.arg('today'))
+  )
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+ORDER BY
+  CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
+  CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
+  op.id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: ListOperationsByProperty :many
+-- The property's operations across its rules with the same pagination,
+-- filters and direction as the per-payment listing. Serves the debt section
+-- (status='overdue') and any full operation list of the object.
+SELECT op.id,
+       op.owner_id,
+       op.property_id,
+       op.payment_id,
+       op.origin,
+       op.date,
+       op.paid_date,
+       op.status,
+       op.type,
+       op.title,
+       op.amount_kopecks,
+       op.payment_form,
+       op.category_label,
+       op.category_slug
+FROM operations op
+WHERE op.owner_id = sqlc.arg('owner')
+  AND op.property_id = sqlc.arg('property')
+  AND (
+    sqlc.arg('status')::text = ''
+    OR (sqlc.arg('status')::text = 'paid' AND op.status = 'paid')
+    OR (sqlc.arg('status')::text = 'planned' AND op.status = 'planned'
+        AND op.date >= sqlc.arg('today'))
+    OR (sqlc.arg('status')::text = 'overdue' AND op.status = 'planned'
+        AND op.date < sqlc.arg('today'))
+  )
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+ORDER BY
+  CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
+  CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
+  op.id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');

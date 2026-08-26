@@ -1,0 +1,38 @@
+meta {
+  name: List Property Operations
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/properties/{{propertyId}}/operations?limit=20&offset=0
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  const cookieName = bru.getEnvVar("cookieName") || bru.getVar("cookieName") || "session_id";
+  if (sessionId) {
+    req.setHeader("Cookie", `${cookieName}=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should list operations across the property's rules", function() {
+    expect(res.body.items).to.be.an("array");
+    for (const item of res.body.items) {
+      expect(["planned", "paid", "overdue"]).to.include(item.status);
+      expect(item.amountKopecks).to.be.an("number");
+    }
+  });
+
+  test("should keep the paid operation from the pay step", function() {
+    const statuses = res.body.items.map(i => i.status);
+    expect(statuses).to.include("paid");
+  });
+}

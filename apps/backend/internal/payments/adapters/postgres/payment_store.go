@@ -218,6 +218,20 @@ func (s *PaymentStore) DeleteFuturePlanned(ctx context.Context, paymentID uuid.U
 	return nil
 }
 
+// SetFavorite writes the favorite star in one atomic UPDATE (PUT favorite,
+// ticket #461); rows affected is not checked — the conveyor has already
+// proven the rule's existence inside the same transaction and lock.
+func (s *PaymentStore) SetFavorite(ctx context.Context, id, scope uuid.UUID, favorite bool) error {
+	if _, err := s.q().SetPaymentFavorite(ctx, postgres.SetPaymentFavoriteParams{
+		ID:         pgconv.UUIDToPgtype(id),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
+		IsFavorite: favorite,
+	}); err != nil {
+		return fmt.Errorf("set favorite of payment %s: %w", id, err)
+	}
+	return nil
+}
+
 // attachPausesAsSlice loads the pause intervals of the given rules over the
 // store's connection and returns them back (the shared attachPauses mutates
 // in place; this adapts it to the value-returning store methods).

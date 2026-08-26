@@ -62,16 +62,18 @@ func (p stubPropertyPolicy) RoleForProperty(context.Context, uuid.UUID, uuid.UUI
 	return p.role, nil
 }
 
-// paymentsHarness wires the whole payments context — the tick service and
-// the payment use case service over one store factory with the real audit
-// recorder — to real PostgreSQL with a mutable clock and an injectable
-// policy (testcontainers PostgreSQL 18 or TEST_DATABASE_URL).
+// paymentsHarness wires the whole payments context — the tick service, the
+// payment use case service and the operations use case service over one store
+// factory with the real audit recorder — to real PostgreSQL with a mutable
+// clock and an injectable policy (testcontainers PostgreSQL 18 or
+// TEST_DATABASE_URL).
 type paymentsHarness struct {
 	t      *testing.T
 	pool   *pgxpool.Pool
 	clock  *mutableClock
 	tick   *paymentsapp.TickService
 	svc    *paymentsapp.PaymentService
+	ops    *paymentsapp.OperationService
 	owner  uuid.UUID
 	propID uuid.UUID
 }
@@ -90,12 +92,15 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 
 	tickStore := paymentspg.NewTickStore(pool)
 	paymentStore := paymentspg.NewPaymentStore(pool)
+	operationStore := paymentspg.NewOperationStore(pool)
 	propertyStore := paymentspg.NewPropertyStore(pool)
 	audit := auditapp.NewService(auditpg.NewWriter(pool), clk)
 	uow := pgdb.NewUoW(pool, logger)
 	calendar := paymentspg.NewOwnerCalendar(pool, clk)
 	zones := paymentspg.NewTickZoneDirectory(pool)
-	factory := paymentsapp.NewTxStoreFactory(tickStore, paymentStore, propertyStore, audit, uow)
+	factory := paymentsapp.NewTxStoreFactory(
+		tickStore, paymentStore, operationStore, propertyStore, audit, uow,
+	)
 
 	return &paymentsHarness{
 		t:     t,
@@ -103,6 +108,7 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 		clock: clk,
 		tick:  paymentsapp.NewTickService(factory, zones, calendar, nil),
 		svc:   paymentsapp.NewPaymentService(factory, calendar, policy),
+		ops:   paymentsapp.NewOperationService(factory, calendar, policy),
 	}
 }
 

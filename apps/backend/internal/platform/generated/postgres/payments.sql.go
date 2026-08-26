@@ -140,6 +140,73 @@ func (q *Queries) DeletePaymentPlannedFrom(ctx context.Context, arg DeletePaymen
 	return result.RowsAffected(), nil
 }
 
+const getOperationByID = `-- name: GetOperationByID :one
+SELECT op.id,
+       op.owner_id,
+       op.property_id,
+       op.payment_id,
+       op.origin,
+       op.date,
+       op.paid_date,
+       op.status,
+       op.type,
+       op.title,
+       op.amount_kopecks,
+       op.payment_form,
+       op.category_label,
+       op.category_slug
+FROM operations op
+WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3
+`
+
+type GetOperationByIDParams struct {
+	ID         pgtype.UUID `json:"id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+type GetOperationByIDRow struct {
+	ID            pgtype.UUID `json:"id"`
+	OwnerID       pgtype.UUID `json:"owner_id"`
+	PropertyID    pgtype.UUID `json:"property_id"`
+	PaymentID     pgtype.UUID `json:"payment_id"`
+	Origin        string      `json:"origin"`
+	Date          pgtype.Date `json:"date"`
+	PaidDate      pgtype.Date `json:"paid_date"`
+	Status        string      `json:"status"`
+	Type          string      `json:"type"`
+	Title         string      `json:"title"`
+	AmountKopecks int64       `json:"amount_kopecks"`
+	PaymentForm   pgtype.Text `json:"payment_form"`
+	CategoryLabel string      `json:"category_label"`
+	CategorySlug  pgtype.Text `json:"category_slug"`
+}
+
+// One operation by id within the owner's scope on the given property — the
+// pay-now use case's load step (manual operations have no payment, so the
+// payment link is not a filter).
+func (q *Queries) GetOperationByID(ctx context.Context, arg GetOperationByIDParams) (GetOperationByIDRow, error) {
+	row := q.db.QueryRow(ctx, getOperationByID, arg.ID, arg.OwnerID, arg.PropertyID)
+	var i GetOperationByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.PaymentID,
+		&i.Origin,
+		&i.Date,
+		&i.PaidDate,
+		&i.Status,
+		&i.Type,
+		&i.Title,
+		&i.AmountKopecks,
+		&i.PaymentForm,
+		&i.CategoryLabel,
+		&i.CategorySlug,
+	)
+	return i, err
+}
+
 const getOwnerTimezone = `-- name: GetOwnerTimezone :one
 SELECT timezone FROM users WHERE id = $1
 `
@@ -169,6 +236,7 @@ SELECT pay.id,
        pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
+       pay.is_favorite,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -197,6 +265,7 @@ type GetPaymentByIDRow struct {
 	PaymentForm      string             `json:"payment_form"`
 	CategorySlug     pgtype.Text        `json:"category_slug"`
 	UserCategoryID   pgtype.UUID        `json:"user_category_id"`
+	IsFavorite       bool               `json:"is_favorite"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	UserCategoryName pgtype.Text        `json:"user_category_name"`
@@ -225,6 +294,7 @@ func (q *Queries) GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) 
 		&i.PaymentForm,
 		&i.CategorySlug,
 		&i.UserCategoryID,
+		&i.IsFavorite,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserCategoryName,
@@ -377,6 +447,235 @@ func (q *Queries) InsertPaymentPause(ctx context.Context, arg InsertPaymentPause
 	return err
 }
 
+const listOperationsByPayment = `-- name: ListOperationsByPayment :many
+SELECT op.id,
+       op.owner_id,
+       op.property_id,
+       op.payment_id,
+       op.origin,
+       op.date,
+       op.paid_date,
+       op.status,
+       op.type,
+       op.title,
+       op.amount_kopecks,
+       op.payment_form,
+       op.category_label,
+       op.category_slug
+FROM operations op
+WHERE op.owner_id = $1
+  AND op.property_id = $2
+  AND op.payment_id = $3
+  AND (
+    $4::text = ''
+    OR ($4::text = 'paid' AND op.status = 'paid')
+    OR ($4::text = 'planned' AND op.status = 'planned'
+        AND op.date >= $5)
+    OR ($4::text = 'overdue' AND op.status = 'planned'
+        AND op.date < $5)
+  )
+  AND ($6::date IS NULL OR op.date >= $6)
+  AND ($7::date IS NULL OR op.date <= $7)
+ORDER BY
+  CASE WHEN $8::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $8::text = 'desc' THEN op.date END DESC,
+  op.id DESC
+LIMIT $10 OFFSET $9
+`
+
+type ListOperationsByPaymentParams struct {
+	Owner    pgtype.UUID `json:"owner"`
+	Property pgtype.UUID `json:"property"`
+	Payment  pgtype.UUID `json:"payment"`
+	Status   string      `json:"status"`
+	Today    pgtype.Date `json:"today"`
+	DateFrom pgtype.Date `json:"date_from"`
+	DateTo   pgtype.Date `json:"date_to"`
+	Order    string      `json:"order"`
+	Offset   int32       `json:"offset"`
+	Limit    int32       `json:"limit"`
+}
+
+type ListOperationsByPaymentRow struct {
+	ID            pgtype.UUID `json:"id"`
+	OwnerID       pgtype.UUID `json:"owner_id"`
+	PropertyID    pgtype.UUID `json:"property_id"`
+	PaymentID     pgtype.UUID `json:"payment_id"`
+	Origin        string      `json:"origin"`
+	Date          pgtype.Date `json:"date"`
+	PaidDate      pgtype.Date `json:"paid_date"`
+	Status        string      `json:"status"`
+	Type          string      `json:"type"`
+	Title         string      `json:"title"`
+	AmountKopecks int64       `json:"amount_kopecks"`
+	PaymentForm   pgtype.Text `json:"payment_form"`
+	CategoryLabel string      `json:"category_label"`
+	CategorySlug  pgtype.Text `json:"category_slug"`
+}
+
+// One payment rule's operations with pagination (limit/offset), the view
+// status filter (” is any), an inclusive period on the operation date and
+// the sort direction. "planned" and "overdue" split the stored planned rows
+// against the owner's today — overdue is computed here from the same truth
+// the response items report (ticket #461).
+func (q *Queries) ListOperationsByPayment(ctx context.Context, arg ListOperationsByPaymentParams) ([]ListOperationsByPaymentRow, error) {
+	rows, err := q.db.Query(ctx, listOperationsByPayment,
+		arg.Owner,
+		arg.Property,
+		arg.Payment,
+		arg.Status,
+		arg.Today,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.Order,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOperationsByPaymentRow{}
+	for rows.Next() {
+		var i ListOperationsByPaymentRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.PaymentID,
+			&i.Origin,
+			&i.Date,
+			&i.PaidDate,
+			&i.Status,
+			&i.Type,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PaymentForm,
+			&i.CategoryLabel,
+			&i.CategorySlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOperationsByProperty = `-- name: ListOperationsByProperty :many
+SELECT op.id,
+       op.owner_id,
+       op.property_id,
+       op.payment_id,
+       op.origin,
+       op.date,
+       op.paid_date,
+       op.status,
+       op.type,
+       op.title,
+       op.amount_kopecks,
+       op.payment_form,
+       op.category_label,
+       op.category_slug
+FROM operations op
+WHERE op.owner_id = $1
+  AND op.property_id = $2
+  AND (
+    $3::text = ''
+    OR ($3::text = 'paid' AND op.status = 'paid')
+    OR ($3::text = 'planned' AND op.status = 'planned'
+        AND op.date >= $4)
+    OR ($3::text = 'overdue' AND op.status = 'planned'
+        AND op.date < $4)
+  )
+  AND ($5::date IS NULL OR op.date >= $5)
+  AND ($6::date IS NULL OR op.date <= $6)
+ORDER BY
+  CASE WHEN $7::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $7::text = 'desc' THEN op.date END DESC,
+  op.id DESC
+LIMIT $9 OFFSET $8
+`
+
+type ListOperationsByPropertyParams struct {
+	Owner    pgtype.UUID `json:"owner"`
+	Property pgtype.UUID `json:"property"`
+	Status   string      `json:"status"`
+	Today    pgtype.Date `json:"today"`
+	DateFrom pgtype.Date `json:"date_from"`
+	DateTo   pgtype.Date `json:"date_to"`
+	Order    string      `json:"order"`
+	Offset   int32       `json:"offset"`
+	Limit    int32       `json:"limit"`
+}
+
+type ListOperationsByPropertyRow struct {
+	ID            pgtype.UUID `json:"id"`
+	OwnerID       pgtype.UUID `json:"owner_id"`
+	PropertyID    pgtype.UUID `json:"property_id"`
+	PaymentID     pgtype.UUID `json:"payment_id"`
+	Origin        string      `json:"origin"`
+	Date          pgtype.Date `json:"date"`
+	PaidDate      pgtype.Date `json:"paid_date"`
+	Status        string      `json:"status"`
+	Type          string      `json:"type"`
+	Title         string      `json:"title"`
+	AmountKopecks int64       `json:"amount_kopecks"`
+	PaymentForm   pgtype.Text `json:"payment_form"`
+	CategoryLabel string      `json:"category_label"`
+	CategorySlug  pgtype.Text `json:"category_slug"`
+}
+
+// The property's operations across its rules with the same pagination,
+// filters and direction as the per-payment listing. Serves the debt section
+// (status='overdue') and any full operation list of the object.
+func (q *Queries) ListOperationsByProperty(ctx context.Context, arg ListOperationsByPropertyParams) ([]ListOperationsByPropertyRow, error) {
+	rows, err := q.db.Query(ctx, listOperationsByProperty,
+		arg.Owner,
+		arg.Property,
+		arg.Status,
+		arg.Today,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.Order,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOperationsByPropertyRow{}
+	for rows.Next() {
+		var i ListOperationsByPropertyRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.PaymentID,
+			&i.Origin,
+			&i.Date,
+			&i.PaidDate,
+			&i.Status,
+			&i.Type,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PaymentForm,
+			&i.CategoryLabel,
+			&i.CategorySlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPaymentsByProperty = `-- name: ListPaymentsByProperty :many
 SELECT pay.id,
        pay.owner_id,
@@ -391,6 +690,7 @@ SELECT pay.id,
        pay.payment_form,
        pay.category_slug,
        pay.user_category_id,
+       pay.is_favorite,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -419,6 +719,7 @@ type ListPaymentsByPropertyRow struct {
 	PaymentForm      string             `json:"payment_form"`
 	CategorySlug     pgtype.Text        `json:"category_slug"`
 	UserCategoryID   pgtype.UUID        `json:"user_category_id"`
+	IsFavorite       bool               `json:"is_favorite"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	UserCategoryName pgtype.Text        `json:"user_category_name"`
@@ -448,6 +749,7 @@ func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsBy
 			&i.PaymentForm,
 			&i.CategorySlug,
 			&i.UserCategoryID,
+			&i.IsFavorite,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UserCategoryName,
@@ -661,12 +963,11 @@ ORDER BY id
 FOR UPDATE
 `
 
-// Payments context queries (ADR 0049, ticket #454).
-//
-// This file carries the materialization tick's persistence: the owner-level
-// payment listing with pauses resolved, the operation dedup keys, the
-// idempotent insert, the auto-pay day payment and the future-planned rebuild.
-// CRUD and listing queries arrive with their tickets (#457, #461).
+// Payments context queries (ADR 0049). This file carries the materialization
+// tick's persistence (the owner-level payment listing with pauses resolved,
+// the operation dedup keys, the idempotent insert, the auto-pay day payment,
+// the future-planned rebuild), the CRUD and pause/resume queries (#457), and
+// the operations/favorites contracts of the second slice (#461).
 // Serialization point of the tick (ADR 0049 §3): the run locks the owner's
 // active/maintenance property rows, ordered by id, before reading or writing
 // anything. Context mutations take the same lock per property through
@@ -693,6 +994,29 @@ func (q *Queries) LockOwnerTickProperties(ctx context.Context, ownerID pgtype.UU
 	return items, nil
 }
 
+const payOperationByID = `-- name: PayOperationByID :execrows
+UPDATE operations
+SET status = 'paid', paid_date = $3
+WHERE id = $1 AND owner_id = $2 AND status = 'planned'
+`
+
+type PayOperationByIDParams struct {
+	ID       pgtype.UUID `json:"id"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
+	PaidDate pgtype.Date `json:"paid_date"`
+}
+
+// «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
+// timezone). The planned guard is belt-and-suspenders over the application's
+// loaded check: rows affected = 0 means already paid or gone.
+func (q *Queries) PayOperationByID(ctx context.Context, arg PayOperationByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, payOperationByID, arg.ID, arg.OwnerID, arg.PaidDate)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const payOperationDueToday = `-- name: PayOperationDueToday :execrows
 UPDATE operations
 SET status = 'paid', paid_date = $2
@@ -710,6 +1034,34 @@ type PayOperationDueTodayParams struct {
 // a pause are not generated at all.
 func (q *Queries) PayOperationDueToday(ctx context.Context, arg PayOperationDueTodayParams) (int64, error) {
 	result, err := q.db.Exec(ctx, payOperationDueToday, arg.PaymentID, arg.PaidDate)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setPaymentFavorite = `-- name: SetPaymentFavorite :execrows
+
+UPDATE payments SET is_favorite = $3
+WHERE id = $1 AND owner_id = $2
+`
+
+type SetPaymentFavoriteParams struct {
+	ID         pgtype.UUID `json:"id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	IsFavorite bool        `json:"is_favorite"`
+}
+
+// Operations and favorites (ticket #461, the second contracts slice of
+// ADR 0049 §4). Reads are scoped by the data owner and by the nested path
+// property→payment→operation; "overdue" is not stored anywhere — the status
+// filter and every response item's view status are resolved against the
+// owner's today passed in by the application layer (ADR 0048).
+// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
+// Existence is already proven inside the same transaction under the property
+// lock; :execrows keeps the store honest independently of that ordering.
+func (q *Queries) SetPaymentFavorite(ctx context.Context, arg SetPaymentFavoriteParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPaymentFavorite, arg.ID, arg.OwnerID, arg.IsFavorite)
 	if err != nil {
 		return 0, err
 	}

@@ -1,6 +1,8 @@
-// Package http holds the payments HTTP adapters: the payment rule endpoints
-// of the first contracts slice (ticket #457, ADR 0049 §4) — create, list,
-// get, partial update, delete with keep_overdue, pause and resume.
+// Package http holds the payments HTTP adapters (ADR 0049 §4): the payment
+// rule endpoints of the first contracts slice (#457) — create, list, get,
+// partial update, delete with keep_overdue, pause and resume — plus the
+// operations listings, «Оплатить сейчас» and PUT favorite of the second
+// slice (#461).
 package http
 
 import (
@@ -35,6 +37,7 @@ type PaymentManager interface {
 	DeletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
 	PausePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	ResumePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	SetPaymentFavorite(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 }
 
 // PaymentHandlers implements the generated payment endpoints.
@@ -76,25 +79,39 @@ var staticPaymentProblems = []httpsupport.ErrorProblem{
 		Err: application.ErrNotPaused, Status: http.StatusConflict,
 		Title: httpsupport.ProblemTitleConflict, Detail: "Платёж не на паузе",
 	},
+	{
+		Err: application.ErrAlreadyPaid, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Операция уже оплачена",
+	},
+}
+
+// writePaymentsError maps an error with a fixed outcome onto the wire via the
+// payments problem table, then handles invalid input through its user-facing
+// detail. The bool verdict lets each handler turn anything unrecognized into
+// its own opaque 500.
+func writePaymentsError(ctx context.Context, w http.ResponseWriter, err error) bool {
+	if httpsupport.WriteErrorProblem(ctx, w, err, staticPaymentProblems) {
+		return true
+	}
+	if errors.Is(err, application.ErrInvalidInput) {
+		detail, ok := httpsupport.UserFacingDetail(err)
+		if !ok {
+			return false
+		}
+		httpsupport.WriteProblem(ctx, w, http.StatusBadRequest, httpsupport.Problem(ctx, "Bad request", detail))
+		return true
+	}
+	return false
 }
 
 // handlePaymentError maps an application error onto the wire contract: the
 // fixed table first, invalid input through its user-facing detail, anything
 // else an opaque 500.
 func (h *PaymentHandlers) handlePaymentError(w http.ResponseWriter, r *http.Request, err error) {
-	if httpsupport.WriteErrorProblem(r.Context(), w, err, staticPaymentProblems) {
+	if writePaymentsError(r.Context(), w, err) {
 		return
 	}
-	if errors.Is(err, application.ErrInvalidInput) {
-		detail, ok := httpsupport.UserFacingDetail(err)
-		if !ok {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
-		return
-	}
-	httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+	h.writeInternal(w, r, err)
 }
 
 // CreatePayment implements POST /properties/{propertyId}/payments.
@@ -269,6 +286,61 @@ func (h *PaymentHandlers) ResumePayment(w http.ResponseWriter, r *http.Request, 
 	}
 
 	h.respondWithPayment(w, r, payment, http.StatusOK)
+}
+
+// SetPaymentFavorite implements PUT /properties/{propertyId}/payments/{paymentId}/favorite
+// (ticket #461): the atomic favorite star write; the updated rule travels back.
+func (h *PaymentHandlers) SetPaymentFavorite(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	body, err := decodeFavoriteBody(w, r)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode set favorite request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	payment, err := h.svc.SetPaymentFavorite(r.Context(), actor, propertyID, paymentID, body.Favorite)
+	if err != nil {
+		h.handlePaymentError(w, r, err)
+		return
+	}
+
+	h.respondWithPayment(w, r, payment, http.StatusOK)
+}
+
+// decodeFavoriteBody reads the favorite toggle body strictly. A required bool
+// cannot express its own absence in the generated struct ({} and {"favorite":
+// false} both decode to false), so a pointer shadow enforces the required flag
+// — the same omitempty-vs-null distinction trick as the tri-state endDate.
+func decodeFavoriteBody(w http.ResponseWriter, r *http.Request) (openapi.FavoriteUpdateRequest, error) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, httpsupport.MaxRequestBodySize))
+	if err != nil {
+		return openapi.FavoriteUpdateRequest{}, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var body openapi.FavoriteUpdateRequest
+	if err := dec.Decode(&body); err != nil {
+		return openapi.FavoriteUpdateRequest{}, err
+	}
+	var shadow struct {
+		Favorite *bool `json:"favorite"`
+	}
+	if err := json.Unmarshal(raw, &shadow); err != nil {
+		return openapi.FavoriteUpdateRequest{}, err
+	}
+	if shadow.Favorite == nil {
+		return openapi.FavoriteUpdateRequest{}, errors.New("payments: favorite flag is required")
+	}
+	return body, nil
 }
 
 // createCommand folds the decoded body into the application command. The
@@ -464,6 +536,7 @@ func paymentResponse(p domain.Payment) (openapi.PaymentResponse, error) {
 		AutoPay:       p.AutoPay,
 		PaymentForm:   openapi.PaymentResponsePaymentForm(p.PaymentForm),
 		Category:      categoryView(p.Category),
+		IsFavorite:    p.IsFavorite,
 		Pauses:        pauses,
 		CreatedAt:     p.CreatedAt,
 		UpdatedAt:     p.UpdatedAt,

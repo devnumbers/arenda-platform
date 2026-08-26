@@ -47,7 +47,7 @@ func TestPaymentCRUD_FullLifecycle(t *testing.T) {
 		t.Fatalf("get after delete = %v, want ErrNotFound", err)
 	}
 	actions := h.auditActions(t, created.ID)
-	want := []string{"payment.created", "payment.deleted"}
+	want := []string{actionPaymentCreated, actionPaymentDeleted}
 	if len(actions) != len(want) {
 		t.Fatalf("audit actions = %v, want %v", actions, want)
 	}
@@ -131,7 +131,7 @@ func TestPaymentUpdate_RebuildsScheduleAndAudits(t *testing.T) {
 	}
 
 	actions := h.auditActions(t, created.ID)
-	want := []string{"payment.created", "payment.updated", "payment.deleted"}
+	want := []string{actionPaymentCreated, actionPaymentUpdated, actionPaymentDeleted}
 	if len(actions) != len(want) {
 		t.Fatalf("audit actions = %v, want %v", actions, want)
 	}

@@ -23,11 +23,11 @@ func TestTick_MaterializesDueAndSingleFutureThenRerunIsNoop(t *testing.T) {
 	// Daily since T-3 (today is the 25th in Moscow): 4 due (3 overdue + today)
 	// + exactly one future planned (prototype smoke "догон по старому since").
 	want := map[string]string{
-		day22:        opPlanned,
-		day23:        opPlanned,
-		"2026-08-24": opPlanned,
-		day25:        opPlanned,
-		day26:        opPlanned,
+		day22: opPlanned,
+		day23: opPlanned,
+		day24: opPlanned,
+		day25: opPlanned,
+		day26: opPlanned,
 	}
 	if len(ops) != len(want) {
 		t.Fatalf("operations count = %d, want %d: %+v", len(ops), len(want), ops)
@@ -64,7 +64,7 @@ func TestTick_AutoPayClosesOnlyToday(t *testing.T) {
 	if got := ops[day23]; got != opPlanned {
 		t.Fatalf("the day before yesterday-equivalent (2026-08-23) = %q, want planned — no backdated catch-up (ADR 0049 §2)", got)
 	}
-	if got := ops["2026-08-24"]; got != opPlanned {
+	if got := ops[day24]; got != opPlanned {
 		t.Fatalf("2026-08-24 = %q, want planned — yesterday remains debt", got)
 	}
 	if got := ops[day25]; got != opPaid {
@@ -93,7 +93,7 @@ func TestTick_WorkerMissedTheDayLeavesDebt(t *testing.T) {
 	h.runTick()
 
 	ops := statusesOf(h.operationsOf(paymentID))
-	for _, missed := range []string{"2026-08-20", "2026-08-21", day22, day23, "2026-08-24"} {
+	for _, missed := range []string{"2026-08-20", "2026-08-21", day22, day23, day24} {
 		if got := ops[missed]; got != opPlanned {
 			t.Fatalf("missed day %s = %q, want planned — a worker outage leaves honest debt", missed, got)
 		}

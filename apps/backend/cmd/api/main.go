@@ -172,6 +172,7 @@ func run() error {
 		PropertyContacts:         propertiesMod.PropertyContactService,
 		AddressSuggester:         propertiesMod.DadataClient,
 		PropertyPayments:         paymentsMod.PaymentService,
+		PropertyOperations:       paymentsMod.OperationService,
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
 		NotificationPreferences:  notificationsMod.PreferenceService,
