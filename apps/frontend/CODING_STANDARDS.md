@@ -45,6 +45,8 @@ No form library and no schema validator — this is deliberate, not a gap:
 ## Components, styling, and React Compiler
 
 - Styling: existing components use CSS Modules + design tokens (`shared/styles/tokens.css`); new design-layer components (ADR 0050) are shadcn/ui over Radix, styled with Tailwind utilities on the same tokens. The transitional mix is accepted until the app-wide migration.
+- Touch-safe hover (decision 2026-08-26): Tailwind `hover:` utilities are already emitted inside `@media (hover: hover)` by Tailwind v4 — use them freely in the design layer. In CSS Modules, every `:hover` rule must sit inside an `@media (hover: hover)` block (all legacy rules were wrapped by codemod; new ones follow the pattern), so hover styles never fire on touch devices.
+- Focus (decision 2026-08-26): input fields carry **no focus ring at all** — the caret is the focus affordance; do not re-add `focus-within:`/`focus-visible:` rings to field boxes. Buttons/links keep their `:focus-visible` ring: it only appears on keyboard focus and never on mouse clicks.
 - `shared/ui/` is the app's own kit: folder-per-component (`Button.tsx` + `Button.module.css` + `index.ts`), ~23 wrappers. Wrap, don't bypass; `/ui-kit` is the gallery route.
 - HeroUI v3 (legacy widgets only, ADR 0050): provider-less — import `@heroui/react` components directly. `@heroui/styles` appears exactly once — the `@import` in `app/globals.css` — and never in TSX.
 - **React Compiler is on** (`next.config.ts`). Manual `useMemo`/`useCallback`/`memo` is not the default: write plain code and let the compiler memoize. Reach for manual memoization only where the compiler provably can't help (values escaping to non-React code) and justify it with a comment.

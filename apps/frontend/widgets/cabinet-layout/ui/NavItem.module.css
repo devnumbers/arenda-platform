@@ -9,8 +9,10 @@
     color 0.15s ease;
 }
 
+@media (hover: hover) {
 .item:hover {
   background: var(--color-secondary-bg, #f1f3f6);
+}
 }
 
 .active {
@@ -45,8 +47,10 @@
   color: #8d8f92;
 }
 
+@media (hover: hover) {
 .bottom:hover {
   background: transparent;
+}
 }
 
 .bottomIcon {

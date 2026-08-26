@@ -122,8 +122,10 @@
   text-decoration: none;
 }
 
+@media (hover: hover) {
 .bannerLink:hover {
   text-decoration: underline;
+}
 }
 
 .bannerLink + .bannerLink {

@@ -56,8 +56,10 @@
   color: var(--color-white);
 }
 
+@media (hover: hover) {
 .primary:hover {
   background-color: var(--color-primary-hover);
+}
 }
 
 .primary:active {
@@ -69,8 +71,10 @@
   color: var(--color-text);
 }
 
+@media (hover: hover) {
 .secondary:hover {
   background-color: var(--color-secondary-hover);
+}
 }
 
 .secondary:active {
@@ -82,8 +86,10 @@
   color: var(--color-primary);
 }
 
+@media (hover: hover) {
 .clear:hover {
   background-color: var(--color-clear-hover);
+}
 }
 
 .clear:active {
@@ -95,8 +101,10 @@
   color: var(--color-text);
 }
 
+@media (hover: hover) {
 .icon-black:hover {
   background-color: var(--color-black-icon-hover);
+}
 }
 
 .icon-black:active {
@@ -108,8 +116,10 @@
   color: var(--color-white);
 }
 
+@media (hover: hover) {
 .white-icon:hover {
   background-color: rgba(255, 255, 255, 0.08);
+}
 }
 
 .white-icon:active {
@@ -121,8 +131,10 @@
   color: var(--color-primary);
 }
 
+@media (hover: hover) {
 .primary-icon:hover {
   background-color: var(--color-clear-hover);
+}
 }
 
 .primary-icon:active {

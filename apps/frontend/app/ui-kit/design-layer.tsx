@@ -48,7 +48,10 @@ const statusGradations = ['danger', 'warning', 'good', 'check', 'info'] as const
  * Figma-фреймов «Рентли. Новые экраны сервиса» (node-id — резолюция #449). */
 export function DesignLayerShowcase(): JSX.Element {
     const [nameValue, setNameValue] = useState('');
+    const [nameInValue, setNameInValue] = useState('');
     const [titleInValue, setTitleInValue] = useState('');
+    const [titleInFilled, setTitleInFilled] = useState('Аренда, январь');
+    const [titleInError, setTitleInError] = useState('Страховка');
     const [limitedValue, setLimitedValue] = useState('Страхование квартиры');
     const [searchValue, setSearchValue] = useState('');
     const [searchFilled, setSearchFilled] = useState('аренд');
@@ -62,9 +65,9 @@ export function DesignLayerShowcase(): JSX.Element {
     return (
         <>
             <section className={styles.section}>
-                <h2 className={styles.sectionTitle}>Дизайн-слой платежей (ADR 0050)</h2>
+                <h2 className={styles.sectionTitle}>Новые компоненты — дизайн-слой (ADR 0050)</h2>
                 <p className={styles.groupTitle}>
-                    shadcn/ui поверх Radix · Tailwind на токенах · шрифт Onest
+                    shadcn/ui поверх Radix · Tailwind на токенах · шрифт Onest — источник правды для новых экранов
                 </p>
 
                 <div className={styles.group}>
@@ -107,7 +110,7 @@ export function DesignLayerShowcase(): JSX.Element {
                 </div>
 
                 <div className={styles.group}>
-                    <h3 className={styles.groupTitle}>TextField</h3>
+                    <h3 className={styles.groupTitle}>TextField · Title Out</h3>
                     <div className={styles.textFields}>
                         <TextField
                             title="Название платежа"
@@ -122,9 +125,9 @@ export function DesignLayerShowcase(): JSX.Element {
                             title="Название платежа"
                             error="Ошибка"
                             maxLength={256}
-                            value={limitedValue}
-                            onChange={(event) => setLimitedValue(event.target.value)}
-                            onClear={() => setLimitedValue('')}
+                            value={nameInValue}
+                            onChange={(event) => setNameInValue(event.target.value)}
+                            onClear={() => setNameInValue('')}
                         />
                         <TextField
                             title="Название платежа"
@@ -133,6 +136,13 @@ export function DesignLayerShowcase(): JSX.Element {
                             onChange={(event) => setLimitedValue(event.target.value)}
                             onClear={() => setLimitedValue('')}
                         />
+                        <TextField title="Название платежа" placeholder="Название платежа" disabled />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>TextField · Title In (плавающий лейбл)</h3>
+                    <div className={styles.textFields}>
                         <TextField
                             variant="titleIn"
                             title="Название платежа"
@@ -141,6 +151,24 @@ export function DesignLayerShowcase(): JSX.Element {
                             onChange={(event) => setTitleInValue(event.target.value)}
                             onClear={() => setTitleInValue('')}
                         />
+                        <TextField
+                            variant="titleIn"
+                            title="Название платежа"
+                            maxLength={256}
+                            value={titleInFilled}
+                            onChange={(event) => setTitleInFilled(event.target.value)}
+                            onClear={() => setTitleInFilled('')}
+                        />
+                        <TextField
+                            variant="titleIn"
+                            title="Название платежа"
+                            error="Ошибка"
+                            maxLength={256}
+                            value={titleInError}
+                            onChange={(event) => setTitleInError(event.target.value)}
+                            onClear={() => setTitleInError('')}
+                        />
+                        <TextField variant="titleIn" title="Название платежа" disabled />
                     </div>
                 </div>
 

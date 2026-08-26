@@ -46,9 +46,14 @@
   transition: background-color 0.15s ease;
 }
 
-.listItem:hover,
 .listItem[data-active='true'] {
   background-color: var(--color-secondary-bg);
+}
+
+@media (hover: hover) {
+.listItem:hover {
+  background-color: var(--color-secondary-bg);
+}
 }
 
 /* Roving keyboard focus inside the dropdown — the app's standard focus ring. */

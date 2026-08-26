@@ -38,8 +38,10 @@
   transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+@media (hover: hover) {
 .periodOption:hover {
   border-color: var(--color-secondary-hover);
+}
 }
 
 .periodOption:focus-visible {
@@ -84,8 +86,10 @@
   text-decoration: none;
 }
 
+@media (hover: hover) {
 .bannerLink:hover {
   text-decoration: underline;
+}
 }
 
 .bannerLink + .bannerLink {

@@ -24,7 +24,20 @@ export default function UiKitPage(): JSX.Element {
         <main className={styles.page}>
             <h1 className={styles.title}>UI Kit</h1>
 
+            {/* Новые компоненты — дизайн-слой (ADR 0050): источник правды,
+                всё новое строится на них. */}
             <DesignLayerShowcase/>
+
+            {/* Старые компоненты (HeroUI) — под замену дизайн-слоем, будут
+                удалены; показаны для сверки при миграции. */}
+            <section className={styles.section}>
+                <h2 className={clsx(styles.sectionTitle, styles.deprecatedTitle)}>
+                    Старые компоненты (HeroUI) — под замену
+                </h2>
+                <p className={styles.statusNote}>
+                    Устаревший слой: не использовать в новом коде (ADR 0050), будет удалён после миграции экранов.
+                </p>
+            </section>
 
             <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Button</h2>

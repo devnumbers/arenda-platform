@@ -72,8 +72,10 @@
   text-decoration: none;
 }
 
+@media (hover: hover) {
 .paymentLink:hover {
   text-decoration: underline;
+}
 }
 
 .rowSkeleton {

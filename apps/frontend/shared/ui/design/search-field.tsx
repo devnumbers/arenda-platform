@@ -7,8 +7,8 @@ import { IconButton } from './icon-button';
 
 /** Поисковое поле дизайн-слоя (Figma 706:12561): пилюля radius 100 на сером
  * фоне, текст 14/16, иконка поиска справа; при непустом значении и onClear —
- * кнопка-крестик (остаётся в таб-порядке). Фокус — каноничный ring
- * дизайн-системы (focus-within). */
+ * кнопка-крестик (остаётся в таб-порядке). Фокус-кольца нет намеренно
+ * (решение владельца 2026-08-26): видимый признак фокуса — каретка. */
 export type SearchFieldProps = Omit<ComponentProps<'input'>, 'type' | 'size'> & {
   readonly onClear?: () => void;
 };
@@ -28,7 +28,6 @@ export function SearchField({
     <div
       className={cn(
         'flex h-13 w-full items-center gap-2 rounded-pill bg-surface-muted pl-[18px] pr-1 font-sans transition-shadow',
-        'focus-within:ring-4 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-surface',
         disabled && 'opacity-50',
         className,
       )}

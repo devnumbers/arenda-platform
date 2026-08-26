@@ -67,8 +67,10 @@
   color: #2b7fff;
 }
 
+@media (hover: hover) {
 .reset:hover {
   opacity: 0.8;
+}
 }
 
 .group {

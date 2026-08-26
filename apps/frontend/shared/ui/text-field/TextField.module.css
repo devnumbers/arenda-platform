@@ -31,12 +31,16 @@
   transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+@media (hover: hover) {
 .field:hover:not(.disabled):not(.error) {
   border-color: var(--color-secondary-hover);
 }
+}
 
+@media (hover: hover) {
 .field.error:hover:not(.disabled) {
   border-color: var(--color-error);
+}
 }
 
 .field:focus-within:not(.disabled) {

@@ -52,8 +52,10 @@
   text-decoration: none;
 }
 
+@media (hover: hover) {
 .markdown a:hover {
   text-decoration: underline;
+}
 }
 
 .markdown strong {

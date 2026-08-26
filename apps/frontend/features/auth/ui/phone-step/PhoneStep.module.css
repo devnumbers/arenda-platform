@@ -44,6 +44,8 @@
   text-decoration: underline;
 }
 
+@media (hover: hover) {
 .legalLink:hover {
   text-decoration: none;
+}
 }

@@ -62,8 +62,10 @@
   color: var(--color-white);
 }
 
+@media (hover: hover) {
 .primary:hover:not(:disabled):not(.disabled) {
   background-color: var(--color-primary-hover);
+}
 }
 
 .primary:active:not(:disabled):not(.disabled) {
@@ -75,8 +77,10 @@
   color: var(--color-text);
 }
 
+@media (hover: hover) {
 .secondary:hover:not(:disabled):not(.disabled) {
   background-color: var(--color-secondary-hover);
+}
 }
 
 .secondary:active:not(:disabled):not(.disabled) {
@@ -88,8 +92,10 @@
   color: var(--color-primary);
 }
 
+@media (hover: hover) {
 .clear:hover:not(:disabled):not(.disabled) {
   background-color: var(--color-clear-hover);
+}
 }
 
 .clear:active:not(:disabled):not(.disabled) {
@@ -101,8 +107,10 @@
   color: var(--color-text);
 }
 
+@media (hover: hover) {
 .icon-black:hover:not(:disabled):not(.disabled) {
   background-color: var(--color-black-icon-hover);
+}
 }
 
 .icon-black:active:not(:disabled):not(.disabled) {
@@ -114,8 +122,10 @@
   color: var(--color-white);
 }
 
+@media (hover: hover) {
 .white-icon:hover:not(:disabled):not(.disabled) {
   background-color: rgba(255, 255, 255, 0.08);
+}
 }
 
 .white-icon:active:not(:disabled):not(.disabled) {
@@ -127,8 +137,10 @@
   color: var(--color-primary);
 }
 
+@media (hover: hover) {
 .primary-icon:hover:not(:disabled):not(.disabled) {
   background-color: var(--color-clear-hover);
+}
 }
 
 .primary-icon:active:not(:disabled):not(.disabled) {

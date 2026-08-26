@@ -15,8 +15,10 @@
   transition: background-color 0.15s ease;
 }
 
+@media (hover: hover) {
 .addButton:hover:not(:disabled) {
   background: #e7e9ec;
+}
 }
 
 .addButton:disabled {

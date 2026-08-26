@@ -37,8 +37,10 @@
   cursor: pointer;
 }
 
+@media (hover: hover) {
 .changePhoneLink:hover {
   color: var(--color-primary-hover);
+}
 }
 
 .errorMessage {

@@ -38,8 +38,10 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+@media (hover: hover) {
 .addTrigger:hover {
   border-color: var(--color-secondary-hover);
+}
 }
 
 .addTrigger:focus-visible {
@@ -89,9 +91,11 @@
   cursor: pointer;
 }
 
+@media (hover: hover) {
 .noticeClose:hover {
   background: var(--color-secondary-hover);
   color: var(--color-text);
+}
 }
 
 .noticeClose svg {
@@ -242,8 +246,10 @@
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
+@media (hover: hover) {
 .roleTrigger:hover {
   background: var(--color-secondary-bg);
+}
 }
 
 .roleTrigger:focus-visible {

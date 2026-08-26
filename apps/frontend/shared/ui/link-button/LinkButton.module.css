@@ -72,8 +72,10 @@
   color: var(--color-white);
 }
 
+@media (hover: hover) {
 .primary:hover:not(.disabled) {
   background-color: var(--color-primary-hover);
+}
 }
 
 .primary:active:not(.disabled) {
@@ -85,8 +87,10 @@
   color: var(--color-text);
 }
 
+@media (hover: hover) {
 .secondary:hover:not(.disabled) {
   background-color: var(--color-secondary-hover);
+}
 }
 
 .secondary:active:not(.disabled) {
@@ -98,8 +102,10 @@
   color: var(--color-primary);
 }
 
+@media (hover: hover) {
 .clear:hover:not(.disabled) {
   background-color: var(--color-clear-hover);
+}
 }
 
 .clear:active:not(.disabled) {
@@ -111,8 +117,10 @@
   color: var(--color-text);
 }
 
+@media (hover: hover) {
 .icon-black:hover:not(.disabled) {
   background-color: var(--color-black-icon-hover);
+}
 }
 
 .icon-black:active:not(.disabled) {

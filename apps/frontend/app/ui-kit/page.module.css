@@ -73,3 +73,17 @@
 .darkGroup .groupTitle {
   color: var(--color-secondary-bg);
 }
+
+/* Разделение слоёв витрины: новые компоненты (дизайн-слой ADR 0050) —
+   источник правды, старые (HeroUI) — под замену и удаление. */
+.statusNote {
+  font-size: var(--font-size-text-m);
+  line-height: var(--line-height-text-m);
+  color: var(--color-text-muted);
+  margin: -8px 0 24px;
+}
+
+.deprecatedTitle {
+  border-bottom-color: var(--color-error);
+  color: var(--color-text-muted);
+}
