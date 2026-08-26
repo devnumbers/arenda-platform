@@ -12,7 +12,7 @@ export function Checkbox({ className, ...props }: CheckboxProps): JSX.Element {
   return (
     <CheckboxRoot
       className={cn(
-        'flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border-[1.5px] border-content-tertiary bg-transparent font-sans outline-none transition-colors',
+        'flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-content-tertiary bg-transparent font-sans outline-none transition-colors',
         'hover:border-primary',
         'active:border-primary-active active:bg-primary-active',
         'data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-white',

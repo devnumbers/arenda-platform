@@ -11,7 +11,7 @@ import { cn } from '@/shared/lib/cn';
  * смещения.
  */
 const iconButtonVariants = cva(
-  'inline-flex shrink-0 items-center justify-center rounded-pill font-sans outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex shrink-0 cursor-pointer items-center justify-center rounded-pill font-sans outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {

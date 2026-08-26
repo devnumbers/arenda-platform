@@ -11,7 +11,7 @@ export function Switch({ className, ...props }: SwitchProps): JSX.Element {
   return (
     <SwitchRoot
       className={cn(
-        'inline-flex h-7 w-10 shrink-0 rounded-pill bg-surface-muted p-[2px] font-sans outline-none transition-colors',
+        'inline-flex h-7 w-10 shrink-0 cursor-pointer rounded-pill bg-surface-muted p-[2px] font-sans outline-none transition-colors',
         'hover:bg-surface-muted-hover active:bg-surface-muted-active',
         'data-[state=checked]:bg-primary data-[state=checked]:hover:bg-primary-hover data-[state=checked]:active:bg-primary-active',
         'focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',

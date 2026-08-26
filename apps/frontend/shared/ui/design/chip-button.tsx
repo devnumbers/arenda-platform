@@ -24,7 +24,7 @@ export function ChipButton({
       type={type}
       aria-pressed={selected}
       className={cn(
-        'inline-flex h-11 shrink-0 items-center justify-center gap-1 rounded-pill bg-surface-muted px-5 font-sans text-sm font-medium text-content outline-none transition-colors',
+        'inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-pill bg-surface-muted px-5 font-sans text-sm font-medium text-content outline-none transition-colors',
         'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         'disabled:pointer-events-none disabled:opacity-50',
         selected && 'bg-primary text-white',

@@ -23,7 +23,7 @@ export function RadioGroupItem({ className, ...props }: RadioGroupItemProps): JS
   return (
     <RadioGroupItemRoot
       className={cn(
-        'flex h-5 w-5 shrink-0 items-center justify-center rounded-pill border-[1.5px] border-content-tertiary bg-transparent font-sans outline-none transition-colors',
+        'flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-pill border-[1.5px] border-content-tertiary bg-transparent font-sans outline-none transition-colors',
         'hover:border-primary',
         'active:border-primary-active active:bg-primary-active',
         'data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-white',

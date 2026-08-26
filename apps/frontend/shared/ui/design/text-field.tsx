@@ -25,7 +25,8 @@ export type TextFieldProps = Omit<ComponentProps<'input'>, 'size'> & {
   readonly title?: string;
   readonly description?: string;
   readonly error?: string;
-  /** Показывает счётчик «длина/лимит»; красным — при достижении лимита. */
+  /** Лимит символов: нативный maxLength инпута (ввод сверх запрещён) +
+   * счётчик «длина/лимит»; красным — при достижении лимита. */
   readonly maxLength?: number;
   readonly onClear?: () => void;
 };
@@ -88,6 +89,7 @@ export function TextField({
               disabled={disabled}
               value={value}
               placeholder={title}
+              maxLength={maxLength}
               {...props}
             />
             <label
@@ -104,7 +106,15 @@ export function TextField({
           </div>
         )}
         {(variant === 'titleOut' || title === undefined) && (
-          <input id={inputId} className={input} disabled={disabled} value={value} placeholder={placeholder} {...props} />
+          <input
+            id={inputId}
+            className={input}
+            disabled={disabled}
+            value={value}
+            placeholder={placeholder}
+            maxLength={maxLength}
+            {...props}
+          />
         )}
         {showClear && (
           <IconButton
