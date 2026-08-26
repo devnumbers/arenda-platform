@@ -6,9 +6,15 @@ import { cn } from '@/shared/lib/cn';
 
 /**
  * Кнопка дизайн-слоя (ADR 0050, Figma 939:46118 — «Рентли. Новые экраны
- * сервиса»). Варианты Primary/Secondary/Danger/Clear, размер default —
- * прямоугольник radius 16, small — пилюля radius 100. Focus-visible —
- * каноничный ring дизайн-системы: 4px синий поверх 2px белого смещения.
+ * сервиса»). Два размера: default — 56px, radius 16, паддинг 24, зазор 8,
+ * кегль R/500 16/18; small — 44px, пилюля radius 100, паддинг 20, зазор 6,
+ * кегль M/500 14/16. Варианты Primary (#2B7FFF→hover #2175F5→active
+ * #176BEB), Secondary (серый фон с шагами hover/active), Danger (розовый
+ * фон, красный текст — hover/active фон не меняют), Clear (белая пилюля,
+ * серый текст) и White (белая пилюля, тёмный текст); Clear/White — пилюли
+ * с кеглем M в ОБОИХ размерах (Figma 1134:55051, 1185:41649). Focus-visible
+ * — ring 4px синий поверх 2px белого смещения (State/Focus), только с
+ * клавиатуры.
  */
 
 /** Заливка Primary — базовый вариант и выбранное состояние пилюли (Figma
@@ -24,11 +30,12 @@ const buttonVariants = cva(
         secondary:
           'bg-surface-muted text-content hover:bg-surface-muted-hover active:bg-surface-muted-active',
         danger: 'bg-surface-danger text-danger',
-        clear: 'rounded-pill bg-surface text-content-secondary',
+        clear: 'bg-surface text-content-secondary',
+        white: 'bg-surface text-content',
       },
       size: {
-        default: 'h-12 gap-2 rounded-button px-6 text-base',
-        small: 'h-11 gap-1.5 rounded-pill px-4 text-sm',
+        default: 'h-14 gap-2 rounded-button px-6 text-base',
+        small: 'h-11 gap-1.5 rounded-pill px-5 text-sm',
       },
       selected: {
         false: '',
@@ -36,9 +43,12 @@ const buttonVariants = cva(
       },
     },
     compoundVariants: [
-      // Clear в default-размере остаётся пилюлей с зазором 6px (Figma
-      // 1134:55051), а не прямоугольником 16px с зазором 8px.
-      { variant: 'clear', size: 'default', class: 'gap-1.5 rounded-pill' },
+      // Clear и White — пилюли с кеглем M/500 и зазором 6 в обоих размерах
+      // (Figma 1134:55051, 1185:41649), не прямоугольники 16px/8px.
+      {
+        variant: ['clear', 'white'],
+        class: 'gap-1.5 rounded-pill text-sm',
+      },
     ],
     defaultVariants: {
       variant: 'primary',

@@ -39,7 +39,7 @@ import {
 } from '@/shared/ui/design';
 import styles from './page.module.css';
 
-const dlButtonVariants = ['primary', 'secondary', 'danger', 'clear'] as const;
+const dlButtonVariants = ['primary', 'secondary', 'danger', 'clear', 'white'] as const;
 const dlIconVariants = ['primary', 'secondary', 'danger'] as const;
 const statusGradations = ['danger', 'warning', 'good', 'check', 'info'] as const;
 
@@ -84,19 +84,22 @@ export function DesignLayerShowcase(): JSX.Element {
                             with icons
                         </Button>
                     </div>
-                    <div className={styles.grid}>
-                        {dlButtonVariants.map((variant) => (
-                            <Button key={variant} variant={variant} size="small">
-                                small
-                            </Button>
-                        ))}
-                        <Button variant="secondary" size="small" selected>
-                            selected
-                        </Button>
-                        <Button size="small" loading>
-                            loading
-                        </Button>
-                    </div>
+    <div className={styles.grid}>
+        {dlButtonVariants.map((variant) => (
+            <Button key={variant} variant={variant} size="small">
+                small
+            </Button>
+        ))}
+        <Button variant="secondary" size="small" selected>
+            selected
+        </Button>
+        <Button size="small" loading>
+            loading
+        </Button>
+        <Button size="small" disabled>
+            disabled
+        </Button>
+    </div>
                 </div>
 
                 <div className={styles.group}>
