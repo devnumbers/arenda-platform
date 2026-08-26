@@ -10,7 +10,10 @@ import { groupedAmount, sanitizeAmountInput } from './amount-input';
  * цифры и запятая. Маска — sanitizeAmountInput (фильтрует символы, лимит
  * 9 999 999,99 ₽); на мобильной клавиатуре открывается цифровой блок
  * (inputMode=decimal), точка нормализуется в запятую. Значение — «сырая»
- * строка («1234,5»), в поле рисуется группировка разрядов. */
+ * строка («1234,5»), в поле рисуется группировка разрядов. Фокусной
+ * обводки нет намеренно (в макете фокус не отрисован) — по правке
+ * владельца 2026-08-26 синее выделение при клике убрано; позицию ввода
+ * показывает каретка цвета текста. */
 export type AmountFieldProps = {
   readonly value: string;
   readonly onChange: (value: string) => void;
@@ -55,8 +58,7 @@ export function AmountField({
         // size={1} + min-w-0: у input есть intrinsic-минимум по атрибуту
         // size, при кегле 44px он распирал контейнер до ~500px и обрезал
         // узкие экраны — сжимаемся до ширины родителя.
-        'w-full min-w-0 cursor-text bg-transparent text-center font-sans text-[2.75rem] font-semibold leading-12 text-content caret-primary outline-none transition-colors placeholder:text-content-tertiary',
-        'focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+        'w-full min-w-0 cursor-text bg-transparent text-center font-sans text-[2.75rem] font-semibold leading-12 text-content outline-none placeholder:text-content-tertiary',
         'disabled:pointer-events-none disabled:opacity-50',
         className,
       )}

@@ -398,45 +398,28 @@ export function DesignLayerShowcase(): JSX.Element {
                 <div className={styles.group}>
                     <h3 className={styles.groupTitle}>AmountField · ввод суммы</h3>
                     <p className={styles.groupTitle}>
-                        Ввод с клавиатуры, только цифры и запятая (маска до 9 999 999,99 ₽); под
-                        суммой — две пары чипов: форма оплаты и направление (Figma 834:19662,
-                        835:19795). Кнопка заблокирована, пока сумма не введена.
+                        Ввод с клавиатуры, только цифры и запятая (маска до 9 999 999,99 ₽); под суммой
+                        — две кнопки: клик меняет их значение, без всплывающих окон (Figma 834:19662
+                        «Перевод/Доход» → 835:19795 «Наличные/Расход»). Кнопка заблокирована, пока
+                        сумма не введена.
                     </p>
                     <div className={styles.column} style={{ maxWidth: 560 }}>
                         <AmountField value={amount} onChange={setAmount} label="Сумма" />
-                        <div className="flex flex-col items-center gap-3">
-                            <div role="group" aria-label="Форма оплаты" className="flex flex-wrap justify-center gap-2">
-                                <ChipButton
-                                    trailingIcon={<ChangeHorizontal />}
-                                    selected={paymentForm === 'transfer'}
-                                    onClick={() => setPaymentForm('transfer')}
-                                >
-                                    Перевод
-                                </ChipButton>
-                                <ChipButton
-                                    trailingIcon={<ChangeHorizontal />}
-                                    selected={paymentForm === 'cash'}
-                                    onClick={() => setPaymentForm('cash')}
-                                >
-                                    Наличные
-                                </ChipButton>
-                            </div>
-                            <div role="group" aria-label="Направление" className="flex flex-wrap justify-center gap-2">
-                                <ChipButton
-                                    trailingIcon={<ChangeHorizontal />}
-                                    selected={direction === 'income'}
-                                    onClick={() => setDirection('income')}
-                                >
-                                    Доход
-                                </ChipButton>
-                                <ChipButton
-                                    trailingIcon={<ChangeHorizontal />}
-                                    selected={direction === 'expense'}
-                                    onClick={() => setDirection('expense')}
-                                >
-                                    Расход
-                                </ChipButton>
-                            </div>
+                        <div className="flex justify-center gap-2">
+                            <ChipButton
+                                trailingIcon={<ChangeHorizontal />}
+                                aria-label={`Форма оплаты: ${paymentForm === 'transfer' ? 'Перевод' : 'Наличные'}. Нажмите, чтобы переключить`}
+                                onClick={() => setPaymentForm((prev) => (prev === 'transfer' ? 'cash' : 'transfer'))}
+                            >
+                                {paymentForm === 'transfer' ? 'Перевод' : 'Наличные'}
+                            </ChipButton>
+                            <ChipButton
+                                trailingIcon={<ChangeHorizontal />}
+                                aria-label={`Направление: ${direction === 'income' ? 'Доход' : 'Расход'}. Нажмите, чтобы переключить`}
+                                onClick={() => setDirection((prev) => (prev === 'income' ? 'expense' : 'income'))}
+                            >
+                                {direction === 'income' ? 'Доход' : 'Расход'}
+                            </ChipButton>
                         </div>
                         <p className="text-center text-sm text-content-secondary">
                             К оплате: {formatMoneyKopecks(amountKopecks(amount))}
