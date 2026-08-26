@@ -56,7 +56,7 @@ export function TextField({
   const bottomLeft = error ?? description;
 
   const box = cn(
-    'flex h-14 w-full items-center rounded-button bg-surface-muted pl-[18px] pr-1 transition-shadow',
+    'flex h-14 w-full items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 transition-shadow',
     !disabled && error === undefined && 'hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
     error !== undefined && 'bg-surface-danger hover:shadow-none',
   );
@@ -111,7 +111,6 @@ export function TextField({
             icon={<Cancel />}
             label="Очистить поле"
             variant={error !== undefined ? 'danger' : 'secondary'}
-            className="h-10 w-10 shrink-0"
             disabled={disabled}
             onClick={onClear}
           />

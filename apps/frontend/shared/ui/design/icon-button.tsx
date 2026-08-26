@@ -5,8 +5,10 @@ import { cn } from '@/shared/lib/cn';
 /**
  * Кнопка-иконка дизайн-слоя (Figma 934:19148). Круглая зона нажатия 44×44
  * под иконку 24×24: Primary — прозрачная с серым hover, Secondary —
- * постоянный серый круг (hover/active не меняют — так в Figma), Danger —
- * прозрачная с красной иконкой. Focus-visible — синее кольцо 2px без смещения.
+ * прозрачная с серой иконкой #9FA8AC (text-content-tertiary; экспорт
+ * инстанса из поля ввода — без фона), Danger — прозрачная с красной
+ * иконкой #FB2C36 (text-danger). Focus-visible — синее кольцо 2px без
+ * смещения.
  */
 const iconButtonVariants = cva(
   'inline-flex shrink-0 items-center justify-center rounded-pill font-sans outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50',
@@ -14,7 +16,7 @@ const iconButtonVariants = cva(
     variants: {
       variant: {
         primary: 'text-content hover:bg-surface-muted active:bg-surface-muted-hover',
-        secondary: 'bg-surface-muted text-content',
+        secondary: 'text-content-tertiary',
         danger: 'text-danger',
       },
     },
