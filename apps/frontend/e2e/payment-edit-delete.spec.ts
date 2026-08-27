@@ -231,6 +231,20 @@ test.describe('удаление платежа', () => {
     // Снесено всё: ни правила, ни просрочек.
     await expect(page.getByText('Телевидение')).toHaveCount(0);
     await expect(page.getByText('Консьерж-сервис')).toHaveCount(2);
+
+    // Оплаченный факт переживает правило с пометкой «платёж удалён»:
+    // операция на месте, payment_id обнулён (AC #467; поверхность показа
+    // пометки — экраны истории операций объекта, следующий срез).
+    const paid = await page.request.get(
+      `/api/properties/${STUDIO}/operations?status=paid&limit=50`,
+    );
+    expect(paid.ok()).toBe(true);
+    const { items } = (await paid.json()) as {
+      items: ReadonlyArray<{ title: string; paymentId: string | null }>;
+    };
+    const tvPaid = items.filter((op) => op.title === 'Телевидение');
+    expect(tvPaid).toHaveLength(1);
+    expect(tvPaid[0]?.paymentId).toBeNull();
   });
 });
 
