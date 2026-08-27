@@ -23,7 +23,8 @@ const (
 // bounds, and the service resolves Today from the owner calendar right before
 // the store runs the query. Status filters on the server-computed view status
 // (nil = no filter); DateFrom/DateTo bound the period inclusively on the
-// operation date; Desc sorts newest-first (the contract default).
+// operation date; sorting is newest-first by contract (a zero Asc), and only
+// an explicit Asc=true flips it to oldest-first.
 type OperationsListQuery struct {
 	Status   *domain.OperationViewStatus
 	DateFrom *time.Time
