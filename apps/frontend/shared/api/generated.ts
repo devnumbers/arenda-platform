@@ -341,6 +341,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/payments/{paymentId}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPaymentOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/favorite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setPaymentFavorite"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPropertyOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/operations/{operationId}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["payOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/access/members": {
         parameters: {
             query?: never;
@@ -1705,6 +1769,8 @@ export interface components {
             /** @enum {string} */
             paymentForm: "transfer" | "cash";
             category: components["schemas"]["CategoryView"];
+            /** @description The rule's favorite star (PUT favorite); returned in the reads and the lists. */
+            isFavorite: boolean;
             pauses: components["schemas"]["PauseIntervalView"][];
             /** Format: date-time */
             createdAt: string;
@@ -1713,6 +1779,45 @@ export interface components {
         };
         PaymentsResponse: {
             items: components["schemas"]["PaymentResponse"][];
+        };
+        /** @description The favorite toggle body of PUT favorite (an atomic UPDATE on the server — never a read-modify-write PATCH). */
+        FavoriteUpdateRequest: {
+            favorite: boolean;
+        };
+        /** @description One operation of the Payments context: a payment occurrence or a manual fact. status carries overdue as a server-computed view status (planned with the date already past in the property owner's timezone). */
+        OperationResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /**
+             * Format: uuid
+             * @description The originating rule; null marks it deleted or the fact manual.
+             */
+            paymentId: string | null;
+            /** Format: date */
+            date: string;
+            /** Format: date */
+            paidDate: string | null;
+            /** @enum {string} */
+            status: "planned" | "paid" | "overdue";
+            /** @enum {string} */
+            type: "income" | "expense";
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /**
+             * @description Snapshot of the rule's form; null leaves room for manual operations.
+             * @enum {string|null}
+             */
+            paymentForm: "transfer" | "cash" | null;
+            /** @description Category label snapshot frozen at materialization time. */
+            categoryLabel: string;
+            /** @description Default-catalog slug snapshot for icon rendering; null when absent. */
+            categorySlug: string | null;
+        };
+        OperationsResponse: {
+            items: components["schemas"]["OperationResponse"][];
         };
         /**
          * @description The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
@@ -1967,6 +2072,16 @@ export interface components {
     };
     parameters: {
         PropertyId: string;
+        /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
+        OperationsStatusFilter: "planned" | "paid" | "overdue";
+        /** @description Inclusive lower bound of the period on the operation date. */
+        OperationsDateFrom: string;
+        /** @description Inclusive upper bound of the period on the operation date. */
+        OperationsDateTo: string;
+        /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
+        OperationsOrder: "asc" | "desc";
+        OperationsLimit: number;
+        OperationsOffset: number;
     };
     requestBodies: never;
     headers: never;
@@ -2787,6 +2902,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPaymentOperations: {
+        parameters: {
+            query?: {
+                /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
+                status?: components["parameters"]["OperationsStatusFilter"];
+                /** @description Inclusive lower bound of the period on the operation date. */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the operation date. */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
+                order?: components["parameters"]["OperationsOrder"];
+                limit?: components["parameters"]["OperationsLimit"];
+                offset?: components["parameters"]["OperationsOffset"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment operations list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setPaymentFavorite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FavoriteUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Payment favorite state set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPropertyOperations: {
+        parameters: {
+            query?: {
+                /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
+                status?: components["parameters"]["OperationsStatusFilter"];
+                /** @description Inclusive lower bound of the period on the operation date. */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the operation date. */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
+                order?: components["parameters"]["OperationsOrder"];
+                limit?: components["parameters"]["OperationsLimit"];
+                offset?: components["parameters"]["OperationsOffset"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property operations list (overdue included with status=overdue) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    payOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operation paid now (planned → paid, paidDate = today in the owner's timezone; the schedule does not shift) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
