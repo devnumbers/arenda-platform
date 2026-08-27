@@ -13,6 +13,13 @@ export const ROUTES = {
   /** Страница платежа (#465): карточка, мутации, секции вхождений. */
   propertyPayment: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}`,
+  /** Подэкраны страницы платежа (#466): график, история, просрочки. */
+  propertyPaymentSchedule: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}/schedule`,
+  propertyPaymentHistory: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}/history`,
+  propertyPaymentOverdue: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}/overdue`,
   /** Визард создания платежа; тип выбирается в шите выбора «Платёж / Автоплатёж». */
   propertyPaymentNew: (id: string, type: 'payment' | 'autopayment') =>
     `/properties/${id}/payments/new?type=${type}`,

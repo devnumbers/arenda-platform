@@ -45,9 +45,11 @@ export const SEEDED_PROPERTIES = ['Квартира на Ленина', 'Гар�
 
 /** Seeded property ids (tools/e2e/frontend/seed.sql): on the apartment live
  * the payments of the «Платежи объекта» screen (#463); the garage is
- * intentionally paymentless for the empty states. */
+ * intentionally paymentless for the empty states; the studio carries the
+ * 55-overdue rule for the overdue sub-screen scroll test (#466). */
 export const SEEDED_APARTMENT_PROPERTY_ID = '33333333-3333-4333-8333-333333333333';
 export const SEEDED_GARAGE_PROPERTY_ID = '44444444-4444-4444-8444-444444444444';
+export const SEEDED_STUDIO_PROPERTY_ID = '46464646-4646-4646-8646-464646464646';
 
 /** Session cookie of the non-secure local backend (httpsupport.SessionCookieName). */
 const SESSION_COOKIE_NAME = 'session_id';

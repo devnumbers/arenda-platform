@@ -1,8 +1,14 @@
 import type { JSX, ReactNode } from 'react';
-import { Star } from '@/shared/assets/icons';
-import { formatDayMonth, PaymentRowButton } from '@/entities/payment';
-import type { IsoDate, Payment } from '@/entities/payment';
+import { ChevronDown, Star } from '@/shared/assets/icons';
+import { cn } from '@/shared/lib/cn';
+import {
+  formatDayMonth,
+  formatOverdueDays,
+  PaymentRowButton,
+} from '@/entities/payment';
+import type { IsoDate, Payment, PaymentOperation } from '@/entities/payment';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
+import { daysOverdue } from '../lib/overdue-days';
 import { paymentRowSubtitle } from '../lib/payment-row-subtitle';
 
 /**
@@ -18,17 +24,34 @@ const headingClass = 'text-xl font-semibold leading-6 text-content';
 const hintClass = 'text-[13px] leading-[15px] text-content-secondary';
 
 /** Серая группа секции со строками (заголовок 24/24 сверху, строки приносят
- * свои 24px горизонтали); боковые поля 24 — поля экрана из Figma. */
+ * свои 24px горизонтали); боковые поля 24 — поля экрана из Figma. Со
+ * стрелкой-навигацией в заголовке (стрелки секций страницы платежа —
+ * резолюция #452): на «Платежах объекта» стрелки не рисуются — адресаты
+ * других срезов. */
 export function PaymentsGroup({
   title,
+  open,
   children,
 }: {
   readonly title: string;
+  readonly open?: { readonly label: string; readonly onOpen: () => void };
   readonly children: ReactNode;
 }): JSX.Element {
   return (
     <section className="mx-6 rounded-card bg-surface-muted pb-2">
-      <h2 className={`${headingClass} px-6 pb-3 pt-6`}>{title}</h2>
+      <div className="flex items-center justify-between px-6 pb-3 pt-6">
+        <h2 className={headingClass}>{title}</h2>
+        {open !== undefined && (
+          <button
+            type="button"
+            onClick={open.onOpen}
+            aria-label={open.label}
+            className="-m-1 cursor-pointer rounded-pill p-1 text-content-tertiary outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+          >
+            <ChevronDown className="-rotate-90" aria-hidden />
+          </button>
+        )}
+      </div>
       {children}
     </section>
   );
@@ -85,6 +108,39 @@ export function PaymentsSkeleton({ withHeading }: { readonly withHeading?: boole
         <div className="h-11 w-4/5 animate-pulse rounded-pill bg-surface-muted-hover" />
       </div>
     </section>
+  );
+}
+
+/** Просроченная операция (страница платежа #465 и полный список #466,
+ * фреймы 693:5435/850:15412): срок «N дней» и сумма красным, бейдж danger
+ * на иконке категории. Порядок asc — старейшая первой, долг разбирают по
+ * порядку накопления. Поверхность: gray — секция страницы, white — строки
+ * «Графика» в полном списке (резолюция #452). */
+export function OverdueOperationRow({
+  operation,
+  today,
+  variant = 'gray',
+  className,
+}: {
+  readonly operation: PaymentOperation;
+  readonly today: IsoDate;
+  readonly variant?: 'white' | 'gray';
+  readonly className?: string;
+}): JSX.Element {
+  const style = categoryStyle('default', operation.categorySlug);
+
+  return (
+    <PaymentRowButton
+      className={cn('px-3', className)}
+      variant={variant}
+      danger
+      categoryIcon={
+        <CategoryIcon icon={style.icon} color={style.color} badge="danger" surface="muted" />
+      }
+      title={operation.title}
+      description={formatOverdueDays(daysOverdue(operation.date, today))}
+      amountKopecks={operation.amountKopecks}
+    />
   );
 }
 

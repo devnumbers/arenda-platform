@@ -26,9 +26,19 @@ export {
   paymentTypeLabel,
 } from './lib/payment-page-model';
 export {
+  buildScheduleList,
+  type ScheduleEntry,
+} from './lib/schedule-list';
+export {
+  groupPaidOperations,
+  type PaymentHistoryGroup,
+} from './lib/operations-history';
+export {
+  OPERATIONS_PAGE_SIZE,
   useCreatePayment,
   usePayment,
   usePaymentOperationsByStatus,
+  usePaymentOperationsPaged,
   usePayments,
   usePausePayment,
   usePayOperation,

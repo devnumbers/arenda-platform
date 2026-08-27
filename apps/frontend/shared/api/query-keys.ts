@@ -39,6 +39,9 @@ export const propertyKeys = {
 /** Статусный фильтр операций, проходящий в query параметром `status`. */
 export type PaymentOperationStatusFilter = 'planned' | 'paid' | 'overdue';
 
+/** Направление сортировки операций по дате вхождения (query `order`). */
+export type PaymentOperationOrder = 'asc' | 'desc';
+
 // features/payments
 export const paymentKeys = {
   all: ['payments'] as const,
@@ -59,6 +62,21 @@ export const paymentOperationKeys = {
     paymentId: string,
     status: PaymentOperationStatusFilter,
   ) => [...paymentOperationKeys.all, 'by-payment', propertyId, paymentId, status] as const,
+  /** Порции операций платежа (подэкраны #466): статус и направление — часть ключа. */
+  byPaymentPaged: (
+    propertyId: string,
+    paymentId: string,
+    status: PaymentOperationStatusFilter,
+    order: PaymentOperationOrder,
+  ) =>
+    [
+      ...paymentOperationKeys.all,
+      'by-payment-paged',
+      propertyId,
+      paymentId,
+      status,
+      order,
+    ] as const,
 };
 
 // features/property-contacts

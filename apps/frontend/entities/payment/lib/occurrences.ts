@@ -22,7 +22,12 @@ import { addDays, cmp, dateInMonth, fromIso } from './dates';
 /** Страховочный потолок перечисления — как в прототипе. */
 const MAX_OCCURRENCES = 1000;
 
-/** Горизонт поиска следующего вхождения — 5 лет вперёд, как в прототипе. */
+/** Дневной горизонт пакетной проекции бессрочного правила для «Графика
+ * платежей» — те же 5 лет, что у календарного горизонта поиска порта
+ * (horizonAfter ниже); живёт здесь, чтобы у проекции и порта было одно
+ * число. */
+export const PROJECTION_HORIZON_DAYS = 366 * 5;
+
 function horizonAfter(date: IsoDate): IsoDate {
   const d = fromIso(date);
   return dateInMonth(d.getUTCFullYear() + 5, d.getUTCMonth(), d.getUTCDate());

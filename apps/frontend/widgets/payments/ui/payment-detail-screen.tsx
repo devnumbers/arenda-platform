@@ -21,7 +21,6 @@ import { notify } from '@/shared/lib/notifications';
 import {
   clientTodayIso,
   formatDayMonth,
-  formatOverdueDays,
   isDatePaused,
   nextOccurrenceAfter,
   occurrencesBetween,
@@ -59,12 +58,12 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import {
+  OverdueOperationRow,
   PaymentsEmptyCard,
   PaymentsGroup,
   PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
-import { daysOverdue } from '../lib/overdue-days';
 
 /**
  * Страница платежа (#465, Figma 671:5889 / 850:15410): шапка со звездой
@@ -189,6 +188,7 @@ function PaymentDetailBody({
   readonly payment: Payment;
   readonly canMutate: boolean;
 }): JSX.Element {
+  const router = useRouter();
   const overdueQuery = usePaymentOperationsByStatus(propertyId, payment.id, 'overdue');
   const plannedQuery = usePaymentOperationsByStatus(propertyId, payment.id, 'planned');
 
@@ -220,7 +220,12 @@ function PaymentDetailBody({
       )}
 
       <div className="flex flex-col gap-6">
-        <NextPaymentSection payment={payment} today={today} paused={paused} />
+        <NextPaymentSection
+          propertyId={propertyId}
+          payment={payment}
+          today={today}
+          paused={paused}
+        />
 
         {overdueQuery.isError ? (
           <PaymentsStateCard
@@ -237,9 +242,15 @@ function PaymentDetailBody({
             }
           />
         ) : overduePreview.length > 0 ? (
-          <PaymentsGroup title="Просроченные">
+          <PaymentsGroup
+            title="Просроченные"
+            open={{
+              label: 'Открыть полный список просроченных',
+              onOpen: () => router.push(ROUTES.propertyPaymentOverdue(propertyId, payment.id)),
+            }}
+          >
             {overduePreview.map((operation) => (
-              <OverdueRow key={operation.id} operation={operation} today={today} />
+              <OverdueOperationRow key={operation.id} operation={operation} today={today} />
             ))}
           </PaymentsGroup>
         ) : (
@@ -249,7 +260,7 @@ function PaymentDetailBody({
           />
         )}
 
-        <SubScreenTiles />
+        <SubScreenTiles propertyId={propertyId} paymentId={payment.id} />
       </div>
     </>
   );
@@ -412,18 +423,21 @@ function PaymentActionsRow({
   );
 }
 
-/** Секция «Ближайший платеж»: одна плановая дата по клиентской проекции или
- * «На паузе»; у завершённого правила вхождений больше нет — пустое
- * состояние (история 43). */
+/** Секция «Ближайший платеж» (стрелка → «График», резолюция #452): одна
+ * плановая дата по клиентской проекции или «На паузе»; у завершённого
+ * правила вхождений больше нет — пустое состояние (история 43). */
 function NextPaymentSection({
+  propertyId,
   payment,
   today,
   paused,
 }: {
+  readonly propertyId: string;
   readonly payment: Payment;
   readonly today: IsoDate;
   readonly paused: boolean;
 }): JSX.Element {
+  const router = useRouter();
   // Вхождение текущего дня — тоже «ближайший»: день окончания включён в
   // расписание (домен-порт), поэтому поиск от today, а не строго после.
   const todayOccurrence = paused ? undefined : occurrencesBetween(payment, today, today)[0];
@@ -436,7 +450,13 @@ function NextPaymentSection({
       : undefined;
 
   return (
-    <PaymentsGroup title="Ближайший платеж">
+    <PaymentsGroup
+      title="Ближайший платеж"
+      open={{
+        label: 'Открыть график платежей',
+        onOpen: () => router.push(ROUTES.propertyPaymentSchedule(propertyId, payment.id)),
+      }}
+    >
       {nextText !== undefined ? (
         <NextPaymentRow payment={payment} subtitle={nextText} />
       ) : (
@@ -469,41 +489,29 @@ function NextPaymentRow({
   );
 }
 
-/** Просроченная операция страницы: срок «N дней» и сумма красным, бейдж
- * danger на иконке категории (фреймы 693:5435/850:15412); порядок asc —
- * старейшая первой, долг разбирают по порядку накопления. */
-function OverdueRow({
-  operation,
-  today,
+/** Плитки подэкранов «График / История» (Figma 693:5245) — входы на
+ * подэкраны #466. */
+function SubScreenTiles({
+  propertyId,
+  paymentId,
 }: {
-  readonly operation: PaymentOperation;
-  readonly today: IsoDate;
+  readonly propertyId: string;
+  readonly paymentId: string;
 }): JSX.Element {
-  const style = categoryStyle('default', operation.categorySlug);
+  const router = useRouter();
 
-  return (
-    <PaymentRowButton
-      className="px-3"
-      variant="gray"
-      danger
-      categoryIcon={
-        <CategoryIcon icon={style.icon} color={style.color} badge="danger" surface="muted" />
-      }
-      title={operation.title}
-      description={formatOverdueDays(daysOverdue(operation.date, today))}
-      amountKopecks={operation.amountKopecks}
-    />
-  );
-}
-
-/** Плитки подэкранов «График / История» (Figma 693:5245): маршруты встанут
- * вместе с подэкранами (#466) — до того плитки без навигации (мёртвых
- * ссылок не выпускаем, прецедент #463). */
-function SubScreenTiles(): JSX.Element {
   return (
     <div className="flex gap-2">
-      <PaymentsTile icon={<Calendar className="h-6 w-6 text-content" aria-hidden />} label="График платежей" />
-      <PaymentsTile icon={<TimeHistory className="h-6 w-6 text-content" aria-hidden />} label="История платежей" />
+      <PaymentsTile
+        icon={<Calendar className="h-6 w-6 text-content" aria-hidden />}
+        label="График платежей"
+        onSelect={() => router.push(ROUTES.propertyPaymentSchedule(propertyId, paymentId))}
+      />
+      <PaymentsTile
+        icon={<TimeHistory className="h-6 w-6 text-content" aria-hidden />}
+        label="История платежей"
+        onSelect={() => router.push(ROUTES.propertyPaymentHistory(propertyId, paymentId))}
+      />
     </div>
   );
 }
@@ -511,15 +519,23 @@ function SubScreenTiles(): JSX.Element {
 function PaymentsTile({
   icon,
   label,
+  onSelect,
 }: {
   readonly icon: ReactNode;
   readonly label: string;
+  readonly onSelect: () => void;
 }): JSX.Element {
+  // Имя — из видимого текста: без aria-лейбла, чтобы не расходиться с
+  // надписью и не дублировать стрелку секции «Ближайший платеж».
   return (
-    <div className="flex min-h-[168.5px] flex-1 flex-col justify-between rounded-card bg-surface-muted p-6">
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex min-h-[168.5px] flex-1 cursor-pointer flex-col justify-between rounded-card bg-surface-muted p-6 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+    >
       {icon}
       <span className="text-base leading-[18px] font-medium text-content">{label}</span>
-    </div>
+    </button>
   );
 }
 

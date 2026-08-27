@@ -44,7 +44,13 @@ VALUES
      'Квартира на Ленина', 'apartment', 'Москва, ул. Ленина, 1', 'active'),
     ('44444444-4444-4444-8444-444444444444',
      '11111111-1111-4111-8111-111111111111',
-     'Гараж на Садовой', 'garage', 'Москва, ул. Садовая, 2', 'active')
+     'Гараж на Садовой', 'garage', 'Москва, ул. Садовая, 2', 'active'),
+-- Третий объект — только для полного списка просроченных (#466): 55+
+-- просрочек одного правила; держит их подальше от квартиры, чтобы секция
+-- «Просроченные» её экрана оставалась двухкарточной (Figma 654:6778).
+    ('46464646-4646-4646-8646-464646464646',
+     '11111111-1111-4111-8111-111111111111',
+     'Студия на Полевой', 'apartment', 'Москва, ул. Полевая, 3', 'active')
 ON CONFLICT (id) DO NOTHING;
 
 -- Платежи объекта для экрана «Платежи объекта» (тикет #463): два обычных
@@ -88,7 +94,32 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Техосмотр', 90000,
      '{"kind": "yearly", "month": 2, "day": 29}',
-     CURRENT_DATE - 14, CURRENT_DATE - 14, FALSE, 'cash', 'parking', FALSE)
+     CURRENT_DATE - 14, CURRENT_DATE - 14, FALSE, 'cash', 'parking', FALSE),
+-- Подэкраны страницы платежа (#466): длинная история оплат (55+ paid —
+-- скролл-догрузка истории; since в будущем, чтобы загрузочный тик ничего
+-- не материализовал поверх сидовых операций — тот же приём, что у аренды)
+-- и ежедневный платеж с длинной будущей проекцией (график, 3+ порции).
+    ('55555555-5555-4555-8555-555555555556',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     'expense', 'Интернет', 100000,
+     '{"kind": "monthly", "dayOfMonth": 15}',
+     CURRENT_DATE + 5, NULL, FALSE, 'transfer', 'internet', FALSE),
+    ('55555555-5555-4555-8555-555555555557',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     'expense', 'Парковка', 20000,
+     '{"kind": "daily"}',
+     CURRENT_DATE, CURRENT_DATE + 120, FALSE, 'cash', 'parking', FALSE),
+-- Полный список просроченных (#466): правило студии с 55 просрочками
+-- (скролл-догрузка). `since` = сегодня − 5: загрузочный тик не добавляет
+-- задним числом, просрочки — ровно сидовые строки ниже.
+    ('55555555-5555-4555-8555-555555555558',
+     '11111111-1111-4111-8111-111111111111',
+     '46464646-4646-4646-8646-464646464646',
+     'expense', 'Аренда студии', 3000000,
+     '{"kind": "monthly", "dayOfMonth": 10}',
+     CURRENT_DATE - 5, NULL, FALSE, 'transfer', 'rent', FALSE)
 ON CONFLICT (id) DO UPDATE
 SET title = EXCLUDED.title,
     amount_kopecks = EXCLUDED.amount_kopecks,
@@ -131,3 +162,60 @@ ON CONFLICT (id) DO UPDATE
 SET date = EXCLUDED.date,
     paid_date = EXCLUDED.paid_date,
     status = EXCLUDED.status;
+
+-- История платежей (#466): 55 оплаченных вхождений «Интернета» — пара
+-- «сегодня/вчера» для групп и 53 помесячно назад (три порции по 50 →
+-- скролл-догрузка). Оплаченные даты раньше `since` (он в будущем) — тот же
+-- сидовый приём, что у просрочки аренды: тик paid-строки не трогает.
+INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
+                        paid_date, status, type, title, amount_kopecks,
+                        payment_form, category_label, category_slug)
+VALUES
+    ('77777777-7777-4777-8777-000000000001',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     '55555555-5555-4555-8555-555555555556',
+     'payment', CURRENT_DATE, CURRENT_DATE, 'paid', 'expense',
+     'Интернет', 100000, 'transfer', 'Интернет', 'internet'),
+    ('77777777-7777-4777-8777-000000000002',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     '55555555-5555-4555-8555-555555555556',
+     'payment', CURRENT_DATE - 1, CURRENT_DATE - 1, 'paid', 'expense',
+     'Интернет', 100000, 'transfer', 'Интернет', 'internet')
+ON CONFLICT (id) DO UPDATE
+SET date = EXCLUDED.date,
+    paid_date = EXCLUDED.paid_date,
+    status = EXCLUDED.status;
+
+INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
+                        paid_date, status, type, title, amount_kopecks,
+                        payment_form, category_label, category_slug)
+SELECT
+    ('77777777-7777-4777-8777-' || lpad((77777700 + g)::text, 12, '0'))::uuid,
+    '11111111-1111-4111-8111-111111111111',
+    '33333333-3333-4333-8333-333333333333',
+    '55555555-5555-4555-8555-555555555556',
+    'payment',
+    (CURRENT_DATE - (g || ' month')::interval)::date,
+    (CURRENT_DATE - (g || ' month')::interval)::date,
+    'paid', 'expense', 'Интернет', 100000, 'transfer', 'Интернет', 'internet'
+FROM generate_series(1, 53) AS g
+ON CONFLICT (id) DO NOTHING;
+
+-- Полный список просроченных (#466): 55 просроченных вхождений «Аренды
+-- студии» (даты — месяцы назад; две порции по 50 → скролл-догрузка).
+INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
+                        paid_date, status, type, title, amount_kopecks,
+                        payment_form, category_label, category_slug)
+SELECT
+    ('77777777-7777-4777-8777-' || lpad((77777800 + g)::text, 12, '0'))::uuid,
+    '11111111-1111-4111-8111-111111111111',
+    '46464646-4646-4646-8646-464646464646',
+    '55555555-5555-4555-8555-555555555558',
+    'payment',
+    (CURRENT_DATE - (g || ' month')::interval)::date,
+    NULL,
+    'planned', 'expense', 'Аренда студии', 3000000, 'transfer', 'Аренда студии', 'rent'
+FROM generate_series(1, 55) AS g
+ON CONFLICT (id) DO NOTHING;

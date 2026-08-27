@@ -1,9 +1,11 @@
 'use client';
 
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
+  type UseInfiniteQueryResult,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
@@ -19,6 +21,7 @@ import type {
 import {
   paymentKeys,
   paymentOperationKeys,
+  type PaymentOperationOrder,
   type PaymentOperationStatusFilter,
 } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
@@ -129,6 +132,43 @@ export function usePaymentOperationsByStatus(
       );
       return response.items.map(mapPaymentOperation);
     },
+    enabled: Boolean(propertyId) && Boolean(paymentId),
+  });
+}
+
+/** Размер порции всех списков операций (правило платформы, резолюция #452:
+ * по 50 + бесконечный скролл; серверный дефолт — те же 50). */
+export const OPERATIONS_PAGE_SIZE = 50;
+
+/**
+ * Порции операций платежа для подэкранов страницы (#466): «История»
+ * (status=paid, порядок по чипу «Новые») и полный список просроченных
+ * (status=overdue, asc — долг разбирают по порядку накопления). pageParam —
+ * offset; следующая страница есть, пока порция полная. Направление — часть
+ * ключа: переключение чипа читает другой кэш с первой порции.
+ */
+export function usePaymentOperationsPaged(
+  propertyId: string,
+  paymentId: string,
+  params: { readonly status: PaymentOperationStatusFilter; readonly order: PaymentOperationOrder },
+): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
+  const { status, order } = params;
+  return useInfiniteQuery({
+    queryKey: paymentOperationKeys.byPaymentPaged(propertyId, paymentId, status, order),
+    queryFn: async ({ pageParam }) => {
+      const response = await apiClient<OperationsResponse>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`
+          + `/operations?status=${status}&order=${order}`
+          + `&limit=${OPERATIONS_PAGE_SIZE}&offset=${String(pageParam)}`,
+      );
+      return response.items.map(mapPaymentOperation);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length < OPERATIONS_PAGE_SIZE
+        ? undefined
+        : allPages.length * OPERATIONS_PAGE_SIZE,
+    select: (data) => data.pages.flat(),
     enabled: Boolean(propertyId) && Boolean(paymentId),
   });
 }
