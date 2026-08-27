@@ -324,6 +324,7 @@ function PaymentActionsRow({
   readonly completed: boolean;
   readonly payable: PaymentOperation | null | undefined;
 }): JSX.Element {
+  const router = useRouter();
   const pausePayment = usePausePayment(propertyId, payment.id);
   const resumePayment = useResumePayment(propertyId, payment.id);
   const payOperation = usePayOperation(propertyId);
@@ -383,10 +384,13 @@ function PaymentActionsRow({
               onClick={() => setConfirmOpen(true)}
             />
           ))}
-        {/* Экран правки — следующий срез (#467): до его посадки кнопка
-         * видима по Figma, но инертна — мёртвых ссылок не выпускаем
-         * (прецедент #463, плитки ниже). */}
-        <RoundActionButton icon={<Edit />} caption="Изменить" disabled />
+        {/* Экран правки (#467): смотрящий не входит — строка кнопок скрыта
+         * целиком (canMutate), полный доступ правит без удаления. */}
+        <RoundActionButton
+          icon={<Edit />}
+          caption="Изменить"
+          onClick={() => router.push(ROUTES.propertyPaymentEdit(propertyId, payment.id))}
+        />
         <RoundActionButton
           variant="primary"
           icon={<Check />}

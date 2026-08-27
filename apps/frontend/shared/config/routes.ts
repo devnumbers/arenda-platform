@@ -20,6 +20,9 @@ export const ROUTES = {
     `/properties/${id}/payments/${paymentId}/history`,
   propertyPaymentOverdue: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}/overdue`,
+  /** Экран правки платежа (#467): форма поверх правила, удаление — там же. */
+  propertyPaymentEdit: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}/edit`,
   /** Визард создания платежа; тип выбирается в шите выбора «Платёж / Автоплатёж». */
   propertyPaymentNew: (id: string, type: 'payment' | 'autopayment') =>
     `/properties/${id}/payments/new?type=${type}`,

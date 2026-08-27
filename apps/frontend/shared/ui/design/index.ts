@@ -18,7 +18,7 @@ export { ChipButton, type ChipButtonProps } from './chip-button';
 export { StepsChip, type StepsChipProps, type StepsChipSize } from './steps-chip';
 export { CalendarButton, type CalendarButtonProps, type CalendarButtonState } from './calendar-button';
 export { AmountField, type AmountFieldProps } from './amount-field';
-export { amountKopecks, groupedAmount, sanitizeAmountInput } from './amount-input';
+export { amountKopecks, groupedAmount, sanitizeAmountInput, syncAmountInputDom } from './amount-input';
 export { CalendarMonth, type CalendarMonthProps } from './calendar-month';
 export { MonthDaysGrid, type MonthDaysGridProps } from './month-days-grid';
 export { monthTitle } from './month-grid';

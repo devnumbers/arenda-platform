@@ -40,6 +40,17 @@ export const test = base.extend<{ seededUser: SeededUser }>({
 });
 export { expect };
 
+/** Session tokens of the seeded co-members of the apartment (#467 role
+ * matrix): full access (edits without delete) and viewer (read only). Lazy
+ * on purpose — specs that never use them run without the extra env. */
+export function seededMemberSessionToken(): string {
+  return requiredEnv('E2E_MEMBER_SESSION_TOKEN');
+}
+
+export function seededViewerSessionToken(): string {
+  return requiredEnv('E2E_VIEWER_SESSION_TOKEN');
+}
+
 /** Seeded property names (tools/e2e/frontend/seed.sql). */
 export const SEEDED_PROPERTIES = ['Квартира на Ленина', 'Гараж на Садовой'] as const;
 
@@ -60,10 +71,16 @@ const BASE_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3010';
  * seeded session cookie, and the middleware /me check accepts it.
  */
 export async function openCabinetWithSeededSession(page: Page, user: SeededUser): Promise<void> {
+  await openCabinetWithSessionToken(page, user.sessionToken);
+}
+
+/** Same entry, but for any pre-authenticated seeded session (co-members of
+ * the apartment — the #467 role matrix). */
+export async function openCabinetWithSessionToken(page: Page, sessionToken: string): Promise<void> {
   await page.context().addCookies([
     {
       name: SESSION_COOKIE_NAME,
-      value: user.sessionToken,
+      value: sessionToken,
       url: BASE_URL,
     },
   ]);

@@ -53,6 +53,57 @@ VALUES
      'Студия на Полевой', 'apartment', 'Москва, ул. Полевая, 3', 'active')
 ON CONFLICT (id) DO NOTHING;
 
+-- Совместный доступ к квартире (#467): полный доступ (правит без удаления)
+-- и смотрящий (экран правки недоступен). Собственные сессии — те же
+-- pre-authenticated cookie-токены оркестратора.
+INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted)
+VALUES
+    ('12111111-1111-4111-8111-111111111121', :'member_phone_det', 'owner', 'Мария', 'Петрова', 'e2e-member@example.com', TRUE),
+    ('13111111-1111-4111-8111-111111111131', :'viewer_phone_det', 'owner', 'Сергей', 'Сидоров', 'e2e-viewer@example.com', TRUE)
+ON CONFLICT (id) DO UPDATE
+SET phone = EXCLUDED.phone,
+    phone_encrypted = TRUE,
+    email = EXCLUDED.email,
+    name = EXCLUDED.name,
+    surname = EXCLUDED.surname;
+
+INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_used_at)
+VALUES
+    ('22222222-2222-4222-8222-222222222223',
+     '12111111-1111-4111-8111-111111111121',
+     :'member_token_hash',
+     now() + interval '7 days',
+     now(),
+     now()),
+    ('22222222-2222-4222-8222-222222222224',
+     '13111111-1111-4111-8111-111111111131',
+     :'viewer_token_hash',
+     now() + interval '7 days',
+     now(),
+     now())
+ON CONFLICT (id) DO UPDATE
+SET token_hash = EXCLUDED.token_hash,
+    expires_at = EXCLUDED.expires_at,
+    last_used_at = EXCLUDED.last_used_at;
+
+-- Уникальность активных членств — частичный индекс (000095): conflict-target
+-- повторяет его условие.
+INSERT INTO property_members (id, property_id, user_id, role, granted_by)
+VALUES
+    ('99999999-9999-4999-8999-999999999931',
+     '33333333-3333-4333-8333-333333333333',
+     '12111111-1111-4111-8111-111111111121',
+     'full_access',
+     '11111111-1111-4111-8111-111111111111'),
+    ('99999999-9999-4999-8999-999999999932',
+     '33333333-3333-4333-8333-333333333333',
+     '13111111-1111-4111-8111-111111111131',
+     'viewer',
+     '11111111-1111-4111-8111-111111111111')
+ON CONFLICT (property_id, user_id) WHERE status = 'active' DO UPDATE
+SET role = EXCLUDED.role,
+    granted_by = EXCLUDED.granted_by;
+
 -- Платежи объекта для экрана «Платежи объекта» (тикет #463): два обычных
 -- правила и автоплатёж на квартире; гараж намеренно пуст — экран показывает
 -- пустые состояния. `since` в будущем: загрузочный тик бекенда ничего не
@@ -119,7 +170,24 @@ VALUES
      '46464646-4646-4646-8646-464646464646',
      'expense', 'Аренда студии', 3000000,
      '{"kind": "monthly", "dayOfMonth": 10}',
-     CURRENT_DATE - 5, NULL, FALSE, 'transfer', 'rent', FALSE)
+     CURRENT_DATE - 5, NULL, FALSE, 'transfer', 'rent', FALSE),
+-- Экран правки и удаление (#467): пара правил-однодневок на студии (в стороне
+-- от секций квартиры) с просрочками для обоих режимов чекбокса модалки:
+-- «Консьерж-сервис» удаляют без чекбокса (долг остаётся), «Телевидение» —
+-- с чекбоксом (просрочки сносятся). `since` в будущем: тик ничего не
+-- материализует, просрочки — ровно сидовые строки ниже.
+    ('55555555-5555-4555-8555-555555555559',
+     '11111111-1111-4111-8111-111111111111',
+     '46464646-4646-4646-8646-464646464646',
+     'expense', 'Консьерж-сервис', 50000,
+     '{"kind": "monthly", "dayOfMonth": 20}',
+     CURRENT_DATE + 5, NULL, FALSE, 'transfer', 'concierge', FALSE),
+    ('55555555-5555-4555-8555-55555555555a',
+     '11111111-1111-4111-8111-111111111111',
+     '46464646-4646-4646-8646-464646464646',
+     'expense', 'Телевидение', 70000,
+     '{"kind": "monthly", "dayOfMonth": 25}',
+     CURRENT_DATE + 5, NULL, FALSE, 'transfer', 'tv', FALSE)
 ON CONFLICT (id) DO UPDATE
 SET title = EXCLUDED.title,
     amount_kopecks = EXCLUDED.amount_kopecks,
@@ -157,7 +225,30 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      '55555555-5555-4555-8555-555555555552',
      'payment', CURRENT_DATE - 2, NULL, 'planned', 'expense',
-     'Страхование', 320000, 'cash', 'Страхование', 'insurance')
+     'Страхование', 320000, 'cash', 'Страхование', 'insurance'),
+-- Просрочки правил под удаление (#467): по паре на «Консьерж-сервис»
+-- (чекбокс не отмечен — долг остаётся) и одна на «Телевидении» (чекбокс
+-- отмечен — сносятся вместе с правилом). Даты старше сидовых просрочек
+-- аренды (55 месяцев): секция «Просроченные» показывает 50 старейших (asc),
+-- карточки целей должны попадать в первую порцию.
+    ('77777777-7777-4777-8777-777777777781',
+     '11111111-1111-4111-8111-111111111111',
+     '46464646-4646-4646-8646-464646464646',
+     '55555555-5555-4555-8555-555555555559',
+     'payment', (CURRENT_DATE - (61 || ' month')::interval)::date, NULL, 'planned', 'expense',
+     'Консьерж-сервис', 50000, 'transfer', 'Консьерж', 'concierge'),
+    ('77777777-7777-4777-8777-777777777782',
+     '11111111-1111-4111-8111-111111111111',
+     '46464646-4646-4646-8646-464646464646',
+     '55555555-5555-4555-8555-555555555559',
+     'payment', (CURRENT_DATE - (62 || ' month')::interval)::date, NULL, 'planned', 'expense',
+     'Консьерж-сервис', 50000, 'transfer', 'Консьерж', 'concierge'),
+    ('77777777-7777-4777-8777-777777777783',
+     '11111111-1111-4111-8111-111111111111',
+     '46464646-4646-4646-8646-464646464646',
+     '55555555-5555-4555-8555-55555555555a',
+     'payment', (CURRENT_DATE - (63 || ' month')::interval)::date, NULL, 'planned', 'expense',
+     'Телевидение', 70000, 'transfer', 'Телевидение', 'tv')
 ON CONFLICT (id) DO UPDATE
 SET date = EXCLUDED.date,
     paid_date = EXCLUDED.paid_date,

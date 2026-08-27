@@ -41,6 +41,8 @@ export type PeriodicityStepProps = {
   readonly onDailyPick: () => void;
   /** «Сегодня» клиентской проекции — дефолты якорей вида месяц/год. */
   readonly today: IsoDate;
+  /** Заголовки шага рисует хост (шит правки #467 несёт их в ModalContent). */
+  readonly withHeading?: boolean;
 };
 
 const YEARLY_MONTH_ITEMS = MONTH_LABELS.map((label, index) => ({
@@ -71,7 +73,11 @@ export function PeriodicityStep({
   onRecurrenceChange,
   onDailyPick,
   today,
+  withHeading = true,
 }: PeriodicityStepProps): JSX.Element {
+  const heading = (title: string, subtitle?: string): JSX.Element | null =>
+    withHeading ? <WizardHeading title={title} subtitle={subtitle} /> : null;
+
   const pickKind = (kind: PeriodicityKind): void => {
     if (kind === 'daily') {
       onRecurrenceChange({ kind: 'daily' });
@@ -88,7 +94,7 @@ export function PeriodicityStep({
   if (openBranch === null) {
     return (
       <>
-        <WizardHeading title="Периодичность платежа" />
+        {heading('Периодичность платежа')}
         <div className="flex flex-col pt-2">
           {PERIODICITY_OPTIONS.map((option) => (
             <ListRow
@@ -111,7 +117,7 @@ export function PeriodicityStep({
     case 'weekdays':
       return (
         <>
-          <WizardHeading title="Выберите день" subtitle="Можно выбрать несколько дней" />
+          {heading('Выберите день', 'Можно выбрать несколько дней')}
           {/* Грид недели в ширину контента — как мини-грид месяца (823:11422):
               7 квадратов всегда помещаются даже на узких экранах. */}
           <div className="mx-auto grid w-full max-w-[512px] grid-cols-7 gap-2 px-4 pt-4">
@@ -143,7 +149,7 @@ export function PeriodicityStep({
         recurrence?.kind === 'monthly' ? recurrence.dayOfMonth : isoDayOfMonth(today);
       return (
         <>
-          <WizardHeading title="Выберите день" />
+          {heading('Выберите день')}
           <div className="px-2 pt-4">
             <MonthDaysGrid
               days={31}
@@ -171,7 +177,7 @@ export function PeriodicityStep({
       const day = recurrence?.kind === 'yearly' ? recurrence.day : isoDayOfMonth(today);
       return (
         <>
-          <WizardHeading title="Выберите месяц и день" />
+          {heading('Выберите месяц и день')}
           <div className="flex gap-4 px-6 pt-4">
             <WheelPicker
               items={YEARLY_MONTH_ITEMS}

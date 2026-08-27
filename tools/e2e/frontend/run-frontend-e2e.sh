@@ -165,14 +165,23 @@ log "Schema is ready"
 
 log "Seeding database"
 E2E_SESSION_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
+E2E_MEMBER_SESSION_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
+E2E_VIEWER_SESSION_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
 # token_hash mirrors encryption.hashToken (HMAC-SHA256 over the raw token);
 # phone_det mirrors encryption.DeterministicEncrypt — users.phone is looked
 # up by its ciphertext, so a plaintext seed row would never match.
 CRYPTO="$SCRIPT_DIR/e2e-crypto.mjs"
 TOKEN_HASH="$(node "$CRYPTO" hash-token "$E2E_ENCRYPTION_KEY" "$E2E_SESSION_TOKEN")"
+MEMBER_TOKEN_HASH="$(node "$CRYPTO" hash-token "$E2E_ENCRYPTION_KEY" "$E2E_MEMBER_SESSION_TOKEN")"
+VIEWER_TOKEN_HASH="$(node "$CRYPTO" hash-token "$E2E_ENCRYPTION_KEY" "$E2E_VIEWER_SESSION_TOKEN")"
 PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+7$USER_PHONE_DIGITS")"
+MEMBER_PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+79150000002")"
+VIEWER_PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+79150000003")"
 docker exec -i "$PG_CONTAINER" \
-  psql -U arenda -d arenda -v ON_ERROR_STOP=1 -v token_hash="$TOKEN_HASH" -v phone_det="$PHONE_DET" \
+  psql -U arenda -d arenda -v ON_ERROR_STOP=1 \
+  -v token_hash="$TOKEN_HASH" -v phone_det="$PHONE_DET" \
+  -v member_token_hash="$MEMBER_TOKEN_HASH" -v member_phone_det="$MEMBER_PHONE_DET" \
+  -v viewer_token_hash="$VIEWER_TOKEN_HASH" -v viewer_phone_det="$VIEWER_PHONE_DET" \
   < "$SEED_SQL" >/dev/null
 
 log "Building frontend (production standalone)"
@@ -219,6 +228,8 @@ status=0
   cd "$FRONTEND_DIR"
   E2E_BASE_URL="$FRONTEND_URL" \
   E2E_SESSION_TOKEN="$E2E_SESSION_TOKEN" \
+  E2E_MEMBER_SESSION_TOKEN="$E2E_MEMBER_SESSION_TOKEN" \
+  E2E_VIEWER_SESSION_TOKEN="$E2E_VIEWER_SESSION_TOKEN" \
   E2E_USER_PHONE="$USER_PHONE_DIGITS" \
   E2E_USER_EMAIL="$USER_EMAIL" \
   E2E_BACKEND_LOG="$BACKEND_LOG" \

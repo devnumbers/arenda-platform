@@ -191,6 +191,12 @@ const payments = {
   created: ((options?) =>
     notify.success('Платеж создан', options)) satisfies ScenarioFn,
   createError: errorScenario('Не удалось создать платеж'),
+  updated: ((options?) =>
+    notify.success('Изменения сохранены', options)) satisfies ScenarioFn,
+  updateError: errorScenario('Не удалось сохранить изменения'),
+  deleted: ((options?) =>
+    notify.success('Платеж удален', options)) satisfies ScenarioFn,
+  deleteError: errorScenario('Не удалось удалить платеж'),
   paused: ((options?) =>
     notify.success('Платеж поставлен на паузу', options)) satisfies ScenarioFn,
   pauseError: errorScenario('Не удалось поставить платеж на паузу'),

@@ -27,12 +27,15 @@ export type EndDateStepProps = {
   readonly endDate: IsoDate | undefined;
   readonly onEndDateChange: (endDate: IsoDate | undefined) => void;
   readonly today: IsoDate;
+  /** Заголовок шага рисует хост (шит правки #467 несёт его в ModalContent). */
+  readonly withHeading?: boolean;
 };
 
 export function EndDateStep({
   endDate,
   onEndDateChange,
   today,
+  withHeading = true,
 }: EndDateStepProps): JSX.Element {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [view, setView] = useState<{ year: number; month: number }>(() => {
@@ -57,10 +60,12 @@ export function EndDateStep({
 
   return (
     <>
-      <WizardHeading
-        title="Окончание платежа"
-        subtitle="После выбранной даты, платеж перестанет оплачиваться и удалится. Необязательно"
-      />
+      {withHeading && (
+        <WizardHeading
+          title="Окончание платежа"
+          subtitle="После выбранной даты, платеж перестанет оплачиваться и удалится. Необязательно"
+        />
+      )}
       <div className="flex flex-col pt-2">
         <ListRow
           title="Выбрать дату"

@@ -17,6 +17,7 @@ import type {
   PaymentCreateCommand,
   PaymentFavoriteCommand,
   PaymentOperation,
+  PaymentUpdateCommand,
 } from '@/entities/payment';
 import {
   paymentKeys,
@@ -92,6 +93,59 @@ export function useCreatePayment(
 }
 
 /**
+ * Правка платежа (#467, экран правки): частичный PATCH — команда уже
+ * посчитана диффом формы (update-model), опущенное поле остаётся без
+ * изменений, `since` серверный. Сервер в транзакции пересоздаёт плановое
+ * вхождение и гоняет тик — инвалидируются и правила, и операции.
+ */
+export function useUpdatePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<Payment, ApiError, PaymentUpdateCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: PaymentUpdateCommand) => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`,
+        { method: 'PATCH', body: JSON.stringify(command) },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
+  });
+}
+
+/**
+ * Удаление платежа (только владелец, история 33 спеки #453): плановые
+ * операции с датой от сегодня сносятся всегда; просроченные остаются
+ * долгом (`keepOverdue: true`, безопасный дефолт модалки) или сносятся
+ * вместе с правилом (`false`). Оплаченные факты неприкосновенны — в истории
+ * они остаются с пометкой «платёж удалён» (`payment_id` обнуляется).
+ */
+export function useDeletePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<void, ApiError, boolean> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (keepOverdue: boolean) => {
+      await apiClient<void>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`
+          + `?keep_overdue=${keepOverdue}`,
+        { method: 'DELETE' },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
+  });
+}
+
+/**
  * Чтение платежа для страницы платежа (#465). Порции списков операций
  * отдельно — этот хук тянет только правило.
  */
@@ -116,12 +170,15 @@ export function usePayment(
  * старейшее неоплаченное; просроченные запрашиваются отдельным ключом и
  * имеют приоритет над плановыми) и секция «Просроченные» страницы платежа
  * (#465). Порядок asc закреплён контрактом «долг разбирают по порядку
- * накопления»; порция — серверный дефолт 50.
+ * накопления»; порция — серверный дефолт 50. `options.enabled` глушит запрос
+ * там, где статусный список не нужен (экран правки #467 тянет просрочки
+ * только для владельца — от них зависит чекбокс модалки удаления).
  */
 export function usePaymentOperationsByStatus(
   propertyId: string,
   paymentId: string,
   status: PaymentOperationStatusFilter,
+  options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<PaymentOperation[], ApiError> {
   return useQuery({
     queryKey: paymentOperationKeys.byPaymentWithStatus(propertyId, paymentId, status),
@@ -132,7 +189,7 @@ export function usePaymentOperationsByStatus(
       );
       return response.items.map(mapPaymentOperation);
     },
-    enabled: Boolean(propertyId) && Boolean(paymentId),
+    enabled: (options.enabled ?? true) && Boolean(propertyId) && Boolean(paymentId),
   });
 }
 

@@ -48,3 +48,19 @@ export function groupedAmount(value: string): string {
   }
   return `${grouped},${kopecks}`;
 }
+
+/**
+ * Синхронизация DOM управляемого инпута суммы (общий хвост AmountField и
+ * компактного поля правки #467): маска могла отбросить символы — если DOM
+ * разошёлся с отрисованным значением, пишем отрисованное вручную (React не
+ * перерисует совпавший value).
+ */
+export function syncAmountInputDom(
+  event: { value: string },
+  sanitized: string,
+): void {
+  const rendered = groupedAmount(sanitized);
+  if (event.value !== rendered) {
+    event.value = rendered;
+  }
+}

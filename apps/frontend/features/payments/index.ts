@@ -34,8 +34,14 @@ export {
   type PaymentHistoryGroup,
 } from './lib/operations-history';
 export {
+  buildPaymentUpdateCommand,
+  editFormReady,
+  type PaymentEditForm,
+} from './lib/update-model';
+export {
   OPERATIONS_PAGE_SIZE,
   useCreatePayment,
+  useDeletePayment,
   usePayment,
   usePaymentOperationsByStatus,
   usePaymentOperationsPaged,
@@ -45,4 +51,5 @@ export {
   usePropertyOverdueOperations,
   useResumePayment,
   useSetPaymentFavorite,
+  useUpdatePayment,
 } from './api/hooks';

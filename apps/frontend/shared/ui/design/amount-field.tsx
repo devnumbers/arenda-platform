@@ -2,7 +2,7 @@
 
 import type { ChangeEvent, JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
-import { groupedAmount, sanitizeAmountInput } from './amount-input';
+import { groupedAmount, sanitizeAmountInput, syncAmountInputDom } from './amount-input';
 
 /** Поле суммы дизайн-слоя (тикет #459, Figma 834:19662 / 835:19795):
  * крупная центрированная строка «2 500 ₽» (Onest SemiBold 44/48) — правка
@@ -41,10 +41,7 @@ export function AmountField({
   const handleChange = (event: ChangeEvent<HTMLInputElement>): void => {
     const sanitized = sanitizeAmountInput(event.target.value);
     onChange(sanitized);
-    const domValue = groupedAmount(sanitized);
-    if (event.target.value !== domValue) {
-      event.target.value = domValue;
-    }
+    syncAmountInputDom(event.target, sanitized);
   };
 
   const amountStyle =
