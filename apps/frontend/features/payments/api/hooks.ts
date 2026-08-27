@@ -1,18 +1,22 @@
 'use client';
 
 import {
+  useMutation,
   useQuery,
+  useQueryClient,
+  type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapPayment, mapPaymentOperation } from '@/entities/payment';
-import type { Payment, PaymentOperation } from '@/entities/payment';
+import type { Payment, PaymentCreateCommand, PaymentOperation } from '@/entities/payment';
 import { paymentKeys, paymentOperationKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 
 type PaymentsResponse = components['schemas']['PaymentsResponse'];
 type OperationsResponse = components['schemas']['OperationsResponse'];
+type PaymentResponseDto = components['schemas']['PaymentResponse'];
 
 /** Список платежей объекта — правил с флагом автоплатежа и избранным
  * (ADR 0049): без пагинации, порядок — серверный (по дате заведения). */
@@ -48,5 +52,29 @@ export function usePropertyOverdueOperations(
       return response.items.map(mapPaymentOperation);
     },
     enabled: Boolean(propertyId),
+  });
+}
+
+/**
+ * Создание платежа (визард #464): контракт POST создания camelCase — команда
+ * уходит телом без переупаковки; `since` проставляет сервер (сегодня в TZ
+ * собственника). Инвалидация списков платежей и операций объекта.
+ */
+export function useCreatePayment(
+  propertyId: string,
+): UseMutationResult<Payment, ApiError, PaymentCreateCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: PaymentCreateCommand) => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments`,
+        { method: 'POST', body: JSON.stringify(command) },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
   });
 }

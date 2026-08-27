@@ -23,7 +23,7 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { clientTodayIso } from '../lib/client-today';
+import { clientTodayIso } from '@/entities/payment';
 import { daysOverdue } from '../lib/overdue-days';
 import { PaymentsAddSheet } from './payments-add-sheet';
 import {

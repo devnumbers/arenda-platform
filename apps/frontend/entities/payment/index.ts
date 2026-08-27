@@ -14,7 +14,8 @@ export type {
   PaymentUpdateCommand,
   Recurrence,
 } from './model/types';
-export { isDatePaused, nextOccurrenceAfter, occurrencesBetween } from './lib/occurrences';
+export { firstOccurrence, isDatePaused, nextOccurrenceAfter, occurrencesBetween } from './lib/occurrences';
+export { clientTodayIso } from './lib/client-today';
 export { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from './lib/date-format';
 export { recurrenceLabel } from './lib/recurrence-label';
 export { PaymentRowButton, type PaymentRowButtonProps } from './ui/payment-row-button';

@@ -131,3 +131,18 @@ export function nextOccurrenceAfter(
   }
   return null;
 }
+
+/**
+ * Самое раннее вхождение правила — превью первого вхождения в визарде
+ * (история 9 спеки #453): расписание всегда строится от `since`, сервер
+ * ставит его при создании. null — вхождений нет (например, окончание
+ * раньше даты заведения).
+ */
+export function firstOccurrence(schedule: PaymentSchedule): IsoDate | null {
+  const first = occurrencesBetween(
+    schedule,
+    schedule.since,
+    addDays(horizonAfter(schedule.since), 1),
+  );
+  return first[0] ?? null;
+}

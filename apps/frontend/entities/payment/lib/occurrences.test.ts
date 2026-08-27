@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PaymentSchedule } from '../model/types';
-import { isDatePaused, nextOccurrenceAfter, occurrencesBetween } from './occurrences';
+import { firstOccurrence, isDatePaused, nextOccurrenceAfter, occurrencesBetween } from './occurrences';
 
 const schedule = (over: Partial<PaymentSchedule>): PaymentSchedule => ({
   recurrence: { kind: 'daily' },
@@ -221,5 +221,63 @@ describe('isDatePaused', () => {
         date,
       ),
     ).toBe(expected);
+  });
+});
+
+describe('firstOccurrence — превью визарда (история 9 спеки #453)', () => {
+  it('ежедневное правило: первое вхождение — сама дата заведения', () => {
+    const daily = schedule({ recurrence: { kind: 'daily' }, since: '2026-08-27' });
+    expect(firstOccurrence(daily)).toBe('2026-08-27');
+  });
+
+  it('еженедельное по понедельникам: следующий понедельник после четверга', () => {
+    const weekly = schedule({
+      recurrence: { kind: 'weekly', weekdays: [1] },
+      since: '2026-08-27', // четверг
+    });
+    expect(firstOccurrence(weekly)).toBe('2026-08-31');
+  });
+
+  it('ежемесячное 31-е прижимается к последнему дню короткого месяца', () => {
+    const monthly = schedule({
+      recurrence: { kind: 'monthly', dayOfMonth: 31 },
+      since: '2026-02-10',
+    });
+    expect(firstOccurrence(monthly)).toBe('2026-02-28');
+  });
+
+  it('ежегодное 29 февраля: ближайшее прижатое после даты заведения', () => {
+    const yearly = schedule({
+      recurrence: { kind: 'yearly', month: 2, day: 29 },
+      since: '2026-05-01',
+    });
+    expect(firstOccurrence(yearly)).toBe('2027-02-28');
+  });
+
+  it('вхождение внутри паузы пропускается', () => {
+    const paused = schedule({
+      recurrence: { kind: 'daily' },
+      since: '2026-08-27',
+      pauses: [{ from: '2026-08-27', to: '2026-09-05' }],
+    });
+    expect(firstOccurrence(paused)).toBe('2026-09-05');
+  });
+
+  it('окончание раньше заведения — вхождений нет', () => {
+    const ended = schedule({
+      recurrence: { kind: 'daily' },
+      since: '2026-08-27',
+      endDate: '2026-08-25',
+    });
+    expect(firstOccurrence(ended)).toBeNull();
+  });
+
+  it('день окончания включён', () => {
+    const ended = schedule({
+      recurrence: { kind: 'daily' },
+      since: '2026-08-27',
+      endDate: '2026-08-29',
+    });
+    expect(firstOccurrence(ended)).toBe('2026-08-27');
   });
 });

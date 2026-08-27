@@ -185,6 +185,13 @@ const paymentMethods = {
     }, options)) satisfies PromiseScenarioFn,
 } as const;
 
+/** Контекст «Платежи» (спека #453, история 52): тосты мутаций. */
+const payments = {
+  created: ((options?) =>
+    notify.success('Платеж создан', options)) satisfies ScenarioFn,
+  createError: errorScenario('Не удалось создать платеж'),
+} as const;
+
 const demo = {
   success: ((options?) =>
     notify.success('Успех', options)) satisfies ScenarioFn,
@@ -210,6 +217,7 @@ export type Scenarios = {
   readonly profile: typeof profile;
   readonly tariff: typeof tariff;
   readonly paymentMethods: typeof paymentMethods;
+  readonly payments: typeof payments;
   readonly demo: typeof demo;
 };
 
@@ -221,5 +229,6 @@ export const scenarios: Scenarios = {
   profile,
   tariff,
   paymentMethods,
+  payments,
   demo,
 };
