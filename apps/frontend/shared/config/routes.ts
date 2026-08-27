@@ -8,6 +8,11 @@ export const ROUTES = {
   propertyContactsNew: (id: string) => `/properties/${id}/contacts/new`,
   propertyContactEdit: (propertyId: string, contactId: string) =>
     `/properties/${propertyId}/contacts/${contactId}/edit`,
+  /** Экран «Платежи объекта» — новый хром (#463). */
+  propertyPayments: (id: string) => `/properties/${id}/payments`,
+  /** Визард создания платежа; тип выбирается в шите «Платёж / Автоплатёж». */
+  propertyPaymentNew: (id: string, type: 'payment' | 'autopayment') =>
+    `/properties/${id}/payments/new?type=${type}`,
   profile: '/profile',
   profilePersonal: '/profile/personal',
   profileNotifications: '/profile/notifications',

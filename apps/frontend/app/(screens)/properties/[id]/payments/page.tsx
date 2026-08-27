@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
-import { PaymentsStubScreen } from './stub-screen';
+import { PaymentsOfPropertyScreen } from '@/widgets/payments';
 
-/** Заглушка экрана «Платежи объекта» (#460): демонстрирует оболочку
- * новых экранов (глобальный top-header на десктопе, локальный TopNav,
- * колонка 560) и служит шаблоном для экранных тикетов #463+. */
+/** Экран «Платежи объекта» (#463): секции «Просроченные», «Платежи»,
+ * «Автоплатежи», поиск, шит выбора «Платёж / Автоплатёж». Оболочка новых
+ * экранов (глобальный top-header на десктопе, колонка 560) — из layout
+ * группы (screens). */
 export const metadata: Metadata = {
   title: 'Платежи объекта — Рентли',
 };
@@ -15,5 +16,5 @@ type PaymentsRoutePageProps = {
 export default async function PaymentsRoutePage({ params }: PaymentsRoutePageProps) {
   const { id } = await params;
 
-  return <PaymentsStubScreen propertyId={id} />;
+  return <PaymentsOfPropertyScreen propertyId={id} />;
 }

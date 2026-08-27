@@ -36,6 +36,20 @@ export const propertyKeys = {
     [...propertyKeys.all, 'address-suggestions', query] as const,
 };
 
+// features/payments
+export const paymentKeys = {
+  all: ['payments'] as const,
+  list: (propertyId: string) =>
+    [...paymentKeys.all, 'list', propertyId] as const,
+};
+
+export const paymentOperationKeys = {
+  all: ['payment-operations'] as const,
+  /** Просроченные операции объекта (сервер считает overdue по TZ собственника). */
+  overdueByProperty: (propertyId: string) =>
+    [...paymentOperationKeys.all, 'overdue', propertyId] as const,
+};
+
 // features/property-contacts
 export const propertyContactKeys = {
   all: ['property-contacts'] as const,

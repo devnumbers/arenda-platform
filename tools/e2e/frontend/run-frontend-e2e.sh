@@ -6,9 +6,9 @@ set -euo pipefail
 # Brings up a deterministic, disposable stack and runs apps/frontend/e2e:
 #   1. postgres 18 — compose project arenda-e2e, port 5436
 #      (apps/backend/docker-compose.e2e.yml), wiped on exit;
-#   2. backend — compiled from apps/backend (AUTO_MIGRATE applies migrations
-#      on boot), APP_ENV=local, EMAIL_SENDER=fake (the login code lands in
-#      the JSON log), PAYMENT_PROVIDER=fake;
+#   2. backend — compiled from apps/backend, auto-migration on boot (the
+#      seed waits for the schema), APP_ENV=local, EMAIL_SENDER=fake
+#      (the login code lands in the JSON log), PAYMENT_PROVIDER=fake;
 #   3. frontend — production build served by the next standalone server
 #      (the exact runtime of apps/frontend/Dockerfile), /api proxied to the
 #      backend via BACKEND_URL;
@@ -92,7 +92,20 @@ command -v docker >/dev/null 2>&1 || die "docker is required (postgres runs via 
 command -v node >/dev/null 2>&1 || die "node is required (frontend build, playwright)"
 command -v go >/dev/null 2>&1 || die "go is required (backend build)"
 
-# Deterministic start: a hard-killed previous run may have left the project up.
+# Deterministic start: a hard-killed previous run (or E2E_KEEP_STACK=1 leftovers)
+# may hold the ports — a stale frontend here would silently serve an old build.
+free_port() {
+  local pids
+  pids="$(lsof -ti tcp:"$1" -sTCP:LISTEN 2>/dev/null || true)"
+  if [ -n "$pids" ]; then
+    log "Freeing port $1 (pids: $pids)"
+    kill $pids 2>/dev/null || true
+    sleep 1
+  fi
+}
+free_port "$E2E_BACKEND_PORT"
+free_port "$E2E_FRONTEND_PORT"
+
 "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 log "Starting postgres (arenda-e2e, port $E2E_PG_PORT)"
 "${COMPOSE[@]}" up -d --wait
@@ -100,7 +113,7 @@ log "Starting postgres (arenda-e2e, port $E2E_PG_PORT)"
 log "Building backend"
 (cd "$PROJECT_ROOT" && go build -o "$BACKEND_BIN" ./apps/backend/cmd/api)
 
-log "Starting backend on $BACKEND_URL (migrations apply on boot)"
+log "Starting backend on $BACKEND_URL"
 (
   cd "$PROJECT_ROOT"
   APP_ENV=local \
@@ -119,8 +132,26 @@ log "Starting backend on $BACKEND_URL (migrations apply on boot)"
   exec "$BACKEND_BIN"
 ) > "$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
+
 wait_for_url "$BACKEND_URL/healthz" 60 "backend" "$BACKEND_LOG"
 log "Backend is healthy"
+
+# healthz answers while the boot auto-migration (wire.WirePlatform) may still
+# be running — the seed's INSERTs need the schema, so poll for it explicitly.
+log "Waiting for migrations"
+for i in $(seq 1 60); do
+  if docker exec "$PG_CONTAINER" psql -U arenda -d arenda -tAc \
+    "SELECT to_regclass('public.users')" 2>/dev/null | grep -q users; then
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    echo "--- migrations did not land in 60s; backend log tail: ---" >&2
+    tail -n 50 "$BACKEND_LOG" >&2 || true
+    die "migrations did not land in 60s"
+  fi
+  sleep 1
+done
+log "Schema is ready"
 
 log "Seeding database"
 E2E_SESSION_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"

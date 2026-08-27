@@ -46,3 +46,63 @@ VALUES
      '11111111-1111-4111-8111-111111111111',
      'Гараж на Садовой', 'garage', 'Москва, ул. Садовая, 2', 'active')
 ON CONFLICT (id) DO NOTHING;
+
+-- Платежи объекта для экрана «Платежи объекта» (тикет #463): два обычных
+-- правила и автоплатёж на квартире; гараж намеренно пуст — экран показывает
+-- пустые состояния. `since` в будущем: загрузочный тик бекенда ничего не
+-- материализует, и в секции «Просроченные» — ровно сидовые операции ниже. Слаги категорий — из дефолтного каталога
+-- (tools/payment-categories/catalog.json), иконку рисует фронт.
+INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
+                      recurrence, since, end_date, auto_pay, payment_form,
+                      category_slug, is_favorite)
+VALUES
+    ('55555555-5555-4555-8555-555555555551',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     'expense', 'Арендная плата', 4500000,
+     '{"kind": "monthly", "dayOfMonth": 1}',
+     CURRENT_DATE + 5, NULL, FALSE, 'transfer', 'rent', TRUE),
+    ('55555555-5555-4555-8555-555555555552',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     'expense', 'Страхование', 320000,
+     '{"kind": "monthly", "dayOfMonth": 15}',
+     CURRENT_DATE + 5, NULL, FALSE, 'cash', 'insurance', FALSE),
+    ('55555555-5555-4555-8555-555555555553',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     'expense', 'Электроэнергия', 120000,
+     '{"kind": "monthly", "dayOfMonth": 5}',
+     CURRENT_DATE + 5, NULL, TRUE, 'transfer', 'electricity', FALSE)
+ON CONFLICT (id) DO UPDATE
+SET title = EXCLUDED.title,
+    amount_kopecks = EXCLUDED.amount_kopecks,
+    recurrence = EXCLUDED.recurrence,
+    since = EXCLUDED.since,
+    auto_pay = EXCLUDED.auto_pay,
+    payment_form = EXCLUDED.payment_form,
+    category_slug = EXCLUDED.category_slug,
+    is_favorite = EXCLUDED.is_favorite;
+
+-- Просроченные вхождения: planned с прошедшей датой — просрочку проецирует
+-- сервер по «сегодня» в TZ собственника (ADR 0048), хранится статус planned.
+INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
+                        paid_date, status, type, title, amount_kopecks,
+                        payment_form, category_label, category_slug)
+VALUES
+    ('77777777-7777-4777-8777-777777777771',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     '55555555-5555-4555-8555-555555555551',
+     'payment', CURRENT_DATE - 5, NULL, 'planned', 'expense',
+     'Арендная плата', 4500000, 'transfer', 'Арендная плата', 'rent'),
+    ('77777777-7777-4777-8777-777777777772',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     '55555555-5555-4555-8555-555555555552',
+     'payment', CURRENT_DATE - 2, NULL, 'planned', 'expense',
+     'Страхование', 320000, 'cash', 'Страхование', 'insurance')
+ON CONFLICT (id) DO UPDATE
+SET date = EXCLUDED.date,
+    paid_date = EXCLUDED.paid_date,
+    status = EXCLUDED.status;

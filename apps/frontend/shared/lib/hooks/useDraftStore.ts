@@ -4,10 +4,11 @@ import { useState, useSyncExternalStore } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 /**
- * Shared form-draft store (decision #333 §4): a sessionStorage-backed draft
- * that loads after hydration and persists on every change. One implementation
- * for every `use-*-draft.ts` wrapper — the wrapper owns only the storage key,
- * the default draft, and the `validate` shape check.
+ * Shared form-draft store (decision #333 §4): a web-storage-backed draft
+ * (sessionStorage by default; `storage: 'local'` for drafts that must survive
+ * a browser restart) that loads after hydration and persists on every change.
+ * One implementation for every `use-*-draft.ts` wrapper — the wrapper owns
+ * only the storage key, the default draft, and the `validate` shape check.
  *
  * Hydration safety comes from `useSyncExternalStore`: the server snapshot is
  * the default draft, and the client snapshot (the persisted draft, read once
@@ -20,8 +21,10 @@ export type DraftSnapshot<T> = {
   readonly isLoaded: boolean;
 };
 
+export type DraftStorageKind = 'session' | 'local';
+
 export type DraftStoreConfig<T> = {
-  /** sessionStorage key; bound at first render — a wrapper with a dynamic key remounts per key. */
+  /** Storage key; bound at first render — a wrapper with a dynamic key remounts per key. */
   readonly storageKey: string;
   /** Fallback used before hydration and whenever storage holds no valid draft. */
   readonly createDefault: () => T;
@@ -31,9 +34,11 @@ export type DraftStoreConfig<T> = {
   readonly persist?: 'auto' | 'manual';
   /** auto mode only: terminal drafts (success steps) are removed from storage instead of written. */
   readonly isTerminal?: (draft: T) => boolean;
+  /** sessionStorage (default) or localStorage — drafts that must survive the browser restart. */
+  readonly storage?: DraftStorageKind;
 };
 
-export type SessionDraftStore<T> = {
+export type ReactiveDraftStore<T> = {
   readonly subscribe: (listener: () => void) => () => void;
   readonly getSnapshot: () => DraftSnapshot<T>;
   readonly getServerSnapshot: () => DraftSnapshot<T>;
@@ -42,10 +47,13 @@ export type SessionDraftStore<T> = {
   readonly clearDraft: () => void;
 };
 
-export function createDraftStore<T>(config: DraftStoreConfig<T>): SessionDraftStore<T> {
+export function createDraftStore<T>(config: DraftStoreConfig<T>): ReactiveDraftStore<T> {
   const { storageKey, createDefault, validate } = config;
   const isManual = (config.persist ?? 'auto') === 'manual';
   const isTerminal = config.isTerminal;
+  /** Lazy storage accessor: the config is read per call, never at store creation —
+   * the initializer also runs during SSR, where touching window would throw. */
+  const area = (): Storage => (config.storage === 'local' ? window.localStorage : window.sessionStorage);
 
   const listeners = new Set<() => void>();
   let serverSnapshot: DraftSnapshot<T> | undefined;
@@ -54,7 +62,7 @@ export function createDraftStore<T>(config: DraftStoreConfig<T>): SessionDraftSt
   function readStoredDraft(): T {
     if (typeof window === 'undefined') return createDefault();
     try {
-      const raw = window.sessionStorage.getItem(storageKey);
+      const raw = area().getItem(storageKey);
       if (raw === null) return createDefault();
       return validate(JSON.parse(raw) as unknown);
     } catch {
@@ -66,10 +74,10 @@ export function createDraftStore<T>(config: DraftStoreConfig<T>): SessionDraftSt
     if (typeof window === 'undefined') return;
     try {
       if (isTerminal !== undefined && isTerminal(draft)) {
-        window.sessionStorage.removeItem(storageKey);
+        area().removeItem(storageKey);
         return;
       }
-      window.sessionStorage.setItem(storageKey, JSON.stringify(draft));
+      area().setItem(storageKey, JSON.stringify(draft));
     } catch {
       // Ignore storage quota / privacy mode errors.
     }
@@ -78,7 +86,7 @@ export function createDraftStore<T>(config: DraftStoreConfig<T>): SessionDraftSt
   function removeStoredDraft(): void {
     if (typeof window === 'undefined') return;
     try {
-      window.sessionStorage.removeItem(storageKey);
+      area().removeItem(storageKey);
     } catch {
       // Ignore storage errors.
     }
@@ -113,7 +121,7 @@ export function createDraftStore<T>(config: DraftStoreConfig<T>): SessionDraftSt
       // update, so keystroke saves never re-render the form.
       if (typeof window === 'undefined') return;
       try {
-        window.sessionStorage.setItem(storageKey, JSON.stringify(draft));
+        area().setItem(storageKey, JSON.stringify(draft));
       } catch {
         // Ignore storage quota / privacy mode errors.
       }
@@ -147,10 +155,11 @@ export function useDraftStore<T>(config: DraftStoreConfig<T>): DraftStore<T> {
 }
 
 /** Clears a draft outside a mounted store (e.g. after navigating away mid-flow). */
-export function clearDraftStorage(storageKey: string): void {
+export function clearDraftStorage(storageKey: string, storage?: DraftStorageKind): void {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.removeItem(storageKey);
+    const area = storage === 'local' ? window.localStorage : window.sessionStorage;
+    area.removeItem(storageKey);
   } catch {
     // Ignore storage errors.
   }

@@ -43,6 +43,12 @@ export { expect };
 /** Seeded property names (tools/e2e/frontend/seed.sql). */
 export const SEEDED_PROPERTIES = ['Квартира на Ленина', 'Гараж на Садовой'] as const;
 
+/** Seeded property ids (tools/e2e/frontend/seed.sql): on the apartment live
+ * the payments of the «Платежи объекта» screen (#463); the garage is
+ * intentionally paymentless for the empty states. */
+export const SEEDED_APARTMENT_PROPERTY_ID = '33333333-3333-4333-8333-333333333333';
+export const SEEDED_GARAGE_PROPERTY_ID = '44444444-4444-4444-8444-444444444444';
+
 /** Session cookie of the non-secure local backend (httpsupport.SessionCookieName). */
 const SESSION_COOKIE_NAME = 'session_id';
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3010';
