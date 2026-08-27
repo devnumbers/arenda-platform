@@ -94,6 +94,7 @@ DEFAULT_GOAL := help
 	backend-tkassa-spec-check backend-openapi-check backend-sqlc-check \
 	migrate-up migrate-down check-env \
 	frontend-install frontend-dev frontend-build frontend-test frontend-api-check frontend-e2e \
+	frontend-e2e-headed frontend-e2e-live-up frontend-e2e-live-down \
 	admin-install admin-dev admin-build admin-typecheck admin-test \
 	landing-install landing-dev landing-build \
 	test backend-test backend-test-integration tools-test \
@@ -319,6 +320,26 @@ frontend-test: ## Run the frontend test suite (vitest)
 # Requires Docker. Docs: docs/testing-strategy.md "Экранные e2e (Playwright)".
 frontend-e2e: ## Run frontend Playwright e2e (dedicated stack; Docker required)
 	./tools/e2e/frontend/run-frontend-e2e.sh
+
+# frontend-e2e-headed replays the specs in visible Chromium windows: the same
+# disposable stack, the same fixtures — the runner just shows its work. Pass a
+# Playwright filter through TESTS, e.g. make frontend-e2e-headed TESTS="-g платежи".
+frontend-e2e-headed: ## Run frontend Playwright e2e with visible browser windows (Docker required)
+	./tools/e2e/frontend/run-frontend-e2e.sh --headed $(TESTS)
+
+# frontend-e2e-live-up / -live-down bracket a live UI walkthrough
+# (.agents/skills/ui-walkthrough): raise the seeded stack without running
+# Playwright and leave it running (E2E_LIVE prints the connection facts), then
+# tear it down when the walkthrough ends.
+frontend-e2e-live-up: ## Raise the seeded frontend e2e stack for a live walkthrough (no tests run)
+	E2E_LIVE=1 ./tools/e2e/frontend/run-frontend-e2e.sh
+
+frontend-e2e-live-down: ## Tear down the live walkthrough stack (ports 3010/8081/5436)
+	docker compose -p arenda-e2e -f apps/backend/docker-compose.e2e.yml down -v --remove-orphans || true
+	for port in 3010 8081 5436; do \
+	  pids="$$(lsof -ti tcp:$$port -sTCP:LISTEN 2>/dev/null || true)"; \
+	  [ -z "$$pids" ] || kill $$pids 2>/dev/null || true; \
+	done
 
 # admin-test runs the Vitest suite.
 admin-test: ## Run the admin test suite (vitest)

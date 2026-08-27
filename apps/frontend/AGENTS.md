@@ -18,6 +18,7 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 - For all frontend work, invoke `frontend` — this repository's FSD architecture, slice boundaries, and data-flow rules, with pointers to primary sources (Next.js 16, React, FSD, Vercel conventions).
 - For TypeScript questions and type design, invoke `typescript`.
 - For current library docs before relying on non-obvious APIs, use `context7`.
+- Before shipping a ticket that touched screens, forms, flows, or widgets, run `/ui-walkthrough` — live black-box acceptance in the visible browser against the seeded e2e stack (P0+P1 green gates the commit; see the skill). To watch already-written e2e specs play in visible windows, use the same skill's headed-run mode (`make frontend-e2e-headed`).
 
 ## MCP Servers
 
@@ -81,6 +82,8 @@ cd apps/frontend && npm run lint
 cd apps/frontend && npm run build
 make frontend-test
 ```
+
+- Tickets touching screens, forms, flows, or widgets also gate on `/ui-walkthrough`: live acceptance against the seeded stack with **P0 + P1 green** before the commit (P2/P3 findings report as Issues without blocking).
 
 CI backstop: the `frontend-test` job in `.github/workflows/ci.yml` runs this
 vitest suite on every PR.

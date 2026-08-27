@@ -15,9 +15,13 @@ set -euo pipefail
 #   4. seed — tools/e2e/frontend/seed.sql: owner user, pre-authenticated
 #      session (raw token exported to Playwright as E2E_SESSION_TOKEN),
 #      two active properties;
-#   5. npx playwright test (apps/frontend/playwright.config.ts).
+#   5. npx playwright test (apps/frontend/playwright.config.ts) — skipped when
+#      E2E_LIVE=1: the stack stays up seeded for a live UI walkthrough
+#      (.agents/skills/ui-walkthrough), the connection facts print at the end.
 #
-# Entry points: `make frontend-e2e` (local) and the frontend-e2e CI job.
+# Entry points: `make frontend-e2e` (local), `make frontend-e2e-headed`
+# (visible browser windows), `make frontend-e2e-live-up` / `-live-down`
+# (walkthrough stack), and the frontend-e2e CI job.
 #
 # Overrides (rarely needed): E2E_PG_PORT (5436), E2E_BACKEND_PORT (8081),
 # E2E_FRONTEND_PORT (3010), E2E_ENCRYPTION_KEY (64-hex test key; the seeded
@@ -36,6 +40,12 @@ BACKEND_BIN="$WORK_DIR/arenda-api"
 E2E_PG_PORT="${E2E_PG_PORT:-5436}"
 E2E_BACKEND_PORT="${E2E_BACKEND_PORT:-8081}"
 E2E_FRONTEND_PORT="${E2E_FRONTEND_PORT:-3010}"
+
+# E2E_LIVE=1 raises the seeded stack without running Playwright — the
+# walkthrough's playground. The stack must outlive this invocation.
+if [ "${E2E_LIVE:-0}" = "1" ]; then
+  E2E_KEEP_STACK=1
+fi
 # Test-only AES-256 key (hex). Not a secret: it pins the backend token HMAC
 # so the seeded session row matches the raw token Playwright puts in a cookie.
 E2E_ENCRYPTION_KEY="${E2E_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
@@ -189,6 +199,16 @@ log "Starting frontend on $FRONTEND_URL"
 FRONTEND_PID=$!
 wait_for_url "$FRONTEND_URL/login" 60 "frontend" "$FRONTEND_LOG"
 log "Frontend is up"
+
+if [ "${E2E_LIVE:-0}" = "1" ]; then
+  log "Live walkthrough stack is ready (kept running):"
+  echo "  frontend  $FRONTEND_URL          (go here)"
+  echo "  backend   $BACKEND_URL/healthz   (log: $BACKEND_LOG)"
+  echo "  seed      phone +7$USER_PHONE_DIGITS, email $USER_EMAIL, session token:"
+  echo "            $E2E_SESSION_TOKEN"
+  echo "  teardown  make frontend-e2e-live-down"
+  exit 0
+fi
 
 log "Installing Playwright browsers (idempotent)"
 (cd "$FRONTEND_DIR" && npx playwright install chromium) >/dev/null

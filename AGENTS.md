@@ -39,7 +39,7 @@ All coding agents in this repo — Kimi Code, ZCode, or any other harness — wo
 Main flow (idea → ship):
 1. `/grill-with-docs` — interview to sharpen the idea before implementation (start here when there is a working directory; use `/grill-me` stateless when there is not). It challenges the plan against the relevant per-context `CONTEXT.md` (index in `CONTEXT-MAP.md`), `docs/`, and `docs/adr/`, and updates documentation only when a real glossary or ADR decision changes.
 2. For multi-session builds: `/to-spec` → `/to-tickets` (tracer-bullet vertical slices with blocking edges).
-3. `/implement` per ticket — runs `/tdd` inside on pre-agreed seams and closes with `/code-review`. `/clear` between tickets. For a single-session task, run `/implement` directly after grilling.
+3. `/implement` per ticket — runs `/tdd` inside on pre-agreed seams and closes with `/code-review`. `/clear` between tickets. For a single-session task, run `/implement` directly after grilling. Frontend tickets with screens or interactions additionally close through `/ui-walkthrough` — live acceptance in the visible browser — before the commit.
 
 On-ramps (merge into the main flow):
 - `/triage` — incoming issues and external requests (not ones you created).
