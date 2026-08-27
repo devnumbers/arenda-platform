@@ -1,4 +1,6 @@
+import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { test as base, expect, type Page, type TestInfo } from '@playwright/test';
 
@@ -61,6 +63,39 @@ export const SEEDED_PROPERTIES = ['Квартира на Ленина', 'Гар�
 export const SEEDED_APARTMENT_PROPERTY_ID = '33333333-3333-4333-8333-333333333333';
 export const SEEDED_GARAGE_PROPERTY_ID = '44444444-4444-4444-8444-444444444444';
 export const SEEDED_STUDIO_PROPERTY_ID = '46464646-4646-4646-8646-464646464646';
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Runs one SQL statement against the e2e database — the orchestrator's own
+ * channel (it seeds and polls migrations through `docker exec … psql`).
+ * Serves the lifecycle scenario (#468): the wizard can only create
+ * future-dated rules, so its overdue leg seeds past-dated occurrences
+ * mid-test the same way seed.sql does (status stays 'planned' — the
+ * overdue projection is computed server-side against the owner's today).
+ * Returns the trimmed psql stdout (e.g. "UPDATE 1") for row-count asserts.
+ */
+export async function execE2eSql(sql: string): Promise<string> {
+  const container = requiredEnv('E2E_PG_CONTAINER');
+  try {
+    const { stdout } = await execFileAsync('docker', [
+      'exec',
+      container,
+      'psql',
+      '-U',
+      'arenda',
+      '-d',
+      'arenda',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-tAc',
+      sql,
+    ]);
+    return stdout.trim();
+  } catch (error) {
+    throw new Error(`e2e SQL failed: ${sql}\n${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 /** Session cookie of the non-secure local backend (httpsupport.SessionCookieName). */
 const SESSION_COOKIE_NAME = 'session_id';

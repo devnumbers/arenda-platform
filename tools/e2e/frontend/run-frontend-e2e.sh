@@ -14,7 +14,9 @@ set -euo pipefail
 #      backend via BACKEND_URL;
 #   4. seed — tools/e2e/frontend/seed.sql: owner user, pre-authenticated
 #      session (raw token exported to Playwright as E2E_SESSION_TOKEN),
-#      two active properties;
+#      two active properties; the postgres container is also exported
+#      (E2E_PG_CONTAINER) so specs can seed mid-test data over SQL
+#      (the #468 lifecycle overdue leg);
 #   5. npx playwright test (apps/frontend/playwright.config.ts) — skipped when
 #      E2E_LIVE=1: the stack stays up seeded for a live UI walkthrough
 #      (.agents/skills/ui-walkthrough), the connection facts print at the end.
@@ -233,6 +235,7 @@ status=0
   E2E_USER_PHONE="$USER_PHONE_DIGITS" \
   E2E_USER_EMAIL="$USER_EMAIL" \
   E2E_BACKEND_LOG="$BACKEND_LOG" \
+  E2E_PG_CONTAINER="$PG_CONTAINER" \
   npx playwright test "$@"
 ) || status=$?
 
