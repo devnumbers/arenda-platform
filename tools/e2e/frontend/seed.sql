@@ -73,16 +73,41 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Электроэнергия', 120000,
      '{"kind": "monthly", "dayOfMonth": 5}',
-     CURRENT_DATE + 5, NULL, TRUE, 'transfer', 'electricity', FALSE)
+     CURRENT_DATE + 5, NULL, TRUE, 'transfer', 'electricity', FALSE),
+-- Страница платежа (#465): правило на активной бессрочной паузе
+-- («Возобновить», «Ближайший платеж» = «На паузе») и завершённое правило
+-- (endDate в прошлом: без паузы, «Оплатить» отключена).
+    ('55555555-5555-4555-8555-555555555554',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     'expense', 'Домофон', 15000,
+     '{"kind": "monthly", "dayOfMonth": 10}',
+     CURRENT_DATE - 60, NULL, FALSE, 'transfer', 'intercom', FALSE),
+    ('55555555-5555-4555-8555-555555555555',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     'expense', 'Техосмотр', 90000,
+     '{"kind": "yearly", "month": 2, "day": 29}',
+     CURRENT_DATE - 14, CURRENT_DATE - 14, FALSE, 'cash', 'parking', FALSE)
 ON CONFLICT (id) DO UPDATE
 SET title = EXCLUDED.title,
     amount_kopecks = EXCLUDED.amount_kopecks,
     recurrence = EXCLUDED.recurrence,
     since = EXCLUDED.since,
+    end_date = EXCLUDED.end_date,
     auto_pay = EXCLUDED.auto_pay,
     payment_form = EXCLUDED.payment_form,
     category_slug = EXCLUDED.category_slug,
     is_favorite = EXCLUDED.is_favorite;
+
+-- Активная бессрочная пауза «Домофона»: from в прошлом, to не задан.
+INSERT INTO payment_pauses (id, payment_id, from_date, to_date)
+VALUES ('88888888-8888-4888-8888-888888888881',
+        '55555555-5555-4555-8555-555555555554',
+        CURRENT_DATE - 3, NULL)
+ON CONFLICT (id) DO UPDATE
+SET from_date = EXCLUDED.from_date,
+    to_date = EXCLUDED.to_date;
 
 -- Просроченные вхождения: planned с прошедшей датой — просрочку проецирует
 -- сервер по «сегодня» в TZ собственника (ADR 0048), хранится статус planned.

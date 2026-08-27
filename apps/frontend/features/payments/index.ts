@@ -21,7 +21,18 @@ export {
 } from './lib/wizard-model';
 export { successScreenCopy, type SuccessScreenCopyInput } from './lib/success-copy';
 export {
+  isPaymentCompleted,
+  oldestUnpaidOperation,
+  paymentTypeLabel,
+} from './lib/payment-page-model';
+export {
   useCreatePayment,
+  usePayment,
+  usePaymentOperationsByStatus,
   usePayments,
+  usePausePayment,
+  usePayOperation,
   usePropertyOverdueOperations,
+  useResumePayment,
+  useSetPaymentFavorite,
 } from './api/hooks';

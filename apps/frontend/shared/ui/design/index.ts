@@ -25,6 +25,7 @@ export { monthTitle } from './month-grid';
 export { MonthYearPicker, type MonthYearPickerProps } from './month-year-picker';
 export { WheelPicker, type WheelPickerProps } from './wheel-picker';
 export { ListRow, type ListRowProps } from './list-row';
+export { RoundActionButton, type RoundActionButtonProps } from './round-action-button';
 export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar';
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';
 export { PageContent, type PageContentProps } from './page-content';

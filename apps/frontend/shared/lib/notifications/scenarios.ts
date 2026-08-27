@@ -185,11 +185,26 @@ const paymentMethods = {
     }, options)) satisfies PromiseScenarioFn,
 } as const;
 
-/** Контекст «Платежи» (спека #453, история 52): тосты мутаций. */
+/** Контекст «Платежи» (спека #453, история 52): тосты мутаций. Тексты
+ * паузы/возобновления/избранного — из резолюции #452. */
 const payments = {
   created: ((options?) =>
     notify.success('Платеж создан', options)) satisfies ScenarioFn,
   createError: errorScenario('Не удалось создать платеж'),
+  paused: ((options?) =>
+    notify.success('Платеж поставлен на паузу', options)) satisfies ScenarioFn,
+  pauseError: errorScenario('Не удалось поставить платеж на паузу'),
+  resumed: ((options?) =>
+    notify.success('Платеж возобновлен', options)) satisfies ScenarioFn,
+  resumeError: errorScenario('Не удалось возобновить платеж'),
+  paid: ((options?) =>
+    notify.success('Оплата отмечена', options)) satisfies ScenarioFn,
+  payError: errorScenario('Не удалось отметить оплату'),
+  favoriteAdded: ((options?) =>
+    notify.success('Платеж добавлен в избранное', options)) satisfies ScenarioFn,
+  favoriteRemoved: ((options?) =>
+    notify.success('Платеж больше не в избранном', options)) satisfies ScenarioFn,
+  favoriteError: errorScenario('Не удалось обновить избранное'),
 } as const;
 
 const demo = {

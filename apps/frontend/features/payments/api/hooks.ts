@@ -10,8 +10,17 @@ import {
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapPayment, mapPaymentOperation } from '@/entities/payment';
-import type { Payment, PaymentCreateCommand, PaymentOperation } from '@/entities/payment';
-import { paymentKeys, paymentOperationKeys } from '@/shared/api/query-keys';
+import type {
+  Payment,
+  PaymentCreateCommand,
+  PaymentFavoriteCommand,
+  PaymentOperation,
+} from '@/entities/payment';
+import {
+  paymentKeys,
+  paymentOperationKeys,
+  type PaymentOperationStatusFilter,
+} from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 
 type PaymentsResponse = components['schemas']['PaymentsResponse'];
@@ -75,6 +84,147 @@ export function useCreatePayment(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
+  });
+}
+
+/**
+ * Чтение платежа для страницы платежа (#465). Порции списков операций
+ * отдельно — этот хук тянет только правило.
+ */
+export function usePayment(
+  propertyId: string,
+  paymentId: string,
+): UseQueryResult<Payment, ApiError> {
+  return useQuery({
+    queryKey: paymentKeys.detail(propertyId, paymentId),
+    queryFn: async () => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`,
+      );
+      return mapPayment(response);
+    },
+    enabled: Boolean(propertyId) && Boolean(paymentId),
+  });
+}
+
+/**
+ * Операции платежа одного статуса — вход мутации «Оплатить» (head asc =
+ * старейшее неоплаченное; просроченные запрашиваются отдельным ключом и
+ * имеют приоритет над плановыми) и секция «Просроченные» страницы платежа
+ * (#465). Порядок asc закреплён контрактом «долг разбирают по порядку
+ * накопления»; порция — серверный дефолт 50.
+ */
+export function usePaymentOperationsByStatus(
+  propertyId: string,
+  paymentId: string,
+  status: PaymentOperationStatusFilter,
+): UseQueryResult<PaymentOperation[], ApiError> {
+  return useQuery({
+    queryKey: paymentOperationKeys.byPaymentWithStatus(propertyId, paymentId, status),
+    queryFn: async () => {
+      const response = await apiClient<OperationsResponse>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`
+          + `/operations?status=${status}&order=asc`,
+      );
+      return response.items.map(mapPaymentOperation);
+    },
+    enabled: Boolean(propertyId) && Boolean(paymentId),
+  });
+}
+
+/**
+ * Пауза платежа (история 18 спеки #453): бессрочно с сегодняшнего дня,
+ * генерация останавливается. Сервер в транзакции гоняет тик, поэтому
+ * инвалидируются и правила, и операции.
+ */
+export function usePausePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<Payment, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/pause`,
+        { method: 'POST' },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
+  });
+}
+
+/** Возобновление без подтверждения (история 20); расписание идёт от якорей. */
+export function useResumePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<Payment, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/resume`,
+        { method: 'POST' },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
+  });
+}
+
+/**
+ * Атомарный toggle избранного (PUT favorite c телом `{favorite}`,
+ * резолюция #452) — без read-modify-write через PATCH.
+ */
+export function useSetPaymentFavorite(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<Payment, ApiError, PaymentFavoriteCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: PaymentFavoriteCommand) => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/favorite`,
+        { method: 'PUT', body: JSON.stringify(command) },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+    },
+  });
+}
+
+/**
+ * «Оплатить сейчас» (история 24/25): `planned → paid` у конкретного
+ * вхождения, дата оплаты — серверная, расписание не сдвигается. Какая
+ * операция гасится («старейшее неоплаченное»), решает виджет по спискам
+ * операций; сервер подтверждает контрактной ошибкой 409 на повторную
+ * оплату.
+ */
+export function usePayOperation(
+  propertyId: string,
+): UseMutationResult<PaymentOperation, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (operationId: string) => {
+      const response = await apiClient<components['schemas']['OperationResponse']>(
+        `/properties/${encodeURIComponent(propertyId)}`
+          + `/operations/${encodeURIComponent(operationId)}/pay`,
+        { method: 'POST' },
+      );
+      return mapPaymentOperation(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
     },
   });
 }

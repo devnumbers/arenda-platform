@@ -90,13 +90,15 @@ export function PaymentsSkeleton({ withHeading }: { readonly withHeading?: boole
 
 /** Строка платежа в серой группе: подзаголовок — дата следующего вхождения
  * или «На паузе» (opacity по истории 22), звезда избранного после даты
- * (Figma 654:6778). */
+ * (Figma 654:6778). Выбор строки открывает страницу платежа (#465). */
 export function PaymentRow({
   payment,
   today,
+  onSelect,
 }: {
   readonly payment: Payment;
   readonly today: IsoDate;
+  readonly onSelect?: () => void;
 }): JSX.Element {
   const subtitle = paymentRowSubtitle(payment, today);
   const style = categoryStyle(payment.category.source, payment.category.slug);
@@ -126,6 +128,7 @@ export function PaymentRow({
         )
       }
       amountKopecks={payment.amountKopecks}
+      onSelect={onSelect}
     />
   );
 }

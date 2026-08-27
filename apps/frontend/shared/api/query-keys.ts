@@ -36,11 +36,16 @@ export const propertyKeys = {
     [...propertyKeys.all, 'address-suggestions', query] as const,
 };
 
+/** Статусный фильтр операций, проходящий в query параметром `status`. */
+export type PaymentOperationStatusFilter = 'planned' | 'paid' | 'overdue';
+
 // features/payments
 export const paymentKeys = {
   all: ['payments'] as const,
   list: (propertyId: string) =>
     [...paymentKeys.all, 'list', propertyId] as const,
+  detail: (propertyId: string, paymentId: string) =>
+    [...paymentKeys.all, 'detail', propertyId, paymentId] as const,
 };
 
 export const paymentOperationKeys = {
@@ -48,6 +53,12 @@ export const paymentOperationKeys = {
   /** Просроченные операции объекта (сервер считает overdue по TZ собственника). */
   overdueByProperty: (propertyId: string) =>
     [...paymentOperationKeys.all, 'overdue', propertyId] as const,
+  /** Операции платежа по статусу — гасилки «Оплатить» и секция страницы платежа. */
+  byPaymentWithStatus: (
+    propertyId: string,
+    paymentId: string,
+    status: PaymentOperationStatusFilter,
+  ) => [...paymentOperationKeys.all, 'by-payment', propertyId, paymentId, status] as const,
 };
 
 // features/property-contacts

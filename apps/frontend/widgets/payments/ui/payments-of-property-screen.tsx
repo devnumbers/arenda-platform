@@ -47,9 +47,8 @@ import {
  * (история 47) и на архивном объекте (read-only архива, #446). Стрелки-ссылки
  * заголовков секций из Figma не рисуются: адресаты (полный список
  * просроченных, глобальные списки) — следующие срезы, мёртвых ссылок не
- * выпускаем; переход из строки/карточки на страницу платежа встанет тем же
- * тикетом, что и сама страница. Текст карточки «Ничего не нашлось» —
- * авторский: состояния поиска в Figma нет.
+ * выпускаем. Строки и карточки открывают страницу платежа (#465). Текст
+ * карточки «Ничего не нашлось» — авторский: состояния поиска в Figma нет.
  */
 export function PaymentsOfPropertyScreen({
   propertyId,
@@ -185,6 +184,7 @@ export function PaymentsOfPropertyScreen({
                       <div className="mt-3 flex gap-2 overflow-x-auto px-6 pb-1">
                         {visibleOverdue.map((operation) => {
                           const style = categoryStyle('default', operation.categorySlug);
+                          const paymentId = operation.paymentId;
                           return (
                             <PaymentCardButton
                               key={operation.id}
@@ -200,6 +200,11 @@ export function PaymentsOfPropertyScreen({
                                 />
                               }
                               danger
+                              onSelect={
+                                paymentId !== null
+                                  ? () => router.push(ROUTES.propertyPayment(propertyId, paymentId))
+                                  : undefined
+                              }
                             />
                           );
                         })}
@@ -218,7 +223,14 @@ export function PaymentsOfPropertyScreen({
                     {visibleRegular.length > 0 ? (
                       <PaymentsGroup title="Платежи">
                         {visibleRegular.map((payment) => (
-                          <PaymentRow key={payment.id} payment={payment} today={today} />
+                          <PaymentRow
+                            key={payment.id}
+                            payment={payment}
+                            today={today}
+                            onSelect={() =>
+                              router.push(ROUTES.propertyPayment(propertyId, payment.id))
+                            }
+                          />
                         ))}
                       </PaymentsGroup>
                     ) : (
@@ -233,7 +245,14 @@ export function PaymentsOfPropertyScreen({
                     {visibleAuto.length > 0 ? (
                       <PaymentsGroup title="Автоплатежи">
                         {visibleAuto.map((payment) => (
-                          <PaymentRow key={payment.id} payment={payment} today={today} />
+                          <PaymentRow
+                            key={payment.id}
+                            payment={payment}
+                            today={today}
+                            onSelect={() =>
+                              router.push(ROUTES.propertyPayment(propertyId, payment.id))
+                            }
+                          />
                         ))}
                       </PaymentsGroup>
                     ) : (

@@ -97,3 +97,13 @@ export { default as Add } from './add.svg';
 // Глобальный хром новых экранов (#460): цветной лого «Рентли» 112×28
 // десктопного top-header — Figma I948:48576;934:19655 (цвета запечены в SVG).
 export { default as RentlyLogo } from './rently-logo.svg';
+
+// Страница платежа (#465): круглые кнопки-действия (Pause 617:6814,
+// Play 851:15576, Check/Edit уже есть — #455), строка повторяемости
+// карточки (Repeat 284:1108) и плитки подэкранов (Calendar 616:6651,
+// TimeHistory 627:7557) — currentColor.
+export { default as Pause } from './pause.svg';
+export { default as Play } from './play.svg';
+export { default as Repeat } from './repeat.svg';
+export { default as Calendar } from './calendar.svg';
+export { default as TimeHistory } from './time-history.svg';

@@ -10,7 +10,10 @@ export const ROUTES = {
     `/properties/${propertyId}/contacts/${contactId}/edit`,
   /** Экран «Платежи объекта» — новый хром (#463). */
   propertyPayments: (id: string) => `/properties/${id}/payments`,
-  /** Визард создания платежа; тип выбирается в шите «Платёж / Автоплатёж». */
+  /** Страница платежа (#465): карточка, мутации, секции вхождений. */
+  propertyPayment: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}`,
+  /** Визард создания платежа; тип выбирается в шите выбора «Платёж / Автоплатёж». */
   propertyPaymentNew: (id: string, type: 'payment' | 'autopayment') =>
     `/properties/${id}/payments/new?type=${type}`,
   profile: '/profile',
