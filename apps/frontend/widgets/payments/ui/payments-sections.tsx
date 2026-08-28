@@ -12,16 +12,60 @@ import { daysOverdue } from '../lib/overdue-days';
 import { paymentRowSubtitle } from '../lib/payment-row-subtitle';
 
 /**
- * Секции экрана «Платежи объекта» (Figma 654:6778, 853:17208): серые
- * группы-карточки с заголовком секции, пустые состояния с подсказкой,
- * скелетоны загрузки и строка платежа (иконка категории с белым кантом на
- * серой группе, подзаголовок — дата следующего вхождения или «На паузе»,
- * звезда избранного). Стрелки-ссылки заголовков не рисуются — адресаты в
- * следующих срезах.
+ * Секции экрана «Платежи объекта» (Figma 1043:57610/1043:62920): серые
+ * группы-карточки с заголовком-ссылкой и стрелкой, пустое состояние —
+ * подзаголовок внутри карточки, строка платежа (подзаголовок — дата
+ * следующего вхождения или «На паузе», звезда избранного). Секции страницы
+ * платежа продолжают использовать PaymentsGroup; PaymentsSection —
+ * новый вид секции главного экрана: клик по заголовку открывает страницу
+ * секции, где виден весь список.
  */
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
-const hintClass = 'text-[13px] leading-[15px] text-content-secondary';
+/** Пояснение секции (Mobile/Text/M/400, 1043:62920): 14/16, серый. */
+const hintClass = 'text-sm leading-4 text-content-secondary';
+
+/**
+ * Секция-карточка «Платежей объекта» (1043:57610, 1043:62920): заголовок
+ * слева, шеврон-стрелка — у правого края карточки (как в SectionHeader и
+ * секциях страницы платежа), вся строка — кнопка на страницу секции; пока
+ * строк нет — серый подзаголовок-пояснение под заголовком (14/16,
+ * Mobile/Text/M/400).
+ */
+export function PaymentsSection({
+  title,
+  onOpen,
+  openLabel,
+  emptyHint,
+  testId,
+  children,
+}: {
+  readonly title: string;
+  readonly onOpen: () => void;
+  readonly openLabel: string;
+  readonly emptyHint: string;
+  readonly testId: string;
+  readonly children: ReactNode;
+}): JSX.Element {
+  const isEmpty = children === null;
+  return (
+    <section data-testid={testId} className="mx-6 rounded-card bg-surface-muted pb-6">
+      <div className="px-6 pt-6">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={openLabel}
+          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+        >
+          <h2 className={headingClass}>{title}</h2>
+          <ChevronDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
+        </button>
+        {isEmpty && <p className={`${hintClass} mt-2 max-w-[360px]`}>{emptyHint}</p>}
+      </div>
+      {!isEmpty && <div className="mt-2 flex flex-col">{children}</div>}
+    </section>
+  );
+}
 
 /** Серая группа секции со строками (заголовок 24/24 сверху, строки приносят
  * свои 24px горизонтали); боковые поля 24 — поля экрана из Figma. Со
@@ -121,11 +165,13 @@ export function OverdueOperationRow({
   today,
   variant = 'gray',
   className,
+  onSelect,
 }: {
   readonly operation: PaymentOperation;
   readonly today: IsoDate;
   readonly variant?: 'white' | 'gray';
   readonly className?: string;
+  readonly onSelect?: () => void;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
 
@@ -140,6 +186,7 @@ export function OverdueOperationRow({
       title={operation.title}
       description={formatOverdueDays(daysOverdue(operation.date, today))}
       amountKopecks={operation.amountKopecks}
+      onSelect={onSelect}
     />
   );
 }

@@ -124,10 +124,11 @@ test.describe('сквозная жизнь платежа', () => {
       + `SELECT id FROM operations WHERE payment_id = '${paymentId}' `
       + `AND status = 'planned' ORDER BY date ASC LIMIT 1)`;
 
-    // ── Создание визардом; появление в списке ──
+    // ── Создание визардом; появление в API; на страницу — напрямую ──
+    // (секции списка показывают максимум 3 ближайших платежа, созданное
+    // правило в топ не обязано попадать).
     const id1 = await createMonthlyPaymentToday(page, seededUser, title1, day);
-    await expect(page.getByText(title1)).toHaveCount(1);
-    await page.getByText(title1).first().click();
+    await page.goto(`/properties/${PROPERTY}/payments/${id1}`);
     await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/payments/[0-9a-f-]+$`));
     const paymentUrl = page.url();
 
@@ -216,9 +217,10 @@ test.describe('сквозная жизнь платежа', () => {
     // сносится, долг остаётся ──
     // Глубина 3 дня: «−7» у этого правила занята уже оплаченной просрочкой.
     expect(await execE2eSql(induceOverdue(id1, 3))).toBe('UPDATE 1');
-    // В списке правило и его просрочка — две карточки с одним названием.
+    // В секции «Просроченные операции» списка появилась строка правила.
     await page.goto(PAYMENTS_URL);
-    await expect(page.getByText(title1)).toHaveCount(2);
+    await expect(page.getByText(title1).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
 
     await page.goto(`${paymentUrl}/edit`);
     await page.getByRole('button', { name: 'Удалить платеж' }).click();
@@ -231,14 +233,14 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
 
     await expect(page.getByText(title1)).toHaveCount(1);
-    await expect(page.getByRole('heading', { name: 'Просроченные' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
 
     // ── Удаление С «удалить просроченные»: сносится всё ──
     const id2 = await createMonthlyPaymentToday(page, seededUser, title2, day);
     expect(await execE2eSql(induceOverdue(id2, 7))).toBe('UPDATE 1');
 
     await page.goto(PAYMENTS_URL);
-    await expect(page.getByText(title2)).toHaveCount(2);
+    await expect(page.getByText(title2).first()).toBeVisible();
 
     await page.goto(`/properties/${PROPERTY}/payments/${id2}/edit`);
     await page.getByRole('button', { name: 'Удалить платеж' }).click();

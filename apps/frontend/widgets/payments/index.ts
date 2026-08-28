@@ -1,4 +1,6 @@
 export { PaymentsOfPropertyScreen } from './ui/payments-of-property-screen';
+export { PaymentsCatalogScreen } from './ui/payments-catalog-screen';
+export type { PaymentsCatalogVariant } from './ui/payments-catalog-screen';
 export { PaymentCreateWizardScreen } from './ui/payment-create-wizard/payment-create-wizard-screen';
 export { PaymentDetailScreen } from './ui/payment-detail-screen';
 export { PaymentEditScreen } from './ui/payment-edit-screen';

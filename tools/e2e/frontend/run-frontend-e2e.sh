@@ -186,6 +186,16 @@ docker exec -i "$PG_CONTAINER" \
   -v viewer_token_hash="$VIEWER_TOKEN_HASH" -v viewer_phone_det="$VIEWER_PHONE_DET" \
   < "$SEED_SQL" >/dev/null
 
+# Поверх базового сида всегда применяется оверлей (live-overlay.sql):
+# правила состояний, которых в seed.sql намеренно нет (weekly / доходные /
+# endDate в будущем). Базовый сид держит точные количества для спеков,
+# оверлей только добавляет правила с `since` в будущем — на просрочки и
+# операции он не влияет. Идемпотентен при пересиде.
+log "Applying live walkthrough overlay seed"
+docker exec -i "$PG_CONTAINER" \
+  psql -U arenda -d arenda -v ON_ERROR_STOP=1 \
+  < "$SCRIPT_DIR/live-overlay.sql" >/dev/null
+
 log "Building frontend (production standalone)"
 if ! (cd "$FRONTEND_DIR" && NEXT_TELEMETRY_DISABLED=1 npm run build) > "$FRONTEND_LOG" 2>&1; then
   echo "--- frontend build failed; log tail: ---" >&2
@@ -217,6 +227,10 @@ if [ "${E2E_LIVE:-0}" = "1" ]; then
   echo "  backend   $BACKEND_URL/healthz   (log: $BACKEND_LOG)"
   echo "  seed      phone +7$USER_PHONE_DIGITS, email $USER_EMAIL, session token:"
   echo "            $E2E_SESSION_TOKEN"
+  echo "  roles     подмена роли — cookie session_id=<token> на $FRONTEND_URL:"
+  echo "            owner       +7$USER_PHONE_DIGITS  $E2E_SESSION_TOKEN"
+  echo "            full access +79150000002         $E2E_MEMBER_SESSION_TOKEN"
+  echo "            viewer      +79150000003         $E2E_VIEWER_SESSION_TOKEN"
   echo "  teardown  make frontend-e2e-live-down"
   exit 0
 fi

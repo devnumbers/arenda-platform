@@ -35,6 +35,10 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   reactCompiler: true,
+  // Next 16 блокирует дев-ресурсы (/_next/hmr, чанки) с origin'ов вне списка:
+  // стек ui-walkthrough живёт на http://127.0.0.1:3010 — пускаем этот хост
+  // (localhost разрешён по умолчанию).
+  allowedDevOrigins: ['127.0.0.1'],
   // Явно, а не по умолчанию Next (true с 13.5.1): двойной рендер эффектов в
   // dev — часть принятого бара качества (волна A, бар #330).
   reactStrictMode: true,

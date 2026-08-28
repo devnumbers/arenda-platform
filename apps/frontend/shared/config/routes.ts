@@ -10,6 +10,12 @@ export const ROUTES = {
     `/properties/${propertyId}/contacts/${contactId}/edit`,
   /** Экран «Платежи объекта» — новый хром (#463). */
   propertyPayments: (id: string) => `/properties/${id}/payments`,
+  /** Страницы секций «Платежей объекта» (Figma 1043:57610): клик по
+   * заголовку секции ведёт на полный список — просроченные операции
+   * объекта, все правила, автоплатежи. */
+  propertyPaymentsOverdue: (id: string) => `/properties/${id}/payments/overdue`,
+  propertyPaymentsAll: (id: string) => `/properties/${id}/payments/all`,
+  propertyPaymentsAuto: (id: string) => `/properties/${id}/payments/auto`,
   /** Страница платежа (#465): карточка, мутации, секции вхождений. */
   propertyPayment: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}`,

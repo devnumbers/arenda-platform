@@ -8,10 +8,11 @@ import {
   test,
 } from './fixtures';
 
-// Экран «Платежи объекта» (#463): вход секцией-ссылкой со страницы объекта,
-// секции «Просроченные / Платежи / Автоплатежи», поиск, шит выбора
-// «Платёж / Автоплатёж» с индикацией черновика. Скриншоты — материал
-// для сверки с Figma (784:13393, 837:21349, 654:6778, 853:17208).
+// Экран «Платежи объекта» (#463, Figma 1043:57610/1043:62920): три секции —
+// «Просроченные операции / Платежи / Автоплатежи», максимум 3 строки в
+// секции, паузные правила не выводятся, поиск фильтрует секции независимо
+// (серверный search), заголовки-стрелки ведут на страницы секций.
+// Скриншоты — материал для сверки с Figma.
 
 const APARTMENT_PAYMENTS_URL = `/properties/${SEEDED_APARTMENT_PROPERTY_ID}/payments`;
 const GARAGE_PAYMENTS_URL = `/properties/${SEEDED_GARAGE_PROPERTY_ID}/payments`;
@@ -38,41 +39,90 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByText('Платежи объекта', { exact: true })).toBeVisible();
   });
 
-  test('секции: просроченные карточки, платежи, автоплатежи; скриншот', async ({
+  test('три секции, максимум 3 строки, паузные скрыты', async ({
     page,
     seededUser,
   }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(APARTMENT_PAYMENTS_URL);
 
-    await expect(page.getByRole('heading', { name: 'Просроченные' })).toBeVisible();
-    // Две просроченные операции с красным сроком; точное число дней зависит
-    // от даты прогона.
-    await expect(page.getByText('Арендная плата').first()).toBeVisible();
-    await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Платежи', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Автоплатежи' })).toBeVisible();
-    await expect(page.getByText('Страхование').first()).toBeVisible();
-    await expect(page.getByText('Электроэнергия')).toBeVisible();
+
+    // Строки секций считаем по кнопкам с суммой (заголовок-стрелка — тоже
+    // кнопка, но без «₽»). Содержимое секций зависит от параллельных
+    // сценариев, создающих платежи на той же квартире, — проверяем форму,
+    // а не состав: у каждой секции от 1 до 3 строк с красным сроком у
+    // просроченных.
+    const overdueRows = page.getByTestId('section-overdue').getByRole('button').filter({ hasText: '₽' });
+    await expect(overdueRows.first()).toBeVisible();
+    expect(await overdueRows.count()).toBeLessThanOrEqual(3);
+    await expect(page.getByTestId('section-overdue').getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
+
+    const paymentRows = page.getByTestId('section-payments').getByRole('button').filter({ hasText: '₽' });
+    await expect(paymentRows.first()).toBeVisible();
+    expect(await paymentRows.count()).toBeLessThanOrEqual(3);
+
+    const autoRows = page.getByTestId('section-auto').getByRole('button').filter({ hasText: '₽' });
+    await expect(autoRows.first()).toBeVisible();
+    expect(await autoRows.count()).toBeLessThanOrEqual(3);
+
+    // Паузное правило не выводится: строк «На паузе» нет ни в одной секции
+    // (его просроченный долг при этом остаётся в секции просроченных).
+    await expect(page.getByTestId('section-payments').getByText('На паузе')).toHaveCount(0);
+    await expect(page.getByTestId('section-auto').getByText('На паузе')).toHaveCount(0);
+
+    // Завершённое правило (вхождений нет) — в конце сортировки, за лимитом.
+    await expect(page.getByText('Техосмотр')).toHaveCount(0);
+
     await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
 
     await captureScreen(page, testInfo, 'payments-filled-mobile');
   });
 
-  test('поиск по названиям фильтрует секции', async ({ page, seededUser }) => {
+  test('заголовок секции ведёт на страницу секции', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(APARTMENT_PAYMENTS_URL);
-    await expect(page.getByText('Страхование').first()).toBeVisible();
 
-    await page.getByRole('button', { name: 'Поиск' }).click();
-    await page.getByRole('searchbox', { name: 'Поиск по названиям' }).fill('страх');
-
-    await expect(page.getByText('Страхование').first()).toBeVisible();
-    await expect(page.getByText('Арендная плата')).toHaveCount(0);
-    await expect(page.getByText('Электроэнергия')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Открыть все платежи' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/all$`));
+    await expect(page.getByText('Платежи объекта', { exact: true })).toBeVisible();
+    // На странице секции паузные видны («там уже всё видно»).
+    await expect(page.getByText('Домофон')).toBeVisible();
+    await expect(page.getByText('На паузе')).toBeVisible();
   });
 
-  test('поиск без совпадений показывает «Ничего не нашлось»', async ({
+  test('страница просроченных операций открывает полный список', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(APARTMENT_PAYMENTS_URL);
+
+    await page.getByRole('button', { name: 'Открыть просроченные операции' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/overdue$`));
+    // Состав строк зависит от параллельных сценариев (гасят сидовые
+    // просрочки), проверяем что список непуст и строки красные.
+    await expect(
+      page.getByRole('button').filter({ hasText: '₽' }).filter({ hasText: /\d+ (день|дня|дней)/ }).first(),
+    ).toBeVisible();
+  });
+
+  test('поиск фильтрует каждую секцию независимо', async ({ page, seededUser }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(APARTMENT_PAYMENTS_URL);
+    // Ищем оверлейное правило: параллельные сценарии его не трогают.
+    await page.getByRole('button', { name: 'Поиск' }).click();
+    await page.getByRole('searchbox', { name: 'Поиск по названиям' }).fill('клининг');
+
+    await expect(page.getByTestId('section-payments').getByText('Клининг холла')).toBeVisible();
+    await expect(page.getByTestId('section-payments').getByRole('button').filter({ hasText: '₽' })).toHaveCount(1);
+    await expect(page.getByTestId('section-auto').getByRole('button').filter({ hasText: '₽' })).toHaveCount(0);
+    await expect(page.getByTestId('section-overdue').getByRole('button').filter({ hasText: '₽' })).toHaveCount(0);
+  });
+
+  test('поиск без совпадений — «Ничего не нашлось» в каждой секции', async ({
     page,
     seededUser,
   }) => {
@@ -82,7 +132,7 @@ test.describe('экран «Платежи объекта»', () => {
     await page.getByRole('button', { name: 'Поиск' }).click();
     await page.getByRole('searchbox', { name: 'Поиск по названиям' }).fill('ипотека');
 
-    await expect(page.getByText('Ничего не нашлось')).toBeVisible();
+    await expect(page.getByText('Ничего не нашлось').first()).toBeVisible();
   });
 
   test('пустые состояния секций на объекте без платежей; скриншот', async ({
@@ -92,11 +142,32 @@ test.describe('экран «Платежи объекта»', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(GARAGE_PAYMENTS_URL);
 
-    await expect(page.getByText('Нет просроченных платежей')).toBeVisible();
-    await expect(page.getByText('Нет платежей')).toBeVisible();
-    await expect(page.getByText('Нет автоплатежей')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+    await expect(
+      page.getByText('Напомним, когда нужно будет отметить оплату, вы вручную отметите платеж'),
+    ).toBeVisible();
+    await expect(
+      page.getByText('Предупредим о платеже, потом автоматически отметим оплату'),
+    ).toBeVisible();
 
     await captureScreen(page, testInfo, 'payments-empty-mobile');
+  });
+
+  test('страницы секций гаража — пустые состояния с иллюстрацией', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+
+    await page.goto(`${GARAGE_PAYMENTS_URL}/all`);
+    await expect(page.getByText('Нет платежей')).toBeVisible();
+    await expect(page.locator('img[src*="empty-payments"]')).toBeVisible();
+
+    await page.goto(`${GARAGE_PAYMENTS_URL}/auto`);
+    await expect(page.getByText('Нет автоплатежей')).toBeVisible();
+
+    await page.goto(`${GARAGE_PAYMENTS_URL}/overdue`);
+    await expect(page.getByText('Нет просроченных операций')).toBeVisible();
   });
 
   test('шит выбора «Платёж / Автоплатёж»; скриншот', async ({
@@ -154,7 +225,7 @@ test.describe('экран «Платежи объекта» — десктоп',
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(APARTMENT_PAYMENTS_URL);
 
-    await expect(page.getByRole('heading', { name: 'Просроченные' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Платежи', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
 

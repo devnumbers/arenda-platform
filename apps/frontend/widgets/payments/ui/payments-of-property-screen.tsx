@@ -6,14 +6,18 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import {
-  matchesTitleSearch,
   usePayments,
   usePropertyOverdueOperations,
 } from '@/features/payments';
 import { useProperty } from '@/features/properties';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
-import { formatOverdueDays, PaymentCardButton } from '@/entities/payment';
+import {
+  formatOverdueDays,
+  isDatePaused,
+  PaymentRowButton,
+} from '@/entities/payment';
 import {
   Button,
   IconButton,
@@ -24,31 +28,33 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { clientTodayIso } from '@/entities/payment';
+import type { Payment } from '@/entities/payment';
 import { daysOverdue } from '../lib/overdue-days';
+import { sortPaymentsByNextOccurrence } from '../lib/sort-payments-by-next-occurrence';
 import { PaymentsAddSheet } from './payments-add-sheet';
 import {
-  PaymentsEmptyCard,
-  PaymentsGroup,
-  PaymentsHeading,
+  PaymentRow,
+  PaymentsSection,
   PaymentsSkeleton,
   PaymentsStateCard,
-  PaymentRow,
 } from './payments-sections';
 
+/** Лимит строк секции главного экрана (Figma 1043:57610): по 3 платежа,
+ * весь список — на странице секции по клику на её заголовок. */
+const SECTION_LIMIT = 3;
+
 /**
- * Экран «Платежи объекта» (#463, Figma 784:13393 / 654:6778, 853:17208):
- * секции «Просроченные» (карточки, горизонтальный скролл), «Платежи»,
- * «Автоплатежи», поиск по названиям и закреплённая кнопка «Добавить»,
- * открывающая шит выбора. Данные — список платежей объекта и просроченные
- * операции объекта; статус просрочки считает сервер (ADR 0048), подпись
- * дней — клиентская проекция (lib/overdue-days).
+ * Экран «Платежи объекта» (#463, Figma 1043:57610/1043:62920): три секции —
+ * «Просроченные операции» (строки, красные срок и сумма), «Платежи»,
+ * «Автоплатежи». Каждая секция показывает максимум 3 платежа в порядке
+ * ближайшего вхождения; паузные правила на экране не выводятся (страница
+ * платежа — их место), а её заголовок-стрелка ведёт на страницу секции со
+ * полным списком. Закреплённая кнопка «Добавить» открывает шит выбора;
+ * скрыта у смотрящего (история 47) и на архивном объекте (#446).
  *
- * Кнопка «Добавить» — вход в финансовую мутацию: скрыта у смотрящего
- * (история 47) и на архивном объекте (read-only архива, #446). Стрелки-ссылки
- * заголовков секций из Figma не рисуются: адресаты (полный список
- * просроченных, глобальные списки) — следующие срезы, мёртвых ссылок не
- * выпускаем. Строки и карточки открывают страницу платежа (#465). Текст
- * карточки «Ничего не нашлось» — авторский: состояния поиска в Figma нет.
+ * Поиск — серверный (`search` в контрактах списков): дебаунс ввода, каждая
+ * секция фильтруется независимо. Статус просрочки считает сервер (ADR 0048),
+ * подпись дней — клиентская проекция (lib/overdue-days).
  */
 export function PaymentsOfPropertyScreen({
   propertyId,
@@ -57,8 +63,6 @@ export function PaymentsOfPropertyScreen({
 }): JSX.Element {
   const router = useRouter();
   const propertyQuery = useProperty(propertyId);
-  const paymentsQuery = usePayments(propertyId);
-  const overdueQuery = usePropertyOverdueOperations(propertyId);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -73,30 +77,31 @@ export function PaymentsOfPropertyScreen({
     }
   }, [searchOpen]);
 
+  // Запрос отстаёт от ввода на дебаунс: одна перегенерация ключа на паузу
+  // печатания, обе секции-источника фильтруются одним и тем же search.
+  const debouncedQuery = useDebounce(query, 300);
+  const searching = searchOpen && debouncedQuery.trim().length > 0;
+  const search = searching ? debouncedQuery.trim() : '';
+
+  const paymentsQuery = usePayments(propertyId, search);
+  const overdueQuery = usePropertyOverdueOperations(propertyId, search);
+
   const today = clientTodayIso();
 
   const payments = paymentsQuery.data ?? [];
   const overdue = overdueQuery.data ?? [];
 
-  const searching = searchOpen && query.trim().length > 0;
-  const regularPayments = payments.filter((payment) => !payment.autoPay);
-  const autoPayments = payments.filter((payment) => payment.autoPay);
-
-  const visibleRegular = searching
-    ? regularPayments.filter((payment) => matchesTitleSearch(query, payment.title))
-    : regularPayments;
-  const visibleAuto = searching
-    ? autoPayments.filter((payment) => matchesTitleSearch(query, payment.title))
-    : autoPayments;
-  const visibleOverdue = searching
-    ? overdue.filter((operation) => matchesTitleSearch(query, operation.title))
-    : overdue;
-
-  const searchMissed =
-    searching
-    && visibleOverdue.length === 0
-    && visibleRegular.length === 0
-    && visibleAuto.length === 0;
+  // Паузные правила не выводятся на экране (1043:57611) — их место на
+  // странице платежа; накопленный ими долг остаётся в секции просроченных.
+  const active = payments.filter((payment) => !isDatePaused(payment.pauses, today));
+  const sortedRegular = sortPaymentsByNextOccurrence(
+    active.filter((payment) => !payment.autoPay),
+    today,
+  );
+  const sortedAuto = sortPaymentsByNextOccurrence(
+    active.filter((payment) => payment.autoPay),
+    today,
+  );
 
   // Мутационный вход только тому, кому можно мутировать: смотрящий читает
   // без кнопок (история 47), архив read-only для финансов (#446). Пока
@@ -110,6 +115,11 @@ export function PaymentsOfPropertyScreen({
     setSearchOpen(false);
     setQuery('');
   };
+
+  const openPayment = (payment: Payment): void =>
+    router.push(ROUTES.propertyPayment(propertyId, payment.id));
+
+  const searchMissHint = searching ? 'Ничего не нашлось' : undefined;
 
   return (
     <>
@@ -157,113 +167,106 @@ export function PaymentsOfPropertyScreen({
             </>
           )}
 
-          {paymentsQuery.isError && (
-            <QueryErrorCard
-              title="Не удалось загрузить платежи"
-              onRetry={() => void paymentsQuery.refetch()}
-            />
-          )}
-
-          {!paymentsQuery.isPending && !paymentsQuery.isError && (
+          {!paymentsQuery.isPending && !overdueQuery.isPending && (
             <>
-              {searchMissed ? (
-                <PaymentsEmptyCard
-                  title="Ничего не нашлось"
-                  hint="Попробуйте изменить поисковый запрос"
+              {overdueQuery.isError ? (
+                <QueryErrorCard
+                  title="Не удалось загрузить просроченные"
+                  onRetry={() => void overdueQuery.refetch()}
+                />
+              ) : (
+                <PaymentsSection
+                  testId="section-overdue"
+                  title="Просроченные операции"
+                  onOpen={() => router.push(ROUTES.propertyPaymentsOverdue(propertyId))}
+                  openLabel="Открыть просроченные операции"
+                  emptyHint={searchMissHint ?? 'У вас нет просроченных операций'}
+                >
+                  {overdue.length > 0
+                    ? overdue.slice(0, SECTION_LIMIT).map((operation) => {
+                        const style = categoryStyle('default', operation.categorySlug);
+                        return (
+                          <PaymentRowButton
+                            key={operation.id}
+                            variant="gray"
+                            danger
+                            categoryIcon={
+                              <CategoryIcon
+                                icon={style.icon}
+                                color={style.color}
+                                badge="danger"
+                                surface="muted"
+                              />
+                            }
+                            title={operation.title}
+                            // Срок просрочки — под названием, с предлогом
+                            // «на» (1043:57610), в отличие от страниц
+                            // платежа, где он стоит под суммой.
+                            subtitle={
+                              <span className="font-medium text-danger">
+                                {`на ${formatOverdueDays(daysOverdue(operation.date, today))}`}
+                              </span>
+                            }
+                            amountKopecks={operation.amountKopecks}
+                            onSelect={
+                              operation.paymentId !== null
+                                ? () =>
+                                    router.push(
+                                      ROUTES.propertyPayment(propertyId, operation.paymentId as string),
+                                    )
+                                : undefined
+                            }
+                          />
+                        );
+                      })
+                    : null}
+                </PaymentsSection>
+              )}
+
+              {paymentsQuery.isError ? (
+                <QueryErrorCard
+                  title="Не удалось загрузить платежи"
+                  onRetry={() => void paymentsQuery.refetch()}
                 />
               ) : (
                 <>
-                  {overdueQuery.isError ? (
-                    <QueryErrorCard
-                      title="Не удалось загрузить просроченные"
-                      onRetry={() => void overdueQuery.refetch()}
-                    />
-                  ) : visibleOverdue.length > 0 ? (
-                    <section className="flex flex-col">
-                      <PaymentsHeading>Просроченные</PaymentsHeading>
-                      <div className="mt-3 flex gap-2 overflow-x-auto px-6 pb-1">
-                        {visibleOverdue.map((operation) => {
-                          const style = categoryStyle('default', operation.categorySlug);
-                          const paymentId = operation.paymentId;
-                          return (
-                            <PaymentCardButton
-                              key={operation.id}
-                              title={operation.title}
-                              amountKopecks={operation.amountKopecks}
-                              description={formatOverdueDays(daysOverdue(operation.date, today))}
-                              leading={
-                                <CategoryIcon
-                                  icon={style.icon}
-                                  color={style.color}
-                                  badge="danger"
-                                  surface="muted"
-                                />
-                              }
-                              danger
-                              onSelect={
-                                paymentId !== null
-                                  ? () => router.push(ROUTES.propertyPayment(propertyId, paymentId))
-                                  : undefined
-                              }
-                            />
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ) : (
-                    !searching && (
-                      <PaymentsEmptyCard
-                        title="Нет просроченных платежей"
-                        hint="Когда платеж просрочится, он будет здесь"
-                      />
-                    )
-                  )}
-
-                  <div className="flex flex-col gap-4">
-                    {visibleRegular.length > 0 ? (
-                      <PaymentsGroup title="Платежи">
-                        {visibleRegular.map((payment) => (
+                  <PaymentsSection
+                    testId="section-payments"
+                    title="Платежи"
+                    onOpen={() => router.push(ROUTES.propertyPaymentsAll(propertyId))}
+                    openLabel="Открыть все платежи"
+                    emptyHint={searchMissHint ?? 'Напомним, когда нужно будет отметить оплату, вы вручную отметите платеж'}
+                  >
+                    {sortedRegular.length > 0
+                      ? sortedRegular.slice(0, SECTION_LIMIT).map((payment) => (
                           <PaymentRow
                             key={payment.id}
                             payment={payment}
                             today={today}
-                            onSelect={() =>
-                              router.push(ROUTES.propertyPayment(propertyId, payment.id))
-                            }
+                            onSelect={() => openPayment(payment)}
                           />
-                        ))}
-                      </PaymentsGroup>
-                    ) : (
-                      !searching && (
-                        <PaymentsEmptyCard
-                          title="Нет платежей"
-                          hint="Напомним, когда нужно будет отметить оплату, вы вручную отметите платеж"
-                        />
-                      )
-                    )}
+                        ))
+                      : null}
+                  </PaymentsSection>
 
-                    {visibleAuto.length > 0 ? (
-                      <PaymentsGroup title="Автоплатежи">
-                        {visibleAuto.map((payment) => (
+                  <PaymentsSection
+                    testId="section-auto"
+                    title="Автоплатежи"
+                    onOpen={() => router.push(ROUTES.propertyPaymentsAuto(propertyId))}
+                    openLabel="Открыть автоплатежи"
+                    emptyHint={searchMissHint ?? 'Предупредим о платеже, потом автоматически отметим оплату'}
+                  >
+                    {sortedAuto.length > 0
+                      ? sortedAuto.slice(0, SECTION_LIMIT).map((payment) => (
                           <PaymentRow
                             key={payment.id}
                             payment={payment}
                             today={today}
-                            onSelect={() =>
-                              router.push(ROUTES.propertyPayment(propertyId, payment.id))
-                            }
+                            onSelect={() => openPayment(payment)}
                           />
-                        ))}
-                      </PaymentsGroup>
-                    ) : (
-                      !searching && (
-                        <PaymentsEmptyCard
-                          title="Нет автоплатежей"
-                          hint="Предупредим о платеже, потом автоматически отметим оплату"
-                        />
-                      )
-                    )}
-                  </div>
+                        ))
+                      : null}
+                  </PaymentsSection>
                 </>
               )}
             </>
@@ -304,4 +307,3 @@ function QueryErrorCard({
     />
   );
 }
-

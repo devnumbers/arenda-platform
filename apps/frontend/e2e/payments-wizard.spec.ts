@@ -135,9 +135,13 @@ test.describe('визард создания платежа', () => {
     expect(created?.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(created?.endDate ?? null).toBeNull();
 
-    // Закрытие успеха возвращает на «Платежи объекта», карточка видна.
+    // Закрытие успеха возвращает на «Платежи объекта». Секции показывают
+    // максимум 3 ближайших платежа, поэтому видимость карточки проверяем
+    // на странице секции — там весь список.
     await page.getByRole('button', { name: 'Хорошо, закрыть' }).click();
     await expect(page).toHaveURL(new RegExp(`${APARTMENT_PAYMENTS_URL}$`));
+    await page.getByRole('button', { name: 'Открыть все платежи' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/all$`));
     await expect(page.getByText(title).first()).toBeVisible();
   });
 
@@ -270,11 +274,13 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: '15', exact: true }).first().click();
     await page.getByRole('button', { name: 'Далее' }).click();
 
-    // Шаг 4: разворачиваем календарь и берём доступный будущий день.
+    // Шаг 4: разворачиваем календарь и берём последний включённый день
+    // последнего отрисованного месяца — он заведомо в будущем, каким бы ни
+    // было сегодняшнее число (вертикальный календарь подгружает месяцы).
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
     await expect(page.getByText(/\d{4}/).first()).toBeVisible();
-    const endDay = new Date().getUTCDate() === 28 ? 27 : 28;
-    await page.getByRole('button', { name: String(endDay), exact: true }).last().click();
+    const enabledDay = page.locator('button:enabled').filter({ hasText: /^\d{1,2}$/ });
+    await enabledDay.last().click();
     await expect(page.getByRole('button', { name: 'Убрать дату' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Далее' }).click();
