@@ -425,7 +425,7 @@ func favoriteReadback(t *testing.T, h *paymentsHarness, paymentID uuid.UUID) boo
 	if err != nil {
 		t.Fatalf("get payment: %v", err)
 	}
-	list, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID)
+	list, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID, "")
 	if err != nil {
 		t.Fatalf("list payments: %v", err)
 	}

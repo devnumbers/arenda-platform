@@ -114,11 +114,13 @@ WHERE op.owner_id = $1
   )
   AND ($6::date IS NULL OR op.date >= $6)
   AND ($7::date IS NULL OR op.date <= $7)
+  AND ($8::text = ''
+       OR op.title ILIKE '%' || $8::text || '%' ESCAPE '\')
 ORDER BY
-  CASE WHEN $8::text = 'asc' THEN op.date END ASC,
-  CASE WHEN $8::text = 'desc' THEN op.date END DESC,
+  CASE WHEN $9::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $9::text = 'desc' THEN op.date END DESC,
   op.id DESC
-LIMIT $10 OFFSET $9
+LIMIT $11 OFFSET $10
 `
 
 type ListOperationsParams struct {
@@ -129,6 +131,7 @@ type ListOperationsParams struct {
 	Today    pgtype.Date `json:"today"`
 	DateFrom pgtype.Date `json:"date_from"`
 	DateTo   pgtype.Date `json:"date_to"`
+	Search   string      `json:"search"`
 	Order    string      `json:"order"`
 	Offset   int32       `json:"offset"`
 	Limit    int32       `json:"limit"`
@@ -152,8 +155,10 @@ type ListOperationsRow struct {
 }
 
 // The operations of one scope with pagination (limit/offset), the view status
-// filter (” is any), an inclusive period on the operation date and the sort
-// direction. A NULL payment widens the scope from one rule to every rule of
+// filter (” is any), an inclusive period on the operation date, the sort
+// direction and a case-insensitive substring search by title (” = no filter;
+// the application layer escapes the ILIKE metacharacters, ESCAPE '\').
+// A NULL payment widens the scope from one rule to every rule of
 // the property: "planned" and "overdue" split the stored planned rows against
 // the owner's today — overdue is computed here from the same truth the
 // response items report, in exactly one place (domain.OperationView mirrors
@@ -167,6 +172,7 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 		arg.Today,
 		arg.DateFrom,
 		arg.DateTo,
+		arg.Search,
 		arg.Order,
 		arg.Offset,
 		arg.Limit,

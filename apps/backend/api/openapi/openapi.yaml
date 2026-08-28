@@ -670,6 +670,7 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: '#/components/parameters/TitleSearch'
       responses:
         '200':
           description: Payments list
@@ -952,6 +953,7 @@ paths:
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
         - $ref: '#/components/parameters/OperationsOffset'
+        - $ref: '#/components/parameters/TitleSearch'
       responses:
         '200':
           description: Property operations list (overdue included with status=overdue)
@@ -2678,6 +2680,15 @@ components:
         type: integer
         default: 0
         minimum: 0
+    TitleSearch:
+      name: search
+      in: query
+      required: false
+      description: >-
+        Case-insensitive substring search by title. A missing or empty value
+        disables the filter; LIKE metacharacters in the value are literals.
+      schema:
+        type: string
 
   schemas:
 

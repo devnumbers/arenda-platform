@@ -126,6 +126,7 @@ func listOperationsParams(
 	params.Today = pgconv.DateToPgtype(q.Today)
 	params.DateFrom = pgconv.DatePtrToPgtype(q.DateFrom)
 	params.DateTo = pgconv.DatePtrToPgtype(q.DateTo)
+	params.Search = escapeLikePattern(q.Search)
 	params.Order = operationsOrder(q.Asc)
 	params.Offset = paginationToInt32(q.Offset)
 	params.Limit = paginationToInt32(q.Limit)

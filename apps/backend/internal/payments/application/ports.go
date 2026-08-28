@@ -73,8 +73,9 @@ type PaymentStore interface {
 	// unknown, belongs to another owner or hangs on another property.
 	Get(ctx context.Context, id, scope, propertyID uuid.UUID) (domain.Payment, error)
 	// ListByProperty returns the property's rules in creation order, each
-	// with its pause intervals.
-	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID) ([]domain.Payment, error)
+	// with its pause intervals. Search is a case-insensitive substring
+	// filter on the title ('' = no filter).
+	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, search string) ([]domain.Payment, error)
 	// Create inserts a new rule (id, owner_id, since are app-side).
 	Create(ctx context.Context, p domain.Payment) error
 	// Update writes the editable fields of the rule (since never among them).

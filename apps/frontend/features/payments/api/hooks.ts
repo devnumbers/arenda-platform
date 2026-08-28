@@ -32,13 +32,19 @@ type OperationsResponse = components['schemas']['OperationsResponse'];
 type PaymentResponseDto = components['schemas']['PaymentResponse'];
 
 /** Список платежей объекта — правил с флагом автоплатежа и избранным
- * (ADR 0049): без пагинации, порядок — серверный (по дате заведения). */
-export function usePayments(propertyId: string): UseQueryResult<Payment[], ApiError> {
+ * (ADR 0049): без пагинации, порядок — серверный (по дате заведения).
+ * search — серверный регистронезависимый подстрочный фильтр по названию
+ * ('' = без фильтра; секции экрана «Платежи объекта» ищут каждую свою). */
+export function usePayments(
+  propertyId: string,
+  search = '',
+): UseQueryResult<Payment[], ApiError> {
   return useQuery({
-    queryKey: paymentKeys.list(propertyId),
+    queryKey: paymentKeys.list(propertyId, search),
     queryFn: async () => {
+      const query = search ? `?search=${encodeURIComponent(search)}` : '';
       const response = await apiClient<PaymentsResponse>(
-        `/properties/${encodeURIComponent(propertyId)}/payments`,
+        `/properties/${encodeURIComponent(propertyId)}/payments${query}`,
       );
       return response.items.map(mapPayment);
     },
@@ -47,23 +53,56 @@ export function usePayments(propertyId: string): UseQueryResult<Payment[], ApiEr
 }
 
 /**
- * Просроченные операции объекта (секция «Просроченные» экрана «Платежи
- * объекта»): статус overdue вычисляет сервер по «сегодня» в TZ собственника
- * (ADR 0048), сортировка asc — старейшая просрочка первой, долг разбирают
- * по порядку накопления. Порция — серверный дефолт 50; полный список с
- * пагинацией — отдельный подэкран следующего среза.
+ * Просроченные операции объекта (секция «Просроченные операции» экрана
+ * «Платежи объекта»): статус overdue вычисляет сервер по «сегодня» в TZ
+ * собственника (ADR 0048), сортировка asc — старейшая просрочка первой,
+ * долг разбирают по порядку накопления. Порция — серверный дефолт 50;
+ * полный список с пагинацией — usePropertyOperationsPaged. search — тот же
+ * серверный фильтр по названию ('' = без фильтра).
  */
 export function usePropertyOverdueOperations(
   propertyId: string,
+  search = '',
 ): UseQueryResult<PaymentOperation[], ApiError> {
   return useQuery({
-    queryKey: paymentOperationKeys.overdueByProperty(propertyId),
+    queryKey: paymentOperationKeys.overdueByProperty(propertyId, search),
     queryFn: async () => {
+      const query = search ? `&search=${encodeURIComponent(search)}` : '';
       const response = await apiClient<OperationsResponse>(
-        `/properties/${encodeURIComponent(propertyId)}/operations?status=overdue&order=asc`,
+        `/properties/${encodeURIComponent(propertyId)}/operations?status=overdue&order=asc${query}`,
       );
       return response.items.map(mapPaymentOperation);
     },
+    enabled: Boolean(propertyId),
+  });
+}
+
+/**
+ * Порции операций объекта для страницы «Просроченные операции»: тот же
+ * контракте, что у usePropertyOverdueOperations, но с limit/offset —
+ * pageParam — offset; следующая страница есть, пока порция полная.
+ */
+export function usePropertyOperationsPaged(
+  propertyId: string,
+  params: { readonly status: PaymentOperationStatusFilter; readonly order: PaymentOperationOrder },
+): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
+  const { status, order } = params;
+  return useInfiniteQuery({
+    queryKey: paymentOperationKeys.byPropertyPaged(propertyId, status, order),
+    queryFn: async ({ pageParam }) => {
+      const response = await apiClient<OperationsResponse>(
+        `/properties/${encodeURIComponent(propertyId)}/operations`
+          + `?status=${status}&order=${order}`
+          + `&limit=${OPERATIONS_PAGE_SIZE}&offset=${String(pageParam)}`,
+      );
+      return response.items.map(mapPaymentOperation);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length < OPERATIONS_PAGE_SIZE
+        ? undefined
+        : allPages.length * OPERATIONS_PAGE_SIZE,
+    select: (data) => data.pages.flat(),
     enabled: Boolean(propertyId),
   });
 }

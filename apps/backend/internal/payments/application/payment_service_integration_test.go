@@ -69,7 +69,7 @@ func assertPaymentReadBack(t *testing.T, h *paymentsHarness, created domain.Paym
 	if got.Title != "Аренда" || got.Category.SlugString() != "rent" {
 		t.Fatalf("get payment = %+v", got)
 	}
-	list, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID)
+	list, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID, "")
 	if err != nil {
 		t.Fatalf("list payments: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestPaymentRoleMatrix(t *testing.T) {
 	viewer := newPaymentsHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleViewer}).withOwner("Europe/Moscow")
 	member := uuid.Must(uuid.NewV7())
 
-	if _, err := viewer.svc.ListPayments(viewer.ctx(), member, viewer.propID); err != nil {
+	if _, err := viewer.svc.ListPayments(viewer.ctx(), member, viewer.propID, ""); err != nil {
 		t.Fatalf("viewer list: %v", err)
 	}
 	if _, err := viewer.svc.CreatePayment(viewer.ctx(), member, viewer.propID, viewer.createCmd()); !errors.Is(err, paymentsapp.ErrForbidden) {
@@ -408,7 +408,7 @@ func TestArchivedProperty_IsFinancialReadOnly(t *testing.T) {
 	if _, err := h.svc.GetPayment(h.ctx(), h.owner, h.propID, created.ID); err != nil {
 		t.Fatalf("get on archived: %v", err)
 	}
-	if _, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID); err != nil {
+	if _, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID, ""); err != nil {
 		t.Fatalf("list on archived: %v", err)
 	}
 }
@@ -447,5 +447,97 @@ func TestUpdatePayment_RebuildsFuturePlannedInTx(t *testing.T) {
 	}
 	if tomorrowAmount != newAmount {
 		t.Fatalf("rebuilt future snapshot = %d, want %d", tomorrowAmount, newAmount)
+	}
+}
+
+// TestPaymentSearch_FiltersByTitle covers the contract's search parameter of
+// the payments listing: case-insensitive substring match on the title,
+// ILIKE metacharacters staying literals ('_' must not turn into a wildcard)
+// and the empty search meaning "no filter".
+func TestPaymentSearch_FiltersByTitle(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	const literalPercentTitle = "аренда гаража 100%"
+	titles := []string{"Аренда квартиры", literalPercentTitle, "Электроэнергия"}
+	for _, title := range titles {
+		cmd := h.createCmd()
+		cmd.Title = title
+		if _, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, cmd); err != nil {
+			t.Fatalf("create payment %q: %v", title, err)
+		}
+	}
+
+	got, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID, "АРЕНДА")
+	if err != nil {
+		t.Fatalf("list payments: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("search = %d items, want 2 (both аренда spellings)", len(got))
+	}
+
+	// The underscore is a literal here: nothing contains one.
+	got, err = h.svc.ListPayments(h.ctx(), h.owner, h.propID, "квартир_")
+	if err != nil {
+		t.Fatalf("list payments: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("search with '_' matched %d items, want 0 (wildcard must stay literal)", len(got))
+	}
+
+	got, err = h.svc.ListPayments(h.ctx(), h.owner, h.propID, "100%")
+	if err != nil {
+		t.Fatalf("list payments: %v", err)
+	}
+	if len(got) != 1 || got[0].Title != literalPercentTitle {
+		t.Fatalf("search '100%%' = %+v, want the literal-percent title", got)
+	}
+
+	all, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID, "")
+	if err != nil {
+		t.Fatalf("list payments: %v", err)
+	}
+	if len(all) != len(titles) {
+		t.Fatalf("empty search = %d items, want all %d", len(all), len(titles))
+	}
+}
+
+// TestOperationSearch_FiltersByTitle covers the same search parameter on the
+// property-wide operations listing against materialized rows.
+func TestOperationSearch_FiltersByTitle(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	const wildcardProbeTitle = "Аренда квартиры"
+	for _, title := range []string{wildcardProbeTitle, "Электроэнергия"} {
+		cmd := h.createCmd()
+		cmd.Title = title
+		if _, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, cmd); err != nil {
+			t.Fatalf("create payment %q: %v", title, err)
+		}
+	}
+
+	searchCmd := h.listCmd(nil, 50, 0, false)
+	searchCmd.Search = "аренда"
+	got, err := h.ops.ListPropertyOperations(h.ctx(), h.owner, h.propID, searchCmd)
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+	for _, item := range got {
+		if item.Operation.Title != wildcardProbeTitle {
+			t.Fatalf("operation %q leaked through the search filter", item.Operation.Title)
+		}
+	}
+	if len(got) == 0 {
+		t.Fatalf("search found no operations, want materialized аренда rows")
+	}
+
+	searchCmd.Search = "квартир_"
+	got, err = h.ops.ListPropertyOperations(h.ctx(), h.owner, h.propID, searchCmd)
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("search with '_' matched %d operations, want 0", len(got))
 	}
 }

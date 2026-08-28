@@ -54,7 +54,7 @@ func (noopPaymentStore) Get(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (d
 	panic("unused")
 }
 
-func (noopPaymentStore) ListByProperty(context.Context, uuid.UUID, uuid.UUID) ([]domain.Payment, error) {
+func (noopPaymentStore) ListByProperty(context.Context, uuid.UUID, uuid.UUID, string) ([]domain.Payment, error) {
 	panic("unused")
 }
 

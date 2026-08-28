@@ -320,12 +320,15 @@ SELECT pay.id,
 FROM payments pay
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.owner_id = $1 AND pay.property_id = $2
+  AND ($3::text = ''
+       OR pay.title ILIKE '%' || $3::text || '%' ESCAPE '\')
 ORDER BY pay.created_at, pay.id
 `
 
 type ListPaymentsByPropertyParams struct {
 	OwnerID    pgtype.UUID `json:"owner_id"`
 	PropertyID pgtype.UUID `json:"property_id"`
+	Search     string      `json:"search"`
 }
 
 type ListPaymentsByPropertyRow struct {
@@ -349,8 +352,10 @@ type ListPaymentsByPropertyRow struct {
 }
 
 // The property's rules in creation order (stable for the list response).
+// search (” = no filter) is a case-insensitive substring match on the title;
+// the application layer escapes the ILIKE metacharacters (ESCAPE '\').
 func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsByPropertyParams) ([]ListPaymentsByPropertyRow, error) {
-	rows, err := q.db.Query(ctx, listPaymentsByProperty, arg.OwnerID, arg.PropertyID)
+	rows, err := q.db.Query(ctx, listPaymentsByProperty, arg.OwnerID, arg.PropertyID, arg.Search)
 	if err != nil {
 		return nil, err
 	}

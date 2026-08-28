@@ -48,6 +48,7 @@ export {
   usePayments,
   usePausePayment,
   usePayOperation,
+  usePropertyOperationsPaged,
   usePropertyOverdueOperations,
   useResumePayment,
   useSetPaymentFavorite,

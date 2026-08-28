@@ -31,6 +31,8 @@ WHERE pay.id = $1 AND pay.owner_id = $2 AND pay.property_id = $3;
 
 -- name: ListPaymentsByProperty :many
 -- The property's rules in creation order (stable for the list response).
+-- search ('' = no filter) is a case-insensitive substring match on the title;
+-- the application layer escapes the ILIKE metacharacters (ESCAPE '\').
 SELECT pay.id,
        pay.owner_id,
        pay.property_id,
@@ -51,6 +53,8 @@ SELECT pay.id,
 FROM payments pay
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.owner_id = $1 AND pay.property_id = $2
+  AND (sqlc.arg('search')::text = ''
+       OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
 ORDER BY pay.created_at, pay.id;
 
 -- name: InsertPayment :exec

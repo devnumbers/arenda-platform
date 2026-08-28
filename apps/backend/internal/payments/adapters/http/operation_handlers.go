@@ -142,6 +142,7 @@ func newListOperationsQuery(
 	dateFrom, dateTo *openapi_types.Date,
 	asc bool,
 	limit, offset *int,
+	search *string,
 ) application.OperationsListQuery {
 	query := application.OperationsListQuery{
 		Status:   status,
@@ -156,6 +157,9 @@ func newListOperationsQuery(
 	}
 	if offset != nil {
 		query.Offset = *offset
+	}
+	if search != nil {
+		query.Search = *search
 	}
 	return query
 }
@@ -200,7 +204,9 @@ func listOperationsFromPaymentParams(
 	if err != nil {
 		return application.OperationsListQuery{}, err
 	}
-	return newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset), nil
+	// The per-rule endpoint has no search parameter in the contract — the
+	// title filter is a property-scope (and payments list) concern.
+	return newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, nil), nil
 }
 
 // listOperationsFromPropertyParams is the property-scope adapter onto the
@@ -216,7 +222,7 @@ func listOperationsFromPropertyParams(
 	if err != nil {
 		return application.OperationsListQuery{}, err
 	}
-	return newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset), nil
+	return newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, params.Search), nil
 }
 
 // writeOperations maps the listed items onto the wire response shape.

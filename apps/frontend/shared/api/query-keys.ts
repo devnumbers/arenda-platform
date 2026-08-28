@@ -45,8 +45,9 @@ export type PaymentOperationOrder = 'asc' | 'desc';
 // features/payments
 export const paymentKeys = {
   all: ['payments'] as const,
-  list: (propertyId: string) =>
-    [...paymentKeys.all, 'list', propertyId] as const,
+  /** Список правил объекта; search — серверный фильтр по названию ('' = без). */
+  list: (propertyId: string, search = '') =>
+    [...paymentKeys.all, 'list', propertyId, search] as const,
   detail: (propertyId: string, paymentId: string) =>
     [...paymentKeys.all, 'detail', propertyId, paymentId] as const,
 };
@@ -54,8 +55,8 @@ export const paymentKeys = {
 export const paymentOperationKeys = {
   all: ['payment-operations'] as const,
   /** Просроченные операции объекта (сервер считает overdue по TZ собственника). */
-  overdueByProperty: (propertyId: string) =>
-    [...paymentOperationKeys.all, 'overdue', propertyId] as const,
+  overdueByProperty: (propertyId: string, search = '') =>
+    [...paymentOperationKeys.all, 'overdue', propertyId, search] as const,
   /** Операции платежа по статусу — гасилки «Оплатить» и секция страницы платежа. */
   byPaymentWithStatus: (
     propertyId: string,
@@ -76,6 +77,21 @@ export const paymentOperationKeys = {
       paymentId,
       status,
       order,
+    ] as const,
+  /** Порции операций объекта: статус, направление и поиск — часть ключа. */
+  byPropertyPaged: (
+    propertyId: string,
+    status: PaymentOperationStatusFilter,
+    order: PaymentOperationOrder,
+    search = '',
+  ) =>
+    [
+      ...paymentOperationKeys.all,
+      'by-property-paged',
+      propertyId,
+      status,
+      order,
+      search,
     ] as const,
 };
 

@@ -33,7 +33,7 @@ const (
 //nolint:dupl // the fields mirror the PaymentManager method set — implementing the port
 type fakePaymentManager struct {
 	create   func(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error)
-	list     func(ctx context.Context, actor, propertyID uuid.UUID) ([]domain.Payment, error)
+	list     func(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error)
 	get      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	update   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error)
 	del      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
@@ -53,11 +53,11 @@ func (f *fakePaymentManager) CreatePayment(
 	return f.create(ctx, actor, propertyID, cmd)
 }
 
-func (f *fakePaymentManager) ListPayments(ctx context.Context, actor, propertyID uuid.UUID) ([]domain.Payment, error) {
+func (f *fakePaymentManager) ListPayments(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error) {
 	if f.list == nil {
 		return nil, errors.New("unexpected ListPayments call")
 	}
-	return f.list(ctx, actor, propertyID)
+	return f.list(ctx, actor, propertyID, search)
 }
 
 func (f *fakePaymentManager) GetPayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error) {
@@ -147,7 +147,7 @@ func TestPaymentHandlers_RequireAuth(t *testing.T) {
 			h.CreatePayment(w, r, propertyID)
 		}},
 		{"list", func(w http.ResponseWriter, r *http.Request) {
-			h.ListPayments(w, r, propertyID)
+			h.ListPayments(w, r, propertyID, openapi.ListPaymentsParams{})
 		}},
 		{"get", func(w http.ResponseWriter, r *http.Request) {
 			h.GetPayment(w, r, propertyID, paymentID)
@@ -618,14 +618,14 @@ func TestListPayments_MapsItems(t *testing.T) {
 	actor := uuid.Must(uuid.NewV7())
 	propertyID := uuid.Must(uuid.NewV7())
 	h := NewPaymentHandlers(&fakePaymentManager{
-		list: func(context.Context, uuid.UUID, uuid.UUID) ([]domain.Payment, error) {
+		list: func(context.Context, uuid.UUID, uuid.UUID, string) ([]domain.Payment, error) {
 			return nil, nil
 		},
 	}, nil)
 
 	w := httptest.NewRecorder()
 	h.ListPayments(w, paymentRequest(t, http.MethodGet, actor, ""),
-		propertyID)
+		propertyID, openapi.ListPaymentsParams{})
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}

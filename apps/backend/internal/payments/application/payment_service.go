@@ -142,14 +142,17 @@ func (s *PaymentService) CreatePayment(
 }
 
 // ListPayments returns the property's payment rules in creation order with
-// their pause intervals. Any actor with the view capability may read; a
+// their pause intervals. Search is a case-insensitive substring filter on
+// the title (” = no filter). Any actor with the view capability may read; a
 // stranger gets ErrNotFound. Reads never tick.
-func (s *PaymentService) ListPayments(ctx context.Context, actor, propertyID uuid.UUID) ([]domain.Payment, error) {
+func (s *PaymentService) ListPayments(
+	ctx context.Context, actor, propertyID uuid.UUID, search string,
+) ([]domain.Payment, error) {
 	scope, err := s.readScope(ctx, actor, propertyID)
 	if err != nil {
 		return nil, err
 	}
-	payments, err := s.payments.ListByProperty(ctx, scope, propertyID)
+	payments, err := s.payments.ListByProperty(ctx, scope, propertyID, search)
 	if err != nil {
 		return nil, fmt.Errorf("list payments: %w", err)
 	}

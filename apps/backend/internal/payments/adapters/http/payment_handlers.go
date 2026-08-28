@@ -31,7 +31,7 @@ import (
 //nolint:dupl // the test double's fields mirror this method set — that is what implementing the port is
 type PaymentManager interface {
 	CreatePayment(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error)
-	ListPayments(ctx context.Context, actor, propertyID uuid.UUID) ([]domain.Payment, error)
+	ListPayments(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error)
 	GetPayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	UpdatePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error)
 	DeletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
@@ -146,13 +146,20 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 }
 
 // ListPayments implements GET /properties/{propertyId}/payments.
-func (h *PaymentHandlers) ListPayments(w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID) {
+func (h *PaymentHandlers) ListPayments(
+	w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID,
+	params openapi.ListPaymentsParams,
+) {
 	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
 		return
 	}
 
-	payments, err := h.svc.ListPayments(r.Context(), actor, propertyID)
+	var search string
+	if params.Search != nil {
+		search = *params.Search
+	}
+	payments, err := h.svc.ListPayments(r.Context(), actor, propertyID, search)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
 		return

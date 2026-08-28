@@ -259,8 +259,10 @@ type Querier interface {
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	// The operations of one scope with pagination (limit/offset), the view status
-	// filter ('' is any), an inclusive period on the operation date and the sort
-	// direction. A NULL payment widens the scope from one rule to every rule of
+	// filter ('' is any), an inclusive period on the operation date, the sort
+	// direction and a case-insensitive substring search by title ('' = no filter;
+	// the application layer escapes the ILIKE metacharacters, ESCAPE '\').
+	// A NULL payment widens the scope from one rule to every rule of
 	// the property: "planned" and "overdue" split the stored planned rows against
 	// the owner's today — overdue is computed here from the same truth the
 	// response items report, in exactly one place (domain.OperationView mirrors
@@ -268,6 +270,8 @@ type Querier interface {
 	ListOperations(ctx context.Context, arg ListOperationsParams) ([]ListOperationsRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
 	// The property's rules in creation order (stable for the list response).
+	// search ('' = no filter) is a case-insensitive substring match on the title;
+	// the application layer escapes the ILIKE metacharacters (ESCAPE '\').
 	ListPaymentsByProperty(ctx context.Context, arg ListPaymentsByPropertyParams) ([]ListPaymentsByPropertyRow, error)
 	// All pending invitations for an email, oldest first: activation at
 	// registration is FIFO across properties (T5, issue #161).

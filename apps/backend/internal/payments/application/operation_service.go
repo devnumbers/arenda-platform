@@ -31,6 +31,9 @@ type OperationsListQuery struct {
 	DateTo   *time.Time
 	Limit    int
 	Offset   int
+	// Search is a case-insensitive substring filter on the title
+	// ('' = no filter); the store adapter escapes the ILIKE metacharacters.
+	Search string
 	// Asc is false by default and by contract: sorting is newest-first unless
 	// explicitly requested otherwise.
 	Asc bool

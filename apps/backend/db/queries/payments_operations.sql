@@ -36,8 +36,10 @@ WHERE id = $1 AND owner_id = $2 AND status = 'planned';
 
 -- name: ListOperations :many
 -- The operations of one scope with pagination (limit/offset), the view status
--- filter ('' is any), an inclusive period on the operation date and the sort
--- direction. A NULL payment widens the scope from one rule to every rule of
+-- filter ('' is any), an inclusive period on the operation date, the sort
+-- direction and a case-insensitive substring search by title ('' = no filter;
+-- the application layer escapes the ILIKE metacharacters, ESCAPE '\').
+-- A NULL payment widens the scope from one rule to every rule of
 -- the property: "planned" and "overdue" split the stored planned rows against
 -- the owner's today — overdue is computed here from the same truth the
 -- response items report, in exactly one place (domain.OperationView mirrors
@@ -70,6 +72,8 @@ WHERE op.owner_id = sqlc.arg('owner')
   )
   AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
   AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('search')::text = ''
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
 ORDER BY
   CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
   CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,

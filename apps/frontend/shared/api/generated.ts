@@ -2082,6 +2082,8 @@ export interface components {
         OperationsOrder: "asc" | "desc";
         OperationsLimit: number;
         OperationsOffset: number;
+        /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+        TitleSearch: string;
     };
     requestBodies: never;
     headers: never;
@@ -2717,7 +2719,10 @@ export interface operations {
     };
     listPayments: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["TitleSearch"];
+            };
             header?: never;
             path: {
                 propertyId: string;
@@ -2992,6 +2997,8 @@ export interface operations {
                 order?: components["parameters"]["OperationsOrder"];
                 limit?: components["parameters"]["OperationsLimit"];
                 offset?: components["parameters"]["OperationsOffset"];
+                /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["TitleSearch"];
             };
             header?: never;
             path: {
