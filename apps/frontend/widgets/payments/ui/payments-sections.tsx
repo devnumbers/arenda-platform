@@ -70,33 +70,44 @@ export function PaymentsSection({
 /** Серая группа секции со строками (заголовок 24/24 сверху, строки приносят
  * свои 24px горизонтали); боковые поля 24 — поля экрана из Figma. Со
  * стрелкой-навигацией в заголовке (стрелки секций страницы платежа —
- * резолюция #452): на «Платежах объекта» стрелки не рисуются — адресаты
- * других срезов. */
+ * резолюция #452); кликабельна вся линия заголовка, не только шеврон.
+ * Пустое состояние — серый подзаголовок внутри карточки (1127:31705). */
 export function PaymentsGroup({
   title,
   open,
+  emptyHint,
   children,
 }: {
   readonly title: string;
   readonly open?: { readonly label: string; readonly onOpen: () => void };
+  readonly emptyHint?: string;
   readonly children: ReactNode;
 }): JSX.Element {
+  const isEmpty = children === null;
   return (
-    <section className="mx-6 rounded-card bg-surface-muted pb-2">
-      <div className="flex items-center justify-between px-6 pb-3 pt-6">
-        <h2 className={headingClass}>{title}</h2>
-        {open !== undefined && (
+    <section className="mx-6 rounded-card bg-surface-muted pb-6">
+      <div className="px-6 pb-3 pt-6">
+        {open !== undefined ? (
           <button
             type="button"
             onClick={open.onOpen}
             aria-label={open.label}
-            className="-m-1 cursor-pointer rounded-pill p-1 text-content-tertiary outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+            className="flex w-full cursor-pointer items-center justify-between rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
           >
-            <ChevronDown className="-rotate-90" aria-hidden />
+            <h2 className={headingClass}>{title}</h2>
+            <ChevronDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
           </button>
+        ) : (
+          <h2 className={headingClass}>{title}</h2>
         )}
       </div>
-      {children}
+      {isEmpty ? (
+        emptyHint !== undefined ? (
+          <p className={`${hintClass} px-6 pb-4`}>{emptyHint}</p>
+        ) : null
+      ) : (
+        children
+      )}
     </section>
   );
 }
@@ -114,6 +125,36 @@ export function PaymentsEmptyCard({
       <h2 className={headingClass}>{title}</h2>
       <p className={`${hintClass} mt-2 max-w-[360px]`}>{hint}</p>
     </section>
+  );
+}
+
+/** Пустое состояние целой страницы с иллюстрацией (1043:60174/60502):
+ * картинка 128, заголовок и пояснение по центру — «Нет платежей», «Нет
+ * просроченных операций» и т.п. */
+export function PaymentsEmptyState({
+  image,
+  title,
+  hint,
+}: {
+  readonly image: string;
+  readonly title: string;
+  readonly hint: string;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col items-center gap-6 pt-16">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={image}
+        alt=""
+        width={128}
+        height={128}
+        className="h-32 w-32 rounded-pill object-cover"
+      />
+      <div className="flex flex-col items-center gap-3 text-center">
+        <h2 className="text-xl font-semibold leading-6 text-content">{title}</h2>
+        <p className="max-w-[360px] text-base leading-[18px] text-content">{hint}</p>
+      </div>
+    </div>
   );
 }
 

@@ -11,7 +11,7 @@ import { usePaymentOperationsPaged } from '@/features/payments';
 import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import {
   OverdueOperationRow,
-  PaymentsEmptyCard,
+  PaymentsEmptyState,
   PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
@@ -61,7 +61,7 @@ export function PaymentOverdueScreen({
           />
         }
       >
-        <TopNavTitle title="Просроченные" />
+        <TopNavTitle title="Просроченные операции" />
       </TopNav>
 
       <PageContent>
@@ -92,12 +92,13 @@ export function PaymentOverdueScreen({
           {!overdueQuery.isPending && !overdueQuery.isError && (
             <>
               {operations.length === 0 ? (
-                <div className="mt-4">
-                  <PaymentsEmptyCard
-                    title="Нет просроченных платежей"
-                    hint="Когда платеж просрочится, он будет здесь"
-                  />
-                </div>
+                // Иллюстрированное пустое состояние — как на общей странице
+                // просроченных (1043:60174, решение владельца).
+                <PaymentsEmptyState
+                  image="/images/payments/empty-payments.png"
+                  title="Нет просроченных операций"
+                  hint="Когда платеж просрочится, он будет здесь"
+                />
               ) : (
                 <>
                   <section className="flex flex-col">

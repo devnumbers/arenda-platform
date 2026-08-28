@@ -25,6 +25,7 @@ import { sortPaymentsByNextOccurrence } from '../lib/sort-payments-by-next-occur
 import {
   OverdueOperationRow,
   PaymentRow,
+  PaymentsEmptyState,
   PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
@@ -258,8 +259,8 @@ function RulesList({
   );
 }
 
-/** Пустое состояние страницы: иллюстрация 128, заголовок и пояснение —
- * по фреймам 1043:60174/1043:60502. */
+/** Пустое состояние страницы: иллюстрация, заголовок и пояснение — по
+ * фреймам 1043:60174/1043:60502 (общий PaymentsEmptyState). */
 function CatalogEmpty({
   meta,
   variantForImage,
@@ -268,20 +269,11 @@ function CatalogEmpty({
   readonly variantForImage: PaymentsCatalogVariant;
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center gap-6 pt-16">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={EMPTY_IMAGE[variantForImage]}
-        alt=""
-        width={128}
-        height={128}
-        className="h-32 w-32 rounded-pill object-cover"
-      />
-      <div className="flex flex-col items-center gap-3 text-center">
-        <h2 className="text-xl font-semibold leading-6 text-content">{meta.emptyTitle}</h2>
-        <p className="max-w-[360px] text-base leading-[18px] text-content">{meta.emptyHint}</p>
-      </div>
-    </div>
+    <PaymentsEmptyState
+      image={EMPTY_IMAGE[variantForImage]}
+      title={meta.emptyTitle}
+      hint={meta.emptyHint}
+    />
   );
 }
 

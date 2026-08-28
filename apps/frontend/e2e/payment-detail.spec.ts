@@ -60,18 +60,18 @@ test.describe('страница платежа', () => {
 
     // Секции: ближайший плановый день месяца («1 сентября»), одна
     // просрочка красным.
-    await expect(page.getByText('Ближайший платеж')).toBeVisible();
+    await expect(page.getByText('Ближайшая операция')).toBeVisible();
     await expect(
       page.getByText(
         /\d{1,2} (января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/,
       ).first(),
     ).toBeVisible();
-    await expect(page.getByText('Просроченные')).toBeVisible();
+    await expect(page.getByText('Просроченные операции')).toBeVisible();
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     // Плитки подэкранов.
     await expect(page.getByText('График платежей')).toBeVisible();
-    await expect(page.getByText('История платежей')).toBeVisible();
+    await expect(page.getByText('История операций')).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-detail-filled-mobile');
   });
@@ -139,7 +139,7 @@ test.describe('страница платежа', () => {
     await page.getByRole('button', { name: 'Оплатить' }).click();
 
     await expect(page.getByText('Оплата отмечена')).toBeVisible();
-    await expect(page.getByText('Нет просроченных платежей')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
 
     // Тик материализует и будущее плановое вхождение: его «Оплатить» гасит
     // досрочно с фактической датой (история 24), расписание не сдвигается.
@@ -185,7 +185,7 @@ test.describe('страница платежа', () => {
     await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeDisabled();
     await expect(page.getByText('Платеж завершен')).toBeVisible();
-    await expect(page.getByText('Нет просроченных платежей')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-detail-completed-mobile');
   });

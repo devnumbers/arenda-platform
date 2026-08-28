@@ -81,6 +81,7 @@ export { default as SortingDown } from './sorting-down.svg';
 export { default as Move } from './move.svg';
 export { default as Star } from './star.svg';
 export { default as StarOff } from './star-off.svg';
+export { default as StarOutline } from './star-outline.svg';
 export { default as StatusIconDanger } from './status-icon-danger.svg';
 export { default as StatusIconWarning } from './status-icon-warning.svg';
 export { default as StatusIconGood } from './status-icon-good.svg';

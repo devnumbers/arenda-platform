@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Star } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -18,7 +18,9 @@ import {
 } from '@/entities/payment';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import {
-  buildScheduleList,
+  extendProjection,
+  materializedEntries,
+  projectionCursor,
   usePayment,
   usePaymentOperationsByStatus,
   type ScheduleEntry,
@@ -30,9 +32,11 @@ import { PaymentsEmptyCard, PaymentsHeading, PaymentsSkeleton, PaymentsStateCard
  * Подэкран «График платежей» (#466, Figma 671:7358): «Ближайший» —
  * материализованное сервером плановое вхождение, «Следующие» — клиентская
  * проекция портом вхождений; единый список порциями по 50 с бесконечным
- * скроллом до endDate (правило платформы — без «Показать еще», резолюция
- * #452). Пустые состояния: «На паузе» и завершённое правило. Просрочки в
- * график не входят — у них отдельный подэкран.
+ * скроллом (правило платформы — без «Показать еще», резолюция #452). У
+ * бессрочного правила проекция догружается бесконечно — страницы
+ * генерируются на лету от курсора, без горизонта и потолка; ограничение
+ * только у правила с endDate. Пустые состояния: «На паузе» и завершённое
+ * правило. Просрочки в график не входят — у них отдельный подэкран.
  */
 const SCHEDULE_PAGE_SIZE = 50;
 
@@ -118,10 +122,31 @@ function ScheduleList({
   readonly plannedOperations: ReadonlyArray<PaymentOperation>;
   readonly today: IsoDate;
 }): JSX.Element {
-  const entries = buildScheduleList(schedule, plannedOperations, today);
-
+  const materialized = materializedEntries(plannedOperations);
   const [visibleCount, setVisibleCount] = useState(SCHEDULE_PAGE_SIZE);
-  const hasMore = visibleCount < entries.length;
+
+  // Проекция — чистое вычисление по видимой глубине: страницы по 50
+  // генерируются на лету от курсора, без горизонта и потолка; у бессрочного
+  // правила догрузка бесконечна, исчерпание (endDate позади) фиксирует
+  // страница, вернувшая меньше полного размера. Память держит только
+  // проскролленное; при уходе с экрана вычисление умирает с компонентом,
+  // серверные порции освобождает штатный GC react-query.
+  const projection = useMemo(() => {
+    let page = extendProjection(
+      schedule,
+      projectionCursor(plannedOperations, today),
+      SCHEDULE_PAGE_SIZE,
+    );
+    const dates = [...page.dates];
+    while (!page.exhausted && dates.length < visibleCount) {
+      page = extendProjection(schedule, page.nextCursor, SCHEDULE_PAGE_SIZE);
+      dates.push(...page.dates);
+    }
+    return { dates, exhausted: page.exhausted };
+  }, [schedule, plannedOperations, today, visibleCount]);
+
+  const totalFollowing = materialized.length - 1 + projection.dates.length;
+  const hasMore = visibleCount - 1 < totalFollowing || !projection.exhausted;
   const sentinelRef = useInfiniteScroll(
     () => setVisibleCount((count) => count + SCHEDULE_PAGE_SIZE),
     hasMore,
@@ -130,7 +155,10 @@ function ScheduleList({
   // На активной паузе график пуст независимо от списков (резолюция #452):
   // даже если плановые строки ещё в кэше — домен на паузе не генерирует.
   // Дальше пустой список — завершённое правило (endDate позади).
-  const nearest = entries[0];
+  const firstProjected = projection.dates[0];
+  const nearest = materialized[0] ?? (firstProjected !== undefined
+    ? ({ kind: 'projected', date: firstProjected } as const)
+    : undefined);
   if (isDatePaused(schedule.pauses, today)) {
     // Авторские тексты: состояний паузы этого подэкрана во Figma нет.
     return (
@@ -149,9 +177,13 @@ function ScheduleList({
     );
   }
 
-  const visibleFollowing = entries
-    .slice(1)
-    .slice(0, visibleCount - 1);
+  // «Следующие»: всё после ближайшего — хвост материализованных и страницы
+  // проекции; глубина показа — visibleCount.
+  const following: ScheduleEntry[] = [
+    ...materialized.slice(1),
+    ...projection.dates.map((date): ScheduleEntry => ({ kind: 'projected', date })),
+  ];
+  const visibleFollowing = following.slice(0, Math.max(visibleCount - 1, 0));
 
   return (
     <>

@@ -26,7 +26,9 @@ export {
   paymentTypeLabel,
 } from './lib/payment-page-model';
 export {
-  buildScheduleList,
+  extendProjection,
+  materializedEntries,
+  projectionCursor,
   type ScheduleEntry,
 } from './lib/schedule-list';
 export {

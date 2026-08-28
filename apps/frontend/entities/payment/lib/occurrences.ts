@@ -19,14 +19,8 @@ import type { PauseInterval, PaymentSchedule } from '../model/types';
 import type { IsoDate } from '../model/types';
 import { addDays, cmp, dateInMonth, fromIso } from './dates';
 
-/** Страховочный потолок перечисления — как в прототипе. */
+/** Страховочный потолок перечисления внутри одного окна — как в прототипе. */
 const MAX_OCCURRENCES = 1000;
-
-/** Дневной горизонт пакетной проекции бессрочного правила для «Графика
- * платежей» — те же 5 лет, что у календарного горизонта поиска порта
- * (horizonAfter ниже); живёт здесь, чтобы у проекции и порта было одно
- * число. */
-export const PROJECTION_HORIZON_DAYS = 366 * 5;
 
 function horizonAfter(date: IsoDate): IsoDate {
   const d = fromIso(date);
@@ -150,4 +144,117 @@ export function firstOccurrence(schedule: PaymentSchedule): IsoDate | null {
     addDays(horizonAfter(schedule.since), 1),
   );
   return first[0] ?? null;
+}
+
+/**
+ * До `count` вхождений строго после курсора `start` — страница бесконечной
+ * догрузки «Графика платежей»: у бессрочного правила страницы генерируются
+ * на лету без потолка, генерация синхронная и дешёвая (дневник и неделю
+ * считает по дням, месяц и год — по якорям от месяца/года курсора).
+ * Ограничения те же, что у occurrencesBetween: снизу `since`, паузы
+ * вырезаются, `endDate` останавливает (сам день окончания включается).
+ * Вернулось меньше `count` — правило исчерпано (или окончание позади).
+ */
+export function nextOccurrencesAfter(
+  schedule: PaymentSchedule,
+  start: IsoDate,
+  count: number,
+): IsoDate[] {
+  if (count <= 0) {
+    return [];
+  }
+  const { recurrence, since, pauses } = schedule;
+  const out: IsoDate[] = [];
+
+  // Открытая пауза [from, ∞) останавливает генерацию навсегда: кандидаты от
+  // `from` и дальше лежат в ней все — без этого стопа перечисление
+  // бессрочного правила на активной паузе не завершается никогда. Кандидаты
+  // во всех ветках монотонно растут, поэтому одна проверка на шаг корректна.
+  const openPauseFrom = pauses.find((pause) => pause.to === undefined)?.from;
+
+  const push = (date: IsoDate): boolean => {
+    if (!isDatePaused(pauses, date)) {
+      out.push(date);
+    }
+    return out.length < count;
+  };
+
+  /** Стоп-условия на кандидата: конец правила, открытая пауза. */
+  const stopAt = (date: IsoDate): boolean =>
+    (schedule.endDate !== undefined && cmp(date, schedule.endDate) > 0)
+    || (openPauseFrom !== undefined && cmp(date, openPauseFrom) >= 0);
+
+  switch (recurrence.kind) {
+    case 'daily': {
+      let date = cmp(since, start) > 0 ? since : addDays(start, 1);
+      while (!stopAt(date) && push(date)) {
+        date = addDays(date, 1);
+      }
+      break;
+    }
+    case 'weekly': {
+      const days = new Set(recurrence.weekdays);
+      let date = cmp(since, start) > 0 ? since : addDays(start, 1);
+      for (;;) {
+        if (stopAt(date)) {
+          break;
+        }
+        if (days.has(fromIso(date).getUTCDay())) {
+          if (!push(date)) {
+            break;
+          }
+        }
+        date = addDays(date, 1);
+      }
+      break;
+    }
+    case 'monthly': {
+      // Якоря считаются от месяца курсора независимо от него самого (как и
+      // в occurrencesBetween — 31-е не сползает); якорь ≤ курсора пропускаем
+      // до пуша, чтобы он не съедал лимит страницы.
+      const base = fromIso(since);
+      const from = fromIso(cmp(since, start) > 0 ? since : start);
+      let month =
+        (from.getUTCFullYear() - base.getUTCFullYear()) * 12
+        + (from.getUTCMonth() - base.getUTCMonth());
+      for (;;) {
+        const date = dateInMonth(
+          base.getUTCFullYear(),
+          base.getUTCMonth() + month,
+          recurrence.dayOfMonth,
+        );
+        month += 1;
+        if (stopAt(date)) {
+          break;
+        }
+        if (cmp(date, start) <= 0) {
+          continue;
+        }
+        if (!push(date)) {
+          break;
+        }
+      }
+      break;
+    }
+    case 'yearly': {
+      const base = fromIso(since);
+      const from = fromIso(cmp(since, start) > 0 ? since : start);
+      let year = from.getUTCFullYear() - base.getUTCFullYear();
+      for (;;) {
+        const date = dateInMonth(base.getUTCFullYear() + year, recurrence.month - 1, recurrence.day);
+        year += 1;
+        if (stopAt(date)) {
+          break;
+        }
+        if (cmp(date, start) <= 0) {
+          continue;
+        }
+        if (!push(date)) {
+          break;
+        }
+      }
+      break;
+    }
+  }
+  return out;
 }

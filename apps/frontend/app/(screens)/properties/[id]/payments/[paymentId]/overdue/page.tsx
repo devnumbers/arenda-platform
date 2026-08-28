@@ -7,7 +7,7 @@ import { PaymentOverdueScreen } from '@/widgets/payments';
  */
 
 export const metadata: Metadata = {
-  title: 'Просроченные — Рентли',
+  title: 'Просроченные операции — Рентли',
 };
 
 type OverdueRoutePageProps = {

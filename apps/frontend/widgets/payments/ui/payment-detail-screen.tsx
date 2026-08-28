@@ -10,8 +10,8 @@ import {
   Pause,
   Play,
   Repeat,
-  Star,
   StarOff,
+  StarOutline,
   TimeHistory,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -59,7 +59,6 @@ import {
 } from '@/shared/ui/design';
 import {
   OverdueOperationRow,
-  PaymentsEmptyCard,
   PaymentsGroup,
   PaymentsSkeleton,
   PaymentsStateCard,
@@ -207,16 +206,22 @@ function PaymentDetailBody({
 
   return (
     <>
-      <PaymentHeroCard payment={payment} paused={paused} />
+      {/* Карточка, кнопки и плитки — внутри 24px обёртки колонки
+       * (1127:31223, padding 0 24px): секции приносят свои mx-6. */}
+      <div className="px-6">
+        <PaymentHeroCard payment={payment} paused={paused} />
+      </div>
 
       {canMutate && (
-        <PaymentActionsRow
-          propertyId={propertyId}
-          payment={payment}
-          paused={paused}
-          completed={completed}
-          payable={payable}
-        />
+        <div className="px-6">
+          <PaymentActionsRow
+            propertyId={propertyId}
+            payment={payment}
+            paused={paused}
+            completed={completed}
+            payable={payable}
+          />
+        </div>
       )}
 
       <div className="flex flex-col gap-6">
@@ -241,26 +246,26 @@ function PaymentDetailBody({
               </Button>
             }
           />
-        ) : overduePreview.length > 0 ? (
+        ) : (
           <PaymentsGroup
-            title="Просроченные"
+            title="Просроченные операции"
             open={{
               label: 'Открыть полный список просроченных',
               onOpen: () => router.push(ROUTES.propertyPaymentOverdue(propertyId, payment.id)),
             }}
+            emptyHint={overduePreview.length > 0 ? undefined : 'У вас нет просроченных операций'}
           >
-            {overduePreview.map((operation) => (
-              <OverdueOperationRow key={operation.id} operation={operation} today={today} />
-            ))}
+            {overduePreview.length > 0
+              ? overduePreview.map((operation) => (
+                  <OverdueOperationRow key={operation.id} operation={operation} today={today} />
+                ))
+              : null}
           </PaymentsGroup>
-        ) : (
-          <PaymentsEmptyCard
-            title="Нет просроченных платежей"
-            hint="Когда платеж просрочится, он будет здесь"
-          />
         )}
 
-        <SubScreenTiles propertyId={propertyId} paymentId={payment.id} />
+        <div className="px-6">
+          <SubScreenTiles propertyId={propertyId} paymentId={payment.id} />
+        </div>
       </div>
     </>
   );
@@ -299,7 +304,7 @@ function PaymentHeroCard({
             {paused && ' • На паузе'}
           </span>
         </div>
-        {Icon !== undefined && <Icon className="h-14 w-14 shrink-0 text-white" aria-hidden />}
+        {Icon !== undefined && <Icon className="h-16 w-16 shrink-0 text-white" aria-hidden />}
       </div>
       <div className="flex items-center gap-1.5 text-sm leading-4 font-normal text-white">
         <Repeat className="h-4 w-4 shrink-0" aria-hidden />
@@ -427,9 +432,10 @@ function PaymentActionsRow({
   );
 }
 
-/** Секция «Ближайший платеж» (стрелка → «График», резолюция #452): одна
- * плановая дата по клиентской проекции или «На паузе»; у завершённого
- * правила вхождений больше нет — пустое состояние (история 43). */
+/** Секция «Ближайшая операция» (1096:37792 — заголовок без стрелки в макете;
+ * по решению владельца стрелка на «График» сохранена): одна плановая дата по
+ * клиентской проекции или «На паузе»; у завершённого правила вхождений
+ * больше нет — пустое состояние (история 43). */
 function NextPaymentSection({
   propertyId,
   payment,
@@ -455,7 +461,7 @@ function NextPaymentSection({
 
   return (
     <PaymentsGroup
-      title="Ближайший платеж"
+      title="Ближайшая операция"
       open={{
         label: 'Открыть график платежей',
         onOpen: () => router.push(ROUTES.propertyPaymentSchedule(propertyId, payment.id)),
@@ -507,13 +513,13 @@ function SubScreenTiles({
   return (
     <div className="flex gap-2">
       <PaymentsTile
-        icon={<Calendar className="h-6 w-6 text-content" aria-hidden />}
+        icon={<Calendar className="h-10 w-10 text-content" aria-hidden />}
         label="График платежей"
         onSelect={() => router.push(ROUTES.propertyPaymentSchedule(propertyId, paymentId))}
       />
       <PaymentsTile
-        icon={<TimeHistory className="h-6 w-6 text-content" aria-hidden />}
-        label="История платежей"
+        icon={<TimeHistory className="h-10 w-10 text-content" aria-hidden />}
+        label="История операций"
         onSelect={() => router.push(ROUTES.propertyPaymentHistory(propertyId, paymentId))}
       />
     </div>
@@ -571,7 +577,9 @@ function FavoriteStarButton({
 
   return (
     <IconButton
-      icon={payment.isFavorite ? <Star /> : <StarOff />}
+      // 1096:37795 / 1097:40757: не в избранном — контурная звезда (клик
+      // добавляет), в избранном — зачёркнутая (клик убирает).
+      icon={payment.isFavorite ? <StarOff /> : <StarOutline />}
       label={payment.isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'}
       aria-pressed={payment.isFavorite}
       disabled={!enabled || setFavorite.isPending}

@@ -121,7 +121,7 @@ test.describe('подэкран «История платежей»', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(PAYMENT_URLS.internet);
 
-    await page.getByRole('button', { name: 'История платежей', exact: true }).click();
+    await page.getByRole('button', { name: 'История операций', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
 
     await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
@@ -208,13 +208,13 @@ test.describe('полный список просроченных', () => {
     await expectMoreAfterScroll(page, overdueTitles, 51);
   });
 
-  test('без просрочек — «Нет просроченных платежей»', async ({ page, seededUser }) => {
+  test('без просрочек — иллюстрированное «Нет просроченных операций»', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(
       `/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555553/overdue`,
     );
 
-    await expect(page.getByText('Нет просроченных платежей')).toBeVisible();
+    await expect(page.getByText('Нет просроченных операций')).toBeVisible();
     await expect(page.getByText('Когда платеж просрочится, он будет здесь')).toBeVisible();
   });
 });

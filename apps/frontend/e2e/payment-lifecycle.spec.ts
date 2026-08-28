@@ -137,7 +137,7 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText(title1).first()).toBeVisible();
     await expect(page.getByText('1 990 ₽').first()).toBeVisible();
     await expect(page.getByText(`Каждый месяц ${day} числа`)).toBeVisible();
-    await expect(page.getByText('Ближайший платеж')).toBeVisible();
+    await expect(page.getByText('Ближайшая операция')).toBeVisible();
 
     // Избранное: звезда переключается с тостом (путь страницы #465).
     const star = page.getByRole('button', { name: 'Добавить в избранное' });
@@ -166,7 +166,7 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
     // ── История: запись «Сегодня» с минусом у расхода ──
-    await page.getByRole('button', { name: 'История платежей', exact: true }).click();
+    await page.getByRole('button', { name: 'История операций', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
     await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
     await expect(page.getByText('-1 990 ₽').first()).toBeVisible();
@@ -189,7 +189,7 @@ test.describe('сквозная жизнь платежа', () => {
     // ── Просрочка (сид прошлого через SQL) → гашение из просроченных ──
     expect(await execE2eSql(induceOverdue(id1, 7))).toBe('UPDATE 1');
     await page.goto(paymentUrl);
-    await expect(page.getByText('Просроченные')).toBeVisible();
+    await expect(page.getByText('Просроченные операции')).toBeVisible();
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     // Полный список просроченных открывается стрелкой секции (#466).
@@ -201,7 +201,7 @@ test.describe('сквозная жизнь платежа', () => {
     await page.goto(paymentUrl);
     await page.getByRole('button', { name: 'Оплатить' }).click();
     await expect(page.getByText('Оплата отмечена')).toBeVisible();
-    await expect(page.getByText('Нет просроченных платежей')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
 
     // ── Правка: сумма меняется, прошлое не тронуто ──
     await page.getByRole('button', { name: 'Изменить' }).click();

@@ -14,7 +14,7 @@ export type {
   PaymentUpdateCommand,
   Recurrence,
 } from './model/types';
-export { firstOccurrence, isDatePaused, nextOccurrenceAfter, occurrencesBetween, PROJECTION_HORIZON_DAYS } from './lib/occurrences';
+export { firstOccurrence, isDatePaused, nextOccurrenceAfter, nextOccurrencesAfter, occurrencesBetween } from './lib/occurrences';
 export { addDays } from './lib/dates';
 export { clientTodayIso } from './lib/client-today';
 export { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from './lib/date-format';

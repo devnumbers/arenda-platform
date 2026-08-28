@@ -103,7 +103,7 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByText('Каждый месяц 20 числа')).toBeVisible();
 
     // Прошлое не тронуто: просрочка осталась на странице платежа.
-    await expect(page.getByText('Просроченные')).toBeVisible();
+    await expect(page.getByText('Просроченные операции')).toBeVisible();
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-edited-detail-mobile');
@@ -201,7 +201,7 @@ test.describe('удаление платежа', () => {
     await expect(page).toHaveURL(new RegExp(`/properties/${STUDIO}/payments$`));
 
     // Долг остался: обе просрочки карточками; правила в списке больше нет.
-    await expect(page.getByText('Просроченные')).toBeVisible();
+    await expect(page.getByText('Просроченные операции')).toBeVisible();
     await expect(page.getByText('Консьерж-сервис')).toHaveCount(2);
   });
 
