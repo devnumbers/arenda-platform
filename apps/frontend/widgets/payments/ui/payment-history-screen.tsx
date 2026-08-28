@@ -75,7 +75,7 @@ export function PaymentHistoryScreen({
           />
         }
       >
-        <TopNavTitle title="История платежей" />
+        <TopNavTitle title="История операций" />
       </TopNav>
 
       <PageContent>

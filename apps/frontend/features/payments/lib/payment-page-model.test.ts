@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Payment, PaymentOperation } from '@/entities/payment';
 import {
   isPaymentCompleted,
+  nearestOccurrence,
   oldestUnpaidOperation,
   paymentTypeLabel,
 } from './payment-page-model';
@@ -80,5 +81,38 @@ describe('paymentTypeLabel', () => {
   it('подписывает направление — «Расход» / «Доход»', () => {
     expect(paymentTypeLabel('expense')).toBe('Расход');
     expect(paymentTypeLabel('income')).toBe('Доход');
+  });
+});
+
+describe('nearestOccurrence', () => {
+  const dailySinceToday: Payment = {
+    ...payment({}),
+    recurrence: { kind: 'daily' },
+    since: '2026-08-28',
+  };
+
+  it('материализованное плановое — источник истины, проекция не перекрывает его', () => {
+    const planned = [operation({ id: 'op30', date: '2026-08-30' })];
+    const nearest = nearestOccurrence(dailySinceToday, planned, '2026-08-28');
+    expect(nearest).toStrictEqual({
+      kind: 'operation',
+      operation: operation({ id: 'op30', date: '2026-08-30' }),
+    });
+  });
+
+  it('без материализованных — вхождение «сегодня» по проекции', () => {
+    const nearest = nearestOccurrence(dailySinceToday, [], '2026-08-28');
+    expect(nearest).toStrictEqual({ kind: 'projected', date: '2026-08-28' });
+  });
+
+  it('правило стартует в будущем — первое вхождение после сегодня', () => {
+    const future = { ...dailySinceToday, since: '2026-09-02' };
+    const nearest = nearestOccurrence(future, [], '2026-08-28');
+    expect(nearest).toStrictEqual({ kind: 'projected', date: '2026-09-02' });
+  });
+
+  it('исчерпанное правило (endDate позади) — undefined', () => {
+    const finished = { ...dailySinceToday, endDate: '2026-08-20' };
+    expect(nearestOccurrence(finished, [], '2026-08-28')).toBeUndefined();
   });
 });

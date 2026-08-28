@@ -22,8 +22,6 @@ import {
   clientTodayIso,
   formatDayMonth,
   isDatePaused,
-  nextOccurrenceAfter,
-  occurrencesBetween,
   recurrenceLabel,
   PaymentRowButton,
   type IsoDate,
@@ -38,6 +36,7 @@ import {
 import { useProperty } from '@/features/properties';
 import {
   isPaymentCompleted,
+  nearestOccurrence,
   oldestUnpaidOperation,
   paymentTypeLabel,
   usePausePayment,
@@ -230,6 +229,7 @@ function PaymentDetailBody({
           payment={payment}
           today={today}
           paused={paused}
+          plannedOperations={plannedQuery.data ?? []}
         />
 
         {overdueQuery.isError ? (
@@ -441,23 +441,23 @@ function NextPaymentSection({
   payment,
   today,
   paused,
+  plannedOperations,
 }: {
   readonly propertyId: string;
   readonly payment: Payment;
   readonly today: IsoDate;
   readonly paused: boolean;
+  readonly plannedOperations: ReadonlyArray<PaymentOperation>;
 }): JSX.Element {
   const router = useRouter();
-  // Вхождение текущего дня — тоже «ближайший»: день окончания включён в
-  // расписание (домен-порт), поэтому поиск от today, а не строго после.
-  const todayOccurrence = paused ? undefined : occurrencesBetween(payment, today, today)[0];
-  const next = todayOccurrence ?? nextOccurrenceAfter(payment, today);
-
-  const nextText = paused
-    ? 'На паузе'
-    : next !== null
-      ? formatDayMonth(next)
-      : undefined;
+  // Ближайшее — серверная истина: материализованное плановое первым (после
+  // оплаты тик материализует следующее, секция переезжает на него, как
+  // «График»); проекция — только пока ничего не материализовано. Активная
+  // пауза — «На паузе» в подзаголовке (история 37), при этом проекция не
+  // считается: на паузе дат нет.
+  const nearest = paused
+    ? { kind: 'paused' as const }
+    : nearestOccurrence(payment, plannedOperations, today);
 
   return (
     <PaymentsGroup
@@ -467,12 +467,28 @@ function NextPaymentSection({
         onOpen: () => router.push(ROUTES.propertyPaymentSchedule(propertyId, payment.id)),
       }}
     >
-      {nextText !== undefined ? (
-        <NextPaymentRow payment={payment} subtitle={nextText} />
-      ) : (
+      {nearest === undefined ? (
         // Авторский текст: состояния завершённого правила во Figma этой
         // страницы нет («Платежей еще не было» — история, не график).
         <p className="px-6 pb-4 text-sm text-content-secondary">Платеж завершен</p>
+      ) : nearest.kind === 'paused' ? (
+        <NextPaymentRow
+          payment={payment}
+          title={payment.title}
+          subtitle="На паузе"
+          amountKopecks={payment.amountKopecks}
+        />
+      ) : (
+        <NextPaymentRow
+          payment={payment}
+          title={nearest.kind === 'operation' ? nearest.operation.title : payment.title}
+          subtitle={formatDayMonth(
+            nearest.kind === 'operation' ? nearest.operation.date : nearest.date,
+          )}
+          amountKopecks={
+            nearest.kind === 'operation' ? nearest.operation.amountKopecks : payment.amountKopecks
+          }
+        />
       )}
     </PaymentsGroup>
   );
@@ -480,10 +496,14 @@ function NextPaymentSection({
 
 function NextPaymentRow({
   payment,
+  title,
   subtitle,
+  amountKopecks,
 }: {
   readonly payment: Payment;
+  readonly title: string;
   readonly subtitle: string;
+  readonly amountKopecks: number;
 }): JSX.Element {
   const style = categoryStyle(payment.category.source, payment.category.slug);
 
@@ -492,9 +512,9 @@ function NextPaymentRow({
       variant="gray"
       className="px-3 pb-2"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
-      title={payment.title}
+      title={title}
       subtitle={subtitle}
-      amountKopecks={payment.amountKopecks}
+      amountKopecks={amountKopecks}
     />
   );
 }

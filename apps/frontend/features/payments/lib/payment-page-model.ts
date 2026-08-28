@@ -1,4 +1,5 @@
 import type { IsoDate, Payment, PaymentOperation, PaymentType } from '@/entities/payment';
+import { nextOccurrenceAfter, occurrencesBetween } from '@/entities/payment';
 
 /**
  * Чистая модель страницы платежа (#465): выбор цели кнопки «Оплатить»,
@@ -31,4 +32,32 @@ export function isPaymentCompleted(payment: Payment, today: IsoDate): boolean {
 /** Подпись направления карточки («Расход» / «Доход»). */
 export function paymentTypeLabel(type: PaymentType): string {
   return type === 'income' ? 'Доход' : 'Расход';
+}
+
+/**
+ * Ближайшее вхождение для секции «Ближайшая операция» (1096:37792):
+ * материализованное плановое — источник истины (после оплаты тик
+ * материализует следующее, и секция переезжает на него, как «График»);
+ * проекция портом вхождений — только пока сервер ничего не материализовал,
+ * день «сегодня» включается (честный вид до прогона тика). undefined —
+ * правило исчерпано (завершённое без planned). Активная пауза разрешается
+ * вызывающим (секция показывает «На паузе»).
+ */
+export type NearestOccurrence =
+  | { readonly kind: 'operation'; readonly operation: PaymentOperation }
+  | { readonly kind: 'projected'; readonly date: IsoDate };
+
+export function nearestOccurrence(
+  payment: Payment,
+  planned: ReadonlyArray<PaymentOperation>,
+  today: IsoDate,
+): NearestOccurrence | undefined {
+  const firstPlanned = planned[0];
+  if (firstPlanned !== undefined) {
+    return { kind: 'operation', operation: firstPlanned };
+  }
+  const todayOccurrence = occurrencesBetween(payment, today, today)[0];
+  const projected = todayOccurrence ?? nextOccurrenceAfter(payment, today);
+  // nextOccurrenceAfter сигналит исчерпание null'ом.
+  return projected === null ? undefined : { kind: 'projected', date: projected };
 }

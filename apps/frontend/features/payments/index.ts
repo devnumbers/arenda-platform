@@ -22,6 +22,7 @@ export {
 export { successScreenCopy, type SuccessScreenCopyInput } from './lib/success-copy';
 export {
   isPaymentCompleted,
+  nearestOccurrence,
   oldestUnpaidOperation,
   paymentTypeLabel,
 } from './lib/payment-page-model';

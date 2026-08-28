@@ -90,7 +90,7 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByText('Платежи объекта', { exact: true })).toBeVisible();
     // На странице секции паузные видны («там уже всё видно»).
     await expect(page.getByText('Домофон')).toBeVisible();
-    await expect(page.getByText('На паузе')).toBeVisible();
+    await expect(page.getByText('На паузе').first()).toBeVisible();
   });
 
   test('страница просроченных операций открывает полный список', async ({
