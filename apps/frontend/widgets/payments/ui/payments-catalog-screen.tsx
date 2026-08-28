@@ -10,6 +10,7 @@ import { clientTodayIso } from '@/entities/payment';
 import {
   usePayments,
   usePropertyOperationsPaged,
+  usePropertyOverdueOperations,
 } from '@/features/payments';
 import { useProperty } from '@/features/properties';
 import {
@@ -122,7 +123,8 @@ export function PaymentsCatalogScreen({
 
 /** Полный список просроченных операций объекта: asc — долг разбирают по
  * порядку накопления, порции по 50 с бесконечным скроллом; строка ведёт на
- * страницу правила-источника. */
+ * долг разбирают по порядку накопления. Строка операции никуда не ведёт —
+ * у операций будет своя страница. */
 function OverdueList({
   propertyId,
   meta,
@@ -130,7 +132,6 @@ function OverdueList({
   readonly propertyId: string;
   readonly meta: { emptyTitle: string; emptyHint: string };
 }): JSX.Element {
-  const router = useRouter();
   const overdueQuery = usePropertyOperationsPaged(propertyId, {
     status: 'overdue',
     order: 'asc',
@@ -181,14 +182,6 @@ function OverdueList({
             today={today}
             variant="white"
             className="py-3"
-            onSelect={
-              operation.paymentId !== null
-                ? () =>
-                    router.push(
-                      ROUTES.propertyPayment(propertyId, operation.paymentId as string),
-                    )
-                : undefined
-            }
           />
         ))}
       </section>
@@ -210,6 +203,14 @@ function RulesList({
 }): JSX.Element {
   const router = useRouter();
   const paymentsQuery = usePayments(propertyId);
+  // Точки просрочки на плашках (1323:61133, State=Expired): первая порция
+  // просроченных операций объекта (порция 50 — глубже не бейджим).
+  const overdueQuery = usePropertyOverdueOperations(propertyId);
+  const overduePaymentIds = new Set(
+    (overdueQuery.data ?? []).flatMap((operation) =>
+      operation.paymentId !== null ? [operation.paymentId] : [],
+    ),
+  );
   const today = clientTodayIso();
 
   if (paymentsQuery.isPending) {
@@ -248,6 +249,8 @@ function RulesList({
           key={payment.id}
           payment={payment}
           today={today}
+          variant="white"
+          hasOverdue={overduePaymentIds.has(payment.id)}
           onSelect={() => router.push(ROUTES.propertyPayment(propertyId, payment.id))}
         />
       ))}

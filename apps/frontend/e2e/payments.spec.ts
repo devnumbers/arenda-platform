@@ -50,21 +50,21 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByRole('heading', { name: 'Платежи', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Автоплатежи' })).toBeVisible();
 
-    // Строки секций считаем по кнопкам с суммой (заголовок-стрелка — тоже
-    // кнопка, но без «₽»). Содержимое секций зависит от параллельных
-    // сценариев, создающих платежи на той же квартире, — проверяем форму,
-    // а не состав: у каждой секции от 1 до 3 строк с красным сроком у
-    // просроченных.
-    const overdueRows = page.getByTestId('section-overdue').getByRole('button').filter({ hasText: '₽' });
+    // Строки секций считаем по текстам с суммой (заголовок-стрелка —
+    // кнопка без «₽»; строки операций не кликабельны и роли button не
+    // имеют). Содержимое секций зависит от параллельных сценариев,
+    // создающих платежи на той же квартире, — проверяем форму, а не состав:
+    // у каждой секции от 1 до 3 строк, у просроченных красный срок.
+    const overdueRows = page.getByTestId('section-overdue').getByText('₽');
     await expect(overdueRows.first()).toBeVisible();
     expect(await overdueRows.count()).toBeLessThanOrEqual(3);
     await expect(page.getByTestId('section-overdue').getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
-    const paymentRows = page.getByTestId('section-payments').getByRole('button').filter({ hasText: '₽' });
+    const paymentRows = page.getByTestId('section-payments').getByText('₽');
     await expect(paymentRows.first()).toBeVisible();
     expect(await paymentRows.count()).toBeLessThanOrEqual(3);
 
-    const autoRows = page.getByTestId('section-auto').getByRole('button').filter({ hasText: '₽' });
+    const autoRows = page.getByTestId('section-auto').getByText('₽');
     await expect(autoRows.first()).toBeVisible();
     expect(await autoRows.count()).toBeLessThanOrEqual(3);
 
@@ -103,10 +103,9 @@ test.describe('экран «Платежи объекта»', () => {
     await page.getByRole('button', { name: 'Открыть просроченные операции' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/overdue$`));
     // Состав строк зависит от параллельных сценариев (гасят сидовые
-    // просрочки), проверяем что список непуст и строки красные.
-    await expect(
-      page.getByRole('button').filter({ hasText: '₽' }).filter({ hasText: /\d+ (день|дня|дней)/ }).first(),
-    ).toBeVisible();
+    // просрочки), проверяем что список непуст: строки операций не
+    // кликабельны — ищем по тексту красного срока.
+    await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
   });
 
   test('поиск фильтрует каждую секцию независимо', async ({ page, seededUser }) => {
@@ -117,9 +116,9 @@ test.describe('экран «Платежи объекта»', () => {
     await page.getByRole('searchbox', { name: 'Поиск по названиям' }).fill('клининг');
 
     await expect(page.getByTestId('section-payments').getByText('Клининг холла')).toBeVisible();
-    await expect(page.getByTestId('section-payments').getByRole('button').filter({ hasText: '₽' })).toHaveCount(1);
-    await expect(page.getByTestId('section-auto').getByRole('button').filter({ hasText: '₽' })).toHaveCount(0);
-    await expect(page.getByTestId('section-overdue').getByRole('button').filter({ hasText: '₽' })).toHaveCount(0);
+    await expect(page.getByTestId('section-payments').getByText('₽')).toHaveCount(1);
+    await expect(page.getByTestId('section-auto').getByText('₽')).toHaveCount(0);
+    await expect(page.getByTestId('section-overdue').getByText('₽')).toHaveCount(0);
   });
 
   test('поиск без совпадений — «Ничего не нашлось» в каждой секции', async ({

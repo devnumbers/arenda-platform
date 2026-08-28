@@ -28,6 +28,10 @@ export type PaymentRowButtonProps = {
   readonly variant?: 'white' | 'gray';
   /** Просроченная операция: сумма и описание красным (#452). */
   readonly danger?: boolean;
+  /** Знаковая сумма операции (1332:61665, State=Plus): положительная — с
+   * плюсом зелёным (доход). У плашек правил не включается — их сумма всегда
+   * без знака. */
+  readonly signedAmount?: boolean;
   readonly onSelect?: () => void;
   readonly disabled?: boolean;
   readonly className?: string;
@@ -44,6 +48,7 @@ export function PaymentRowButton({
   description,
   variant = 'white',
   danger = false,
+  signedAmount = false,
   onSelect,
   disabled = false,
   className,
@@ -56,7 +61,7 @@ export function PaymentRowButton({
       className={cn(
         'group/row flex w-full cursor-pointer items-center py-2 outline-none',
         'transition-all focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-        'hover:opacity-80 active:opacity-80',
+        'hover:opacity-80 active:opacity-80 px-3',
         variant === 'gray' ? 'bg-surface-muted' : 'bg-surface',
         onSelect === undefined && 'cursor-default',
         disabled && 'pointer-events-none opacity-50',
@@ -87,9 +92,14 @@ export function PaymentRowButton({
                   <span
                     className={cn(
                       'text-base font-medium',
-                      danger ? 'text-danger' : 'text-content group-hover/row:text-content-secondary',
+                      danger
+                        ? 'text-danger'
+                        : signedAmount && amountKopecks > 0
+                          ? 'text-success'
+                          : 'text-content group-hover/row:text-content-secondary',
                     )}
                   >
+                    {signedAmount && amountKopecks > 0 && '+'}
                     {formatMoneyKopecks(amountKopecks)}
                   </span>
                 )}

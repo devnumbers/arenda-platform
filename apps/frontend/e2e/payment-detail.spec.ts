@@ -194,9 +194,12 @@ test.describe('страница платежа', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(PROPERTY_PAYMENTS_URL);
 
-    await page.getByText('Страхование').first().click();
+    // Секции показывают максимум 3 ближайших платежа: кликаем по строке,
+    // которая всегда в топе, — ежедневная «Парковка». Строки операций
+    // (просрочек) кликов не имеют — правило ведёт на страницу платежа.
+    await page.getByText('Парковка', { exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/payments/[0-9a-f-]+$`));
-    await expect(page.getByText('Страхование').first()).toBeVisible();
+    await expect(page.getByText('Парковка').first()).toBeVisible();
   });
 });
 

@@ -17,6 +17,7 @@ import {
   usePaymentOperationsPaged,
 } from '@/features/payments';
 import { Button, ChipButton, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { operationStatusLabel } from '../lib/operation-status-label';
 import {
   PaymentsEmptyCard,
   PaymentsHeading,
@@ -148,23 +149,29 @@ export function PaymentHistoryScreen({
   );
 }
 
-/** Строка истории (Figma 671:7776): иконка категории, название, сумма
- * справа; расход — с минусом. */
+/** Строка истории (Figma 671:7776, 1332:61665): иконка категории с белым
+ * кантом (строка внутри страницы), название, подпись оплаты — «Заранее
+ * на N дней» / «Задержан на N дней» / дата при точном попадании; сумма
+ * справа знаковая: расход с минусом, доход с плюсом зелёным. Строка
+ * операции никуда не ведёт — у операций будет своя страница. */
 function HistoryRow({
   operation,
 }: {
   readonly operation: PaymentOperation;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
+  const label = operationStatusLabel(operation);
 
   return (
     <PaymentRowButton
       className="px-3 py-3"
-      categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
+      categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
       title={operation.title}
+      subtitle={label?.text}
       amountKopecks={
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }
+      signedAmount
     />
   );
 }

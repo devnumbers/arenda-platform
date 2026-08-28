@@ -134,6 +134,9 @@ test.describe('подэкран «История платежей»', () => {
 
     // Сумма расхода — с минусом (Figma 671:7776).
     await expect(page.getByText('-1 000 ₽').first()).toBeVisible();
+    // Офсетные оплаты сида: подписи строки операции (1332:61665).
+    await expect(page.getByText('Заранее на 2 дня')).toBeVisible();
+    await expect(page.getByText('Задержан на 2 дня')).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-history-mobile');
   });

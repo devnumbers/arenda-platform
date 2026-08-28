@@ -90,6 +90,7 @@
 
     --color-danger: var(--dl-danger);
     --color-error: var(--dl-error);
+    --color-success: var(--dl-success);
 
     --color-overlay: var(--dl-overlay);
     --color-input-border: var(--dl-input-border);

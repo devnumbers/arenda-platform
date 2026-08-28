@@ -219,15 +219,17 @@ function ScheduleRow({
   return (
     <PaymentRowButton
       className="px-3 py-3"
-      categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
+      // Строка внутри страницы — кант белый; звезда favorite-правила — перед
+      // датой (1323:61133).
+      categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
       title={entry.kind === 'operation' ? entry.operation.title : fallbackTitle}
       subtitle={
         <span className="inline-flex items-center gap-1">
+          {isFavorite && <Star className="h-4 w-4 shrink-0" aria-hidden />}
           {formatDayMonthWithYear(
             entry.kind === 'operation' ? entry.operation.date : entry.date,
             today,
           )}
-          {isFavorite && <Star className="h-4 w-4 shrink-0" aria-hidden />}
         </span>
       }
       amountKopecks={

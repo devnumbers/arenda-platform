@@ -90,6 +90,12 @@ export function PaymentsOfPropertyScreen({
 
   const payments = paymentsQuery.data ?? [];
   const overdue = overdueQuery.data ?? [];
+  // Платежи с накопленной просрочкой — красная точка на иконке в секциях
+  // (1323:61133, State=Expired). Просрочки приходят порцией 50 (asc) —
+  // долгов поверх первой порции на плашках не бейджим.
+  const overduePaymentIds = new Set(
+    overdue.flatMap((operation) => (operation.paymentId !== null ? [operation.paymentId] : [])),
+  );
 
   // Паузные правила не выводятся на экране (1043:57611) — их место на
   // странице платежа; накопленный ими долг остаётся в секции просроченных.
@@ -208,14 +214,6 @@ export function PaymentsOfPropertyScreen({
                               </span>
                             }
                             amountKopecks={operation.amountKopecks}
-                            onSelect={
-                              operation.paymentId !== null
-                                ? () =>
-                                    router.push(
-                                      ROUTES.propertyPayment(propertyId, operation.paymentId as string),
-                                    )
-                                : undefined
-                            }
                           />
                         );
                       })
@@ -243,6 +241,7 @@ export function PaymentsOfPropertyScreen({
                             key={payment.id}
                             payment={payment}
                             today={today}
+                            hasOverdue={overduePaymentIds.has(payment.id)}
                             onSelect={() => openPayment(payment)}
                           />
                         ))
@@ -262,6 +261,7 @@ export function PaymentsOfPropertyScreen({
                             key={payment.id}
                             payment={payment}
                             today={today}
+                            hasOverdue={overduePaymentIds.has(payment.id)}
                             onSelect={() => openPayment(payment)}
                           />
                         ))

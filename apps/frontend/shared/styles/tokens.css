@@ -83,6 +83,9 @@
   --dl-danger: #fb2c36;
   --dl-error: #ff383c;
 
+  /* Зелёный дохода: «+» суммы доходных операций (1332:61665, State=Plus). */
+  --dl-success: #34c771;
+
   --dl-input-border: #d3d7d9;
   --dl-overlay: rgba(23, 26, 28, 0.5);
 

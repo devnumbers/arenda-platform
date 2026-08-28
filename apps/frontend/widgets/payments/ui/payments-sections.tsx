@@ -155,23 +155,22 @@ export function PaymentsSkeleton({ withHeading }: { readonly withHeading?: boole
   );
 }
 
-/** Просроченная операция (страница платежа #465 и полный список #466,
- * фреймы 693:5435/850:15412): срок «N дней» и сумма красным, бейдж danger
- * на иконке категории. Порядок asc — старейшая первой, долг разбирают по
- * порядку накопления. Поверхность: gray — секция страницы, white — строки
- * «Графика» в полном списке (резолюция #452). */
+/** Просроченная операция (страница платежа #465, полный список #466 и
+ * каталог объекта, фреймы 693:5435/850:15412/1332:61665): срок «на N дней»
+ * и сумма красным, бейдж danger на иконке категории. Порядок asc — старейшая
+ * первой, долг разбирают по порядку накопления. Поверхность: gray — секция
+ * на сером блоке (кант серый), white — строки внутри страницы (кант белый).
+ * Строка операции никуда не ведёт: у операций будет своя страница. */
 export function OverdueOperationRow({
   operation,
   today,
   variant = 'gray',
   className,
-  onSelect,
 }: {
   readonly operation: PaymentOperation;
   readonly today: IsoDate;
   readonly variant?: 'white' | 'gray';
   readonly className?: string;
-  readonly onSelect?: () => void;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
 
@@ -181,26 +180,38 @@ export function OverdueOperationRow({
       variant={variant}
       danger
       categoryIcon={
-        <CategoryIcon icon={style.icon} color={style.color} badge="danger" surface="muted" />
+        <CategoryIcon
+          icon={style.icon}
+          color={style.color}
+          badge="danger"
+          surface={variant === 'white' ? 'white' : 'muted'}
+        />
       }
       title={operation.title}
       description={formatOverdueDays(daysOverdue(operation.date, today))}
       amountKopecks={operation.amountKopecks}
-      onSelect={onSelect}
     />
   );
 }
 
-/** Строка платежа в серой группе: подзаголовок — дата следующего вхождения
- * или «На паузе» (opacity по истории 22), звезда избранного после даты
- * (Figma 654:6778). Выбор строки открывает страницу платежа (#465). */
+/** Строка правила-платежа в секциях (1323:61133): подзаголовок — дата
+ * следующего вхождения или «На паузе» (opacity по истории 22); звезда
+ * избранного — ПЕРЕД подзаголовком и во всех состояниях; у платежа с
+ * накопленной просрочкой — красная точка-уведомление на иконке
+ * (State=Expired, обе поверхности). Поверхность gray — строки на серых
+ * блоках (кант серый), white — внутри страницы, открытой кликом по серому
+ * блоку (кант белый). Выбор строки открывает страницу платежа (#465). */
 export function PaymentRow({
   payment,
   today,
+  variant = 'gray',
+  hasOverdue = false,
   onSelect,
 }: {
   readonly payment: Payment;
   readonly today: IsoDate;
+  readonly variant?: 'white' | 'gray';
+  readonly hasOverdue?: boolean;
   readonly onSelect?: () => void;
 }): JSX.Element {
   const subtitle = paymentRowSubtitle(payment, today);
@@ -216,15 +227,22 @@ export function PaymentRow({
 
   return (
     <PaymentRowButton
-      variant="gray"
-      className={paused ? 'px-3 opacity-60' : 'px-3'}
-      categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
+      variant={variant}
+      className={paused ? 'opacity-60' : ''}
+      categoryIcon={
+        <CategoryIcon
+          icon={style.icon}
+          color={style.color}
+          badge={hasOverdue ? 'notification' : undefined}
+          surface={variant === 'white' ? 'white' : 'muted'}
+        />
+      }
       title={payment.title}
       subtitle={
-        dateText !== undefined && payment.isFavorite ? (
+        payment.isFavorite ? (
           <span className="inline-flex items-center gap-1">
-            {dateText}
             <Star className="h-4 w-4 shrink-0" aria-hidden />
+            {dateText}
           </span>
         ) : (
           dateText

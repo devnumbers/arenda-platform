@@ -48,3 +48,36 @@ SET title = EXCLUDED.title,
     payment_form = EXCLUDED.payment_form,
     category_slug = EXCLUDED.category_slug,
     is_favorite = EXCLUDED.is_favorite;
+
+-- История «Интернета»: пара офсетных оплат для подписей строки операции
+-- (1332:61665): «Заранее на 2 дня» (paid на 2 дня раньше срока) и
+-- «Задержан на 2 дня» (paid на 2 дня позже). Даты не пересекаются с сидом
+-- (CURRENT_DATE/−1 и помесячными) — дедуп (payment_id, date) не задет.
+INSERT INTO operations (id, owner_id, property_id, payment_id, origin, date,
+                        paid_date, status, type, title, amount_kopecks,
+                        payment_form, category_label, category_slug)
+VALUES
+    ('77777777-7777-4777-8777-000000000790',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     '55555555-5555-4555-8555-555555555556',
+     'payment', CURRENT_DATE - 3, CURRENT_DATE - 5, 'paid', 'expense',
+     'Интернет', 100000, 'transfer', 'Интернет', 'internet'),
+    ('77777777-7777-4777-8777-000000000791',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     '55555555-5555-4555-8555-555555555556',
+     'payment', CURRENT_DATE - 6, CURRENT_DATE - 4, 'paid', 'expense',
+     'Интернет', 100000, 'transfer', 'Интернет', 'internet'),
+-- Доходная оплата для зелёного плюса (State=Plus): «Аренда машиноместа»,
+-- суббота, оплачена в день срока.
+    ('77777777-7777-4777-8777-000000000792',
+     '11111111-1111-4111-8111-111111111111',
+     '33333333-3333-4333-8333-333333333333',
+     '55555555-5555-4555-8555-555555555561',
+     'payment', CURRENT_DATE - 7, CURRENT_DATE - 7, 'paid', 'income',
+     'Аренда машиноместа', 200000, 'transfer', 'Аренда машиноместа', 'parking')
+ON CONFLICT (id) DO UPDATE
+SET date = EXCLUDED.date,
+    paid_date = EXCLUDED.paid_date,
+    status = EXCLUDED.status;
