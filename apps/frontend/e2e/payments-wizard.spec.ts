@@ -30,7 +30,11 @@ async function openWizard(
   await page.goto(APARTMENT_PAYMENTS_URL);
   await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
   await page.goto(wizardUrl(type));
-  await expect(page.getByRole('heading', { name: 'Периодичность платежа' }).or(page.getByRole('searchbox'))).toBeVisible();
+  await expect(
+    page
+      .getByRole('heading', { name: 'Периодичность платежа' })
+      .or(page.getByRole('heading', { name: 'Категория платежа' })),
+  ).toBeVisible();
 }
 
 /**
@@ -39,6 +43,7 @@ async function openWizard(
  */
 async function selectCategory(page: Parameters<typeof openCabinetWithSeededSession>[0], slugLabel = 'Арендная плата'): Promise<void> {
   await page.getByRole('button', { name: slugLabel }).click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.getByRole('heading', { name: 'Дайте название платежу' })).toBeVisible();
 }
 
@@ -83,9 +88,11 @@ test.describe('визард создания платежа', () => {
     const title = 'E2E страховка квартиры';
     await openWizard(page, seededUser);
 
-    // Шаг 1 — поиск по каталогу ведёт на «Страхование».
+    // Шаг 1 — лупа раскрывает поиск в хедере; запрос ведёт на «Страхование».
+    await page.getByRole('button', { name: 'Поиск по категориям' }).click();
     await page.getByRole('searchbox').fill('страхов');
     await page.getByRole('button', { name: 'Страхование' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
     await expect(page.getByRole('heading', { name: 'Дайте название платежу' })).toBeVisible();
     await captureScreen(page, testInfo, 'wizard-step1-category-mobile');
 

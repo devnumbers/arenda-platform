@@ -248,7 +248,7 @@ test.describe('экран «Платежи объекта»', () => {
     // Дальше — как без черновика: карточка ведёт в визард с нуля (шаг 1).
     await page.getByRole('button', { name: PAYMENT_CARD }).click();
     await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
-    await expect(page.getByRole('searchbox')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
   });
 });
 

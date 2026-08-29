@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
@@ -11,6 +11,7 @@ import {
   Button,
   IconButton,
   PageContent,
+  SearchField,
   StepsChip,
   StickyBottomBar,
   TopNav,
@@ -36,7 +37,7 @@ import { CategoryStep } from './category-step';
 import { EndDateStep } from './end-date-step';
 import { PeriodicityStep } from './periodicity-step';
 import { TitleStep } from './title-step';
-import { WizardBottomBar } from './wizard-chrome';
+import { WizardBottomBar, WizardHeading } from './wizard-chrome';
 import { WizardSuccess } from './wizard-success';
 
 /**
@@ -61,6 +62,10 @@ export function PaymentCreateWizardFlow({
   const [created, setCreated] = useState<Payment | null>(null);
   const [step, setStep] = useState<WizardStep>(() => initialStep(draft));
   const [openBranch, setOpenBranch] = useState<PeriodicityBranch | null>(null);
+  // Поиск категорий живёт в хедере шага 1 (Figma 781:12299): лупа меняет
+  // чип «Шаг N из 5» на поле, «Назад» возвращает чип и сбрасывает запрос.
+  const [categorySearchOpen, setCategorySearchOpen] = useState(false);
+  const [categoryQuery, setCategoryQuery] = useState('');
 
   const today: IsoDate = clientTodayIso();
 
@@ -81,18 +86,58 @@ export function PaymentCreateWizardFlow({
     <>
       <TopNav
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={navigateBack} />}
+        trailing={
+          step === 1 && !categorySearchOpen ? (
+            <IconButton
+              icon={<Search />}
+              label="Поиск по категориям"
+              onClick={() => setCategorySearchOpen(true)}
+            />
+          ) : undefined
+        }
       >
-        <StepsChip step={step} total={WIZARD_TOTAL_STEPS} size="m" />
-      </TopNav>
-      <PageContent>
-        {step === 1 && (
-          <CategoryStep
-            selectedSlug={draft.categorySlug}
-            onSelect={(slug) => {
-              setDraft((prev) => ({ ...prev, categorySlug: slug }));
-              goToStep(2);
-            }}
+        {step === 1 && categorySearchOpen ? (
+          <SearchField
+            value={categoryQuery}
+            onChange={(event) => setCategoryQuery(event.target.value)}
+            onClear={() => setCategoryQuery('')}
+            placeholder="Найти категорию"
+            aria-label="Поиск по названиям категорий"
           />
+        ) : (
+          <StepsChip step={step} total={WIZARD_TOTAL_STEPS} size="m" />
+        )}
+      </TopNav>
+      {/* У макета контентный фрейм несёт pt-72 под плавающий TopNav (44px);
+          здесь хедер в потоке, так что от навигации до заголовка остаётся
+          28+24 = 52px — как во Figma. */}
+      <PageContent className="pt-0">
+        {step === 1 && (
+          <>
+            <WizardHeading title="Категория платежа" subtitle="Выберите категорию" />
+            <CategoryStep
+              selectedSlug={draft.categorySlug}
+              onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}
+              query={categoryQuery}
+            />
+            {/* «Продолжить» — после выбора категории (Figma 823:4243). */}
+            {draft.categorySlug !== undefined && (
+              <StickyBottomBar>
+                <WizardBottomBar>
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      setCategorySearchOpen(false);
+                      setCategoryQuery('');
+                      goToStep(2);
+                    }}
+                  >
+                    Продолжить
+                  </Button>
+                </WizardBottomBar>
+              </StickyBottomBar>
+            )}
+          </>
         )}
         {step === 2 && (
           <>
@@ -194,6 +239,11 @@ export function PaymentCreateWizardFlow({
   function navigateBack(): void {
     if (step === 3 && openBranch !== null) {
       setOpenBranch(null);
+      return;
+    }
+    if (step === 1 && categorySearchOpen) {
+      setCategorySearchOpen(false);
+      setCategoryQuery('');
       return;
     }
     if (step > 1) {
