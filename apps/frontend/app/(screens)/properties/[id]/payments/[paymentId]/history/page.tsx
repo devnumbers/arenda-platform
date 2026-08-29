@@ -7,7 +7,7 @@ import { PaymentHistoryScreen } from '@/widgets/payments';
  */
 
 export const metadata: Metadata = {
-  title: 'История платежей — Рентли',
+  title: 'История операций — Рентли',
 };
 
 type HistoryRoutePageProps = {

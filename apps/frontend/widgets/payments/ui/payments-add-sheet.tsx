@@ -4,25 +4,26 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Add } from '@/shared/assets/icons';
+import { Add, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import {
-  clearPaymentWizardDraft,
+  clearPaymentWizardDrafts,
+  latestPaymentDraftType,
   usePaymentWizardDraft,
   type PaymentDraftType,
 } from '@/features/payments';
 import { Button, Modal, ModalContent } from '@/shared/ui/design';
 
 /**
- * Шит выбора «Платёж / Автоплатёж» (спека #453, история 13): вход в создание
- * платежа с экрана объекта. Выбор типа — Figma 1134:40415 (попап) /
- * 1134:39570 (шит); состояние подтверждения при наличии черновика этого
- * типа — строка «Черновик» с «Продолжить» + кнопка «Создать новый»
- * (Figma 837:21349; черновик стирается, визард стартует с нуля). Без
- * черновика карточка ведёт в визард сразу. Индикация черновика —
- * usePaymentWizardDraft (localStorage, ключ per объект+тип); сам визард
- * и восстановление черновика — следующий срез, навигация ведёт на его
- * маршрут.
+ * Вход в создание платежа (спека #453, история 13): клик «Добавить»
+ * проверяет черновик визарда. Есть черновик — Figma 1134:40451:
+ * заголовок «У вас есть черновик» и две кнопки — «Продолжить черновик»
+ * (визард того же типа восстанавливается на первый незавершённый шаг)
+ * и «Создать новый» (черновики объекта стираются, Figma 837:21376),
+ * после которой в той же модалке показывается выбор типа — ровно как
+ * без черновика (Figma 847:11688). Черновика нет — выбор типа сразу.
+ * Черновики — usePaymentWizardDraft (localStorage per объект+тип),
+ * свежесть — updatedAt в payload: показывается последний тронутый.
  */
 
 /** Копирайт карточек — дословно из фреймов 1134:40415 / 1134:39570
@@ -62,105 +63,74 @@ export function PaymentsAddSheet({
   onOpenChange,
 }: PaymentsAddSheetProps): JSX.Element {
   const router = useRouter();
-  const [confirmType, setConfirmType] = useState<PaymentDraftType | null>(null);
+  // «Создать новый» меняет контент шита на выбор типа, не закрывая
+  // модалку; при закрытии шит возвращается в черновик-состояние.
+  const [phase, setPhase] = useState<'draft' | 'choice'>('draft');
   const paymentDraft = usePaymentWizardDraft(propertyId, 'payment');
   const autopaymentDraft = usePaymentWizardDraft(propertyId, 'autopayment');
-  type DraftState = ReturnType<typeof usePaymentWizardDraft>;
 
-  const draftByType = (type: PaymentDraftType): DraftState =>
-    type === 'payment' ? paymentDraft : autopaymentDraft;
+  // Черновики читаются из localStorage асинхронно: до загрузки контент не
+  // выбираем, иначе выбор типа мелькнёт перед черновик-состоянием.
+  const loaded = paymentDraft.isLoaded && autopaymentDraft.isLoaded;
+  const latest: PaymentDraftType | undefined = loaded
+    ? latestPaymentDraftType(paymentDraft, autopaymentDraft)
+    : undefined;
 
   const goWizard = (type: PaymentDraftType): void => {
     router.push(ROUTES.propertyPaymentNew(propertyId, type));
   };
 
-  const handleCardSelect = (type: PaymentDraftType): void => {
-    if (draftByType(type).hasDraft) {
-      setConfirmType(type);
-      return;
-    }
-    goWizard(type);
-  };
-
-  const handleCreateNew = (type: PaymentDraftType): void => {
-    clearPaymentWizardDraft(propertyId, type);
-    goWizard(type);
-  };
-
   const handleOpenChange = (nextOpen: boolean): void => {
     if (!nextOpen) {
-      setConfirmType(null);
+      setPhase('draft');
     }
     onOpenChange(nextOpen);
   };
 
+  let title: string;
+  let content: JSX.Element | null;
+  if (latest !== undefined && phase === 'draft') {
+    const draftType = latest;
+    title = 'У вас есть черновик';
+    content = (
+      <div className="flex flex-col gap-4">
+        <Button
+          variant="secondary"
+          className="w-full"
+          trailingIcon={<Edit />}
+          onClick={() => goWizard(draftType)}
+        >
+          Продолжить черновик
+        </Button>
+        <Button
+          className="w-full"
+          trailingIcon={<Add />}
+          onClick={() => {
+            clearPaymentWizardDrafts(propertyId);
+            setPhase('choice');
+          }}
+        >
+          Создать новый
+        </Button>
+      </div>
+    );
+  } else {
+    title = 'Выберите тип платежа';
+    content = loaded ? (
+      <div className="grid grid-cols-2 gap-2">
+        {(Object.keys(TYPE_META) as PaymentDraftType[]).map((type) => (
+          <ChoiceCard key={type} type={type} onSelect={() => goWizard(type)} />
+        ))}
+      </div>
+    ) : null;
+  }
+
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
-      <ModalContent title="Выберите тип платежа" showClose>
-        {confirmType === null ? (
-          <div className="flex flex-col gap-4">
-            {paymentDraft.hasDraft && (
-              <DraftRow type="payment" onContinue={() => goWizard('payment')} />
-            )}
-            {autopaymentDraft.hasDraft && (
-              <DraftRow type="autopayment" onContinue={() => goWizard('autopayment')} />
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(TYPE_META) as PaymentDraftType[]).map((type) => (
-                <ChoiceCard key={type} type={type} onSelect={() => handleCardSelect(type)} />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <DraftRow
-              type={confirmType}
-              onContinue={() => {
-                goWizard(confirmType);
-              }}
-            />
-            <Button
-              className="w-full"
-              leadingIcon={<Add />}
-              onClick={() => {
-                handleCreateNew(confirmType);
-              }}
-            >
-              Создать новый
-            </Button>
-          </div>
-        )}
+      <ModalContent title={title} showClose>
+        {content}
       </ModalContent>
     </Modal>
-  );
-}
-
-const draftRowClass =
-  'flex w-full cursor-pointer items-center justify-between gap-3 rounded-input bg-surface-muted '
-  + 'py-2.5 pl-4 pr-6 text-left outline-none transition-all focus-visible:ring-4 focus-visible:ring-primary '
-  + 'hover:opacity-80 active:opacity-80';
-
-function DraftRow({
-  type,
-  onContinue,
-}: {
-  readonly type: PaymentDraftType;
-  readonly onContinue: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onContinue}
-      className={draftRowClass}
-    >
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[13px] leading-[15px] text-content-secondary">
-          {TYPE_META[type].label}
-        </span>
-        <span className="text-base leading-[18px] text-content-secondary">Черновик</span>
-      </span>
-      <span className="text-base leading-[18px] text-content">Продолжить</span>
-    </button>
   );
 }
 

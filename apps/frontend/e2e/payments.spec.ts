@@ -184,7 +184,7 @@ test.describe('экран «Платежи объекта»', () => {
     await captureScreen(page, testInfo, 'payments-sheet-mobile');
   });
 
-  test('черновик в шите: строка «Черновик» и подтверждение «Создать новый»', async ({
+  test('черновик в шите: «У вас есть черновик» вместо выбора типа (1134:40451)', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -197,20 +197,58 @@ test.describe('экран «Платежи объекта»', () => {
       },
       [
         paymentDraftStorageKey(SEEDED_APARTMENT_PROPERTY_ID, 'payment'),
-        JSON.stringify({ categorySlug: 'rent', title: 'Арендная плата' }),
+        JSON.stringify({ categorySlug: 'rent', title: 'Арендная плата', updatedAt: 1756400000000 }),
       ],
     );
     await page.goto(APARTMENT_PAYMENTS_URL);
 
     await page.getByRole('button', { name: 'Добавить' }).click();
-    await expect(page.getByText('Черновик')).toBeVisible();
-    await expect(page.getByText('Продолжить')).toBeVisible();
-
-    // Карточка типа с черновиком переключает шит в подтверждение (837:21349).
-    await page.getByRole('button', { name: PAYMENT_CARD }).click();
-    await expect(page.getByRole('button', { name: /Создать новый/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'У вас есть черновик' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Продолжить черновик' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Создать новый' })).toBeVisible();
+    // Сценарии не объединяются: с черновиком выбора типа в шите нет.
+    await expect(page.getByRole('button', { name: PAYMENT_CARD })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: AUTOPAYMENT_CARD })).toHaveCount(0);
     await page.waitForTimeout(700);
     await captureScreen(page, testInfo, 'payments-sheet-draft-mobile');
+
+    // «Продолжить черновик» — визард восстанавливается на шаге периодичности:
+    // категория и название уже в черновике.
+    await page.getByRole('button', { name: 'Продолжить черновик' }).click();
+    await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
+    await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
+  });
+
+  test('«Создать новый» стирает черновик и в той же модалке показывает выбор типа', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    const draftKey = paymentDraftStorageKey(SEEDED_APARTMENT_PROPERTY_ID, 'payment');
+    await page.addInitScript(
+      ([key, value]) => {
+        window.localStorage.setItem(key ?? '', value ?? '');
+      },
+      [draftKey, JSON.stringify({ categorySlug: 'rent', title: 'Арендная плата', updatedAt: 1756400000000 })],
+    );
+    await page.goto(APARTMENT_PAYMENTS_URL);
+
+    await page.getByRole('button', { name: 'Добавить' }).click();
+    await page.getByRole('button', { name: 'Создать новый' }).click();
+    // Модалка не переоткрывается: контент сменился на выбор типа,
+    // черновик уже стёрт.
+    await expect(page.getByRole('heading', { name: 'Выберите тип платежа' })).toBeVisible();
+    await expect(page.getByRole('button', { name: PAYMENT_CARD })).toBeVisible();
+    const storedAfterDiscard = await page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      draftKey,
+    );
+    expect(storedAfterDiscard).toBeNull();
+
+    // Дальше — как без черновика: карточка ведёт в визард с нуля (шаг 1).
+    await page.getByRole('button', { name: PAYMENT_CARD }).click();
+    await expect(page).toHaveURL(`${APARTMENT_PAYMENTS_URL}/new?type=payment`);
+    await expect(page.getByRole('searchbox')).toBeVisible();
   });
 });
 

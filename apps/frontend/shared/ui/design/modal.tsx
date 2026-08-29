@@ -12,7 +12,9 @@ import {
   Dialog as DialogRoot,
 } from '@radix-ui/react-dialog';
 import { Drawer } from 'vaul';
+import { Cancel } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { IconButton } from './icon-button';
 import { SheetDragHandle } from './sheet-drag-handle';
 
 /** Адаптивная модалка-шелл дизайн-слой (резолюция #449; переработка
@@ -26,7 +28,10 @@ import { SheetDragHandle } from './sheet-drag-handle';
  * вход шита 450ms / карточки 400ms с мягким хвостом, выходы короче
  * (280/220ms), фон 350/250ms — по характеру системных модалок Apple
  * (HIG Motion: движение короткое, сглаженное на обоих концах).
- * Заголовок обязателен (a11y: контент ссылается на Title). */
+ * Заголовок обязателен (a11y: контент ссылается на Title); стиль —
+ * Mobile/Heading/H3/600 (20/24 SemiBold). Крестик закрытия (showClose) —
+ * только в карточке, по Figma-компоненту Modal (936:33834, варианты
+ * Popup/Sheet): в шите закрытие — свайп вниз или тап по оверлею. */
 
 /** SSR-безопасное определение широкого вьюпорта: до гидратации — true
  * (карточка), после — факт; модалки открываются только по взаимодействию
@@ -81,15 +86,24 @@ export type ModalContentProps = {
   readonly description?: ReactNode;
   readonly children: ReactNode;
   readonly className?: string;
+  /** Крестик закрытия в правом верхнем углу карточки (только попап). */
+  readonly showClose?: boolean;
 };
 
-export function ModalContent({ title, description, children, className }: ModalContentProps): JSX.Element {
+export function ModalContent({ title, description, children, className, showClose = false }: ModalContentProps): JSX.Element {
   const isDesktop = useIsDesktop();
   const body = (
     <>
       <SheetDragHandle className="tablet:hidden" />
       <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        <DialogTitle className="text-lg font-semibold text-content">{title}</DialogTitle>
+        <div className="flex items-start justify-between gap-4">
+          <DialogTitle className="text-xl font-semibold leading-6 text-content">{title}</DialogTitle>
+          {isDesktop && showClose && (
+            <DialogClose asChild>
+              <IconButton icon={<Cancel />} label="Закрыть" />
+            </DialogClose>
+          )}
+        </div>
         {description !== undefined && (
           <DialogDescription className="text-sm text-content-secondary">{description}</DialogDescription>
         )}
@@ -111,7 +125,7 @@ export function ModalContent({ title, description, children, className }: ModalC
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
           <DialogContent
             className={cn(
-              'flex max-h-[92dvh] w-full max-w-[560px] flex-col rounded-sheet bg-white font-sans outline-none',
+              'flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
               'data-[state=open]:animate-[modal-card-in_400ms_var(--dl-ease)]',
               'data-[state=closed]:animate-[modal-card-out_220ms_var(--dl-ease)]',
               className,

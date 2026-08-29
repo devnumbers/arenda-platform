@@ -1,5 +1,7 @@
 export {
   clearPaymentWizardDraft,
+  clearPaymentWizardDrafts,
+  latestPaymentDraftType,
   paymentDraftStorageKey,
   usePaymentWizardDraft,
   type PaymentDraftType,

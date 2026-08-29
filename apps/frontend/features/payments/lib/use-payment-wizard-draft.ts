@@ -31,6 +31,10 @@ export type PaymentWizardDraft = {
   readonly amountKopecks?: number;
   /** Форма оплаты: перевод/наличные (шаг 5). */
   readonly paymentForm?: PaymentForm;
+  /** Момент последней правки (Date.now()) — шит «Добавить» показывает
+   * последний тронутый черновик, когда их два. Служебное поле: само по
+   * себе черновиком не считается. */
+  readonly updatedAt?: number;
 };
 
 const DEFAULT_DRAFT: PaymentWizardDraft = {};
@@ -65,10 +69,25 @@ export function usePaymentWizardDraft(
     validate: validatePaymentWizardDraft,
     storage: 'local',
   });
-  return { draft, isLoaded, hasDraft: hasPaymentWizardDraftFields(draft), setDraft, clearDraft };
+  // Каждая правка визарда двигает свежесть черновика: время живёт в самом
+  // payload, поэтому «последний тронутый» переживает перезагрузку страницы.
+  const setDraftStamped: Dispatch<SetStateAction<PaymentWizardDraft>> = (value) => {
+    setDraft((prev) => ({
+      ...(typeof value === 'function' ? value(prev) : value),
+      updatedAt: Date.now(),
+    }));
+  };
+  return {
+    draft,
+    isLoaded,
+    hasDraft: hasPaymentWizardDraftFields(draft),
+    setDraft: setDraftStamped,
+    clearDraft,
+  };
 }
 
-/** Черновик наличествует, когда валидатор оставил хоть одно поле. */
+/** Черновик наличествует, когда валидатор оставил хоть одно поле шага
+ * (служебный updatedAt не в счёт). */
 export function hasPaymentWizardDraftFields(draft: PaymentWizardDraft): boolean {
   return (
     draft.type !== undefined
@@ -79,6 +98,23 @@ export function hasPaymentWizardDraftFields(draft: PaymentWizardDraft): boolean 
     || draft.amountKopecks !== undefined
     || draft.paymentForm !== undefined
   );
+}
+
+/** Тип для шита «Добавить»: последний тронутый черновик объекта; их нет —
+ * undefined. При равной свежести (нет таймстампов у унаследованных
+ * черновиков) — обычный платёж, детерминированно. */
+export function latestPaymentDraftType(
+  payment: { readonly hasDraft: boolean; readonly draft: PaymentWizardDraft },
+  autopayment: { readonly hasDraft: boolean; readonly draft: PaymentWizardDraft },
+): PaymentDraftType | undefined {
+  if (payment.hasDraft && autopayment.hasDraft) {
+    return (autopayment.draft.updatedAt ?? 0) > (payment.draft.updatedAt ?? 0)
+      ? 'autopayment'
+      : 'payment';
+  }
+  if (payment.hasDraft) return 'payment';
+  if (autopayment.hasDraft) return 'autopayment';
+  return undefined;
 }
 
 function isFilledString(value: unknown): value is string {
@@ -141,6 +177,10 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     record.paymentForm === 'transfer' || record.paymentForm === 'cash' ? record.paymentForm : undefined;
   if (record.paymentForm !== undefined && paymentForm === undefined) return DEFAULT_DRAFT;
 
+  // Служебное поле: мусорный таймстамп просто отбрасывается, черновик
+  // не роняет.
+  const updatedAt = isPositiveInt(record.updatedAt) ? record.updatedAt : undefined;
+
   return {
     ...(type !== undefined && { type }),
     ...(categorySlug !== undefined && { categorySlug }),
@@ -149,5 +189,6 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ...(endDate !== undefined && { endDate }),
     ...(amountKopecks !== undefined && { amountKopecks }),
     ...(paymentForm !== undefined && { paymentForm }),
+    ...(updatedAt !== undefined && { updatedAt }),
   };
 }
