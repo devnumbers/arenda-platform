@@ -3,8 +3,9 @@ import type { JSX } from 'react';
 
 /**
  * Общий хром шагов визарда создания платежа (#464): заголовок шага
- * (Figma Heading 699:8717 — H3 20/24 + подзаголовок 14/16) и нижняя
- * панель действия над StickyBottomBar.
+ * (Figma Heading 699:8717 — H3 20/24 + подзаголовок 14/16), нижняя
+ * панель действия над StickyBottomBar и подсказка открытого поиска
+ * (Figma 1049:46256 — иллюстрация 128 + текст 16/18).
  */
 
 export function WizardHeading({
@@ -20,6 +21,27 @@ export function WizardHeading({
       {subtitle !== undefined && (
         <p className="text-sm leading-4 text-content-secondary">{subtitle}</p>
       )}
+    </div>
+  );
+}
+
+/** Контент шага при открытом поиске категорий: вместо списка — иллюстрация
+ * с одним текстом (пустой запрос — «Начните искать», без совпадений —
+ * «Ничего не нашлось»); создание категории здесь не упоминается. */
+export function CategorySearchHint({ text }: { readonly text: string }): JSX.Element {
+  return (
+    <div className="flex flex-col items-center gap-4 pt-16">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/images/payments/category-search.png"
+        alt=""
+        width={128}
+        height={128}
+        className="h-32 w-32"
+      />
+      <p className="max-w-[320px] text-center text-base leading-[18px] text-content-secondary">
+        {text}
+      </p>
     </div>
   );
 }

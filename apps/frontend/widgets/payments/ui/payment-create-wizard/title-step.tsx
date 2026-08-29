@@ -5,8 +5,9 @@ import { TextField } from '@/shared/ui/design';
 import { WizardHeading } from './wizard-chrome';
 
 /**
- * Шаг 2 визарда — название платежа (Figma 830:16721): необязательно,
- * дефолт — лейбл категории подставляется при сохранении.
+ * Шаг 2 визарда — название платежа (Figma 1049:47385): необязательно,
+ * лимит 256 символов со счётчиком; дефолт — лейбл категории подставляется
+ * при сохранении.
  */
 
 export type TitleStepProps = {
@@ -17,13 +18,13 @@ export type TitleStepProps = {
 export function TitleStep({ title, onTitleChange }: TitleStepProps): JSX.Element {
   return (
     <>
-      <WizardHeading title="Дайте название платежу" />
+      <WizardHeading title="Назовите платеж" />
       <div className="px-6 pt-4">
         <TextField
           variant="titleIn"
-          title="Название"
-          placeholder="Название платежа"
+          title="Название платежа"
           description="Необязательно"
+          maxLength={256}
           value={title}
           onChange={(event) => onTitleChange(event.target.value)}
           onClear={() => onTitleChange('')}

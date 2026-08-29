@@ -1,8 +1,8 @@
 'use client';
 
 import type { JSX } from 'react';
-import { Check } from '@/shared/assets/icons';
-import { recurrenceLabel, type IsoDate, type Recurrence } from '@/entities/payment';
+import { ArrowRight, Check } from '@/shared/assets/icons';
+import { type IsoDate, type Recurrence } from '@/entities/payment';
 import {
   CalendarButton,
   ListRow,
@@ -25,10 +25,11 @@ import { WizardHeading } from './wizard-chrome';
 
 /**
  * Шаг 3 визарда — периодичность без «Один раз» (решение #449, ошибка
- * дизайна Figma): меню день/неделя/месяц/год (Figma 823:11219) и ветки
- * дат — дни недели (830:13354), мини-грид месяца с «последним днем месяца»
- * (823:11422/830:12311), месяц+день для года (829:11606). У ежедневного
- * правила ветки нет — выбор сразу завершает шаг.
+ * дизайна Figma): меню день/неделя/месяц/год (Figma 1049:48174 — строки
+ * с круглой стрелкой вправо) и ветки дат — дни недели (830:13354),
+ * мини-грид месяца с «последним днем месяца» (823:11422/830:12311),
+ * месяц+день для года (829:11606). У ежедневного правила ветки нет —
+ * выбор сразу завершает шаг.
  */
 
 export type PeriodicityStepProps = {
@@ -95,17 +96,14 @@ export function PeriodicityStep({
     return (
       <>
         {heading('Периодичность платежа')}
-        <div className="flex flex-col pt-2">
+        <div className="flex flex-col pt-6">
           {PERIODICITY_OPTIONS.map((option) => (
             <ListRow
               key={option.kind}
+              className="py-3.5"
               title={option.label}
-              value={
-                recurrence !== undefined && recurrence.kind === option.kind
-                  ? recurrenceLabel(recurrence)
-                  : undefined
-              }
               onSelect={() => pickKind(option.kind)}
+              trailing={<ArrowRight className="h-6 w-6 text-content-secondary" aria-hidden />}
             />
           ))}
         </div>

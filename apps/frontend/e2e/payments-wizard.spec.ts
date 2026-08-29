@@ -44,7 +44,7 @@ async function openWizard(
 async function selectCategory(page: Parameters<typeof openCabinetWithSeededSession>[0], slugLabel = 'Арендная плата'): Promise<void> {
   await page.getByRole('button', { name: slugLabel }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
-  await expect(page.getByRole('heading', { name: 'Дайте название платежу' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Назовите платеж' })).toBeVisible();
 }
 
 async function passTitleStep(page: Parameters<typeof openCabinetWithSeededSession>[0], title?: string): Promise<void> {
@@ -52,7 +52,7 @@ async function passTitleStep(page: Parameters<typeof openCabinetWithSeededSessio
   if (title !== undefined) {
     await field.fill(title);
   }
-  await page.getByRole('button', { name: 'Далее' }).click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.getByRole('heading', { name: 'Периодичность платежа' })).toBeVisible();
 }
 
@@ -81,6 +81,35 @@ async function fetchPayments(
 test.describe('визард создания платежа', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
+  test('поиск категории: фокус при открытии, подсказка, крестик и клик вне закрывают', async ({
+    page,
+    seededUser,
+  }) => {
+    await openWizard(page, seededUser);
+
+    // Лупа открывает поиск: подсказка вместо списка, поле сразу активно.
+    await page.getByRole('button', { name: 'Поиск по категориям' }).click();
+    await expect(page.getByText('Начните искать категорию')).toBeVisible();
+    await expect(page.getByRole('searchbox')).toBeFocused();
+
+    // С запросом — отфильтрованный список, подсказка исчезает.
+    await page.getByRole('searchbox').fill('страхов');
+    await expect(page.getByRole('button', { name: 'Страхование' })).toBeVisible();
+    await expect(page.getByText('Начните искать категорию')).toHaveCount(0);
+
+    // Крестик очищает и закрывает поиск.
+    await page.getByRole('button', { name: 'Очистить поиск' }).click();
+    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('searchbox')).toHaveCount(0);
+
+    // Клик вне хедера при пустом запросе тоже закрывает.
+    await page.getByRole('button', { name: 'Поиск по категориям' }).click();
+    await expect(page.getByText('Начните искать категорию')).toBeVisible();
+    await page.mouse.click(195, 400);
+    await expect(page.getByRole('heading', { name: 'Категория платежа' })).toBeVisible();
+    await expect(page.getByRole('searchbox')).toHaveCount(0);
+  });
+
   test('полный путь платежа: ежемесячное 10-го; платёж в API и списке объекта', async ({
     page,
     seededUser,
@@ -93,12 +122,12 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('searchbox').fill('страхов');
     await page.getByRole('button', { name: 'Страхование' }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await expect(page.getByRole('heading', { name: 'Дайте название платежу' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Назовите платеж' })).toBeVisible();
     await captureScreen(page, testInfo, 'wizard-step1-category-mobile');
 
     // Шаг 2 — название.
     await page.getByRole('textbox').fill(title);
-    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
 
     // Шаг 3 — меню периодичности без «Один раз»; ветка месяца.
     await expect(page.getByRole('button', { name: 'Каждый день' })).toBeVisible();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Search } from '@/shared/assets/icons';
@@ -37,7 +37,7 @@ import { CategoryStep } from './category-step';
 import { EndDateStep } from './end-date-step';
 import { PeriodicityStep } from './periodicity-step';
 import { TitleStep } from './title-step';
-import { WizardBottomBar, WizardHeading } from './wizard-chrome';
+import {CategorySearchHint, WizardBottomBar, WizardHeading} from './wizard-chrome';
 import { WizardSuccess } from './wizard-success';
 
 /**
@@ -66,6 +66,30 @@ export function PaymentCreateWizardFlow({
   // чип «Шаг N из 5» на поле, «Назад» возвращает чип и сбрасывает запрос.
   const [categorySearchOpen, setCategorySearchOpen] = useState(false);
   const [categoryQuery, setCategoryQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Открытие поиска сразу делает поле активным (программный фокус —
+  // устоявшийся a11y-паттерн вместо autoFocus).
+  useEffect(() => {
+    if (categorySearchOpen) {
+      searchInputRef.current?.focus();
+    }
+  }, [categorySearchOpen]);
+
+  // Клик вне хедера при пустом запросе закрывает поиск (Figma 1049:46256);
+  // с непустым поиск остаётся открытым.
+  useEffect(() => {
+    if (!categorySearchOpen || categoryQuery !== '') {
+      return undefined;
+    }
+    const handleOutside = (event: MouseEvent): void => {
+      if (!(event.target instanceof Element) || !event.target.closest('header')) {
+        setCategorySearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [categorySearchOpen, categoryQuery]);
 
   const today: IsoDate = clientTodayIso();
 
@@ -98,9 +122,13 @@ export function PaymentCreateWizardFlow({
       >
         {step === 1 && categorySearchOpen ? (
           <SearchField
+            ref={searchInputRef}
             value={categoryQuery}
             onChange={(event) => setCategoryQuery(event.target.value)}
-            onClear={() => setCategoryQuery('')}
+            onClear={() => {
+              setCategoryQuery('');
+              setCategorySearchOpen(false);
+            }}
             placeholder="Найти категорию"
             aria-label="Поиск по названиям категорий"
           />
@@ -114,12 +142,21 @@ export function PaymentCreateWizardFlow({
       <PageContent className="pt-0">
         {step === 1 && (
           <>
-            <WizardHeading title="Категория платежа" subtitle="Выберите категорию" />
-            <CategoryStep
-              selectedSlug={draft.categorySlug}
-              onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}
-              query={categoryQuery}
-            />
+            {/* Открытый поиск меняет контент (Figma 1049:46256/46418):
+                пустой запрос — иллюстрация-подсказка вместо списка и
+                заголовка; с запросом — отфильтрованный список. */}
+            {categorySearchOpen && categoryQuery === '' ? (
+              <CategorySearchHint text="Начните искать категорию" />
+            ) : (
+              <>
+                <WizardHeading title="Категория платежа" subtitle="Выберите категорию" />
+                <CategoryStep
+                  selectedSlug={draft.categorySlug}
+                  onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}
+                  query={categorySearchOpen ? categoryQuery : ''}
+                />
+              </>
+            )}
             {/* «Продолжить» — после выбора категории (Figma 823:4243). */}
             {draft.categorySlug !== undefined && (
               <StickyBottomBar>
@@ -148,7 +185,7 @@ export function PaymentCreateWizardFlow({
             <StickyBottomBar>
               <WizardBottomBar>
                 <Button className="w-full" onClick={() => goToStep(3)}>
-                  Далее
+                  Продолжить
                 </Button>
               </WizardBottomBar>
             </StickyBottomBar>

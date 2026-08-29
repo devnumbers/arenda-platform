@@ -8,7 +8,6 @@ import {
 } from '@/features/payment-categories';
 import { matchesTitleSearch } from '@/features/payments';
 import { ListRow } from '@/shared/ui/design';
-import { PaymentsEmptyCard } from '../payments-sections';
 
 /**
  * Список категорий из дефолтного каталога (#447, 40 категорий) — шаг 1
@@ -54,11 +53,18 @@ export function CategoryStep({
         />
       ))}
       {visible.length === 0 && (
-        <div className="pt-8">
-          <PaymentsEmptyCard
-            title="Ничего не нашлось"
-            hint="Попробуйте изменить запрос"
+        <div className="flex flex-col items-center gap-4 pt-16">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/payments/category-search.png"
+            alt=""
+            width={128}
+            height={128}
+            className="h-32 w-32"
           />
+          <p className="max-w-[320px] text-center text-base leading-[18px] text-content-secondary">
+            Ничего не нашлось
+          </p>
         </div>
       )}
     </div>
