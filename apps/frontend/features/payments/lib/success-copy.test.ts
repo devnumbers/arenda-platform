@@ -18,7 +18,7 @@ describe('successScreenCopy', () => {
       draftType: 'autopayment',
       title: 'Аренда мебели',
       amountKopecks: 250000,
-      recurrence: { kind: 'monthly', dayOfMonth: 10 },
+      recurrence: { kind: 'monthly', daysOfMonth: [10], lastDay: false },
       firstOccurrence: '2026-09-10',
     });
     expect(copy.heading).toBe('Вы создали автоплатеж\n«Аренда мебели»');
@@ -56,7 +56,7 @@ describe('successScreenCopy', () => {
         draftType: 'payment',
         title: 'Т',
         amountKopecks: 100000,
-        recurrence: { kind: 'monthly', dayOfMonth: 31 },
+        recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: true },
         firstOccurrence: '2026-08-31',
       }).description,
     ).toBe(`Первый платеж 31 августа на ${RUB('1 000')}, далее последний день каждого месяца`);

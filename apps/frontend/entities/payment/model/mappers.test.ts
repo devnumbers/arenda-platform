@@ -11,7 +11,7 @@ const paymentDto: PaymentDto = {
   type: 'expense',
   title: 'Арендная плата',
   amountKopecks: 5_600_000,
-  recurrence: { kind: 'monthly', dayOfMonth: 31 },
+  recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: true },
   since: '2026-01-31',
   endDate: null,
   autoPay: false,
@@ -33,7 +33,7 @@ describe('mapPayment — DTO → entity', () => {
     expect(payment.id).toBe(paymentDto.id);
     expect(payment.title).toBe('Арендная плата');
     expect(payment.amountKopecks).toBe(5_600_000);
-    expect(payment.recurrence).toStrictEqual({ kind: 'monthly', dayOfMonth: 31 });
+    expect(payment.recurrence).toStrictEqual({ kind: 'monthly', daysOfMonth: [], lastDay: true });
     expect(payment.since).toBe('2026-01-31');
     expect(payment.isFavorite).toBe(false);
     expect(payment.category).toStrictEqual({

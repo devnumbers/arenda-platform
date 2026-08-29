@@ -267,7 +267,8 @@ func TestRecurrenceJSON_RoundTrip(t *testing.T) {
 	}{
 		{"daily", NewDailyRecurrence(), `{"kind":"daily"}`},
 		{"weekly", mustWeekly(t, time.Sunday, time.Saturday), `{"kind":"weekly","weekdays":[0,6]}`},
-		{"monthly", mustMonthly(t, 31), `{"kind":"monthly","dayOfMonth":31}`},
+		{"monthly", mustMonthly(t, 5, 20), `{"kind":"monthly","daysOfMonth":[5,20]}`},
+		{"monthly last day", mustMonthlyLastDay(t), `{"kind":"monthly","lastDay":true}`},
 		{"yearly", mustYearly(t, time.February, 29), `{"kind":"yearly","month":2,"day":29}`},
 	}
 	for _, tc := range cases {
@@ -306,7 +307,7 @@ func TestRecurrenceConstructors_Validate(t *testing.T) {
 	require.Error(t, err)
 	_, err = NewWeeklyRecurrence([]time.Weekday{time.Monday, time.Monday})
 	require.Error(t, err)
-	_, err = NewMonthlyRecurrence(0)
+	_, err = NewMonthlyRecurrence(nil, false)
 	require.Error(t, err)
 	_, err = NewYearlyRecurrence(time.January, 32)
 	require.Error(t, err)

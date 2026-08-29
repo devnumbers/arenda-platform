@@ -27,7 +27,7 @@ describe('validatePaymentWizardDraft', () => {
     const parsed = {
       categorySlug: 'rent',
       title: 'Арендная плата',
-      recurrence: { kind: 'monthly', dayOfMonth: 1 },
+      recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
       endDate: '2027-01-31',
       amountKopecks: 4500000,
       paymentForm: 'transfer',

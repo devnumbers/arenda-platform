@@ -65,11 +65,12 @@ func dates(ts []time.Time) []string {
 func TestOccurrencesBetween_MonthlyClamps31stWithoutDrift(t *testing.T) {
 	t.Parallel()
 	// Prototype smoke: янв31→фев28→мар31 — the anchor never slides.
-	rec := mustMonthly(t, 31)
+	const febLastDay = "2026-02-28"
+	rec := mustMonthlyLastDay(t)
 	p := rule(t, rec, "2026-01-31", nil)
 
 	got := dates(OccurrencesBetween(p, d("2026-01-01"), d("2026-04-01")))
-	assert.Equal(t, []string{"2026-01-31", "2026-02-28", "2026-03-31"}, got)
+	assert.Equal(t, []string{"2026-01-31", febLastDay, "2026-03-31"}, got)
 }
 
 func TestOccurrencesBetween_MonthlyAnchorInSinceMonthAlreadyPassed(t *testing.T) {
@@ -85,12 +86,76 @@ func TestOccurrencesBetween_MonthlyAnchorInSinceMonthAlreadyPassed(t *testing.T)
 
 func TestNextOccurrenceAfter_ClampedFebruary(t *testing.T) {
 	t.Parallel()
-	rec := mustMonthly(t, 31)
+	rec := mustMonthlyLastDay(t)
 	p := rule(t, rec, "2026-01-31", nil)
 
 	next, ok := NextOccurrenceAfter(p, d("2026-02-01"))
 	require.True(t, ok)
 	assert.Equal(t, "2026-02-28", next.Format(time.DateOnly))
+}
+
+func TestOccurrencesBetween_MonthlyMultipleDaysOrdered(t *testing.T) {
+	t.Parallel()
+	// Several days of month: one occurrence per selected day, in date order.
+	rec := mustMonthly(t, 18, 1)
+	p := rule(t, rec, "2026-08-01", nil)
+
+	got := dates(OccurrencesBetween(p, d("2026-08-01"), d("2026-09-30")))
+	assert.Equal(t, []string{"2026-08-01", "2026-08-18", "2026-09-01", "2026-09-18"}, got)
+}
+
+func TestOccurrencesBetween_MonthlyLastDayClampsInShortMonths(t *testing.T) {
+	t.Parallel()
+	// The last-day marker clamps to the actual last day (February → 28th).
+	rec, err := NewMonthlyRecurrence([]int{30}, true)
+	require.NoError(t, err)
+	p := rule(t, rec, "2026-02-01", nil)
+
+	got := dates(OccurrencesBetween(p, d("2026-02-01"), d("2026-04-30")))
+	assert.Equal(t, []string{"2026-02-28", "2026-03-30", "2026-03-31", "2026-04-30"}, got)
+}
+
+func TestRecurrenceJSON_MonthlyLegacyDayOfMonth(t *testing.T) {
+	t.Parallel()
+	// Stored rows of the pre-multi-day shape keep reading: a plain day maps
+	// to a one-day set, the legacy 31st maps to the last-day marker.
+	var plain Recurrence
+	require.NoError(t, plain.UnmarshalJSON([]byte(`{"kind":"monthly","dayOfMonth":10}`)))
+	assert.Equal(t, RecurrenceMonthly, plain.Kind())
+	assert.Equal(t, []int{10}, plain.DaysOfMonth())
+	assert.False(t, plain.LastDay())
+
+	var last Recurrence
+	require.NoError(t, last.UnmarshalJSON([]byte(`{"kind":"monthly","dayOfMonth":31}`)))
+	assert.Equal(t, RecurrenceMonthly, last.Kind())
+	assert.Empty(t, last.DaysOfMonth())
+	assert.True(t, last.LastDay())
+}
+
+func TestRecurrenceJSON_MonthlyNewShapeRoundTrip(t *testing.T) {
+	t.Parallel()
+	rec, err := NewMonthlyRecurrence([]int{18, 1}, true)
+	require.NoError(t, err)
+	data, err := rec.MarshalJSON()
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"kind":"monthly","daysOfMonth":[1,18],"lastDay":true}`, string(data))
+
+	var back Recurrence
+	require.NoError(t, back.UnmarshalJSON(data))
+	assert.Equal(t, []int{1, 18}, back.DaysOfMonth())
+	assert.True(t, back.LastDay())
+}
+
+func TestRecurrenceConstructors_MonthlyRejectsEmptyAndOutOfRange(t *testing.T) {
+	t.Parallel()
+	_, err := NewMonthlyRecurrence(nil, false)
+	require.Error(t, err)
+	_, err = NewMonthlyRecurrence([]int{1, 1}, false)
+	require.Error(t, err)
+	_, err = NewMonthlyRecurrence([]int{0, 15}, false)
+	require.Error(t, err)
+	_, err = NewMonthlyRecurrence([]int{31}, false)
+	require.Error(t, err)
 }
 
 func TestOccurrencesBetween_WeeklyOnlySelectedDaysFromSince(t *testing.T) {
@@ -179,9 +244,16 @@ func mustWeekly(t *testing.T, days ...time.Weekday) Recurrence {
 	return rec
 }
 
-func mustMonthly(t *testing.T, day int) Recurrence {
+func mustMonthly(t *testing.T, days ...int) Recurrence {
 	t.Helper()
-	rec, err := NewMonthlyRecurrence(day)
+	rec, err := NewMonthlyRecurrence(days, false)
+	require.NoError(t, err)
+	return rec
+}
+
+func mustMonthlyLastDay(t *testing.T) Recurrence {
+	t.Helper()
+	rec, err := NewMonthlyRecurrence(nil, true)
 	require.NoError(t, err)
 	return rec
 }

@@ -71,7 +71,7 @@ async function createMonthlyPaymentToday(
   await page.getByRole('button', { name: 'Каждый месяц' }).click();
   await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
   await page.getByRole('button', { name: day, exact: true }).first().click();
-  await page.getByRole('button', { name: 'Далее' }).click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
 
   // Шаг 4 — окончание не задаём.
   await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();

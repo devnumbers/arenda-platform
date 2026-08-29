@@ -19,7 +19,7 @@ export type PaymentOperationStatus = 'planned' | 'paid' | 'overdue';
 export type Recurrence =
   | { kind: 'daily' }
   | { kind: 'weekly'; weekdays: ReadonlyArray<number> } // 0=воскресенье..6=суббота
-  | { kind: 'monthly'; dayOfMonth: number } // 1..31; короткие месяцы прижимают к последнему дню
+  | { kind: 'monthly'; daysOfMonth: ReadonlyArray<number>; lastDay: boolean } // дни 1..30; короткие месяцы прижимают к последнему дню; lastDay — его фактический последний день
   | { kind: 'yearly'; month: number; day: number }; // месяц 1..12; 29 февраля прижимается
 
 /** Интервал паузы [from, to): from включительно, день возобновления to — нет. */

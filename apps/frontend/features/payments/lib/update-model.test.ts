@@ -14,7 +14,7 @@ function basePayment(overrides: Partial<Payment> = {}): Payment {
     type: 'expense',
     title: 'Страхование',
     amountKopecks: 320_000,
-    recurrence: { kind: 'monthly', dayOfMonth: 15 },
+    recurrence: { kind: 'monthly', daysOfMonth: [15], lastDay: false },
     since: '2026-08-01',
     endDate: undefined,
     autoPay: false,
@@ -36,7 +36,7 @@ function baseForm(overrides: Partial<PaymentEditForm> = {}): PaymentEditForm {
     amountKopecks: 320_000,
     categorySlug: undefined,
     paymentForm: 'cash',
-    recurrence: { kind: 'monthly', dayOfMonth: 15 },
+    recurrence: { kind: 'monthly', daysOfMonth: [15], lastDay: false },
     endDate: undefined,
     ...overrides,
   };
@@ -67,9 +67,9 @@ describe('buildPaymentUpdateCommand', () => {
   it('изменённая регулярность сравнивается по содержимому', () => {
     const command = buildPaymentUpdateCommand(
       basePayment(),
-      baseForm({ recurrence: { kind: 'monthly', dayOfMonth: 20 } }),
+      baseForm({ recurrence: { kind: 'monthly', daysOfMonth: [20], lastDay: false } }),
     );
-    expect(command).toEqual({ recurrence: { kind: 'monthly', dayOfMonth: 20 } });
+    expect(command).toEqual({ recurrence: { kind: 'monthly', daysOfMonth: [20], lastDay: false } });
   });
 
   it('порядок дней недели не ломает сравнение еженедельной регулярности', () => {

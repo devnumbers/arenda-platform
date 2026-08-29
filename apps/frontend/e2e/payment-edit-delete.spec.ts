@@ -87,6 +87,8 @@ test.describe('экран правки платежа', () => {
     await page.getByRole('button', { name: 'Регулярность платежа' }).click();
     await expect(page.getByText('Периодичность платежа')).toBeVisible();
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
+    // Мультивыбор: у сид-платежа день 15 — снимаем его и ставим 20.
+    await page.getByRole('button', { name: '15', exact: true }).click();
     await page.getByRole('button', { name: '20', exact: true }).click();
     await page.getByRole('button', { name: 'Готово' }).click();
     await expect(

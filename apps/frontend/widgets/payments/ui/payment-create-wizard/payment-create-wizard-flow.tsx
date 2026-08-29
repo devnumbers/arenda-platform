@@ -15,9 +15,10 @@ import {
   StepsChip,
   StickyBottomBar,
   TopNav,
+  TopNavTitle,
 } from '@/shared/ui/design';
 import type { IsoDate, Payment } from '@/entities/payment';
-import { clientTodayIso, formatDayMonthWithYear } from '@/entities/payment';
+import { clientTodayIso } from '@/entities/payment';
 import {
   buildPaymentCreateCommand,
   periodicityReady,
@@ -31,7 +32,6 @@ import {
   type WizardStep,
 } from '@/features/payments';
 import { paymentCategoryBySlug } from '@/features/payment-categories';
-import { firstOccurrencePreview } from '../../lib/first-occurrence';
 import { AmountStep } from './amount-step';
 import { CategoryStep } from './category-step';
 import { EndDateStep } from './end-date-step';
@@ -46,6 +46,14 @@ import { WizardSuccess } from './wizard-success';
  * восстанавливается на первый незавершённый шаг; черновик живёт в
  * localStorage per объект+тип (история 10 спеки #453).
  */
+
+/** Подпись типа периода в хедере открытой ветки шага 3
+ * (Figma 1056:52895): названия совпадают с пунктами меню. */
+const BRANCH_PERIOD_LABELS: Record<PeriodicityBranch, string> = {
+  weekdays: 'Каждую неделю',
+  monthDays: 'Каждый месяц',
+  yearly: 'Каждый год',
+};
 
 export type PaymentCreateWizardFlowProps = {
   readonly propertyId: string;
@@ -132,6 +140,10 @@ export function PaymentCreateWizardFlow({
             placeholder="Найти категорию"
             aria-label="Поиск по названиям категорий"
           />
+        ) : step === 3 && openBranch !== null ? (
+          /* Ветка шага 3 сменяет чип на подпись типа периода
+             (Figma 1056:52895). */
+          <TopNavTitle title={BRANCH_PERIOD_LABELS[openBranch]} />
         ) : (
           <StepsChip step={step} total={WIZARD_TOTAL_STEPS} size="m" />
         )}
@@ -203,16 +215,14 @@ export function PaymentCreateWizardFlow({
               onDailyPick={() => goToStep(4)}
               today={today}
             />
-            {(openBranch !== null || periodicityReady(draft.recurrence)) && (
+            {/* Панель шага видна, когда периодичность готова: в ветке недели
+                — после первого выбранного дня (Figma 1056:52895), в ветках
+                месяца/года якорь задан дефолтом сразу. */}
+            {periodicityReady(draft.recurrence) && (
               <StickyBottomBar>
                 <WizardBottomBar>
-                  {previewLine()}
-                  <Button
-                    className="w-full"
-                    disabled={!periodicityReady(draft.recurrence)}
-                    onClick={() => goToStep(4)}
-                  >
-                    Далее
+                  <Button className="w-full" onClick={() => goToStep(4)}>
+                    Продолжить
                   </Button>
                 </WizardBottomBar>
               </StickyBottomBar>
@@ -228,7 +238,6 @@ export function PaymentCreateWizardFlow({
             />
             <StickyBottomBar>
               <WizardBottomBar>
-                {previewLine()}
                 <Button className="w-full" onClick={() => goToStep(5)}>
                   Далее
                 </Button>
@@ -252,7 +261,6 @@ export function PaymentCreateWizardFlow({
             />
             <StickyBottomBar>
               <WizardBottomBar>
-                {previewLine()}
                 <Button
                   className="w-full"
                   disabled={!wizardStepReady(5, draft)}
@@ -297,17 +305,6 @@ export function PaymentCreateWizardFlow({
     }
   }
 
-  /** Превью первого вхождения над кнопкой шага (клиентский порт, история 9). */
-  function previewLine(): JSX.Element | null {
-    const recurrence = draft.recurrence;
-    if (recurrence === undefined || !periodicityReady(recurrence)) return null;
-    const first = firstOccurrencePreview(recurrence, today, draft.endDate);
-    return (
-      <p className="text-center text-sm text-content-secondary">
-        Первое вхождение — {first !== null ? formatDayMonthWithYear(first, today) : 'нет'}
-      </p>
-    );
-  }
 
   async function submit(): Promise<void> {
     const command = buildPaymentCreateCommand(draft, {

@@ -3,7 +3,8 @@
  * (решения №1/№8/№10/№17; якорь в регулярности):
  * - «каждый день» — все дни с даты заведения;
  * - «каждую неделю» — выбранные дни недели (0=воскресенье..6=суббота);
- * - «каждый месяц» — день месяца, 31-е прижимается к последнему дню месяца;
+ * - «каждый месяц» — выбранные дни месяца (1..30, прижимаются к последнему
+ *   дню короткого месяца) и/или фактический последний день месяца;
  * - «каждый год» — месяц и день, 29 февраля прижимается к последнему дню февраля;
  * - генерация ограничена снизу `since` — задним числом вхождений нет;
  * - `endDate` останавливает генерацию, сам день окончания включён;
@@ -21,6 +22,25 @@ import { addDays, cmp, dateInMonth, fromIso } from './dates';
 
 /** Страховочный потолок перечисления внутри одного окна — как в прототипе. */
 const MAX_OCCURRENCES = 1000;
+
+/** Дни-кандидаты одного месяца месячной регулярности: каждый выбранный день
+ * прижимается к длине месяца, маркер последнего дня даёт фактический
+ * последний день; даты сортируются и дедуплицируются (выбранный день может
+ * совпасть с последним). */
+function monthlyCandidates(
+  recurrence: Extract<PaymentSchedule['recurrence'], { kind: 'monthly' }>,
+  year: number,
+  monthIndex0: number,
+): IsoDate[] {
+  const candidates = recurrence.daysOfMonth.map((day) =>
+    dateInMonth(year, monthIndex0, day),
+  );
+  if (recurrence.lastDay) {
+    candidates.push(dateInMonth(year, monthIndex0, 31));
+  }
+  candidates.sort(cmp);
+  return candidates.filter((date, index) => index === 0 || cmp(date, candidates[index - 1] ?? date) !== 0);
+}
 
 function horizonAfter(date: IsoDate): IsoDate {
   const d = fromIso(date);
@@ -79,16 +99,26 @@ export function occurrencesBetween(
       break;
     }
     case 'monthly': {
-      // Каждый месяц строится от якоря независимо, не итеративно: иначе 31-е
+      // Каждый месяц строится от якоря независимо, не итеративно: иначе 30-е
       // «сползает» на 28-е навсегда (смоук прототипа «янв31→фев28→мар31»).
       const base = fromIso(since);
+      const baseYear = base.getUTCFullYear();
+      const baseMonth = base.getUTCMonth();
       for (let month = 0; out.length < MAX_OCCURRENCES; month++) {
-        const date = dateInMonth(base.getUTCFullYear(), base.getUTCMonth() + month, recurrence.dayOfMonth);
-        if (cmp(date, since) < 0) continue;
-        if (cmp(date, start) < 0) continue;
-        if (cmp(date, hardEnd) > 0) break;
-        if (!isDatePaused(pauses, date)) {
-          out.push(date);
+        const candidates = monthlyCandidates(recurrence, baseYear, baseMonth + month);
+        const first = candidates[0];
+        if (first === undefined || cmp(first, hardEnd) > 0) {
+          break;
+        }
+        for (const date of candidates) {
+          if (out.length >= MAX_OCCURRENCES) {
+            break;
+          }
+          if (cmp(date, since) < 0) continue;
+          if (cmp(date, start) < 0) continue;
+          if (!isDatePaused(pauses, date)) {
+            out.push(date);
+          }
         }
       }
       break;
@@ -210,7 +240,7 @@ export function nextOccurrencesAfter(
     }
     case 'monthly': {
       // Якоря считаются от месяца курсора независимо от него самого (как и
-      // в occurrencesBetween — 31-е не сползает); якорь ≤ курсора пропускаем
+      // в occurrencesBetween — 30-е не сползает); якорь ≤ курсора пропускаем
       // до пуша, чтобы он не съедал лимит страницы.
       const base = fromIso(since);
       const from = fromIso(cmp(since, start) > 0 ? since : start);
@@ -218,19 +248,27 @@ export function nextOccurrencesAfter(
         (from.getUTCFullYear() - base.getUTCFullYear()) * 12
         + (from.getUTCMonth() - base.getUTCMonth());
       for (;;) {
-        const date = dateInMonth(
+        const candidates = monthlyCandidates(
+          recurrence,
           base.getUTCFullYear(),
           base.getUTCMonth() + month,
-          recurrence.dayOfMonth,
         );
         month += 1;
-        if (stopAt(date)) {
-          break;
+        let stopped = false;
+        for (const date of candidates) {
+          if (stopAt(date)) {
+            stopped = true;
+            break;
+          }
+          if (cmp(date, start) <= 0) {
+            continue;
+          }
+          if (!push(date)) {
+            stopped = true;
+            break;
+          }
         }
-        if (cmp(date, start) <= 0) {
-          continue;
-        }
-        if (!push(date)) {
+        if (stopped) {
           break;
         }
       }

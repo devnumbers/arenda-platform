@@ -37,12 +37,29 @@ describe('recurrenceLabel — формулировки резолюции #452',
     [15, 'Каждый месяц 15 числа'],
     [28, 'Каждый месяц 28 числа'],
     [30, 'Каждый месяц 30 числа'],
-  ] as const)('месяц, день %i → «%s»', (dayOfMonth, expected) => {
-    expect(recurrenceLabel({ kind: 'monthly', dayOfMonth })).toBe(expected);
+  ] as const)('месяц, день %i → «%s»', (day, expected) => {
+    expect(
+      recurrenceLabel({ kind: 'monthly', daysOfMonth: [day], lastDay: false }),
+    ).toBe(expected);
+  });
+
+  it('несколько дней месяца перечисляются через «и»', () => {
+    expect(
+      recurrenceLabel({ kind: 'monthly', daysOfMonth: [1, 18], lastDay: false }),
+    ).toBe('Каждый месяц 1 и 18 числа');
+    expect(
+      recurrenceLabel({ kind: 'monthly', daysOfMonth: [1, 5, 18], lastDay: false }),
+    ).toBe('Каждый месяц 1, 5 и 18 числа');
+  });
+
+  it('дни плюс последний день месяца', () => {
+    expect(
+      recurrenceLabel({ kind: 'monthly', daysOfMonth: [1, 18], lastDay: true }),
+    ).toBe('Каждый месяц 1 и 18 числа и в последний день месяца');
   });
 
   it('день 31 прижимается в каждом месяце — текст «Последний день каждого месяца»', () => {
-    expect(recurrenceLabel({ kind: 'monthly', dayOfMonth: 31 })).toBe(
+    expect(recurrenceLabel({ kind: 'monthly', daysOfMonth: [], lastDay: true })).toBe(
       'Последний день каждого месяца',
     );
   });

@@ -75,22 +75,52 @@ func weeklyBetween(p Payment, first, hardEnd time.Time) []time.Time {
 	return out
 }
 
-// monthlyBetween enumerates the anchor day of each month from the rule's own
-// month on. Every month is rebuilt from the anchor independently (not
-// iteratively): otherwise the 31st would "drift" onto the 28th forever.
+// monthlyBetween enumerates every selected day of month (plus the actual
+// last day when marked) of each month from the rule's own month on. Every
+// month is rebuilt from the anchors independently (not iteratively):
+// otherwise the 30th would "drift" onto the 28th forever.
 func monthlyBetween(p Payment, start, hardEnd time.Time) []time.Time {
 	out := make([]time.Time, 0)
+	baseYear, baseMonth := p.Since.Year(), p.Since.Month()
 	for k := 0; len(out) < maxOccurrences; k++ {
-		d := dateInMonth(p.Since.Year(), p.Since.Month()+time.Month(k), p.Recurrence.DayOfMonth())
-		if d.After(hardEnd) {
+		// Month arithmetic by number, not AddDate: Jan 31 + 1 month must be
+		// February, not March 3rd.
+		total := int(baseMonth) - 1 + k
+		candidates := monthlyCandidates(
+			p.Recurrence,
+			baseYear+total/12,
+			time.Month(total%12+1),
+		)
+		if len(candidates) == 0 || candidates[0].After(hardEnd) {
 			break
 		}
-		if d.Before(p.Since) || d.Before(start) || IsDatePaused(p.Pauses, d) {
-			continue
+		for _, d := range candidates {
+			if len(out) >= maxOccurrences {
+				break
+			}
+			if d.Before(p.Since) || d.Before(start) || IsDatePaused(p.Pauses, d) {
+				continue
+			}
+			out = append(out, d)
 		}
-		out = append(out, d)
 	}
 	return out
+}
+
+// monthlyCandidates builds the sorted occurrence dates of one month for a
+// monthly recurrence: each selected day clamped to the month's length, plus
+// the month's actual last day when marked.
+func monthlyCandidates(r Recurrence, year int, month time.Month) []time.Time {
+	candidates := make([]time.Time, 0, len(r.DaysOfMonth())+1)
+	for _, day := range r.DaysOfMonth() {
+		candidates = append(candidates, dateInMonth(year, month, day))
+	}
+	if r.LastDay() {
+		candidates = append(candidates, dateInMonth(year, month, 31))
+	}
+	slices.SortFunc(candidates, func(a, b time.Time) int { return a.Compare(b) })
+	// A selected day can clamp onto the last day — the date fires once.
+	return slices.CompactFunc(candidates, func(a, b time.Time) bool { return a.Equal(b) })
 }
 
 // yearlyBetween enumerates the anchor month-and-day of each year from the

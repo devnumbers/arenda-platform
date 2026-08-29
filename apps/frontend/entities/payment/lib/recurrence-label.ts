@@ -48,13 +48,22 @@ export function recurrenceLabel(recurrence: Recurrence): string {
         .filter((name) => name !== undefined);
       return `Каждую неделю в ${days.join(', ')}`;
     }
-    case 'monthly':
-      // День 31 прижатием даёт последний день каждого короткого месяца —
-      // расписание тождественно опции «последний день», текст из резолюции #452.
-      if (recurrence.dayOfMonth === 31) {
+    case 'monthly': {
+      // Дни перечисляются в родительном падеже («1 и 18 числа»); маркер
+      // последнего дня добавляется отдельной фразой (резолюция #452).
+      const days = recurrence.daysOfMonth;
+      const daysPart =
+        days.length === 1
+          ? `${days[0] ?? 1} числа`
+          : `${days.slice(0, -1).join(', ')} и ${days[days.length - 1] ?? 1} числа`;
+      if (days.length === 0) {
         return 'Последний день каждого месяца';
       }
-      return `Каждый месяц ${recurrence.dayOfMonth} числа`;
+      if (recurrence.lastDay) {
+        return `Каждый месяц ${daysPart} и в последний день месяца`;
+      }
+      return `Каждый месяц ${daysPart}`;
+    }
     case 'yearly':
       // Якорь-високосный 2024 сохраняет 29 февраля для формулировки.
       return `Каждое ${formatDayMonth(dateInMonth(2024, recurrence.month - 1, recurrence.day))}`;

@@ -1,10 +1,9 @@
 'use client';
 
 import type { JSX } from 'react';
-import { ArrowRight, Check } from '@/shared/assets/icons';
+import { ArrowRight, CheckBoxFalse, CheckBoxTrue } from '@/shared/assets/icons';
 import { type IsoDate, type Recurrence } from '@/entities/payment';
 import {
-  CalendarButton,
   ListRow,
   MonthDaysGrid,
   WheelPicker,
@@ -26,11 +25,23 @@ import { WizardHeading } from './wizard-chrome';
 /**
  * Шаг 3 визарда — периодичность без «Один раз» (решение #449, ошибка
  * дизайна Figma): меню день/неделя/месяц/год (Figma 1049:48174 — строки
- * с круглой стрелкой вправо) и ветки дат — дни недели (830:13354),
- * мини-грид месяца с «последним днем месяца» (823:11422/830:12311),
- * месяц+день для года (829:11606). У ежедневного правила ветки нет —
- * выбор сразу завершает шаг.
+ * с круглой стрелкой вправо) и ветки дат — дни недели списком с
+ * чекбоксами (Figma 1056:52140/52895), мини-грид месяца с «последним
+ * днем месяца» (823:11422/830:12311), месяц+день для года (829:11606).
+ * У ежедневного правила ветки нет — выбор сразу завершает шаг.
  */
+
+/** Полные названия дней недели для списка ветки недели (значения как в
+ * WEEKDAY_BUTTONS: 1..6 — Пн..Сб, 0 — Вс). */
+const WEEKDAY_FULL_LABELS: Record<number, string> = {
+  1: 'Понедельник',
+  2: 'Вторник',
+  3: 'Среда',
+  4: 'Четверг',
+  5: 'Пятница',
+  6: 'Суббота',
+  0: 'Воскресенье',
+};
 
 export type PeriodicityStepProps = {
   readonly recurrence: Recurrence | undefined;
@@ -61,7 +72,9 @@ function defaultForKind(
     case 'weekly':
       return { kind: 'weekly', weekdays: [] };
     case 'monthly':
-      return { kind: 'monthly', dayOfMonth: todayDay };
+      // По фрейму 1056:53076 ничего не предвыбрано: правило готово после
+      // первого дня или отметки последнего дня.
+      return { kind: 'monthly', daysOfMonth: [], lastDay: false };
     case 'yearly':
       return { kind: 'yearly', month: todayMonth, day: todayDay };
   }
@@ -103,7 +116,7 @@ export function PeriodicityStep({
               className="py-3.5"
               title={option.label}
               onSelect={() => pickKind(option.kind)}
-              trailing={<ArrowRight className="h-6 w-6 text-content-secondary" aria-hidden />}
+              trailing={<ArrowRight className="h-6 w-6" aria-hidden />}
             />
           ))}
         </div>
@@ -112,57 +125,90 @@ export function PeriodicityStep({
   }
 
   switch (openBranch) {
-    case 'weekdays':
+    case 'weekdays': {
+      const selectedDays = new Set(
+        recurrence?.kind === 'weekly' ? recurrence.weekdays : [],
+      );
       return (
         <>
           {heading('Выберите день', 'Можно выбрать несколько дней')}
-          {/* Грид недели в ширину контента — как мини-грид месяца (823:11422):
-              7 квадратов всегда помещаются даже на узких экранах. */}
-          <div className="mx-auto grid w-full max-w-[512px] grid-cols-7 gap-2 px-4 pt-4">
-            {WEEKDAY_BUTTONS.map((day) => {
-              const selectedDays = new Set(
-                recurrence?.kind === 'weekly' ? recurrence.weekdays : [],
-              );
-              return (
-                <CalendarButton
-                  key={day.value}
-                  className="aspect-square h-auto w-full"
-                  state={selectedDays.has(day.value) ? 'selected' : 'default'}
-                  onClick={() =>
-                    onRecurrenceChange({
-                      kind: 'weekly',
-                      weekdays: toggleWeekday([...selectedDays], day.value),
-                    })
-                  }
-                >
-                  {day.label}
-                </CalendarButton>
-              );
-            })}
+          <div className="flex flex-col pt-6">
+            {WEEKDAY_BUTTONS.map((day) => (
+              <ListRow
+                key={day.value}
+                className="py-3.5"
+                title={WEEKDAY_FULL_LABELS[day.value]}
+                onSelect={() =>
+                  onRecurrenceChange({
+                    kind: 'weekly',
+                    weekdays: toggleWeekday([...selectedDays], day.value),
+                  })
+                }
+                trailing={
+                  selectedDays.has(day.value) ? (
+                    <CheckBoxTrue className="h-6 w-6" aria-hidden />
+                  ) : (
+                    <CheckBoxFalse className="h-6 w-6" aria-hidden />
+                  )
+                }
+              />
+            ))}
           </div>
         </>
       );
+    }
     case 'monthDays': {
-      const dayOfMonth =
-        recurrence?.kind === 'monthly' ? recurrence.dayOfMonth : isoDayOfMonth(today);
+      // Несколько дней месяца (Figma 1056:53076/53382): плоский грид 1..30 на
+      // всю ширину, выбор мультивыбором; последний день месяца — отдельный
+      // маркер-чекбокс, независимый от дней.
+      const current: Recurrence =
+        recurrence?.kind === 'monthly'
+          ? recurrence
+          : { kind: 'monthly', daysOfMonth: [], lastDay: false };
+      const days = current.daysOfMonth;
+      const toggleDay = (day: number): Recurrence => ({
+        kind: 'monthly',
+        daysOfMonth: days.includes(day)
+          ? days.filter((picked) => picked !== day)
+          : [...days, day].sort((a, b) => a - b),
+        lastDay: current.lastDay,
+      });
       return (
         <>
-          {heading('Выберите день')}
-          <div className="px-2 pt-4">
-            <MonthDaysGrid
-              days={31}
-              selectedDays={new Set([dayOfMonth])}
-              onDayToggle={(picked) => onRecurrenceChange({ kind: 'monthly', dayOfMonth: picked })}
-            />
+          {heading('Выберите день', 'Можно выбрать несколько дней')}
+          <div className="grid grid-cols-7 gap-2 px-6 pt-6">
+            {Array.from({ length: 30 }, (_, index) => index + 1).map((day) => {
+              const selected = days.includes(day);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => onRecurrenceChange(toggleDay(day))}
+                  className={
+                    selected
+                      ? 'aspect-square w-full cursor-pointer rounded-xl bg-primary text-base font-medium leading-[18px] text-white outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary'
+                      : 'aspect-square w-full cursor-pointer rounded-xl text-base font-medium leading-[18px] text-content outline-none transition-colors hover:bg-surface-muted active:bg-surface-muted-hover focus-visible:ring-2 focus-visible:ring-primary'
+                  }
+                >
+                  {day}
+                </button>
+              );
+            })}
           </div>
           <div className="pt-4">
             <ListRow
               title="Последний день месяца"
-              onSelect={() => onRecurrenceChange({ kind: 'monthly', dayOfMonth: 31 })}
+              className="py-3.5"
+              onSelect={() =>
+                onRecurrenceChange({ ...current, lastDay: !current.lastDay })
+              }
               trailing={
-                dayOfMonth === 31 ? (
-                  <Check className="h-5 w-5 text-primary" aria-hidden />
-                ) : undefined
+                current.lastDay ? (
+                  <CheckBoxTrue className="h-6 w-6" aria-hidden />
+                ) : (
+                  <CheckBoxFalse className="h-6 w-6" aria-hidden />
+                )
               }
             />
           </div>

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { PaymentSchedule } from '../model/types';
-import { firstOccurrence, isDatePaused, nextOccurrenceAfter, occurrencesBetween } from './occurrences';
+import {
+  firstOccurrence,
+  isDatePaused,
+  nextOccurrenceAfter,
+  nextOccurrencesAfter,
+  occurrencesBetween,
+} from './occurrences';
 
 const schedule = (over: Partial<PaymentSchedule>): PaymentSchedule => ({
   recurrence: { kind: 'daily' },
@@ -11,7 +17,7 @@ const schedule = (over: Partial<PaymentSchedule>): PaymentSchedule => ({
 
 describe('occurrencesBetween — ежемесячное прижатие без сползания (смоук прототипа)', () => {
   const jan31: PaymentSchedule = schedule({
-    recurrence: { kind: 'monthly', dayOfMonth: 31 },
+    recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: true },
     since: '2026-01-31',
   });
 
@@ -160,7 +166,7 @@ describe('occurrencesBetween — интервалы пауз [from, to)', () => 
 
   it('дыры навсегда: вхождение внутри закрытой прошлой паузы не возвращается', () => {
     const monthly = schedule({
-      recurrence: { kind: 'monthly', dayOfMonth: 10 },
+      recurrence: { kind: 'monthly', daysOfMonth: [10], lastDay: false },
       since: '2026-01-01',
       endDate: '2026-12-31',
       pauses: [{ from: '2026-03-10', to: '2026-04-10' }],
@@ -177,7 +183,7 @@ describe('occurrencesBetween — интервалы пауз [from, to)', () => 
 
 describe('nextOccurrenceAfter (смоук прототипа)', () => {
   const jan31: PaymentSchedule = schedule({
-    recurrence: { kind: 'monthly', dayOfMonth: 31 },
+    recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: true },
     since: '2026-01-31',
   });
 
@@ -240,7 +246,7 @@ describe('firstOccurrence — превью визарда (история 9 сп
 
   it('ежемесячное 31-е прижимается к последнему дню короткого месяца', () => {
     const monthly = schedule({
-      recurrence: { kind: 'monthly', dayOfMonth: 31 },
+      recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: true },
       since: '2026-02-10',
     });
     expect(firstOccurrence(monthly)).toBe('2026-02-28');
@@ -279,5 +285,44 @@ describe('firstOccurrence — превью визарда (история 9 сп
       endDate: '2026-08-29',
     });
     expect(firstOccurrence(ended)).toBe('2026-08-27');
+  });
+});
+
+describe('monthly с несколькими днями месяца', () => {
+  const rec = { kind: 'monthly', daysOfMonth: [18, 1], lastDay: true } as const;
+  const schedule: PaymentSchedule = {
+    recurrence: rec,
+    since: '2026-08-01',
+    pauses: [],
+  };
+
+  it('вхождение на каждый выбранный день и на последний день месяца, по порядку', () => {
+    expect(occurrencesBetween(schedule, '2026-08-01', '2026-09-30')).toStrictEqual([
+      '2026-08-01',
+      '2026-08-18',
+      '2026-08-31',
+      '2026-09-01',
+      '2026-09-18',
+      '2026-09-30',
+    ]);
+  });
+
+  it('короткий месяц прижимает выбранный день и последний день к 28 февраля', () => {
+    const february: PaymentSchedule = {
+      recurrence: { kind: 'monthly', daysOfMonth: [30], lastDay: true },
+      since: '2026-02-01',
+      pauses: [],
+    };
+    expect(occurrencesBetween(february, '2026-02-01', '2026-02-28')).toStrictEqual([
+      '2026-02-28',
+    ]);
+  });
+
+  it('догрузка идёт по всем дням месяца подряд', () => {
+    expect(nextOccurrencesAfter(schedule, '2026-08-10', 3)).toStrictEqual([
+      '2026-08-18',
+      '2026-08-31',
+      '2026-09-01',
+    ]);
   });
 });

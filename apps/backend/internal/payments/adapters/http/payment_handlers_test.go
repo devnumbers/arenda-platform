@@ -27,19 +27,17 @@ const (
 
 // fakePaymentManager is the func-backed PaymentManager double: every use case
 // is optional; an unset one fails the test loudly instead of silently
-// succeeding (ADR 0035 test doubles). The field set mirrors the port's method
-// signatures by design — that is what implementing an interface is.
-//
-//nolint:dupl // the fields mirror the PaymentManager method set — implementing the port
+// succeeding (ADR 0035 test doubles). The func fields back the port's
+// methods one to one; the field order is alphabetical, unlike the port.
 type fakePaymentManager struct {
 	create   func(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error)
-	list     func(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error)
-	get      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
-	update   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error)
 	del      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
+	favorite func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
+	get      func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	list     func(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error)
 	pause    func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	resume   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
-	favorite func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
+	update   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error)
 }
 
 // The method set mirrors the port; the long signatures are the contract's.

@@ -39,7 +39,13 @@ export function recurrencesEqual(a: Recurrence, b: Recurrence): boolean {
           === [...b.weekdays].sort((x, y) => x - y).join()
       );
     case 'monthly':
-      return b.kind === 'monthly' && a.dayOfMonth === b.dayOfMonth;
+      return (
+        b.kind === 'monthly'
+        && a.lastDay === b.lastDay
+        && a.daysOfMonth.length === b.daysOfMonth.length
+        && [...a.daysOfMonth].sort((x, y) => x - y).join()
+          === [...b.daysOfMonth].sort((x, y) => x - y).join()
+      );
     case 'yearly':
       return b.kind === 'yearly' && a.month === b.month && a.day === b.day;
   }

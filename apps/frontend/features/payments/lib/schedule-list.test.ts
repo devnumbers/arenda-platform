@@ -8,7 +8,7 @@ import {
 
 /** Ежемесячное правило 1 числа с 2026-09-01, без окончания и пауз. */
 const monthly: PaymentSchedule = {
-  recurrence: { kind: 'monthly', dayOfMonth: 1 },
+  recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
   since: '2026-09-01',
   pauses: [],
 };
@@ -54,7 +54,7 @@ describe('extendProjection', () => {
 
   it('31-е прижимается без сползания и не теряется между страницами', () => {
     const rule: PaymentSchedule = {
-      recurrence: { kind: 'monthly', dayOfMonth: 31 },
+      recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: true },
       since: '2026-01-31',
       pauses: [],
     };
@@ -100,7 +100,7 @@ describe('extendProjection', () => {
 
 describe('extendProjection — остановка на открытой паузе', () => {
   const pausedForever: PaymentSchedule = {
-    recurrence: { kind: 'monthly', dayOfMonth: 10 },
+    recurrence: { kind: 'monthly', daysOfMonth: [10], lastDay: false },
     since: '2026-06-29',
     pauses: [{ from: '2026-08-25' }],
   };
@@ -113,7 +113,7 @@ describe('extendProjection — остановка на открытой пауз
 
   it('пауза в будущем: собираются только даты до неё', () => {
     const pausesLater: PaymentSchedule = {
-      recurrence: { kind: 'monthly', dayOfMonth: 10 },
+      recurrence: { kind: 'monthly', daysOfMonth: [10], lastDay: false },
       since: '2026-09-01',
       pauses: [{ from: '2026-11-01' }],
     };

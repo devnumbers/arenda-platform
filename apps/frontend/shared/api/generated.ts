@@ -1685,13 +1685,16 @@ export interface components {
             kind: "weekly";
             weekdays: number[];
         };
+        /** @description Хотя бы одно из daysOfMonth и lastDay обязательно (проверяется доменом). День 1..30 в коротких месяцах зажимается на последний день месяца без сдвига расписания. */
         RecurrenceMonthly: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "monthly";
-            dayOfMonth: number;
+            daysOfMonth?: number[];
+            /** @description Дополнительно срабатывать в последний день месяца (в коротких месяцах — в его фактический последний день). */
+            lastDay?: boolean;
         };
         RecurrenceYearly: {
             /**

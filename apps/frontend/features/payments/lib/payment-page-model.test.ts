@@ -29,7 +29,7 @@ function payment(overrides: Partial<Payment>): Payment {
     type: 'expense',
     title: 'Арендная плата',
     amountKopecks: 4500000,
-    recurrence: { kind: 'monthly', dayOfMonth: 1 },
+    recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
     since: '2026-01-01',
     autoPay: false,
     paymentForm: 'transfer',

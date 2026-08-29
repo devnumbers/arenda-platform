@@ -27,8 +27,6 @@ import (
 // PaymentManager is the consumer-side port of these handlers (ADR 0035): the
 // payment rule use cases. The concrete application service satisfies it; the
 // handler tests run against func-backed fakes.
-//
-//nolint:dupl // the test double's fields mirror this method set — that is what implementing the port is
 type PaymentManager interface {
 	CreatePayment(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreatePaymentCommand) (domain.Payment, error)
 	ListPayments(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error)
@@ -458,7 +456,15 @@ func parseRecurrence(in openapi.Recurrence) (domain.Recurrence, error) {
 		}
 		return rec, nil
 	case openapi.RecurrenceMonthly:
-		rec, err := domain.NewMonthlyRecurrence(v.DayOfMonth)
+		var days []int
+		if v.DaysOfMonth != nil {
+			days = *v.DaysOfMonth
+		}
+		var lastDay bool
+		if v.LastDay != nil {
+			lastDay = *v.LastDay
+		}
+		rec, err := domain.NewMonthlyRecurrence(days, lastDay)
 		if err != nil {
 			return domain.Recurrence{}, application.ErrInvalidInput
 		}
@@ -550,8 +556,13 @@ func recurrenceResponse(r domain.Recurrence) (openapi.Recurrence, error) {
 			Kind: openapi.Weekly, Weekdays: weekdays,
 		})
 	case domain.RecurrenceMonthly:
+		days := r.DaysOfMonth()
+		if days == nil {
+			days = []int{}
+		}
+		lastDay := r.LastDay()
 		err = out.FromRecurrenceMonthly(openapi.RecurrenceMonthly{
-			Kind: openapi.Monthly, DayOfMonth: r.DayOfMonth(),
+			Kind: openapi.Monthly, DaysOfMonth: &days, LastDay: &lastDay,
 		})
 	case domain.RecurrenceYearly:
 		err = out.FromRecurrenceYearly(openapi.RecurrenceYearly{

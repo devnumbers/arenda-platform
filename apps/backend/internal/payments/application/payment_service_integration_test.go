@@ -93,7 +93,7 @@ func TestPaymentUpdate_RebuildsScheduleAndAudits(t *testing.T) {
 	newAmount := int64(6000000)
 	recurrence := domain.Recurrence{}
 	{
-		monthly, err := domain.NewMonthlyRecurrence(10)
+		monthly, err := domain.NewMonthlyRecurrence([]int{10}, false)
 		if err != nil {
 			t.Fatalf("fixture recurrence: %v", err)
 		}

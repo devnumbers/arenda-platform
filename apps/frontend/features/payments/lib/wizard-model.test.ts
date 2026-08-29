@@ -13,7 +13,7 @@ import {
 const draft = (over: Partial<PaymentWizardDraft>): PaymentWizardDraft => ({
   categorySlug: 'rent',
   title: 'Арендная плата',
-  recurrence: { kind: 'monthly', dayOfMonth: 1 },
+  recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
   endDate: undefined,
   amountKopecks: 250000,
   paymentForm: 'transfer',
@@ -71,7 +71,7 @@ describe('periodicityReady / branchKind', () => {
     expect(branchKind(undefined)).toBeNull();
     expect(branchKind({ kind: 'daily' })).toBeNull();
     expect(branchKind({ kind: 'weekly', weekdays: [0] })).toBe('weekdays');
-    expect(branchKind({ kind: 'monthly', dayOfMonth: 15 })).toBe('monthDays');
+    expect(branchKind({ kind: 'monthly', daysOfMonth: [15], lastDay: false })).toBe('monthDays');
     expect(branchKind({ kind: 'yearly', month: 5, day: 13 })).toBe('yearly');
   });
 
@@ -80,7 +80,7 @@ describe('periodicityReady / branchKind', () => {
     expect(periodicityReady({ kind: 'daily' })).toBe(true);
     expect(periodicityReady({ kind: 'weekly', weekdays: [] })).toBe(false);
     expect(periodicityReady({ kind: 'weekly', weekdays: [6] })).toBe(true);
-    expect(periodicityReady({ kind: 'monthly', dayOfMonth: 31 })).toBe(true);
+    expect(periodicityReady({ kind: 'monthly', daysOfMonth: [], lastDay: true })).toBe(true);
     expect(periodicityReady({ kind: 'yearly', month: 12, day: 31 })).toBe(true);
   });
 });
@@ -109,7 +109,7 @@ describe('buildPaymentCreateCommand — сериализация чернови�
       type: 'expense',
       title: 'Арендная плата',
       amountKopecks: 250000,
-      recurrence: { kind: 'monthly', dayOfMonth: 1 },
+      recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
       paymentForm: 'transfer',
       categorySlug: 'rent',
       autoPay: false,

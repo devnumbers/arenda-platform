@@ -64,7 +64,7 @@ export function periodicityReady(recurrence: Recurrence | undefined): boolean {
     case 'weekly':
       return recurrence.weekdays.length > 0;
     case 'monthly':
-      return recurrence.dayOfMonth >= 1 && recurrence.dayOfMonth <= 31;
+      return recurrence.daysOfMonth.length > 0 || recurrence.lastDay;
     case 'yearly':
       return (
         recurrence.month >= 1

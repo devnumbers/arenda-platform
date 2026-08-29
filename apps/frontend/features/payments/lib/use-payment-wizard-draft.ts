@@ -135,8 +135,24 @@ function validateRecurrence(value: unknown): Recurrence | undefined {
       return Array.isArray(record.weekdays) && record.weekdays.every((day) => typeof day === 'number')
         ? { kind: 'weekly', weekdays: record.weekdays }
         : undefined;
-    case 'monthly':
-      return isPositiveInt(record.dayOfMonth) ? { kind: 'monthly', dayOfMonth: record.dayOfMonth } : undefined;
+    case 'monthly': {
+      const days = Array.isArray(record.daysOfMonth)
+        && record.daysOfMonth.every((day) => typeof day === 'number' && Number.isInteger(day))
+        ? record.daysOfMonth
+        : undefined;
+      const lastDay = typeof record.lastDay === 'boolean' ? record.lastDay : false;
+      if ((days !== undefined && days.length > 0) || lastDay) {
+        return { kind: 'monthly', daysOfMonth: days ?? [], lastDay };
+      }
+      // Старый формат черновика с одним днём месяца читается, как хранится
+      // в бекенде: 31 означал зажатый последний день.
+      if (isPositiveInt(record.dayOfMonth)) {
+        return record.dayOfMonth === 31
+          ? { kind: 'monthly', daysOfMonth: [], lastDay: true }
+          : { kind: 'monthly', daysOfMonth: [record.dayOfMonth], lastDay: false };
+      }
+      return undefined;
+    }
     case 'yearly':
       return isPositiveInt(record.month) && isPositiveInt(record.day)
         ? { kind: 'yearly', month: record.month, day: record.day }

@@ -9,7 +9,7 @@ function payment(overrides: Partial<Payment>): Payment {
     type: 'expense',
     title: 'Арендная плата',
     amountKopecks: 4500000,
-    recurrence: { kind: 'monthly', dayOfMonth: 1 },
+    recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
     since: '2026-01-01',
     autoPay: false,
     paymentForm: 'transfer',
@@ -24,7 +24,7 @@ function payment(overrides: Partial<Payment>): Payment {
 
 describe('sortPaymentsByNextOccurrence', () => {
   it('самое раннее вхождение — первым', () => {
-    const monthly5 = payment({ id: 'monthly-5', recurrence: { kind: 'monthly', dayOfMonth: 5 } });
+    const monthly5 = payment({ id: 'monthly-5', recurrence: { kind: 'monthly', daysOfMonth: [5], lastDay: false } });
     const monthly1 = payment({ id: 'monthly-1' });
     const weekly = payment({ id: 'weekly', recurrence: { kind: 'weekly', weekdays: [6] } });
 
@@ -45,8 +45,8 @@ describe('sortPaymentsByNextOccurrence', () => {
   });
 
   it('при равной дате сохраняется серверный порядок (устойчивость)', () => {
-    const first = payment({ id: 'first', recurrence: { kind: 'monthly', dayOfMonth: 1 } });
-    const second = payment({ id: 'second', recurrence: { kind: 'monthly', dayOfMonth: 1 } });
+    const first = payment({ id: 'first', recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false } });
+    const second = payment({ id: 'second', recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false } });
 
     const sorted = sortPaymentsByNextOccurrence([first, second], '2026-08-27');
 

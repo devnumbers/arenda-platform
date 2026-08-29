@@ -81,6 +81,8 @@ export { default as SortingDown } from './sorting-down.svg';
 export { default as Move } from './move.svg';
 export { default as Star } from './star.svg';
 export { default as StarOff } from './star-off.svg';
+export { default as CheckBoxTrue } from './checkbox-true.svg';
+export { default as CheckBoxFalse } from './checkbox-false.svg';
 export { default as RadioFalse } from './radio-false.svg';
 export { default as RadioTrue } from './radio-true.svg';
 export { default as StarOutline } from './star-outline.svg';

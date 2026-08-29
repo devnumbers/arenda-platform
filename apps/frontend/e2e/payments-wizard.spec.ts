@@ -65,7 +65,7 @@ type PaymentFromApi = {
   autoPay: boolean;
   since: string;
   endDate?: string | null;
-  recurrence: { kind: string; weekdays?: number[]; dayOfMonth?: number; month?: number; day?: number };
+  recurrence: { kind: string; weekdays?: number[]; daysOfMonth?: number[]; lastDay?: boolean; month?: number; day?: number };
 };
 
 /** Прочитать список платежей объекта из API тем же сеансом (куки контекста). */
@@ -136,10 +136,11 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
     await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '10', exact: true }).first().click();
+    await page.getByRole('button', { name: '15', exact: true }).first().click();
     await captureScreen(page, testInfo, 'wizard-step3-month-days-mobile');
 
     // Шаг 4 — окончание необязательно: пропускаем.
-    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
 
@@ -155,7 +156,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(
       `«${title}»`,
     );
-    await expect(page.getByText(/Первый платеж .* на 2\u00A0500 ₽, далее каждый месяц 10 числа/)).toBeVisible();
+    await expect(page.getByText(/Первый платеж .* на 2\u00A0500 ₽, далее каждый месяц 10 и 15 числа/)).toBeVisible();
     await expect(page.getByText('Посмотреть платеж')).toHaveCount(0);
     await captureScreen(page, testInfo, 'wizard-success-mobile');
 
@@ -163,7 +164,7 @@ test.describe('визард создания платежа', () => {
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === title);
     expect(created).toBeDefined();
-    expect(created?.recurrence).toStrictEqual({ kind: 'monthly', dayOfMonth: 10 });
+    expect(created?.recurrence).toStrictEqual({ kind: 'monthly', daysOfMonth: [10, 15], lastDay: false });
     expect(created?.amountKopecks).toBe(250000);
     expect(created?.type).toBe('expense');
     expect(created?.paymentForm).toBe('cash');
@@ -193,11 +194,13 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Каждую неделю' }).click();
     await expect(page.getByRole('heading', { name: 'Выберите день' })).toBeVisible();
     await expect(page.getByText('Можно выбрать несколько дней')).toBeVisible();
-    // Без выбора кнопка Далее недоступна (валидация ветки).
-    await expect(page.getByRole('button', { name: 'Далее' })).toBeDisabled();
-    await page.getByRole('button', { name: 'Вт', exact: true }).click();
-    await page.getByRole('button', { name: 'Пт', exact: true }).click();
-    await page.getByRole('button', { name: 'Далее' }).click();
+    // В хедере — подпись типа периода вместо чипа шага.
+    await expect(page.getByText('Каждую неделю')).toBeVisible();
+    // Без выбора панель с кнопкой не показана (Figma 1056:52895).
+    await expect(page.getByRole('button', { name: 'Продолжить' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Вторник', exact: true }).click();
+    await page.getByRole('button', { name: 'Пятница', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
 
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
@@ -212,7 +215,7 @@ test.describe('визард создания платежа', () => {
     expect(created?.recurrence).toStrictEqual({ kind: 'weekly', weekdays: [2, 5] });
   });
 
-  test('ветка месяца: «Последний день месяца» прижимается через деньOfMonth=31', async ({
+  test('ветка месяца: «Последний день месяца» — отдельный маркер lastDay', async ({
     page,
     seededUser,
   }) => {
@@ -223,7 +226,7 @@ test.describe('визард создания платежа', () => {
 
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
     await page.getByRole('button', { name: 'Последний день месяца' }).click();
-    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
 
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
@@ -237,7 +240,7 @@ test.describe('визард создания платежа', () => {
 
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === title);
-    expect(created?.recurrence).toStrictEqual({ kind: 'monthly', dayOfMonth: 31 });
+    expect(created?.recurrence).toStrictEqual({ kind: 'monthly', daysOfMonth: [], lastDay: true });
   });
 
   test('ежедневная периодичность завершает шаг сразу, без ветки дат', async ({
@@ -279,7 +282,7 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'Выберите месяц и день' })).toBeVisible();
     // Месяц остаётся текущим (дефолт от «сегодня»); выбираем 13-е.
     await page.getByRole('button', { name: '13', exact: true }).first().click();
-    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
 
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
@@ -308,7 +311,7 @@ test.describe('визард создания платежа', () => {
 
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
     await page.getByRole('button', { name: '15', exact: true }).first().click();
-    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
 
     // Шаг 4: разворачиваем календарь и берём последний включённый день
     // последнего отрисованного месяца — он заведомо в будущем, каким бы ни
@@ -341,8 +344,8 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, 'E2E черновик после перезагрузки');
 
     await page.getByRole('button', { name: 'Каждую неделю' }).click();
-    await page.getByRole('button', { name: 'Ср', exact: true }).click();
-    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('button', { name: 'Среда', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     // Сумма введена, но чипы не выбраны — дальше не пускает.
@@ -371,7 +374,7 @@ test.describe('визард создания платежа', () => {
 
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
     await page.getByRole('button', { name: '5', exact: true }).first().click();
-    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('3300');
@@ -385,7 +388,7 @@ test.describe('визард создания платежа', () => {
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === title);
     expect(created?.autoPay).toBe(true);
-    expect(created?.recurrence.dayOfMonth).toBe(5);
+    expect(created?.recurrence.daysOfMonth).toStrictEqual([5]);
   });
 });
 
@@ -404,8 +407,8 @@ test.describe('визард создания платежа — десктоп',
     await passTitleStep(page);
     await page.getByRole('button', { name: 'Каждую неделю' }).click();
     await captureScreen(page, testInfo, 'wizard-desktop-weekdays');
-    await page.getByRole('button', { name: 'Пн', exact: true }).click();
-    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('button', { name: 'Понедельник', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
     await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
   });
 });

@@ -17,7 +17,14 @@ export function mapPayment(dto: PaymentDto): Payment {
     type: dto.type,
     title: dto.title,
     amountKopecks: dto.amountKopecks,
-    recurrence: dto.recurrence,
+    recurrence:
+      dto.recurrence.kind === 'monthly'
+        ? {
+            kind: 'monthly',
+            daysOfMonth: dto.recurrence.daysOfMonth ?? [],
+            lastDay: dto.recurrence.lastDay ?? false,
+          }
+        : dto.recurrence,
     since: dto.since,
     endDate: dto.endDate ?? undefined,
     autoPay: dto.autoPay,
