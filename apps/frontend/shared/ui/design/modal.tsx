@@ -88,22 +88,37 @@ export type ModalContentProps = {
   readonly className?: string;
   /** Крестик закрытия в правом верхнем углу карточки (только попап). */
   readonly showClose?: boolean;
+  /** Скрыть заголовок визуально (sr-only): a11y-имя диалога остаётся,
+   * дизайн-макеты без заголовка не ломаются. */
+  readonly titleSrOnly?: boolean;
 };
 
-export function ModalContent({ title, description, children, className, showClose = false }: ModalContentProps): JSX.Element {
+export function ModalContent({
+  title,
+  description,
+  children,
+  className,
+  showClose = false,
+  titleSrOnly = false,
+}: ModalContentProps): JSX.Element {
   const isDesktop = useIsDesktop();
+  const titleBlock = titleSrOnly ? (
+    <DialogTitle className="sr-only">{title}</DialogTitle>
+  ) : (
+    <div className="flex items-start justify-between gap-4">
+      <DialogTitle className="text-xl font-semibold leading-6 text-content">{title}</DialogTitle>
+      {isDesktop && showClose && (
+        <DialogClose asChild>
+          <IconButton icon={<Cancel />} label="Закрыть" />
+        </DialogClose>
+      )}
+    </div>
+  );
   const body = (
     <>
       <SheetDragHandle className="tablet:hidden" />
       <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-start justify-between gap-4">
-          <DialogTitle className="text-xl font-semibold leading-6 text-content">{title}</DialogTitle>
-          {isDesktop && showClose && (
-            <DialogClose asChild>
-              <IconButton icon={<Cancel />} label="Закрыть" />
-            </DialogClose>
-          )}
-        </div>
+        {titleBlock}
         {description !== undefined && (
           <DialogDescription className="text-sm text-content-secondary">{description}</DialogDescription>
         )}

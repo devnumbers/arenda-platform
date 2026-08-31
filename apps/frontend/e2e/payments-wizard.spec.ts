@@ -279,8 +279,10 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, title);
 
     await page.getByRole('button', { name: 'Каждый год' }).click();
-    await expect(page.getByRole('heading', { name: 'Выберите месяц и день' })).toBeVisible();
-    // Месяц остаётся текущим (дефолт от «сегодня»); выбираем 13-е.
+    // Месяц остаётся текущим (дефолт от «сегодня»), ничего не предвыбрано;
+    // выбираем 13-е на календаре одного месяца.
+    const monthName = new Date().toLocaleDateString('ru-RU', { month: 'long' });
+    await expect(page.getByRole('button', { name: new RegExp(monthName, 'i') })).toBeVisible();
     await page.getByRole('button', { name: '13', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
@@ -298,6 +300,59 @@ test.describe('визард создания платежа', () => {
     expect(created?.recurrence.day).toBe(13);
     const todayMonth = Number(new Date().toISOString().slice(5, 7));
     expect(created?.recurrence.month).toBe(todayMonth);
+  });
+
+  test('ежегодная ветка: пикер месяца и года — месяц меняется, год не раньше текущего', async ({
+    page,
+    seededUser,
+  }) => {
+    const title = 'E2E взнос по году';
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, title);
+
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    // Чип открывает шит-пикер: колесо месяцев (все 12) и годы от текущего.
+    await page.getByRole('button', { name: /месяц год|\d{4}/i }).first().click();
+    await expect(page.getByText('Отменить')).toBeVisible();
+    await expect(page.getByText(String(new Date().getFullYear())).first()).toBeVisible();
+
+    // Регресс «декабрь → январь даёт ноябрь»: выбранной остаётся прокрученная
+    // строка, значение не уводит колесо к чужому ряду.
+    await page.getByText('Сентябрь').first().click();
+    await expect(
+      page
+        .getByRole('listbox', { name: 'Месяц' })
+        .getByRole('option', { selected: true }),
+    ).toHaveText('Сентябрь');
+
+    // Годы без верхней границы: упор в конец списка удлиняет его вперёд.
+    const yearWheel = page.getByRole('listbox', { name: 'Год' });
+    await yearWheel.press('End');
+    await yearWheel.press('End');
+    await expect(
+      page.getByText(String(new Date().getFullYear() + 20)).first(),
+    ).toBeVisible();
+
+    await page.getByRole('button', { name: 'Выбрать' }).click();
+
+    // Календарь переключился на сентябрь; выбираем 10-е.
+    await page.getByRole('button', { name: '10', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('7000');
+    await page.getByRole('button', { name: 'Расход' }).click();
+    await page.getByRole('button', { name: 'Перевод' }).click();
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toContainText(`«${title}»`);
+
+    const items = await fetchPayments(page);
+    const created = items.find((payment) => payment.title === title);
+    expect(created?.recurrence.kind).toBe('yearly');
+    expect(created?.recurrence.month).toBe(9);
+    expect(created?.recurrence.day).toBe(10);
   });
 
   test('окончание платежа задается датой из календаря и попадает в контракт', async ({
@@ -319,7 +374,12 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
     await expect(page.getByText(/\d{4}/).first()).toBeVisible();
     const enabledDay = page.locator('button:enabled').filter({ hasText: /^\d{1,2}$/ });
-    await enabledDay.last().click();
+    // В последний день месяца текущий месяц запрещён целиком — листаем
+    // вперёд по месяцам, пока не появится доступный день.
+    for (let guard = 0; (await enabledDay.count()) === 0 && guard < 12; guard++) {
+      await page.getByRole('button', { name: 'Следующий месяц' }).click();
+    }
+    await enabledDay.first().click();
     await expect(page.getByRole('button', { name: 'Убрать дату' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Далее' }).click();

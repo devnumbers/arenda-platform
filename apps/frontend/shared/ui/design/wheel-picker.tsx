@@ -16,9 +16,11 @@ import { cn } from '@/shared/lib/cn';
  * и снапом к ряду, инерция тач-скролла, ленты-градиенты сверху и снизу и
  * серая полоса выбора за центральной строкой. Кегли по расстоянию от
  * центра (Figma): 0 — 20/24 M/500 #171A1C; 1 — 16/18; дальше — 13/15;
- * нецентральные строки #6F787C. Геометрия: окно 196px (класс h-[196px]) =
- * 7 рядов по 28px (WHEEL_ROW_HEIGHT), поля по 84px (класс py-[84px]),
- * полоса выбора 48px radius 16, градиенты по 32px. Значение коммитится,
+ * нецентральные строки #6F787C. Геометрия: окно 240px (класс h-[240px]) =
+ * 5 рядов по 48px (WHEEL_ROW_HEIGHT) — по 2 ряда над и под выбранным,
+ * поля по 96px (класс py-[96px]), полоса выбора 48px radius 16 — ровно
+ * один ряд, градиенты по 48px.
+ * Значение коммитится,
  * когда прокрутка осела; клик по ряду и клавиатура коммитят сразу.
  *
  * Клавиатура — собственная, а не общий модуль listbox-keyboard: то колесо
@@ -26,7 +28,7 @@ import { cn } from '@/shared/lib/cn';
  * Space/Escape и без заворота по краям — семантика стрелок иная. */
 
 /** Высота ряда (px); окно колеса — 7 рядов. */
-const WHEEL_ROW_HEIGHT = 28;
+const WHEEL_ROW_HEIGHT = 48;
 /** Пауза тишины скролла, после которой ряд под полосой считается выбранным. */
 const SETTLE_TIMEOUT_MS = 150;
 
@@ -139,7 +141,7 @@ export function WheelPicker({
         onScroll={handleScroll}
         onKeyDown={handleKeyDown}
         onClick={handleClick}
-        className="relative flex h-[196px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[84px] outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
+        className="relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => {
           const distance = Math.abs(index - scrollIndex);
@@ -150,8 +152,9 @@ export function WheelPicker({
               role="option"
               aria-selected={index === valueIndex}
               data-index={index}
+              style={{ height: WHEEL_ROW_HEIGHT }}
               className={cn(
-                'flex h-7 shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-content-secondary transition-all',
+                'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-content-secondary transition-all',
                 distance === 0 && 'text-xl font-medium leading-6 text-content',
                 distance === 1 && 'text-base leading-[18px]',
                 distance >= 2 && 'text-[13px] leading-[15px]',
@@ -164,11 +167,11 @@ export function WheelPicker({
       </ul>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-surface to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-surface to-transparent"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-surface to-transparent"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-surface to-transparent"
       />
     </div>
   );

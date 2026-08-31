@@ -20,6 +20,7 @@ import {
 import type { IsoDate, Payment } from '@/entities/payment';
 import { clientTodayIso } from '@/entities/payment';
 import {
+  branchKind,
   buildPaymentCreateCommand,
   periodicityReady,
   useCreatePayment,
@@ -215,10 +216,12 @@ export function PaymentCreateWizardFlow({
               onDailyPick={() => goToStep(4)}
               today={today}
             />
-            {/* Панель шага видна, когда периодичность готова: в ветке недели
-                — после первого выбранного дня (Figma 1056:52895), в ветках
-                месяца/года якорь задан дефолтом сразу. */}
-            {periodicityReady(draft.recurrence) && (
+            {/* Панель шага видна, когда периодичность готова и совпадает с
+                открытой веткой: в ветке недели — после первого выбранного
+                дня (Figma 1056:52895), месяц готовит дефолт сразу, год —
+                после выбора дня (Figma 1056:53547). */}
+            {periodicityReady(draft.recurrence)
+              && (openBranch === null || openBranch === branchKind(draft.recurrence)) && (
               <StickyBottomBar>
                 <WizardBottomBar>
                   <Button className="w-full" onClick={() => goToStep(4)}>

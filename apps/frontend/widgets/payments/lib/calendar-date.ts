@@ -24,3 +24,8 @@ export function isoDayOfMonth(iso: IsoDate): number {
 export function isoMonthNumber(iso: IsoDate): number {
   return Number(iso.slice(5, 7));
 }
+
+/** Год из date-строки, без заводимого Date. */
+export function isoYear(iso: IsoDate): number {
+  return Number(iso.slice(0, 4));
+}

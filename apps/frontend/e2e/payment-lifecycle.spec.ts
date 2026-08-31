@@ -67,10 +67,16 @@ async function createMonthlyPaymentToday(
   await page.getByRole('textbox').fill(title);
   await page.getByRole('button', { name: 'Продолжить' }).click();
 
-  // Шаг 3 — ежемесячно, день = сегодня.
+  // Шаг 3 — ежемесячно, день = сегодня. Грид несёт 1..30, поэтому 31-е
+  // выбирается маркером «Последний день месяца» (в 31-дневном месяце это
+  // тот же сегодняшний день).
   await page.getByRole('button', { name: 'Каждый месяц' }).click();
   await expect(page.getByRole('heading', { name: 'Выберите день', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: day, exact: true }).first().click();
+  if (day === '31') {
+    await page.getByRole('button', { name: 'Последний день месяца' }).click();
+  } else {
+    await page.getByRole('button', { name: day, exact: true }).first().click();
+  }
   await page.getByRole('button', { name: 'Продолжить' }).click();
 
   // Шаг 4 — окончание не задаём.
@@ -89,7 +95,7 @@ async function createMonthlyPaymentToday(
     `«${title}»`,
   );
   await expect(
-    page.getByText(new RegExp(`Первый платеж .* на 1\\u00A0990 ₽, далее каждый месяц ${day} числа`)),
+    page.getByText(new RegExp(day === '31' ? 'Первый платеж .* на 1\\u00A0990 ₽, далее последний день каждого месяца' : `Первый платеж .* на 1\\u00A0990 ₽, далее каждый месяц ${day} числа`)),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Хорошо, закрыть' }).click();
   await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
@@ -137,7 +143,13 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText('Платеж', { exact: true })).toBeVisible();
     await expect(page.getByText(title1).first()).toBeVisible();
     await expect(page.getByText('1 990 ₽').first()).toBeVisible();
-    await expect(page.getByText(`Каждый месяц ${day} числа`)).toBeVisible();
+    await expect(
+      page.getByText(
+        day === '31'
+          ? 'Последний день каждого месяца'
+          : `Каждый месяц ${day} числа`,
+      ),
+    ).toBeVisible();
     await expect(page.getByText('Ближайшая операция')).toBeVisible();
 
     // Избранное: звезда переключается с тостом (путь страницы #465).
@@ -212,7 +224,13 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await expect(page.getByText('2 500 ₽').first()).toBeVisible();
-    await expect(page.getByText(`Каждый месяц ${day} числа`)).toBeVisible();
+    await expect(
+      page.getByText(
+        day === '31'
+          ? 'Последний день каждого месяца'
+          : `Каждый месяц ${day} числа`,
+      ),
+    ).toBeVisible();
 
     // ── Просрочка #2 → удаление БЕЗ «удалить просроченные»: правило
     // сносится, долг остаётся ──
