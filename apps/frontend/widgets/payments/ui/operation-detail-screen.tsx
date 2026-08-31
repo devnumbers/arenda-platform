@@ -69,6 +69,10 @@ export function OperationDetailScreen({
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   const operation = operationQuery.isSuccess ? operationQuery.data : undefined;
 
+  // Успех оплаты живёт на уровне экрана: в этом состоянии рисуется свой
+  // экран (1444:65733) с крестиком вместо шапки «назад + дата».
+  const [paidResult, setPaidResult] = useState<PaymentOperation | null>(null);
+
   // Единый предикат мутационного входа страницы платежа (ADR 0028, #446).
   const canMutate =
     property !== undefined
@@ -77,6 +81,17 @@ export function OperationDetailScreen({
 
   const loading = operationQuery.isPending || propertyQuery.isPending;
   const failed = operationQuery.isError || propertyQuery.isError;
+
+  if (!loading && !failed && operation !== undefined && paidResult !== null) {
+    return (
+      <OperationPaidSuccess
+        propertyId={propertyId}
+        paid={paidResult}
+        propertyTitle={property?.name ?? ''}
+        onClose={() => setPaidResult(null)}
+      />
+    );
+  }
 
   return (
     <>
@@ -128,6 +143,7 @@ export function OperationDetailScreen({
               propertyTitle={property?.name ?? ''}
               operation={operation}
               canMutate={canMutate}
+              onPaid={setPaidResult}
             />
           )}
         </div>
@@ -143,11 +159,13 @@ function OperationDetailBody({
   propertyTitle,
   operation,
   canMutate,
+  onPaid,
 }: {
   readonly propertyId: string;
   readonly propertyTitle: string;
   readonly operation: PaymentOperation;
   readonly canMutate: boolean;
+  readonly onPaid: (paid: PaymentOperation) => void;
 }): JSX.Element {
   const payOperation = usePayOperation(propertyId);
 
@@ -168,27 +186,13 @@ function OperationDetailBody({
     && plannedQuery.data !== undefined
     && isOperationPayable(operation, overdueQuery.data, plannedQuery.data);
 
-  const [paidResult, setPaidResult] = useState<PaymentOperation | null>(null);
-
   const pay = async (): Promise<void> => {
     try {
-      const paid = await payOperation.mutateAsync(operation.id);
-      setPaidResult(paid);
+      onPaid(await payOperation.mutateAsync(operation.id));
     } catch (error) {
       notify.scenarios.payments.payError(error);
     }
   };
-
-  if (paidResult !== null) {
-    return (
-      <OperationPaidSuccess
-        propertyId={propertyId}
-        paid={paidResult}
-        propertyTitle={propertyTitle}
-        onClose={() => setPaidResult(null)}
-      />
-    );
-  }
 
   const today = clientTodayIso();
   const subtitle = operationSubtitle(operation, today);
