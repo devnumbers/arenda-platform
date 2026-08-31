@@ -218,8 +218,8 @@ function OperationDetailBody({
         {paymentId !== null && (
           <PaymentRowButton
             variant="white"
-            className="py-3"
-            categoryIcon={<CategoryGlyph icon={category.icon} color={category.color} size="h-6 w-6" />}
+            className="px-6 py-3 [&>span]:px-0"
+            categoryIcon={<CategoryGlyph icon={category.icon} color={category.color} circleClass="h-11 w-11" glyphClass="h-6 w-6" />}
             title={operation.title}
             subtitle="Платеж"
             onSelect={() => router.push(ROUTES.propertyPayment(propertyId, paymentId))}
@@ -227,10 +227,10 @@ function OperationDetailBody({
         )}
         <PaymentRowButton
           variant="white"
-          className="py-3"
+          className="px-6 py-3 [&>span]:px-0"
           categoryIcon={
             <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted">
-              <Home className="h-6 w-6 text-content" aria-hidden />
+              <Home className="h-6 w-6 text-content-tertiary" aria-hidden />
             </span>
           }
           title={propertyTitle !== '' ? propertyTitle : 'Объект'}
@@ -292,11 +292,11 @@ function OperationHero({
         className="flex h-24 w-24 items-center justify-center rounded-pill"
         style={{ backgroundColor: category.color }}
       >
-        {Icon !== undefined && <Icon className="h-10 w-10 text-white" aria-hidden />}
+        {Icon !== undefined && <Icon className="h-12 w-12 text-white" aria-hidden />}
       </span>
       <span className="text-xl font-semibold leading-6 text-content">{operation.title}</span>
       <span className="flex items-center gap-1.5 rounded-pill bg-surface-info py-1 pl-1.5 pr-3">
-        <CategoryGlyph icon={category.icon} color={category.color} size="h-3.5 w-3.5" />
+        <CategoryGlyph icon={category.icon} color={category.color} circleClass="h-6 w-6" glyphClass="h-3.5 w-3.5" />
         <span className="text-sm leading-4 text-content">{operation.categoryLabel}</span>
       </span>
       <span className={`text-[40px] leading-[44px] font-semibold ${amountTone}`}>
@@ -333,24 +333,26 @@ function OperationSection({
 }
 
 /** Круглый глиф категории без канта (правка владельца: белого кольца
- * в дизайне нет): цветная подложка + bold-иконка заданного размера. */
+ * в дизайне нет): цветная подложка заданного размера + bold-иконка. */
 function CategoryGlyph({
   icon,
   color,
-  size,
+  circleClass,
+  glyphClass,
 }: {
   readonly icon: string;
   readonly color: string;
-  readonly size: string;
+  readonly circleClass: string;
+  readonly glyphClass: string;
 }): JSX.Element {
   const Icon = categoryIconComponents[icon];
 
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-pill"
+      className={`flex shrink-0 items-center justify-center rounded-pill ${circleClass}`}
       style={{ backgroundColor: color }}
     >
-      {Icon !== undefined && <Icon className={`${size} text-white`} aria-hidden />}
+      {Icon !== undefined && <Icon className={`${glyphClass} text-white`} aria-hidden />}
     </span>
   );
 }
@@ -410,7 +412,7 @@ function OperationPaidSuccess({
               className="flex h-24 w-24 items-center justify-center rounded-pill"
               style={{ backgroundColor: style.color }}
             >
-              {Icon !== undefined && <Icon className="h-10 w-10 text-white" aria-hidden />}
+              {Icon !== undefined && <Icon className="h-12 w-12 text-white" aria-hidden />}
             </span>
             <StatusIcon status="good" className="absolute left-[60px] top-[60px] h-12 w-12" />
           </span>
