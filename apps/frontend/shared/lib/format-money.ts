@@ -24,6 +24,21 @@ export function kopecksToRublesString(kopecks: number): string {
 }
 
 /**
+ * Kopecks → raw input-field string the way the user types it: whole rubles
+ * without a decimal part ("145"), fractional amounts with exactly two
+ * decimals ("145,50"). The display rule for saved values in amount fields —
+ * it never appends ",00" the user did not type (owner note 2026-08-31).
+ * Integer operations only.
+ */
+export function kopecksToAmountInputString(kopecks: number): string {
+  const rubles = Math.trunc(kopecks / 100);
+  const remainder = kopecks % 100;
+  return remainder === 0
+    ? String(rubles)
+    : `${rubles},${String(remainder).padStart(2, '0')}`;
+}
+
+/**
  * Input-field string → kopecks. Accepts dot or comma as the decimal
  * separator, rounds to the nearest kopeck. Returns `undefined` when the value
  * is not a parseable non-negative amount (empty string included); with

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     formatMoneyKopecks,
+    kopecksToAmountInputString,
     kopecksToRublesString,
     parseRublesToKopecks,
     ratioToPercent,
@@ -35,6 +36,19 @@ describe('kopecksToRublesString', () => {
         expect(kopecksToRublesString(0)).toBe('0.00');
         expect(kopecksToRublesString(100)).toBe('1.00');
         expect(kopecksToRublesString(1)).toBe('0.01');
+    });
+});
+
+describe('kopecksToAmountInputString', () => {
+    it('whole rubles render without a decimal part', () => {
+        expect(kopecksToAmountInputString(14500)).toBe('145');
+        expect(kopecksToAmountInputString(250000)).toBe('2500');
+    });
+
+    it('fractional amounts render with exactly two decimals', () => {
+        expect(kopecksToAmountInputString(14550)).toBe('145,50');
+        expect(kopecksToAmountInputString(123450)).toBe('1234,50');
+        expect(kopecksToAmountInputString(5)).toBe('0,05');
     });
 });
 

@@ -1,5 +1,9 @@
-import type { Recurrence } from '@/entities/payment';
-import type { PaymentCreateCommand } from '@/entities/payment';
+import type {
+  PaymentCreateCommand,
+  PaymentForm,
+  PaymentType,
+  Recurrence,
+} from '@/entities/payment';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
 /**
@@ -89,13 +93,39 @@ export function wizardStepReady(step: WizardStep, draft: PaymentWizardDraft): bo
       // Окончание платежа необязательно: пусто — бессрочный.
       return true;
     case 5:
-      return (
-        draft.amountKopecks !== undefined
-        && draft.amountKopecks > 0
-        && draft.type !== undefined
-        && draft.paymentForm !== undefined
-      );
+      // Признаки шага суммы имеют дефолты (Figma 834:19662: чипы сразу
+      // показывают «Доход» и «Перевод») — решает только положительная сумма.
+      return draft.amountKopecks !== undefined && draft.amountKopecks > 0;
   }
+}
+
+/** Дефолтные признаки шага суммы (Figma 834:19662): до явного выбора
+ * чипы показывают «Доход» и «Перевод». Живут на слое отображения и
+ * сборки команды — черновик хранит только явный выбор пользователя,
+ * чтобы «есть ли что продолжать» не зависело от дефолтов. */
+const AMOUNT_STEP_DEFAULTS = {
+  type: 'income',
+  paymentForm: 'transfer',
+} as const;
+
+/** Признак типа, видимый на шаге суммы: явный выбор или дефолт. */
+export function effectivePaymentType(type: PaymentType | undefined): PaymentType {
+  return type ?? AMOUNT_STEP_DEFAULTS.type;
+}
+
+/** Признак формы оплаты, видимый на шаге суммы: явный выбор или дефолт. */
+export function effectivePaymentForm(paymentForm: PaymentForm | undefined): PaymentForm {
+  return paymentForm ?? AMOUNT_STEP_DEFAULTS.paymentForm;
+}
+
+/** Клик по чипу-переключателю меняет значение на альтернативное. */
+export function togglePaymentType(type: PaymentType): PaymentType {
+  return type === 'income' ? 'expense' : 'income';
+}
+
+/** Клик по чипу формы оплаты меняет её на альтернативную. */
+export function togglePaymentForm(paymentForm: PaymentForm): PaymentForm {
+  return paymentForm === 'transfer' ? 'cash' : 'transfer';
 }
 
 /** Мультивыбор дней недели: сортированный набор без дубликатов. */
@@ -127,7 +157,6 @@ export function buildPaymentCreateCommand(
   const recurrence = draft.recurrence;
   if (recurrence === undefined || !periodicityReady(recurrence)) return undefined;
   if (draft.amountKopecks === undefined || draft.amountKopecks <= 0) return undefined;
-  if (draft.type === undefined || draft.paymentForm === undefined) return undefined;
   if (draft.categorySlug === undefined) return undefined;
 
   const title =
@@ -137,11 +166,11 @@ export function buildPaymentCreateCommand(
   if (title === undefined) return undefined;
 
   return {
-    type: draft.type,
+    type: effectivePaymentType(draft.type),
     title,
     amountKopecks: draft.amountKopecks,
     recurrence,
-    paymentForm: draft.paymentForm,
+    paymentForm: effectivePaymentForm(draft.paymentForm),
     categorySlug: draft.categorySlug,
     autoPay: options.autoPay ?? false,
     ...(draft.endDate !== undefined && { endDate: draft.endDate }),

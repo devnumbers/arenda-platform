@@ -1,6 +1,6 @@
 'use client';
 
-import type { ChangeEvent, JSX } from 'react';
+import { useState, type ChangeEvent, type JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { groupedAmount, sanitizeAmountInput, syncAmountInputDom } from './amount-input';
 
@@ -18,7 +18,14 @@ import { groupedAmount, sanitizeAmountInput, syncAmountInputDom } from './amount
  * владельца 2026-08-26: будучи частью value, он уводил каретку за себя и
  * ломал Backspace). Сам инпут скрыт под невидимым span-измерителем той же
  * строки: ширина поля равна ширине набранного текста, связка центрируется,
- * каретка живёт среди цифр, Backspace стирает по символу. */
+ * каретка живёт среди цифр, Backspace стирает по символу.
+ *
+ * Правка владельца 2026-08-31: пока поле в фокусе, рисуется ровно то, что
+ * набирает пользователь. Родитель может эхо-возвращать нормализованное из
+ * копеек значение (черновик хранит целые копейки) — его перерисовка под
+ * курсором уводила каретку в конец и дописывала «,00», блокируя ввод.
+ * Вне фокуса значение синхронизируется с пропсом: восстановление черновика
+ * и нормализация после blur («25,5» → «25,50» — правило экрана). */
 export type AmountFieldProps = {
   readonly value: string;
   readonly onChange: (value: string) => void;
@@ -35,11 +42,24 @@ export function AmountField({
   label,
   className,
 }: AmountFieldProps): JSX.Element {
+  // Сырой буфер набранного: источник отрисовки, пока поле в фокусе.
+  const [buffer, setBuffer] = useState(value);
+  const [focused, setFocused] = useState(false);
+  const [syncedValue, setSyncedValue] = useState(value);
+  // Вне фокуса поле следует за пропсом (восстановление черновика,
+  // нормализация после blur): подгонка состояния при рендере —
+  // официальный паттерн React вместо setState в эффекте.
+  if (!focused && value !== syncedValue) {
+    setSyncedValue(value);
+    setBuffer(value);
+  }
+
   // Управляемый input показывает маскированное значение; при вводе маска
   // вычищает лишнее — если DOM разошёлся со значением, синхронизируем его
   // вручную (React не перерисует совпавший value).
   const handleChange = (event: ChangeEvent<HTMLInputElement>): void => {
     const sanitized = sanitizeAmountInput(event.target.value);
+    setBuffer(sanitized);
     onChange(sanitized);
     syncAmountInputDom(event.target, sanitized);
   };
@@ -58,7 +78,7 @@ export function AmountField({
       <span className="relative inline-flex">
         {/* измеритель: задаёт ширину инпута по набранному тексту */}
         <span aria-hidden className={cn('invisible whitespace-pre px-0.5', amountStyle)}>
-          {groupedAmount(value) === '' ? '0' : groupedAmount(value)}
+          {groupedAmount(buffer) === '' ? '0' : groupedAmount(buffer)}
         </span>
         <input
           type="text"
@@ -69,9 +89,11 @@ export function AmountField({
           size={1}
           aria-label={label}
           disabled={disabled}
-          value={groupedAmount(value)}
+          value={groupedAmount(buffer)}
           placeholder="0"
           onChange={handleChange}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           className={cn(
             'absolute inset-0 h-full w-full cursor-text bg-transparent text-center outline-none placeholder:text-content-tertiary',
             amountStyle,
@@ -85,7 +107,7 @@ export function AmountField({
           // ml-3 — пробел между суммой и символом рубля, как в макете «2 500 ₽»
           'ml-3',
           amountStyle,
-          value === '' ? 'text-content-tertiary' : 'text-content',
+          buffer === '' ? 'text-content-tertiary' : 'text-content',
         )}
       >
         ₽

@@ -1,19 +1,29 @@
 'use client';
 
 import type { JSX } from 'react';
+import { ChangeHorizontal } from '@/shared/assets/icons';
 import type { PaymentForm, PaymentType } from '@/entities/payment';
 import { AmountField, ChipButton } from '@/shared/ui/design';
 import {
-  kopecksToRublesString,
+  kopecksToAmountInputString,
   parseRublesToKopecks,
 } from '@/shared/lib/format-money';
+import {
+  effectivePaymentForm,
+  effectivePaymentType,
+  togglePaymentForm,
+  togglePaymentType,
+} from '@/features/payments';
 import { WizardHeading } from './wizard-chrome';
 
 /**
  * Шаг 5 визарда — сумма и признаки (Figma 834:19662/835:19795): крупное
  * поле суммы (numpad заменён вводом с цифровой клавиатуры — правка
- * владельца в тикете дизайн-слоя) и чипы «Доход/Расход» + «Перевод/
- * Наличные». Деньги считаются только через форматтеры копеек.
+ * владельца в тикете дизайн-слоя) и два чипа-переключателя в один ряд —
+ * форма оплаты и тип. Чип показывает текущее значение с иконкой смены;
+ * клик меняет его на альтернативное, видимого выбранного состояния нет.
+ * До явного выбора показываются «Перевод» и «Доход». Деньги считаются
+ * только через форматтеры копеек.
  */
 
 export type AmountStepProps = {
@@ -26,15 +36,15 @@ export type AmountStepProps = {
   readonly onPaymentFormChange: (paymentForm: PaymentForm) => void;
 };
 
-const TYPE_CHIPS = [
-  { value: 'income' as const, label: 'Доход' },
-  { value: 'expense' as const, label: 'Расход' },
-];
+const TYPE_LABELS: Record<PaymentType, string> = {
+  income: 'Доход',
+  expense: 'Расход',
+};
 
-const FORM_CHIPS = [
-  { value: 'transfer' as const, label: 'Перевод' },
-  { value: 'cash' as const, label: 'Наличные' },
-];
+const FORM_LABELS: Record<PaymentForm, string> = {
+  transfer: 'Перевод',
+  cash: 'Наличные',
+};
 
 export function AmountStep({
   amountKopecks,
@@ -45,7 +55,9 @@ export function AmountStep({
   onPaymentFormChange,
 }: AmountStepProps): JSX.Element {
   const rawValue =
-    amountKopecks === undefined ? '' : kopecksToRublesString(amountKopecks).replace('.', ',');
+    amountKopecks === undefined ? '' : kopecksToAmountInputString(amountKopecks);
+  const currentType = effectivePaymentType(type);
+  const currentForm = effectivePaymentForm(paymentForm);
 
   return (
     <>
@@ -56,29 +68,23 @@ export function AmountStep({
           onChange={(next) => onAmountChange(parseRublesToKopecks(next, { positive: true }))}
           label="Сумма"
         />
-        <div className="flex w-full flex-col items-center gap-2">
-          <div className="flex justify-center gap-2">
-            {TYPE_CHIPS.map((chip) => (
-              <ChipButton
-                key={chip.value}
-                selected={type === chip.value}
-                onClick={() => onTypeChange(chip.value)}
-              >
-                {chip.label}
-              </ChipButton>
-            ))}
-          </div>
-          <div className="flex justify-center gap-2">
-            {FORM_CHIPS.map((chip) => (
-              <ChipButton
-                key={chip.value}
-                selected={paymentForm === chip.value}
-                onClick={() => onPaymentFormChange(chip.value)}
-              >
-                {chip.label}
-              </ChipButton>
-            ))}
-          </div>
+        {/* Чипы в порядке макета: форма оплаты слева, тип справа; серый фон
+            без выбранного состояния — значение написано на самом чипе. */}
+        <div className="flex justify-center gap-2">
+          <ChipButton
+            aria-label={`Форма оплаты: ${FORM_LABELS[currentForm]}, нажмите, чтобы сменить`}
+            onClick={() => onPaymentFormChange(togglePaymentForm(currentForm))}
+            trailingIcon={<ChangeHorizontal />}
+          >
+            {FORM_LABELS[currentForm]}
+          </ChipButton>
+          <ChipButton
+            aria-label={`Тип платежа: ${TYPE_LABELS[currentType]}, нажмите, чтобы сменить`}
+            onClick={() => onTypeChange(togglePaymentType(currentType))}
+            trailingIcon={<ChangeHorizontal />}
+          >
+            {TYPE_LABELS[currentType]}
+          </ChipButton>
         </div>
       </div>
     </>

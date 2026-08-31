@@ -5,7 +5,11 @@ import {
   WIZARD_TOTAL_STEPS,
   branchKind,
   buildPaymentCreateCommand,
+  effectivePaymentForm,
+  effectivePaymentType,
   periodicityReady,
+  togglePaymentForm,
+  togglePaymentType,
   toggleWeekday,
   wizardStepReady,
 } from './wizard-model';
@@ -51,8 +55,9 @@ describe('wizardStepReady — валидация шагов не пускает 
     [4, draft({ endDate: undefined }), true], // окончание необязательно
     [5, draft({ amountKopecks: 250000 }), true],
     [5, draft({ amountKopecks: 0 }), false],
-    [5, draft({ paymentForm: undefined }), false],
-    [5, draft({ type: undefined }), false],
+    [5, draft({ paymentForm: undefined }), true], // у формы дефолт «перевод»
+    [5, draft({ type: undefined }), true], // у типа дефолт «доход»
+    [5, draft({ amountKopecks: undefined }), false],
   ] as const)('шаг %s → %s', (step, value, expected) => {
     expect(wizardStepReady(step, value)).toBe(expected);
   });
@@ -63,6 +68,25 @@ describe('wizardStepReady — валидация шагов не пускает 
     expect(wizardStepReady(2, empty)).toBe(true);
     expect(wizardStepReady(3, empty)).toBe(false);
     expect(wizardStepReady(5, empty)).toBe(false);
+  });
+});
+
+describe('дефолты и переключатели шага суммы (Figma 834:19662)', () => {
+  it('до явного выбора показываются «доход» и «перевод»', () => {
+    expect(effectivePaymentType(undefined)).toBe('income');
+    expect(effectivePaymentForm(undefined)).toBe('transfer');
+  });
+
+  it('явный выбор сильнее дефолта', () => {
+    expect(effectivePaymentType('expense')).toBe('expense');
+    expect(effectivePaymentForm('cash')).toBe('cash');
+  });
+
+  it('клик по чипу меняет значение на альтернативное', () => {
+    expect(togglePaymentType('income')).toBe('expense');
+    expect(togglePaymentType('expense')).toBe('income');
+    expect(togglePaymentForm('transfer')).toBe('cash');
+    expect(togglePaymentForm('cash')).toBe('transfer');
   });
 });
 
@@ -119,6 +143,15 @@ describe('buildPaymentCreateCommand — сериализация чернови�
   it('автоплатёж получает флаг autoPay=true', () => {
     const command = buildPaymentCreateCommand(draft({}), { autoPay: true });
     expect(command?.autoPay).toBe(true);
+  });
+
+  it('без явных признаков шага суммы команда берёт дефолты «доход/перевод»', () => {
+    const command = buildPaymentCreateCommand(
+      draft({ type: undefined, paymentForm: undefined }),
+      {},
+    );
+    expect(command?.type).toBe('income');
+    expect(command?.paymentForm).toBe('transfer');
   });
 
   it('пустое название замещается лейблом категории', () => {
