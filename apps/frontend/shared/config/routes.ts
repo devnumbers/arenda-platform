@@ -29,6 +29,9 @@ export const ROUTES = {
   /** Страница операции: вхождение правила; «Отметить оплаченной» — отсюда. */
   propertyOperation: (id: string, operationId: string) =>
     `/properties/${id}/operations/${operationId}`,
+  /** Просмотр проекции будущего вхождения (чисто фронт, без id операции). */
+  propertyPaymentProjectedOperation: (id: string, paymentId: string, date: string) =>
+    `/properties/${id}/payments/${paymentId}/operations/projected/${date}`,
   /** Экран правки платежа (#467): форма поверх правила, удаление — там же. */
   propertyPaymentEdit: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}/edit`,

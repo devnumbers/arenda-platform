@@ -33,6 +33,7 @@ export {
   oldestUnpaidOperation,
   paymentTypeLabel,
 } from './lib/payment-page-model';
+export { projectedOperation } from './lib/projected-operation';
 export {
   extendProjection,
   materializedEntries,

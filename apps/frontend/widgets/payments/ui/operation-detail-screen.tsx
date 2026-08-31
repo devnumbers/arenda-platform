@@ -166,7 +166,6 @@ function OperationDetailBody({
   readonly canMutate: boolean;
   readonly onPaid: (paid: PaymentOperation) => void;
 }): JSX.Element {
-  const router = useRouter();
   const payOperation = usePayOperation(propertyId);
 
   // Ручные факты и операции удалённого правила (paymentId null) не
@@ -194,7 +193,44 @@ function OperationDetailBody({
     }
   };
 
-  const today = clientTodayIso();
+  return (
+    <OperationView
+      propertyId={propertyId}
+      operation={operation}
+      propertyTitle={propertyTitle}
+      today={clientTodayIso()}
+      payBar={canMutate && payable
+        ? {
+            onPay: () => {
+              void pay();
+            },
+            pending: payOperation.isPending,
+          }
+        : undefined}
+    />
+  );
+}
+
+/**
+ * Общий вид операции (1386:67731 / 1419:25859 / 1419:25645): hero,
+ * «Данные операции» со ссылками и «Подробнее». Служит и странице
+ * операции, и проекционному просмотру (без payBar — у проекции кнопки
+ * нет: платится только материализованная операция).
+ */
+export function OperationView({
+  propertyId,
+  operation,
+  propertyTitle,
+  today,
+  payBar,
+}: {
+  readonly propertyId: string;
+  readonly operation: PaymentOperation;
+  readonly propertyTitle: string;
+  readonly today: IsoDate;
+  readonly payBar?: { readonly onPay: () => void; readonly pending: boolean };
+}): JSX.Element {
+  const router = useRouter();
   const subtitle = operationSubtitle(operation, today);
   const amount = operationHeroAmount(operation);
   const delay = operationDelayRow(operation, today);
@@ -215,14 +251,14 @@ function OperationDetailBody({
        * правило и объект. У операции без правила (ручной факт, платёж
        * удалён) строки «Платеж» нет (решение владельца). */}
       <OperationSection title="Данные операции">
-        {paymentId !== null && (
+        {operation.paymentId !== null && (
           <PaymentRowButton
             variant="white"
             className="px-6 py-3 [&>span]:px-0"
             categoryIcon={<CategoryGlyph icon={category.icon} color={category.color} circleClass="h-11 w-11" glyphClass="h-6 w-6" />}
             title={operation.title}
             subtitle="Платеж"
-            onSelect={() => router.push(ROUTES.propertyPayment(propertyId, paymentId))}
+            onSelect={() => router.push(ROUTES.propertyPayment(propertyId, operation.paymentId as string))}
           />
         )}
         <PaymentRowButton
@@ -254,12 +290,12 @@ function OperationDetailBody({
         />
       </OperationSection>
 
-      {canMutate && payable && (
+      {payBar !== undefined && (
         <StickyBottomBar>
           <Button
             className="w-full"
-            loading={payOperation.isPending}
-            onClick={() => void pay()}
+            loading={payBar.pending}
+            onClick={payBar.onPay}
           >
             Отметить оплаченной
           </Button>

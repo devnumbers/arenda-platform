@@ -172,6 +172,21 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText('Следующие').first()).toBeVisible();
     await expect(page.getByText(title1).first()).toBeVisible();
 
+    // Любая строка графика открывает операцию (решение владельца):
+    // материализованная — по id, проекция — вью без кнопки оплаты.
+    await page.getByRole('button', { name: new RegExp(`${title1}`) }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/operations/[0-9a-f-]+$`));
+    await expect(page.getByText('Запланирована', { exact: true })).toBeVisible();
+    await page.goBack();
+    // Хвост списка «Следующие» — проекции (материализованных две: сегодня и
+    // следующий месяц), последняя строка заведомо кликает проекционный вью.
+    await page.getByRole('button', { name: new RegExp(`${title1}`) }).last().click();
+    await expect(page).toHaveURL(new RegExp(`/operations/projected/[0-9-]+$`));
+    await expect(page.getByText('Запланирована', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Отметить оплаченной' })).toHaveCount(0);
+    await page.goBack();
+    await expect(page.getByText('Следующие').first()).toBeVisible();
+
     // ── «Оплатить» ведёт на страницу операции; «Отметить оплаченной» гасит
     // старейшее неоплаченное; тик тут же материализует следующее вхождение —
     // на странице платежа кнопка остаётся активной ──

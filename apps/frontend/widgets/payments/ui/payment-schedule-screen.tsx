@@ -102,6 +102,8 @@ export function PaymentScheduleScreen({
 
           {!loading && !failed && payment !== undefined && (
             <ScheduleList
+              propertyId={propertyId}
+              paymentId={paymentId}
               schedule={payment}
               plannedOperations={plannedOperations}
               today={clientTodayIso()}
@@ -114,14 +116,19 @@ export function PaymentScheduleScreen({
 }
 
 function ScheduleList({
+  propertyId,
+  paymentId,
   schedule,
   plannedOperations,
   today,
 }: {
+  readonly propertyId: string;
+  readonly paymentId: string;
   readonly schedule: Payment;
   readonly plannedOperations: ReadonlyArray<PaymentOperation>;
   readonly today: IsoDate;
 }): JSX.Element {
+  const router = useRouter();
   const materialized = materializedEntries(plannedOperations);
   const [visibleCount, setVisibleCount] = useState(SCHEDULE_PAGE_SIZE);
 
@@ -189,6 +196,16 @@ function ScheduleList({
     );
   }
 
+  // Любая строка графика открывает операцию (решение владельца):
+  // материализованная — по id, проекция — вью без кнопки оплаты.
+  const selectEntry = (entry: ScheduleEntry): void => {
+    if (entry.kind === 'operation') {
+      router.push(ROUTES.propertyOperation(propertyId, entry.operation.id));
+    } else {
+      router.push(ROUTES.propertyPaymentProjectedOperation(propertyId, paymentId, entry.date));
+    }
+  };
+
   // «Следующие»: всё после ближайшего — хвост материализованных и страницы
   // проекции; глубина показа — visibleCount.
   const following: ScheduleEntry[] = [
@@ -208,6 +225,7 @@ function ScheduleList({
           defaultAmountKopecks={schedule.amountKopecks}
           isFavorite={schedule.isFavorite}
           today={today}
+          onSelect={() => selectEntry(nearest)}
         />
       </section>
 
@@ -223,6 +241,7 @@ function ScheduleList({
               defaultAmountKopecks={schedule.amountKopecks}
               isFavorite={schedule.isFavorite}
               today={today}
+              onSelect={() => selectEntry(entry)}
             />
           ))}
         </section>
@@ -245,6 +264,7 @@ function ScheduleRow({
   defaultAmountKopecks,
   isFavorite,
   today,
+  onSelect,
 }: {
   readonly entry: ScheduleEntry;
   readonly category: PaymentCategoryView;
@@ -252,6 +272,7 @@ function ScheduleRow({
   readonly defaultAmountKopecks: number;
   readonly isFavorite: boolean;
   readonly today: IsoDate;
+  readonly onSelect?: () => void;
 }): JSX.Element {
   const operationSlug =
     entry.kind === 'operation' ? entry.operation.categorySlug : undefined;
@@ -279,6 +300,7 @@ function ScheduleRow({
       amountKopecks={
         entry.kind === 'operation' ? entry.operation.amountKopecks : defaultAmountKopecks
       }
+      onSelect={onSelect}
     />
   );
 }
