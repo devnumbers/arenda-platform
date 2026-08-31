@@ -339,6 +339,29 @@ export function useSetPaymentFavorite(
 }
 
 /**
+ * Одна операция для страницы операции: статус приходит вычисляемым view
+ * (planned/paid/overdue — overdue по TZ собственника, ADR 0048). Ключ —
+ * ветка paymentOperationKeys.all, поэтому оплата инвалидирует её наравне
+ * со списками.
+ */
+export function useOperation(
+  propertyId: string,
+  operationId: string,
+): UseQueryResult<PaymentOperation, ApiError> {
+  return useQuery({
+    queryKey: paymentOperationKeys.byId(propertyId, operationId),
+    queryFn: async () => {
+      const response = await apiClient<components['schemas']['OperationResponse']>(
+        `/properties/${encodeURIComponent(propertyId)}`
+          + `/operations/${encodeURIComponent(operationId)}`,
+      );
+      return mapPaymentOperation(response);
+    },
+    enabled: Boolean(propertyId) && Boolean(operationId),
+  });
+}
+
+/**
  * «Оплатить сейчас» (история 24/25): `planned → paid` у конкретного
  * вхождения, дата оплаты — серверная, расписание не сдвигается. Какая
  * операция гасится («старейшее неоплаченное»), решает виджет по спискам

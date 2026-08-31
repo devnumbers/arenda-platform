@@ -31,11 +31,13 @@ export {
 } from './lib/wizard-model';
 export { successScreenCopy, type SuccessScreenCopyInput } from './lib/success-copy';
 export {
+  isOperationPayable,
   isPaymentCompleted,
   nearestOccurrence,
   oldestUnpaidOperation,
   paymentTypeLabel,
 } from './lib/payment-page-model';
+export { projectedOperation } from './lib/projected-operation';
 export {
   extendProjection,
   materializedEntries,
@@ -59,6 +61,7 @@ export {
   usePayment,
   usePaymentOperationsByStatus,
   usePaymentOperationsPaged,
+  useOperation,
   usePayments,
   usePausePayment,
   usePayOperation,

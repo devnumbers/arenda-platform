@@ -21,6 +21,7 @@ import (
 // application service satisfies it; the handler tests run against func-backed
 // fakes.
 type OperationsManager interface {
+	GetOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	PayOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	ListPaymentOperations(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
@@ -97,6 +98,26 @@ func (h *OperationsHandlers) ListPropertyOperations(
 	}
 
 	writeOperations(w, r, items)
+}
+
+// GetOperation implements GET /properties/{propertyId}/operations/{operationId}
+// — one operation for the operation page. A stranger or a foreign row is the
+// privacy 404; the status travels as the server-computed view.
+func (h *OperationsHandlers) GetOperation(
+	w http.ResponseWriter, r *http.Request, propertyID, operationID openapi_types.UUID,
+) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	item, err := h.svc.GetOperation(r.Context(), actor, propertyID, operationID)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(item))
 }
 
 // PayOperation implements POST /properties/{propertyId}/operations/{operationId}/pay:

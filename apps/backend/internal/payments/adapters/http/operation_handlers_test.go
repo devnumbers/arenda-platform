@@ -24,6 +24,7 @@ import (
 
 // fakeOperationsManager is the func-backed OperationsManager double.
 type fakeOperationsManager struct {
+	get   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	pay   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	byPay func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
@@ -33,6 +34,15 @@ type fakeOperationsManager struct {
 		ctx context.Context, actor, propertyID uuid.UUID,
 		cmd application.OperationsListQuery,
 	) ([]application.OperationListItem, error)
+}
+
+func (f *fakeOperationsManager) GetOperation(
+	ctx context.Context, actor, propertyID, operationID uuid.UUID,
+) (application.OperationListItem, error) {
+	if f.get == nil {
+		return application.OperationListItem{}, errors.New("unexpected GetOperation call")
+	}
+	return f.get(ctx, actor, propertyID, operationID)
 }
 
 func (f *fakeOperationsManager) PayOperation(
@@ -97,6 +107,9 @@ func TestOperationsHandlers_RequireAuth(t *testing.T) {
 		name string
 		call func(w http.ResponseWriter, r *http.Request)
 	}{
+		{"get", func(w http.ResponseWriter, r *http.Request) {
+			h.GetOperation(w, r, propertyID, otherID)
+		}},
 		{"list by payment", func(w http.ResponseWriter, r *http.Request) {
 			h.ListPaymentOperations(w, r, propertyID, otherID, openapi.ListPaymentOperationsParams{})
 		}},
@@ -310,6 +323,72 @@ func TestListPropertyOperations_MapsApplicationErrors(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want the privacy 404", w.Code)
 	}
+}
+
+func TestGetOperation_ReturnsOperationAndMapsErrors(t *testing.T) {
+	t.Parallel()
+
+	paidOp := fixtureOperation(domain.StatusPaid)
+
+	t.Run("returns the operation with the computed view", func(t *testing.T) {
+		t.Parallel()
+		var gotActor, gotProperty, gotOperation uuid.UUID
+		svc := &fakeOperationsManager{
+			get: func(_ context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error) {
+				gotActor, gotProperty, gotOperation = actor, propertyID, operationID
+				return application.OperationListItem{
+					Operation:  paidOp,
+					ViewStatus: domain.ViewStatusPaid,
+				}, nil
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operation", nil,
+		)
+		w := httptest.NewRecorder()
+		propertyID := uuid.Must(uuid.NewV7())
+		h.GetOperation(w, req, propertyID, paidOp.ID)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+		}
+		if gotActor != actor || gotProperty != propertyID || gotOperation != paidOp.ID {
+			t.Errorf("actor/property/operation = %s/%s/%s, want %s/%s/%s",
+				gotActor, gotProperty, gotOperation, actor, propertyID, paidOp.ID)
+		}
+		var body openapi.OperationResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body.Id != paidOp.ID || body.Status != openapi.OperationResponseStatus(openapi.Paid) {
+			t.Errorf("wire = %s/%s, want the requested id with the computed paid status",
+				body.Id, body.Status)
+		}
+	})
+
+	t.Run("a foreign operation is the privacy 404", func(t *testing.T) {
+		t.Parallel()
+		svc := &fakeOperationsManager{
+			get: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (application.OperationListItem, error) {
+				return application.OperationListItem{}, application.ErrNotFound
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operation", nil,
+		)
+		w := httptest.NewRecorder()
+		h.GetOperation(w, req, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want the privacy 404", w.Code)
+		}
+	})
 }
 
 func TestPayOperation_HappyPathAndConflicts(t *testing.T) {

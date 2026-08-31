@@ -139,6 +139,28 @@ func (s *OperationService) PayOperation(
 	}, nil
 }
 
+// GetOperation returns one operation with its server-computed view status —
+// the read behind the operation page. It is a pure read: a viewer reads it
+// like the listings, an unknown or foreign row is the privacy ErrNotFound,
+// and overdue is derived against the owner's today (CONTEXT.md «Просрочка»).
+func (s *OperationService) GetOperation(
+	ctx context.Context, actor, propertyID, operationID uuid.UUID,
+) (OperationListItem, error) {
+	scope, err := resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
+	if err != nil {
+		return OperationListItem{}, err
+	}
+	op, err := s.operations.Get(ctx, operationID, scope, propertyID)
+	if err != nil {
+		return OperationListItem{}, err
+	}
+	today, err := ownerToday(s.calendar, ctx, scope)
+	if err != nil {
+		return OperationListItem{}, err
+	}
+	return OperationListItem{Operation: op, ViewStatus: domain.OperationView(op, today)}, nil
+}
+
 // ListPaymentOperations returns one rule's operations paginated, filtered and
 // sorted per the query, each with its computed view status. A missing or
 // foreign rule is ErrNotFound — the operations never reveal it either.

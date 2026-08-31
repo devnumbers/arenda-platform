@@ -54,6 +54,9 @@ export const paymentKeys = {
 
 export const paymentOperationKeys = {
   all: ['payment-operations'] as const,
+  /** Одна операция — страница операции. */
+  byId: (propertyId: string, operationId: string) =>
+    [...paymentOperationKeys.all, 'by-id', propertyId, operationId] as const,
   /** Просроченные операции объекта (сервер считает overdue по TZ собственника). */
   overdueByProperty: (propertyId: string, search = '') =>
     [...paymentOperationKeys.all, 'overdue', propertyId, search] as const,

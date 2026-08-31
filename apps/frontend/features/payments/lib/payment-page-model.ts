@@ -62,3 +62,22 @@ export function nearestOccurrence(
   // nextOccurrenceAfter сигналит исчерпание null'ом.
   return projected === null ? undefined : { kind: 'projected', date: projected };
 }
+
+/**
+ * «Отметить оплаченной» на странице операции стоит только у той операции,
+ * которую гасит «Оплатить» страницы платежа: старейшая просрочка, без
+ * просрочек — ближайшая плановая (решение владельца «как сейчас логика
+ * устроена»). Оплаченная не оплачивается никогда; пока списки не готовы,
+ * вызывающий кнопку не показывает.
+ */
+export function isOperationPayable(
+  operation: PaymentOperation,
+  overdue: ReadonlyArray<PaymentOperation>,
+  planned: ReadonlyArray<PaymentOperation>,
+): boolean {
+  if (operation.status === 'paid') {
+    return false;
+  }
+  const payable = oldestUnpaidOperation(overdue, planned);
+  return payable !== null && payable.id === operation.id;
+}

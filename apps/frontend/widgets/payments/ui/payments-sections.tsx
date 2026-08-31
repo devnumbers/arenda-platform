@@ -201,17 +201,19 @@ export function PaymentsSkeleton({ withHeading }: { readonly withHeading?: boole
  * и сумма красным, бейдж danger на иконке категории. Порядок asc — старейшая
  * первой, долг разбирают по порядку накопления. Поверхность: gray — секция
  * на сером блоке (кант серый), white — строки внутри страницы (кант белый).
- * Строка операции никуда не ведёт: у операций будет своя страница. */
+ * onSelect ведёт на страницу операции. */
 export function OverdueOperationRow({
   operation,
   today,
   variant = 'gray',
   className,
+  onSelect,
 }: {
   readonly operation: PaymentOperation;
   readonly today: IsoDate;
   readonly variant?: 'white' | 'gray';
   readonly className?: string;
+  readonly onSelect?: () => void;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
 
@@ -231,6 +233,7 @@ export function OverdueOperationRow({
       title={operation.title}
       description={formatOverdueDays(daysOverdue(operation.date, today))}
       amountKopecks={operation.amountKopecks}
+      onSelect={onSelect}
     />
   );
 }

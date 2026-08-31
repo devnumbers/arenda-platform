@@ -3,6 +3,8 @@ export { PaymentsCatalogScreen } from './ui/payments-catalog-screen';
 export type { PaymentsCatalogVariant } from './ui/payments-catalog-screen';
 export { PaymentCreateWizardScreen } from './ui/payment-create-wizard/payment-create-wizard-screen';
 export { PaymentDetailScreen } from './ui/payment-detail-screen';
+export { OperationDetailScreen } from './ui/operation-detail-screen';
+export { ProjectedOperationScreen } from './ui/projected-operation-screen';
 export { PaymentEditScreen } from './ui/payment-edit-screen';
 export { PaymentScheduleScreen } from './ui/payment-schedule-screen';
 export { PaymentHistoryScreen } from './ui/payment-history-screen';
