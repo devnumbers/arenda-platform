@@ -34,6 +34,15 @@ import { WizardHeading } from './wizard-chrome';
  * У ежедневного правила ветки нет — выбор сразу завершает шаг.
  */
 
+/** Подпись типа периода в хедере открытой ветки (Figma 1056:52895):
+ * названия совпадают с пунктами меню. Общая для визарда и страницы
+ * периодичности экрана правки. */
+export const BRANCH_PERIOD_LABELS: Record<PeriodicityBranch, string> = {
+  weekdays: 'Каждую неделю',
+  monthDays: 'Каждый месяц',
+  yearly: 'Каждый год',
+};
+
 /** Полные названия дней недели для списка ветки недели (значения как в
  * WEEKDAY_BUTTONS: 1..6 — Пн..Сб, 0 — Вс). */
 const WEEKDAY_FULL_LABELS: Record<number, string> = {
@@ -326,9 +335,10 @@ export function YearMonthCalendar({
 
   return (
     <>
-      {/* В режиме колёс календарь и чип скрываются: остаётся только выбор
-          месяца и года (подмена контента, не вторая модалка). */}
-      {!wheelOpen && (
+      {/* В модальном режиме календарь остаётся на странице под оверлеем
+          шита; подмена контента — только для режима «календарь уже внутри
+          модалки» (wheelAsModal=false). */}
+      {(!wheelOpen || wheelAsModal) && (
       <>
       <div className={padded ? 'px-6 pt-4' : 'pt-1'}>
         <button
@@ -348,7 +358,7 @@ export function YearMonthCalendar({
         </button>
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
+      <div className={padded ? 'grid grid-cols-7 gap-2 px-6' : 'grid grid-cols-7 gap-2'}>
         {WEEKDAY_HEADERS.map((name) => (
           <span
             key={name}

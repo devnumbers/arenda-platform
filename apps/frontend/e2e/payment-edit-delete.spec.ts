@@ -85,14 +85,15 @@ test.describe('экран правки платежа', () => {
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('4000');
 
-    // Регулярность: шит «Периодичность платежа» → «Каждый месяц» → день 20.
+    // Регулярность: страница «Выбор периодичности» → «Каждый месяц» → день 20.
     await page.getByRole('button', { name: 'Регулярность платежа' }).click();
-    await expect(page.getByText('Периодичность платежа')).toBeVisible();
+    await expect(page.getByText('Выбор периодичности')).toBeVisible();
     await page.getByRole('button', { name: 'Каждый месяц' }).click();
     // Мультивыбор: у сид-платежа день 15 — снимаем его и ставим 20.
     await page.getByRole('button', { name: '15', exact: true }).click();
     await page.getByRole('button', { name: '20', exact: true }).click();
-    await page.getByRole('button', { name: 'Готово' }).click();
+    // Правка живёт в черновике страницы и применяется кнопкой «Выбрать».
+    await page.getByRole('button', { name: 'Выбрать' }).click();
     await expect(
       page.getByRole('button', { name: 'Регулярность платежа' }),
     ).toHaveText(/Каждый месяц 20 числа/);
@@ -111,6 +112,29 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-edited-detail-mobile');
+  });
+
+  test('черновик периодичности: ветка без дней не меняет форму до «Выбрать»', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(URLS.insuranceEdit);
+
+    // Ветка недели без выбранных дней — незавершённый период остаётся
+    // черновиком страницы, «Назад» его отбрасывает (баг «Каждую неделю в —»).
+    await page.getByRole('button', { name: 'Регулярность платежа' }).click();
+    await page.getByRole('button', { name: 'Каждую неделю' }).click();
+    await expect(page.getByText('Понедельник')).toBeVisible();
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page.getByRole('button', { name: 'Каждый месяц' })).toBeVisible();
+    await page.getByRole('button', { name: 'Назад' }).click();
+
+    // Форма с прежним значением, сохранение закрыто — правки не было.
+    await expect(page.getByRole('button', { name: 'Регулярность платежа' })).toHaveText(
+      /Каждый месяц 20 числа/,
+    );
+    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeDisabled();
   });
 
   test('тип и способ оплаты меняются простым нажатием, без пикера', async ({
@@ -158,6 +182,33 @@ test.describe('экран правки платежа', () => {
     await page.getByRole('button', { name: 'Поиск по категориям' }).click();
     await page.getByRole('searchbox', { name: 'Поиск по названиям категорий' }).fill('страх');
     await expect(page.getByRole('button', { name: 'Страхование', exact: true })).toBeVisible();
+  });
+
+  test('окончание платежа — страница с календарём открыта сразу', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(URLS.insuranceEdit);
+
+    await page.getByRole('button', { name: 'Окончание платежа' }).click();
+    await expect(page.getByText('Выбор даты')).toBeVisible();
+    // Сегодняшний день активен в текущем гриде (minDate = сегодня).
+    const day = String(new Date().getDate());
+    const monthGen = [
+      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+    ][new Date().getMonth()];
+    await page.getByRole('button', { name: day, exact: true }).click();
+
+    // Дата применена к форме (правка не сохранена — после перезагрузки
+    // снова «Бессрочно»).
+    await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(
+      new RegExp(`${day} ${monthGen}`),
+    );
+    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Окончание платежа' })).toHaveText(/Бессрочно/);
   });
 
   test('отмена крестом возвращает на страницу платежа без изменений', async ({

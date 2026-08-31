@@ -36,7 +36,7 @@ import { paymentCategoryBySlug } from '@/features/payment-categories';
 import { AmountStep } from './amount-step';
 import { CategoryStep } from './category-step';
 import { EndDateStep } from './end-date-step';
-import { PeriodicityStep } from './periodicity-step';
+import { BRANCH_PERIOD_LABELS, PeriodicityStep } from './periodicity-step';
 import { TitleStep } from './title-step';
 import {CategorySearchHint, WizardBottomBar, WizardHeading} from './wizard-chrome';
 import { WizardSuccess } from './wizard-success';
@@ -47,14 +47,6 @@ import { WizardSuccess } from './wizard-success';
  * восстанавливается на первый незавершённый шаг; черновик живёт в
  * localStorage per объект+тип (история 10 спеки #453).
  */
-
-/** Подпись типа периода в хедере открытой ветки шага 3
- * (Figma 1056:52895): названия совпадают с пунктами меню. */
-const BRANCH_PERIOD_LABELS: Record<PeriodicityBranch, string> = {
-  weekdays: 'Каждую неделю',
-  monthDays: 'Каждый месяц',
-  yearly: 'Каждый год',
-};
 
 export type PaymentCreateWizardFlowProps = {
   readonly propertyId: string;

@@ -49,6 +49,7 @@ export {
 export {
   buildPaymentUpdateCommand,
   editFormReady,
+  recurrencesEqual,
   type PaymentEditForm,
 } from './lib/update-model';
 export {

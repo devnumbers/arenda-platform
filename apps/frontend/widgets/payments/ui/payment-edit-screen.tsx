@@ -25,14 +25,17 @@ import {
   recurrenceLabel,
   type IsoDate,
   type Payment,
+  type Recurrence,
 } from '@/entities/payment';
 import { paymentCategoryBySlug } from '@/features/payment-categories';
 import { useProperty } from '@/features/properties';
 import {
   buildPaymentUpdateCommand,
+  branchKind,
   editFormReady,
   FORM_OF_PAYMENT_LABELS,
   periodicityReady,
+  recurrencesEqual,
   togglePaymentForm,
   togglePaymentType,
   TYPE_LABELS,
@@ -65,8 +68,11 @@ import {
   PaymentsStateCard,
 } from './payments-sections';
 import { CategoryStep } from './payment-create-wizard/category-step';
-import { EndDateStep } from './payment-create-wizard/end-date-step';
-import { PeriodicityStep } from './payment-create-wizard/periodicity-step';
+import {
+  BRANCH_PERIOD_LABELS,
+  PeriodicityStep,
+  YearMonthCalendar,
+} from './payment-create-wizard/periodicity-step';
 import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
 
 /**
@@ -81,7 +87,13 @@ import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
  * (Figma 781:12299, без карандаша: свои категории — следующий срез);
  * заголовок хедера — «Выбор категории», заголовок страницы без подписи
  * (решение владельца 2026-08-31); уход со страницы не теряет
- * несохранённые правки формы. Регулярность —
+ * несохранённые правки формы. Периодичность — отдельная страница как шаг 3
+ * визарда, хедер «Выбор периодичности», в ветке — название периода
+ * (решение владельца 2026-08-31); правка живёт в черновике страницы и
+ * применяется только кнопкой «Выбрать» — «Назад» её отбрасывает
+ * (багфикс: незавершённый период не оставался в форме). Окончание —
+ * страница с календарём, открытым сразу (решение владельца 2026-08-31).
+ * Регулярность —
  * без «Один раз» (решение #449) с ветками дат; `since` и напоминания
  * отсутствуют (не редактируются, истории 31 спеки #453).
  * Сохранение — частичный PATCH: команда — дифф формы (update-model),
@@ -95,8 +107,6 @@ import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
  * без удаления; «Удалить платеж» — только владелец. Архив финансово
  * read-only (#446).
  */
-
-type EditPicker = 'periodicity' | 'endDate';
 
 export function PaymentEditScreen({
   propertyId,
@@ -232,8 +242,16 @@ function PaymentEditForm({
   const [form, setForm] = useState<PaymentEditForm>(() => formFromPayment(payment));
   const [amountRaw, setAmountRaw] = useState<string>(() => initialAmountRaw(payment.amountKopecks));
 
-  const [picker, setPicker] = useState<EditPicker | null>(null);
+  const [endDateOpen, setEndDateOpen] = useState(false);
   const [openBranch, setOpenBranch] = useState<PeriodicityBranch | null>(null);
+  // Периодичность — отдельная страница на том же маршруте (как шаг 3
+  // визарда); правка живёт в черновике страницы и попадает в форму только
+  // по кнопке «Выбрать» — иначе незавершённый период («Каждую неделю в —»)
+  // оставался бы в форме при выходе назад.
+  const [periodicityOpen, setPeriodicityOpen] = useState(false);
+  const [periodicityDraft, setPeriodicityDraft] = useState<Recurrence | undefined>(
+    undefined,
+  );
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteOverdue, setDeleteOverdue] = useState(false);
@@ -321,10 +339,69 @@ function PaymentEditForm({
     }
   };
 
-  const closePeriodicity = (): void => {
-    setPicker(null);
+  const closePeriodicityPage = (): void => {
+    // Черновик отбрасывается: период меняется только кнопкой «Выбрать».
+    setPeriodicityOpen(false);
     setOpenBranch(null);
+    setPeriodicityDraft(undefined);
   };
+
+  const applyPeriodicity = (): void => {
+    if (periodicityDraft === undefined) {
+      return;
+    }
+    update('recurrence', periodicityDraft);
+    closePeriodicityPage();
+  };
+
+  const periodicityBack = (): void => {
+    if (openBranch !== null) {
+      setOpenBranch(null);
+      return;
+    }
+    closePeriodicityPage();
+  };
+
+  // Окончание платежа — страница с календарём (как шаг 4 визарда,
+  // Figma 843:8345): календарь открыт сразу, выбор дня применяется и
+  // возвращает на форму. Снятую дату UI не меняет — только раньше срока
+  // (ограничение прежнее, minDate = сегодня).
+  if (endDateOpen) {
+    return (
+      <>
+        <TopNav
+          leading={
+            <IconButton
+              icon={<ArrowLeft />}
+              label="Назад"
+              onClick={() => setEndDateOpen(false)}
+            />
+          }
+        >
+          <TopNavTitle title="Выбор даты" />
+        </TopNav>
+        <YearMonthCalendar
+          value={
+            form.endDate === undefined
+              ? undefined
+              : {
+                  year: Number(form.endDate.slice(0, 4)),
+                  month0: Number(form.endDate.slice(5, 7)) - 1,
+                  day: Number(form.endDate.slice(8)),
+                }
+          }
+          today={today}
+          minDate={today}
+          onPick={(picked) => {
+            const mm = String(picked.month0 + 1).padStart(2, '0');
+            const dd = String(picked.day).padStart(2, '0');
+            update('endDate', `${picked.year}-${mm}-${dd}`);
+            setEndDateOpen(false);
+          }}
+        />
+      </>
+    );
+  }
 
   const closeCategoryPage = (): void => {
     setCategoryOpen(false);
@@ -383,6 +460,50 @@ function PaymentEditForm({
           <StickyBottomBar>
             <Button className="w-full" onClick={closeCategoryPage}>
               Готово
+            </Button>
+          </StickyBottomBar>
+        )}
+      </>
+    );
+  }
+
+  // Страница периодичности — как шаг 3 визарда (Figma 1049:48174): в ветке
+  // хедер показывает название периода, «Назад» закрывает ветку; правка — в
+  // черновике, «Выбрать» применяется когда периодичность готова, ветка
+  // закрыта или совпадает с ней и значение изменилось.
+  if (periodicityOpen) {
+    const draftChanged =
+      periodicityDraft !== undefined
+      && !recurrencesEqual(periodicityDraft, form.recurrence);
+    return (
+      <>
+        <TopNav
+          leading={
+            <IconButton icon={<ArrowLeft />} label="Назад" onClick={periodicityBack} />
+          }
+        >
+          {openBranch !== null ? (
+            <TopNavTitle title={BRANCH_PERIOD_LABELS[openBranch]} />
+          ) : (
+            <TopNavTitle title="Выбор периодичности" />
+          )}
+        </TopNav>
+        <PeriodicityStep
+          recurrence={periodicityDraft}
+          openBranch={openBranch}
+          onOpenBranch={setOpenBranch}
+          onRecurrenceChange={setPeriodicityDraft}
+          onDailyPick={() => setPeriodicityDraft({ kind: 'daily' })}
+          today={today}
+          withHeading={false}
+        />
+        {periodicityDraft !== undefined
+          && periodicityReady(periodicityDraft)
+          && (openBranch === null || openBranch === branchKind(periodicityDraft))
+          && draftChanged && (
+          <StickyBottomBar>
+            <Button className="w-full" onClick={applyPeriodicity}>
+              Выбрать
             </Button>
           </StickyBottomBar>
         )}
@@ -470,14 +591,17 @@ function PaymentEditForm({
           title="Регулярность платежа"
           value={recurrenceLabel(form.recurrence)}
           icon={<Calendar className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => setPicker('periodicity')}
+          onClick={() => {
+            setPeriodicityDraft(form.recurrence);
+            setPeriodicityOpen(true);
+          }}
         />
 
         <FieldButton
           title="Окончание платежа"
           value={form.endDate !== undefined ? formatDayMonthWithYear(form.endDate, today) : 'Бессрочно'}
           icon={<Calendar className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => setPicker('endDate')}
+          onClick={() => setEndDateOpen(true)}
         />
 
         {canDelete && (
@@ -506,51 +630,6 @@ function PaymentEditForm({
           Сохранить изменения
         </Button>
       </StickyBottomBar>
-
-      <Modal
-        open={picker === 'periodicity'}
-        onOpenChange={(open) => !open && closePeriodicity()}
-      >
-        <ModalContent title={periodicitySheetTitle(openBranch)}>
-          <div className="-mx-6 -mb-6">
-            <PeriodicityStep
-              recurrence={form.recurrence}
-              openBranch={openBranch}
-              onOpenBranch={setOpenBranch}
-              onRecurrenceChange={(recurrence) => update('recurrence', recurrence)}
-              onDailyPick={() => closePeriodicity()}
-              today={today}
-              withHeading={false}
-            />
-          </div>
-          {periodicityReady(form.recurrence) && (
-            <div className="-mx-6 -mb-6 px-6 pb-6">
-              <Button className="w-full" onClick={closePeriodicity}>
-                Готово
-              </Button>
-            </div>
-          )}
-        </ModalContent>
-      </Modal>
-
-      <Modal
-        open={picker === 'endDate'}
-        onOpenChange={(open) => !open && setPicker(null)}
-      >
-        <ModalContent
-          title="Окончание платежа"
-          description="После выбранной даты, платеж перестанет оплачиваться и удалится. Необязательно"
-        >
-          <div className="-mx-6 -mb-6">
-            <EndDateStep
-              endDate={form.endDate}
-              onEndDateChange={(endDate) => update('endDate', endDate)}
-              today={today}
-              withHeading={false}
-            />
-          </div>
-        </ModalContent>
-      </Modal>
 
       {canDelete && (
         <Modal open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -594,18 +673,6 @@ function PaymentEditForm({
       )}
     </>
   );
-}
-
-function periodicitySheetTitle(openBranch: PeriodicityBranch | null): string {
-  switch (openBranch) {
-    case 'weekdays':
-    case 'monthDays':
-      return 'Выберите день';
-    case 'yearly':
-      return 'Выберите месяц и день';
-    case null:
-      return 'Периодичность платежа';
-  }
 }
 
 /** Поле-кнопка (Figma «Input Field» с иконкой): бокс 56px со значением и
