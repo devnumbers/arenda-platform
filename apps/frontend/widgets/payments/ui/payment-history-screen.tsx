@@ -2,6 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { ArrowLeft, ChangeHorizontal } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
@@ -19,19 +20,19 @@ import {
 import { Button, ChipButton, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { operationStatusLabel } from '../lib/operation-status-label';
 import {
-  PaymentsEmptyCard,
   PaymentsHeading,
   PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
 
 /**
- * Подэкран «История платежей» (#466, Figma 671:7776): только paid-вхождения,
+ * Подэкран «История операций» (#466, Figma 671:7776): только paid-вхождения,
  * группы «Сегодня» / «Вчера» / дата; чип «Новые» переключает сортировку
  * «сначала новые ↔ сначала старые» (серверная — порядок закреплён за API);
  * серверные порции по 50 с бесконечным скроллом. Суммы расходов — со
  * знаком минус (Figma). Группировка по дате вхождения: досрочно оплаченное
  * будущее вхождение остаётся в дате своего периода (учёт, не касса).
+ * Пустая история — иллюстрация и «Платежей еще не было» (Figma 858:21271).
  */
 export function PaymentHistoryScreen({
   propertyId,
@@ -106,11 +107,19 @@ export function PaymentHistoryScreen({
           {!historyQuery.isPending && !historyQuery.isError && (
             <>
               {groups.length === 0 ? (
-                <div className="mt-4">
-                  <PaymentsEmptyCard
-                    title="Платежей еще не было"
-                    hint="Отмеченные оплаты появятся здесь"
+                // Пустая история (Figma 858:21271): иллюстрация 128 и одна
+                // строка 16/18 — без карточки и подсказки.
+                <div className="flex flex-col items-center gap-4 pt-24">
+                  <Image
+                    src="/images/payments/history-empty.png"
+                    alt=""
+                    width={128}
+                    height={128}
+                    className="h-32 w-32"
                   />
+                  <p className="text-base leading-[18px] text-content">
+                    Платежей еще не было
+                  </p>
                 </div>
               ) : (
                 <>
