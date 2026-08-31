@@ -120,6 +120,63 @@ func listingFixture(t *testing.T, h *paymentsHarness, pay uuid.UUID) {
 	}
 }
 
+func TestGetOperation_ReturnsOneWithComputedView(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
+	overdueID := h.seedOperation(pay, "2026-08-12", opPlanned)
+	paidID := h.seedOperation(pay, "2026-08-05", opPaid)
+	futureID := h.seedOperation(pay, day27, opPlanned)
+
+	overdue, err := h.ops.GetOperation(h.ctx(), h.owner, h.propID, overdueID)
+	if err != nil {
+		t.Fatalf("get overdue operation: %v", err)
+	}
+	if overdue.Operation.Date.Format(time.DateOnly) != "2026-08-12" {
+		t.Fatalf("date = %s, want the 12th",
+			overdue.Operation.Date.Format(time.DateOnly))
+	}
+	if overdue.ViewStatus != domain.ViewStatusOverdue {
+		t.Fatalf("view status = %s, want overdue (past planned vs the Moscow today)",
+			overdue.ViewStatus)
+	}
+
+	closed, err := h.ops.GetOperation(h.ctx(), h.owner, h.propID, paidID)
+	if err != nil {
+		t.Fatalf("get paid operation: %v", err)
+	}
+	if closed.ViewStatus != domain.ViewStatusPaid {
+		t.Fatalf("view status = %s, want paid", closed.ViewStatus)
+	}
+
+	standing, err := h.ops.GetOperation(h.ctx(), h.owner, h.propID, futureID)
+	if err != nil {
+		t.Fatalf("get future operation: %v", err)
+	}
+	if standing.ViewStatus != domain.ViewStatusPlanned {
+		t.Fatalf("view status = %s, want planned", standing.ViewStatus)
+	}
+}
+
+func TestGetOperation_HidesForeignAndMissingRows(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
+	ownID := h.seedOperation(pay, "2026-08-12", opPlanned)
+	stranger := uuid.Must(uuid.NewV7())
+
+	if _, err := h.ops.GetOperation(h.ctx(), stranger, h.propID, ownID); err != nil {
+		wantAppError(t, err, paymentsapp.ErrNotFound)
+	} else {
+		t.Fatal("a stranger read a foreign operation")
+	}
+	if _, err := h.ops.GetOperation(h.ctx(), h.owner, h.propID, uuid.Must(uuid.NewV7())); err != nil {
+		wantAppError(t, err, paymentsapp.ErrNotFound)
+	} else {
+		t.Fatal("an unknown operation id resolved")
+	}
+}
+
 func TestPayOperation_PaysOnOwnersTodayAndConflicts(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
@@ -473,12 +530,16 @@ func TestOperationsRoleMatrix_ViewerReadsButDoesNotAct(t *testing.T) {
 	seeding := viewer.seedPayment(day25, `{"kind": "daily"}`, false)
 	viewer.runTick()
 
-	_, err := viewer.ops.PayOperation(viewer.ctx(), viewer.owner, viewer.propID,
-		oldestPlannedOperation(t, viewer, seeding))
+	opID := oldestPlannedOperation(t, viewer, seeding)
+	_, err := viewer.ops.PayOperation(viewer.ctx(), viewer.owner, viewer.propID, opID)
 	wantAppError(t, err, paymentsapp.ErrForbidden)
 
 	_, err = viewer.svc.SetPaymentFavorite(viewer.ctx(), viewer.owner, viewer.propID, seeding, true)
 	wantAppError(t, err, paymentsapp.ErrForbidden)
+
+	if _, err := viewer.ops.GetOperation(viewer.ctx(), viewer.owner, viewer.propID, opID); err != nil {
+		t.Fatalf("viewer operation read: %v", err)
+	}
 
 	lists, err := viewer.ops.ListPaymentOperations(
 		viewer.ctx(), viewer.owner, viewer.propID, seeding, viewer.listCmd(nil, 50, 0, false))
