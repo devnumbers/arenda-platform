@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import type { PaymentOperation } from '@/entities/payment';
 import {
-  isOperationPayable,
   operationDelayRow,
   operationHeroAmount,
   operationSubtitle,
@@ -64,23 +63,30 @@ describe('operationSubtitle', () => {
 });
 
 describe('operationDelayRow', () => {
+  it('просроченная — «Задержана на» от сегодняшнего дня', () => {
+    expect(operationDelayRow(operation({ status: 'overdue' }), '2026-11-13')).toEqual({
+      label: 'Задержана на',
+      text: '3 дня',
+    });
+  });
+
   it('оплачена позже срока — «Задержана на»', () => {
-    expect(operationDelayRow(operation({ status: 'paid', paidDate: '2026-11-13' }))).toEqual({
+    expect(operationDelayRow(operation({ status: 'paid', paidDate: '2026-11-13' }), '2026-11-13')).toEqual({
       label: 'Задержана на',
       text: '3 дня',
     });
   });
 
   it('оплачена раньше срока — «Заранее на»', () => {
-    expect(operationDelayRow(operation({ status: 'paid', paidDate: '2026-11-08' }))).toEqual({
+    expect(operationDelayRow(operation({ status: 'paid', paidDate: '2026-11-08' }), '2026-11-13')).toEqual({
       label: 'Заранее на',
       text: '2 дня',
     });
   });
 
   it('оплачена в срок и плановая — строки нет', () => {
-    expect(operationDelayRow(operation({ status: 'paid', paidDate: '2026-11-10' }))).toBeNull();
-    expect(operationDelayRow(operation())).toBeNull();
+    expect(operationDelayRow(operation({ status: 'paid', paidDate: '2026-11-10' }), '2026-11-13')).toBeNull();
+    expect(operationDelayRow(operation(), '2026-11-05')).toBeNull();
   });
 });
 
@@ -106,27 +112,5 @@ describe('operationHeroAmount', () => {
 
   it('просроченная — красная', () => {
     expect(operationHeroAmount(operation({ status: 'overdue' })).tone).toBe('danger');
-  });
-});
-
-describe('isOperationPayable', () => {
-  const overdueOlder = operation({ id: 'op-old', date: '2026-11-01', status: 'overdue' });
-  const overdueNewer = operation({ id: 'op-new', date: '2026-11-03', status: 'overdue' });
-  const plannedNext = operation({ id: 'op-next', date: '2026-12-10' });
-
-  it('платить можно только старейшую просрочку', () => {
-    expect(isOperationPayable(overdueOlder, [overdueOlder, overdueNewer], [])).toBe(true);
-    expect(isOperationPayable(overdueNewer, [overdueOlder, overdueNewer], [])).toBe(false);
-  });
-
-  it('без просрочек — ближайшую плановую', () => {
-    expect(isOperationPayable(plannedNext, [], [plannedNext])).toBe(true);
-  });
-
-  it('оплаченная и чужая операция не оплачиваются', () => {
-    const paid = operation({ id: 'op-paid', status: 'paid', paidDate: '2026-10-10' });
-    expect(isOperationPayable(paid, [], [paid])).toBe(false);
-    expect(isOperationPayable(operation({ id: 'op-x' }), [], [plannedNext])).toBe(false);
-    expect(isOperationPayable(plannedNext, [], [])).toBe(false);
   });
 });

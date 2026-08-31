@@ -128,7 +128,7 @@ test.describe('страница платежа', () => {
     await expect(page.getByText('На паузе', { exact: true }).first()).toBeVisible();
   });
 
-  test('«Оплатить» гасит старейшую просрочку; дальше можно оплатить досрочно', async ({
+  test('оплата уходит на страницу операции; отметка гасит просрочку, дальше — досрочно', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -136,15 +136,33 @@ test.describe('страница платежа', () => {
     await page.goto(PAYMENT_URLS.rent);
 
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
+
+    // Строка просрочки ведёт на страницу операции: статус «Просрочена» и
+    // кнопка «Отметить оплаченной» (макеты 1419:25859).
+    await page.getByRole('button', { name: /\d+ (день|дня|дней)/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await expect(page.getByText('Просрочена', { exact: true })).toBeVisible();
+
+    await page.goBack();
     await page.getByRole('button', { name: 'Оплатить' }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
 
-    await expect(page.getByText('Оплата отмечена')).toBeVisible();
+    // Экран успеха (1444:65733); «Посмотреть платеж» ведёт на страницу
+    // правила — долг закрыт, тик материализовал следующее вхождение и
+    // «Оплатить» снова активна (оплатить можно досрочно, история 24).
+    await expect(page.getByText('Платеж оплачен')).toBeVisible();
+    await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
-
-    // Тик материализует и будущее плановое вхождение: его «Оплатить» гасит
-    // досрочно с фактической датой (история 24), расписание не сдвигается.
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
+    // Назад по истории — операция в состоянии «Выполнена», кнопки нет.
+    await page.goBack();
+    await expect(page.getByText('Выполнена')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Отметить оплаченной' })).toHaveCount(0);
+
+    await page.goto(PAYMENT_URLS.rent);
     await captureScreen(page, testInfo, 'payment-detail-paid-out-mobile');
   });
 

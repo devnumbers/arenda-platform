@@ -477,12 +477,19 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: 'Создать платеж' }).click();
     await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toBeVisible();
 
-    // Оплачиваем единственное вхождение — правило завершено сразу же
-    // (серверный isCompleted), без ожидания календарного endDate+1.
+    // Оплачиваем единственное вхождение со страницы операции — правило
+    // завершено сразу же (серверный isCompleted), без ожидания
+    // календарного endDate+1.
     await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
     const pay = page.getByRole('button', { name: 'Оплатить' });
     await expect(pay).toBeEnabled();
     await pay.click();
+    await expect(page).toHaveURL(new RegExp(`/operations/[0-9a-f-]+$`));
+    await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
+    await expect(page.getByText('Платеж оплачен')).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
+    await expect(page.getByText('Выполнена')).toBeVisible();
+    await page.goBack();
     await expect(page.getByText('Платеж завершен')).toBeVisible();
 
     // И в графике — то же завершённое состояние вместо «ближайших» дат.

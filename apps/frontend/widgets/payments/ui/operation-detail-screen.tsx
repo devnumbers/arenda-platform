@@ -21,6 +21,7 @@ import {
 } from '@/features/payment-categories';
 import { useProperty } from '@/features/properties';
 import {
+  isOperationPayable,
   useOperation,
   usePayOperation,
   usePaymentOperationsByStatus,
@@ -37,7 +38,6 @@ import {
 } from '@/shared/ui/design';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import {
-  isOperationPayable,
   operationDelayRow,
   operationHeroAmount,
   operationSubtitle,
@@ -193,7 +193,7 @@ function OperationDetailBody({
   const today = clientTodayIso();
   const subtitle = operationSubtitle(operation, today);
   const amount = operationHeroAmount(operation);
-  const delay = operationDelayRow(operation);
+  const delay = operationDelayRow(operation, today);
   const category = categoryStyle('default', operation.categorySlug);
   const amountTone =
     amount.tone === 'success'

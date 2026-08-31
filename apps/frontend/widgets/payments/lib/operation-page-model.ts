@@ -1,16 +1,14 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatOverdueDays } from '@/entities/payment';
-import { oldestUnpaidOperation } from '@/features/payments';
 import { daysOverdue } from './overdue-days';
 
 /**
  * Чистая модель страницы операции (Figma 1386:67731 / 1419:25859 /
  * 1419:25645 / 1444:66228): подпись под суммой, строка задержки, знаковая
- * сумма hero-блока и правило «которую операцию можно оплатить» — та же
- * логика, что у цели кнопки «Оплатить» страницы платежа
- * (oldestUnpaidOperation, история 25 спеки #453). Даты — date-строки,
- * «сегодня» приходит параметром (ADR 0048).
+ * сумма hero-блока. Правило «которую операцию можно оплатить» живёт
+ * в features/payments (isOperationPayable, рядом с oldestUnpaidOperation).
+ * Даты — date-строки, «сегодня» приходит параметром (ADR 0048).
  */
 
 /** Тон подписи под суммой: синий планового срока, красный просрочки. */
@@ -48,11 +46,16 @@ function signedDaysBetween(from: IsoDate, to: IsoDate): number {
   return Math.round(diff / 86_400_000);
 }
 
-/** Строка «Подробнее» про отклонение от срока у оплаченной операции:
- * позже срока — «Задержана на», раньше — «Заранее на», в срок — строки нет. */
+/** Строка «Подробнее» про отклонение от срока (1419:25859 / 1419:25645):
+ * просроченная и оплаченная позже срока — «Задержана на», оплаченная раньше —
+ * «Заранее на», оплаченная в срок и плановая — строки нет. */
 export function operationDelayRow(
   operation: PaymentOperation,
+  today: IsoDate,
 ): { readonly label: string; readonly text: string } | null {
+  if (operation.status === 'overdue') {
+    return { label: 'Задержана на', text: formatOverdueDays(daysOverdue(operation.date, today)) };
+  }
   if (operation.status !== 'paid' || operation.paidDate === undefined) {
     return null;
   }
@@ -87,21 +90,4 @@ export function operationHeroAmount(operation: PaymentOperation): OperationHeroA
       : { text: money, tone: 'default' };
   }
   return { text: `−${money}`, tone: 'default' };
-}
-
-/** «Отметить оплаченной» стоит только у той операции, которую гасит кнопка
- * «Оплатить» страницы платежа: старейшая просрочка, без просрочек —
- * ближайшая плановая (та же oldestUnpaidOperation — решение владельца
- * «как сейчас логика устроена»). Пока списки не готовы, вызывающий кнопку
- * не показывает. */
-export function isOperationPayable(
-  operation: PaymentOperation,
-  overdue: ReadonlyArray<PaymentOperation>,
-  planned: ReadonlyArray<PaymentOperation>,
-): boolean {
-  if (operation.status === 'paid') {
-    return false;
-  }
-  const payable = oldestUnpaidOperation(overdue, planned);
-  return payable !== null && payable.id === operation.id;
 }

@@ -27,6 +27,7 @@ export {
 } from './lib/wizard-model';
 export { successScreenCopy, type SuccessScreenCopyInput } from './lib/success-copy';
 export {
+  isOperationPayable,
   isPaymentCompleted,
   nearestOccurrence,
   oldestUnpaidOperation,

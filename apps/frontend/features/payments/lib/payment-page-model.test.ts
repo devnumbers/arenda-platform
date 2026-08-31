@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Payment, PaymentOperation } from '@/entities/payment';
 import {
+  isOperationPayable,
   isPaymentCompleted,
   nearestOccurrence,
   oldestUnpaidOperation,
@@ -115,5 +116,41 @@ describe('nearestOccurrence', () => {
   it('исчерпанное правило (endDate позади) — undefined', () => {
     const finished = { ...dailySinceToday, endDate: '2026-08-20' };
     expect(nearestOccurrence(finished, [], '2026-08-28')).toBeUndefined();
+  });
+});
+
+describe('isOperationPayable', () => {
+  const base = {
+    propertyId: 'prop-1',
+    paymentId: 'pay-1',
+    type: 'income',
+    title: 'Арендная плата',
+    amountKopecks: 5_600_000,
+    categoryLabel: 'Арендная плата',
+  } as const;
+  const overdueOlder: PaymentOperation = {
+    ...base, id: 'op-old', date: '2026-11-01', status: 'overdue', categorySlug: 'rent',
+  };
+  const overdueNewer: PaymentOperation = {
+    ...base, id: 'op-new', date: '2026-11-03', status: 'overdue', categorySlug: 'rent',
+  };
+  const plannedNext: PaymentOperation = {
+    ...base, id: 'op-next', date: '2026-12-10', status: 'planned', categorySlug: 'rent',
+  };
+
+  it('платить можно только старейшую просрочку', () => {
+    expect(isOperationPayable(overdueOlder, [overdueOlder, overdueNewer], [])).toBe(true);
+    expect(isOperationPayable(overdueNewer, [overdueOlder, overdueNewer], [])).toBe(false);
+  });
+
+  it('без просрочек — ближайшую плановую; оплаченная и чужая — нет', () => {
+    const paid: PaymentOperation = {
+      ...base, id: 'op-paid', date: '2026-10-10', status: 'paid', paidDate: '2026-10-10',
+      categorySlug: 'rent',
+    };
+    expect(isOperationPayable(plannedNext, [], [plannedNext])).toBe(true);
+    expect(isOperationPayable(paid, [], [plannedNext])).toBe(false);
+    expect(isOperationPayable({ ...plannedNext, id: 'op-x' }, [], [plannedNext])).toBe(false);
+    expect(isOperationPayable(plannedNext, [], [])).toBe(false);
   });
 });

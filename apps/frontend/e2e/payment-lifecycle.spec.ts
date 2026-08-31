@@ -83,11 +83,12 @@ async function createMonthlyPaymentToday(
   await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
   await page.getByRole('button', { name: 'Далее' }).click();
 
-  // Шаг 5 — сумма, направление и форма оплаты.
+  // Шаг 5 — сумма, направление и форма оплаты (чипы-переключатели
+  // 464ca960: клик меняет значение на второе).
   await expect(page.getByRole('button', { name: 'Создать платеж' })).toBeDisabled();
   await page.getByRole('textbox', { name: 'Сумма' }).fill('1990');
-  await page.getByRole('button', { name: 'Расход' }).click();
-  await page.getByRole('button', { name: 'Наличные' }).click();
+  await page.getByRole('button', { name: /Тип платежа: Доход/ }).click();
+  await page.getByRole('button', { name: /Форма оплаты: Перевод/ }).click();
   await page.getByRole('button', { name: 'Создать платеж' }).click();
 
   // Экран успеха с первым вхождением из серверного ответа; закрытие — на список.
@@ -171,11 +172,17 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText('Следующие').first()).toBeVisible();
     await expect(page.getByText(title1).first()).toBeVisible();
 
-    // ── «Оплатить»: гасит старейшее неоплаченное; тик тут же материализует
-    // следующее вхождение — кнопка остаётся активной ──
+    // ── «Оплатить» ведёт на страницу операции; «Отметить оплаченной» гасит
+    // старейшее неоплаченное; тик тут же материализует следующее вхождение —
+    // на странице платежа кнопка остаётся активной ──
     await page.goto(paymentUrl);
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page.getByText('Оплата отмечена')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
+    await expect(page.getByText('Платеж оплачен')).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
+    await expect(page.getByText('Выполнена')).toBeVisible();
+    await page.goto(paymentUrl);
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
     // ── История: запись «Сегодня» с минусом у расхода ──
@@ -213,7 +220,12 @@ test.describe('сквозная жизнь платежа', () => {
 
     await page.goto(paymentUrl);
     await page.getByRole('button', { name: 'Оплатить' }).click();
-    await expect(page.getByText('Оплата отмечена')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
+    await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
+    await expect(page.getByText('Платеж оплачен')).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
+    await expect(page.getByText('Выполнена')).toBeVisible();
+    await page.goto(paymentUrl);
     await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
 
     // ── Правка: сумма меняется, прошлое не тронуто ──
