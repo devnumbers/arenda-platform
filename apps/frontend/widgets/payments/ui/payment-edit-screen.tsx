@@ -1,8 +1,17 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Calendar, Cancel, ChangeHorizontal, Check, Filter, Trash } from '@/shared/assets/icons';
+import {
+  ArrowLeft,
+  Calendar,
+  Cancel,
+  ChangeHorizontal,
+  Check,
+  Filter,
+  Search,
+  Trash,
+} from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import {
   kopecksToRublesString,
@@ -43,6 +52,7 @@ import {
   ModalContent,
   PageContent,
   sanitizeAmountInput,
+  SearchField,
   StickyBottomBar,
   syncAmountInputDom,
   TextField,
@@ -57,16 +67,23 @@ import {
 import { CategoryStep } from './payment-create-wizard/category-step';
 import { EndDateStep } from './payment-create-wizard/end-date-step';
 import { PeriodicityStep } from './payment-create-wizard/periodicity-step';
+import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
 
 /**
  * Экран правки платежа (Figma 705:10034; ранее 1127:33146, #467): форма,
  * не визард — все поля на одной странице, значения предзаполнены правилом.
+ * В хедере — только «Редактирование» (решение владельца 2026-08-31).
  * Тип («Доход или расход») и «Способ оплаты» — строки-поля, значение
  * меняется простым нажатием по строке, без пикеров. Лейбл «Способ оплаты» —
  * по макету (решение владельца 2026-08-31), хотя глоссарий (CONTEXT-MAP)
  * считает его термином биллинга и предписывает платежам «Форму оплаты».
- * Регулярность — без «Один раз» (решение #449) с ветками дат; `since` и
- * напоминания отсутствуют (не редактируются, истории 31 спеки #453).
+ * Категория — отдельная страница на том же маршруте, как шаг 1 визарда
+ * (Figma 781:12299, без карандаша: свои категории — следующий срез);
+ * заголовок хедера — «Выбор категории», заголовок страницы без подписи
+ * (решение владельца 2026-08-31); уход со страницы не теряет
+ * несохранённые правки формы. Регулярность —
+ * без «Один раз» (решение #449) с ветками дат; `since` и напоминания
+ * отсутствуют (не редактируются, истории 31 спеки #453).
  * Сохранение — частичный PATCH: команда — дифф формы (update-model),
  * пересоздание планового вхождения делает сервер — правка меняет только
  * будущее. Внизу — danger-кнопка «Удалить платеж» с модалкой выбора судьбы
@@ -79,7 +96,7 @@ import { PeriodicityStep } from './payment-create-wizard/periodicity-step';
  * read-only (#446).
  */
 
-type EditPicker = 'category' | 'periodicity' | 'endDate';
+type EditPicker = 'periodicity' | 'endDate';
 
 export function PaymentEditScreen({
   propertyId,
@@ -221,6 +238,36 @@ function PaymentEditForm({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteOverdue, setDeleteOverdue] = useState(false);
 
+  // Выбор категории — отдельная страница на том же маршруте (как шаг 1
+  // визарда): уход со страницы не теряет несохранённые правки формы.
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categorySearchOpen, setCategorySearchOpen] = useState(false);
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Открытие поиска сразу делает поле активным (программный фокус —
+  // устоявшийся a11y-паттерн вместо autoFocus).
+  useEffect(() => {
+    if (categorySearchOpen) {
+      searchInputRef.current?.focus();
+    }
+  }, [categorySearchOpen]);
+
+  // Клик вне хедера при пустом запросе закрывает поиск (Figma 1049:46256);
+  // с непустым поиск остаётся открытым.
+  useEffect(() => {
+    if (!categorySearchOpen || categoryQuery !== '') {
+      return undefined;
+    }
+    const handleOutside = (event: MouseEvent): void => {
+      if (!(event.target instanceof Element) || !event.target.closest('header')) {
+        setCategorySearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [categorySearchOpen, categoryQuery]);
+
   // Чекбокс модалки удаления виден ровно при наличии просрочек (история 35) —
   // список тянут только те, кому удаление доступно.
   const overdueQuery = usePaymentOperationsByStatus(propertyId, payment.id, 'overdue', {
@@ -236,6 +283,11 @@ function PaymentEditForm({
     form.categorySlug !== undefined
       ? resolveTitle(form.categorySlug) ?? form.categorySlug
       : payment.category.label;
+
+  // Выбор на странице категории: явный выбор формы или текущая категория.
+  const selectedSlug = form.categorySlug ?? payment.category.slug;
+  const categoryChanged =
+    form.categorySlug !== undefined && form.categorySlug !== payment.category.slug;
 
   const command = buildPaymentUpdateCommand(payment, form, { resolveTitle });
   const ready = editFormReady(form, payment.category.slug, resolveTitle);
@@ -274,9 +326,73 @@ function PaymentEditForm({
     setOpenBranch(null);
   };
 
+  const closeCategoryPage = (): void => {
+    setCategoryOpen(false);
+    setCategorySearchOpen(false);
+    setCategoryQuery('');
+  };
+
+  // Страница выбора категории (Figma 781:12299): радио на строке — состояние
+  // формы, «Готово» появляется после смены и возвращает на форму; «Назад»
+  // тоже возвращает — выбор уже в форме, его видно и можно не сохранять.
+  if (categoryOpen) {
+    return (
+      <>
+        <TopNav
+          leading={
+            <IconButton icon={<ArrowLeft />} label="Назад" onClick={closeCategoryPage} />
+          }
+          trailing={
+            categorySearchOpen ? undefined : (
+              <IconButton
+                icon={<Search />}
+                label="Поиск по категориям"
+                onClick={() => setCategorySearchOpen(true)}
+              />
+            )
+          }
+        >
+          {categorySearchOpen ? (
+            <SearchField
+              ref={searchInputRef}
+              value={categoryQuery}
+              onChange={(event) => setCategoryQuery(event.target.value)}
+              onClear={() => {
+                setCategoryQuery('');
+                setCategorySearchOpen(false);
+              }}
+              placeholder="Найти категорию"
+              aria-label="Поиск по названиям категорий"
+            />
+          ) : (
+            <TopNavTitle title="Выбор категории" />
+          )}
+        </TopNav>
+        {/* КатегорияStep и подсказка поиска приносят свои отступы (шаг визарда
+         * рассчитан на полноширинный контент) — обёртке паддинг не нужен. */}
+        {categorySearchOpen && categoryQuery === '' ? (
+          <CategorySearchHint text="Начните искать категорию" />
+        ) : (
+          <CategoryStep
+            selectedSlug={selectedSlug}
+            onSelect={(slug) => update('categorySlug', slug)}
+            query={categorySearchOpen ? categoryQuery : ''}
+          />
+        )}
+        {categoryChanged && (
+          <StickyBottomBar>
+            <Button className="w-full" onClick={closeCategoryPage}>
+              Готово
+            </Button>
+          </StickyBottomBar>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
-      {/* Шапка экрана правки (Figma 705:10034): Отмена | тип + «Редактирование»
+      {/* Шапка экрана правки (Figma 705:10034): Отмена | «Редактирование»
        * | Check — быстрая клавиша сохранения наравне со sticky-кнопкой. */}
       <TopNav
         leading={
@@ -295,10 +411,7 @@ function PaymentEditForm({
           />
         }
       >
-        <TopNavTitle
-          title={payment.autoPay ? 'Автоплатёж' : 'Платеж'}
-          subtitle="Редактирование"
-        />
+        <TopNavTitle title="Редактирование" />
       </TopNav>
       {/* Горизонтальный отступ макета (705:10034, 24px) контент приносит сам —
        * PageContent его не вкладывает, как и на экране карточки платежа. */}
@@ -334,7 +447,7 @@ function PaymentEditForm({
           title="Категория"
           value={categoryLabel}
           icon={<Filter className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => setPicker('category')}
+          onClick={() => setCategoryOpen(true)}
         />
 
         <FieldButton
@@ -393,21 +506,6 @@ function PaymentEditForm({
           Сохранить изменения
         </Button>
       </StickyBottomBar>
-
-      <Modal
-        open={picker === 'category'}
-        onOpenChange={(open) => !open && setPicker(null)}
-      >
-        <ModalContent title="Категория платежа">
-          <CategoryStep
-            selectedSlug={form.categorySlug ?? payment.category.slug}
-            onSelect={(slug) => {
-              update('categorySlug', slug);
-              setPicker(null);
-            }}
-          />
-        </ModalContent>
-      </Modal>
 
       <Modal
         open={picker === 'periodicity'}

@@ -46,8 +46,7 @@ test.describe('экран правки платежа', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(URLS.insuranceEdit);
 
-    // Шапка: тип правила и подзаголовок «Редактирование», отмена и сохранение.
-    await expect(page.getByText('Платеж', { exact: true })).toBeVisible();
+    // Шапка: только «Редактирование», отмена и сохранение.
     await expect(page.getByText('Редактирование')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Отменить правку' })).toBeVisible();
     // exact: «Сохранить» — клавиша Check в шапке, не sticky «Сохранить изменения».
@@ -132,6 +131,33 @@ test.describe('экран правки платежа', () => {
     await page.reload();
     await expect(page.getByRole('button', { name: 'Способ оплаты' })).toHaveText(/Наличные/);
     await expect(page.getByRole('button', { name: 'Доход или расход' })).toHaveText(/Расход/);
+  });
+
+  test('выбор категории — отдельная страница, как в визарде', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(URLS.insuranceEdit);
+
+    await page.getByRole('button', { name: 'Категория' }).click();
+    await expect(page.getByText('Выбор категории')).toBeVisible();
+    // «Готово» появляется только после смены категории.
+    await expect(page.getByRole('button', { name: 'Готово' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Интернет', exact: true }).click();
+    await page.getByRole('button', { name: 'Готово' }).click();
+
+    // Форма показывает выбранное и готова к сохранению; правка не сохранена.
+    await expect(page.getByRole('button', { name: 'Категория' })).toHaveText(/Интернет/);
+    await expect(page.getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Категория' })).toHaveText(/Страхование/);
+
+    // Поиск со страницы категории (лупа в хедере) фильтрует список.
+    await page.getByRole('button', { name: 'Категория' }).click();
+    await page.getByRole('button', { name: 'Поиск по категориям' }).click();
+    await page.getByRole('searchbox', { name: 'Поиск по названиям категорий' }).fill('страх');
+    await expect(page.getByRole('button', { name: 'Страхование', exact: true })).toBeVisible();
   });
 
   test('отмена крестом возвращает на страницу платежа без изменений', async ({
