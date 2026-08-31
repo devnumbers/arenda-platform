@@ -83,11 +83,13 @@ async function createMonthlyPaymentToday(
   await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
   await page.getByRole('button', { name: 'Далее' }).click();
 
-  // Шаг 5 — сумма, направление и форма оплаты.
+  // Шаг 5 — сумма, направление и форма оплаты. Чипы-переключатели (Figma
+  // 834:19662) показывают текущее значение — по умолчанию «Доход» и
+  // «Перевод»; клик по чипу ставит альтернативное.
   await expect(page.getByRole('button', { name: 'Создать платеж' })).toBeDisabled();
   await page.getByRole('textbox', { name: 'Сумма' }).fill('1990');
-  await page.getByRole('button', { name: 'Расход' }).click();
-  await page.getByRole('button', { name: 'Наличные' }).click();
+  await page.getByRole('button', { name: 'Тип платежа' }).click(); // Доход → Расход
+  await page.getByRole('button', { name: 'Форма оплаты' }).click(); // Перевод → Наличные
   await page.getByRole('button', { name: 'Создать платеж' }).click();
 
   // Экран успеха с первым вхождением из серверного ответа; закрытие — на список.
@@ -236,10 +238,14 @@ test.describe('сквозная жизнь платежа', () => {
     // сносится, долг остаётся ──
     // Глубина 3 дня: «−7» у этого правила занята уже оплаченной просрочкой.
     expect(await execE2eSql(induceOverdue(id1, 3))).toBe('UPDATE 1');
-    // В секции «Просроченные операции» списка появилась строка правила.
+    // Секция «Просроченные операции» списка несёт лимит 3 строки от старых
+    // к новым — сидовые долги старше и вытесняют свежую просрочку правила;
+    // строку правила ищем в полном списке просроченных.
     await page.goto(PAYMENTS_URL);
-    await expect(page.getByText(title1).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
+    await page.getByRole('button', { name: 'Открыть просроченные операции' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/overdue$`));
+    await expect(page.getByText(title1).first()).toBeVisible();
 
     await page.goto(`${paymentUrl}/edit`);
     await page.getByRole('button', { name: 'Удалить платеж' }).click();
@@ -251,8 +257,11 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText('Платеж удален')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
 
-    await expect(page.getByText(title1)).toHaveCount(1);
-    await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
+    // Правило снесено: на списке строки нет (остаток долга — за лимитом
+    // секции), в полном списке просроченных операция долга на месте.
+    await expect(page.getByText(title1)).toHaveCount(0);
+    await page.goto(`${PAYMENTS_URL}/overdue`);
+    await expect(page.getByText(title1).first()).toBeVisible();
 
     // ── Удаление С «удалить просроченные»: сносится всё ──
     const id2 = await createMonthlyPaymentToday(page, seededUser, title2, day);
