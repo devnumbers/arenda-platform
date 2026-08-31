@@ -16,7 +16,7 @@ describe('successScreenCopy', () => {
   it('автоплатёж — формулировка пополнения из фрейма успеха', () => {
     const copy = successScreenCopy({
       draftType: 'autopayment',
-      title: 'Аренда мебели',
+      typedTitle: 'Аренда мебели',
       amountKopecks: 250000,
       recurrence: { kind: 'monthly', daysOfMonth: [10], lastDay: false },
       firstOccurrence: '2026-09-10',
@@ -30,7 +30,7 @@ describe('successScreenCopy', () => {
   it('обычный платёж — формулировка первого платежа', () => {
     const copy = successScreenCopy({
       draftType: 'payment',
-      title: 'Коммунальные услуги',
+      typedTitle: 'Коммунальные услуги',
       amountKopecks: 480000,
       recurrence: { kind: 'weekly', weekdays: [1] },
       firstOccurrence: '2026-08-31',
@@ -45,7 +45,7 @@ describe('successScreenCopy', () => {
     expect(
       successScreenCopy({
         draftType: 'payment',
-        title: 'Т',
+        typedTitle: 'Т',
         amountKopecks: 100000,
         recurrence: { kind: 'weekly', weekdays: [0, 3] },
         firstOccurrence: '2026-09-03',
@@ -54,7 +54,7 @@ describe('successScreenCopy', () => {
     expect(
       successScreenCopy({
         draftType: 'payment',
-        title: 'Т',
+        typedTitle: 'Т',
         amountKopecks: 100000,
         recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: true },
         firstOccurrence: '2026-08-31',
@@ -62,15 +62,32 @@ describe('successScreenCopy', () => {
     ).toBe(`Первый платеж 31 августа на ${RUB('1 000')}, далее последний день каждого месяца`);
   });
 
-  it('первое вхождение не определено (окончание раньше заведения) — текст без даты', () => {
+  it('название не введено — заголовок одной строкой без «названия»', () => {
     const copy = successScreenCopy({
       draftType: 'payment',
-      title: 'Страховка',
+      amountKopecks: 480000,
+      recurrence: { kind: 'weekly', weekdays: [1] },
+      firstOccurrence: '2026-08-31',
+    });
+    expect(copy.heading).toBe('Вы создали платеж');
+    const auto = successScreenCopy({
+      draftType: 'autopayment',
+      amountKopecks: 480000,
+      recurrence: { kind: 'weekly', weekdays: [1] },
+      firstOccurrence: '2026-08-31',
+    });
+    expect(auto.heading).toBe('Вы создали автоплатеж');
+  });
+
+  it('первое вхождение не определено (окончание раньше заведения) — описания нет', () => {
+    const copy = successScreenCopy({
+      draftType: 'payment',
+      typedTitle: 'Страховка',
       amountKopecks: 99000,
       recurrence: { kind: 'daily' },
       firstOccurrence: null,
     });
     expect(copy.heading).toBe('Вы создали платеж\n«Страховка»');
-    expect(copy.description).toBe('Платеж сохранен; первое вхождение появится после начала его действия');
+    expect(copy.description).toBeUndefined();
   });
 });

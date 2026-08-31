@@ -160,7 +160,8 @@ test.describe('визард создания платежа', () => {
       `«${title}»`,
     );
     await expect(page.getByText(/Первый платеж .* на 2\u00A0500 ₽, далее каждый месяц 10 и 15 числа/)).toBeVisible();
-    await expect(page.getByText('Посмотреть платеж')).toHaveCount(0);
+    // Кнопка из фрейма 835:19893 — ведёт на страницу платежа.
+    await expect(page.getByRole('button', { name: 'Посмотреть платеж' })).toBeVisible();
     await captureScreen(page, testInfo, 'wizard-success-mobile');
 
     // Контракт: платёж появился в API с серверным since и регулярностью.
@@ -429,6 +430,29 @@ test.describe('визард создания платежа', () => {
     const items = await fetchPayments(page);
     const created = items.find((payment) => payment.title === 'E2E ввод суммы без автокопеек');
     expect(created?.amountKopecks).toBe(123450);
+  });
+
+  test('успех без названия: заголовок без «названия», «Посмотреть платеж» ведёт на страницу', async ({
+    page,
+    seededUser,
+  }) => {
+    await openWizard(page, seededUser);
+    // Название не вводим — заголовок успеха остаётся без «названия».
+    await selectCategory(page);
+    await passTitleStep(page);
+
+    await page.getByRole('button', { name: 'Каждую неделю' }).click();
+    await page.getByRole('button', { name: 'Понедельник', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('900');
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Вы создали платеж' })).toBeVisible();
+    await expect(page.getByText(/Первый платеж .* на 900 ₽/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[^/]+$`));
   });
 
   test('черновик переживает перезагрузку: поля шага суммы восстановлены', async ({

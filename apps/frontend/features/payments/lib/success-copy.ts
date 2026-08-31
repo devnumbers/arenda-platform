@@ -8,15 +8,19 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import type { PaymentDraftType } from './use-payment-wizard-draft';
 
 /**
- * Тексты экрана успеха визарда (#464, Figma 835:19893). Заголовок — «Вы
- * создали платеж/автоплатеж «Название»» (копирайт-правки #449 применены);
- * описание показывает дату первого вхождения (превью клиентским портом)
- * и продолжение расписания канонической меткой периодичности.
+ * Тексты экрана успеха визарда (Figma 835:19893). Заголовок — «Вы создали
+ * платеж/автоплатеж «Название»»; название показывается, только если
+ * пользователь его ввёл (правка владельца 2026-08-31: подставленный лейбл
+ * категории на экране не пишется — платёж при этом сохраняется с ним же).
+ * Описание показывает дату первого вхождения (превью клиентским портом)
+ * и продолжение расписания канонической меткой периодичности; при не
+ * определённом вхождении абзаца нет вовсе.
  */
 
 export type SuccessScreenCopyInput = {
   readonly draftType: PaymentDraftType;
-  readonly title: string;
+  /** Название, введённое пользователем; undefined — поле оставили пустым. */
+  readonly typedTitle?: string;
   readonly amountKopecks: number;
   readonly recurrence: Recurrence;
   /** null — вхождений не будет (окончание раньше даты заведения). */
@@ -25,7 +29,8 @@ export type SuccessScreenCopyInput = {
 
 export type SuccessScreenCopy = {
   readonly heading: string;
-  readonly description: string;
+  /** undefined — абзац описания не рисуется. */
+  readonly description?: string;
 };
 
 /** «Каждый…» после «далее» читается со строчной. */
@@ -39,10 +44,13 @@ export function successScreenCopy(input: SuccessScreenCopyInput): SuccessScreenC
   const tail = lowerFirst(recurrenceLabel(input.recurrence));
 
   return {
-    heading: `Вы создали ${entity}\n«${input.title}»`,
+    heading:
+      input.typedTitle === undefined
+        ? `Вы создали ${entity}`
+        : `Вы создали ${entity}\n«${input.typedTitle}»`,
     description:
       input.firstOccurrence === null
-        ? `Платеж сохранен; первое вхождение появится после начала его действия`
+        ? undefined
         : `${lead} ${formatDayMonth(input.firstOccurrence)} на ${formatMoneyKopecks(
             input.amountKopecks,
           )}, далее ${tail}`,

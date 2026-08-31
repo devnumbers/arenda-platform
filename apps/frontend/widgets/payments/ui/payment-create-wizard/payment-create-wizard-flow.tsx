@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Search } from '@/shared/assets/icons';
+import { ArrowLeft, Cancel, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
@@ -68,7 +68,13 @@ export function PaymentCreateWizardFlow({
   const router = useRouter();
   const createPayment = useCreatePayment(propertyId);
   const { draft, setDraft, clearDraft } = usePaymentWizardDraft(propertyId, draftType);
-  const [created, setCreated] = useState<Payment | null>(null);
+  // Успех держит и факт «название введено»: экран показывает подставленный
+  // лейбл категории только когда пользователь сам набрал название
+  // (правка владельца 2026-08-31).
+  const [created, setCreated] = useState<{
+    payment: Payment;
+    hasTypedTitle: boolean;
+  } | null>(null);
   const [step, setStep] = useState<WizardStep>(() => initialStep(draft));
   const [openBranch, setOpenBranch] = useState<PeriodicityBranch | null>(null);
   // Поиск категорий живёт в хедере шага 1 (Figma 781:12299): лупа меняет
@@ -105,10 +111,20 @@ export function PaymentCreateWizardFlow({
   if (created !== null) {
     return (
       <>
-        <TopNav />
+        <TopNav
+          leading={
+            <IconButton icon={<Cancel />} label="Закрыть" onClick={closeAfterCreation} />
+          }
+        />
         <PageContent>
           <div className="pt-16">
-            <WizardSuccess created={created} draftType={draftType} onClose={closeAfterCreation} />
+            <WizardSuccess
+              propertyId={propertyId}
+              created={created.payment}
+              hasTypedTitle={created.hasTypedTitle}
+              draftType={draftType}
+              onClose={closeAfterCreation}
+            />
           </div>
         </PageContent>
       </>
@@ -310,6 +326,9 @@ export function PaymentCreateWizardFlow({
 
 
   async function submit(): Promise<void> {
+    // Факт «название введено» — из черновика на момент сабмита: в ответе API
+    // название уже всегда заполнено (пустое поле замещает лейбл категории).
+    const hasTypedTitle = draft.title !== undefined && draft.title.trim().length > 0;
     const command = buildPaymentCreateCommand(draft, {
       autoPay: draftType === 'autopayment',
       resolveTitle: (slug) => paymentCategoryBySlug(slug)?.label,
@@ -321,7 +340,7 @@ export function PaymentCreateWizardFlow({
       const payment = await createPayment.mutateAsync(command);
       clearDraft();
       notify.scenarios.payments.created();
-      setCreated(payment);
+      setCreated({ payment, hasTypedTitle });
     } catch (error) {
       notify.scenarios.payments.createError(error);
     }
