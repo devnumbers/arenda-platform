@@ -109,6 +109,7 @@ export function PaymentOverdueScreen({
                         today={today}
                         variant="white"
                         className="py-3"
+                        onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
                       />
                     ))}
                   </section>

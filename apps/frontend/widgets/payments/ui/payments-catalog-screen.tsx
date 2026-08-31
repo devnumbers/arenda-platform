@@ -123,9 +123,8 @@ export function PaymentsCatalogScreen({
 }
 
 /** Полный список просроченных операций объекта: asc — долг разбирают по
- * порядку накопления, порции по 50 с бесконечным скроллом; строка ведёт на
- * долг разбирают по порядку накопления. Строка операции никуда не ведёт —
- * у операций будет своя страница. */
+ * порядку накопления, порции по 50 с бесконечным скроллом; строка ведёт
+ * на страницу операции. */
 function OverdueList({
   propertyId,
   meta,
@@ -133,6 +132,7 @@ function OverdueList({
   readonly propertyId: string;
   readonly meta: { emptyTitle: string; emptyHint: string };
 }): JSX.Element {
+  const router = useRouter();
   const overdueQuery = usePropertyOperationsPaged(propertyId, {
     status: 'overdue',
     order: 'asc',
@@ -183,6 +183,7 @@ function OverdueList({
             today={today}
             variant="white"
             className="py-3"
+            onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
           />
         ))}
       </section>

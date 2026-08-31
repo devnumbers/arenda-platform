@@ -26,6 +26,9 @@ export const ROUTES = {
     `/properties/${id}/payments/${paymentId}/history`,
   propertyPaymentOverdue: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}/overdue`,
+  /** Страница операции: вхождение правила; «Отметить оплаченной» — отсюда. */
+  propertyOperation: (id: string, operationId: string) =>
+    `/properties/${id}/operations/${operationId}`,
   /** Экран правки платежа (#467): форма поверх правила, удаление — там же. */
   propertyPaymentEdit: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}/edit`,

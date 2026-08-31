@@ -1,0 +1,400 @@
+'use client';
+
+import { useState, type JSX, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Cancel, Home } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
+import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { goBack } from '@/shared/lib/navigation';
+import { notify } from '@/shared/lib/notifications';
+import {
+  clientTodayIso,
+  formatDayMonth,
+  formatDayMonthWithYear,
+  type IsoDate,
+  type PaymentOperation,
+} from '@/entities/payment';
+import {
+  categoryIconComponents,
+  categoryStyle,
+  CategoryIcon,
+} from '@/features/payment-categories';
+import { useProperty } from '@/features/properties';
+import {
+  useOperation,
+  usePayOperation,
+  usePaymentOperationsByStatus,
+} from '@/features/payments';
+import {
+  Button,
+  IconButton,
+  ListRow,
+  PageContent,
+  StatusIcon,
+  StickyBottomBar,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
+import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import {
+  isOperationPayable,
+  operationDelayRow,
+  operationHeroAmount,
+  operationSubtitle,
+} from '../lib/operation-page-model';
+
+/**
+ * Страница операции (Figma 1386:67731 / 1419:25859 / 1419:25645 /
+ * 1444:66228): hero с иконкой категории, суммой и подписью срока, секции
+ * «Данные операции» и «Подробнее», внизу — «Отметить оплаченной» только у
+ * той операции, которую гасит «Оплатить» страницы платежа (та же
+ * oldestUnpaidOperation — решение владельца). Оплата ставит paid_date =
+ * сегодня сервера (ADR 0048) и показывает экран успеха «Платеж оплачен»
+ * (1444:65733): «Хорошо» возвращает на страницу операции — теперь
+ * «Выполнена», «Посмотреть платеж» ведёт на правило. Смотрящий и архив
+ * читают без кнопки, как на странице платежа. Заголовок корзины (удаление)
+ * в этой поставке не делается.
+ */
+export function OperationDetailScreen({
+  propertyId,
+  operationId,
+}: {
+  readonly propertyId: string;
+  readonly operationId: string;
+}): JSX.Element {
+  const router = useRouter();
+  const operationQuery = useOperation(propertyId, operationId);
+  const propertyQuery = useProperty(propertyId);
+
+  const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
+  const operation = operationQuery.isSuccess ? operationQuery.data : undefined;
+
+  // Единый предикат мутационного входа страницы платежа (ADR 0028, #446).
+  const canMutate =
+    property !== undefined
+    && property.access?.role !== 'viewer'
+    && property.status !== 'archived';
+
+  const loading = operationQuery.isPending || propertyQuery.isPending;
+  const failed = operationQuery.isError || propertyQuery.isError;
+
+  return (
+    <>
+      <TopNav
+        leading={
+          <IconButton
+            icon={<ArrowLeft />}
+            label="Назад"
+            onClick={() => goBack(router, ROUTES.propertyPayments(propertyId))}
+          />
+        }
+      >
+        {operation !== undefined && (
+          <TopNavTitle title={formatDayMonth(operation.paidDate ?? operation.date)} />
+        )}
+      </TopNav>
+
+      <PageContent>
+        <div className="flex flex-col gap-8">
+          {loading && (
+            <>
+              <PaymentsSkeleton withHeading />
+              <PaymentsSkeleton withHeading />
+            </>
+          )}
+
+          {failed && (
+            <PaymentsStateCard
+              title="Не удалось загрузить операцию"
+              hint="Проверьте подключение и попробуйте снова"
+              action={
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    void operationQuery.refetch();
+                    void propertyQuery.refetch();
+                  }}
+                >
+                  Повторить
+                </Button>
+              }
+            />
+          )}
+
+          {!loading && operation !== undefined && (
+            <OperationDetailBody
+              propertyId={propertyId}
+              propertyTitle={property?.name ?? ''}
+              operation={operation}
+              canMutate={canMutate}
+            />
+          )}
+        </div>
+      </PageContent>
+    </>
+  );
+}
+
+/** Тело страницы после загрузки операции; списки правила для проверки
+ * «которую можно оплатить» догружаются здесь же. */
+function OperationDetailBody({
+  propertyId,
+  propertyTitle,
+  operation,
+  canMutate,
+}: {
+  readonly propertyId: string;
+  readonly propertyTitle: string;
+  readonly operation: PaymentOperation;
+  readonly canMutate: boolean;
+}): JSX.Element {
+  const payOperation = usePayOperation(propertyId);
+
+  // Ручные факты и операции удалённого правила (paymentId null) не
+  // оплачиваются из этой страницы — кнопки у них и так не будет, списки
+  // запроса не нужны.
+  const paymentId = operation.paymentId ?? null;
+  const overdueQuery = usePaymentOperationsByStatus(
+    propertyId, paymentId ?? '', 'overdue', { enabled: paymentId !== null },
+  );
+  const plannedQuery = usePaymentOperationsByStatus(
+    propertyId, paymentId ?? '', 'planned', { enabled: paymentId !== null },
+  );
+
+  const payable =
+    paymentId !== null
+    && overdueQuery.data !== undefined
+    && plannedQuery.data !== undefined
+    && isOperationPayable(operation, overdueQuery.data, plannedQuery.data);
+
+  const [paidResult, setPaidResult] = useState<PaymentOperation | null>(null);
+
+  const pay = async (): Promise<void> => {
+    try {
+      const paid = await payOperation.mutateAsync(operation.id);
+      setPaidResult(paid);
+    } catch (error) {
+      notify.scenarios.payments.payError(error);
+    }
+  };
+
+  if (paidResult !== null) {
+    return (
+      <OperationPaidSuccess
+        propertyId={propertyId}
+        paid={paidResult}
+        propertyTitle={propertyTitle}
+        onClose={() => setPaidResult(null)}
+      />
+    );
+  }
+
+  const today = clientTodayIso();
+  const subtitle = operationSubtitle(operation, today);
+  const amount = operationHeroAmount(operation);
+  const delay = operationDelayRow(operation);
+  const category = categoryStyle('default', operation.categorySlug);
+  const amountTone =
+    amount.tone === 'success'
+      ? 'text-success'
+      : amount.tone === 'danger'
+        ? 'text-danger'
+        : 'text-content';
+
+  return (
+    <>
+      <OperationHero operation={operation} category={category} subtitle={subtitle} amountText={amount.text} amountTone={amountTone} />
+
+      <DetailsSection title="Данные операции">
+        <ListRow
+          leading={<CategoryIcon icon={category.icon} color={category.color} />}
+          title={operation.title}
+          subtitle="Платеж"
+        />
+        <ListRow
+          leading={(
+            <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted">
+              <Home className="h-6 w-6 text-content" aria-hidden />
+            </span>
+          )}
+          title={propertyTitle !== '' ? propertyTitle : 'Объект'}
+          subtitle="Объект"
+        />
+      </DetailsSection>
+
+      <DetailsSection title="Подробнее">
+        {operation.paidDate !== undefined && (
+          <ListRow title="Фактическая оплата" value={formatDayMonthWithYear(operation.paidDate, today)} />
+        )}
+        <ListRow title="Плановая оплата" value={formatDayMonthWithYear(operation.date, today)} />
+        {delay !== null && <ListRow title={delay.label} value={delay.text} />}
+        <ListRow
+          title="Статус"
+          value={
+            <StatusValue operation={operation} />
+          }
+        />
+      </DetailsSection>
+
+      {canMutate && payable && (
+        <StickyBottomBar>
+          <Button
+            className="w-full"
+            loading={payOperation.isPending}
+            onClick={() => void pay()}
+          >
+            Отметить оплаченной
+          </Button>
+        </StickyBottomBar>
+      )}
+    </>
+  );
+}
+
+/** Hero-блок (1386:67731): иконка категории 96 с белым кантом, название,
+ * чип категории, сумма 40 и подпись срока под ней. */
+function OperationHero({
+  operation,
+  category,
+  subtitle,
+  amountText,
+  amountTone,
+}: {
+  readonly operation: PaymentOperation;
+  readonly category: ReturnType<typeof categoryStyle>;
+  readonly subtitle: ReturnType<typeof operationSubtitle>;
+  readonly amountText: string;
+  readonly amountTone: string;
+}): JSX.Element {
+  const Icon = categoryIconComponents[category.icon];
+
+  return (
+    <div className="flex flex-col items-center gap-3 px-6 pt-6">
+      <span
+        className="flex h-24 w-24 items-center justify-center rounded-pill shadow-[0_0_0_2.5px_var(--dl-surface)]"
+        style={{ backgroundColor: category.color }}
+      >
+        {Icon !== undefined && <Icon className="h-10 w-10 text-white" aria-hidden />}
+      </span>
+      <span className="text-xl font-semibold leading-6 text-content">{operation.title}</span>
+      <span className="flex items-center gap-1.5 rounded-pill bg-surface-info py-1 pl-1.5 pr-3">
+        <CategoryIcon
+          icon={category.icon}
+          color={category.color}
+          className="h-6 w-6 [&_svg]:h-3.5 [&_svg]:w-3.5"
+        />
+        <span className="text-sm leading-4 text-content">{operation.categoryLabel}</span>
+      </span>
+      <span className={`text-[40px] leading-[44px] font-semibold ${amountTone}`}>
+        {amountText}
+      </span>
+      {subtitle !== null && (
+        <span
+          className={`text-base leading-[18px] font-medium ${
+            subtitle.tone === 'danger' ? 'text-danger' : 'text-primary'
+          }`}
+        >
+          {subtitle.text}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Секция-карточка страницы: заголовок 20 и серый контейнер строк. */
+function DetailsSection({
+  title,
+  children,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+}): JSX.Element {
+  return (
+    <section>
+      <h2 className="px-6 pb-2 text-xl font-semibold leading-6 text-content">{title}</h2>
+      <div className="mx-6 flex flex-col rounded-card bg-surface-muted py-2">{children}</div>
+    </section>
+  );
+}
+
+/** Значение статуса (1419:25859): просрочка — красным, остальные — тёмным. */
+function StatusValue({ operation }: { readonly operation: PaymentOperation }): JSX.Element {
+  const label =
+    operation.status === 'paid'
+      ? 'Выполнена'
+      : operation.status === 'overdue'
+        ? 'Просрочена'
+        : 'Запланирована';
+  return (
+    <span className={operation.status === 'overdue' ? 'text-danger' : undefined}>{label}</span>
+  );
+}
+
+/** Экран успеха «Платеж оплачен» (1444:65733): иконка категории с зелёной
+ * галочкой, подпись «название / сумма за дату / по объекту», кнопки
+ * «Хорошо» (страница операции — теперь «Выполнена») и «Посмотреть платеж»
+ * (страница правила; у ручных фактов правила нет — кнопки тоже). */
+function OperationPaidSuccess({
+  propertyId,
+  paid,
+  propertyTitle,
+  onClose,
+}: {
+  readonly propertyId: string;
+  readonly paid: PaymentOperation;
+  readonly propertyTitle: string;
+  readonly onClose: () => void;
+}): JSX.Element {
+  const router = useRouter();
+  const today = clientTodayIso();
+  const paidDate: IsoDate = paid.paidDate ?? today;
+  const paymentId = paid.paymentId;
+  const style = categoryStyle('default', paid.categorySlug);
+  const Icon = categoryIconComponents[style.icon];
+
+  return (
+    <>
+      <TopNav
+        leading={
+          <IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />
+        }
+      />
+      <PageContent>
+        <div className="flex flex-col items-center gap-8 px-6 pt-16">
+          <span className="relative block h-24 w-24">
+            <span
+              className="flex h-24 w-24 items-center justify-center rounded-pill shadow-[0_0_0_2.5px_var(--dl-surface)]"
+              style={{ backgroundColor: style.color }}
+            >
+              {Icon !== undefined && <Icon className="h-10 w-10 text-white" aria-hidden />}
+            </span>
+            <StatusIcon status="good" className="absolute left-[60px] top-[60px] h-12 w-12" />
+          </span>
+          <div className="flex flex-col gap-3 self-stretch">
+            <h1 className="text-center text-xl font-semibold leading-6 text-content">
+              Платеж оплачен
+            </h1>
+            <p className="text-center text-base leading-[18px] whitespace-pre-line text-content-secondary">
+              {`«${paid.title}»\n${formatMoneyKopecks(paid.amountKopecks)} за ${formatDayMonthWithYear(paidDate, today)}\nпо объекту «${propertyTitle !== '' ? propertyTitle : '—'}»`}
+            </p>
+          </div>
+        </div>
+      </PageContent>
+      <StickyBottomBar>
+        <Button className="w-full" onClick={onClose}>
+          Хорошо
+        </Button>
+        {paymentId !== null && (
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => router.push(ROUTES.propertyPayment(propertyId, paymentId))}
+          >
+            Посмотреть платеж
+          </Button>
+        )}
+      </StickyBottomBar>
+    </>
+  );
+}

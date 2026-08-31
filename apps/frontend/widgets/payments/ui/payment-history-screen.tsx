@@ -141,7 +141,11 @@ export function PaymentHistoryScreen({
                     <section key={group.label} className="flex flex-col">
                       <PaymentsHeading>{group.label}</PaymentsHeading>
                       {group.operations.map((operation) => (
-                        <HistoryRow key={operation.id} operation={operation} />
+                        <HistoryRow
+                          key={operation.id}
+                          operation={operation}
+                          onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+                        />
                       ))}
                     </section>
                   ))}
@@ -161,12 +165,14 @@ export function PaymentHistoryScreen({
 /** Строка истории (Figma 671:7776, 1332:61665): иконка категории с белым
  * кантом (строка внутри страницы), название, подпись оплаты — «Заранее
  * на N дней» / «Задержан на N дней» / дата при точном попадании; сумма
- * справа знаковая: расход с минусом, доход с плюсом зелёным. Строка
- * операции никуда не ведёт — у операций будет своя страница. */
+ * справа знаковая: расход с минусом, доход с плюсом зелёным. onSelect
+ * ведёт на страницу операции. */
 function HistoryRow({
   operation,
+  onSelect,
 }: {
   readonly operation: PaymentOperation;
+  readonly onSelect?: () => void;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
   const label = operationStatusLabel(operation);
@@ -181,6 +187,7 @@ function HistoryRow({
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }
       signedAmount
+      onSelect={onSelect}
     />
   );
 }

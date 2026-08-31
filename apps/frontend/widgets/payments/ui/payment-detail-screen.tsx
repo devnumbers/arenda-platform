@@ -40,7 +40,6 @@ import {
   oldestUnpaidOperation,
   paymentTypeLabel,
   usePausePayment,
-  usePayOperation,
   usePaymentOperationsByStatus,
   usePayment,
   useResumePayment,
@@ -75,8 +74,10 @@ import {
  *
  * Доступ (ADR 0028): смотрящий — чтение, звезда неактивна, круглых кнопок
  * нет; архив финансово read-only (#446). Завершённое правило (endDate в
- * прошлом) — без паузы; «Оплатить» гасит старейшее неоплаченное вхождение
- * (просрочки в приоритете) и работает даже на паузе (история 25 спеки #453).
+ * прошлом) — без паузы. «Оплатить» больше не гасит вхождение сама: она
+ * ведёт на страницу операции (той же цели — старейшее неоплаченное
+ * вхождение, просрочки в приоритете), оплата — кнопкой «Отметить
+ * оплаченной» оттуда. Работает и на паузе (история 25 спеки #453).
  */
 
 /** Максимум строк секции «Просроченные» страницы; полный список — подэкран
@@ -257,7 +258,12 @@ function PaymentDetailBody({
           >
             {overduePreview.length > 0
               ? overduePreview.map((operation) => (
-                  <OverdueOperationRow key={operation.id} operation={operation} today={today} />
+                  <OverdueOperationRow
+                    key={operation.id}
+                    operation={operation}
+                    today={today}
+                    onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+                  />
                 ))
               : null}
           </PaymentsGroup>
@@ -315,7 +321,7 @@ function PaymentHeroCard({
 }
 
 /** Круглые кнопки мутаций (Figma 671:6261): пауза с confirm-шторкой ↔
- * возобновление, «Изменить» (инертна до экрана правки #467), «Оплатить». */
+ * возобновление, «Изменить», «Оплатить» — переход на страницу операции. */
 function PaymentActionsRow({
   propertyId,
   payment,
@@ -332,7 +338,6 @@ function PaymentActionsRow({
   const router = useRouter();
   const pausePayment = usePausePayment(propertyId, payment.id);
   const resumePayment = useResumePayment(propertyId, payment.id);
-  const payOperation = usePayOperation(propertyId);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -352,18 +357,6 @@ function PaymentActionsRow({
       notify.scenarios.payments.resumed();
     } catch (error) {
       notify.scenarios.payments.resumeError(error);
-    }
-  };
-
-  const pay = async (): Promise<void> => {
-    if (payable == null) {
-      return;
-    }
-    try {
-      await payOperation.mutateAsync(payable.id);
-      notify.scenarios.payments.paid();
-    } catch (error) {
-      notify.scenarios.payments.payError(error);
     }
   };
 
@@ -400,9 +393,12 @@ function PaymentActionsRow({
           variant="primary"
           icon={<Check />}
           caption="Оплатить"
-          loading={payOperation.isPending}
           disabled={payable == null}
-          onClick={() => void pay()}
+          onClick={() => {
+            if (payable != null) {
+              router.push(ROUTES.propertyOperation(propertyId, payable.id));
+            }
+          }}
         />
       </div>
 
@@ -494,6 +490,13 @@ function NextPaymentSection({
           amountKopecks={
             nearest.kind === 'operation' ? nearest.operation.amountKopecks : payment.amountKopecks
           }
+          // Материализованная плановая — настоящая операция со своей
+          // страницей; проекция — ещё не операция, строка не кликабельна.
+          onSelect={
+            nearest.kind === 'operation'
+              ? () => router.push(ROUTES.propertyOperation(propertyId, nearest.operation.id))
+              : undefined
+          }
         />
       )}
     </PaymentsGroup>
@@ -505,11 +508,13 @@ function NextPaymentRow({
   title,
   subtitle,
   amountKopecks,
+  onSelect,
 }: {
   readonly payment: Payment;
   readonly title: string;
   readonly subtitle: string;
   readonly amountKopecks: number;
+  readonly onSelect?: () => void;
 }): JSX.Element {
   const style = categoryStyle(payment.category.source, payment.category.slug);
 
@@ -521,6 +526,7 @@ function NextPaymentRow({
       title={title}
       subtitle={subtitle}
       amountKopecks={amountKopecks}
+      onSelect={onSelect}
     />
   );
 }

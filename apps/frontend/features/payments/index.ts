@@ -54,6 +54,7 @@ export {
   usePayment,
   usePaymentOperationsByStatus,
   usePaymentOperationsPaged,
+  useOperation,
   usePayments,
   usePausePayment,
   usePayOperation,
