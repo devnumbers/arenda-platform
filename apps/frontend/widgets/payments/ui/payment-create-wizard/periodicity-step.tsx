@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { JSX } from 'react';
 import { ArrowRight, CheckBoxFalse, CheckBoxTrue, ChevronDown } from '@/shared/assets/icons';
 import { type IsoDate, type Recurrence } from '@/entities/payment';
@@ -251,23 +251,6 @@ function firstWeekdayMon0(year: number, month0: number): number {
   return (new Date(Date.UTC(year, month0, 1)).getUTCDay() + 6) % 7;
 }
 
-/** Стартовый просмотр: у существующего правила — его месяц в ближайшем
- * непрошедшем году, иначе — текущий месяц. */
-function initialYearlyView(
-  current: Recurrence | undefined,
-  todayYear: number,
-  todayMonth0: number,
-): YearMonth {
-  if (current?.kind === 'yearly') {
-    const month0 = current.month - 1;
-    return {
-      year: month0 >= todayMonth0 ? todayYear : todayYear + 1,
-      month0,
-    };
-  }
-  return { year: todayYear, month0: todayMonth0 };
-}
-
 /** Лента месяцев для колеса пикера: текущий месяц ровно в центре
  * (±126 рядов), слева — остальные 11 по кругу без текущего, справа —
  * все 12 по кругу. Значения кодируют позицию «месяц:ряд», чтобы колесо
@@ -292,41 +275,66 @@ function monthWheelItems(centerMonth0: number): ReadonlyArray<{
   return items;
 }
 
-function YearlyBranch({
-  recurrence,
+export type YearMonthCalendarValue = {
+  readonly year: number;
+  readonly month0: number;
+  readonly day: number;
+};
+
+/** Календарь одного месяца с чипом «Месяц Год» и шитом-пикером (Figma
+ * 1056:53547/50518): используется в годовой ветке и в выборе даты
+ * окончания. День выбирается кликом; дни раньше minDate запрещены
+ * (задним числом не выбираются). Год в значении настоящий — что видеть
+ * в календаре и писать в чипе. */
+export function YearMonthCalendar({
+  value,
   today,
-  onChange,
+  minDate,
+  onPick,
+  wheelAsModal = true,
+  padded = true,
 }: {
-  readonly recurrence: Recurrence | undefined;
+  readonly value: YearMonthCalendarValue | undefined;
   readonly today: IsoDate;
-  readonly onChange: (recurrence: Recurrence) => void;
+  /** Дни раньше этой даты недоступны. */
+  readonly minDate?: IsoDate;
+  readonly onPick: (value: YearMonthCalendarValue) => void;
+  /** Колесо месяца/года отдельной модалкой (по умолчанию) или подменой
+   * контента — когда календарь уже внутри модалки. */
+  readonly wheelAsModal?: boolean;
+  /** Свои горизонатльные отступы px-6: на странице — да, внутри модалки
+   * (p-6 уже есть) — нет. */
+  readonly padded?: boolean;
 }): JSX.Element {
   const todayYear = isoYear(today);
   const todayMonth0 = isoMonthNumber(today) - 1;
   const [view, setView] = useState<YearMonth | null>(null);
-  const [picker, setPicker] = useState<
+  const [pickerDraft, setPickerDraft] = useState<
     (YearMonth & { readonly monthValue: string; readonly centerMonth0: number }) | null
   >(null);
-  // Годы без верхней границы: список удлиняется, когда выбранный год
-  // подходит к концу (стандарт бесконечных колес — повтор/докрутка списка,
-  // значение никогда не «тянет» скролл обратно).
   const [yearsCount, setYearsCount] = useState(11);
+  const wheelOpen = pickerDraft !== null;
 
-  const shown = view ?? initialYearlyView(recurrence, todayYear, todayMonth0);
+  const shown = view ?? initialYearMonthView(value, todayYear, todayMonth0);
   const shownLength = monthLength(shown.year, shown.month0);
   const selectedDay =
-    recurrence !== undefined && recurrence.kind === 'yearly' && recurrence.month === shown.month0 + 1
-      ? recurrence.day
+    value !== undefined && value.year === shown.year && value.month0 === shown.month0
+      ? value.day
       : undefined;
-  const pickerOpen = picker !== null;
+
+  const minYear = minDate !== undefined ? isoYear(minDate) : todayYear;
 
   return (
     <>
-      <div className="px-6 pt-4">
+      {/* В режиме колёс календарь и чип скрываются: остаётся только выбор
+          месяца и года (подмена контента, не вторая модалка). */}
+      {!wheelOpen && (
+      <>
+      <div className={padded ? 'px-6 pt-4' : 'pt-1'}>
         <button
           type="button"
           onClick={() =>
-            setPicker({
+            setPickerDraft({
               year: shown.year,
               month0: shown.month0,
               monthValue: `${shown.month0}:0`,
@@ -340,7 +348,7 @@ function YearlyBranch({
         </button>
       </div>
 
-      <div className="grid grid-cols-7 gap-2 px-6 pt-6">
+      <div className="grid grid-cols-7 gap-2">
         {WEEKDAY_HEADERS.map((name) => (
           <span
             key={name}
@@ -353,6 +361,8 @@ function YearlyBranch({
           <span key={`pad-${index}`} aria-hidden />
         ))}
         {Array.from({ length: shownLength }, (_, index) => index + 1).map((day) => {
+          const iso = isoDateOf(shown.year, shown.month0, day);
+          const disabled = minDate !== undefined && iso < minDate;
           const isToday =
             shown.year === todayYear && shown.month0 === todayMonth0 && day === isoDayOfMonth(today);
           const selected = selectedDay === day;
@@ -361,13 +371,14 @@ function YearlyBranch({
               key={day}
               type="button"
               aria-pressed={selected}
-              onClick={() => onChange({ kind: 'yearly', month: shown.month0 + 1, day })}
+              disabled={disabled}
+              onClick={() => onPick({ year: shown.year, month0: shown.month0, day })}
               className={
                 selected
                   ? 'aspect-square w-full cursor-pointer rounded-xl bg-primary text-base font-medium leading-[18px] text-white outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary'
                   : isToday
-                    ? 'aspect-square w-full cursor-pointer rounded-xl bg-primary/10 text-base font-medium leading-[18px] text-content outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary'
-                    : 'aspect-square w-full cursor-pointer rounded-xl text-base font-medium leading-[18px] text-content outline-none transition-colors hover:bg-surface-muted active:bg-surface-muted-hover focus-visible:ring-2 focus-visible:ring-primary'
+                    ? 'aspect-square w-full cursor-pointer rounded-xl bg-primary/10 text-base font-medium leading-[18px] text-content outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent'
+                    : 'aspect-square w-full cursor-pointer rounded-xl text-base font-medium leading-[18px] text-content outline-none transition-colors hover:bg-surface-muted active:bg-surface-muted-hover focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent'
               }
             >
               {day}
@@ -375,68 +386,169 @@ function YearlyBranch({
           );
         })}
       </div>
-
-      <Modal open={pickerOpen} onOpenChange={(open) => !open && setPicker(null)}>
-        <ModalContent title="Месяц и год" titleSrOnly>
-          {picker !== null && (
-            <>
-              <div className="flex gap-4">
-                {/* Значение ряда возвращается в колесо ровно тем, что
-                    проскроллил пользователь: пересборка ленты вокруг нового
-                    месяца и подстановка «{месяц}:0» заставили бы колесо
-                    прыгнуть к чужому ряду (баг «декабрь → январь даёт
-                    ноябрь»). */}
-                <WheelPicker
-                  items={monthWheelItems(picker.centerMonth0)}
-                  value={picker.monthValue}
-                  onValueChange={(monthValue) =>
-                    setPicker((prev) => {
-                      if (prev === null) return prev;
-                      const month0 = Number(monthValue.split(':')[0]);
-                      return Number.isNaN(month0)
-                        ? prev
-                        : { ...prev, monthValue, month0 };
-                    })
-                  }
-                  label="Месяц"
-                  className="flex-1"
-                />
-                <WheelPicker
-                  items={Array.from({ length: yearsCount }, (_, index) => ({
-                    value: String(todayYear + index),
-                    label: String(todayYear + index),
-                  }))}
-                  value={String(picker.year)}
-                  onValueChange={(value) => {
-                    const year = Number(value);
-                    setPicker((prev) => (prev === null ? prev : { ...prev, year }));
-                    // Выбрал предпоследний/последний год — добавляем ещё десять.
-                    if (year >= todayYear + yearsCount - 3) {
-                      setYearsCount((count) => count + 10);
-                    }
-                  }}
-                  label="Год"
-                  className="flex-1"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Button variant="secondary" className="w-full" onClick={() => setPicker(null)}>
-                  Отменить
-                </Button>
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    setView({ year: picker.year, month0: picker.month0 });
-                    setPicker(null);
-                  }}
-                >
-                  Выбрать
-                </Button>
-              </div>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
+      </>
+      )}
+      {wheelAsModal ? (
+        <Modal open={wheelOpen} onOpenChange={(open) => !open && setPickerDraft(null)}>
+          <ModalContent title="Месяц и год" titleSrOnly>
+            {pickerDraft !== null && (
+              <YearWheelBody
+                pickerDraft={pickerDraft}
+                setPickerDraft={setPickerDraft}
+                yearsCount={yearsCount}
+                setYearsCount={setYearsCount}
+                minYear={minYear}
+                onApply={(year, month0) => {
+                  setView({ year, month0 });
+                  setPickerDraft(null);
+                }}
+              />
+            )}
+          </ModalContent>
+        </Modal>
+      ) : (
+        wheelOpen && (
+          <>
+            <YearWheelBody
+              pickerDraft={pickerDraft}
+              setPickerDraft={setPickerDraft}
+              yearsCount={yearsCount}
+              setYearsCount={setYearsCount}
+              minYear={minYear}
+              onApply={(year, month0) => {
+                setView({ year, month0 });
+                setPickerDraft(null);
+              }}
+            />
+          </>
+        )
+      )}
     </>
+  );
+}
+
+/** Колёса месяца и года с кнопками: «Отменить» закрывает колёса (в режиме
+ * подмены — возвращает к календарю), «Выбрать» применяет месяц и год. */
+type PickerDraft = YearMonth & {
+  readonly monthValue: string;
+  readonly centerMonth0: number;
+};
+
+function YearWheelBody({
+  pickerDraft,
+  setPickerDraft,
+  yearsCount,
+  setYearsCount,
+  minYear,
+  onApply,
+}: {
+  readonly pickerDraft: PickerDraft;
+  readonly setPickerDraft: Dispatch<SetStateAction<PickerDraft | null>>;
+  readonly yearsCount: number;
+  readonly setYearsCount: Dispatch<SetStateAction<number>>;
+  readonly minYear: number;
+  readonly onApply: (year: number, month0: number) => void;
+}): JSX.Element {
+  return (
+    <>
+      <div className="flex gap-4">
+        {/* Значение ряда возвращается в колесо ровно тем, что проскроллил
+            пользователь: пересборка ленты вокруг нового месяца и подстановка
+            «{месяц}:0» заставили бы колесо прыгнуть к чужому ряду (баг
+            «декабрь → январь даёт ноябрь»). */}
+        <WheelPicker
+          items={monthWheelItems(pickerDraft.centerMonth0)}
+          value={pickerDraft.monthValue}
+          onValueChange={(monthValue) =>
+            setPickerDraft((prev) => {
+              if (prev === null) return prev;
+              const month0 = Number(monthValue.split(':')[0]);
+              return Number.isNaN(month0) ? prev : { ...prev, monthValue, month0 };
+            })
+          }
+          label="Месяц"
+          className="flex-1"
+        />
+        <WheelPicker
+          items={Array.from({ length: yearsCount }, (_, index) => ({
+            value: String(minYear + index),
+            label: String(minYear + index),
+          }))}
+          value={String(pickerDraft.year)}
+          onValueChange={(value) => {
+            const year = Number(value);
+            setPickerDraft((prev) => (prev === null ? prev : { ...prev, year }));
+            // Выбрал предпоследний/последний год — добавляем ещё десять.
+            if (year >= minYear + yearsCount - 3) {
+              setYearsCount((count) => count + 10);
+            }
+          }}
+          label="Год"
+          className="flex-1"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Button variant="secondary" className="w-full" onClick={() => setPickerDraft(null)}>
+          Отменить
+        </Button>
+        <Button
+          className="w-full"
+          onClick={() => onApply(pickerDraft.year, pickerDraft.month0)}
+        >
+          Выбрать
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function isoDateOf(year: number, month0: number, day: number): IsoDate {
+  return new Date(Date.UTC(year, month0, day)).toISOString().slice(0, 10);
+}
+
+function initialYearMonthView(
+  value: YearMonthCalendarValue | undefined,
+  todayYear: number,
+  todayMonth0: number,
+): YearMonth {
+  if (value !== undefined) {
+    return { year: value.year, month0: value.month0 };
+  }
+  return { year: todayYear, month0: todayMonth0 };
+}
+
+/** Годовая ветка: обёртка календаря — выбранный год не хранится в правиле
+ * (yearly = месяц и день), но нужен календарю; для месяца в прошлом
+ * показываем ближайший будущий год. */
+function YearlyBranch({
+  recurrence,
+  today,
+  onChange,
+}: {
+  readonly recurrence: Recurrence | undefined;
+  readonly today: IsoDate;
+  readonly onChange: (recurrence: Recurrence) => void;
+}): JSX.Element {
+  const todayYear = isoYear(today);
+  const todayMonth0 = isoMonthNumber(today) - 1;
+  const [picked, setPicked] = useState<YearMonthCalendarValue | undefined>(() => {
+    if (recurrence?.kind !== 'yearly') return undefined;
+    const month0 = recurrence.month - 1;
+    return {
+      year: month0 >= todayMonth0 ? todayYear : todayYear + 1,
+      month0,
+      day: recurrence.day,
+    };
+  });
+
+  return (
+    <YearMonthCalendar
+      value={picked}
+      today={today}
+      onPick={(value) => {
+        setPicked(value);
+        onChange({ kind: 'yearly', month: value.month0 + 1, day: value.day });
+      }}
+    />
   );
 }

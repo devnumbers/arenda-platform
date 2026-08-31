@@ -368,19 +368,23 @@ test.describe('визард создания платежа', () => {
     await page.getByRole('button', { name: '15', exact: true }).first().click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    // Шаг 4: разворачиваем календарь и берём последний включённый день
-    // последнего отрисованного месяца — он заведомо в будущем, каким бы ни
-    // было сегодняшнее число (вертикальный календарь подгружает месяцы).
+    // Шаг 4: «Выбрать дату» открывает модалку годового календаря;
+    // прыжок на последний год — все дни заведомо в будущем.
     await page.getByRole('button', { name: 'Выбрать дату' }).click();
-    await expect(page.getByText(/\d{4}/).first()).toBeVisible();
-    const enabledDay = page.locator('button:enabled').filter({ hasText: /^\d{1,2}$/ });
-    // В последний день месяца текущий месяц запрещён целиком — листаем
-    // вперёд по месяцам, пока не появится доступный день.
-    for (let guard = 0; (await enabledDay.count()) === 0 && guard < 12; guard++) {
-      await page.getByRole('button', { name: 'Следующий месяц' }).click();
-    }
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // Чип «Месяц Год» открывает колёса; год — не раньше текущего.
+    await dialog.getByRole('button', { name: /\d{4}/ }).click();
+    const yearWheel = page.getByRole('listbox', { name: 'Год' });
+    await expect(yearWheel).toBeVisible();
+    await yearWheel.press('End');
+    await page.getByRole('button', { name: 'Выбрать' }).click();
+    // Календарь переключился на далёкий год — все дни доступны.
+    const enabledDay = dialog.locator('button:enabled').filter({ hasText: /^\d{1,2}$/ });
     await enabledDay.first().click();
-    await expect(page.getByRole('button', { name: 'Убрать дату' })).toBeVisible();
+    // Модалка закрылась, дата вернулась на экран окончания.
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByText(/\d{1,2} [а-я]+, \d{4}/)).toBeVisible();
 
     await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('15000');

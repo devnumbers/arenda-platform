@@ -2,25 +2,20 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp } from '@/shared/assets/icons';
+import { ArrowRight } from '@/shared/assets/icons';
 import type { IsoDate } from '@/entities/payment';
 import { formatDayMonthWithYear } from '@/entities/payment';
-import {
-  CalendarMonth,
-  IconButton,
-  ListRow,
-  Button,
-  monthTitle,
-} from '@/shared/ui/design';
-import { isoToUtcDate, utcDateToIso } from '../../lib/calendar-date';
+import { ListRow, Modal, ModalContent } from '@/shared/ui/design';
 import { WizardHeading } from './wizard-chrome';
+import { YearMonthCalendar } from './periodicity-step';
 
 /**
- * Шаг 4 визарда — «Окончание платежа» (Figma 843:8345/851:15788): только
- * дата; напоминания и email-уведомления — вне среза. Пусто — бессрочный.
- * Строка «Выбрать дату» разворачивает календарь прямо в шаге (ветки дат
- * шага 3 — тот же паттерн инлайн-выбора), прошлое отключено: правило
- * действует с даты заведения без вхождений задним числом.
+ * Шаг 4 визарда — «Окончание платежа» (Figma 843:8345/843-8358): строка
+ * «Выбрать дату» (с датой — она сама) открывает модалку с годовым
+ * календарём — чип «Месяц Год» с колесами (годы не раньше текущего) и
+ * календарем одного месяца; выбор дня закрывает модалку и возвращает дату.
+ * Пусто — бессрочный. Напоминания и email-уведомления макета — вне среза
+ * (в контракте платежа их нет).
  */
 
 export type EndDateStepProps = {
@@ -37,84 +32,50 @@ export function EndDateStep({
   today,
   withHeading = true,
 }: EndDateStepProps): JSX.Element {
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [view, setView] = useState<{ year: number; month: number }>(() => {
-    const anchor = endDate ?? today;
-    return { year: Number(anchor.slice(0, 4)), month: Number(anchor.slice(5, 7)) - 1 };
-  });
-
-  const shiftMonth = (delta: number): void => {
-    setView((prev) => {
-      const next = new Date(Date.UTC(prev.year, prev.month + delta, 1));
-      return { year: next.getUTCFullYear(), month: next.getUTCMonth() };
-    });
-  };
-
-  const pick = (date: Date): void => {
-    if (utcDateToIso(date) < today) {
-      return;
-    }
-    onEndDateChange(utcDateToIso(date));
-    setCalendarOpen(false);
-  };
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
     <>
       {withHeading && (
         <WizardHeading
           title="Окончание платежа"
-          subtitle="После выбранной даты, платеж перестанет оплачиваться и удалится. Необязательно"
+          subtitle="После выбранной даты, платеж перестанет оплачиваться и удалится. Выбирать необязательно"
         />
       )}
       <div className="flex flex-col pt-2">
         <ListRow
-          title="Выбрать дату"
-          value={endDate !== undefined ? formatDayMonthWithYear(endDate, today) : undefined}
-          trailing={
-            calendarOpen ? (
-              <ChevronUp className="h-5 w-5 text-content-secondary" aria-hidden />
-            ) : (
-              <ChevronDown className="h-5 w-5 text-content-secondary" aria-hidden />
-            )
-          }
-          onSelect={() => setCalendarOpen((open) => !open)}
+          title={endDate !== undefined ? formatDayMonthWithYear(endDate, today) : 'Выбрать дату'}
+          className="py-4"
+          onSelect={() => setPickerOpen(true)}
+          trailing={<ArrowRight className="h-6 w-6" aria-hidden />}
         />
-        {calendarOpen && (
-          <div className="px-6 pt-3">
-            <div className="flex items-center justify-between pb-2">
-              <IconButton
-                icon={<ArrowLeft />}
-                label="Предыдущий месяц"
-                variant="secondary"
-                onClick={() => shiftMonth(-1)}
-              />
-              <span className="text-base font-medium text-content" aria-live="polite">
-                {monthTitle(view.year, view.month)}
-              </span>
-              <IconButton
-                icon={<ArrowRight />}
-                label="Следующий месяц"
-                variant="secondary"
-                onClick={() => shiftMonth(1)}
-              />
-            </div>
-            <CalendarMonth
-              year={view.year}
-              month={view.month}
-              value={endDate !== undefined ? isoToUtcDate(endDate) : undefined}
-              isDateDisabled={(date) => utcDateToIso(date) < today}
-              onDateSelect={pick}
-            />
-          </div>
-        )}
-        {endDate !== undefined && (
-          <div className="pt-2 pr-6 pl-6">
-            <Button variant="clear" size="small" onClick={() => onEndDateChange(undefined)}>
-              Убрать дату
-            </Button>
-          </div>
-        )}
       </div>
+
+      <Modal open={pickerOpen} onOpenChange={setPickerOpen}>
+        <ModalContent title="Выбрать дату" titleSrOnly>
+          <YearMonthCalendar
+            wheelAsModal={false}
+            padded={false}
+            value={
+              endDate === undefined
+                ? undefined
+                : {
+                    year: Number(endDate.slice(0, 4)),
+                    month0: Number(endDate.slice(5, 7)) - 1,
+                    day: Number(endDate.slice(8)),
+                  }
+            }
+            today={today}
+            minDate={today}
+            onPick={(picked) => {
+              const mm = String(picked.month0 + 1).padStart(2, '0');
+              const dd = String(picked.day).padStart(2, '0');
+              onEndDateChange(`${picked.year}-${mm}-${dd}`);
+              setPickerOpen(false);
+            }}
+          />
+        </ModalContent>
+      </Modal>
     </>
   );
 }
