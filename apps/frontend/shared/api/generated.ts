@@ -1774,6 +1774,8 @@ export interface components {
             category: components["schemas"]["CategoryView"];
             /** @description The rule's favorite star (PUT favorite); returned in the reads and the lists. */
             isFavorite: boolean;
+            /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
+            isCompleted: boolean;
             pauses: components["schemas"]["PauseIntervalView"][];
             /** Format: date-time */
             createdAt: string;

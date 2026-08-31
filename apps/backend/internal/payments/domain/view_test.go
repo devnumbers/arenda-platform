@@ -71,3 +71,52 @@ func orToday(date, today time.Time) time.Time {
 	}
 	return date
 }
+
+// IsCompleted: правило завершено, когда не осталось неоплаченных вхождений —
+// ничего planned и за последней материализованной датой вхождений нет.
+func TestIsCompleted(t *testing.T) {
+	t.Parallel()
+	t.Run("оплачены все вхождения до endDate — завершён сразу, не на следующий день", func(t *testing.T) {
+		t.Parallel()
+		// Сценарий бага: since=t0, endDate=t0+2, обе операции оплачены,
+		// planned пусто — завершён в тот же день (t0), хотя endDate впереди.
+		p := rule(t, NewDailyRecurrence(), dayT0, new(dayNext2))
+		assert.True(t, IsCompleted(p, d(dayT0), dp(dayNext2), false))
+	})
+
+	t.Run("есть planned — не завершён (идёт обычное правило или есть долг)", func(t *testing.T) {
+		t.Parallel()
+		p := rule(t, NewDailyRecurrence(), dayT0, new(dayNext2))
+		assert.False(t, IsCompleted(p, d(dayT0), dp(dayT0), true))
+		open := rule(t, NewDailyRecurrence(), dayT0, nil)
+		assert.False(t, IsCompleted(open, d(dayT0), nil, true))
+	})
+
+	t.Run("без endDate правило никогда не завершено", func(t *testing.T) {
+		t.Parallel()
+		open := rule(t, NewDailyRecurrence(), dayT0, nil)
+		// Автоплатёж погасил сегодняшнее, завтрашнее ещё есть — за cursor
+		// находится вхождение.
+		assert.False(t, IsCompleted(open, d(dayT0), dp(dayT0), false))
+	})
+
+	t.Run("ничего не материализовано — не завершён, вхождения ещё будут", func(t *testing.T) {
+		t.Parallel()
+		p := rule(t, NewDailyRecurrence(), dayT0, new(dayNext2))
+		assert.False(t, IsCompleted(p, d(dayT0), nil, false))
+	})
+
+	t.Run("правило закончилось давно и всё оплачено — завершён", func(t *testing.T) {
+		t.Parallel()
+		p := rule(t, NewDailyRecurrence(), "2026-01-01", new("2026-01-02"))
+		assert.True(t, IsCompleted(p, d(dayT0), dp("2026-01-02"), false))
+	})
+
+	t.Run("оплачено вперёд за пределами сегодня — курсор по последней дате", func(t *testing.T) {
+		t.Parallel()
+		open := rule(t, NewDailyRecurrence(), dayT0, nil)
+		assert.False(t, IsCompleted(open, d(dayT0), dp(dayNext2), false))
+		ended := rule(t, NewDailyRecurrence(), dayT0, new(dayNext))
+		assert.True(t, IsCompleted(ended, d(dayT0), dp(dayNext), false))
+	})
+}

@@ -4,6 +4,7 @@ import type { Payment } from '@/entities/payment';
 
 function payment(overrides: Partial<Payment>): Payment {
   return {
+    isCompleted: false,
     id: 'p1',
     propertyId: 'prop1',
     type: 'expense',
@@ -48,6 +49,16 @@ describe('paymentRowSubtitle', () => {
     const result = paymentRowSubtitle(
       payment({ endDate: '2026-08-01' }),
       '2026-08-27',
+    );
+    expect(result).toStrictEqual({ kind: 'none' });
+  });
+
+  it('серверный флаг isCompleted гасит календарную дату — правила уже нет', () => {
+    // Сценарий бага короткого правила: endDate ещё впереди (01.09), но все
+    // вхождения оплачены — флаг важнее календарной проекции.
+    const result = paymentRowSubtitle(
+      payment({ endDate: '2026-09-01', isCompleted: true }),
+      '2026-08-31',
     );
     expect(result).toStrictEqual({ kind: 'none' });
   });

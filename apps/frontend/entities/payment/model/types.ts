@@ -59,6 +59,9 @@ export type Payment = {
   readonly paymentForm: PaymentForm;
   readonly category: PaymentCategoryView;
   readonly isFavorite: boolean;
+  /** Завершённый платёж (CONTEXT.md): неоплаченных вхождений больше нет.
+   * Вычисляется сервером на чтение, не хранится. */
+  readonly isCompleted: boolean;
   readonly pauses: ReadonlyArray<PauseInterval>;
   readonly createdAt: string;
   readonly updatedAt: string;

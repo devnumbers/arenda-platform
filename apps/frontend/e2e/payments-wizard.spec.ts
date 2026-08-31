@@ -455,6 +455,42 @@ test.describe('визард создания платежа', () => {
     await expect(page).toHaveURL(new RegExp(`/payments/[^/]+$`));
   });
 
+  test('правило одним днём: после оплаты — «Платеж завершен» сразу, не после endDate', async ({
+    page,
+    seededUser,
+  }) => {
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, 'E2E правило одним днём');
+
+    await page.getByRole('button', { name: 'Каждый день' }).click();
+    await expect(page.getByRole('heading', { name: 'Окончание платежа' })).toBeVisible();
+    // Окончание = сегодня: правило из единственного вхождения.
+    await page.getByRole('button', { name: 'Выбрать дату' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const todayNum = String(new Date().getDate());
+    await dialog.getByRole('button', { name: new RegExp(`^${todayNum}$`) }).first().click();
+    await expect(dialog).toHaveCount(0);
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('600');
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toBeVisible();
+
+    // Оплачиваем единственное вхождение — правило завершено сразу же
+    // (серверный isCompleted), без ожидания календарного endDate+1.
+    await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
+    const pay = page.getByRole('button', { name: 'Оплатить' });
+    await expect(pay).toBeEnabled();
+    await pay.click();
+    await expect(page.getByText('Платеж завершен')).toBeVisible();
+
+    // И в графике — то же завершённое состояние вместо «ближайших» дат.
+    await page.getByRole('button', { name: 'Открыть график платежей' }).click();
+    await expect(page.getByText('Платеж завершен')).toBeVisible();
+    await expect(page.getByText('Следующие')).toHaveCount(0);
+  });
+
   test('черновик переживает перезагрузку: поля шага суммы восстановлены', async ({
     page,
     seededUser,

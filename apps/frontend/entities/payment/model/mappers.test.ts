@@ -18,6 +18,7 @@ const paymentDto: PaymentDto = {
   paymentForm: 'transfer',
   category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
   isFavorite: false,
+  isCompleted: false,
   pauses: [
     { fromDate: '2026-03-01', toDate: '2026-04-01' },
     { fromDate: '2026-05-01', toDate: null },

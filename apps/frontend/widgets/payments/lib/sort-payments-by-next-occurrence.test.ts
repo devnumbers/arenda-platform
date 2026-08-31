@@ -4,6 +4,7 @@ import type { Payment } from '@/entities/payment';
 
 function payment(overrides: Partial<Payment>): Payment {
   return {
+    isCompleted: false,
     id: 'p1',
     propertyId: 'prop1',
     type: 'expense',

@@ -3912,7 +3912,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, paymentForm, category, isFavorite, isCompleted, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -3947,6 +3947,14 @@ components:
         isFavorite:
           type: boolean
           description: The rule's favorite star (PUT favorite); returned in the reads and the lists.
+        isCompleted:
+          type: boolean
+          description: >-
+            Server-computed settlement view of the rule (CONTEXT.md,
+            «Завершённый платёж»): no planned operations — overdue included —
+            and no occurrence beyond the last materialized date of any
+            status. Never stored, never written by the client; derived on
+            every read like the operation's overdue.
         pauses:
           type: array
           items:

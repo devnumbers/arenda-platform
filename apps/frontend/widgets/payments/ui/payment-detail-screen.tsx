@@ -454,10 +454,16 @@ function NextPaymentSection({
   // оплаты тик материализует следующее, секция переезжает на него, как
   // «График»); проекция — только пока ничего не материализовано. Активная
   // пауза — «На паузе» в подзаголовке (история 37), при этом проекция не
-  // считается: на паузе дат нет.
+  // считается: на паузе дат нет. Завершённое правило (isCompleted —
+  // серверный вычисляемый флаг, CONTEXT.md) — пустое состояние сразу после
+  // оплаты последнего вхождения, не дожидаясь endDate; иначе проекция
+  // порождала бы уже оплаченные даты заново (баг «следующий платеж 31
+  // августа» после полной оплаты короткого правила).
   const nearest = paused
     ? { kind: 'paused' as const }
-    : nearestOccurrence(payment, plannedOperations, today);
+    : payment.isCompleted
+      ? undefined
+      : nearestOccurrence(payment, plannedOperations, today);
 
   return (
     <PaymentsGroup

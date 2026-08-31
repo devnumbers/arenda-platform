@@ -20,6 +20,11 @@ export function paymentRowSubtitle(
   if (isDatePaused(payment.pauses, today)) {
     return { kind: 'paused' };
   }
+  // Завершённое правило (CONTEXT.md «Завершённый платёж»): серверный
+  // вычисляемый флаг — дат следующего вхождения у него нет и не будет.
+  if (payment.isCompleted) {
+    return { kind: 'none' };
+  }
   const next = nextOccurrenceAfter(payment, today);
   return next === null ? { kind: 'none' } : { kind: 'date', iso: next };
 }

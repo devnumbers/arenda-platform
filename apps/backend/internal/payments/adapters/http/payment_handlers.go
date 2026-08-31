@@ -36,6 +36,8 @@ type PaymentManager interface {
 	PausePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	ResumePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	SetPaymentFavorite(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
+	CompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	CompletedStatuses(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
 }
 
 // PaymentHandlers implements the generated payment endpoints.
@@ -140,7 +142,7 @@ func (h *PaymentHandlers) CreatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	h.respondWithPayment(w, r, payment, http.StatusCreated)
+	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusCreated)
 }
 
 // ListPayments implements GET /properties/{propertyId}/payments.
@@ -162,10 +164,15 @@ func (h *PaymentHandlers) ListPayments(
 		h.handlePaymentError(w, r, err)
 		return
 	}
+	completed, err := h.svc.CompletedStatuses(r.Context(), actor, propertyID)
+	if err != nil {
+		h.writeInternal(w, r, err)
+		return
+	}
 
 	items := make([]openapi.PaymentResponse, 0, len(payments))
 	for _, payment := range payments {
-		resp, err := paymentResponse(payment)
+		resp, err := paymentResponse(payment, completed[payment.ID])
 		if err != nil {
 			h.writeInternal(w, r, err)
 			return
@@ -188,7 +195,7 @@ func (h *PaymentHandlers) GetPayment(w http.ResponseWriter, r *http.Request, pro
 		return
 	}
 
-	h.respondWithPayment(w, r, payment, http.StatusOK)
+	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
 }
 
 // UpdatePayment implements PATCH /properties/{propertyId}/payments/{paymentId}.
@@ -220,7 +227,7 @@ func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	h.respondWithPayment(w, r, payment, http.StatusOK)
+	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
 }
 
 // DeletePayment implements DELETE /properties/{propertyId}/payments/{paymentId}.
@@ -260,7 +267,7 @@ func (h *PaymentHandlers) PausePayment(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	h.respondWithPayment(w, r, payment, http.StatusOK)
+	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
 }
 
 // ResumePayment implements POST /properties/{propertyId}/payments/{paymentId}/resume.
@@ -276,7 +283,7 @@ func (h *PaymentHandlers) ResumePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	h.respondWithPayment(w, r, payment, http.StatusOK)
+	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
 }
 
 // SetPaymentFavorite implements PUT /properties/{propertyId}/payments/{paymentId}/favorite
@@ -302,7 +309,7 @@ func (h *PaymentHandlers) SetPaymentFavorite(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	h.respondWithPayment(w, r, payment, http.StatusOK)
+	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
 }
 
 // decodeFavoriteBody reads the favorite toggle body strictly. A required bool
@@ -508,8 +515,9 @@ func datePtrFromWire(d *openapi_types.Date) *time.Time {
 // paymentResponse maps the domain rule onto the wire response: the category
 // reference is resolved (CategoryView with the «Прочее» fallback), the
 // recurrence goes back through its per-kind shape and the pauses travel as
-// intervals.
-func paymentResponse(p domain.Payment) (openapi.PaymentResponse, error) {
+// intervals. The isCompleted flag is the server-computed settlement view
+// the use case passes in — the mapping itself stays pure.
+func paymentResponse(p domain.Payment, isCompleted bool) (openapi.PaymentResponse, error) {
 	recurrence, err := recurrenceResponse(p.Recurrence)
 	if err != nil {
 		return openapi.PaymentResponse{}, err
@@ -534,6 +542,7 @@ func paymentResponse(p domain.Payment) (openapi.PaymentResponse, error) {
 		PaymentForm:   openapi.PaymentResponsePaymentForm(p.PaymentForm),
 		Category:      categoryView(p.Category),
 		IsFavorite:    p.IsFavorite,
+		IsCompleted:   isCompleted,
 		Pauses:        pauses,
 		CreatedAt:     p.CreatedAt,
 		UpdatedAt:     p.UpdatedAt,
@@ -599,8 +608,15 @@ func categoryView(ref domain.CategoryRef) openapi.CategoryView {
 
 // respondWithPayment maps the rule onto the wire response with the given
 // status — 201 from CreatePayment, 200 from the other payment endpoints.
-func (h *PaymentHandlers) respondWithPayment(w http.ResponseWriter, r *http.Request, payment domain.Payment, status int) {
-	resp, err := paymentResponse(payment)
+func (h *PaymentHandlers) respondWithPayment(
+	w http.ResponseWriter, r *http.Request, actor, propertyID uuid.UUID, payment domain.Payment, status int,
+) {
+	completed, err := h.svc.CompletedStatus(r.Context(), actor, propertyID, payment.ID)
+	if err != nil {
+		h.writeInternal(w, r, err)
+		return
+	}
+	resp, err := paymentResponse(payment, completed)
 	if err != nil {
 		h.writeInternal(w, r, err)
 		return

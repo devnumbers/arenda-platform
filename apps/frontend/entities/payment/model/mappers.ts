@@ -36,6 +36,7 @@ export function mapPayment(dto: PaymentDto): Payment {
       label: dto.category.label,
     },
     isFavorite: dto.isFavorite,
+    isCompleted: dto.isCompleted,
     pauses: dto.pauses.map((pause) => ({
       from: pause.fromDate,
       to: pause.toDate ?? undefined,

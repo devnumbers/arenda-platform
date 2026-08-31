@@ -37,7 +37,31 @@ type fakePaymentManager struct {
 	list     func(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]domain.Payment, error)
 	pause    func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	resume   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
-	update   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand) (domain.Payment, error)
+	update   func(
+		ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand,
+	) (domain.Payment, error)
+	completedStatus   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
+	completedStatuses func(ctx context.Context, actor, propertyID uuid.UUID) (map[uuid.UUID]bool, error)
+}
+
+// CompletedStatus defaults to false — the pre-completion behaviour the older
+// wire assertions expect unless a test sets the hook.
+func (f *fakePaymentManager) CompletedStatus(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (bool, error) {
+	if f.completedStatus == nil {
+		return false, nil
+	}
+	return f.completedStatus(ctx, actor, propertyID, paymentID)
+}
+
+func (f *fakePaymentManager) CompletedStatuses(
+	ctx context.Context, actor, propertyID uuid.UUID,
+) (map[uuid.UUID]bool, error) {
+	if f.completedStatuses == nil {
+		return map[uuid.UUID]bool{}, nil
+	}
+	return f.completedStatuses(ctx, actor, propertyID)
 }
 
 // The method set mirrors the port; the long signatures are the contract's.

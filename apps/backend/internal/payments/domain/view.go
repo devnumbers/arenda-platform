@@ -25,3 +25,24 @@ func OperationView(op Operation, today time.Time) OperationViewStatus {
 	}
 	return OperationViewStatus(op.Status)
 }
+
+// IsCompleted reports whether the payment rule has no unsettled occurrences
+// left: nothing planned and no occurrence beyond the last materialized date
+// of any status. Like overdue it is a computed read-side view, never stored —
+// the rule itself keeps no lifecycle state (payment.go). The
+// lastMaterialized argument is the newest operation date across planned and
+// paid (nil — nothing has been materialized yet); the projection cursor then
+// falls to yesterday, so a rule whose occurrences all lie ahead is not
+// completed. An open-ended rule never completes: occurrences exist beyond
+// any cursor.
+func IsCompleted(p Payment, today time.Time, lastMaterialized *time.Time, hasPlanned bool) bool {
+	if hasPlanned {
+		return false
+	}
+	cursor := today.AddDate(0, 0, -1)
+	if lastMaterialized != nil && lastMaterialized.After(cursor) {
+		cursor = *lastMaterialized
+	}
+	_, ok := NextOccurrenceAfter(p, cursor)
+	return !ok
+}

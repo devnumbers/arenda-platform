@@ -9,6 +9,7 @@ import {
 /** Правило-база: все поля заполнены, категория из дефолтного каталога. */
 function basePayment(overrides: Partial<Payment> = {}): Payment {
   return {
+    isCompleted: false,
     id: '019abcde-0000-7000-8000-000000000001',
     propertyId: '019abcde-0000-7000-8000-000000000002',
     type: 'expense',

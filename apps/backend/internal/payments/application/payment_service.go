@@ -427,3 +427,101 @@ func updatedFields(cmd UpdatePaymentCommand) []string {
 	}
 	return fields
 }
+
+// CompletedStatus reports the computed settlement status of one rule
+// (CONTEXT.md «Завершённый платёж»): no planned operations — overdue
+// included — and no occurrence beyond the last materialized date of any
+// status. A read-side view like overdue (domain.IsCompleted); reads never
+// tick, the aggregate queries are bounded to one row each.
+func (s *PaymentService) CompletedStatus(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (bool, error) {
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return false, err
+	}
+	payment, err := s.payments.Get(ctx, paymentID, scope, propertyID)
+	if err != nil {
+		return false, err
+	}
+	return s.ruleCompleted(ctx, scope, payment)
+}
+
+// CompletedStatuses computes the completion flag for every rule of the
+// property: the list response carries the flag per item, while the list rows
+// themselves hold no operation data to derive it client-side.
+func (s *PaymentService) CompletedStatuses(
+	ctx context.Context, actor, propertyID uuid.UUID,
+) (map[uuid.UUID]bool, error) {
+	scope, err := s.readScope(ctx, actor, propertyID)
+	if err != nil {
+		return nil, err
+	}
+	payments, err := s.payments.ListByProperty(ctx, scope, propertyID, "")
+	if err != nil {
+		return nil, err
+	}
+	today, err := ownerToday(s.calendar, ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	statuses := make(map[uuid.UUID]bool, len(payments))
+	for _, payment := range payments {
+		completed, err := s.ruleCompletedToday(ctx, scope, today, payment)
+		if err != nil {
+			return nil, err
+		}
+		statuses[payment.ID] = completed
+	}
+	return statuses, nil
+}
+
+// ruleCompleted resolves the data owner's today and computes the flag for a
+// loaded rule.
+func (s *PaymentService) ruleCompleted(
+	ctx context.Context, scope uuid.UUID, payment domain.Payment,
+) (bool, error) {
+	today, err := ownerToday(s.calendar, ctx, scope)
+	if err != nil {
+		return false, err
+	}
+	return s.ruleCompletedToday(ctx, scope, today, payment)
+}
+
+// ruleCompletedToday gathers the operation aggregates the pure domain check
+// needs: any planned operation (the overdue view status included — an
+// unsettled debt keeps the rule unfinished) and the newest materialized date
+// across both stored statuses. Three bounded queries over the rule's own
+// rows; with planned present the rest is unnecessary.
+func (s *PaymentService) ruleCompletedToday(
+	ctx context.Context, scope uuid.UUID, today time.Time, payment domain.Payment,
+) (bool, error) {
+	overdue := domain.ViewStatusOverdue
+	planned := domain.ViewStatusPlanned
+	for _, status := range []*domain.OperationViewStatus{&overdue, &planned} {
+		ops, err := s.operations.ListByPayment(ctx, scope, payment.PropertyID, payment.ID, OperationsListQuery{
+			Status: status,
+			Limit:  1,
+			Today:  today,
+		})
+		if err != nil {
+			return false, fmt.Errorf("completion status check: %w", err)
+		}
+		if len(ops) > 0 {
+			return false, nil
+		}
+	}
+	newest, err := s.operations.ListByPayment(ctx, scope, payment.PropertyID, payment.ID, OperationsListQuery{
+		Limit: 1,
+		Today: today,
+	})
+	if err != nil {
+		return false, fmt.Errorf("completion last operation: %w", err)
+	}
+	var lastMaterialized *time.Time
+	if len(newest) > 0 {
+		date := newest[0].Date
+		lastMaterialized = &date
+	}
+	return domain.IsCompleted(payment, today, lastMaterialized, false), nil
+}
