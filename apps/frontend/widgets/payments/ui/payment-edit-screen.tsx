@@ -300,7 +300,9 @@ function PaymentEditForm({
           subtitle="Редактирование"
         />
       </TopNav>
-      <div className="flex flex-col gap-8">
+      {/* Горизонтальный отступ макета (705:10034, 24px) контент приносит сам —
+       * PageContent его не вкладывает, как и на экране карточки платежа. */}
+      <div className="flex flex-col gap-8 px-6">
         <div className="flex flex-col gap-2">
           <label htmlFor="payment-edit-amount" className="text-base font-medium leading-[18px] text-content">
             Сумма
@@ -380,16 +382,16 @@ function PaymentEditForm({
       </div>
 
       <StickyBottomBar>
-        <div className="px-6 pb-3">
-          <Button
-            className="w-full"
-            disabled={!canSave}
-            loading={updatePayment.isPending}
-            onClick={() => void save()}
-          >
-            Сохранить изменения
-          </Button>
-        </div>
+        {/* Паддинг 24 даёт сама панель (Figma 1043:60106); дополнительная
+         * обёртка давала бы двойной отступ. */}
+        <Button
+          className="w-full"
+          disabled={!canSave}
+          loading={updatePayment.isPending}
+          onClick={() => void save()}
+        >
+          Сохранить изменения
+        </Button>
       </StickyBottomBar>
 
       <Modal
@@ -546,7 +548,8 @@ function FieldButton({
 }
 
 /** Компактное поле суммы (Figma 1127:33146 «Сумма»): бокс 56px, группировка
- * разрядов, символ рубля вне инпута (Backspace стирает по цифре), кнопка
+ * разрядов, без символа рубля (правка владельца 2026-08-31, макет
+ * 705:10034), кнопка
  * очистки — при непустом значении. */
 function AmountBoxInput({
   value,
@@ -577,7 +580,6 @@ function AmountBoxInput({
         }}
         className="h-full min-w-0 flex-1 border-none bg-transparent text-base leading-[18px] text-content outline-none placeholder:text-content-secondary"
       />
-      <span aria-hidden className="pr-1 text-base leading-[18px] text-content">₽</span>
       {hasValue && (
         <IconButton icon={<Cancel />} label="Очистить сумму" variant="secondary" onClick={onClear} />
       )}
