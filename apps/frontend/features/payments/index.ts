@@ -9,6 +9,10 @@ export {
 } from './lib/use-payment-wizard-draft';
 export { matchesTitleSearch } from './lib/title-search';
 export {
+  FORM_OF_PAYMENT_LABELS,
+  TYPE_LABELS,
+} from './lib/payment-labels';
+export {
   PERIODICITY_OPTIONS,
   WEEKDAY_BUTTONS,
   WIZARD_TOTAL_STEPS,

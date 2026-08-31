@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Calendar, Cancel, Check, ChevronDown, Trash } from '@/shared/assets/icons';
+import { Calendar, Cancel, ChangeHorizontal, Check, Filter, Trash } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import {
   kopecksToRublesString,
@@ -16,15 +16,17 @@ import {
   recurrenceLabel,
   type IsoDate,
   type Payment,
-  type PaymentForm,
-  type PaymentType,
 } from '@/entities/payment';
 import { paymentCategoryBySlug } from '@/features/payment-categories';
 import { useProperty } from '@/features/properties';
 import {
   buildPaymentUpdateCommand,
   editFormReady,
+  FORM_OF_PAYMENT_LABELS,
   periodicityReady,
+  togglePaymentForm,
+  togglePaymentType,
+  TYPE_LABELS,
   useDeletePayment,
   usePayment,
   usePaymentOperationsByStatus,
@@ -37,7 +39,6 @@ import {
   Checkbox,
   groupedAmount,
   IconButton,
-  ListRow,
   Modal,
   ModalContent,
   PageContent,
@@ -58,11 +59,14 @@ import { EndDateStep } from './payment-create-wizard/end-date-step';
 import { PeriodicityStep } from './payment-create-wizard/periodicity-step';
 
 /**
- * Экран правки платежа (#467, Figma 1127:33146): форма, не визард — все
- * поля на одной странице, значения предзаполнены правилом. Регулярность —
- * без «Один раз» (решение #449) с ветками дат; `since` и напоминания
- * отсутствуют (не редактируются, истории 31 спеки #453). Лейбл формы
- * оплаты — «Форма оплаты» (копирайт-правка спеки, не «Способ оплаты»).
+ * Экран правки платежа (Figma 705:10034; ранее 1127:33146, #467): форма,
+ * не визард — все поля на одной странице, значения предзаполнены правилом.
+ * Тип («Доход или расход») и «Способ оплаты» — строки-поля, значение
+ * меняется простым нажатием по строке, без пикеров. Лейбл «Способ оплаты» —
+ * по макету (решение владельца 2026-08-31), хотя глоссарий (CONTEXT-MAP)
+ * считает его термином биллинга и предписывает платежам «Форму оплаты».
+ * Регулярность — без «Один раз» (решение #449) с ветками дат; `since` и
+ * напоминания отсутствуют (не редактируются, истории 31 спеки #453).
  * Сохранение — частичный PATCH: команда — дифф формы (update-model),
  * пересоздание планового вхождения делает сервер — правка меняет только
  * будущее. Внизу — danger-кнопка «Удалить платеж» с модалкой выбора судьбы
@@ -75,12 +79,7 @@ import { PeriodicityStep } from './payment-create-wizard/periodicity-step';
  * read-only (#446).
  */
 
-const FORM_OF_PAYMENT_LABELS: Record<PaymentForm, string> = {
-  transfer: 'Перевод',
-  cash: 'Наличные',
-};
-
-type EditPicker = 'category' | 'paymentForm' | 'periodicity' | 'endDate';
+type EditPicker = 'category' | 'periodicity' | 'endDate';
 
 export function PaymentEditScreen({
   propertyId,
@@ -277,7 +276,7 @@ function PaymentEditForm({
 
   return (
     <>
-      {/* Шапка экрана правки (Figma 1127:33146): Отмена | тип + «Редактирование»
+      {/* Шапка экрана правки (Figma 705:10034): Отмена | тип + «Редактирование»
        * | Check — быстрая клавиша сохранения наравне со sticky-кнопкой. */}
       <TopNav
         leading={
@@ -318,35 +317,38 @@ function PaymentEditForm({
               update('amountKopecks', undefined);
             }}
           />
-          <SegmentedTypeControl
-            value={form.type}
-            onChange={(type) => update('type', type)}
-          />
         </div>
 
         <TextField
           variant="titleOut"
           title="Название платежа"
-          description="Необязательно"
+          placeholder="Введите название"
           maxLength={255}
           value={form.title}
           onChange={(event) => update('title', event.target.value)}
-          onClear={() => update('title', '')}
         />
 
         <FieldButton
           title="Категория"
           value={categoryLabel}
-          icon={<ChevronDown className="h-6 w-6 text-content-secondary" aria-hidden />}
+          icon={<Filter className="h-6 w-6 text-content-secondary" aria-hidden />}
           onClick={() => setPicker('category')}
         />
 
         <FieldButton
-          title="Форма оплаты"
+          title="Доход или расход"
+          ariaLabel={`Доход или расход: ${TYPE_LABELS[form.type]}, нажмите, чтобы сменить`}
+          value={TYPE_LABELS[form.type]}
+          icon={<ChangeHorizontal className="h-6 w-6 text-content-secondary" aria-hidden />}
+          onClick={() => update('type', togglePaymentType(form.type))}
+        />
+
+        <FieldButton
+          title="Способ оплаты"
+          ariaLabel={`Способ оплаты: ${FORM_OF_PAYMENT_LABELS[form.paymentForm]}, нажмите, чтобы сменить`}
           value={FORM_OF_PAYMENT_LABELS[form.paymentForm]}
-          description="Необязательно"
-          icon={<ChevronDown className="h-6 w-6 text-content-secondary" aria-hidden />}
-          onClick={() => setPicker('paymentForm')}
+          icon={<ChangeHorizontal className="h-6 w-6 text-content-secondary" aria-hidden />}
+          onClick={() => update('paymentForm', togglePaymentForm(form.paymentForm))}
         />
 
         <FieldButton
@@ -359,7 +361,6 @@ function PaymentEditForm({
         <FieldButton
           title="Окончание платежа"
           value={form.endDate !== undefined ? formatDayMonthWithYear(form.endDate, today) : 'Бессрочно'}
-          description="Необязательно"
           icon={<Calendar className="h-6 w-6 text-content-secondary" aria-hidden />}
           onClick={() => setPicker('endDate')}
         />
@@ -403,31 +404,6 @@ function PaymentEditForm({
               setPicker(null);
             }}
           />
-        </ModalContent>
-      </Modal>
-
-      <Modal
-        open={picker === 'paymentForm'}
-        onOpenChange={(open) => !open && setPicker(null)}
-      >
-        <ModalContent title="Форма оплаты">
-          <div className="-mx-6 -mb-6">
-            {(Object.keys(FORM_OF_PAYMENT_LABELS) as PaymentForm[]).map((formValue) => (
-              <ListRow
-                key={formValue}
-                title={FORM_OF_PAYMENT_LABELS[formValue]}
-                onSelect={() => {
-                  update('paymentForm', formValue);
-                  setPicker(null);
-                }}
-                trailing={
-                  form.paymentForm === formValue ? (
-                    <Check className="h-5 w-5 text-primary" aria-hidden />
-                  ) : undefined
-                }
-              />
-            ))}
-          </div>
         </ModalContent>
       </Modal>
 
@@ -533,26 +509,28 @@ function periodicitySheetTitle(openBranch: PeriodicityBranch | null): string {
 }
 
 /** Поле-кнопка (Figma «Input Field» с иконкой): бокс 56px со значением и
- * стрелкой/календарём, открывает пикер в шите. */
+ * иконкой справа; тап открывает пикер в шите либо (тип, способ оплаты)
+ * переключает значение на месте. У переключателей ariaLabel несёт текущее
+ * значение — как у чипов шага суммы визарда. */
 function FieldButton({
   title,
   value,
-  description,
   icon,
   onClick,
+  ariaLabel,
 }: {
   readonly title: string;
   readonly value: string;
-  readonly description?: string;
   readonly icon: JSX.Element;
   readonly onClick: () => void;
+  readonly ariaLabel?: string;
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-base font-medium leading-[18px] text-content">{title}</span>
       <button
         type="button"
-        aria-label={title}
+        aria-label={ariaLabel ?? title}
         onClick={onClick}
         className="flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted pr-2 pl-[18px] text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)] focus-visible:ring-2 focus-visible:ring-primary"
       >
@@ -563,9 +541,6 @@ function FieldButton({
           {icon}
         </span>
       </button>
-      {description !== undefined && (
-        <span className="text-[13px] leading-[15px] text-content-tertiary">{description}</span>
-      )}
     </div>
   );
 }
@@ -606,44 +581,6 @@ function AmountBoxInput({
       {hasValue && (
         <IconButton icon={<Cancel />} label="Очистить сумму" variant="secondary" onClick={onClear} />
       )}
-    </div>
-  );
-}
-
-/** Переключатель «Расход / Доход» (Figma 1127:33146): сегмент-контрол —
- * белый выбранный сегмент на серой подложке. */
-function SegmentedTypeControl({
-  value,
-  onChange,
-}: {
-  readonly value: PaymentType;
-  readonly onChange: (type: PaymentType) => void;
-}): JSX.Element {
-  const options: ReadonlyArray<{ readonly value: PaymentType; readonly label: string }> = [
-    { value: 'expense', label: 'Расход' },
-    { value: 'income', label: 'Доход' },
-  ];
-
-  return (
-    <div className="flex w-full gap-0.5 rounded-button bg-surface-muted p-0.5">
-      {options.map((option) => {
-        const selected = value === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onChange(option.value)}
-            className={
-              selected
-                ? 'flex h-[52px] flex-1 cursor-pointer items-center justify-center rounded-[14px] bg-white text-sm leading-4 font-medium text-content shadow-[0_2px_8px_0_rgba(0,0,0,0.16)] outline-none focus-visible:ring-2 focus-visible:ring-primary'
-                : 'flex h-[52px] flex-1 cursor-pointer items-center justify-center rounded-[14px] text-sm leading-4 font-medium text-content-secondary outline-none transition-colors hover:text-content focus-visible:ring-2 focus-visible:ring-primary'
-            }
-          >
-            {option.label}
-          </button>
-        );
-      })}
     </div>
   );
 }

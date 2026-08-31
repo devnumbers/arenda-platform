@@ -1,5 +1,6 @@
 import type { IsoDate, Payment, PaymentOperation, PaymentType } from '@/entities/payment';
 import { nextOccurrenceAfter, occurrencesBetween } from '@/entities/payment';
+import { TYPE_LABELS } from './payment-labels';
 
 /**
  * Чистая модель страницы платежа (#465): выбор цели кнопки «Оплатить»,
@@ -31,7 +32,7 @@ export function isPaymentCompleted(payment: Payment, today: IsoDate): boolean {
 
 /** Подпись направления карточки («Расход» / «Доход»). */
 export function paymentTypeLabel(type: PaymentType): string {
-  return type === 'income' ? 'Доход' : 'Расход';
+  return TYPE_LABELS[type];
 }
 
 /**

@@ -11,8 +11,10 @@ import {
 import {
   effectivePaymentForm,
   effectivePaymentType,
+  FORM_OF_PAYMENT_LABELS,
   togglePaymentForm,
   togglePaymentType,
+  TYPE_LABELS,
 } from '@/features/payments';
 import { WizardHeading } from './wizard-chrome';
 
@@ -34,16 +36,6 @@ export type AmountStepProps = {
   readonly onTypeChange: (type: PaymentType) => void;
   readonly paymentForm: PaymentForm | undefined;
   readonly onPaymentFormChange: (paymentForm: PaymentForm) => void;
-};
-
-const TYPE_LABELS: Record<PaymentType, string> = {
-  income: 'Доход',
-  expense: 'Расход',
-};
-
-const FORM_LABELS: Record<PaymentForm, string> = {
-  transfer: 'Перевод',
-  cash: 'Наличные',
 };
 
 export function AmountStep({
@@ -72,11 +64,11 @@ export function AmountStep({
             без выбранного состояния — значение написано на самом чипе. */}
         <div className="flex justify-center gap-2">
           <ChipButton
-            aria-label={`Форма оплаты: ${FORM_LABELS[currentForm]}, нажмите, чтобы сменить`}
+            aria-label={`Форма оплаты: ${FORM_OF_PAYMENT_LABELS[currentForm]}, нажмите, чтобы сменить`}
             onClick={() => onPaymentFormChange(togglePaymentForm(currentForm))}
             trailingIcon={<ChangeHorizontal />}
           >
-            {FORM_LABELS[currentForm]}
+            {FORM_OF_PAYMENT_LABELS[currentForm]}
           </ChipButton>
           <ChipButton
             aria-label={`Тип платежа: ${TYPE_LABELS[currentType]}, нажмите, чтобы сменить`}
