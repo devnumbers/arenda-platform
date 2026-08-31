@@ -11,6 +11,7 @@ import {
   clientTodayIso,
   formatDayMonth,
   formatDayMonthWithYear,
+  PaymentRowButton,
   type IsoDate,
   type PaymentOperation,
 } from '@/entities/payment';
@@ -29,7 +30,6 @@ import {
 import {
   Button,
   IconButton,
-  ListRow,
   PageContent,
   StatusIcon,
   StickyBottomBar,
@@ -110,7 +110,7 @@ export function OperationDetailScreen({
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-6">
           {loading && (
             <>
               <PaymentsSkeleton withHeading />
@@ -167,6 +167,7 @@ function OperationDetailBody({
   readonly canMutate: boolean;
   readonly onPaid: (paid: PaymentOperation) => void;
 }): JSX.Element {
+  const router = useRouter();
   const payOperation = usePayOperation(propertyId);
 
   // Ручные факты и операции удалённого правила (paymentId null) не
@@ -210,36 +211,49 @@ function OperationDetailBody({
     <>
       <OperationHero operation={operation} category={category} subtitle={subtitle} amountText={amount.text} amountTone={amountTone} />
 
-      <DetailsSection title="Данные операции">
-        <ListRow
-          leading={<CategoryIcon icon={category.icon} color={category.color} />}
-          title={operation.title}
-          subtitle="Платеж"
-        />
-        <ListRow
-          leading={(
-            <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted">
+      {/* Данные операции (1386:67731): строки — Row Button Variant=White на
+       * белом фоне, контент с отступом 24, без шеврона; клик ведёт на
+       * правило и объект. У операции без правила (ручной факт, платёж
+       * удалён) строки «Платеж» нет (решение владельца). */}
+      <OperationSection title="Данные операции">
+        {paymentId !== null && (
+          <PaymentRowButton
+            variant="white"
+            className="px-6 py-3"
+            categoryIcon={<CategoryIcon icon={category.icon} color={category.color} />}
+            title={operation.title}
+            subtitle="Платеж"
+            onSelect={() => router.push(ROUTES.propertyPayment(propertyId, paymentId))}
+          />
+        )}
+        <PaymentRowButton
+          variant="white"
+          className="px-6 py-3"
+          categoryIcon={
+            <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]">
               <Home className="h-6 w-6 text-content" aria-hidden />
             </span>
-          )}
+          }
           title={propertyTitle !== '' ? propertyTitle : 'Объект'}
           subtitle="Объект"
+          onSelect={() => router.push(ROUTES.property(propertyId))}
         />
-      </DetailsSection>
+      </OperationSection>
 
-      <DetailsSection title="Подробнее">
+      {/* Подробнее (1386:67731): статичные строки «лейбл — значение» 14px
+       * прямо на белом, без карточки и без hover-подсветки. */}
+      <OperationSection title="Подробнее">
         {operation.paidDate !== undefined && (
-          <ListRow title="Фактическая оплата" value={formatDayMonthWithYear(operation.paidDate, today)} />
+          <DetailRow label="Фактическая оплата" value={formatDayMonthWithYear(operation.paidDate, today)} />
         )}
-        <ListRow title="Плановая оплата" value={formatDayMonthWithYear(operation.date, today)} />
-        {delay !== null && <ListRow title={delay.label} value={delay.text} />}
-        <ListRow
-          title="Статус"
-          value={
-            <StatusValue operation={operation} />
-          }
+        <DetailRow label="Плановая оплата" value={formatDayMonthWithYear(operation.date, today)} />
+        {delay !== null && <DetailRow label={delay.label} value={delay.text} />}
+        <DetailRow
+          label="Статус"
+          value={operation.status === 'overdue' ? 'Просрочена' : operation.status === 'paid' ? 'Выполнена' : 'Запланирована'}
+          danger={operation.status === 'overdue'}
         />
-      </DetailsSection>
+      </OperationSection>
 
       {canMutate && payable && (
         <StickyBottomBar>
@@ -274,7 +288,7 @@ function OperationHero({
   const Icon = categoryIconComponents[category.icon];
 
   return (
-    <div className="flex flex-col items-center gap-3 px-6 pt-6">
+    <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-6">
       <span
         className="flex h-24 w-24 items-center justify-center rounded-pill shadow-[0_0_0_2.5px_var(--dl-surface)]"
         style={{ backgroundColor: category.color }}
@@ -306,8 +320,9 @@ function OperationHero({
   );
 }
 
-/** Секция-карточка страницы: заголовок 20 и серый контейнер строк. */
-function DetailsSection({
+/** Секция страницы (1386:67731): заголовок H3 20/24 и строки без
+ * карточки-подложки — прямо на белом фоне экрана. */
+function OperationSection({
   title,
   children,
 }: {
@@ -317,21 +332,27 @@ function DetailsSection({
   return (
     <section>
       <h2 className="px-6 pb-2 text-xl font-semibold leading-6 text-content">{title}</h2>
-      <div className="mx-6 flex flex-col rounded-card bg-surface-muted py-2">{children}</div>
+      <div className="flex flex-col">{children}</div>
     </section>
   );
 }
 
-/** Значение статуса (1419:25859): просрочка — красным, остальные — тёмным. */
-function StatusValue({ operation }: { readonly operation: PaymentOperation }): JSX.Element {
-  const label =
-    operation.status === 'paid'
-      ? 'Выполнена'
-      : operation.status === 'overdue'
-        ? 'Просрочена'
-        : 'Запланирована';
+/** Статичная строка «Подробнее»: лейбл слева серым 14, значение справа
+ * тёмным 14 (просрочка — красным); hover-подсветки нет. */
+function DetailRow({
+  label,
+  value,
+  danger = false,
+}: {
+  readonly label: string;
+  readonly value: ReactNode;
+  readonly danger?: boolean;
+}): JSX.Element {
   return (
-    <span className={operation.status === 'overdue' ? 'text-danger' : undefined}>{label}</span>
+    <div className="flex items-baseline justify-between gap-3 px-6 py-1 text-sm leading-4">
+      <span className="shrink-0 text-content-secondary">{label}</span>
+      <span className={`text-right ${danger ? 'text-danger' : 'text-content'}`}>{value}</span>
+    </div>
   );
 }
 

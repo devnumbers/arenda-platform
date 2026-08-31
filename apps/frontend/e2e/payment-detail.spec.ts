@@ -143,6 +143,16 @@ test.describe('страница платежа', () => {
     await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
     await expect(page.getByText('Просрочена', { exact: true })).toBeVisible();
 
+    // Строки «Данных операции» — ссылки (1386:67731): объект ведёт на
+    // страницу объекта, правило — на страницу платежа.
+    await page.getByRole('button', { name: 'Квартира на Ленина Объект' }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}$`));
+    await page.goBack();
+    await page.getByRole('button', { name: 'Арендная плата Платеж' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
+    await page.goBack();
+    await expect(page.getByText('Просрочена', { exact: true })).toBeVisible();
+
     await page.goBack();
     await page.getByRole('button', { name: 'Оплатить' }).click();
     await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+$`));
