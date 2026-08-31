@@ -18,7 +18,6 @@ import {
 import {
   categoryIconComponents,
   categoryStyle,
-  CategoryIcon,
 } from '@/features/payment-categories';
 import { useProperty } from '@/features/properties';
 import {
@@ -219,8 +218,8 @@ function OperationDetailBody({
         {paymentId !== null && (
           <PaymentRowButton
             variant="white"
-            className="px-6 py-3"
-            categoryIcon={<CategoryIcon icon={category.icon} color={category.color} />}
+            className="py-3"
+            categoryIcon={<CategoryGlyph icon={category.icon} color={category.color} size="h-6 w-6" />}
             title={operation.title}
             subtitle="Платеж"
             onSelect={() => router.push(ROUTES.propertyPayment(propertyId, paymentId))}
@@ -228,9 +227,9 @@ function OperationDetailBody({
         )}
         <PaymentRowButton
           variant="white"
-          className="px-6 py-3"
+          className="py-3"
           categoryIcon={
-            <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]">
+            <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted">
               <Home className="h-6 w-6 text-content" aria-hidden />
             </span>
           }
@@ -270,7 +269,7 @@ function OperationDetailBody({
   );
 }
 
-/** Hero-блок (1386:67731): иконка категории 96 с белым кантом, название,
+/** Hero-блок (1386:67731): иконка категории 96, название,
  * чип категории, сумма 40 и подпись срока под ней. */
 function OperationHero({
   operation,
@@ -290,18 +289,14 @@ function OperationHero({
   return (
     <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-6">
       <span
-        className="flex h-24 w-24 items-center justify-center rounded-pill shadow-[0_0_0_2.5px_var(--dl-surface)]"
+        className="flex h-24 w-24 items-center justify-center rounded-pill"
         style={{ backgroundColor: category.color }}
       >
         {Icon !== undefined && <Icon className="h-10 w-10 text-white" aria-hidden />}
       </span>
       <span className="text-xl font-semibold leading-6 text-content">{operation.title}</span>
       <span className="flex items-center gap-1.5 rounded-pill bg-surface-info py-1 pl-1.5 pr-3">
-        <CategoryIcon
-          icon={category.icon}
-          color={category.color}
-          className="h-6 w-6 [&_svg]:h-3.5 [&_svg]:w-3.5"
-        />
+        <CategoryGlyph icon={category.icon} color={category.color} size="h-3.5 w-3.5" />
         <span className="text-sm leading-4 text-content">{operation.categoryLabel}</span>
       </span>
       <span className={`text-[40px] leading-[44px] font-semibold ${amountTone}`}>
@@ -334,6 +329,29 @@ function OperationSection({
       <h2 className="px-6 pb-2 text-xl font-semibold leading-6 text-content">{title}</h2>
       <div className="flex flex-col">{children}</div>
     </section>
+  );
+}
+
+/** Круглый глиф категории без канта (правка владельца: белого кольца
+ * в дизайне нет): цветная подложка + bold-иконка заданного размера. */
+function CategoryGlyph({
+  icon,
+  color,
+  size,
+}: {
+  readonly icon: string;
+  readonly color: string;
+  readonly size: string;
+}): JSX.Element {
+  const Icon = categoryIconComponents[icon];
+
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-pill"
+      style={{ backgroundColor: color }}
+    >
+      {Icon !== undefined && <Icon className={`${size} text-white`} aria-hidden />}
+    </span>
   );
 }
 
@@ -389,7 +407,7 @@ function OperationPaidSuccess({
         <div className="flex flex-col items-center gap-8 px-6 pt-16">
           <span className="relative block h-24 w-24">
             <span
-              className="flex h-24 w-24 items-center justify-center rounded-pill shadow-[0_0_0_2.5px_var(--dl-surface)]"
+              className="flex h-24 w-24 items-center justify-center rounded-pill"
               style={{ backgroundColor: style.color }}
             >
               {Icon !== undefined && <Icon className="h-10 w-10 text-white" aria-hidden />}
