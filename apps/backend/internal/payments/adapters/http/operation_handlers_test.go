@@ -411,6 +411,27 @@ func TestDeleteOperation_CancelsAndMapsErrors(t *testing.T) {
 			t.Fatalf("status = %d, want 403", w.Code)
 		}
 	})
+
+	t.Run("an archived property is the 409", func(t *testing.T) {
+		t.Parallel()
+		svc := &fakeOperationsManager{
+			del: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
+				return application.ErrArchivedProperty
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodDelete, "/operation", nil,
+		)
+		w := httptest.NewRecorder()
+		h.DeleteOperation(w, req, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+
+		if w.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want 409", w.Code)
+		}
+	})
 }
 
 func TestGetOperation_ReturnsOperationAndMapsErrors(t *testing.T) {
