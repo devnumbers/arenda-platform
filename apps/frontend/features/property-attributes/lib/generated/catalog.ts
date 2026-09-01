@@ -40,7 +40,6 @@ export type AttrFieldList = readonly AttrField[];
 const yearBuiltMax = new Date().getFullYear() + 5;
 
 const apartmentFields: AttrFieldList = [
-  { key: "rooms", kind: 'enum', options: ["studio", "1", "2", "3", "4", "5", "6", "7_plus"], group: "about_object" },
   { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
   { key: "area_living", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
   { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
@@ -55,7 +54,6 @@ const apartmentFields: AttrFieldList = [
 ];
 
 const roomFields: AttrFieldList = [
-  { key: "rooms", kind: 'enum', options: ["2", "3", "4", "5", "6", "7_plus"], group: "about_object" },
   { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
   { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
   { key: "floor", kind: 'integer', min: -3, max: 200, group: "about_object" },

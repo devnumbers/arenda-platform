@@ -1,20 +1,20 @@
 import type { components } from '@/shared/api/dto';
 import type { PropertyAttributes, PropertyType } from '@/entities/property';
 import { propertyCreateStepReady, type PropertyCreateDraft } from './property-create-draft';
-import { propertyTypeLabels } from './property-types';
 
 /**
  * Сабмит флоу «Создание объекта» (#482): команда POST /properties из
- * черновика и нотис смены типа. Характеристики уходят полной заменой
- * только заполненными ключами каталога текущего типа (бэкенд отклоняет
- * чужие ключи); «сырой» ввод нормализуется в проводные значения.
- * Черновик при этом чужие ключи хранит (lossless,
- * docs/entities/obekt.md) — смена типа их не удаляет.
+ * черновика. Характеристики уходят полной заменой только заполненными
+ * ключами каталога текущего типа (бэкенд отклоняет чужие ключи);
+ * «сырой» ввод нормализуется в проводные значения. Черновик при этом
+ * чужие ключи хранит (lossless, docs/entities/obekt.md) — смена типа их
+ * не удаляет и, по решению владельца, ничего не сообщает: экран просто
+ * показывает каталог нового типа.
  *
  * Каталог характеристик — соседняя фича (features/property-attributes):
  * боковые импорты между фичами запрещены, поэтому фича принимает порт с
- * тремя функциями каталога, а виджет инжектит реальные реализации
- * (паттерн resolveTitle из флоу платежей).
+ * функциями каталога, а виджет инжектит реальные реализации (паттерн
+ * resolveTitle из флоу платежей).
  */
 
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
@@ -81,22 +81,3 @@ export function buildPropertyCreateCommand(
   };
 }
 
-/** Нотис смены типа (lossless): среди заполненных есть ключи прежнего
- * типа, которых нет у нового. Текст честен контексту создания: черновик
- * ключи хранит, но в payload они не попадают — сохранены не будут. */
-export function attributeTypeChangeNotice(
-  prevType: PropertyType,
-  nextType: PropertyType,
-  attributes: PropertyAttributes,
-  attributeCatalog: PropertyAttributesPort,
-): string | undefined {
-  if (prevType === nextType) {
-    return undefined;
-  }
-  const nextKeys = attributeCatalog.fieldKeys(nextType);
-  const prevKeys = attributeCatalog.fieldKeys(prevType);
-  const hasForeign = Object.keys(attributes).some((key) => prevKeys.has(key) && !nextKeys.has(key));
-  return hasForeign
-    ? `Характеристики, заполненные для типа «${propertyTypeLabels[prevType]}», скрыты и не сохранятся`
-    : undefined;
-}

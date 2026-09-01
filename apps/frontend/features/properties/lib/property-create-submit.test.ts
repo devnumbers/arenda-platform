@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PropertyAttributes, PropertyType } from '@/entities/property';
+import type { PropertyType } from '@/entities/property';
 import {
-  attributeTypeChangeNotice,
   buildPropertyCreateCommand,
   type PropertyAttributesPort,
 } from './property-create-submit';
@@ -135,27 +134,5 @@ describe('buildPropertyCreateCommand', () => {
       type: 'land',
       address: 'Ленина, 1',
     });
-  });
-});
-
-describe('attributeTypeChangeNotice', () => {
-  it('заполненные ключи прежнего типа, которых нет у нового, — нотис', () => {
-    const attrs: PropertyAttributes = { area_living: '20', area_total: '47' };
-    expect(attributeTypeChangeNotice('apartment', 'house', attrs, stubCatalog)).toContain('Квартира');
-  });
-
-  it('общие ключи обоих типов нотиса не дают', () => {
-    const attrs: PropertyAttributes = { area_total: '47' };
-    expect(attributeTypeChangeNotice('apartment', 'house', attrs, stubCatalog)).toBeUndefined();
-  });
-
-  it('квартира ↔ апартаменты — один набор каталога, нотиса нет', () => {
-    const attrs: PropertyAttributes = { area_living: '20' };
-    expect(attributeTypeChangeNotice('apartment', 'apartments', attrs, stubCatalog)).toBeUndefined();
-    expect(attributeTypeChangeNotice('apartments', 'apartment', attrs, stubCatalog)).toBeUndefined();
-  });
-
-  it('без заполненных характеристик нотиса нет', () => {
-    expect(attributeTypeChangeNotice('apartment', 'land', {}, stubCatalog)).toBeUndefined();
   });
 });

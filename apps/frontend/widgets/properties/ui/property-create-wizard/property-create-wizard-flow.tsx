@@ -8,7 +8,6 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { fieldsForType, toWireAttributes, validateAttributes } from '@/features/property-attributes';
 import {
-  attributeTypeChangeNotice,
   buildPropertyCreateCommand,
   initialPropertyCreateStep,
   propertyCreateStepReady,
@@ -63,9 +62,6 @@ export function PropertyCreateWizardFlow(): JSX.Element {
   // где нижняя панель ещё не смонтирована (аналог визарда платежей #464).
   useTabBarSuppression();
   const [step, setStep] = useState<PropertyCreateStep>(() => initialPropertyCreateStep(draft));
-  // Нотис lossless живёт во флоу: смена типа случается и на шаге 1
-  // (возврат «назад» и другая категория), а шаг 3 перемонтируется.
-  const [typeChangeNotice, setTypeChangeNotice] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   return (
@@ -136,15 +132,13 @@ export function PropertyCreateWizardFlow(): JSX.Element {
             />
             <CharacteristicsStep
               type={draft.type}
-              onHousingTypeChange={changeType}
+              onHousingTypeChange={(type) => setDraft((prev) => ({ ...prev, type }))}
               name={draft.name ?? ''}
               onNameChange={(name) => setDraft((prev) => ({ ...prev, name }))}
               description={draft.description ?? ''}
               onDescriptionChange={(description) => setDraft((prev) => ({ ...prev, description }))}
               attributes={draft.attributes ?? {}}
               onAttributesChange={(attributes) => setDraft((prev) => ({ ...prev, attributes }))}
-              notice={typeChangeNotice ?? undefined}
-              onDismissNotice={() => setTypeChangeNotice(null)}
             />
             <StickyBottomBar>
               <PropertyWizardBottomBar>
@@ -184,23 +178,8 @@ export function PropertyCreateWizardFlow(): JSX.Element {
     dismiss();
   }
 
-  /** Смена типа с заполненными характеристиками прежнего типа показывает
-   * нотис (lossless); без чужих заполненных ключей смена тихая. */
-  function changeType(nextType: PropertyType): void {
-    if (draft.type !== undefined) {
-      const notice = attributeTypeChangeNotice(
-        draft.type,
-        nextType,
-        draft.attributes ?? {},
-        attributeCatalog,
-      );
-      setTypeChangeNotice(notice ?? null);
-    }
-    setDraft((prev) => ({ ...prev, type: nextType }));
-  }
-
   function selectCategory(type: PropertyType): void {
-    changeType(type);
+    setDraft((prev) => ({ ...prev, type }));
     setStep(2);
   }
 

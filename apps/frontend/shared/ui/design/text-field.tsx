@@ -17,8 +17,9 @@ import { IconButton } from './icon-button';
  * нет намеренно (решение владельца 2026-08-26): видимый признак фокуса —
  * каретка. Кнопка очистки появляется при непустом значении и переданном
  * onClear; остаётся в таб-порядке.
- * Суффикс (Figma 1218:54295 — единицы «м²», «м» в полях характеристик) —
- * серый текст справа в боксе, только декоративный (aria-hidden).
+ * Суффикс и префикс (Figma 1218:54295 — единицы «м²», «м» в полях
+ * характеристик) — серый текст внутри бокса, только декоративный
+ * (aria-hidden): префикс стоит слева до ввода, суффикс — справа.
  * Многострочное поле (Figma 1227:58065 «Title Out Multi Lines») — textarea
  * в том же боксе: бокс растёт от контента, минимум 56px; вариант titleIn
  * с multiline не сочетается — плавающий лейбл рассчитан на одну строку. */
@@ -34,8 +35,11 @@ type TextFieldBaseProps = {
    * счётчик «длина/лимит»; красным — при достижении лимита. */
   readonly maxLength?: number;
   readonly onClear?: () => void;
-  /** Декоративный хвост бокса (единица измерения), aria-hidden. */
+  /** Декоративный хвост бокса (единица измерения справа), aria-hidden. */
   readonly suffix?: ReactNode;
+  /** Декоративная головка бокса (единица измерения слева, до ввода),
+   * aria-hidden. */
+  readonly prefix?: ReactNode;
 };
 
 /** Однострочное поле — пропсы input; многострочное (multiline) — пропсы
@@ -57,6 +61,7 @@ export function TextField({
   maxLength,
   onClear,
   suffix,
+  prefix,
   multiline = false,
   value,
   disabled,
@@ -126,6 +131,11 @@ export function TextField({
         )}
         {(variant === 'titleOut' || title === undefined || multiline) && (
           <>
+            {prefix !== undefined && (
+              <span aria-hidden className="pr-1 text-base leading-[18px] text-content-secondary">
+                {prefix}
+              </span>
+            )}
             {multiline ? (
               <textarea
                 id={inputId}
@@ -140,7 +150,7 @@ export function TextField({
             ) : (
               <input
                 id={inputId}
-                className={input}
+                className={cn(input, prefix !== undefined && 'px-0')}
                 disabled={disabled}
                 value={value}
                 placeholder={placeholder}

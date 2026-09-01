@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PropertyAttributes, PropertyType } from '@/entities/property';
 import { findField, type AttrField } from './catalog';
 import type { AttrKey } from '../model/attr-keys';
-import { toWireAttribute, toWireAttributes } from './wire';
+import { toWireAttribute, toWireAttributes, sanitizeAttributeInput } from './wire';
 
 /** Поле каталога для примера: отсутствие ключа у типа — ошибка теста. */
 function field(type: PropertyType, key: AttrKey): AttrField {
@@ -45,7 +45,7 @@ describe('toWireAttribute', () => {
 describe('toWireAttributes', () => {
   it('оставляет только ключи каталога текущего типа и заполненные значения', () => {
     const attrs: PropertyAttributes = {
-      rooms: '2',
+      bathroom: 'separate',
       area_total: '47,5',
       // чужой ключ от прежнего типа — не попадает в payload типа apartment
       land_area: '6',
@@ -53,7 +53,7 @@ describe('toWireAttributes', () => {
       balcony: '',
     };
     expect(toWireAttributes('apartment', attrs)).toStrictEqual({
-      rooms: '2',
+      bathroom: 'separate',
       area_total: 47.5,
     });
   });
@@ -61,5 +61,33 @@ describe('toWireAttributes', () => {
   it('пустой ввод даёт пустой объект — «нет характеристик»', () => {
     expect(toWireAttributes('land', {})).toStrictEqual({});
     expect(toWireAttributes('land', { land_area: '' })).toStrictEqual({});
+  });
+});
+
+describe('sanitizeAttributeInput', () => {
+  it('дробное число: буквы и лишние разделители не вводятся', () => {
+    const area = field('apartment', 'area_total');
+    expect(sanitizeAttributeInput(area, '4 7,5а')).toBe('47,5');
+    // Второй разделитель выбрасывается, цифры после него остаются.
+    expect(sanitizeAttributeInput(area, '4,5.6')).toBe('4,56');
+    expect(sanitizeAttributeInput(area, '.5')).toBe(',5');
+    expect(sanitizeAttributeInput(area, '')).toBe('');
+  });
+
+  it('целое число: только цифры; минус — если каталог допускает отрицательные', () => {
+    const year = field('apartment', 'year_built');
+    const floor = field('apartment', 'floor');
+    // Буквы (в т.ч. похожая на ноль «о») не вводятся.
+    expect(sanitizeAttributeInput(year, '2о19')).toBe('219');
+    expect(sanitizeAttributeInput(year, '-2019')).toBe('2019');
+    expect(sanitizeAttributeInput(floor, '-')).toBe('-');
+    expect(sanitizeAttributeInput(floor, '-3')).toBe('-3');
+    expect(sanitizeAttributeInput(floor, '3-4')).toBe('34');
+    expect(sanitizeAttributeInput(floor, '-3,5')).toBe('-35');
+  });
+
+  it('строковое поле не фильтруется', () => {
+    const spot = field('parking', 'spot_number');
+    expect(sanitizeAttributeInput(spot, '12-А / место')).toBe('12-А / место');
   });
 });

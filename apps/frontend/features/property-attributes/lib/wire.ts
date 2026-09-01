@@ -8,6 +8,33 @@ import { type AttrField, fieldsForType } from './catalog';
  * (docs/entities/obekt.md: полная замена, только заполненные ключи).
  */
 
+/** Живая фильтрация ввода по типу поля: в число вводятся только цифры
+ * (плюс один разделитель для дробных и ведущий минус там, где каталог
+ * допускает отрицательные), строковые поля не фильтруются. Запрещённый
+ * символ не вводится вовсе — пользователь не видит его мигания. */
+export function sanitizeAttributeInput(field: AttrField, raw: string): string {
+  if (field.kind !== 'number' && field.kind !== 'integer') {
+    return raw;
+  }
+  let out = '';
+  let separatorSeen = false;
+  for (const char of raw) {
+    if (char >= '0' && char <= '9') {
+      out += char;
+      continue;
+    }
+    if (field.kind === 'number' && !separatorSeen && (char === ',' || char === '.')) {
+      out += ',';
+      separatorSeen = true;
+      continue;
+    }
+    if (char === '-' && field.min < 0 && out.length === 0) {
+      out += char;
+    }
+  }
+  return out;
+}
+
 /** Одно значение: числовые поля парсятся (запятая → точка, целые — без
  * дробной части), незаполненное и нечислимое отбрасывается. */
 export function toWireAttribute(

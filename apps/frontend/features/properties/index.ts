@@ -18,7 +18,6 @@ export type {
   PropertyCreateStep,
 } from './lib/property-create-draft';
 export {
-  attributeTypeChangeNotice,
   buildPropertyCreateCommand,
   type PropertyAttributesPort,
 } from './lib/property-create-submit';

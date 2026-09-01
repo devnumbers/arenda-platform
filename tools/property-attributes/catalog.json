@@ -5,21 +5,6 @@
     "apartment": {
       "label": "Квартира",
       "fields": {
-        "rooms": {
-          "kind": "enum",
-          "label": "Комнаты",
-          "options": [
-            { "key": "studio", "label": "Студия" },
-            { "key": "1", "label": "1" },
-            { "key": "2", "label": "2" },
-            { "key": "3", "label": "3" },
-            { "key": "4", "label": "4" },
-            { "key": "5", "label": "5" },
-            { "key": "6", "label": "6" },
-            { "key": "7_plus", "label": "7+" }
-          ],
-          "group": "about_object"
-        },
         "area_total": {
           "kind": "number",
           "label": "Общая площадь",
@@ -125,19 +110,6 @@
     "room": {
       "label": "Комната",
       "fields": {
-        "rooms": {
-          "kind": "enum",
-          "label": "Комнаты",
-          "options": [
-            { "key": "2", "label": "2" },
-            { "key": "3", "label": "3" },
-            { "key": "4", "label": "4" },
-            { "key": "5", "label": "5" },
-            { "key": "6", "label": "6" },
-            { "key": "7_plus", "label": "7+" }
-          ],
-          "group": "about_object"
-        },
         "area_total": {
           "kind": "number",
           "label": "Общая площадь",
@@ -215,21 +187,6 @@
     "apartments": {
       "label": "Апартаменты",
       "fields": {
-        "rooms": {
-          "kind": "enum",
-          "label": "Комнаты",
-          "options": [
-            { "key": "studio", "label": "Студия" },
-            { "key": "1", "label": "1" },
-            { "key": "2", "label": "2" },
-            { "key": "3", "label": "3" },
-            { "key": "4", "label": "4" },
-            { "key": "5", "label": "5" },
-            { "key": "6", "label": "6" },
-            { "key": "7_plus", "label": "7+" }
-          ],
-          "group": "about_object"
-        },
         "area_total": {
           "kind": "number",
           "label": "Общая площадь",

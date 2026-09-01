@@ -111,8 +111,9 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(housing.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
   await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'false');
 
-  // Поля каталога квартиры: enum-чипы и пара этажей в двух колонках.
-  await expect(page.getByRole('group', { name: 'Комнаты' }).getByRole('button', { name: 'Студия' })).toBeVisible();
+  // Поля каталога квартиры: enum-чипы (комнат в наборе больше нет) и
+  // единицы слева внутри бокса.
+  await expect(page.getByRole('group', { name: 'Комнаты' })).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Санузел' }).getByRole('button', { name: 'Раздельный' })).toBeVisible();
   await expect(page.getByText('м²').first()).toBeVisible();
 
@@ -122,14 +123,22 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(name).toBeFocused();
 
   // Смена типа жилья — чипы перезаключаются, набор полей тот же (один
-  // каталог у квартиры и апартаментов).
+  // каталог у квартиры и апартаментов), смена тихая — без нотиса.
   await housing.getByRole('button', { name: 'Апартаменты' }).click();
   await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('group', { name: 'Комнаты' }).getByRole('button', { name: 'Студия' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Санузел' }).getByRole('button', { name: 'Раздельный' })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+
+  // Нечислимый ввод не попадает в поле: фильтр по типу поля.
+  const floor = page.getByRole('textbox', { name: 'Этаж', exact: true });
+  await floor.pressSequentially('5а,');
+  await expect(floor).toHaveValue('5');
+  const area = page.getByRole('textbox', { name: 'Общая площадь' });
+  await area.pressSequentially('47,5м');
+  await expect(area).toHaveValue('47,5');
 
   // Заполнение характеристики, «Создать объект» появляется с названием
   // (обязательное поле), счётчик лимита 64 работает.
-  await page.getByRole('group', { name: 'Комнаты' }).getByRole('button', { name: '2' }).click();
   const submit = page.getByRole('button', { name: 'Создать объект' });
   await expect(submit).toBeDisabled();
   await name.fill('Квартира на Ленина');

@@ -15,11 +15,9 @@ import {
     PropertyAttributesFields,
     validateAttributes,
     filterByType,
-    fieldsForType,
     type AttrErrors,
     type AttrKey,
 } from '@/features/property-attributes';
-import {propertyTypeLabels} from '@/features/properties';
 import {ApiError} from '@/shared/api/errors';
 import {PropertyTypeSelect} from './PropertyTypeSelect';
 import {AddressField} from './AddressField';
@@ -82,7 +80,6 @@ export function PropertyEditForm({
     const [description, setDescription] = useState('');
     const [attributes, setAttributes] = useState<PropertyAttributes>({});
     const [attrErrors, setAttrErrors] = useState<AttrErrors>({});
-    const [typeChangeNotice, setTypeChangeNotice] = useState<string | null>(null);
     const [submitAttempted, setSubmitAttempted] = useState(false);
     const hasInitialized = useRef(false);
 
@@ -107,25 +104,11 @@ export function PropertyEditForm({
     const isTypeValid = type !== undefined;
 
     const handleTypeChange = (nextType: PropertyType) => {
-        const prevType = type;
         setType(nextType);
-        // Show notice only when switching type away from one that has filled
-        // attributes with keys that don't belong to the new type. Data is NOT
-        // deleted — foreign keys stay in state (lossless); filterByType() prunes
-        // them only for display and submission.
-        if (prevType && prevType !== nextType) {
-            const prevFields = new Set<string>(fieldsForType(prevType).map((f) => f.key));
-            const nextFields = new Set<string>(fieldsForType(nextType).map((f) => f.key));
-            const hasForeign = Object.keys(attributes).some(
-                (k) => prevFields.has(k) && !nextFields.has(k),
-            );
-            if (hasForeign) {
-                setTypeChangeNotice(
-                    `Характеристики, заполненные для типа «${propertyTypeLabels[prevType]}», сохранятся, но будут скрыты`,
-                );
-            }
-        }
-        // Fields of a different type — reset visible errors until next blur.
+        // Данные не удаляются — чужие ключи остаются в состоянии (lossless),
+        // filterByType() прячет их для показа и отправки. Нотис о скрытии
+        // не показывается (решение владельца).
+        // Поля другого типа — сбрасываем видимые ошибки до следующего blur.
         setAttrErrors({});
     };
 
@@ -271,19 +254,6 @@ export function PropertyEditForm({
                             </Button>
                         )}
                     </div>
-                    {typeChangeNotice && (
-                        <div className={styles.notice} role="status" aria-live="polite">
-                            <span className={styles.noticeText}>{typeChangeNotice}</span>
-                            <button
-                                type="button"
-                                className={styles.noticeClose}
-                                aria-label="Скрыть уведомление"
-                                onClick={() => setTypeChangeNotice(null)}
-                            >
-                                ×
-                            </button>
-                        </div>
-                    )}
                     <div className={styles.fields}>
                         <PropertyAttributesFields
                             type={type}

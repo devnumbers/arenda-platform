@@ -7,6 +7,7 @@ import {
   enumLabels,
   fieldLabels,
   fieldsForType,
+  sanitizeAttributeInput,
   toWireAttributes,
   validateAttributes,
   validateField,
@@ -21,14 +22,13 @@ import { Button, TextField } from '@/shared/ui/design';
  * Шаг 3 «Характеристики» (#482, Figma 1218-54295): название объекта,
  * чип-группа «Тип жилья» для категории «Квартира» (закрывает тип
  * apartments) и поля из каталога по текущему типу — чипы enum (радиус
- * 16), числа с единицами-суффиксами, этаж/этажность в две колонки,
+ * 16), числа с единицами-префиксами слева, этаж/этажность в две колонки,
  * описание в конце. Все характеристики необязательные
  * (docs/entities/obekt.md), готовность шага определяет название.
  *
  * Lossless при смене типа: в черновике чужие ключи хранятся, экран
- * рендерит только ключи каталога текущего типа (toWireAttributes), а
- * факт скрытия доставляет нотис флоу (потеря заполненного — по правилу
- * docs/entities/obekt.md).
+ * рендерит только ключи каталога текущего типа (toWireAttributes);
+ * скрытие заполненного — тихое, без нотиса (решение владельца).
  */
 
 const NAME_MAX_LENGTH = 64;
@@ -43,9 +43,6 @@ export type CharacteristicsStepProps = {
   readonly onDescriptionChange: (description: string) => void;
   readonly attributes: PropertyAttributes;
   readonly onAttributesChange: (next: PropertyAttributes) => void;
-  /** Нотис скрытия характеристик прежнего типа (назначает флоу). */
-  readonly notice?: string;
-  readonly onDismissNotice: () => void;
 };
 
 export function CharacteristicsStep({
@@ -57,8 +54,6 @@ export function CharacteristicsStep({
   onDescriptionChange,
   attributes,
   onAttributesChange,
-  notice,
-  onDismissNotice,
 }: CharacteristicsStepProps): JSX.Element {
   const nameInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -114,17 +109,14 @@ export function CharacteristicsStep({
     onAttributesChange(next);
   };
 
-  // Сырой ввод хранится строкой как набрано (запятая — на время ввода):
-  // нормализация в числа происходит в проводных значениях при валидации
-  // и сабмите (features/property-attributes/lib/wire).
-  const attributeValue = (key: AttrKey): string => {
-    const raw = attributes[key];
-    return raw === undefined ? '' : String(raw);
-  };
-
-  const handleAttributeInput = (key: AttrKey, event: ChangeEvent<HTMLInputElement>): void => {
-    const raw = event.currentTarget.value;
-    updateAttribute(key, raw.length > 0 ? raw : undefined);
+  // Сырой ввод фильтруется по типу поля (sanitizeAttributeInput: в числах
+  // только цифры, разделитель и минус там, где каталог допускает) и
+  // хранится строкой как набрано; нормализация в числа происходит в
+  // проводных значениях при валидации и сабмите
+  // (features/property-attributes/lib/wire).
+  const handleAttributeInput = (field: AttrField, event: ChangeEvent<HTMLInputElement>): void => {
+    const raw = sanitizeAttributeInput(field, event.currentTarget.value);
+    updateAttribute(field.key, raw.length > 0 ? raw : undefined);
   };
 
   const handleFieldBlur = (): void => {
@@ -158,23 +150,24 @@ export function CharacteristicsStep({
     </div>
   );
 
+  const attributeValue = (key: AttrKey): string => {
+    const raw = attributes[key];
+    return raw === undefined ? '' : String(raw);
+  };
+
   const renderInputField = (field: AttrField): JSX.Element => (
     <TextField
       key={field.key}
       title={fieldLabels[field.key]}
       value={attributeValue(field.key)}
-      onChange={makeInputHandler(field.key)}
+      onChange={(event) => handleAttributeInput(field, event)}
       onBlur={handleFieldBlur}
       error={showError(field.key)}
       inputMode={field.kind === 'number' ? 'decimal' : field.kind === 'integer' ? 'numeric' : undefined}
       maxLength={field.kind === 'string' ? field.maxLen : undefined}
-      suffix={field.kind === 'number' ? field.unit : undefined}
+      prefix={field.kind === 'number' ? field.unit : undefined}
     />
   );
-
-  function makeInputHandler(key: AttrKey): (event: ChangeEvent<HTMLInputElement>) => void {
-    return (event) => handleAttributeInput(key, event);
-  }
 
   // Поля каталога в порядке каталога; пара «Этаж» + «Этажность дома» —
   // в две колонки (Figma 1218:54295). Описание — отдельное поле
@@ -232,22 +225,6 @@ export function CharacteristicsStep({
               );
             })}
           </div>
-        </div>
-      )}
-      {notice !== undefined && (
-        <div
-          role="status"
-          className="flex items-start justify-between gap-3 rounded-button bg-surface-danger p-4 text-sm leading-4 text-danger"
-        >
-          <span>{notice}</span>
-          <button
-            type="button"
-            aria-label="Скрыть уведомление"
-            className="cursor-pointer text-base leading-4 text-danger"
-            onClick={onDismissNotice}
-          >
-            ×
-          </button>
         </div>
       )}
       {catalogUnits}
