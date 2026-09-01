@@ -104,6 +104,7 @@ Use `make local-infra-reset` only when intentionally deleting local Docker volum
 
 - Do not create or switch to a git worktree by default. Work in the current checkout and current branch unless the user explicitly asks for a worktree or branch isolation.
 - If a generic skill recommends a worktree, this repository rule overrides it.
+- Worktree isolation is handled by the `/using-git-worktrees` skill (`.agents/skills/using-git-worktrees/`); run it only on the user's explicit request, never on your own initiative.
 - Money is stored as `BIGINT` in kopecks across the backend and crosses every layer (API, frontend, admin) as integer kopecks — never floats; money arithmetic is integer-only. See `docs/adr/0008-subscription-lifecycle.md`. On the schema side this is enforced by `make migrations-lint` (`tools/migration-lint/domain-rules.mjs`, config `apps/backend/.squawk.toml`).
 - All amounts are in RUB; there is no multi-currency support (`docs/adr/0036-fintech-domain-language.md`).
 - Format money for display only at the UI layer: frontend — `formatMoneyKopecks` (`apps/frontend/shared/lib/format-money.ts`); admin — `formatKopecks` / `MoneyField` (`apps/admin/src/fields.tsx`).
