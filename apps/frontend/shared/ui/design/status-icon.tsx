@@ -30,5 +30,7 @@ export type StatusIconProps = {
 
 export function StatusIcon({ status, className }: StatusIconProps): JSX.Element {
   const Icon = statusIconMap[status];
-  return <Icon className={cn('h-6 w-6 shrink-0', className)} aria-hidden />;
+  // Кант по умолчанию белый (text-surface): в SVG он stroke="currentColor",
+  // иначе цвет канта зависел бы от унаследованного текста потребителя.
+  return <Icon className={cn('text-surface h-6 w-6 shrink-0', className)} aria-hidden />;
 }

@@ -50,7 +50,15 @@ export function CategoryIcon({
     >
       <Icon className="h-6 w-6 text-white" aria-hidden />
       {badge === 'danger' && (
-        <StatusIconDanger className="absolute -top-1.5 -left-1.5 h-6 w-6" aria-hidden />
+        <StatusIconDanger
+          className={cn(
+            'absolute -top-1.5 -left-1.5 h-6 w-6',
+            // Кант бейджа красится под поверхность тем же механизмом, что и
+            // кант круга (тень выше): в SVG он stroke="currentColor".
+            surface === 'muted' ? 'text-surface-muted' : 'text-surface',
+          )}
+          aria-hidden
+        />
       )}
       {badge === 'notification' && (
         <span
