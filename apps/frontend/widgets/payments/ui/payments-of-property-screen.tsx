@@ -214,6 +214,11 @@ export function PaymentsOfPropertyScreen({
                               </span>
                             }
                             amountKopecks={operation.amountKopecks}
+                            // Плашки операций кликабельны, как на остальных
+                            // поверхностях: ведут на страницу операции.
+                            onSelect={() =>
+                              router.push(ROUTES.propertyOperation(propertyId, operation.id))
+                            }
                           />
                         );
                       })
