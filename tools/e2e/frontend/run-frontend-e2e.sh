@@ -4,7 +4,7 @@ set -euo pipefail
 # Frontend Playwright e2e orchestrator (ticket #456, spec #453).
 #
 # Brings up a deterministic, disposable stack and runs apps/frontend/e2e:
-#   1. postgres 18 — compose project arenda-e2e, port 5436
+#   1. postgres 18 — compose project arenda-e2e (slot 0), port 5436
 #      (apps/backend/docker-compose.e2e.yml), wiped on exit;
 #   2. backend — compiled from apps/backend, auto-migration on boot (the
 #      seed waits for the schema), APP_ENV=local, EMAIL_SENDER=fake
@@ -25,10 +25,16 @@ set -euo pipefail
 # (visible browser windows), `make frontend-e2e-live-up` / `-live-down`
 # (walkthrough stack), and the frontend-e2e CI job.
 #
+# Parallel worktree sessions (docs/agents/parallel-dev.md): the make targets
+# source the checkout's root .env, so a worktree's E2E_* arrive here via the
+# process env and each slot gets its own ports and compose project —
+# overriding any of the defaults below.
+#
 # Overrides (rarely needed): E2E_PG_PORT (5436), E2E_BACKEND_PORT (8081),
-# E2E_FRONTEND_PORT (3010), E2E_ENCRYPTION_KEY (64-hex test key; the seeded
-# session hash must match the backend HMAC). E2E_KEEP_STACK=1 leaves the
-# stack up after the run for manual inspection.
+# E2E_FRONTEND_PORT (3010), E2E_COMPOSE_PROJECT (arenda-e2e; the postgres
+# container name follows it: <project>-postgres-1), E2E_ENCRYPTION_KEY
+# (64-hex test key; the seeded session hash must match the backend HMAC).
+# E2E_KEEP_STACK=1 leaves the stack up after the run for manual inspection.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -39,9 +45,10 @@ BACKEND_LOG="$WORK_DIR/backend.log"
 FRONTEND_LOG="$WORK_DIR/frontend.log"
 BACKEND_BIN="$WORK_DIR/arenda-api"
 
-E2E_PG_PORT="${E2E_PG_PORT:-5436}"
-E2E_BACKEND_PORT="${E2E_BACKEND_PORT:-8081}"
-E2E_FRONTEND_PORT="${E2E_FRONTEND_PORT:-3010}"
+export E2E_PG_PORT="${E2E_PG_PORT:-5436}"
+export E2E_BACKEND_PORT="${E2E_BACKEND_PORT:-8081}"
+export E2E_FRONTEND_PORT="${E2E_FRONTEND_PORT:-3010}"
+export E2E_COMPOSE_PROJECT="${E2E_COMPOSE_PROJECT:-arenda-e2e}"
 
 # E2E_LIVE=1 raises the seeded stack without running Playwright — the
 # walkthrough's playground. The stack must outlive this invocation.
@@ -52,8 +59,10 @@ fi
 # so the seeded session row matches the raw token Playwright puts in a cookie.
 E2E_ENCRYPTION_KEY="${E2E_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 
-COMPOSE=(docker compose -p arenda-e2e -f "$PROJECT_ROOT/apps/backend/docker-compose.e2e.yml")
-PG_CONTAINER="arenda-e2e-postgres-1"
+COMPOSE=(docker compose -p "$E2E_COMPOSE_PROJECT" -f "$PROJECT_ROOT/apps/backend/docker-compose.e2e.yml")
+# Compose names default containers <project>-<service>-<index>; the project
+# name is the slot's isolation boundary, so the container name follows it.
+PG_CONTAINER="${E2E_COMPOSE_PROJECT}-postgres-1"
 DATABASE_URL="postgres://arenda:arenda@localhost:${E2E_PG_PORT}/arenda?sslmode=disable"
 BACKEND_URL="http://127.0.0.1:${E2E_BACKEND_PORT}"
 FRONTEND_URL="http://127.0.0.1:${E2E_FRONTEND_PORT}"
@@ -73,7 +82,7 @@ cleanup() {
     log "E2E_KEEP_STACK=1 — stack left running:"
     log "  backend  $BACKEND_URL/healthz  (log: $BACKEND_LOG)"
     log "  frontend $FRONTEND_URL         (log: $FRONTEND_LOG)"
-    log "  postgres localhost:$E2E_PG_PORT (compose project arenda-e2e)"
+    log "  postgres localhost:$E2E_PG_PORT (compose project $E2E_COMPOSE_PROJECT)"
     log "Tear down later: ${COMPOSE[*]} down -v"
     return 0
   fi
@@ -119,12 +128,15 @@ free_port "$E2E_BACKEND_PORT"
 free_port "$E2E_FRONTEND_PORT"
 
 "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
-log "Starting postgres (arenda-e2e, port $E2E_PG_PORT)"
+log "Starting postgres ($E2E_COMPOSE_PROJECT, port $E2E_PG_PORT)"
 "${COMPOSE[@]}" up -d --wait
 
 log "Building backend"
 (cd "$PROJECT_ROOT" && go build -o "$BACKEND_BIN" ./apps/backend/cmd/api)
 
+# The e2e stack stays hermetic: the make targets source the checkout's root
+# .env (worktree slots), and OTEL_* from it must not turn this disposable
+# backend into a telemetry exporter pointed at the shared observability.
 log "Starting backend on $BACKEND_URL"
 (
   cd "$PROJECT_ROOT"
@@ -141,6 +153,9 @@ log "Starting backend on $BACKEND_URL"
   LOG_FORMAT=json \
   LOG_LEVEL=info \
   LOG_SUCCESSFUL_REQUESTS=false \
+  OTEL_TRACES_EXPORTER=none \
+  OTEL_METRICS_EXPORTER=none \
+  OTEL_EXPORTER_OTLP_ENDPOINT= \
   exec "$BACKEND_BIN"
 ) > "$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!

@@ -2,7 +2,22 @@
 # --env-file: compose resolves .env relative to the directory of the first -f
 # file (apps/backend), while POSTGRES_* for local infra live in the root .env
 # consumed by backend-run/migrate-up — the flag keeps one env source.
-COMPOSE_LOCAL := docker compose --env-file .env -f apps/backend/docker-compose.local.yml
+# -p: the compose project name is the only isolation mechanism between
+# parallel checkouts (containers, networks, volume prefixes). It comes from
+# the checkout's own .env slot (docs/agents/parallel-dev.md): a worktree pins
+# AREND_SLOT=N and gets project arenda-wtN with its own postgres volume and
+# ports; slot 0 (no AREND_SLOT) keeps arenda-local and today's behavior.
+# name: in the compose file stays the fallback for calls without .env and -p.
+# A slot lookup that fails (broken AREND_SLOT, node missing) aborts the whole
+# make run right here: silently falling back to arenda-local would put this
+# checkout's local-infra — including `down -v` — into the main checkout's
+# compose project, the exact collision the slots exist to prevent.
+COMPOSE_PROJECT := $(shell node tools/dev-env/dev-env.mjs compose-project 2>&1 || echo SLOT_LOOKUP_FAILED)
+FRONTEND_DEV_PORT := $(shell node tools/dev-env/dev-env.mjs frontend-port 2>&1 || echo SLOT_LOOKUP_FAILED)
+ifneq ($(findstring SLOT_LOOKUP_FAILED,$(COMPOSE_PROJECT))$(findstring SLOT_LOOKUP_FAILED,$(FRONTEND_DEV_PORT)),)
+$(error dev-env slot lookup failed — fix the reported AREND_SLOT: $(strip $(COMPOSE_PROJECT)) / $(strip $(FRONTEND_DEV_PORT)))
+endif
+COMPOSE_LOCAL := docker compose --env-file .env -p $(COMPOSE_PROJECT) -f apps/backend/docker-compose.local.yml
 COMPOSE_TEST := docker compose -p arenda-test -f apps/backend/docker-compose.test.yml
 BACKEND_DIR := apps/backend
 FRONTEND_DIR := apps/frontend
@@ -30,10 +45,10 @@ SQLC_VERSION := v1.31.1
 # aquasec/trivy 0.74.0, multi-arch manifest digest
 TRIVY_IMAGE := aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
 TRIVY_CACHE_VOLUME := arenda-trivy-cache
-NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate
-TOOLS_TEST_DIRS := tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate
+NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate tools/dev-env
+TOOLS_TEST_DIRS := tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate tools/dev-env
 KNIP_VERSION := 6.32.2
-KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate
+KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate tools/dev-env
 TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
 # Named LINT_MIGRATIONS_DIR to stay distinct from the MIGRATIONS_DIR env
 # contract checked in check-env (.env.example).
@@ -90,6 +105,7 @@ DEFAULT_GOAL := help
 
 .PHONY: help versions-sync versions-check \
 	local-infra-up local-infra-down local-infra-reset test-infra-up test-infra-down \
+	worktree-new \
 	backend-run backend-lint backend-vulncheck backend-nolint \
 	backend-tkassa-spec-check backend-openapi-check backend-sqlc-check \
 	migrate-up migrate-down check-env \
@@ -244,8 +260,14 @@ migrate-down: check-env ## Roll back the last applied migration
 frontend-install: ## Install frontend dependencies (npm install)
 	cd $(FRONTEND_DIR) && npm install
 
-frontend-dev: ## Run the frontend dev server (next dev)
-	cd $(FRONTEND_DIR) && npm run dev
+# Worktree slots bind their own dev port (3020+N) so parallel frontends don't
+# collide (docs/agents/parallel-dev.md); slot 0 passes no flag — Next's
+# default 3000. The port comes from the checkout's own .env, evaluated at
+# parse time like COMPOSE_PROJECT above.
+FRONTEND_DEV_ARGS := $(if $(filter-out 3000,$(FRONTEND_DEV_PORT)),-- -p $(FRONTEND_DEV_PORT),)
+
+frontend-dev: ## Run the frontend dev server (next dev; a worktree slot binds its own port)
+	cd $(FRONTEND_DIR) && npm run dev $(FRONTEND_DEV_ARGS)
 
 frontend-build: ## Build the frontend for production (next build)
 	cd $(FRONTEND_DIR) && npm run build
@@ -313,30 +335,41 @@ frontend-test: ## Run the frontend test suite (vitest)
 	cd $(FRONTEND_DIR) && npm run test
 
 # frontend-e2e runs the Playwright screen suite (ticket #456): brings up a
-# dedicated disposable stack — postgres (compose project arenda-e2e, port
-# 5436), the backend (migrations on boot, fake email/payment providers), a
-# production standalone build of the frontend — seeds the owner/session/
+# dedicated disposable stack — postgres (its own compose project, port 5436
+# on slot 0), the backend (migrations on boot, fake email/payment providers),
+# a production standalone build of the frontend — seeds the owner/session/
 # properties fixtures, runs apps/frontend/e2e, and tears everything down.
-# Requires Docker. Docs: docs/testing-strategy.md "Экранные e2e (Playwright)".
+# The targets source the checkout's root .env so a worktree's E2E_* (slot
+# ports + compose project) reach the runner via the process env; a plain
+# slot-0 .env carries no E2E_* and the runner defaults apply. Requires
+# Docker. Docs: docs/testing-strategy.md "Экранные e2e (Playwright)",
+# slots: docs/agents/parallel-dev.md.
+SOURCE_ROOT_ENV := set -a; [ -f .env ] && . ./.env; set +a;
+
 frontend-e2e: ## Run frontend Playwright e2e (dedicated stack; Docker required)
-	./tools/e2e/frontend/run-frontend-e2e.sh
+	$(SOURCE_ROOT_ENV) ./tools/e2e/frontend/run-frontend-e2e.sh
 
 # frontend-e2e-headed replays the specs in visible Chromium windows: the same
 # disposable stack, the same fixtures — the runner just shows its work. Pass a
 # Playwright filter through TESTS, e.g. make frontend-e2e-headed TESTS="-g платежи".
 frontend-e2e-headed: ## Run frontend Playwright e2e with visible browser windows (Docker required)
-	./tools/e2e/frontend/run-frontend-e2e.sh --headed $(TESTS)
+	$(SOURCE_ROOT_ENV) ./tools/e2e/frontend/run-frontend-e2e.sh --headed $(TESTS)
 
 # frontend-e2e-live-up / -live-down bracket a live UI walkthrough
 # (.agents/skills/ui-walkthrough): raise the seeded stack without running
 # Playwright and leave it running (E2E_LIVE prints the connection facts), then
 # tear it down when the walkthrough ends.
 frontend-e2e-live-up: ## Raise the seeded frontend e2e stack for a live walkthrough (no tests run)
-	E2E_LIVE=1 ./tools/e2e/frontend/run-frontend-e2e.sh
+	$(SOURCE_ROOT_ENV) E2E_LIVE=1 ./tools/e2e/frontend/run-frontend-e2e.sh
 
-frontend-e2e-live-down: ## Tear down the live walkthrough stack (ports 3010/8081/5436)
-	docker compose -p arenda-e2e -f apps/backend/docker-compose.e2e.yml down -v --remove-orphans || true
-	for port in 3010 8081 5436; do \
+# Teardown mirrors live-up: project and ports come from this checkout's .env
+# (a worktree's slot values) with the slot-0 defaults as fallback — no more
+# hardcoded arenda-e2e / 3010 / 8081 / 5436, so a walkthrough in one checkout
+# never tears down a parallel session's stack.
+frontend-e2e-live-down: ## Tear down the live walkthrough stack (this checkout's e2e slot)
+	$(SOURCE_ROOT_ENV) \
+	docker compose -p "$${E2E_COMPOSE_PROJECT:-arenda-e2e}" -f apps/backend/docker-compose.e2e.yml down -v --remove-orphans || true; \
+	for port in "$${E2E_FRONTEND_PORT:-3010}" "$${E2E_BACKEND_PORT:-8081}" "$${E2E_PG_PORT:-5436}"; do \
 	  pids="$$(lsof -ti tcp:$$port -sTCP:LISTEN 2>/dev/null || true)"; \
 	  [ -z "$$pids" ] || kill $$pids 2>/dev/null || true; \
 	done
@@ -599,6 +632,15 @@ versions-check: ## Fail if any file drifted from the Makefile version pins
 		exit 1; \
 	fi; \
 	echo "versions-check: version pins are fresh"
+
+##@ Worktrees
+# Creates .worktrees/<WT> on a new branch with a generated slot env (its own
+# ports and compose projects — docs/agents/parallel-dev.md). Deliberately
+# minimal: dependencies, baseline tests and infra startup are the
+# using-git-worktrees skill's side of the recipe. Only on explicit request
+# (repo rule: no worktrees by default).
+worktree-new: ## Create a worktree with its own slot env (WT=<name>; branch = name)
+	node tools/dev-env/worktree-new.mjs "$(WT)"
 
 ##@ Setup
 # Installs the pinned lefthook binary when missing, then wires the git hooks
