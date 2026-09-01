@@ -34,3 +34,6 @@ docs/reviews
 lefthook-local.yml
 
 .scratch
+
+# Agent worktrees (using-git-worktrees skill)
+.worktrees/
