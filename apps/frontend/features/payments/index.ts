@@ -57,6 +57,7 @@ export {
 export {
   OPERATIONS_PAGE_SIZE,
   useCreatePayment,
+  useDeleteOperation,
   useDeletePayment,
   usePayment,
   usePaymentOperationsByStatus,

@@ -206,6 +206,9 @@ const payments = {
   paid: ((options?) =>
     notify.success('Оплата отмечена', options)) satisfies ScenarioFn,
   payError: errorScenario('Не удалось отметить оплату'),
+  operationDeleted: ((options?) =>
+    notify.success('Операция удалена', options)) satisfies ScenarioFn,
+  operationDeleteError: errorScenario('Не удалось удалить операцию'),
   favoriteAdded: ((options?) =>
     notify.success('Платеж добавлен в избранное', options)) satisfies ScenarioFn,
   favoriteRemoved: ((options?) =>

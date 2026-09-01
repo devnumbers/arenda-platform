@@ -244,6 +244,19 @@ test.describe('сквозная жизнь платежа', () => {
     await page.goto(paymentUrl);
     await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
 
+    // ── Удаление операции: новая просрочка стирается корзиной, тик не
+    // воскресает её (надгробие cancelled) ──
+    expect(await execE2eSql(induceOverdue(id1, 2))).toBe('UPDATE 1');
+    await page.goto(paymentUrl);
+    await page.getByRole('button', { name: new RegExp(`${title1} .*(день|дня|дней)`) }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/operations/[0-9a-f-]+$`));
+    await page.getByRole('button', { name: 'Удалить операцию' }).click();
+    await expect(page.getByText('Удалить операцию?')).toBeVisible();
+    await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+    await expect(page.getByText('Операция удалена')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
+    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+
     // ── Правка: сумма меняется, прошлое не тронуто ──
     await page.getByRole('button', { name: 'Изменить' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/edit$`));

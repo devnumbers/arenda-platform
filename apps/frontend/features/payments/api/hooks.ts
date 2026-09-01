@@ -270,6 +270,31 @@ export function usePaymentOperationsPaged(
 }
 
 /**
+ * Удаление операции (решение владельца): planned (долг) и paid получают
+ * tombstone-статус cancelled — факт оплаты и долг исчезают, расписание не
+ * трогается (надгробие блокирует повторную материализацию на тике).
+ * Инвалидация операций и правил (isCompleted мог пересчитаться).
+ */
+export function useDeleteOperation(
+  propertyId: string,
+): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (operationId: string) => {
+      await apiClient<void>(
+        `/properties/${encodeURIComponent(propertyId)}`
+          + `/operations/${encodeURIComponent(operationId)}`,
+        { method: 'DELETE' },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+    },
+  });
+}
+
+/**
  * Пауза платежа (история 18 спеки #453): бессрочно с сегодняшнего дня,
  * генерация останавливается. Сервер в транзакции гоняет тик, поэтому
  * инвалидируются и правила, и операции.

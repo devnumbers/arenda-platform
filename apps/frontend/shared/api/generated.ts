@@ -399,7 +399,11 @@ export interface paths {
         get: operations["getOperation"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete an operation (the cancelled tombstone)
+         * @description A planned (the overdue debt) or paid operation gets the cancelled tombstone: paid_date is cleared with the payment fact, the debt and the history entry disappear, and the row keeps its (payment_id, date) key so the tick never re-materializes the occurrence. Only the nearest future planned and the projections are not deletable — the schedule is ruled at the payment level.
+         */
+        delete: operations["deleteOperation"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3063,6 +3067,30 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OperationResponse"];
                 };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operation cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

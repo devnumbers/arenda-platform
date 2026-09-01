@@ -2,7 +2,7 @@
 
 import { useState, type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cancel, Home } from '@/shared/assets/icons';
+import { ArrowLeft, Cancel, Home, Trash } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { goBack } from '@/shared/lib/navigation';
@@ -22,6 +22,7 @@ import {
 import { useProperty } from '@/features/properties';
 import {
   isOperationPayable,
+  useDeleteOperation,
   useOperation,
   usePayOperation,
   usePaymentOperationsByStatus,
@@ -29,6 +30,8 @@ import {
 import {
   Button,
   IconButton,
+  Modal,
+  ModalContent,
   PageContent,
   StatusIcon,
   StickyBottomBar,
@@ -51,8 +54,9 @@ import {
  * сегодня сервера (ADR 0048) и показывает экран успеха «Платеж оплачен»
  * (1444:65733): «Хорошо» возвращает на страницу операции — теперь
  * «Выполнена», «Посмотреть платеж» ведёт на правило. Смотрящий и архив
- * читают без кнопки, как на странице платежа. Заголовок корзины (удаление)
- * в этой поставке не делается.
+ * читают без кнопок. Корзина в шапке (1386:67731) удаляет оплаченные и
+ * просроченные операции через шторку 1510:77505 — tombstone cancelled
+ * стирает факт и долг; плановые и проекции не удаляются.
  */
 export function OperationDetailScreen({
   propertyId,
@@ -72,6 +76,7 @@ export function OperationDetailScreen({
   // экран (1444:65733) с крестиком вместо шапки «назад + дата».
   const [paidResult, setPaidResult] = useState<PaymentOperation | null>(null);
 
+
   // Единый предикат мутационного входа страницы платежа (ADR 0028, #446).
   const canMutate =
     property !== undefined
@@ -80,6 +85,33 @@ export function OperationDetailScreen({
 
   const loading = operationQuery.isPending || propertyQuery.isPending;
   const failed = operationQuery.isError || propertyQuery.isError;
+
+  // Удаление операции (1510:77505): корзина в шапке только у оплаченных и
+  // просроченных; подтверждение шторкой; после успеха — назад из истории.
+  const deleteOperation = useDeleteOperation(propertyId);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deletable =
+    !loading && !failed && operation !== undefined && canMutate
+    && (operation.status === 'paid' || operation.status === 'overdue');
+
+  const remove = async (): Promise<void> => {
+    if (operation === undefined) {
+      return;
+    }
+    try {
+      await deleteOperation.mutateAsync(operation.id);
+      setConfirmDelete(false);
+      notify.scenarios.payments.operationDeleted();
+      goBack(
+        router,
+        operation.paymentId !== null
+          ? ROUTES.propertyPayment(propertyId, operation.paymentId)
+          : ROUTES.propertyPayments(propertyId),
+      );
+    } catch (error) {
+      notify.scenarios.payments.operationDeleteError(error);
+    }
+  };
 
   if (!loading && !failed && operation !== undefined && paidResult !== null) {
     return (
@@ -101,6 +133,15 @@ export function OperationDetailScreen({
             label="Назад"
             onClick={() => goBack(router, ROUTES.propertyPayments(propertyId))}
           />
+        }
+        trailing={
+          deletable && (
+            <IconButton
+              icon={<Trash />}
+              label="Удалить операцию"
+              onClick={() => setConfirmDelete(true)}
+            />
+          )
         }
       >
         {operation !== undefined && (
@@ -147,6 +188,33 @@ export function OperationDetailScreen({
           )}
         </div>
       </PageContent>
+
+      {/* Confirm-шторка удаления (1510:77505): серое пояснение и мягкая
+       * danger-кнопка; случайное нажатие не стирает факт (резолюция #452). */}
+      <Modal open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <ModalContent
+          title="Удалить операцию?"
+          description="Операция исчезнет и не будет учитываться в доходах или расходах"
+        >
+          <div className="mt-2 flex gap-2">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setConfirmDelete(false)}
+            >
+              Отменить
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              loading={deleteOperation.isPending}
+              onClick={() => void remove()}
+            >
+              Удалить
+            </Button>
+          </div>
+        </ModalContent>
+      </Modal>
     </>
   );
 }

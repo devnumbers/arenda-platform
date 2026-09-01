@@ -172,6 +172,19 @@ test.describe('страница платежа', () => {
     await expect(page.getByText('Выполнена')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Отметить оплаченной' })).toHaveCount(0);
 
+    // Удаление оплаченной операции (1510:77505): факт стирается, история
+    // пустеет, правило живёт дальше.
+    await page.getByRole('button', { name: 'История операций', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
+    await page.getByRole('button', { name: /Арендная плата/ }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/operations/[0-9a-f-]+$`));
+    await page.getByRole('button', { name: 'Удалить операцию' }).click();
+    await expect(page.getByText('Удалить операцию?')).toBeVisible();
+    await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+    await expect(page.getByText('Операция удалена')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
+    await expect(page.getByText('Платежей еще не было')).toBeVisible();
+
     await page.goto(PAYMENT_URLS.rent);
     await captureScreen(page, testInfo, 'payment-detail-paid-out-mobile');
   });
