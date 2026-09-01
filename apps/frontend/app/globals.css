@@ -111,6 +111,10 @@
     --text-base--line-height: 1.125rem;
     --text-lg: 1.25rem;
     --text-lg--line-height: 1.5rem;
+    /* H1 28/32 — заголовки шагов визарда создания объекта (Figma
+       Mobile/Heading/H1/600, #480). */
+    --text-2xl: 1.75rem;
+    --text-2xl--line-height: 2rem;
 
     --radius-button: 16px;
     --radius-pill: 100px;
