@@ -112,3 +112,10 @@ export { default as Play } from './play.svg';
 export { default as Repeat } from './repeat.svg';
 export { default as Calendar } from './calendar.svg';
 export { default as TimeHistory } from './time-history.svg';
+
+// Футер новых экранов (#460, Figma 1185:40813): табы «Объекты /
+// Уведомления / Еще» — монохромные Regular-иконки 24×24 (currentColor):
+// HomeMain 501:8460, NotificationSettings 472:4940, Menu 185:210.
+export { default as HomeMain } from './home-main.svg';
+export { default as NotificationSettings } from './notification-settings.svg';
+export { default as MenuLines } from './menu-lines.svg';

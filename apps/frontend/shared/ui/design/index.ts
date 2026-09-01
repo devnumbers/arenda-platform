@@ -30,6 +30,17 @@ export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar'
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';
 export { PageContent, type PageContentProps } from './page-content';
 export { TopNav, type TopNavProps, TopNavTitle, type TopNavTitleProps } from './top-nav';
+export {
+  TopNavUserContext,
+  TopNavUserContextProvider,
+  useTopNavUser,
+  type TopNavUser,
+} from './top-nav-user-context';
+export {
+  TabBar,
+  TabBarVisibilityProvider,
+  useTabBarSuppression,
+} from './tab-bar';
 export { HeaderLogo, type HeaderLogoProps } from './header-logo';
 export {
   Modal,

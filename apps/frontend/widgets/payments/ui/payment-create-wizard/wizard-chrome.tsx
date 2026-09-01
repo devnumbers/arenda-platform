@@ -17,7 +17,7 @@ export function WizardHeading({
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-2 px-6 pt-6">
-      <h1 className="text-xl font-semibold leading-6 text-content">{title}</h1>
+      <h1 className="m-0 text-xl font-semibold leading-6 text-content">{title}</h1>
       {subtitle !== undefined && (
         <p className="text-sm leading-4 text-content-secondary">{subtitle}</p>
       )}

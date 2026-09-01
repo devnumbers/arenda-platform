@@ -16,6 +16,7 @@ import {
   StickyBottomBar,
   TopNav,
   TopNavTitle,
+  useTabBarSuppression,
 } from '@/shared/ui/design';
 import type { IsoDate, Payment } from '@/entities/payment';
 import { clientTodayIso } from '@/entities/payment';
@@ -60,6 +61,10 @@ export function PaymentCreateWizardFlow({
   const router = useRouter();
   const createPayment = useCreatePayment(propertyId);
   const { draft, setDraft, clearDraft } = usePaymentWizardDraft(propertyId, draftType);
+  // Визард — экран создания: футер глушится на всех шагах, включая те,
+  // где нижняя панель «Продолжить» ещё не смонтирована (шаг 1 до выбора
+  // категории, ветки шага 3 до готовности) — ТЗ #460.
+  useTabBarSuppression();
   // Успех держит и факт «название введено»: экран показывает подставленный
   // лейбл категории только когда пользователь сам набрал название
   // (правка владельца 2026-08-31).
@@ -126,6 +131,7 @@ export function PaymentCreateWizardFlow({
   return (
     <>
       <TopNav
+        variant={step === 1 && categorySearchOpen ? 'search' : 'default'}
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={navigateBack} />}
         trailing={
           step === 1 && !categorySearchOpen ? (

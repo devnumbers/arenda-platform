@@ -1,13 +1,17 @@
+'use client';
+
 import type { JSX, ReactNode } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { SheetDragHandle } from './sheet-drag-handle';
+import { useTabBarSuppression } from './tab-bar';
 
 /** Нижняя закреплённая панель дизайн-слоя (Figma 1043:60106): белый «шит»
  * radius 40 сверху со слотом контента (паддинг 24, зазор 16); каноника —
  * без grabber-ручки (Show Grabber: false), проп `dragHandle` оставлен для
  * включения, если канва вернёт ручку. На широких экранах контент — в
  * колонке max-560. Низ уважает safe-area (home indicator). PageContent даёт
- * снизу 136px, чтобы контент не уходил под панель. */
+ * снизу 136px, чтобы контент не уходил под панель. Пока панель смонтирована,
+ * глушит TabBar: экран с нижней кнопкой действия футера не имеет. */
 export type StickyBottomBarProps = {
   readonly children: ReactNode;
   readonly dragHandle?: boolean;
@@ -15,10 +19,14 @@ export type StickyBottomBarProps = {
 };
 
 export function StickyBottomBar({ children, dragHandle = false, className }: StickyBottomBarProps): JSX.Element {
+  useTabBarSuppression();
+
   return (
     <div className={cn('fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans', className)}>
       {dragHandle && <SheetDragHandle />}
-      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      {/* На мобайле (768 и уже) панель во всю ширину вьюпорта; колонка 560 —
+       * только на десктопе. */}
+      <div className="mx-auto flex w-full desktop:max-w-[560px] flex-col gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {children}
       </div>
     </div>
