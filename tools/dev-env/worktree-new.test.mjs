@@ -6,7 +6,7 @@
 // docs/agents/parallel-dev.md «Per-worktree .env» and «make worktree-new».
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -53,12 +53,45 @@ function makeGitRepo({ rootEnv, envExample, registry = {} }) {
   return root;
 }
 
-function runWorktreeNew(root, name) {
+// The port preflight shells out to lsof; the tests pin it with a shim on
+// PATH so slot allocation never depends on what happens to listen on the
+// slot ports of the machine running the tests.
+//   "free"            — nothing is listening anywhere (exit 1, no output)
+//   "busy"            — everything is listening (pid 4242)
+//   { busy: [ports] } — only the listed ports are listening
+//   "absent"          — no lsof at all: PATH holds only a git symlink, so
+//                       the probe dies with ENOENT (a non-executable shim
+//                       wouldn't do — the PATH search skips it and finds the
+//                       real lsof further down)
+function makeLsofBin(mode) {
+  const dir = mkdtempSync(path.join(tmpdir(), "dev-env-lsof-"));
+  const body =
+    mode === "free"
+      ? "exit 1"
+      : mode === "busy"
+        ? "echo 4242"
+        : `case "$*" in ${mode.busy.map((p) => `*tcp:${p}*`).join("|")}) echo 4242 ;; esac\nexit 1`;
+  const shim = path.join(dir, "lsof");
+  writeFileSync(shim, `#!/bin/sh\n${body}\n`);
+  chmodSync(shim, 0o755);
+  return dir;
+}
+
+function makeNoLsofBin() {
+  const dir = mkdtempSync(path.join(tmpdir(), "dev-env-nolsof-"));
+  const gitPath = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+  symlinkSync(gitPath, path.join(dir, "git"));
+  return dir;
+}
+
+function runWorktreeNew(root, name, { lsof = "free" } = {}) {
+  const binDir = lsof === "absent" ? makeNoLsofBin() : makeLsofBin(lsof);
+  const rest = lsof === "absent" ? "" : `:${process.env.PATH}`;
   const res = spawnSync(process.execPath, [scriptPath, name], {
     cwd: root,
     encoding: "utf8",
     timeout: 30_000,
-    env: sanitizedEnv(),
+    env: { ...sanitizedEnv(), PATH: `${binDir}${rest}` },
   });
   return { code: res.status, stdout: res.stdout, stderr: res.stderr };
 }
@@ -212,5 +245,43 @@ describe("worktree-new: refusals", () => {
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("duplicate");
     expect(existsSync(path.join(root, ".worktrees", "feature-a"))).toBe(false);
+  });
+});
+
+describe("worktree-new: port preflight", () => {
+  const rootEnv = "POSTGRES_USER=arenda\n";
+
+  it("skips a slot whose port already has a listener, warns with the holder, takes the next", () => {
+    // The #489 live-check case: the registry says slot 1 is free, but its
+    // e2e backend port 8096 is held by a stray process (pid 4242) — handing
+    // the slot out would let the e2e runner's free_port() kill that process.
+    const root = makeGitRepo({ rootEnv });
+    const res = runWorktreeNew(root, "feature-a", { lsof: { busy: [8096] } });
+
+    expect(res.code).toBe(0);
+    expect(res.stderr).toContain("slot 1 skipped");
+    expect(res.stderr).toContain("8096");
+    expect(res.stderr).toContain("4242");
+    expect(res.stdout).toContain("slot 2");
+    expect(readFileSync(path.join(root, ".worktrees", "feature-a", ".env"), "utf8")).toContain("AREND_SLOT=2");
+  });
+
+  it("refuses when every free slot's ports are listening and creates nothing", () => {
+    const root = makeGitRepo({ rootEnv });
+    const res = runWorktreeNew(root, "feature-a", { lsof: "busy" });
+
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("listening");
+    expect(res.stderr).toContain("8096");
+    expect(existsSync(path.join(root, ".worktrees", "feature-a"))).toBe(false);
+  });
+
+  it("warns and hands out the first registry slot when the probe can't run", () => {
+    const root = makeGitRepo({ rootEnv });
+    const res = runWorktreeNew(root, "feature-a", { lsof: "absent" });
+
+    expect(res.code).toBe(0);
+    expect(res.stderr).toContain("lsof");
+    expect(readFileSync(path.join(root, ".worktrees", "feature-a", ".env"), "utf8")).toContain("AREND_SLOT=1");
   });
 });

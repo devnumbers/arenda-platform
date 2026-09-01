@@ -113,10 +113,50 @@ export function envOverrideBlock(cfg, baseEnv) {
   ].join("\n");
 }
 
+// The six host ports a slot owns: the dev role (postgres, backend, frontend)
+// then the e2e role. The worktree-new preflight probes exactly these; the
+// teardown recipe (docs/agents/parallel-dev.md) walks them to find a slot's
+// orphaned processes.
+export function slotPorts(cfg) {
+  return [
+    cfg.devPgPort,
+    cfg.devBackendPort,
+    cfg.devFrontendPort,
+    cfg.e2ePgPort,
+    cfg.e2eBackendPort,
+    cfg.e2eFrontendPort,
+  ];
+}
+
+// Port preflight on top of the registry scan (#489 live check): the .env
+// registry says nothing about who actually listens, and a slot handed out
+// over a foreign listener would let the e2e runner's free_port() kill that
+// process. Walk the candidates in order and take the first whose six ports
+// have no listener, per probe(port) → pid array (empty = free). probe may
+// return null when it cannot run at all (no lsof) — that aborts the
+// preflight with unavailable: true so the caller can warn and fall back.
+// Every held candidate comes back in `blocked` so the caller can warn with
+// the holding pids.
+export function selectSlotByPorts(candidateSlots, probe) {
+  const blocked = [];
+  for (const slot of candidateSlots) {
+    const cfg = slotConfig(slot);
+    const busyPorts = [];
+    for (const port of slotPorts(cfg)) {
+      const pids = probe(port);
+      if (pids === null) return { unavailable: true, slot: null, cfg: null, blocked };
+      if (pids.length > 0) busyPorts.push({ port, pids });
+    }
+    if (busyPorts.length === 0) return { unavailable: false, slot, cfg, blocked };
+    blocked.push({ slot, busyPorts });
+  }
+  return { unavailable: false, slot: null, cfg: null, blocked };
+}
+
 // The registry is the set of .env files itself (docs/agents/parallel-dev.md):
 // the checkout's root .env plus every .worktrees/<name>/.env. Returns the
-// taken slots (slot → file) and the first free N of 1..9 (null when the range
-// is exhausted). Duplicate or malformed claims throw.
+// taken slots (slot → file) and the free N of 1..9 in order (empty when the
+// range is exhausted). Duplicate or malformed claims throw.
 export function scanSlotRegistry(rootDir) {
   const taken = new Map();
   const candidates = [path.join(rootDir, ".env")];
@@ -142,9 +182,10 @@ export function scanSlotRegistry(rootDir) {
     }
     taken.set(slot, file);
   }
+  const freeSlots = [];
   for (let free = 1; free <= 9; free++) {
-    if (!taken.has(free)) return { taken, free };
+    if (!taken.has(free)) freeSlots.push(free);
   }
-  return { taken, free: null };
+  return { taken, freeSlots };
 }
 
