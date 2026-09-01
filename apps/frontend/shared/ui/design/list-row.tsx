@@ -23,12 +23,16 @@ export type ListRowProps = {
   readonly onSelect?: () => void;
   readonly disabled?: boolean;
   readonly className?: string;
+  /** Дополнение к классу подписи (другой цвет из того же компонента Row
+   * Button — подсказки адреса несут #6F787C, Figma 1519:94336). */
+  readonly subtitleClassName?: string;
 };
 
 export function ListRow({
   leading,
   title,
   subtitle,
+  subtitleClassName,
   subtitleIcon,
   value,
   description,
@@ -70,7 +74,12 @@ export function ListRow({
           {title}
         </span>
         {subtitle !== undefined && (
-          <span className="flex items-center gap-1.5 text-sm text-content-tertiary">
+          <span
+            className={cn(
+              'flex items-center gap-1.5 text-sm text-content-tertiary',
+              subtitleClassName,
+            )}
+          >
             {subtitleIcon !== undefined && (
               <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
                 {subtitleIcon}

@@ -8,19 +8,23 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import {
   IconButton,
+  Button,
   PageContent,
   StepsChip,
+  StickyBottomBar,
   TopNav,
   useTabBarSuppression,
 } from '@/shared/ui/design';
 import {
   initialPropertyCreateStep,
+  propertyCreateStepReady,
   PROPERTY_CREATE_TOTAL_STEPS,
   usePropertyCreateDraft,
   type PropertyCreateStep,
 } from '@/features/properties';
+import { AddressStep } from './address-step';
 import { CategoryStep } from './category-step';
-import { PropertyWizardHeading } from './wizard-chrome';
+import { PropertyWizardBottomBar, PropertyWizardHeading } from './wizard-chrome';
 
 /**
  * Поток шагов визарда создания объекта (#480): клиентское состояние на
@@ -79,10 +83,28 @@ export function PropertyCreateWizardFlow(): JSX.Element {
             />
           </>
         )}
-        {/* Шаг 2 «Адрес» — тикет #481 (Figma 1213-52017/52391, 1519-94336),
-            шаг 3 «Характеристики» — #482 (Figma 1218-54295): хедер и
-            переходы флоу финальные, контент шагов дозревает в своих
-            тикетах. */}
+        {/* Шаг 3 «Характеристики» — тикет #482 (Figma 1218-54295):
+            хедер и переходы флоу финальные, контент шага дозревает в своём
+            тикете. */}
+        {step === 2 && (
+          <>
+            <AddressStep
+              value={draft.address ?? ''}
+              onChange={(address) => setDraft((prev) => ({ ...prev, address }))}
+            />
+            {/* «Продолжить» — после непустого адреса (Figma 1213-52017
+                без панели, 1213-52391 с панелью). */}
+            {propertyCreateStepReady(2, draft) && (
+              <StickyBottomBar>
+                <PropertyWizardBottomBar>
+                  <Button className="w-full" onClick={() => setStep(3)}>
+                    Продолжить
+                  </Button>
+                </PropertyWizardBottomBar>
+              </StickyBottomBar>
+            )}
+          </>
+        )}
       </PageContent>
     </>
   );

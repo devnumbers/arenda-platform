@@ -8,11 +8,13 @@ export { propertyTypeLabels, propertyTypeOptions } from './lib/property-types';
 export {
   initialPropertyCreateStep,
   propertyCategoryOptions,
+  propertyCreateStepReady,
   PROPERTY_CREATE_TOTAL_STEPS,
 } from './lib/property-create-draft';
 export type {
   PropertyCreateDraft,
   PropertyCreateStep,
 } from './lib/property-create-draft';
+export { addressSuggestionRow } from './lib/address-suggestion';
 export { usePropertyCreateDraft } from './lib/use-property-create-draft';
 export { PropertyStatusBadge } from './ui/PropertyStatusBadge';
