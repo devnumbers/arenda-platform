@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cancel, Search } from '@/shared/assets/icons';
+import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import {
   usePayments,
   usePropertyOverdueOperations,
@@ -22,7 +21,6 @@ import {
   Button,
   IconButton,
   PageContent,
-  SearchField,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
@@ -52,9 +50,8 @@ const SECTION_LIMIT = 3;
  * полным списком. Закреплённая кнопка «Добавить» открывает шит выбора;
  * скрыта у смотрящего (история 47) и на архивном объекте (#446).
  *
- * Поиск — серверный (`search` в контрактах списков): дебаунс ввода, каждая
- * секция фильтруется независимо. Статус просрочки считает сервер (ADR 0048),
- * подпись дней — клиентская проекция (lib/overdue-days).
+ * Статус просрочки считает сервер (ADR 0048), подпись дней — клиентская
+ * проекция (lib/overdue-days).
  */
 export function PaymentsOfPropertyScreen({
   propertyId,
@@ -64,27 +61,10 @@ export function PaymentsOfPropertyScreen({
   const router = useRouter();
   const propertyQuery = useProperty(propertyId);
 
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Поле поиска получает фокус программно (jsx-a11y запрещает autoFocus;
-  // паттерн логин-экрана — ref + effect под контролем компонента).
-  useEffect(() => {
-    if (searchOpen) {
-      searchInputRef.current?.focus();
-    }
-  }, [searchOpen]);
-
-  // Запрос отстаёт от ввода на дебаунс: одна перегенерация ключа на паузу
-  // печатания, обе секции-источника фильтруются одним и тем же search.
-  const debouncedQuery = useDebounce(query, 300);
-  const searching = searchOpen && debouncedQuery.trim().length > 0;
-  const search = searching ? debouncedQuery.trim() : '';
-
-  const paymentsQuery = usePayments(propertyId, search);
-  const overdueQuery = usePropertyOverdueOperations(propertyId, search);
+  const paymentsQuery = usePayments(propertyId);
+  const overdueQuery = usePropertyOverdueOperations(propertyId);
 
   const today = clientTodayIso();
 
@@ -117,15 +97,8 @@ export function PaymentsOfPropertyScreen({
   const canMutate =
     property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
 
-  const closeSearch = (): void => {
-    setSearchOpen(false);
-    setQuery('');
-  };
-
   const openPayment = (payment: Payment): void =>
     router.push(ROUTES.propertyPayment(propertyId, payment.id));
-
-  const searchMissHint = searching ? 'Ничего не нашлось' : undefined;
 
   return (
     <>
@@ -137,30 +110,8 @@ export function PaymentsOfPropertyScreen({
             onClick={() => goBack(router, ROUTES.property(propertyId))}
           />
         }
-        trailing={
-          searchOpen ? (
-            <IconButton icon={<Cancel />} label="Закрыть поиск" onClick={closeSearch} />
-          ) : (
-            <IconButton
-              icon={<Search />}
-              label="Поиск"
-              onClick={() => setSearchOpen(true)}
-            />
-          )
-        }
       >
-        {searchOpen ? (
-          <SearchField
-            ref={searchInputRef}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onClear={() => setQuery('')}
-            placeholder="Найти платеж"
-            aria-label="Поиск по названиям"
-          />
-        ) : (
-          <TopNavTitle title="Платежи объекта" />
-        )}
+        <TopNavTitle title="Платежи объекта" />
       </TopNav>
 
       <PageContent>
@@ -186,7 +137,7 @@ export function PaymentsOfPropertyScreen({
                   title="Просроченные операции"
                   onOpen={() => router.push(ROUTES.propertyPaymentsOverdue(propertyId))}
                   openLabel="Открыть просроченные операции"
-                  emptyHint={searchMissHint ?? 'У вас нет просроченных операций'}
+                  emptyHint={'У вас нет просроченных операций'}
                 >
                   {overdue.length > 0
                     ? overdue.slice(0, SECTION_LIMIT).map((operation) => {
@@ -238,7 +189,7 @@ export function PaymentsOfPropertyScreen({
                     title="Платежи"
                     onOpen={() => router.push(ROUTES.propertyPaymentsAll(propertyId))}
                     openLabel="Открыть все платежи"
-                    emptyHint={searchMissHint ?? 'Напомним, когда нужно будет отметить оплату, вы вручную отметите платеж'}
+                    emptyHint={'Напомним, когда нужно будет отметить оплату, вы вручную отметите платеж'}
                   >
                     {sortedRegular.length > 0
                       ? sortedRegular.slice(0, SECTION_LIMIT).map((payment) => (
@@ -258,7 +209,7 @@ export function PaymentsOfPropertyScreen({
                     title="Автоплатежи"
                     onOpen={() => router.push(ROUTES.propertyPaymentsAuto(propertyId))}
                     openLabel="Открыть автоплатежи"
-                    emptyHint={searchMissHint ?? 'Предупредим о платеже, потом автоматически отметим оплату'}
+                    emptyHint={'Предупредим о платеже, потом автоматически отметим оплату'}
                   >
                     {sortedAuto.length > 0
                       ? sortedAuto.slice(0, SECTION_LIMIT).map((payment) => (
