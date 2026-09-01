@@ -55,7 +55,18 @@ export function PropertyCreateWizardFlow(): JSX.Element {
       >
         <StepsChip step={step} total={PROPERTY_CREATE_TOTAL_STEPS} size="m" />
       </TopNav>
-      <PageContent className="pt-0">
+      {/* Шаг 1: контент прижат к низу области под хедером (Figma
+          1213-52111: Page Content высотой с вьюпорт, alignItems flex-end,
+          136px снизу; pb-[136px] PageContent — тот самый отступ). На
+          десктопе — сверху, как принято для высоких окон (решение
+          владельца). */}
+      <PageContent
+        className={
+          step === 1
+            ? 'min-h-[calc(100dvh-72px)] justify-end pt-0 desktop:min-h-0 desktop:justify-start'
+            : 'pt-0'
+        }
+      >
         {step === 1 && (
           <>
             <PropertyWizardHeading title="Выберите, какая у вас недвижимость" />
