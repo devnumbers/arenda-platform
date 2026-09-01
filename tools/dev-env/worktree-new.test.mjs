@@ -12,10 +12,22 @@ import path from "node:path";
 
 const scriptPath = path.join(import.meta.dirname, "worktree-new.mjs");
 
+// git exports its own environment to hook processes, and in a linked
+// worktree GIT_DIR is absolute — a pre-push run from a worktree poisons
+// every fixture git call below with the real checkout's git dir (hooks
+// resolve from it too). The fixtures own their git dirs: strip the hook
+// environment wholesale at the spawn boundary.
+function sanitizedEnv() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+}
+
 function git(root, ...args) {
   const res = spawnSync("git", ["-c", "commit.gpgsign=false", ...args], {
     cwd: root,
     encoding: "utf8",
+    env: sanitizedEnv(),
   });
   if (res.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${res.stderr}`);
   return res.stdout;
@@ -46,6 +58,7 @@ function runWorktreeNew(root, name) {
     cwd: root,
     encoding: "utf8",
     timeout: 30_000,
+    env: sanitizedEnv(),
   });
   return { code: res.status, stdout: res.stdout, stderr: res.stderr };
 }
@@ -119,6 +132,29 @@ describe("worktree-new: happy path", () => {
     expect(wtEnv).toContain("ENCRYPTION_KEY=...");
     expect(wtEnv).toContain(".env.example");
     expect(res.stdout).toContain(".env.example");
+  });
+
+  it("ignores a hook's GIT_* environment (pre-push from a linked worktree)", () => {
+    // A pre-push hook run from a linked worktree exports GIT_DIR pointing
+    // into the real checkout; the fixture git ops and the script under test
+    // must not see it.
+    const poisoned = { GIT_DIR: path.join(tmpdir(), "no-such-git-dir"), GIT_WORK_TREE: tmpdir() };
+    const restore = Object.entries(poisoned).map(([key, value]) => {
+      const prev = process.env[key];
+      process.env[key] = value;
+      return [key, prev];
+    });
+    try {
+      const root = makeGitRepo({ rootEnv });
+      const res = runWorktreeNew(root, "feature-a");
+      expect(res.code).toBe(0);
+      expect(existsSync(path.join(root, ".worktrees", "feature-a", ".env"))).toBe(true);
+    } finally {
+      for (const [key, prev] of restore) {
+        if (prev === undefined) delete process.env[key];
+        else process.env[key] = prev;
+      }
+    }
   });
 });
 
