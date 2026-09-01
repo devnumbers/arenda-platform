@@ -58,4 +58,20 @@ describe('addressSuggestionRow', () => {
       subtitle: 'Москва',
     });
   });
+
+  it('реальный формат DaData: регион и «г Город» вырезаются целиком', () => {
+    expect(
+      addressSuggestionRow('Московская обл, г Коломна, ул Суворова, д 2', 'Коломна'),
+    ).toStrictEqual({ title: 'ул Суворова, д 2', subtitle: 'Коломна' });
+    expect(
+      addressSuggestionRow('Московская обл, г Коломна, ул Суворова', 'Коломна'),
+    ).toStrictEqual({ title: 'ул Суворова', subtitle: 'Коломна' });
+  });
+
+  it('город в составе другого слова (Коломенская) не вырезается', () => {
+    expect(addressSuggestionRow('г Коломна, ул Коломенская, 5', 'Коломна')).toStrictEqual({
+      title: 'ул Коломенская, 5',
+      subtitle: 'Коломна',
+    });
+  });
 });
