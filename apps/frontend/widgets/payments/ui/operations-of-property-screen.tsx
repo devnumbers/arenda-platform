@@ -2,41 +2,36 @@
 
 import { useMemo, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { ArrowLeft, ChevronDown, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { formatMoneyKopecks, ratioToPercent } from '@/shared/lib/format-money';
-import {
-  CategoryIcon,
-  categoryStyle,
-} from '@/features/payment-categories';
+import { categoryStyle } from '@/features/payment-categories';
 import {
   groupOperationsByDate,
+  operationsMonthOf,
+  operationsMonthRange,
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from '@/features/payments';
 import {
   clientTodayIso,
-  PaymentRowButton,
   type OperationsSummary,
-  type PaymentOperation,
 } from '@/entities/payment';
 import {
   Button,
   ChipButton,
   IconButton,
-  MONTH_LABELS,
   PageContent,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
 import {
-  PaymentsHeading,
   PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
+import { LoadingMoreIndicator, OperationsDateList } from './operations-list';
 
 /**
  * Экран «Операции объекта» (#474, Figma 1492-41825): оплаченные операции
@@ -44,11 +39,11 @@ import {
  * синий; дефолт — текущий месяц) и «Категория» (шиты выбора — тикет #477),
  * под ними карточки «Расходы»/«Доходы» с суммой за период; у расходов —
  * полоса-разбивка по категориям (топ-4 + остаток белым), у доходов —
- * сплошная белая (Figma 1492:59525). Сводка и список считают один и тот же
+ * сплошная белая (Figma 1492:59525). Карточки ведут на экраны «Расходы
+ * объекта»/«Доходы объекта» (#475). Сводка и список считают один и тот же
  * скоуп на сервере (#473) — карточки и список всегда согласны. Порции по 50
  * с бесконечным скроллом; строка ведёт на страницу операции. Поиск — иконка
- * в хедере (экран поиска — тикет #476); пустое состояние — заглушка до
- * тикета #478.
+ * в хедере (экран поиска — тикет #476).
  */
 export function OperationsOfPropertyScreen({
   propertyId,
@@ -58,7 +53,7 @@ export function OperationsOfPropertyScreen({
   const router = useRouter();
 
   const today = clientTodayIso();
-  const period = useMemo(() => currentMonthRange(today), [today]);
+  const period = useMemo(() => operationsMonthRange(operationsMonthOf(today)), [today]);
   const scope = {
     status: 'paid',
     order: 'desc',
@@ -82,7 +77,7 @@ export function OperationsOfPropertyScreen({
   const segments = expenseSegments(summaryQuery.data);
   const pending = listQuery.isPending || summaryQuery.isPending;
 
-  const openOperation = (operation: PaymentOperation): void =>
+  const openOperation = (operation: { readonly id: string }): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
 
   return (
@@ -143,56 +138,35 @@ export function OperationsOfPropertyScreen({
               ) : (
                 <>
                   {/* Карточки сводки (Figma 1492:59516/1492:59525): сумма за
-                   * период + полоса; расходы — разбивка по категориям. */}
+                   * период + полоса; расходы — разбивка по категориям. Клик —
+                   * вход на экран направления (#475). */}
                   <div className="flex gap-2 px-6">
                     <SummaryCard
                       label="Расходы"
                       totalKopecks={summaryQuery.data?.expenseTotalKopecks}
                       segments={segments}
+                      openLabel="Открыть расходы объекта"
+                      onOpen={() => router.push(ROUTES.propertyOperationsExpense(propertyId))}
                     />
                     <SummaryCard
                       label="Доходы"
                       totalKopecks={summaryQuery.data?.incomeTotalKopecks}
                       segments={[]}
+                      openLabel="Открыть доходы объекта"
+                      onOpen={() => router.push(ROUTES.propertyOperationsIncome(propertyId))}
                     />
                   </div>
 
-                  {groups.length === 0 ? (
-                    // Пустой период (Figma 1510-77308): иллюстрация 128 и
-                    // одна строка 16/18 серым, блок с отступами 64.
-                    <div className="flex flex-col items-center gap-4 py-16">
-                      <Image
-                        src="/images/payments/operations-empty.png"
-                        alt=""
-                        width={128}
-                        height={128}
-                        className="h-32 w-32"
-                      />
-                      <p className="text-base leading-[18px] text-content-secondary">
-                        Операции не найдены. Попробуйте выбрать другой период
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {groups.map((group) => (
-                        <section key={group.date} className="flex flex-col">
-                          <PaymentsHeading>{group.label}</PaymentsHeading>
-                          {group.operations.map((operation) => (
-                            <OperationRow
-                              key={operation.id}
-                              operation={operation}
-                              onSelect={() => openOperation(operation)}
-                            />
-                          ))}
-                        </section>
-                      ))}
-
-                      {listQuery.hasNextPage === true && (
-                        <div ref={sentinelRef} aria-hidden />
-                      )}
-                      {listQuery.isFetchingNextPage && <LoadingMoreIndicator />}
-                    </div>
-                  )}
+                  <OperationsDateList
+                    groups={groups}
+                    onSelectOperation={openOperation}
+                    tail={
+                      <>
+                        {listQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
+                        {listQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                      </>
+                    }
+                  />
                 </>
               )}
             </>
@@ -205,18 +179,29 @@ export function OperationsOfPropertyScreen({
 
 /** Карточка сводки (Figma 1492:59516, EL-3091ce92): серая карточка radius 24,
  * сумма 16/500, подпись 14/400, полоса 6px со скруглением; сегменты —
- * категории расходов (цвет каталога), остаток и пустая разбивка — белым. */
+ * категории расходов (цвет каталога), остаток и пустая разбивка — белым.
+ * Вся карточка — кнопка на экран направления (#475), как заголовки секций
+ * «Платежей объекта». */
 function SummaryCard({
   label,
   totalKopecks,
   segments,
+  openLabel,
+  onOpen,
 }: {
   readonly label: string;
   readonly totalKopecks: number | undefined;
   readonly segments: ReadonlyArray<SummarySegment>;
+  readonly openLabel: string;
+  readonly onOpen: () => void;
 }): JSX.Element {
   return (
-    <div className="min-w-0 flex-1 rounded-card bg-surface-muted px-6 pb-6 pt-5">
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={openLabel}
+      className="min-w-0 flex-1 cursor-pointer rounded-card bg-surface-muted px-6 pb-6 pt-5 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+    >
       <div className="flex flex-col gap-0.5">
         <span className="text-base font-medium text-content">
           {totalKopecks === undefined ? '—' : formatMoneyKopecks(totalKopecks)}
@@ -235,7 +220,7 @@ function SummaryCard({
           />
         ))}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -273,50 +258,4 @@ function expenseSegments(
     segments.push({ color: '#FFFFFF', percent: 100 - covered });
   }
   return segments;
-}
-
-/** Строка операции (1332:61665, Row Button White): иконка категории с белым
- * кантом, название, знаковая сумма — доход зелёным с плюсом, расход тёмным
- * с минусом (Figma 1492:42480). */
-function OperationRow({
-  operation,
-  onSelect,
-}: {
-  readonly operation: PaymentOperation;
-  readonly onSelect: () => void;
-}): JSX.Element {
-  const style = categoryStyle('default', operation.categorySlug);
-  return (
-    <PaymentRowButton
-      className="px-3 py-3"
-      categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
-      title={operation.title}
-      amountKopecks={
-        operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
-      }
-      signedAmount
-      onSelect={onSelect}
-    />
-  );
-}
-
-function LoadingMoreIndicator(): JSX.Element {
-  return (
-    <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <div className="h-8 w-8 animate-pulse rounded-pill bg-surface-muted" />
-    </div>
-  );
-}
-
-/** Границы текущего месяца по клиентскому «сегодня»: «сегодня» интерфейса
- * считает сервер по TZ собственника (ADR 0048); клиентская зона влияет
- * только на выбор месяца по умолчанию — листание и шит периода придут в
- * тикете #477. */
-function currentMonthRange(today: string): { from: string; to: string; label: string } {
-  const year = Number(today.slice(0, 4));
-  const month = Number(today.slice(5, 7)) - 1;
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  const from = `${today.slice(0, 7)}-01`;
-  const to = `${today.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`;
-  return { from, to, label: `${MONTH_LABELS[month]} ${year}` };
 }

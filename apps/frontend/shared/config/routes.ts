@@ -31,6 +31,10 @@ export const ROUTES = {
     `/properties/${id}/operations/${operationId}`,
   /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
   propertyOperations: (id: string) => `/properties/${id}/operations`,
+  /** Экраны «Доходы объекта»/«Расходы объекта» (#475): список одного
+   * направления за месяц с листанием. */
+  propertyOperationsIncome: (id: string) => `/properties/${id}/operations/income`,
+  propertyOperationsExpense: (id: string) => `/properties/${id}/operations/expense`,
   /** Поиск по операциям объекта (Figma 1494-61633…; экран — тикет #476). */
   propertyOperationsSearch: (id: string) => `/properties/${id}/operations/search`,
   /** Просмотр проекции будущего вхождения (чисто фронт, без id операции). */

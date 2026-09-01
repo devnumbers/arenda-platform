@@ -50,6 +50,13 @@ export {
   type PaymentHistoryGroup,
 } from './lib/operations-history';
 export {
+  isCurrentOperationsMonth,
+  operationsMonthOf,
+  operationsMonthRange,
+  shiftOperationsMonth,
+  type OperationsMonth,
+} from './lib/operations-month';
+export {
   buildPaymentUpdateCommand,
   editFormReady,
   recurrencesEqual,
