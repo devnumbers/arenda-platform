@@ -22,11 +22,12 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// fakeOperationsManager is the func-backed OperationsManager double.
+// fakeOperationsManager is the func-backed OperationsManager double: every
+// use case is optional; an unset one fails the test loudly instead of
+// silently succeeding (ADR 0035 test doubles). The func fields back the
+// port's methods one to one; the field order is alphabetical, unlike the
+// port.
 type fakeOperationsManager struct {
-	get   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
-	del   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) error
-	pay   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	byPay func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 		cmd application.OperationsListQuery,
@@ -35,6 +36,13 @@ type fakeOperationsManager struct {
 		ctx context.Context, actor, propertyID uuid.UUID,
 		cmd application.OperationsListQuery,
 	) ([]application.OperationListItem, error)
+	del       func(ctx context.Context, actor, propertyID, operationID uuid.UUID) error
+	get       func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
+	pay       func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
+	summarize func(
+		ctx context.Context, actor, propertyID uuid.UUID,
+		cmd application.OperationsSummaryQuery,
+	) (application.OperationsSummary, error)
 }
 
 func (f *fakeOperationsManager) DeleteOperation(
@@ -81,6 +89,15 @@ func (f *fakeOperationsManager) ListPropertyOperations(
 		return nil, errors.New("unexpected ListPropertyOperations call")
 	}
 	return f.byProp(ctx, actor, propertyID, cmd)
+}
+
+func (f *fakeOperationsManager) SummarizePropertyOperations(
+	ctx context.Context, actor, propertyID uuid.UUID, cmd application.OperationsSummaryQuery,
+) (application.OperationsSummary, error) {
+	if f.summarize == nil {
+		return application.OperationsSummary{}, errors.New("unexpected SummarizePropertyOperations call")
+	}
+	return f.summarize(ctx, actor, propertyID, cmd)
 }
 
 // fixtureOperation is the tests' fixture operation; a paid status carries a
@@ -162,7 +179,7 @@ func TestListPaymentOperations_FoldsParamsIntoCommand(t *testing.T) {
 	h := NewOperationsHandlers(svc, nil)
 	actor := uuid.Must(uuid.NewV7())
 
-	status := openapi.Overdue
+	status := openapi.ListPaymentOperationsParamsStatusOverdue
 	from := openapi_types.Date{Time: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
 	to := openapi_types.Date{Time: time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC)}
 	asc := openapi.Asc
@@ -205,7 +222,7 @@ func TestListPaymentOperations_FoldsParamsIntoCommand(t *testing.T) {
 	if len(body.Items) != 1 {
 		t.Fatalf("items = %d, want 1", len(body.Items))
 	}
-	if body.Items[0].Status != openapi.OperationResponseStatus(openapi.Overdue) {
+	if body.Items[0].Status != openapi.OperationResponseStatusOverdue {
 		t.Errorf("wire status = %q, want the computed overdue view status", body.Items[0].Status)
 	}
 }
@@ -252,7 +269,7 @@ func TestListPaymentOperations_DefaultsAreDescPage50(t *testing.T) {
 func TestListPropertyOperations_ForwardsToPort(t *testing.T) {
 	t.Parallel()
 
-	planned := openapi.ListPropertyOperationsParamsStatus(openapi.Planned)
+	planned := openapi.ListPropertyOperationsParamsStatusPlanned
 	var gotActor, gotProp uuid.UUID
 	var gotCmd application.OperationsListQuery
 	svc := &fakeOperationsManager{
@@ -293,7 +310,7 @@ func TestListPropertyOperations_ForwardsToPort(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &items); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(items.Items) != 1 || items.Items[0].Status != openapi.OperationResponseStatus(openapi.Planned) {
+	if len(items.Items) != 1 || items.Items[0].Status != openapi.OperationResponseStatusPlanned {
 		t.Errorf("wire = %+v, want one planned item", items.Items)
 	}
 }
@@ -472,7 +489,7 @@ func TestGetOperation_ReturnsOperationAndMapsErrors(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
-		if body.Id != paidOp.ID || body.Status != openapi.OperationResponseStatus(openapi.Paid) {
+		if body.Id != paidOp.ID || body.Status != openapi.OperationResponseStatusPaid {
 			t.Errorf("wire = %s/%s, want the requested id with the computed paid status",
 				body.Id, body.Status)
 		}
@@ -537,7 +554,7 @@ func TestPayOperation_HappyPathAndConflicts(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
-		if body.Status != openapi.OperationResponseStatus(openapi.Paid) {
+		if body.Status != openapi.OperationResponseStatusPaid {
 			t.Errorf("status = %q, want paid", body.Status)
 		}
 		if body.PaidDate == nil || !body.PaidDate.Equal(paidOp.PaidDate.UTC()) {
@@ -653,3 +670,223 @@ func TestSetPaymentFavorite_BodyAndResponse(t *testing.T) {
 }
 
 func intPtr(v int) *int { return new(v) }
+
+func TestSummarizePropertyOperations_FoldsParamsIntoCommand(t *testing.T) {
+	t.Parallel()
+
+	var gotActor, gotProp uuid.UUID
+	var gotCmd application.OperationsSummaryQuery
+	svc := &fakeOperationsManager{
+		summarize: func(
+			_ context.Context, actor, prop uuid.UUID, cmd application.OperationsSummaryQuery,
+		) (application.OperationsSummary, error) {
+			gotActor, gotProp, gotCmd = actor, prop, cmd
+			return application.OperationsSummary{}, nil
+		},
+	}
+	h := NewOperationsHandlers(svc, nil)
+	actor := uuid.Must(uuid.NewV7())
+	propID := uuid.Must(uuid.NewV7())
+
+	paid := openapi.SummarizePropertyOperationsParamsStatusPaid
+	expense := openapi.SummarizePropertyOperationsParamsTypeExpense
+	from := openapi_types.Date{Time: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
+	to := openapi_types.Date{Time: time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC)}
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations/summary", nil,
+	)
+	w := httptest.NewRecorder()
+	h.SummarizePropertyOperations(w, req, propID, openapi.SummarizePropertyOperationsParams{
+		Status:   &paid,
+		Type:     &expense,
+		DateFrom: &from,
+		DateTo:   &to,
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if gotActor != actor || gotProp != propID {
+		t.Errorf("actor/property = %s/%s, want %s/%s", gotActor, gotProp, actor, propID)
+	}
+	if gotCmd.Status == nil || *gotCmd.Status != domain.ViewStatusPaid {
+		t.Errorf("cmd.Status = %v, want paid", gotCmd.Status)
+	}
+	if gotCmd.Type == nil || *gotCmd.Type != domain.TypeExpense {
+		t.Errorf("cmd.Type = %v, want expense", gotCmd.Type)
+	}
+	if gotCmd.DateFrom == nil || gotCmd.DateTo == nil {
+		t.Errorf("period = %v..%v, want both bounds carried", gotCmd.DateFrom, gotCmd.DateTo)
+	}
+}
+
+func TestSummarizePropertyOperations_ResponseShape(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeOperationsManager{
+		summarize: func(
+			context.Context, uuid.UUID, uuid.UUID, application.OperationsSummaryQuery,
+		) (application.OperationsSummary, error) {
+			return application.OperationsSummary{
+				IncomeTotalKopecks:  6650000,
+				ExpenseTotalKopecks: 1700000,
+				Categories: []application.CategorySummary{
+					{Slug: testSlugRent, Label: testLabelRent, Type: domain.TypeIncome, TotalKopecks: 5650000},
+				},
+			}, nil
+		},
+	}
+	h := NewOperationsHandlers(svc, nil)
+
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), uuid.Must(uuid.NewV7())), http.MethodGet, "/operations/summary", nil,
+	)
+	w := httptest.NewRecorder()
+	h.SummarizePropertyOperations(w, req, uuid.Must(uuid.NewV7()), openapi.SummarizePropertyOperationsParams{})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body openapi.OperationsSummaryResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.IncomeTotalKopecks != 6650000 || body.ExpenseTotalKopecks != 1700000 {
+		t.Errorf("totals = %d/%d, want 6 650 000/1 700 000",
+			body.IncomeTotalKopecks, body.ExpenseTotalKopecks)
+	}
+	if len(body.Categories) != 1 ||
+		body.Categories[0].CategorySlug != testSlugRent ||
+		body.Categories[0].CategoryLabel != testLabelRent ||
+		body.Categories[0].Type != openapi.OperationsSummaryCategoryTypeIncome {
+		t.Errorf("categories = %+v, want the single rent row", body.Categories)
+	}
+}
+
+func TestSummarizePropertyOperations_MapsErrorsAndAuth(t *testing.T) {
+	t.Parallel()
+
+	t.Run("requires auth", func(t *testing.T) {
+		t.Parallel()
+		h := NewOperationsHandlers(&fakeOperationsManager{}, nil)
+		w := httptest.NewRecorder()
+		h.SummarizePropertyOperations(w,
+			httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil),
+			uuid.Must(uuid.NewV7()), openapi.SummarizePropertyOperationsParams{})
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", w.Code)
+		}
+	})
+
+	t.Run("rejects an out-of-vocabulary type", func(t *testing.T) {
+		t.Parallel()
+		h := NewOperationsHandlers(&fakeOperationsManager{}, nil)
+		actor := uuid.Must(uuid.NewV7())
+		bogus := openapi.SummarizePropertyOperationsParamsType("both")
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/", nil,
+		)
+		w := httptest.NewRecorder()
+		h.SummarizePropertyOperations(w, req, uuid.Must(uuid.NewV7()),
+			openapi.SummarizePropertyOperationsParams{Type: &bogus})
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 for an out-of-vocabulary type", w.Code)
+		}
+	})
+
+	t.Run("a foreign property is the privacy 404", func(t *testing.T) {
+		t.Parallel()
+		svc := &fakeOperationsManager{
+			summarize: func(context.Context, uuid.UUID, uuid.UUID, application.OperationsSummaryQuery) (application.OperationsSummary, error) {
+				return application.OperationsSummary{}, application.ErrNotFound
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/", nil,
+		)
+		w := httptest.NewRecorder()
+		h.SummarizePropertyOperations(w, req, uuid.Must(uuid.NewV7()), openapi.SummarizePropertyOperationsParams{})
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want the privacy 404", w.Code)
+		}
+	})
+}
+
+func TestListPropertyOperations_FoldsTypeAndCategoryFilters(t *testing.T) {
+	t.Parallel()
+
+	var gotCmd application.OperationsListQuery
+	svc := &fakeOperationsManager{
+		byProp: func(
+			_ context.Context, _, _ uuid.UUID, cmd application.OperationsListQuery,
+		) ([]application.OperationListItem, error) {
+			gotCmd = cmd
+			return []application.OperationListItem{}, nil
+		},
+	}
+	h := NewOperationsHandlers(svc, nil)
+	actor := uuid.Must(uuid.NewV7())
+
+	expense := openapi.ListPropertyOperationsParamsTypeExpense
+	categories := "rent, utilities ,,security"
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations", nil,
+	)
+	w := httptest.NewRecorder()
+	h.ListPropertyOperations(w, req, uuid.Must(uuid.NewV7()), openapi.ListPropertyOperationsParams{
+		Type:     &expense,
+		Category: &categories,
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if gotCmd.Type == nil || *gotCmd.Type != domain.TypeExpense {
+		t.Errorf("cmd.Type = %v, want expense", gotCmd.Type)
+	}
+	want := []string{testSlugRent, "utilities", "security"}
+	if len(gotCmd.Categories) != len(want) {
+		t.Fatalf("cmd.Categories = %v, want %v", gotCmd.Categories, want)
+	}
+	for i, slug := range want {
+		if gotCmd.Categories[i] != slug {
+			t.Errorf("cmd.Categories[%d] = %q, want %q", i, gotCmd.Categories[i], slug)
+		}
+	}
+
+	t.Run("an empty category value disables the filter", func(t *testing.T) {
+		t.Parallel()
+		var gotCmd application.OperationsListQuery
+		svc := &fakeOperationsManager{
+			byProp: func(
+				_ context.Context, _, _ uuid.UUID, cmd application.OperationsListQuery,
+			) ([]application.OperationListItem, error) {
+				gotCmd = cmd
+				return []application.OperationListItem{}, nil
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+		empty := " , "
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations", nil,
+		)
+		w := httptest.NewRecorder()
+		h.ListPropertyOperations(w, req, uuid.Must(uuid.NewV7()),
+			openapi.ListPropertyOperationsParams{Category: &empty})
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", w.Code)
+		}
+		if len(gotCmd.Categories) != 0 {
+			t.Errorf("cmd.Categories = %v, want no filter", gotCmd.Categories)
+		}
+	})
+}

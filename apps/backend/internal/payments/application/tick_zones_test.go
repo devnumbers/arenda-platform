@@ -120,6 +120,12 @@ func (noopOperationStore) ListByProperty(
 	panic("unused")
 }
 
+func (noopOperationStore) SummarizeByProperty(
+	context.Context, uuid.UUID, uuid.UUID, OperationsSummaryQuery,
+) (OperationsSummary, error) {
+	panic("unused")
+}
+
 func (noopOperationStore) WithTx(tx transaction.Tx) (OperationStore, error) {
 	return noopOperationStore{}, nil
 }

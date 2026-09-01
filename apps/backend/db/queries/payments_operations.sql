@@ -51,8 +51,10 @@ WHERE id = $1 AND owner_id = $2 AND property_id = $3
 -- name: ListOperations :many
 -- The operations of one scope with pagination (limit/offset), the view status
 -- filter ('' is any), an inclusive period on the operation date, the sort
--- direction and a case-insensitive substring search by title ('' = no filter;
--- the application layer escapes the ILIKE metacharacters, ESCAPE '\').
+-- direction, a case-insensitive substring search by title ('' = no filter;
+-- the application layer escapes the ILIKE metacharacters, ESCAPE '\'), the
+-- direction filter ('' is any) and the comma-separated category slugs filter
+-- ('' is any; rows without a category snapshot never match a slug).
 -- A NULL payment widens the scope from one rule to every rule of
 -- the property: "planned" and "overdue" split the stored planned rows against
 -- the owner's today — overdue is computed here from the same truth the
@@ -91,8 +93,66 @@ WHERE op.owner_id = sqlc.arg('owner')
   AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
        OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('categories')::text = ''
+       OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
 ORDER BY
   CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
   CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
   op.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: SumOperationTotals :many
+-- The period totals of one property's operations by direction (ticket #473):
+-- the same status/period predicate as ListOperations, aggregated in SQL so
+-- the summary cards never re-add a paginated listing client-side. The
+-- direction filter deliberately does not apply here — the totals always
+-- report both directions (the contract: the type filter narrows only the
+-- category breakdown). Types absent from the scope simply miss from the
+-- result — the adapter reports them as zero. Cancelled tombstones never
+-- count.
+SELECT op.type,
+       SUM(op.amount_kopecks)::bigint AS total_kopecks
+FROM operations op
+WHERE op.owner_id = sqlc.arg('owner')
+  AND op.property_id = sqlc.arg('property')
+  AND op.status <> 'cancelled'
+  AND (
+    sqlc.arg('status')::text = ''
+    OR (sqlc.arg('status')::text = 'paid' AND op.status = 'paid')
+    OR (sqlc.arg('status')::text = 'planned' AND op.status = 'planned'
+        AND op.date >= sqlc.arg('today'))
+    OR (sqlc.arg('status')::text = 'overdue' AND op.status = 'planned'
+        AND op.date < sqlc.arg('today'))
+  )
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+GROUP BY op.type;
+
+-- name: SumOperationsByCategory :many
+-- The per-category breakdown behind the category chips and the summary
+-- cards' bar (ticket #473): one row per category snapshot present in the
+-- scope, largest total first; rows without a category snapshot are skipped
+-- (no chip identity — their amounts still count in the totals).
+SELECT op.category_slug,
+       op.category_label,
+       op.type,
+       SUM(op.amount_kopecks)::bigint AS total_kopecks
+FROM operations op
+WHERE op.owner_id = sqlc.arg('owner')
+  AND op.property_id = sqlc.arg('property')
+  AND op.status <> 'cancelled'
+  AND op.category_slug IS NOT NULL
+  AND (
+    sqlc.arg('status')::text = ''
+    OR (sqlc.arg('status')::text = 'paid' AND op.status = 'paid')
+    OR (sqlc.arg('status')::text = 'planned' AND op.status = 'planned'
+        AND op.date >= sqlc.arg('today'))
+    OR (sqlc.arg('status')::text = 'overdue' AND op.status = 'planned'
+        AND op.date < sqlc.arg('today'))
+  )
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+GROUP BY op.category_slug, op.category_label, op.type
+ORDER BY total_kopecks DESC, op.category_slug;

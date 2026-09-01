@@ -196,7 +196,7 @@ func (h *paymentsHarness) seedPause(paymentID uuid.UUID, from string, to *string
 
 // createCmd is the canonical valid create fixture: daily rent.
 func (h *paymentsHarness) createCmd() paymentsapp.CreatePaymentCommand {
-	slug := "rent"
+	slug := testIntegrationSlugRent
 	return paymentsapp.CreatePaymentCommand{
 		Type:          domain.TypeExpense,
 		Title:         "Аренда",

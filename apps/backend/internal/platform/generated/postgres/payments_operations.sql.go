@@ -148,25 +148,30 @@ WHERE op.owner_id = $1
   AND ($7::date IS NULL OR op.date <= $7)
   AND ($8::text = ''
        OR op.title ILIKE '%' || $8::text || '%' ESCAPE '\')
+  AND ($9::text = '' OR op.type = $9::text)
+  AND ($10::text = ''
+       OR op.category_slug = ANY(string_to_array($10::text, ',')))
 ORDER BY
-  CASE WHEN $9::text = 'asc' THEN op.date END ASC,
-  CASE WHEN $9::text = 'desc' THEN op.date END DESC,
+  CASE WHEN $11::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $11::text = 'desc' THEN op.date END DESC,
   op.id DESC
-LIMIT $11 OFFSET $10
+LIMIT $13 OFFSET $12
 `
 
 type ListOperationsParams struct {
-	Owner    pgtype.UUID `json:"owner"`
-	Property pgtype.UUID `json:"property"`
-	Payment  pgtype.UUID `json:"payment"`
-	Status   string      `json:"status"`
-	Today    pgtype.Date `json:"today"`
-	DateFrom pgtype.Date `json:"date_from"`
-	DateTo   pgtype.Date `json:"date_to"`
-	Search   string      `json:"search"`
-	Order    string      `json:"order"`
-	Offset   int32       `json:"offset"`
-	Limit    int32       `json:"limit"`
+	Owner      pgtype.UUID `json:"owner"`
+	Property   pgtype.UUID `json:"property"`
+	Payment    pgtype.UUID `json:"payment"`
+	Status     string      `json:"status"`
+	Today      pgtype.Date `json:"today"`
+	DateFrom   pgtype.Date `json:"date_from"`
+	DateTo     pgtype.Date `json:"date_to"`
+	Search     string      `json:"search"`
+	Type       string      `json:"type"`
+	Categories string      `json:"categories"`
+	Order      string      `json:"order"`
+	Offset     int32       `json:"offset"`
+	Limit      int32       `json:"limit"`
 }
 
 type ListOperationsRow struct {
@@ -188,8 +193,10 @@ type ListOperationsRow struct {
 
 // The operations of one scope with pagination (limit/offset), the view status
 // filter (” is any), an inclusive period on the operation date, the sort
-// direction and a case-insensitive substring search by title (” = no filter;
-// the application layer escapes the ILIKE metacharacters, ESCAPE '\').
+// direction, a case-insensitive substring search by title (” = no filter;
+// the application layer escapes the ILIKE metacharacters, ESCAPE '\'), the
+// direction filter (” is any) and the comma-separated category slugs filter
+// (” is any; rows without a category snapshot never match a slug).
 // A NULL payment widens the scope from one rule to every rule of
 // the property: "planned" and "overdue" split the stored planned rows against
 // the owner's today — overdue is computed here from the same truth the
@@ -205,6 +212,8 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 		arg.DateFrom,
 		arg.DateTo,
 		arg.Search,
+		arg.Type,
+		arg.Categories,
 		arg.Order,
 		arg.Offset,
 		arg.Limit,
@@ -263,4 +272,152 @@ func (q *Queries) PayOperationByID(ctx context.Context, arg PayOperationByIDPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const sumOperationTotals = `-- name: SumOperationTotals :many
+SELECT op.type,
+       SUM(op.amount_kopecks)::bigint AS total_kopecks
+FROM operations op
+WHERE op.owner_id = $1
+  AND op.property_id = $2
+  AND op.status <> 'cancelled'
+  AND (
+    $3::text = ''
+    OR ($3::text = 'paid' AND op.status = 'paid')
+    OR ($3::text = 'planned' AND op.status = 'planned'
+        AND op.date >= $4)
+    OR ($3::text = 'overdue' AND op.status = 'planned'
+        AND op.date < $4)
+  )
+  AND ($5::date IS NULL OR op.date >= $5)
+  AND ($6::date IS NULL OR op.date <= $6)
+GROUP BY op.type
+`
+
+type SumOperationTotalsParams struct {
+	Owner    pgtype.UUID `json:"owner"`
+	Property pgtype.UUID `json:"property"`
+	Status   string      `json:"status"`
+	Today    pgtype.Date `json:"today"`
+	DateFrom pgtype.Date `json:"date_from"`
+	DateTo   pgtype.Date `json:"date_to"`
+}
+
+type SumOperationTotalsRow struct {
+	Type         string `json:"type"`
+	TotalKopecks int64  `json:"total_kopecks"`
+}
+
+// The period totals of one property's operations by direction (ticket #473):
+// the same status/period predicate as ListOperations, aggregated in SQL so
+// the summary cards never re-add a paginated listing client-side. The
+// direction filter deliberately does not apply here — the totals always
+// report both directions (the contract: the type filter narrows only the
+// category breakdown). Types absent from the scope simply miss from the
+// result — the adapter reports them as zero. Cancelled tombstones never
+// count.
+func (q *Queries) SumOperationTotals(ctx context.Context, arg SumOperationTotalsParams) ([]SumOperationTotalsRow, error) {
+	rows, err := q.db.Query(ctx, sumOperationTotals,
+		arg.Owner,
+		arg.Property,
+		arg.Status,
+		arg.Today,
+		arg.DateFrom,
+		arg.DateTo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumOperationTotalsRow{}
+	for rows.Next() {
+		var i SumOperationTotalsRow
+		if err := rows.Scan(&i.Type, &i.TotalKopecks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sumOperationsByCategory = `-- name: SumOperationsByCategory :many
+SELECT op.category_slug,
+       op.category_label,
+       op.type,
+       SUM(op.amount_kopecks)::bigint AS total_kopecks
+FROM operations op
+WHERE op.owner_id = $1
+  AND op.property_id = $2
+  AND op.status <> 'cancelled'
+  AND op.category_slug IS NOT NULL
+  AND (
+    $3::text = ''
+    OR ($3::text = 'paid' AND op.status = 'paid')
+    OR ($3::text = 'planned' AND op.status = 'planned'
+        AND op.date >= $4)
+    OR ($3::text = 'overdue' AND op.status = 'planned'
+        AND op.date < $4)
+  )
+  AND ($5::date IS NULL OR op.date >= $5)
+  AND ($6::date IS NULL OR op.date <= $6)
+  AND ($7::text = '' OR op.type = $7::text)
+GROUP BY op.category_slug, op.category_label, op.type
+ORDER BY total_kopecks DESC, op.category_slug
+`
+
+type SumOperationsByCategoryParams struct {
+	Owner    pgtype.UUID `json:"owner"`
+	Property pgtype.UUID `json:"property"`
+	Status   string      `json:"status"`
+	Today    pgtype.Date `json:"today"`
+	DateFrom pgtype.Date `json:"date_from"`
+	DateTo   pgtype.Date `json:"date_to"`
+	Type     string      `json:"type"`
+}
+
+type SumOperationsByCategoryRow struct {
+	CategorySlug  pgtype.Text `json:"category_slug"`
+	CategoryLabel string      `json:"category_label"`
+	Type          string      `json:"type"`
+	TotalKopecks  int64       `json:"total_kopecks"`
+}
+
+// The per-category breakdown behind the category chips and the summary
+// cards' bar (ticket #473): one row per category snapshot present in the
+// scope, largest total first; rows without a category snapshot are skipped
+// (no chip identity — their amounts still count in the totals).
+func (q *Queries) SumOperationsByCategory(ctx context.Context, arg SumOperationsByCategoryParams) ([]SumOperationsByCategoryRow, error) {
+	rows, err := q.db.Query(ctx, sumOperationsByCategory,
+		arg.Owner,
+		arg.Property,
+		arg.Status,
+		arg.Today,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.Type,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumOperationsByCategoryRow{}
+	for rows.Next() {
+		var i SumOperationsByCategoryRow
+		if err := rows.Scan(
+			&i.CategorySlug,
+			&i.CategoryLabel,
+			&i.Type,
+			&i.TotalKopecks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

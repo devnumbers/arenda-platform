@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -148,10 +149,69 @@ func listOperationsParams(
 	params.DateFrom = pgconv.DatePtrToPgtype(q.DateFrom)
 	params.DateTo = pgconv.DatePtrToPgtype(q.DateTo)
 	params.Search = escapeLikePattern(q.Search)
+	params.Type = operationsTypeFilter(q.Type)
+	params.Categories = joinCategorySlugs(q.Categories)
 	params.Order = operationsOrder(q.Asc)
 	params.Offset = paginationToInt32(q.Offset)
 	params.Limit = paginationToInt32(q.Limit)
 	return params
+}
+
+// SummarizeByProperty runs the summary's two aggregations (ticket #473):
+// the period totals by direction and the per-category breakdown. The store
+// reports absent directions as zero totals; the breakdown arrives from SQL
+// already ordered by total, largest first.
+func (s *OperationStore) SummarizeByProperty(
+	ctx context.Context, scope, propertyID uuid.UUID, q application.OperationsSummaryQuery,
+) (application.OperationsSummary, error) {
+	// The totals deliberately carry no direction filter — the contract
+	// reports both directions whatever the categories are narrowed to.
+	params := postgres.SumOperationTotalsParams{
+		Owner:    pgconv.UUIDToPgtype(scope),
+		Property: pgconv.UUIDToPgtype(propertyID),
+		Status:   operationsStatusFilter(q.Status),
+		Today:    pgconv.DateToPgtype(q.Today),
+		DateFrom: pgconv.DatePtrToPgtype(q.DateFrom),
+		DateTo:   pgconv.DatePtrToPgtype(q.DateTo),
+	}
+	totals, err := s.q().SumOperationTotals(ctx, params)
+	if err != nil {
+		return application.OperationsSummary{}, fmt.Errorf("sum operation totals of property %s: %w", propertyID, err)
+	}
+
+	categories, err := s.q().SumOperationsByCategory(ctx, postgres.SumOperationsByCategoryParams{
+		Owner:    params.Owner,
+		Property: params.Property,
+		Status:   params.Status,
+		Today:    params.Today,
+		DateFrom: params.DateFrom,
+		DateTo:   params.DateTo,
+		Type:     operationsTypeFilter(q.Type),
+	})
+	if err != nil {
+		return application.OperationsSummary{}, fmt.Errorf("sum operations by category of property %s: %w", propertyID, err)
+	}
+
+	summary := application.OperationsSummary{
+		Categories: make([]application.CategorySummary, 0, len(categories)),
+	}
+	for _, row := range totals {
+		switch domain.PaymentType(row.Type) {
+		case domain.TypeIncome:
+			summary.IncomeTotalKopecks = row.TotalKopecks
+		case domain.TypeExpense:
+			summary.ExpenseTotalKopecks = row.TotalKopecks
+		}
+	}
+	for _, row := range categories {
+		summary.Categories = append(summary.Categories, application.CategorySummary{
+			Slug:         row.CategorySlug.String,
+			Label:        row.CategoryLabel,
+			Type:         domain.PaymentType(row.Type),
+			TotalKopecks: row.TotalKopecks,
+		})
+	}
+	return summary, nil
 }
 
 // mapOperationRows projects listed rows onto the domain shape.
@@ -178,6 +238,23 @@ func operationsStatusFilter(status *domain.OperationViewStatus) string {
 		return ""
 	}
 	return string(*status)
+}
+
+// operationsTypeFilter encodes the direction filter for the SQL: nil is any
+// direction; income/expense compare against the operation's type snapshot.
+func operationsTypeFilter(typ *domain.PaymentType) string {
+	if typ == nil {
+		return ""
+	}
+	return string(*typ)
+}
+
+// joinCategorySlugs encodes the category filter for the SQL's
+// string_to_array split: ” is any category. Operations snapshot only the
+// default catalog's slug — kebab-case, never a comma; user-category rows
+// carry a NULL slug, which matches no filter value by design.
+func joinCategorySlugs(slugs []string) string {
+	return strings.Join(slugs, ",")
 }
 
 // operationsOrder encodes the sort direction ('asc' | 'desc'); false encodes
