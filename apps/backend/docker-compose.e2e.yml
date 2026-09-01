@@ -10,7 +10,10 @@ services:
     ports:
       # 5436: 5433 занят локальной dev-базой, 5435 — тестовой (compose-проект
       # arenda-test); e2e-среда экранных тестов фронта получает свой порт.
-      - "5436:5432"
+      # Хост-порт берётся из E2E_PG_PORT (дефолт 5436): слоты ворктри вешают
+      # e2e-базу на 5445+N (docs/agents/parallel-dev.md), чтобы два
+      # одновременных e2e-стека не делили порт.
+      - "${E2E_PG_PORT:-5436}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U arenda -d arenda"]
       interval: 5s
