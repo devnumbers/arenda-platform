@@ -22,6 +22,7 @@ import (
 // fakes.
 type OperationsManager interface {
 	GetOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
+	DeleteOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) error
 	PayOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	ListPaymentOperations(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
@@ -118,6 +119,27 @@ func (h *OperationsHandlers) GetOperation(
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationResponse(item))
+}
+
+// DeleteOperation implements DELETE
+// /properties/{propertyId}/operations/{operationId}: a planned (the overdue
+// debt) or paid operation gets the cancelled tombstone — the fact and the
+// debt disappear, the schedule is untouched. A foreign or already-cancelled
+// operation is the privacy 404.
+func (h *OperationsHandlers) DeleteOperation(
+	w http.ResponseWriter, r *http.Request, propertyID, operationID openapi_types.UUID,
+) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.DeleteOperation(r.Context(), actor, propertyID, operationID); err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // PayOperation implements POST /properties/{propertyId}/operations/{operationId}/pay:

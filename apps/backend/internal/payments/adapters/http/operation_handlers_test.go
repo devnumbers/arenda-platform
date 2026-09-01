@@ -25,6 +25,7 @@ import (
 // fakeOperationsManager is the func-backed OperationsManager double.
 type fakeOperationsManager struct {
 	get   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
+	del   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) error
 	pay   func(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	byPay func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
@@ -34,6 +35,15 @@ type fakeOperationsManager struct {
 		ctx context.Context, actor, propertyID uuid.UUID,
 		cmd application.OperationsListQuery,
 	) ([]application.OperationListItem, error)
+}
+
+func (f *fakeOperationsManager) DeleteOperation(
+	ctx context.Context, actor, propertyID, operationID uuid.UUID,
+) error {
+	if f.del == nil {
+		return errors.New("unexpected DeleteOperation call")
+	}
+	return f.del(ctx, actor, propertyID, operationID)
 }
 
 func (f *fakeOperationsManager) GetOperation(
@@ -109,6 +119,9 @@ func TestOperationsHandlers_RequireAuth(t *testing.T) {
 	}{
 		{"get", func(w http.ResponseWriter, r *http.Request) {
 			h.GetOperation(w, r, propertyID, otherID)
+		}},
+		{"delete", func(w http.ResponseWriter, r *http.Request) {
+			h.DeleteOperation(w, r, propertyID, otherID)
 		}},
 		{"list by payment", func(w http.ResponseWriter, r *http.Request) {
 			h.ListPaymentOperations(w, r, propertyID, otherID, openapi.ListPaymentOperationsParams{})
@@ -323,6 +336,81 @@ func TestListPropertyOperations_MapsApplicationErrors(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want the privacy 404", w.Code)
 	}
+}
+
+func TestDeleteOperation_CancelsAndMapsErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("cancels with 204", func(t *testing.T) {
+		t.Parallel()
+		var gotActor, gotProperty, gotOperation uuid.UUID
+		svc := &fakeOperationsManager{
+			del: func(_ context.Context, actor, propertyID, operationID uuid.UUID) error {
+				gotActor, gotProperty, gotOperation = actor, propertyID, operationID
+				return nil
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodDelete, "/operation", nil,
+		)
+		w := httptest.NewRecorder()
+		propertyID := uuid.Must(uuid.NewV7())
+		operationID := uuid.Must(uuid.NewV7())
+		h.DeleteOperation(w, req, propertyID, operationID)
+
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204: %s", w.Code, w.Body.String())
+		}
+		if gotActor != actor || gotProperty != propertyID || gotOperation != operationID {
+			t.Errorf("actor/property/operation = %s/%s/%s, want %s/%s/%s",
+				gotActor, gotProperty, gotOperation, actor, propertyID, operationID)
+		}
+	})
+
+	t.Run("a foreign or cancelled operation is the privacy 404", func(t *testing.T) {
+		t.Parallel()
+		svc := &fakeOperationsManager{
+			del: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
+				return application.ErrNotFound
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodDelete, "/operation", nil,
+		)
+		w := httptest.NewRecorder()
+		h.DeleteOperation(w, req, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want the privacy 404", w.Code)
+		}
+	})
+
+	t.Run("a viewer deletes nothing", func(t *testing.T) {
+		t.Parallel()
+		svc := &fakeOperationsManager{
+			del: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
+				return application.ErrForbidden
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		actor := uuid.Must(uuid.NewV7())
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodDelete, "/operation", nil,
+		)
+		w := httptest.NewRecorder()
+		h.DeleteOperation(w, req, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()))
+
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", w.Code)
+		}
+	})
 }
 
 func TestGetOperation_ReturnsOperationAndMapsErrors(t *testing.T) {

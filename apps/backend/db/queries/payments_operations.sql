@@ -24,7 +24,10 @@ SELECT op.id,
        op.category_label,
        op.category_slug
 FROM operations op
-WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3;
+WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3
+  -- Отменённая операция исчезает для всех чтений (решение владельца):
+  -- прямой GET по ней — тот же приватный 404, что у чужой строки.
+  AND op.status <> 'cancelled';
 
 -- name: PayOperationByID :execrows
 -- «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
@@ -33,6 +36,17 @@ WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3;
 UPDATE operations
 SET status = 'paid', paid_date = $3
 WHERE id = $1 AND owner_id = $2 AND status = 'planned';
+
+-- name: CancelOperationByID :execrows
+-- «Удалить операцию» (решение владельца): tombstone-статус cancelled —
+-- строка остаётся с ключом (payment_id, date) и не воскресает на тике,
+-- paid_date очищается вместе с фактом оплаты. Только planned и paid;
+-- прочие строки (включая уже отменённые) не трогаются — use case рапортует
+-- not-found: отменённая операция для всех чтений больше не существует.
+UPDATE operations
+SET status = 'cancelled', paid_date = NULL
+WHERE id = $1 AND owner_id = $2 AND property_id = $3
+  AND status IN ('planned', 'paid');
 
 -- name: ListOperations :many
 -- The operations of one scope with pagination (limit/offset), the view status
@@ -61,6 +75,9 @@ SELECT op.id,
 FROM operations op
 WHERE op.owner_id = sqlc.arg('owner')
   AND op.property_id = sqlc.arg('property')
+  -- Отменённые операции (надгробия) исчезают из всех выборок: не долг
+  -- (не planned), не факт (не paid); выдача по умолчанию их тоже не показывает.
+  AND op.status <> 'cancelled'
   AND (sqlc.narg('payment')::uuid IS NULL OR op.payment_id = sqlc.narg('payment'))
   AND (
     sqlc.arg('status')::text = ''

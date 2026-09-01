@@ -115,6 +115,11 @@ type OperationStore interface {
 	// MarkPaid flips the still-planned operation to paid with the given date;
 	// rows affected = 0 surfaces as ErrAlreadyPaid.
 	MarkPaid(ctx context.Context, id, scope uuid.UUID, paidDate time.Time) error
+	// Cancel flips a planned or paid operation to the cancelled tombstone and
+	// clears paid_date with the payment fact; rows affected = 0 — unknown id,
+	// a foreign row or an already-cancelled one — surfaces as ErrNotFound
+	// (cancelled operations are gone for every read).
+	Cancel(ctx context.Context, id, scope, propertyID uuid.UUID) error
 	// ListByPayment returns one rule's operations ordered per the query.
 	ListByPayment(
 		ctx context.Context, scope, propertyID, paymentID uuid.UUID, q OperationsListQuery,

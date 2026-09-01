@@ -139,6 +139,44 @@ func (s *OperationService) PayOperation(
 	}, nil
 }
 
+// DeleteOperation implements «Удалить операцию» (DELETE …/operations/{id}):
+// a planned (the overdue debt) or paid operation gets the cancelled
+// tombstone — paid_date is cleared with the payment fact, the debt and the
+// history entry disappear, and the row keeps its (payment_id, date) key so
+// the tick never re-materializes the cancelled occurrence (решение владельца;
+// ближайшая будущая плановая и проекции не удаляются — расписание правится
+// на уровне правила). Full Access and Owner may delete; a viewer gets
+// ErrForbidden, an archived property ErrArchivedProperty, and a foreign or
+// already-cancelled operation the privacy ErrNotFound.
+func (s *OperationService) DeleteOperation(
+	ctx context.Context, actor, propertyID, operationID uuid.UUID,
+) error {
+	conveyor := s.conveyor()
+	_, err := runMutation(conveyor, ctx, actor, propertyID, uuid.Nil, s.writeGate,
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Operation], error) {
+			// Get исключает отменённые: повторное удаление — тот же 404.
+			op, err := stores.operations.Get(ctx, operationID, scope, propertyID)
+			if err != nil {
+				return mutationOutcome[domain.Operation]{}, err
+			}
+			if err := stores.operations.Cancel(ctx, operationID, scope, propertyID); err != nil {
+				return mutationOutcome[domain.Operation]{}, err
+			}
+			outcome := mutationOutcome[domain.Operation]{
+				Audit:         auditdomain.ActionOperationDeleted,
+				AuditEntity:   auditdomain.EntityOperation,
+				AuditEntityID: &op.ID,
+			}
+			if op.PaymentID != nil {
+				outcome.AuditCtx = map[string]any{"payment_id": *op.PaymentID}
+			}
+			return outcome, nil
+		})
+	return err
+}
+
 // GetOperation returns one operation with its server-computed view status —
 // the read behind the operation page. It is a pure read: a viewer reads it
 // like the listings, an unknown or foreign row is the privacy ErrNotFound,

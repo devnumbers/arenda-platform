@@ -11,6 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelOperationByID = `-- name: CancelOperationByID :execrows
+UPDATE operations
+SET status = 'cancelled', paid_date = NULL
+WHERE id = $1 AND owner_id = $2 AND property_id = $3
+  AND status IN ('planned', 'paid')
+`
+
+type CancelOperationByIDParams struct {
+	ID         pgtype.UUID `json:"id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+	PropertyID pgtype.UUID `json:"property_id"`
+}
+
+// «Удалить операцию» (решение владельца): tombstone-статус cancelled —
+// строка остаётся с ключом (payment_id, date) и не воскресает на тике,
+// paid_date очищается вместе с фактом оплаты. Только planned и paid;
+// прочие строки (включая уже отменённые) не трогаются — use case рапортует
+// not-found: отменённая операция для всех чтений больше не существует.
+func (q *Queries) CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelOperationByID, arg.ID, arg.OwnerID, arg.PropertyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getOperationByID = `-- name: GetOperationByID :one
 
 SELECT op.id,
@@ -29,6 +55,9 @@ SELECT op.id,
        op.category_slug
 FROM operations op
 WHERE op.id = $1 AND op.owner_id = $2 AND op.property_id = $3
+  -- Отменённая операция исчезает для всех чтений (решение владельца):
+  -- прямой GET по ней — тот же приватный 404, что у чужой строки.
+  AND op.status <> 'cancelled'
 `
 
 type GetOperationByIDParams struct {
@@ -103,6 +132,9 @@ SELECT op.id,
 FROM operations op
 WHERE op.owner_id = $1
   AND op.property_id = $2
+  -- Отменённые операции (надгробия) исчезают из всех выборок: не долг
+  -- (не planned), не факт (не paid); выдача по умолчанию их тоже не показывает.
+  AND op.status <> 'cancelled'
   AND ($3::uuid IS NULL OR op.payment_id = $3)
   AND (
     $4::text = ''

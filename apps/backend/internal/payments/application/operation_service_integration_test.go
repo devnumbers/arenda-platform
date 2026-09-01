@@ -120,6 +120,108 @@ func listingFixture(t *testing.T, h *paymentsHarness, pay uuid.UUID) {
 	}
 }
 
+func TestDeleteOperation_CancelsOverdueAndBlocksResurrection(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
+	overdueID := h.seedOperation(pay, "2026-08-12", opPlanned)
+
+	if err := h.ops.DeleteOperation(h.ctx(), h.owner, h.propID, overdueID); err != nil {
+		t.Fatalf("delete overdue: %v", err)
+	}
+
+	// Надгробие: строка живёт с новым статусом — тик не воскресает дату.
+	h.runTick()
+	var status string
+	var count int
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT status, count(*) OVER () FROM operations WHERE id = $1`, overdueID,
+	).Scan(&status, &count); err != nil {
+		t.Fatalf("load cancelled row: %v", err)
+	}
+	if status != "cancelled" || count != 1 {
+		t.Fatalf("row = %s (rows %d), want the cancelled tombstone to survive the tick", status, count)
+	}
+
+	// Долг схлопнулся: overdue-выборка пуста, в истории не оплаченная.
+	overdue := domain.ViewStatusOverdue
+	debt, err := h.ops.ListPaymentOperations(h.ctx(), h.owner, h.propID, pay, h.listCmd(&overdue, 50, 0, false))
+	if err != nil || len(debt) != 0 {
+		t.Fatalf("overdebt listing = %v items (%v), want none", len(debt), err)
+	}
+
+	// Прямой GET отменённой — «не существует».
+	if _, err := h.ops.GetOperation(h.ctx(), h.owner, h.propID, overdueID); !errors.Is(err, paymentsapp.ErrNotFound) {
+		t.Fatalf("get cancelled = %v, want ErrNotFound", err)
+	}
+
+	// Повторное удаление отменённой — тоже «не существует».
+	if err := h.ops.DeleteOperation(h.ctx(), h.owner, h.propID, overdueID); !errors.Is(err, paymentsapp.ErrNotFound) {
+		t.Fatalf("repeat delete = %v, want ErrNotFound", err)
+	}
+
+	if got := operationsAudit(t, h, overdueID); len(got) != 1 || got[0] != "operation.deleted" {
+		t.Fatalf("audit = %v, want [operation.deleted]", got)
+	}
+}
+
+func TestDeleteOperation_CancelsPaidFactClearingPaidDate(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
+	paidID := h.seedOperation(pay, "2026-08-05", opPaid)
+
+	if err := h.ops.DeleteOperation(h.ctx(), h.owner, h.propID, paidID); err != nil {
+		t.Fatalf("delete paid: %v", err)
+	}
+	var status string
+	var paidDate *string
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT status, paid_date::text FROM operations WHERE id = $1`, paidID,
+	).Scan(&status, &paidDate); err != nil {
+		t.Fatalf("load row: %v", err)
+	}
+	if status != "cancelled" || paidDate != nil {
+		t.Fatalf("row = %s/%v, want cancelled with the payment fact cleared", status, paidDate)
+	}
+
+	paidFilter := domain.ViewStatusPaid
+	history, err := h.ops.ListPaymentOperations(h.ctx(), h.owner, h.propID, pay, h.listCmd(&paidFilter, 50, 0, false))
+	if err != nil || len(history) != 0 {
+		t.Fatalf("history = %v items (%v), want none", len(history), err)
+	}
+}
+
+func TestDeleteOperation_RoleMatrixAndArchived(t *testing.T) {
+	t.Parallel()
+	viewer := newPaymentsHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleViewer}).withOwner("Europe/Moscow")
+	viewerPay := viewer.seedPayment(day25, `{"kind": "daily"}`, false)
+	viewerOp := viewer.seedOperation(viewerPay, day25, opPaid)
+	if err := viewer.ops.DeleteOperation(viewer.ctx(), viewer.owner, viewer.propID, viewerOp); !errors.Is(err, paymentsapp.ErrForbidden) {
+		t.Fatalf("viewer delete = %v, want ErrForbidden", err)
+	}
+
+	none := newPaymentsHarnessWithPolicy(t, stubPropertyPolicy{role: sharedpolicy.RoleNone}).withOwner("Europe/Moscow")
+	nonePay := none.seedPayment(day25, `{"kind": "daily"}`, false)
+	noneOp := none.seedOperation(nonePay, day25, opPaid)
+	stranger := uuid.Must(uuid.NewV7())
+	if err := none.ops.DeleteOperation(none.ctx(), stranger, none.propID, noneOp); !errors.Is(err, paymentsapp.ErrNotFound) {
+		t.Fatalf("stranger delete = %v, want the privacy ErrNotFound", err)
+	}
+
+	archived := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	archivedPay := archived.seedPayment(day25, `{"kind": "daily"}`, false)
+	archivedOp := archived.seedOperation(archivedPay, day25, opPaid)
+	if _, err := archived.pool.Exec(archived.ctx(),
+		`UPDATE properties SET status = 'archived' WHERE id = $1`, archived.propID); err != nil {
+		t.Fatalf("archive property: %v", err)
+	}
+	delErr := archived.ops.DeleteOperation(archived.ctx(), archived.owner, archived.propID, archivedOp)
+	if !errors.Is(delErr, paymentsapp.ErrArchivedProperty) {
+		t.Fatalf("archived delete = %v, want ErrArchivedProperty", delErr)
+	}
+}
+
 func TestGetOperation_ReturnsOneWithComputedView(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")

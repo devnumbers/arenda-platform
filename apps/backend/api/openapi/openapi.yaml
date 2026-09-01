@@ -998,6 +998,40 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteOperation
+      summary: Delete an operation (the cancelled tombstone)
+      description: >
+        A planned (the overdue debt) or paid operation gets the cancelled
+        tombstone: paid_date is cleared with the payment fact, the debt and
+        the history entry disappear, and the row keeps its (payment_id, date)
+        key so the tick never re-materializes the occurrence. Only the nearest
+        future planned and the projections are not deletable — the schedule is
+        ruled at the payment level.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Operation cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/operations/{operationId}/pay:
     post:
       operationId: payOperation

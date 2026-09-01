@@ -104,6 +104,10 @@ func (noopOperationStore) MarkPaid(context.Context, uuid.UUID, uuid.UUID, time.T
 	panic("unused")
 }
 
+func (noopOperationStore) Cancel(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
 func (noopOperationStore) ListByPayment(
 	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, OperationsListQuery,
 ) ([]domain.Operation, error) {

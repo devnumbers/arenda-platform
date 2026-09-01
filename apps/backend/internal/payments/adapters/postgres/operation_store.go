@@ -86,6 +86,27 @@ func (s *OperationStore) MarkPaid(ctx context.Context, id, scope uuid.UUID, paid
 	return nil
 }
 
+// Cancel flips a planned or paid operation to the cancelled tombstone and
+// clears paid_date with the payment fact; the row stays and keeps its
+// (payment_id, date) key so the tick never re-materializes the occurrence.
+// Rows affected = 0 — an unknown id, a foreign row or an already-cancelled
+// one — surfaces as ErrNotFound: cancelled operations are gone for every
+// read (lists exclude the status, the single GET reports not-found).
+func (s *OperationStore) Cancel(ctx context.Context, id, scope, propertyID uuid.UUID) error {
+	affected, err := s.q().CancelOperationByID(ctx, postgres.CancelOperationByIDParams{
+		ID:         pgconv.UUIDToPgtype(id),
+		OwnerID:    pgconv.UUIDToPgtype(scope),
+		PropertyID: pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		return fmt.Errorf("cancel operation %s: %w", id, err)
+	}
+	if affected == 0 {
+		return application.ErrNotFound
+	}
+	return nil
+}
+
 // ListByPayment returns one rule's operations in the query's order.
 func (s *OperationStore) ListByPayment(
 	ctx context.Context, scope, propertyID, paymentID uuid.UUID, q application.OperationsListQuery,

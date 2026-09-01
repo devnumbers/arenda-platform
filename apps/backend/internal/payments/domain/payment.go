@@ -38,10 +38,14 @@ const (
 // (prototype decision №2).
 type OperationStatus string
 
-// The two stored statuses; closure is payment only (№16).
+// The stored statuses; closure is payment only (№16). Cancelled is the
+// deletion tombstone (решение владельца): the row keeps its (payment_id,
+// date) key so the tick never re-materializes the occurrence, while the fact
+// (paid_date) and the debt (not planned anymore) are gone.
 const (
-	StatusPlanned OperationStatus = "planned"
-	StatusPaid    OperationStatus = "paid"
+	StatusPlanned   OperationStatus = "planned"
+	StatusPaid      OperationStatus = "paid"
+	StatusCancelled OperationStatus = "cancelled"
 )
 
 // OperationOrigin distinguishes an occurrence materialized from a payment

@@ -15,6 +15,12 @@ type Querier interface {
 	// transition of a subscription has no prior status or tariff.
 	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
+	// «Удалить операцию» (решение владельца): tombstone-статус cancelled —
+	// строка остаётся с ключом (payment_id, date) и не воскресает на тике,
+	// paid_date очищается вместе с фактом оплаты. Только planned и paid;
+	// прочие строки (включая уже отменённые) не трогаются — use case рапортует
+	// not-found: отменённая операция для всех чтений больше не существует.
+	CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error)
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)).
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
