@@ -320,7 +320,7 @@ test.describe('визард создания платежа', () => {
 
     // Регресс «декабрь → январь даёт ноябрь»: выбранной остаётся прокрученная
     // строка, значение не уводит колесо к чужому ряду.
-    await page.getByText('Сентябрь').first().click();
+    await page.getByRole('listbox', { name: 'Месяц' }).getByText('Сентябрь').first().click();
     await expect(
       page
         .getByRole('listbox', { name: 'Месяц' })

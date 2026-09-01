@@ -296,9 +296,9 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText('Платеж удален')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
 
-    // Правило снесено: на списке строки нет (остаток долга — за лимитом
-    // секции), в полном списке просроченных операция долга на месте.
-    await expect(page.getByText(title1)).toHaveCount(0);
+    // Правило снесено; остаток долга живёт — полный список просроченных
+    // показывает его без лимита секции (позиция долга в лимите секции зависит
+    // от дат сидовых долгов — там не проверяем).
     await page.goto(`${PAYMENTS_URL}/overdue`);
     await expect(page.getByText(title1).first()).toBeVisible();
 

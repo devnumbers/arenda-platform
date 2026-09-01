@@ -174,6 +174,7 @@ test.describe('страница платежа', () => {
 
     // Удаление оплаченной операции (1510:77505): факт стирается, история
     // пустеет, правило живёт дальше.
+    await page.goto(PAYMENT_URLS.rent);
     await page.getByRole('button', { name: 'История операций', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
     await page.getByRole('button', { name: /Арендная плата/ }).first().click();
