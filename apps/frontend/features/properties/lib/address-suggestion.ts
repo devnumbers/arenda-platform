@@ -13,11 +13,19 @@ export function addressSuggestionRow(
     return { title: value, subtitle: undefined };
   }
 
-  return { title: stripLeadingCity(value, city), subtitle: city };
+  const title = stripLeadingCity(value, city);
+  if (title.toLowerCase() === city.toLowerCase()) {
+    // Значение целиком — город (в том числе с префиксом «г. »): подпись
+    // дублировала бы заголовок.
+    return { title, subtitle: undefined };
+  }
+
+  return { title, subtitle: city };
 }
 
-/** Отрезает ведущий сегмент города («г. Москва, » / «г Москва, »), если он
- * там есть; иначе возвращает значение как есть. */
+/** Отрезает ведущий сегмент города («г. Москва, » / «г Москва, »); для
+ * значения-города возвращает его без префикса, для остальных значений
+ * возвращает значение как есть. */
 function stripLeadingCity(value: string, city: string): string {
   const prefix = /^(?:г|гор)\.?\s+/i.exec(value);
   const rest = prefix !== null ? value.slice(prefix[0].length) : value;
@@ -27,6 +35,10 @@ function stripLeadingCity(value: string, city: string): string {
   }
 
   const afterCity = rest.slice(city.length);
+  if (afterCity === '') {
+    return rest;
+  }
+
   const separator = /^[,]\s*/.exec(afterCity);
 
   return separator !== null ? afterCity.slice(separator[0].length) : value;

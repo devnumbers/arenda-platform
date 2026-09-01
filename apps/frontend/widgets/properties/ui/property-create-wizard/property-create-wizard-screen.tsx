@@ -27,8 +27,10 @@ export function PropertyCreateWizardScreen(): JSX.Element {
           <div className="flex flex-col gap-3 px-6 pt-6" aria-hidden>
             <div className="h-8 w-72 max-w-full rounded bg-surface-muted" />
             <div className="mt-3 flex flex-wrap gap-2">
-              {SKELETON_CHIP_WIDTHS.map((width) => (
-                <div key={width} className="h-11 rounded-pill bg-surface-muted" style={{ width }} />
+              {/* Список декоративный и статичный (aria-hidden, никогда не
+                  переупорядочивается) — ключ по позиции честен. */}
+              {SKELETON_CHIP_WIDTHS.map((width, index) => (
+                <div key={index} className="h-11 rounded-pill bg-surface-muted" style={{ width }} />
               ))}
             </div>
           </div>

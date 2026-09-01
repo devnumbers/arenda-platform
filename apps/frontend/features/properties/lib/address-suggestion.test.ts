@@ -30,6 +30,13 @@ describe('addressSuggestionRow', () => {
     });
   });
 
+  it('значение-город с префиксом «г. » тоже не дублирует подпись', () => {
+    expect(addressSuggestionRow('г. Москва', 'Москва')).toStrictEqual({
+      title: 'Москва',
+      subtitle: undefined,
+    });
+  });
+
   it('без города строка показывается целиком', () => {
     expect(addressSuggestionRow('Ленина, 31', undefined)).toStrictEqual({
       title: 'Ленина, 31',
