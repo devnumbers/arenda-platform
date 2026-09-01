@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
+import { runListboxAction } from '@/shared/ui/select/listbox-keyboard';
 
 /** Строка списка дизайн-слоя (Figma 699:7254): слоты — ведущий элемент
  * (иконка категории 44×44 кладётся слотом), заголовок + подзаголовок с
@@ -10,7 +11,14 @@ import { cn } from '@/shared/lib/cn';
  *
  * Строка — div с role=button, а не <button>: trailing-слот несёт
  * собственные кнопки-иконки, а вложенные кнопки в HTML невалидны (ловится
- * hydration-ошибкой). Клавиатура: Enter/Space вызывают onSelect. */
+ * hydration-ошибкой). Клавиатура: Enter/Space вызывают onSelect.
+ *
+ * Вариант option — строка popup-списка (listbox, подсказки адреса):
+ * role=option внутри контейнера role=listbox, roving focus (Tab список
+ * обходит, входят стрелками с поля), aria-selected=false (кандидат, а не
+ * выбор), клавиатура — общий listbox-модуль: стрелки с wrap-around,
+ * Home/End, Enter/Space; Escape не гасится — всплывает контейнеру списка,
+ * который закрывает список и возвращает фокус полю. */
 export type ListRowProps = {
   readonly leading?: ReactNode;
   readonly title: ReactNode;
@@ -26,6 +34,9 @@ export type ListRowProps = {
   /** Дополнение к классу подписи (другой цвет из того же компонента Row
    * Button — подсказки адреса несут #6F787C, Figma 1519:94336). */
   readonly subtitleClassName?: string;
+  /** Роль строки: option — внутри role=listbox (см. выше), button —
+   * обычная строка-кнопка (по умолчанию). */
+  readonly variant?: 'button' | 'option';
 };
 
 export function ListRow({
@@ -40,11 +51,19 @@ export function ListRow({
   onSelect,
   disabled = false,
   className,
+  variant = 'button',
 }: ListRowProps): JSX.Element {
   const interactive = onSelect !== undefined && !disabled;
+  const isOption = variant === 'option';
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (!interactive) {
+      return;
+    }
+    // Опция списка ведёт клавиатуру через общий listbox-модуль (стрелки,
+    // Home/End, Enter/Space; Escape всплывает контейнеру списка).
+    if (isOption) {
+      runListboxAction(event, { onSelect });
       return;
     }
     if (event.key === 'Enter' || event.key === ' ') {
@@ -55,8 +74,9 @@ export function ListRow({
 
   return (
     <div
-      role={onSelect !== undefined ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
+      role={isOption ? 'option' : onSelect !== undefined ? 'button' : undefined}
+      aria-selected={isOption ? false : undefined}
+      tabIndex={interactive ? (isOption ? -1 : 0) : undefined}
       aria-disabled={disabled || undefined}
       onClick={interactive ? onSelect : undefined}
       onKeyDown={handleKeyDown}

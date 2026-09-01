@@ -43,6 +43,20 @@ export const DEFAULT_PROPERTY_CREATE_DRAFT: PropertyCreateDraft = {};
 export const propertyCategoryOptions: readonly { value: PropertyType; label: string }[] =
   propertyTypeOptions.filter((option) => option.value !== 'apartments');
 
+/** Чип-группа «Тип жилья» шага 3 (Figma 1218-54295): закрывает тип
+ * apartments внутри категории «Квартира» — оба значения делят один
+ * каталог характеристик, поэтому смена между ними не меняет набор полей. */
+export const propertyHousingTypeOptions: readonly { value: PropertyType; label: string }[] = [
+  { value: 'apartment', label: 'Квартира' },
+  { value: 'apartments', label: 'Апартаменты' },
+];
+
+/** Категория «Квартира» шага 1 (апартаменты появляются только здесь, на
+ * шаге «Тип жилья»). */
+export function isApartmentCategory(type: PropertyType): boolean {
+  return type === 'apartment' || type === 'apartments';
+}
+
 /** Готовность шага: категория выбрана / адрес непустой / название есть.
  * Характеристики и описание на готовность шага 3 не влияют — они
  * необязательные (docs/entities/obekt.md). */

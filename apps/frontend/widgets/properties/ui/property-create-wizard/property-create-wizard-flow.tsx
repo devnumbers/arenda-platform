@@ -6,24 +6,31 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { fieldsForType, toWireAttributes, validateAttributes } from '@/features/property-attributes';
 import {
-  IconButton,
+  attributeTypeChangeNotice,
+  buildPropertyCreateCommand,
+  initialPropertyCreateStep,
+  propertyCreateStepReady,
+  PROPERTY_CREATE_TOTAL_STEPS,
+  useCreateProperty,
+  usePropertyCreateDraft,
+  type PropertyAttributesPort,
+  type PropertyCreateStep,
+} from '@/features/properties';
+import {
   Button,
+  IconButton,
   PageContent,
   StepsChip,
   StickyBottomBar,
   TopNav,
   useTabBarSuppression,
 } from '@/shared/ui/design';
-import {
-  initialPropertyCreateStep,
-  propertyCreateStepReady,
-  PROPERTY_CREATE_TOTAL_STEPS,
-  usePropertyCreateDraft,
-  type PropertyCreateStep,
-} from '@/features/properties';
+import type { PropertyType } from '@/entities/property';
 import { AddressStep } from './address-step';
 import { CategoryStep } from './category-step';
+import { CharacteristicsStep } from './characteristics-step';
 import { PropertyWizardBottomBar, PropertyWizardHeading } from './wizard-chrome';
 
 /**
@@ -31,17 +38,35 @@ import { PropertyWizardBottomBar, PropertyWizardHeading } from './wizard-chrome'
  * одном маршруте /properties/new, восстанавливается на первый
  * незавершённый шаг черновика. Хедер шагов (Figma 1213-52111 /
  * 1213-52017): шаг 1 — крестик слева; шаги 2–3 — «назад» слева и крестик
- * справа; в центре чип «шаг N из 3». Экран успеха шагом не считается —
- * придёт с POST-сабмитом (#482) и своей разметкой (#483).
+ * справа; в центре чип «шаг N из 3». Шаг 3 «Характеристики» (#482) —
+ * экран рендерится по каталогу и сабмитит POST /properties; успех ведёт
+ * на карточку объекта (экран успеха — #483). Экран успеха шагом не
+ * считается.
  */
+
+// Порт каталога характеристик для сабмит-либы: реальные реализации
+// соседней фичи инжектятся здесь (виджету доступны обе фичи).
+const attributeCatalog: PropertyAttributesPort = {
+  toWireAttributes,
+  validateAttributes,
+  fieldKeys: (type) => new Set(fieldsForType(type).map((field) => field.key)),
+};
+
+const SUBMIT_ERROR_MESSAGE =
+  'Не удалось создать объект. Проверьте соединение и попробуйте ещё раз';
 
 export function PropertyCreateWizardFlow(): JSX.Element {
   const router = useRouter();
-  const { draft, setDraft } = usePropertyCreateDraft();
+  const createProperty = useCreateProperty();
+  const { draft, setDraft, clearDraft } = usePropertyCreateDraft();
   // Визард — экран создания: футер глушится на всех шагах, включая те,
   // где нижняя панель ещё не смонтирована (аналог визарда платежей #464).
   useTabBarSuppression();
   const [step, setStep] = useState<PropertyCreateStep>(() => initialPropertyCreateStep(draft));
+  // Нотис lossless живёт во флоу: смена типа случается и на шаге 1
+  // (возврат «назад» и другая категория), а шаг 3 перемонтируется.
+  const [typeChangeNotice, setTypeChangeNotice] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   return (
     <>
@@ -76,16 +101,10 @@ export function PropertyCreateWizardFlow(): JSX.Element {
             <PropertyWizardHeading title="Выберите, какая у вас недвижимость" />
             <CategoryStep
               selected={draft.type}
-              onSelect={(type) => {
-                setDraft((prev) => ({ ...prev, type }));
-                setStep(2);
-              }}
+              onSelect={selectCategory}
             />
           </>
         )}
-        {/* Шаг 3 «Характеристики» — тикет #482 (Figma 1218-54295):
-            хедер и переходы флоу финальные, контент шага дозревает в своём
-            тикете. */}
         {step === 2 && (
           <>
             <AddressStep
@@ -105,6 +124,50 @@ export function PropertyCreateWizardFlow(): JSX.Element {
             )}
           </>
         )}
+        {/* Шаг 3 «Характеристики» (#482, Figma 1218-54295): название,
+            тип жилья для «Квартиры», поля каталога по типу, описание;
+            внизу «Создать объект» — POST /properties. Шаг достижим только
+            с выбранной категорией, поэтому draft.type определён. */}
+        {step === 3 && draft.type !== undefined && (
+          <>
+            <PropertyWizardHeading
+              title="Характеристики"
+              hint="Вы можете создать объект, а характеристики заполнить позже"
+            />
+            <CharacteristicsStep
+              type={draft.type}
+              onHousingTypeChange={changeType}
+              name={draft.name ?? ''}
+              onNameChange={(name) => setDraft((prev) => ({ ...prev, name }))}
+              description={draft.description ?? ''}
+              onDescriptionChange={(description) => setDraft((prev) => ({ ...prev, description }))}
+              attributes={draft.attributes ?? {}}
+              onAttributesChange={(attributes) => setDraft((prev) => ({ ...prev, attributes }))}
+              notice={typeChangeNotice ?? undefined}
+              onDismissNotice={() => setTypeChangeNotice(null)}
+            />
+            <StickyBottomBar>
+              <PropertyWizardBottomBar>
+                {submitError !== null && (
+                  <div
+                    role="alert"
+                    className="rounded-button bg-surface-danger px-4 py-3 text-sm leading-4 text-danger"
+                  >
+                    {submitError}
+                  </div>
+                )}
+                <Button
+                  className="w-full"
+                  disabled={!propertyCreateStepReady(3, draft)}
+                  loading={createProperty.isPending}
+                  onClick={() => void submit()}
+                >
+                  Создать объект
+                </Button>
+              </PropertyWizardBottomBar>
+            </StickyBottomBar>
+          </>
+        )}
       </PageContent>
     </>
   );
@@ -119,5 +182,42 @@ export function PropertyCreateWizardFlow(): JSX.Element {
       return;
     }
     dismiss();
+  }
+
+  /** Смена типа с заполненными характеристиками прежнего типа показывает
+   * нотис (lossless); без чужих заполненных ключей смена тихая. */
+  function changeType(nextType: PropertyType): void {
+    if (draft.type !== undefined) {
+      const notice = attributeTypeChangeNotice(
+        draft.type,
+        nextType,
+        draft.attributes ?? {},
+        attributeCatalog,
+      );
+      setTypeChangeNotice(notice ?? null);
+    }
+    setDraft((prev) => ({ ...prev, type: nextType }));
+  }
+
+  function selectCategory(type: PropertyType): void {
+    changeType(type);
+    setStep(2);
+  }
+
+  async function submit(): Promise<void> {
+    setSubmitError(null);
+    const command = buildPropertyCreateCommand(draft, attributeCatalog);
+    if (command === undefined || createProperty.isPending) {
+      return;
+    }
+    try {
+      const property = await createProperty.mutateAsync(command);
+      clearDraft();
+      // Создание сущности ведёт на её страницу заменой записи истории
+      // (правило навигации); экран успеха заменит этот переход (#483).
+      router.replace(ROUTES.property(property.id));
+    } catch {
+      setSubmitError(SUBMIT_ERROR_MESSAGE);
+    }
   }
 }

@@ -7,6 +7,7 @@ import {
   useAddressSuggestions,
 } from '@/features/properties';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import { focusListboxEdge } from '@/shared/ui/select/listbox-keyboard';
 import { ListRow, TextField } from '@/shared/ui/design';
 
 /**
@@ -16,6 +17,12 @@ import { ListRow, TextField } from '@/shared/ui/design';
  * (дебаунс 300мс, как в легаси-AddressField); ошибка сети тихая — списка
  * просто нет, ручной ввод продолжает работать. Выбор подсказки
  * фиксирует полный адрес в черновике и прячет список до следующей правки.
+ *
+ * Клавиатура списка — общий listbox-паттерн (CODING_STANDARDS, волна B
+ * jsx-a11y): контейнер role=listbox, строки role=option с roving focus,
+ * стрелки с wrap-around и Home/End ведёт runListboxAction внутри ListRow,
+ * Escape гасится на контейнере и возвращает фокус в поле; стрелка у поля
+ * входит в список с первого/последнего ряда (focusListboxEdge).
  */
 
 const SUGGEST_QUERY_MIN_LENGTH = 3;
@@ -58,7 +65,16 @@ export function AddressStep({ value, onChange }: AddressStepProps): JSX.Element 
         />
       </div>
       {showList && (
-        <div ref={listRef} className="mt-2">
+        <div
+          ref={listRef}
+          role="listbox"
+          aria-label="Подсказки адреса"
+          // Контейнер фокусируем программно (требование ARIA-listbox),
+          // Tab-порядок не занимает: в список входят стрелками с поля.
+          tabIndex={-1}
+          className="mt-2"
+          onKeyDown={handleListKeyDown}
+        >
           {rows.map((suggestion) => {
             const row = addressSuggestionRow(suggestion.value, suggestion.city);
             return (
@@ -68,6 +84,7 @@ export function AddressStep({ value, onChange }: AddressStepProps): JSX.Element 
                 subtitleClassName="text-content-secondary"
                 title={row.title}
                 subtitle={row.subtitle}
+                variant="option"
                 onSelect={() => select(suggestion.value)}
               />
             );
@@ -88,9 +105,22 @@ export function AddressStep({ value, onChange }: AddressStepProps): JSX.Element 
       setDismissed(true);
       return;
     }
-    if (event.key === 'ArrowDown' && showList) {
+    if (showList && event.key === 'ArrowDown') {
       event.preventDefault();
-      listRef.current?.querySelector<HTMLElement>('[role="button"]')?.focus();
+      focusListboxEdge(listRef.current, 'first');
+    }
+    if (showList && event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusListboxEdge(listRef.current, 'last');
+    }
+  }
+
+  // Escape на строке всплывает с опции (runListboxAction его не гасит):
+  // список прячется, фокус возвращается в поле.
+  function handleListKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === 'Escape') {
+      setDismissed(true);
+      inputRef.current?.focus();
     }
   }
 

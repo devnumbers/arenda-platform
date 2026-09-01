@@ -66,18 +66,26 @@ test('шаг 2: подсказки адреса — список, выбор, в
   await expect(address).toBeFocused();
 
   // До трёх символов подсказок нет; со строки «Ленина» приходит список:
-  // заголовок — улица и дом (город отрезан), подпись — город.
+  // заголовок — улица и дом (город отрезан), подпись — город. Список —
+  // ARIA-listbox, строки — опции (#482: полный listbox-паттерн).
+  const listbox = page.getByRole('listbox', { name: 'Подсказки адреса' });
   await address.fill('Ле');
-  await expect(page.getByRole('button', { name: /Ленина/ })).toHaveCount(0);
+  await expect(listbox.getByRole('option', { name: /Ленина/ })).toHaveCount(0);
   await address.fill('Ленина');
-  const firstRow = page.getByRole('button', { name: 'Ленина, д. 1 Москва' });
+  const firstRow = listbox.getByRole('option', { name: 'Ленина, д. 1 Москва' });
   await expect(firstRow).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Ленина, 5 Санкт-Петербург' })).toBeVisible();
+  await expect(listbox.getByRole('option', { name: 'Ленина, 5 Санкт-Петербург' })).toBeVisible();
   await captureScreen(page, testInfo, '02-address-suggestions');
 
-  // Escape прячет список, правка значения возвращает его.
-  await address.press('Escape');
+  // Стрелки входят в список (вниз — к первой строке), Escape со строки
+  // возвращает фокус в поле и прячет список.
+  await address.press('ArrowDown');
+  await expect(firstRow).toBeFocused();
+  await firstRow.press('Escape');
+  await expect(address).toBeFocused();
   await expect(firstRow).toBeHidden();
+
+  // Правка значения возвращает список.
   await address.press('a');
   await expect(firstRow).toBeVisible();
 
@@ -87,6 +95,47 @@ test('шаг 2: подсказки адреса — список, выбор, в
   await expect(firstRow).toBeHidden();
   await expect(page.getByRole('button', { name: 'Продолжить' })).toBeVisible();
   await captureScreen(page, testInfo, '03-address-picked');
+});
+
+test('шаг 3: характеристики — поля каталога, тип жилья, гейт названия', async ({ page, seededUser }, testInfo) => {
+  await openWizard(page, seededUser);
+  await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Квартира' }).click();
+  await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 1');
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+
+  // Заголовок и подсказка шага 3; «Тип жилья» только у категории
+  // «Квартира» (закрывает тип apartments).
+  await expect(page.getByRole('heading', { name: 'Характеристики' })).toBeVisible();
+  await expect(page.getByText('Вы можете создать объект, а характеристики заполнить позже')).toBeVisible();
+  const housing = page.getByRole('group', { name: 'Тип жилья' });
+  await expect(housing.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'false');
+
+  // Поля каталога квартиры: enum-чипы и пара этажей в двух колонках.
+  await expect(page.getByRole('group', { name: 'Комнаты' }).getByRole('button', { name: 'Студия' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Санузел' }).getByRole('button', { name: 'Раздельный' })).toBeVisible();
+  await expect(page.getByText('м²').first()).toBeVisible();
+
+  // Первое поле шага захватило фокус на входе (паттерн шага «Адрес»);
+  // проверяем до кликов по чипам — они перенесут фокус.
+  const name = page.getByRole('textbox', { name: 'Название объекта' });
+  await expect(name).toBeFocused();
+
+  // Смена типа жилья — чипы перезаключаются, набор полей тот же (один
+  // каталог у квартиры и апартаментов).
+  await housing.getByRole('button', { name: 'Апартаменты' }).click();
+  await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('group', { name: 'Комнаты' }).getByRole('button', { name: 'Студия' })).toBeVisible();
+
+  // Заполнение характеристики, «Создать объект» появляется с названием
+  // (обязательное поле), счётчик лимита 64 работает.
+  await page.getByRole('group', { name: 'Комнаты' }).getByRole('button', { name: '2' }).click();
+  const submit = page.getByRole('button', { name: 'Создать объект' });
+  await expect(submit).toBeDisabled();
+  await name.fill('Квартира на Ленина');
+  await expect(page.getByText('18/64')).toBeVisible();
+  await expect(submit).toBeEnabled();
+  await captureScreen(page, testInfo, '04-characteristics');
 });
 
 test('шаг 2: черновик переживает перезагрузку, очистка убирает «Продолжить»', async ({ page, seededUser }) => {
