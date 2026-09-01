@@ -1,6 +1,8 @@
-export { mapPayment, mapPaymentOperation } from './model/mappers';
+export { mapPayment, mapPaymentOperation, mapOperationsSummary } from './model/mappers';
 export type {
   IsoDate,
+  OperationsCategorySummary,
+  OperationsSummary,
   PauseInterval,
   Payment,
   PaymentCategoryView,

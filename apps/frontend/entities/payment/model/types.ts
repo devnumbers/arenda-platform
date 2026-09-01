@@ -115,3 +115,25 @@ export type PaymentUpdateCommand = Partial<Omit<PaymentCreateCommand, 'endDate'>
 export type PaymentFavoriteCommand = {
   readonly favorite: boolean;
 };
+
+/** Строка категории в сводке периода (#473): слаг для иконки и стиля,
+ * подпись-снапшот для текста, сумма по категории в копейках. */
+export type OperationsCategorySummary = {
+  readonly slug: string;
+  readonly label: string;
+  readonly type: PaymentType;
+  readonly totalKopecks: number;
+};
+
+/**
+ * Сводка периода объекта (#473) за экранами «Операции объекта»: итоги по
+ * направлениям — всегда оба, карточки читают их вместе; разбивка по
+ * категориям только с операциями в скоупе, по сумме убывание. Операции без
+ * снапшота категории (пользовательские категории) считают в итогах, но
+ * строки в разбивке не дают.
+ */
+export type OperationsSummary = {
+  readonly incomeTotalKopecks: number;
+  readonly expenseTotalKopecks: number;
+  readonly categories: ReadonlyArray<OperationsCategorySummary>;
+};

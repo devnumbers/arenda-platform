@@ -11,8 +11,9 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapPayment, mapPaymentOperation } from '@/entities/payment';
+import { mapPayment, mapPaymentOperation, mapOperationsSummary } from '@/entities/payment';
 import type {
+  OperationsSummary,
   Payment,
   PaymentCreateCommand,
   PaymentFavoriteCommand,
@@ -23,12 +24,14 @@ import {
   paymentKeys,
   paymentOperationKeys,
   type PaymentOperationOrder,
+  type PaymentOperationScope,
   type PaymentOperationStatusFilter,
 } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 
 type PaymentsResponse = components['schemas']['PaymentsResponse'];
 type OperationsResponse = components['schemas']['OperationsResponse'];
+type OperationsSummaryResponse = components['schemas']['OperationsSummaryResponse'];
 type PaymentResponseDto = components['schemas']['PaymentResponse'];
 
 /** Список платежей объекта — правил с флагом автоплатежа и избранным
@@ -266,6 +269,86 @@ export function usePaymentOperationsPaged(
         : allPages.length * OPERATIONS_PAGE_SIZE,
     select: (data) => data.pages.flat(),
     enabled: Boolean(propertyId) && Boolean(paymentId),
+  });
+}
+
+/**
+ * Порции операций объекта для экранов «Операции объекта» (#474): тот же
+ * контракт, что у usePropertyOperationsPaged, но весь скоуп (тип, категории,
+ * период) уходит и в ключ, и в query — переключение фильтра читает свой кэш
+ * с первой порции. pageParam — offset; следующая страница есть, пока порция
+ * полная.
+ */
+export function usePropertyOperationsScopedPaged(
+  propertyId: string,
+  scope: PaymentOperationScope,
+): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
+  return useInfiniteQuery({
+    queryKey: paymentOperationKeys.byPropertyScopedPaged(propertyId, scope),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams({
+        status: scope.status,
+        order: scope.order,
+        limit: String(OPERATIONS_PAGE_SIZE),
+        offset: String(pageParam),
+      });
+      if (scope.type !== undefined) {
+        params.set('type', scope.type);
+      }
+      if (scope.categories !== undefined && scope.categories.length > 0) {
+        params.set('category', scope.categories.join(','));
+      }
+      if (scope.dateFrom !== undefined) {
+        params.set('date_from', scope.dateFrom);
+      }
+      if (scope.dateTo !== undefined) {
+        params.set('date_to', scope.dateTo);
+      }
+      const response = await apiClient<OperationsResponse>(
+        `/properties/${encodeURIComponent(propertyId)}/operations?${params.toString()}`,
+      );
+      return response.items.map(mapPaymentOperation);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length < OPERATIONS_PAGE_SIZE
+        ? undefined
+        : allPages.length * OPERATIONS_PAGE_SIZE,
+    select: (data) => data.pages.flat(),
+    enabled: Boolean(propertyId),
+  });
+}
+
+/**
+ * Сводка периода объекта (#474) за карточками «Расходы/Доходы» и чипом
+ * «Категория»: итоги всегда оба направления, разбивка — только категории с
+ * операциями (по сумме убывание). Статус и период — те же, что у списка,
+ * поэтому карточки и список всегда согласны друг с другом.
+ */
+export function usePropertyOperationsSummary(
+  propertyId: string,
+  scope: PaymentOperationScope,
+): UseQueryResult<OperationsSummary, ApiError> {
+  return useQuery({
+    queryKey: paymentOperationKeys.summary(propertyId, scope),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set('status', scope.status);
+      if (scope.type !== undefined) {
+        params.set('type', scope.type);
+      }
+      if (scope.dateFrom !== undefined) {
+        params.set('date_from', scope.dateFrom);
+      }
+      if (scope.dateTo !== undefined) {
+        params.set('date_to', scope.dateTo);
+      }
+      const response = await apiClient<OperationsSummaryResponse>(
+        `/properties/${encodeURIComponent(propertyId)}/operations/summary?${params.toString()}`,
+      );
+      return mapOperationsSummary(response);
+    },
+    enabled: Boolean(propertyId),
   });
 }
 

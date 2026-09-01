@@ -45,6 +45,7 @@ export {
   type ScheduleEntry,
 } from './lib/schedule-list';
 export {
+  groupOperationsByDate,
   groupPaidOperations,
   type PaymentHistoryGroup,
 } from './lib/operations-history';
@@ -67,6 +68,8 @@ export {
   usePausePayment,
   usePayOperation,
   usePropertyOperationsPaged,
+  usePropertyOperationsScopedPaged,
+  usePropertyOperationsSummary,
   usePropertyOverdueOperations,
   useResumePayment,
   useSetPaymentFavorite,

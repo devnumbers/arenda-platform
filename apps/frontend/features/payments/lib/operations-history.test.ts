@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PaymentOperation } from '@/entities/payment';
-import { groupPaidOperations } from './operations-history';
+import { groupOperationsByDate, groupPaidOperations } from './operations-history';
 
 const paid = (id: string, date: string): PaymentOperation => ({
   id,
@@ -47,5 +47,34 @@ describe('groupPaidOperations', () => {
 
   it('пустая история даёт пустой список групп', () => {
     expect(groupPaidOperations([], '2026-08-27')).toStrictEqual([]);
+  });
+});
+
+describe('groupOperationsByDate', () => {
+  it('называет группы с датой через запятую: «Сегодня, 27 августа»', () => {
+    const groups = groupOperationsByDate(
+      [paid('a', '2026-08-27'), paid('b', '2026-08-26'), paid('c', '2026-08-11'), paid('d', '2025-05-13')],
+      '2026-08-27',
+    );
+    expect(groups.map((group) => group.label)).toStrictEqual([
+      'Сегодня, 27 августа',
+      'Вчера, 26 августа',
+      '11 августа',
+      '13 мая, 2025',
+    ]);
+  });
+
+  it('складывает операции одной даты в одну группу в порядке сервера', () => {
+    const groups = groupOperationsByDate(
+      [paid('a', '2026-08-20'), paid('b', '2026-08-20')],
+      '2026-08-27',
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.label).toBe('20 августа');
+    expect(groups[0]?.operations.map((operation) => operation.id)).toStrictEqual(['a', 'b']);
+  });
+
+  it('пустой список даёт пустой список групп', () => {
+    expect(groupOperationsByDate([], '2026-08-27')).toStrictEqual([]);
   });
 });
