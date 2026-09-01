@@ -126,6 +126,10 @@ log "Building backend"
 (cd "$PROJECT_ROOT" && go build -o "$BACKEND_BIN" ./apps/backend/cmd/api)
 
 log "Starting backend on $BACKEND_URL"
+# Подсказки адреса: по умолчанию dummy-ключ (endpoint тихо деградирует —
+# спека гейтится на DADATA_BASE_URL); экспортированный настоящий ключ
+# (например, из корневого .env) включает живой DaData в локальных прогонах.
+E2E_DADATA_API_KEY="${DADATA_API_KEY:-e2e-dadata-dummy}"
 (
   cd "$PROJECT_ROOT"
   APP_ENV=local \
@@ -137,7 +141,7 @@ log "Starting backend on $BACKEND_URL"
   PAYMENT_PROVIDER=fake \
   APP_BASE_URL="$BACKEND_URL" \
   ENCRYPTION_KEY="$E2E_ENCRYPTION_KEY" \
-  DADATA_API_KEY=e2e-dadata-dummy \
+  DADATA_API_KEY="$E2E_DADATA_API_KEY" \
   LOG_FORMAT=json \
   LOG_LEVEL=info \
   LOG_SUCCESSFUL_REQUESTS=false \

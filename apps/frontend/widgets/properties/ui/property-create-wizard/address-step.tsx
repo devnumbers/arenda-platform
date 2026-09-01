@@ -64,7 +64,7 @@ export function AddressStep({ value, onChange }: AddressStepProps): JSX.Element 
             return (
               <ListRow
                 key={suggestion.value}
-                className="px-3 py-3"
+                className="py-3"
                 subtitleClassName="text-content-secondary"
                 title={row.title}
                 subtitle={row.subtitle}
