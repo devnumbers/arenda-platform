@@ -14,8 +14,10 @@ make frontend-e2e          # из корня репо; нужен Docker + Node 
 
 Оркестратор `run-frontend-e2e.sh`:
 
-1. поднимает postgres 18 (compose-проект `arenda-e2e`, порт 5436;
-   перед стартом сносит остатки прошлого прогона вместе с вольюмами);
+1. поднимает postgres 18 (compose-проект `arenda-e2e`, порт 5436 — слот 0;
+   слоты ворктри подменяют проект и порты через `.env`, см.
+   `docs/agents/parallel-dev.md`; перед стартом сносит остатки прошлого
+   прогона вместе с вольюмами);
 2. собирает и запускает бекенд (`127.0.0.1:8081`): миграции применяются на
    старте, `EMAIL_SENDER=fake` (код входа пишется в JSON-лог),
    `PAYMENT_PROVIDER=fake`;
@@ -39,8 +41,13 @@ make frontend-e2e          # из корня репо; нужен Docker + Node 
 | `E2E_PG_PORT` | `5436` | порт postgres e2e-среды |
 | `E2E_BACKEND_PORT` | `8081` | порт бекенда |
 | `E2E_FRONTEND_PORT` | `3010` | порт фронта (он же `E2E_BASE_URL`) |
+| `E2E_COMPOSE_PROJECT` | `arenda-e2e` | имя compose-проекта (имя контейнера postgres — `<проект>-postgres-1`) |
 | `E2E_ENCRYPTION_KEY` | тестовый 64-hex ключ | ключ HMAC сид-сессии |
 | `E2E_KEEP_STACK` | `0` | `1` — не сносить стек после прогона (отладка) |
+
+Таргеты `make frontend-e2e*` сорсят корневой `.env` чекаута: слоты ворктри
+(`arenda-e2e-wt<N>`, порты BASE+5+N) приходят в раннер из process env —
+`docs/agents/parallel-dev.md`.
 
 ## Контракт тестов
 
