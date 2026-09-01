@@ -160,7 +160,9 @@ func listOperationsParams(
 // SummarizeByProperty runs the summary's two aggregations (ticket #473):
 // the period totals by direction and the per-category breakdown. The store
 // reports absent directions as zero totals; the breakdown arrives from SQL
-// already ordered by total, largest first.
+// already ordered by total, largest first. The two reads run as plain
+// statements — like every listing read, they accept a mid-summary mutation
+// racing one statement against another; the summary cards tolerate that.
 func (s *OperationStore) SummarizeByProperty(
 	ctx context.Context, scope, propertyID uuid.UUID, q application.OperationsSummaryQuery,
 ) (application.OperationsSummary, error) {

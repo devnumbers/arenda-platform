@@ -21,6 +21,13 @@ import (
 // the default-catalog slug the CRUD fixtures already rent with.
 const testIntegrationSlugRent = "rent"
 
+// opCancelled is the stored tombstone status (CONTEXT.md «Отменённая
+// операция»); the harness consts only carry the listing statuses.
+const opCancelled = "cancelled"
+
+// testIntegrationSlugUtilities is the default-catalog slug of the ЖКУ fixtures.
+const testIntegrationSlugUtilities = "utilities"
+
 // seedOperationRow inserts one operation row with the full fixture control —
 // direction, category snapshot, amount — the summary tests need a diversity
 // the seedOperation helper fixes to expense/ЖКУ. A nil paymentID seeds a
@@ -63,10 +70,10 @@ func (h *paymentsHarness) seedOperationRow(
 func (h *paymentsHarness) summaryFixture(pay uuid.UUID) {
 	h.t.Helper()
 	h.seedOperationRow(&pay, "2026-08-10", opPaid, "income", "Аренда", 5650000, testIntegrationSlugRent, "Арендная плата")
-	h.seedOperationRow(&pay, "2026-08-12", opPaid, "expense", "ЖКУ", 1050000, "utilities", "Коммунальные услуги")
+	h.seedOperationRow(&pay, "2026-08-12", opPaid, "expense", "ЖКУ", 1050000, testIntegrationSlugUtilities, "Коммунальные услуги")
 	h.seedOperationRow(&pay, "2026-08-18", opPaid, "expense", "Охрана", 250000, "security", "Охрана")
-	h.seedOperationRow(&pay, "2026-08-21", opPaid, "expense", "ЖКУ", 400000, "utilities", "Коммунальные услуги")
-	h.seedOperationRow(&pay, "2026-08-20", opPlanned, "expense", "ЖКУ", 300000, "utilities", "Коммунальные услуги")
+	h.seedOperationRow(&pay, "2026-08-21", opPaid, "expense", "ЖКУ", 400000, testIntegrationSlugUtilities, "Коммунальные услуги")
+	h.seedOperationRow(&pay, "2026-08-20", opPlanned, "expense", "ЖКУ", 300000, testIntegrationSlugUtilities, "Коммунальные услуги")
 	h.seedOperationRow(nil, "2026-08-15", opPaid, "income", "Залог", 1000000, "deposit", "Залог")
 }
 
@@ -104,7 +111,7 @@ func TestSummarizePropertyOperations_TotalsAndCategories(t *testing.T) {
 		total int64
 	}{
 		{testIntegrationSlugRent, 5650000},
-		{"utilities", 1450000},
+		{testIntegrationSlugUtilities, 1450000},
 		{"deposit", 1000000},
 		{"security", 250000},
 	}
@@ -158,7 +165,7 @@ func TestSummarizePropertyOperations_OverdueIsAViewStatus(t *testing.T) {
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
 	// Planned since the 12th — overdue against the Moscow today (the 25th).
-	h.seedOperationRow(&pay, "2026-08-12", opPlanned, "expense", "ЖКУ", 700000, "utilities", "Коммунальные услуги")
+	h.seedOperationRow(&pay, "2026-08-12", opPlanned, "expense", "ЖКУ", 700000, testIntegrationSlugUtilities, "Коммунальные услуги")
 
 	from, to := augustWindow()
 	overdue := domain.ViewStatusOverdue
@@ -196,6 +203,76 @@ func TestSummarizePropertyOperations_EmptyPeriodIsEmptySummary(t *testing.T) {
 	}
 	if summary.IncomeTotalKopecks != 0 || summary.ExpenseTotalKopecks != 0 || len(summary.Categories) != 0 {
 		t.Fatalf("summary = %+v, want the zero summary", summary)
+	}
+}
+
+func TestSummarizePropertyOperations_CancelledNeverCounts(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
+	h.summaryFixture(pay)
+	// Надгробие удалённой операции: факт и долг исчезли — из сводки тоже
+	// (CONTEXT.md «Отменённая операция»: для всех чтений её не существует).
+	h.seedOperationRow(&pay, "2026-08-14", opCancelled, "expense", "Клининг", 900000, "cleaning", "Клининг")
+
+	from, to := augustWindow()
+	paid := domain.ViewStatusPaid
+	summary, err := h.ops.SummarizePropertyOperations(h.ctx(), h.owner, h.propID,
+		paymentsapp.OperationsSummaryQuery{Status: &paid, DateFrom: &from, DateTo: &to})
+	if err != nil {
+		t.Fatalf("summarize: %v", err)
+	}
+	if summary.IncomeTotalKopecks != 6650000 || summary.ExpenseTotalKopecks != 1700000 {
+		t.Fatalf("totals = %d/%d, want 6 650 000/1 700 000 — cancelled must not count",
+			summary.IncomeTotalKopecks, summary.ExpenseTotalKopecks)
+	}
+	for _, row := range summary.Categories {
+		if row.Slug == "cleaning" {
+			t.Fatalf("cancelled category %s leaked into the breakdown", row.Slug)
+		}
+	}
+}
+
+func TestOperationsSummaryAndListing_UserCategoryRows(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	pay := h.seedPayment(day22, `{"kind": "monthly", "dayOfMonth": 15}`, false)
+	// Операция с пользовательской категорией: снапшот слага отсутствует
+	// (category_slug NULL), подпись — имя пользовательской категории.
+	h.seedOperationRow(&pay, "2026-08-13", opPaid, "expense", "Свой расход", 123000, "", "Своя категория")
+
+	from, to := augustWindow()
+	paid := domain.ViewStatusPaid
+
+	// Сводка: сумма считается в тотале, но строки-чипа у категории нет.
+	summary, err := h.ops.SummarizePropertyOperations(h.ctx(), h.owner, h.propID,
+		paymentsapp.OperationsSummaryQuery{Status: &paid, DateFrom: &from, DateTo: &to})
+	if err != nil {
+		t.Fatalf("summarize: %v", err)
+	}
+	if summary.ExpenseTotalKopecks != 123000 {
+		t.Fatalf("expense total = %d, want 123 000 — no snapshot still counts", summary.ExpenseTotalKopecks)
+	}
+	if len(summary.Categories) != 0 {
+		t.Fatalf("categories = %+v, want none — a row without a snapshot has no chip identity", summary.Categories)
+	}
+
+	// Список: категории-фильтр её не находит, без фильтра — видно.
+	filtered, err := h.ops.ListPropertyOperations(h.ctx(), h.owner, h.propID,
+		paymentsapp.OperationsListQuery{Categories: []string{"cleaning", testIntegrationSlugUtilities}, DateFrom: &from, DateTo: &to, Limit: 50})
+	if err != nil {
+		t.Fatalf("category filter: %v", err)
+	}
+	if len(filtered) != 0 {
+		t.Fatalf("category filter matched %+v, want nothing — NULL slug matches no value", filtered)
+	}
+	unfiltered, err := h.ops.ListPropertyOperations(h.ctx(), h.owner, h.propID,
+		paymentsapp.OperationsListQuery{Status: &paid, DateFrom: &from, DateTo: &to, Limit: 50})
+	if err != nil {
+		t.Fatalf("unfiltered list: %v", err)
+	}
+	if len(unfiltered) != 1 || unfiltered[0].Operation.Title != "Свой расход" {
+		t.Fatalf("unfiltered list = %+v, want the user-category operation", unfiltered)
 	}
 }
 
@@ -257,7 +334,7 @@ func TestOperationsListing_TypeAndCategoryFilters(t *testing.T) {
 		t.Fatalf("categories=[security] listed %+v, want the single Охрана row", guarded)
 	}
 
-	mixed := []string{"rent", "utilities"}
+	mixed := []string{"rent", testIntegrationSlugUtilities}
 	both, err := h.ops.ListPropertyOperations(h.ctx(), h.owner, h.propID,
 		paymentsapp.OperationsListQuery{Categories: mixed, DateFrom: &from, DateTo: &to, Limit: 50})
 	if err != nil {
