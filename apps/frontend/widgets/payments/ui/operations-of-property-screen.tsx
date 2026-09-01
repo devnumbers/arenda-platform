@@ -2,6 +2,7 @@
 
 import { useMemo, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { ArrowLeft, ChevronDown, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
@@ -157,11 +158,18 @@ export function OperationsOfPropertyScreen({
                   </div>
 
                   {groups.length === 0 ? (
-                    // Заглушка пустого состояния; 1:1 с Figma 1518-92899 —
-                    // тикет #478.
-                    <div className="flex flex-col items-center pt-24">
-                      <p className="text-base leading-[18px] text-content">
-                        Операций за период нет
+                    // Пустой период (Figma 1510-77308): иллюстрация 128 и
+                    // одна строка 16/18 серым, блок с отступами 64.
+                    <div className="flex flex-col items-center gap-4 py-16">
+                      <Image
+                        src="/images/payments/operations-empty.png"
+                        alt=""
+                        width={128}
+                        height={128}
+                        className="h-32 w-32"
+                      />
+                      <p className="text-base leading-[18px] text-content-secondary">
+                        Операции не найдены. Попробуйте выбрать другой период
                       </p>
                     </div>
                   ) : (
@@ -218,7 +226,7 @@ function SummaryCard({
       <div className="mt-4 flex h-1.5 w-full overflow-hidden rounded-pill">
         {(segments.length > 0
           ? segments
-          : [{ color: '#FFFFFF', percent: 100 }]
+          : [{ color: fallbackBarColor(totalKopecks), percent: 100 }]
         ).map((segment, index) => (
           <span
             key={`${segment.color}-${index}`}
@@ -229,6 +237,13 @@ function SummaryCard({
       </div>
     </div>
   );
+}
+
+/** Цвет полосы без разбивки (Figma 1510-77309): пустой период (0 ₽) —
+ * серый #D3D7D9 (токен --dl-input-border), есть операции — белая
+ * (главный макет 1492-41825, карточка «Доходы»). */
+function fallbackBarColor(totalKopecks: number | undefined): string {
+  return totalKopecks !== undefined && totalKopecks > 0 ? '#FFFFFF' : '#D3D7D9';
 }
 
 type SummarySegment = {
