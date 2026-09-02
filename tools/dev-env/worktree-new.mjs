@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 // make worktree-new WT=<name> engine (docs/agents/parallel-dev.md): create a
 // git worktree under .worktrees/<name> on a new branch, allocate the next
-// free slot from the registry (.env files), generate the worktree's root .env
-// (copy + slot block) and apps/frontend/.env.development.local, and print the
-// connection facts. Deliberately does not install dependencies, run baseline
-// tests, start infrastructure, or push — that is the using-git-worktrees
-// skill's side of the recipe.
+// free slot from the registry (.env files) whose ports no listener holds
+// (lsof preflight), generate the worktree's root .env (copy + slot block)
+// and apps/frontend/.env.development.local, and print the connection facts.
+// Deliberately does not install dependencies, run baseline tests, start
+// infrastructure, or push — that is the using-git-worktrees skill's side of
+// the recipe.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { envOverrideBlock, parseEnvFile, scanSlotRegistry, slotConfig, slotDatabaseUrl } from "./lib.mjs";
+import { envOverrideBlock, parseEnvFile, scanSlotRegistry, selectSlotByPorts, slotConfig, slotDatabaseUrl } from "./lib.mjs";
 
 const USAGE = `usage: node worktree-new.mjs <name> [root]
 
@@ -51,11 +52,45 @@ try {
 } catch (err) {
   die(err.message);
 }
-if (registry.free === null) {
+if (registry.freeSlots.length === 0) {
   die("no free worktree slot — all of 1..9 are claimed; remove a worktree to release its slot");
 }
-const slot = registry.free;
-const cfg = slotConfig(slot);
+
+// Port preflight on top of the registry (#489 live check): the registry only
+// knows .env claims, not who actually listens. A slot handed out over a
+// foreign listener would let the e2e runner's free_port() kill that process,
+// so held slots are skipped with a warning naming the holding pids. An
+// unavailable lsof means no preflight: warn and fall back to the registry's
+// first free slot.
+function listeningPids(port) {
+  const res = spawnSync("lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
+  if (res.error) return null;
+  return res.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+const preflight = selectSlotByPorts(registry.freeSlots, listeningPids);
+for (const { slot: held, busyPorts } of preflight.blocked) {
+  const detail = busyPorts.map(({ port, pids }) => `port ${port} (pid ${pids.join(", ")})`).join(", ");
+  console.error(
+    `worktree-new: WARNING: slot ${held} skipped — ${detail} already listening; ` +
+      "the ports are held by another stack or a stray process (docs/agents/parallel-dev.md, «Разборка»)",
+  );
+}
+let { slot, cfg } = preflight;
+if (preflight.unavailable) {
+  console.error(
+    "worktree-new: WARNING: lsof is not available — the port preflight was skipped; " +
+      "check the slot's ports by hand before running e2e (docs/agents/parallel-dev.md, «Разборка»)",
+  );
+  slot = registry.freeSlots[0];
+  cfg = slotConfig(slot);
+}
+if (slot === null) {
+  die("every free slot 1..9 has listening ports — clear the holders first (docs/agents/parallel-dev.md, «Разборка»)");
+}
 
 const worktree = git(root, ["worktree", "add", path.relative(root, wtDir), "-b", name]);
 if (worktree.status !== 0) {

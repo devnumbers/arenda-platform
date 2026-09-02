@@ -11,8 +11,19 @@ import path from "node:path";
 
 const sourceScript = path.join(import.meta.dirname, "stop-gate.mjs");
 
+// git exports its own environment to hook processes, and in a linked
+// worktree GIT_DIR is absolute — a pre-push run from a worktree poisons
+// every fixture git call below with the real checkout's git dir (hooks
+// resolve from it too). The fixtures own their git dirs: strip the hook
+// environment wholesale at the spawn boundary.
+function sanitizedEnv() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+}
+
 function exec(dir, args, opts = {}) {
-  const res = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", ...opts });
+  const res = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", ...opts, env: sanitizedEnv() });
   if (res.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${res.stderr}`);
   return res.stdout;
 }
@@ -90,6 +101,7 @@ function runStopGate(script, dir, payloadOverrides = {}, stdin = undefined) {
     encoding: "utf8",
     cwd: dir,
     timeout: 60_000,
+    env: sanitizedEnv(),
   });
   return { code: res.status, stderr: res.stderr, stdout: res.stdout };
 }
@@ -249,5 +261,28 @@ describe("stop-gate: blocking and fail-open behavior", () => {
     const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir, { cwd: outside });
     expect(res.code).toBe(0);
     expect(gatesRun(dir)).toEqual([]);
+  });
+
+  it("fixtures are isolated from a hook's GIT_* environment", () => {
+    // A pre-push hook run from a linked worktree exports GIT_DIR pointing
+    // into the real checkout; the fixture git ops must not see it.
+    const poisoned = { GIT_DIR: path.join(tmpdir(), "no-such-git-dir"), GIT_WORK_TREE: tmpdir() };
+    const restore = Object.entries(poisoned).map(([key, value]) => {
+      const prev = process.env[key];
+      process.env[key] = value;
+      return [key, prev];
+    });
+    try {
+      const dir = fixture("poisoned-env");
+      writeFileSync(path.join(dir, "apps/backend/main.go"), "package main\n");
+      const res = runStopGate(path.join(dir, "stop-gate.mjs"), dir);
+      expect(res.code).toBe(0);
+      expect(gatesRun(dir)).toEqual(["backend", "backend-nolint"]);
+    } finally {
+      for (const [key, prev] of restore) {
+        if (prev === undefined) delete process.env[key];
+        else process.env[key] = prev;
+      }
+    }
   });
 });
