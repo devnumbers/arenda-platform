@@ -7,7 +7,8 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 ## Contexts
 
 - [Identity](./apps/backend/internal/identity/CONTEXT.md) — accounts, sessions, user roles (Owner, Admin).
-- [Properties](./apps/backend/internal/properties/CONTEXT.md) — property cards only: photos, contacts, attributes, archive. The leases/operations domain was removed for a full rewrite (ADR 0046).
+- [Properties](./apps/backend/internal/properties/CONTEXT.md) — property cards only: photos, attributes, archive. The leases/operations domain was removed for a full rewrite (ADR 0046).
+- [Contacts](./apps/backend/internal/contacts/CONTEXT.md) — the owner's contact book: cards of people for a property (plumber, management company, concierge); the property link is optional (ADR 0051).
 - [Payments](./apps/backend/internal/payments/CONTEXT.md) — payment rules and operation occurrences per property: income/expense record-keeping, auto pay, overdue debt, pauses (ADR 0047).
 - [Notifications](./apps/backend/internal/notifications/CONTEXT.md) — delivery channels (email, Web Push), per-channel preferences, the `subscription_grace` event with direct sending, and the grace worker.
 - [Billing](./apps/backend/internal/billing/CONTEXT.md) — tariffs, subscriptions, payment methods, T-Kassa integration.
@@ -20,6 +21,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - **Identity → all**: Owner/Admin roles thread through every context.
 - **Identity → Access**: Identity emits `UserRegistered` when a new account is created; Access consumes it to activate shares issued to a previously-unregistered email.
 - **Properties ↔ Access**: Access governs who can view/edit properties.
+- **Contacts → Properties**: a contact lives in its owner's contact book; the property link is optional (nullable `property_id`). Deleting a property — either ADR 0025 mode — nulls the link; the contact survives in the book (ADR 0051). Property-bound contacts are visible/editable to members by the property access roles (ADR 0028), as with payments; contacts without a property are owner-only.
 - **Properties → Payments**: a payment and its operations belong to exactly one property (`property_id`); access to them follows the property access roles (ADR 0028). Property lifecycle interplay (archive/delete) is decided with the payments schema (ADR 0047, ticket #446).
 - **Properties → Billing**: Active property count feeds subscription tariff limits.
 - **Billing → Access**: Downgrade/grace-period may suspend shared access when limits shrink.
