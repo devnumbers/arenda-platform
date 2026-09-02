@@ -1,39 +1,32 @@
 'use client';
 
-import { useMemo, useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  ArrowSLeft,
-  ArrowSRight,
-  ChevronDown,
-  Search,
-} from '@/shared/assets/icons';
+import { ArrowLeft, ArrowSLeft, ArrowSRight, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import type { PaymentOperationScope } from '@/shared/api/query-keys';
+import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import {
-  Button,
-  ChipButton,
-  IconButton,
-  PageContent,
-  TopNav,
-  TopNavTitle,
-} from '@/shared/ui/design';
+  clientTodayIso,
+  type PaymentOperation,
+} from '@/entities/payment';
 import {
+  defaultOperationsPeriod,
   groupOperationsByDate,
-  isCurrentOperationsMonth,
+  operationsCategoryRows,
+  operationsMonthIndex,
   operationsMonthOf,
-  operationsMonthRange,
-  shiftOperationsMonth,
+  shiftOperationsPeriod,
+  useOperationsFilters,
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
-  type OperationsMonth,
 } from '@/features/payments';
-import { clientTodayIso, type PaymentOperation } from '@/entities/payment';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import { LoadingMoreIndicator, OperationsDateList } from './operations-list';
+import { OperationsFiltersArea } from './operations-filters-area';
 
 /** Копия экрана по направлению (Figma 1494-61191 / 1492-59865). */
 const SCREEN_COPY = {
@@ -48,10 +41,10 @@ const SCREEN_COPY = {
  * по месяцам (ArrowSLeft/ArrowSRight 44×44); ниже — список операций одного
  * типа за период, группировка и строки как на главном (общий
  * OperationsDateList). Скоуп сужен `type` — фильтр списка и сводки #473.
- * Листание: правая стрелка гасится на текущем месяце — на экранах только
- * paid-операции (резолюция #474), в будущем их не бывает; влево — без
- * границы, месяцы без операций показывают пустое состояние. Порции по 50
- * с бесконечным скроллом; чипы выбора периода/категории — тикет #477.
+ * Период и категории живут в адресе (#477): дефолт — текущий месяц,
+ * стрелки сдвигают применённый период (правая гасится, когда период
+ * упёрся в текущий месяц — на экранах только paid-операции, резолюция
+ * #474), выбор чипами — шиты #477. Порции по 50 с бесконечным скроллом.
  */
 export function OperationsOfTypeScreen({
   propertyId,
@@ -61,22 +54,29 @@ export function OperationsOfTypeScreen({
   readonly type: keyof typeof SCREEN_COPY;
 }): JSX.Element {
   const router = useRouter();
+  const { filters, applyPeriod, applyCategories } = useOperationsFilters();
 
   const today = clientTodayIso();
-  const [month, setMonth] = useState<OperationsMonth>(() => operationsMonthOf(today));
-  const period = useMemo(() => operationsMonthRange(month), [month]);
-  const atCurrentMonth = isCurrentOperationsMonth(month, today);
+  const period = filters.period ?? defaultOperationsPeriod(today);
+  // Правая стрелка гасится, когда период упёрся в текущий месяц.
+  const atCurrentMonth =
+    operationsMonthIndex(operationsMonthOf(period.to))
+    >= operationsMonthIndex(operationsMonthOf(today));
 
-  const scope = {
+  const periodScope: PaymentOperationScope = {
     status: 'paid',
     order: 'desc',
     type,
     dateFrom: period.from,
     dateTo: period.to,
-  } as const;
+  };
+  const listScope: PaymentOperationScope =
+    filters.categories.length > 0
+      ? { ...periodScope, categories: filters.categories }
+      : periodScope;
 
-  const listQuery = usePropertyOperationsScopedPaged(propertyId, scope);
-  const summaryQuery = usePropertyOperationsSummary(propertyId, scope);
+  const listQuery = usePropertyOperationsScopedPaged(propertyId, listScope);
+  const summaryQuery = usePropertyOperationsSummary(propertyId, periodScope);
 
   const sentinelRef = useInfiniteScroll(
     () => {
@@ -95,6 +95,7 @@ export function OperationsOfTypeScreen({
         ? summaryQuery.data.expenseTotalKopecks
         : summaryQuery.data.incomeTotalKopecks;
   const pending = listQuery.isPending || summaryQuery.isPending;
+  const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
 
   const openOperation = (operation: PaymentOperation): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
@@ -122,14 +123,16 @@ export function OperationsOfTypeScreen({
 
       <PageContent>
         <div className="flex flex-col gap-6 pt-4">
-          {/* Чипы фильтров — как на главном (Figma 1502:65149): период следует
-           * за листанием; шиты выбора — тикет #477. */}
-          <div className="flex gap-1.5 overflow-x-auto px-6">
-            <ChipButton selected trailingIcon={<ChevronDown />}>
-              {period.label}
-            </ChipButton>
-            <ChipButton trailingIcon={<ChevronDown />}>Категория</ChipButton>
-          </div>
+          {/* Чипы и шиты фильтров — как на главном (Figma 1502:65149):
+           * период следует за листанием, состояние живёт в адресе. */}
+          <OperationsFiltersArea
+            period={period}
+            periodExplicit={filters.period !== null}
+            categories={filters.categories}
+            categoryRows={categoryRows}
+            onApplyPeriod={applyPeriod}
+            onApplyCategories={applyCategories}
+          />
 
           {pending && (
             <>
@@ -157,12 +160,13 @@ export function OperationsOfTypeScreen({
               ) : (
                 <>
                   {/* Сумма периода с листанием по месяцам (Figma 1502:65151):
-                   * стрелки 44×44, H1 28/32 по центру. */}
+                   * стрелки 44×44, H1 28/32 по центру; период применяется
+                   * в адрес (#477), дефолт — текущий месяц. */}
                   <div className="flex items-stretch px-3.5">
                     <IconButton
                       icon={<ArrowSLeft />}
                       label="Предыдущий месяц"
-                      onClick={() => setMonth(shiftOperationsMonth(month, -1))}
+                      onClick={() => applyPeriod(shiftOperationsPeriod(period, -1))}
                     />
                     <div className="flex min-w-0 flex-1 items-center justify-center">
                       <span className="truncate text-[28px] font-semibold leading-8 text-content">
@@ -173,7 +177,7 @@ export function OperationsOfTypeScreen({
                       icon={<ArrowSRight />}
                       label="Следующий месяц"
                       disabled={atCurrentMonth}
-                      onClick={() => setMonth(shiftOperationsMonth(month, 1))}
+                      onClick={() => applyPeriod(shiftOperationsPeriod(period, 1))}
                     />
                   </div>
 

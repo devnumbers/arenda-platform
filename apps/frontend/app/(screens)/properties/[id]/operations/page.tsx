@@ -1,9 +1,12 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { OperationsOfPropertyScreen } from '@/widgets/payments';
 
 /**
  * Экран «Операции объекта» (#474, Figma 1492-41825): оплаченные операции
- * за период с чипами фильтров и карточками сводки.
+ * за период с чипами фильтров и карточками сводки. Фильтры период/категории
+ * (#477) живут в query-параметрах, поэтому клиентский экран со
+ * useSearchParams стоит за Suspense-границей — требование App Router.
  */
 
 export const metadata: Metadata = {
@@ -17,5 +20,9 @@ type OperationsPageProps = {
 export default async function PropertyOperationsRoutePage({ params }: OperationsPageProps) {
   const { id } = await params;
 
-  return <OperationsOfPropertyScreen propertyId={id} />;
+  return (
+    <Suspense fallback={null}>
+      <OperationsOfPropertyScreen propertyId={id} />
+    </Suspense>
+  );
 }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  isCurrentOperationsMonth,
   operationsMonthOf,
   operationsMonthRange,
   shiftOperationsMonth,
@@ -49,11 +48,3 @@ describe('operationsMonthRange', () => {
   });
 });
 
-describe('isCurrentOperationsMonth', () => {
-  it('истина только для месяца клиентского «сегодня»', () => {
-    expect(isCurrentOperationsMonth({ year: 2026, month: 8 }, '2026-09-01')).toBe(true);
-    expect(isCurrentOperationsMonth({ year: 2026, month: 7 }, '2026-09-01')).toBe(false);
-    expect(isCurrentOperationsMonth({ year: 2026, month: 9 }, '2026-09-01')).toBe(false);
-    expect(isCurrentOperationsMonth({ year: 2025, month: 8 }, '2026-09-01')).toBe(false);
-  });
-});

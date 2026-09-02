@@ -1,23 +1,24 @@
 'use client';
 
-import { useMemo, type JSX } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ChevronDown, Search } from '@/shared/assets/icons';
+import { ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import type { PaymentOperationScope } from '@/shared/api/query-keys';
 import {
+  defaultOperationsPeriod,
   groupOperationsByDate,
-  operationsMonthOf,
-  operationsMonthRange,
+  operationsCategoryRows,
+  useOperationsFilters,
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from '@/features/payments';
 import { clientTodayIso } from '@/entities/payment';
 import {
   Button,
-  ChipButton,
   IconButton,
   PageContent,
   TopNav,
@@ -28,6 +29,7 @@ import {
   PaymentsStateCard,
 } from './payments-sections';
 import { LoadingMoreIndicator, OperationsDateList } from './operations-list';
+import { OperationsFiltersArea } from './operations-filters-area';
 import { summaryBarSegments, type SummaryBarSegment } from '../lib/summary-bar';
 
 /** Пилюля полосы без операций в периоде (Figma 1510-77101): серая #D3D7D9. */
@@ -36,16 +38,19 @@ const EMPTY_BAR_COLOR = '#D3D7D9';
 /**
  * Экран «Операции объекта» (#474, Figma 1492-41825): оплаченные операции
  * за период, сгруппированные по датам; сверху — чипы «Период» (выбран,
- * синий; дефолт — текущий месяц) и «Категория» (шиты выбора — тикет #477),
- * под ними карточки «Расходы»/«Доходы» с суммой за период; у обоих —
- * полоса-разбивка пилюлями категорий (все категории с операциями, зазор
- * 2px, пропорционально суммам — Figma 1510-77101, решение владельца
- * 2026-09-01 отменяет схему #474 «топ-4 + остаток белым, доходы белым»).
- * Карточки ведут на экраны «Расходы
- * объекта»/«Доходы объекта» (#475). Сводка и список считают один и тот же
- * скоуп на сервере (#473) — карточки и список всегда согласны. Порции по 50
- * с бесконечным скроллом; строка ведёт на страницу операции. Поиск — иконка
- * в хедере (экран поиска — тикет #476).
+ * синий; дефолт — текущий месяц) и «Категория» («Все категории», синий с
+ * активным фильтром); под ними карточки «Расходы»/«Доходы» с суммой за
+ * период; у обоих — полоса-разбивка пилюлями категорий (все категории с
+ * операциями, зазор 2px, пропорционально суммам — Figma 1510-77101,
+ * решение владельца 2026-09-01 отменяет схему #474 «топ-4 + остаток
+ * белым, доходы белым»). Карточки ведут на экраны «Расходы
+ * объекта»/«Доходы объекта» (#475). Список сужается категориями (#477),
+ * сводка категорийный фильтр не принимает — карточки всегда за весь
+ * период, а строки шита категорий показывают суммы периода. Фильтры живут
+ * в адресе (?from=&to=&category= — шарабельно, назад возвращает к
+ * списку), пересчёт сводки при смене периода — ключ react-query. Порции
+ * по 50 с бесконечным скроллом; строка ведёт на страницу операции. Поиск —
+ * иконка в хедере (экран поиска — тикет #476).
  */
 export function OperationsOfPropertyScreen({
   propertyId,
@@ -53,18 +58,25 @@ export function OperationsOfPropertyScreen({
   readonly propertyId: string;
 }): JSX.Element {
   const router = useRouter();
+  const { filters, applyPeriod, applyCategories } = useOperationsFilters();
 
   const today = clientTodayIso();
-  const period = useMemo(() => operationsMonthRange(operationsMonthOf(today)), [today]);
-  const scope = {
+  const period = filters.period ?? defaultOperationsPeriod(today);
+  // Список сужается выбранными категориями; сводка (#473) категорийный
+  // фильтр не принимает — карточки всегда показывают весь период.
+  const periodScope: PaymentOperationScope = {
     status: 'paid',
     order: 'desc',
     dateFrom: period.from,
     dateTo: period.to,
-  } as const;
+  };
+  const listScope: PaymentOperationScope =
+    filters.categories.length > 0
+      ? { ...periodScope, categories: filters.categories }
+      : periodScope;
 
-  const listQuery = usePropertyOperationsScopedPaged(propertyId, scope);
-  const summaryQuery = usePropertyOperationsSummary(propertyId, scope);
+  const listQuery = usePropertyOperationsScopedPaged(propertyId, listScope);
+  const summaryQuery = usePropertyOperationsSummary(propertyId, periodScope);
 
   const sentinelRef = useInfiniteScroll(
     () => {
@@ -77,6 +89,7 @@ export function OperationsOfPropertyScreen({
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   const pending = listQuery.isPending || summaryQuery.isPending;
+  const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
 
   const openOperation = (operation: { readonly id: string }): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
@@ -104,14 +117,16 @@ export function OperationsOfPropertyScreen({
 
       <PageContent>
         <div className="flex flex-col gap-6 pt-4">
-          {/* Чипы фильтров (Figma 1492:59532): период выбран — синий, категория
-           * серая; сами шиты выбора — тикет #477. */}
-          <div className="flex gap-1.5 overflow-x-auto px-6">
-            <ChipButton selected trailingIcon={<ChevronDown />}>
-              {period.label}
-            </ChipButton>
-            <ChipButton trailingIcon={<ChevronDown />}>Категория</ChipButton>
-          </div>
+          {/* Чипы и шиты фильтров период/категории (#477): дефолт — текущий
+           * месяц и «Все категории», состояние живёт в адресе. */}
+          <OperationsFiltersArea
+            period={period}
+            periodExplicit={filters.period !== null}
+            categories={filters.categories}
+            categoryRows={categoryRows}
+            onApplyPeriod={applyPeriod}
+            onApplyCategories={applyCategories}
+          />
 
           {pending && (
             <>

@@ -1,9 +1,11 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { OperationsOfTypeScreen } from '@/widgets/payments';
 
 /**
  * Экран «Доходы объекта» (#475, Figma 1494-61191): оплаченные доходы за
- * месяц с листанием и H1-суммой периода.
+ * период с листанием и H1-суммой; фильтры (#477) живут в query-параметрах —
+ * useSearchParams за Suspense-границей (требование App Router).
  */
 
 export const metadata: Metadata = {
@@ -19,5 +21,9 @@ export default async function PropertyOperationsIncomeRoutePage({
 }: OperationsIncomePageProps) {
   const { id } = await params;
 
-  return <OperationsOfTypeScreen propertyId={id} type="income" />;
+  return (
+    <Suspense fallback={null}>
+      <OperationsOfTypeScreen propertyId={id} type="income" />
+    </Suspense>
+  );
 }

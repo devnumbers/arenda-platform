@@ -18,9 +18,19 @@ export function operationsMonthOf(today: IsoDate): OperationsMonth {
   return { year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) - 1 };
 }
 
+/** Непрерывный индекс месяца (год × 12 + месяц) — для сравнения «раньше/позже». */
+export function operationsMonthIndex(month: OperationsMonth): number {
+  return month.year * 12 + month.month;
+}
+
+/** ISO-дата дня месяца 'YYYY-MM-DD'. */
+export function operationsMonthIso(month: OperationsMonth, day: number): IsoDate {
+  return `${month.year}-${String(month.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 /** Сдвиг на целое число месяцев через границы года (стрелки навигации). */
 export function shiftOperationsMonth(base: OperationsMonth, delta: number): OperationsMonth {
-  const months = base.year * 12 + base.month + delta;
+  const months = operationsMonthIndex(base) + delta;
   return { year: Math.floor(months / 12), month: months % 12 };
 }
 
@@ -39,10 +49,3 @@ export function operationsMonthRange(month: OperationsMonth): {
   };
 }
 
-/** Текущий ли это месяц клиентского «сегодня»: правая стрелка навигации
- * гасится на нём — на экранах только paid-операции (резолюция #474),
- * в будущем их не бывает. */
-export function isCurrentOperationsMonth(month: OperationsMonth, today: IsoDate): boolean {
-  return month.year === Number(today.slice(0, 4))
-    && month.month === Number(today.slice(5, 7)) - 1;
-}

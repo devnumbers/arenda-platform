@@ -91,6 +91,14 @@ export type ModalContentProps = {
   /** Скрыть заголовок визуально (sr-only): a11y-имя диалога остаётся,
    * дизайн-макеты без заголовка не ломаются. */
   readonly titleSrOnly?: boolean;
+  /** Закреплённая нижняя панель действия (Figma 1510-74149 — кнопка
+   * «Выбрать» шита категорий): контент скроллится, футер всегда виден.
+   * Без футера шит целиком скроллится, как раньше. */
+  readonly footer?: ReactNode;
+  /** Полноэкранный шит на мобайле (Figma 1495-64015/1506-72116 — шиты
+   * фильтров операций): во всю высоту вьюпорта, без скругления; на
+   * десктопе остаётся центрированной карточкой. */
+  readonly fullScreen?: boolean;
 };
 
 export function ModalContent({
@@ -100,6 +108,8 @@ export function ModalContent({
   className,
   showClose = false,
   titleSrOnly = false,
+  footer,
+  fullScreen = false,
 }: ModalContentProps): JSX.Element {
   const isDesktop = useIsDesktop();
   const titleBlock = titleSrOnly ? (
@@ -114,16 +124,30 @@ export function ModalContent({
       )}
     </div>
   );
+  const content = (
+    <>
+      {titleBlock}
+      {description !== undefined && (
+        <DialogDescription className="text-sm text-content-secondary">{description}</DialogDescription>
+      )}
+      {children}
+    </>
+  );
   const body = (
     <>
       <SheetDragHandle className="tablet:hidden" />
-      <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        {titleBlock}
-        {description !== undefined && (
-          <DialogDescription className="text-sm text-content-secondary">{description}</DialogDescription>
-        )}
-        {children}
-      </div>
+      {footer === undefined ? (
+        <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          {content}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-4">{content}</div>
+          <div className="shrink-0 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">
+            {footer}
+          </div>
+        </div>
+      )}
     </>
   );
 
@@ -165,6 +189,7 @@ export function ModalContent({
       <Drawer.Content
         className={cn(
           'fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-white font-sans outline-none',
+          fullScreen && 'h-[100dvh] max-h-[100dvh] rounded-t-none',
           // Вход/выход анимирует сам vaul (slideFromBottom 0.5s на той же
           // кривой cubic-bezier(0.32,0.72,0,1)) — скоординировано с drag.
           className,
