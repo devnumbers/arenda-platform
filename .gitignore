@@ -27,8 +27,9 @@ apps/frontend/test-results
 docs/plans
 docs/reviews
 
-# Local agent tooling config
-.zcode/
+# Local agent tooling config (workspace MCP config is committed — see .zcode/config.json)
+.zcode/*
+!.zcode/config.json
 
 # Personal lefthook overrides (skip jobs etc.)
 lefthook-local.yml

@@ -8,13 +8,14 @@ The living registry of this repo's agent infrastructure: which tools stand (MCP 
 
 ## MCP servers
 
-Configured per harness, outside the repo: Kimi Code — `~/.kimi-code/mcp.json`; ZCode — its own MCP config. API keys (context7, figma) are personal and live only in the user config, never in the repo.
+Configured per harness, outside the repo: Kimi Code — `~/.kimi-code/mcp.json`; ZCode — its own MCP config — with one exception: `playwright` lives in the committed repo workspace config `.zcode/config.json` (ZCode auto-connects it in every session and worktree; worktrees inherit it like any committed file). API keys (context7, figma) are personal and live only in the user config, never in the repo.
 
 | Server | Role | Status |
 | --- | --- | --- |
 | `lean-ctx` | Compressed reads and noisy-output compression, semantic search by meaning, dependency/diff-impact graph, session intelligence | in force — since 2026-08-16 narrowed to exactly this list (Serena landed; boundary rule below) |
 | `context7` | Official library/framework documentation | in force |
-| `playwright` | Browser automation and UI verification | in force |
+| `playwright` | Browser automation and UI verification — the mechanism for **all** repo browser work (live acceptance, headed spec runs, browser debugging), single and parallel sessions alike; one stdio server per session = one visible Chromium per session (`--isolated` in-memory profile, headed by default) | in force — repurposed 2026-09-02 to the committed workspace config `.zcode/config.json` (decision [#515](https://github.com/devnumbers/arenda-platform/issues/515), map [#512](https://github.com/devnumbers/arenda-platform/issues/512), record [#516](https://github.com/devnumbers/arenda-platform/issues/516)); the rule text — `docs/agents/parallel-dev.md` |
+| Browser Use (ZCode plugin, built-in pane) | Ordinary agent web surfing only | restricted 2026-09-02 ([#516](https://github.com/devnumbers/arenda-platform/issues/516)) — barred from repo browser tasks: all chats share one cookie-partition (auth sessions on `127.0.0.1` cross, [#514](https://github.com/devnumbers/arenda-platform/issues/514)) and there is one visible pane per window, so parallel-session isolation is impossible (decision [#515](https://github.com/devnumbers/arenda-platform/issues/515)) |
 | `figma` | Figma design data and image exports | in force |
 | `heroui-react` | HeroUI v3 component docs, source, theme tokens | in force |
 | `serena` | Unified semantic tool for the stack (TS + Go): navigation, references, rename, diagnostics, symbol-level editing | in force — spike-gate passed 2026-08-16 (results below); MCP re-shuffle completed 2026-08-18 ([#308](https://github.com/devnumbers/arenda-platform/issues/308)): gopls/jetbrains entries dropped from both harness configs, serena mandatory with stop-procedure; pinned `serena-agent` 1.7.0 |
