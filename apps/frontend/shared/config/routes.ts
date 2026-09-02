@@ -35,6 +35,10 @@ export const ROUTES = {
   /** Визард создания платежа; тип выбирается в шите выбора «Платёж / Автоплатёж». */
   propertyPaymentNew: (id: string, type: 'payment' | 'autopayment') =>
     `/properties/${id}/payments/new?type=${type}`,
+  /** Экран «Контакты объекта» (#508) — новый хром, книга контактов (ADR 0051). */
+  propertyContacts: (id: string) => `/properties/${id}/contacts`,
+  /** Создание контакта (#509); до тикета путь ведёт на 404. */
+  propertyContactNew: (id: string) => `/properties/${id}/contacts/new`,
   profile: '/profile',
   profilePersonal: '/profile/personal',
   profileNotifications: '/profile/notifications',

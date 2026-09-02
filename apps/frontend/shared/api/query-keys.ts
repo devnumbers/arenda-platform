@@ -27,6 +27,14 @@ export const billingKeys = {
   payment: (id: string) => ['billing', 'payments', id] as const,
 };
 
+// features/contacts
+export const contactKeys = {
+  all: ['contacts'] as const,
+  /** Книга контактов объекта (ADR 0051); search — серверный фильтр ('' = без). */
+  list: (propertyId: string, search = '') =>
+    [...contactKeys.all, 'list', propertyId, search] as const,
+};
+
 // features/properties
 export const propertyKeys = {
   all: ['properties'] as const,
