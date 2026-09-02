@@ -36,9 +36,9 @@ type Querier interface {
 	CountAuditLogsAdmin(ctx context.Context, arg CountAuditLogsAdminParams) (int64, error)
 	// Every started session counts, whatever its later outcome (ticket #427).
 	CountCardBindingSessionsByUserSince(ctx context.Context, arg CountCardBindingSessionsByUserSinceParams) (int64, error)
+	CountContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
-	CountPropertyContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
 	// The count twin of ListSubscriptionPaymentsBySelection for the stuck-payment
@@ -62,7 +62,6 @@ type Querier interface {
 	CreateCardBindingSession(ctx context.Context, arg CreateCardBindingSessionParams) (CardBindingSession, error)
 	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
-	CreatePropertyContact(ctx context.Context, arg CreatePropertyContactParams) (PropertyContact, error)
 	CreatePropertyMember(ctx context.Context, arg CreatePropertyMemberParams) (PropertyMember, error)
 	// Pending property member invitations by email (T5, issue #161). Emails are
 	// stored lowercase; lookups compare with lower() on the parameter side too.
@@ -82,6 +81,7 @@ type Querier interface {
 	CreateTariff(ctx context.Context, arg CreateTariffParams) (Tariff, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
+	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
 	// The hygiene batch (ticket #433): sessions past their lifetime, whatever
 	// their status — an expired session never produces a payment method, and the
 	// only later read of an old row is the binding limit's sliding window, which
@@ -120,7 +120,6 @@ type Querier interface {
 	// planned always goes with the rule.
 	DeletePaymentPlannedFrom(ctx context.Context, arg DeletePaymentPlannedFromParams) (int64, error)
 	DeleteProperty(ctx context.Context, arg DeletePropertyParams) error
-	DeletePropertyContact(ctx context.Context, arg DeletePropertyContactParams) error
 	DeletePropertyMember(ctx context.Context, arg DeletePropertyMemberParams) error
 	DeletePropertyMemberInvitation(ctx context.Context, arg DeletePropertyMemberInvitationParams) error
 	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
@@ -134,6 +133,16 @@ type Querier interface {
 	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
 	GetAuditLogByIDAdmin(ctx context.Context, id pgtype.UUID) (AuditLog, error)
 	GetCardBindingSessionByRequestKeyForUpdate(ctx context.Context, arg GetCardBindingSessionByRequestKeyForUpdateParams) (CardBindingSession, error)
+	// Contacts context queries: CRUD and search over the owner's contact book
+	// (ADR 0051, ticket #506). Reads and writes are scoped by the data owner
+	// (ADR 0028) — the service has already resolved the actor's role. The by-id
+	// read alone is unscoped on purpose: the card itself carries the property
+	// binding the authorization gates on, so the service loads first and
+	// authorizes before anything travels out.
+	GetContactByID(ctx context.Context, id pgtype.UUID) (Contact, error)
+	// The contacts view of the property a use case targets: just the data owner
+	// whose book the property-bound cards belong to (ADR 0028).
+	GetContactPropertyRef(ctx context.Context, id pgtype.UUID) (GetContactPropertyRefRow, error)
 	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
 	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
 	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
@@ -188,7 +197,6 @@ type Querier interface {
 	// Unscoped pessimistic-lock lookup by id, for write paths that resolve access
 	// via the policy port before applying scope = owner_id (T3, issue #156).
 	GetPropertyByIDForUpdate(ctx context.Context, id pgtype.UUID) (Property, error)
-	GetPropertyContact(ctx context.Context, arg GetPropertyContactParams) (PropertyContact, error)
 	// The read side of the payments property port: the data owner of a property
 	// (the SQL scope, ADR 0028) and its lifecycle state for the read gates.
 	GetPropertyForPayment(ctx context.Context, id pgtype.UUID) (GetPropertyForPaymentRow, error)
@@ -239,6 +247,7 @@ type Querier interface {
 	// untouched on the conflict branch because the window is not being reset.
 	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
+	InsertContact(ctx context.Context, arg InsertContactParams) (Contact, error)
 	// Idempotent by the partial unique (payment_id, date): a concurrent or
 	// repeated run inserts nothing. Always planned — the auto-pay closes today's
 	// occurrence separately, strictly on its day (ADR 0049 §2).
@@ -262,6 +271,16 @@ type Querier interface {
 	ListAllTariffs(ctx context.Context) ([]Tariff, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
+	// The owner's slice per the query scope: 'all' — the whole book,
+	// 'without_property' — the unbound cards, 'property' — one property's cards
+	// (property_id must be set for it). search ('' = no filter) is a
+	// case-insensitive substring match over the name fields, role, phone, email
+	// and messenger username; the application layer escapes the ILIKE
+	// metacharacters (ESCAPE '\').
+	ListContacts(ctx context.Context, arg ListContactsParams) ([]Contact, error)
+	// The admin read of one property's contacts (ADR 0051 consequences): the
+	// bound cards only — an unbound contact belongs to no property card.
+	ListContactsAdmin(ctx context.Context, arg ListContactsAdminParams) ([]Contact, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	// The operations of one scope with pagination (limit/offset), the view status
@@ -284,8 +303,6 @@ type Querier interface {
 	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
-	ListPropertyContactsAdmin(ctx context.Context, arg ListPropertyContactsAdminParams) ([]PropertyContact, error)
-	ListPropertyContactsByProperty(ctx context.Context, arg ListPropertyContactsByPropertyParams) ([]PropertyContact, error)
 	ListPropertyMemberInvitations(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMemberInvitation, error)
 	ListPropertyMembers(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMember, error)
 	ListPropertyMembersByUser(ctx context.Context, userID pgtype.UUID) ([]ListPropertyMembersByUserRow, error)
@@ -400,13 +417,16 @@ type Querier interface {
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error)
+	// The full editable-field rewrite keyed by (id, owner_id): zero rows means
+	// the card is gone between the service's read and this write (mapped to
+	// ErrNotFound, taking the audit entry down with it).
+	UpdateContact(ctx context.Context, arg UpdateContactParams) (Contact, error)
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set (since is never among it — server-set,
 	// prototype decision №17). The favorite star has its own atomic UPDATE.
 	UpdatePayment(ctx context.Context, arg UpdatePaymentParams) error
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
-	UpdatePropertyContact(ctx context.Context, arg UpdatePropertyContactParams) (PropertyContact, error)
 	UpdatePropertyMemberInvitationLastSentAt(ctx context.Context, arg UpdatePropertyMemberInvitationLastSentAtParams) error
 	UpdatePropertyMemberInvitationRole(ctx context.Context, arg UpdatePropertyMemberInvitationRoleParams) (PropertyMemberInvitation, error)
 	UpdatePropertyMemberRole(ctx context.Context, arg UpdatePropertyMemberRoleParams) (PropertyMember, error)

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
+	contactsdomain "github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
@@ -259,16 +260,18 @@ func (r *AdminRepository) propertyViewFromRow(
 }
 
 // ListPropertyContacts implements PropertyContactRepository.ListPropertyContacts.
-// The property_contacts.phone column is plaintext, so no decryption is needed.
+// Reads the contacts context (ADR 0051): the property's bound cards, the
+// display name composed from the name fields; the phone column is plaintext,
+// so no decryption is needed.
 func (r *AdminRepository) ListPropertyContacts(
 	ctx context.Context, filters adminapp.AdminPropertyContactFilters,
 ) ([]adminapp.AdminPropertyContactView, int64, error) {
-	total, err := r.q().CountPropertyContactsAdmin(ctx, pgconv.UUIDToPgtype(filters.PropertyID))
+	total, err := r.q().CountContactsAdmin(ctx, pgconv.UUIDToPgtype(filters.PropertyID))
 	if err != nil {
-		return nil, 0, fmt.Errorf("count property contacts: %w", err)
+		return nil, 0, fmt.Errorf("count contacts: %w", err)
 	}
 
-	rows, err := r.q().ListPropertyContactsAdmin(ctx, postgres.ListPropertyContactsAdminParams{
+	rows, err := r.q().ListContactsAdmin(ctx, postgres.ListContactsAdminParams{
 		PropertyID: pgconv.UUIDToPgtype(filters.PropertyID),
 		Limit:      toInt32(filters.Limit),
 		Offset:     toInt32(filters.Offset),
@@ -279,13 +282,18 @@ func (r *AdminRepository) ListPropertyContacts(
 
 	views := make([]adminapp.AdminPropertyContactView, 0, len(rows))
 	for _, row := range rows {
+		name := contactsdomain.Contact{
+			FirstName:  row.FirstName,
+			LastName:   pgconv.TextToString(row.LastName),
+			Patronymic: pgconv.TextToString(row.Patronymic),
+		}.FullName()
 		views = append(views, adminapp.AdminPropertyContactView{
 			PropertyContact: propertiesdomain.PropertyContact{
 				ID:         pgconv.UUIDFromPgtype(row.ID),
 				PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
 				OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
-				Name:       row.Name,
-				Phone:      row.Phone,
+				Name:       name,
+				Phone:      pgconv.TextToString(row.Phone),
 				CreatedAt:  row.CreatedAt.Time,
 				UpdatedAt:  row.UpdatedAt.Time,
 			},

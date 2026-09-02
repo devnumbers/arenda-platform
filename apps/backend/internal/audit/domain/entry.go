@@ -132,6 +132,15 @@ const (
 	// (the extended ADR 0020 gap); it has no action here.
 	ActionOperationPaid Action = "operation.paid"
 
+	// ActionContactCreated and its neighbours record the Contacts context
+	// user mutations (ADR 0051, ticket #506): in-tx fail-safe. The context
+	// never carries the contact's PII (names, phone, email) — ids and field
+	// names only. The property_contact.* vocabulary above belongs to the
+	// demolished ADR 0026 surface and stays for the historical audit rows.
+	ActionContactCreated Action = "contact.created"
+	ActionContactUpdated Action = "contact.updated"
+	ActionContactDeleted Action = "contact.deleted"
+
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
@@ -179,7 +188,9 @@ const (
 	EntityOperationCategory        EntityType = "operation_category"
 	// EntityPayment is a payment rule of the Payments context (ADR 0047):
 	// the rule itself, not its materialized operations.
-	EntityPayment             EntityType = "payment"
+	EntityPayment EntityType = "payment"
+	// EntityContact is a contact card of the Contacts context (ADR 0051).
+	EntityContact             EntityType = "contact"
 	EntitySubscription        EntityType = "subscription"
 	EntityPaymentMethod       EntityType = "payment_method"
 	EntitySubscriptionPayment EntityType = "subscription_payment"
