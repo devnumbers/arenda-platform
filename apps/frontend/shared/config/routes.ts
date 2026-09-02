@@ -37,6 +37,10 @@ export const ROUTES = {
   propertyOperationsExpense: (id: string) => `/properties/${id}/operations/expense`,
   /** Поиск по операциям объекта (Figma 1494-61633…; экран — тикет #476). */
   propertyOperationsSearch: (id: string) => `/properties/${id}/operations/search`,
+  /** Страницы выбора периода и категорий (#477, Figma 1495-64015,
+   * 1502-65940, 1502-66758 / 1506-72116, 1510-74149). */
+  propertyOperationsPeriod: (id: string) => `/properties/${id}/operations/period`,
+  propertyOperationsCategories: (id: string) => `/properties/${id}/operations/categories`,
   /** Просмотр проекции будущего вхождения (чисто фронт, без id операции). */
   propertyPaymentProjectedOperation: (id: string, paymentId: string, date: string) =>
     `/properties/${id}/payments/${paymentId}/operations/projected/${date}`,

@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowSLeft, ArrowSRight, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
@@ -16,9 +16,12 @@ import {
 import {
   defaultOperationsPeriod,
   groupOperationsByDate,
+  operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsMonthIndex,
   operationsMonthOf,
+  operationsPeriodDefaultChipLabel,
+  operationsPeriodRangeChipLabel,
   shiftOperationsPeriod,
   useOperationsFilters,
   usePropertyOperationsScopedPaged,
@@ -26,7 +29,7 @@ import {
 } from '@/features/payments';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import { LoadingMoreIndicator, OperationsDateList } from './operations-list';
-import { OperationsFiltersArea } from './operations-filters-area';
+import { OperationsFilterChips } from './operations-filter-chips';
 
 /** Копия экрана по направлению (Figma 1494-61191 / 1492-59865). */
 const SCREEN_COPY = {
@@ -54,7 +57,8 @@ export function OperationsOfTypeScreen({
   readonly type: keyof typeof SCREEN_COPY;
 }): JSX.Element {
   const router = useRouter();
-  const { filters, applyPeriod, applyCategories } = useOperationsFilters();
+  const pathname = usePathname();
+  const { filters, applyPeriod } = useOperationsFilters();
 
   const today = clientTodayIso();
   const period = filters.period ?? defaultOperationsPeriod(today);
@@ -100,6 +104,23 @@ export function OperationsOfTypeScreen({
   const openOperation = (operation: PaymentOperation): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
 
+  const openFilters = (which: 'period' | 'categories'): void => {
+    const params = new URLSearchParams();
+    if (filters.period !== null) {
+      params.set('from', filters.period.from);
+      params.set('to', filters.period.to);
+    }
+    if (filters.categories.length > 0) {
+      params.set('category', filters.categories.join(','));
+    }
+    params.set('return', pathname);
+    const base =
+      which === 'period'
+        ? ROUTES.propertyOperationsPeriod(propertyId)
+        : ROUTES.propertyOperationsCategories(propertyId);
+    router.push(`${base}?${params.toString()}`);
+  };
+
   return (
     <>
       <TopNav
@@ -123,15 +144,18 @@ export function OperationsOfTypeScreen({
 
       <PageContent>
         <div className="flex flex-col gap-6 pt-4">
-          {/* Чипы и шиты фильтров — как на главном (Figma 1502:65149):
-           * период следует за листанием, состояние живёт в адресе. */}
-          <OperationsFiltersArea
-            period={period}
-            periodExplicit={filters.period !== null}
-            categories={filters.categories}
-            categoryRows={categoryRows}
-            onApplyPeriod={applyPeriod}
-            onApplyCategories={applyCategories}
+          {/* Чипы фильтров — как на главном (Figma 1502:65149): период
+           * следует за листанием; выбор — отдельные страницы (#477). */}
+          <OperationsFilterChips
+            periodLabel={
+              filters.period !== null
+                ? operationsPeriodRangeChipLabel(period)
+                : operationsPeriodDefaultChipLabel(period)
+            }
+            categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
+            categoriesActive={filters.categories.length > 0}
+            onOpenPeriod={() => openFilters('period')}
+            onOpenCategories={() => openFilters('categories')}
           />
 
           {pending && (

@@ -10,7 +10,6 @@ import {
   operationsFiltersParams,
   operationsPeriodBoundLabel,
   operationsPeriodDefaultChipLabel,
-  operationsPeriodMonths,
   operationsPeriodRangeChipLabel,
   pickOperationsPeriodDay,
   readOperationsFilters,
@@ -209,27 +208,6 @@ describe('черновик выбора периода', () => {
       start: '2026-09-05',
       end: null,
     });
-  });
-});
-
-describe('operationsPeriodMonths', () => {
-  it('стек: от старта выбора до текущего месяца + 2 приглушённых будущих (Figma 1495-64015)', () => {
-    const months = operationsPeriodMonths({ start: '2025-01-01', end: '2026-01-01' }, TODAY);
-    expect(months[0]).toEqual({ year: 2024, month: 9 });
-    expect(months[months.length - 1]).toEqual({ year: 2026, month: 10 });
-    expect(months).toHaveLength(26);
-  });
-
-  it('без давнего выбора — окно 24 месяца назад, выбор его не расширяет', () => {
-    const months = operationsPeriodMonths({ start: '2026-09-01', end: null }, TODAY);
-    expect(months[0]).toEqual({ year: 2024, month: 9 });
-    expect(months[months.length - 1]).toEqual({ year: 2026, month: 10 });
-    expect(months).toHaveLength(26);
-  });
-
-  it('давний выбор расширяет стек ровно до своего старта', () => {
-    const months = operationsPeriodMonths({ start: '2024-02-14', end: null }, TODAY);
-    expect(months[0]).toEqual({ year: 2024, month: 1 });
   });
 });
 

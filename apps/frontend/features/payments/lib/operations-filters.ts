@@ -1,14 +1,27 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
 import { formatDayMonth } from '@/entities/payment';
+import { safeInternalPath } from '@/shared/lib/safe-internal-path';
 import { daysInMonth } from '@/shared/ui/design/month-grid';
 import {
-  operationsMonthIndex,
   operationsMonthIso,
   operationsMonthOf,
   operationsMonthRange,
   shiftOperationsMonth,
-  type OperationsMonth,
 } from './operations-month';
+
+/**
+ * Куда возвращаться со страниц выбора фильтров (#477): только маршруты
+ * операций того же объекта (страница открывается разными списками —
+ * главным и направлениями), иначе — главный список.
+ */
+export function resolveFilterReturnPath(raw: string | null, propertyId: string): string {
+  const prefix = `/properties/${propertyId}/operations`;
+  const candidate = safeInternalPath(raw);
+  if (candidate !== null && candidate.startsWith(prefix)) {
+    return candidate;
+  }
+  return prefix;
+}
 
 /**
  * Фильтры период/категории экранов «Операции объекта» (#477, Figma
@@ -214,27 +227,6 @@ export function pickOperationsPeriodDay(
 /** Завершённый период черновика: без конца — один день старта. */
 export function settledOperationsPeriod(draft: OperationsPeriodDraft): OperationsPeriod {
   return { from: draft.start, to: draft.end ?? draft.start };
-}
-
-/**
- * Стек месяцев шита периода: от старта выбора (но не глубже окна 24
- * месяца от «сегодня») до текущего месяца плюс два приглушённых будущих —
- * будущее видно и недоступно (Figma 1495-64015: Ноябрь, Декабрь, Январь).
- */
-export function operationsPeriodMonths(
-  draft: OperationsPeriodDraft,
-  today: IsoDate,
-): ReadonlyArray<OperationsMonth> {
-  const current = operationsMonthOf(today);
-  const anchor = Math.min(
-    operationsMonthIndex(operationsMonthOf(draft.start)),
-    operationsMonthIndex(current) - 23,
-  );
-  const last = operationsMonthIndex(current) + 2;
-  const anchorMonth: OperationsMonth = { year: Math.floor(anchor / 12), month: anchor % 12 };
-  return Array.from({ length: last - anchor + 1 }, (_, index) =>
-    shiftOperationsMonth(anchorMonth, index),
-  );
 }
 
 /** Строка шита категорий: слаг собирает оба направления в одну сумму. */
