@@ -9,6 +9,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - [Identity](./apps/backend/internal/identity/CONTEXT.md) — accounts, sessions, user roles (Owner, Admin).
 - [Properties](./apps/backend/internal/properties/CONTEXT.md) — property cards only: photos, contacts, attributes, archive. The leases/operations domain was removed for a full rewrite (ADR 0046).
 - [Payments](./apps/backend/internal/payments/CONTEXT.md) — payment rules and operation occurrences per property: income/expense record-keeping, auto pay, overdue debt, pauses (ADR 0047).
+- [Tasks](./apps/backend/internal/tasks/CONTEXT.md) — task rules and task occurrences per property: manual to-do tracking; overdue and «undated» are computed states, the completed journal survives rule deletion (ADR 0051).
 - [Notifications](./apps/backend/internal/notifications/CONTEXT.md) — delivery channels (email, Web Push), per-channel preferences, the `subscription_grace` event with direct sending, and the grace worker.
 - [Billing](./apps/backend/internal/billing/CONTEXT.md) — tariffs, subscriptions, payment methods, T-Kassa integration.
 - [Access](./apps/backend/internal/access/CONTEXT.md) — property sharing, member roles, derived object access.
@@ -21,6 +22,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - **Identity → Access**: Identity emits `UserRegistered` when a new account is created; Access consumes it to activate shares issued to a previously-unregistered email.
 - **Properties ↔ Access**: Access governs who can view/edit properties.
 - **Properties → Payments**: a payment and its operations belong to exactly one property (`property_id`); access to them follows the property access roles (ADR 0028). Property lifecycle interplay (archive/delete) is decided with the payments schema (ADR 0047, ticket #446).
+- **Properties → Tasks**: a task rule and its tasks belong to exactly one property (`property_id`); access to them follows the property access roles (ADR 0028). Archive is read-only for tasks (the tick skips archived properties); deletion is a total cascade (ADR 0051).
 - **Properties → Billing**: Active property count feeds subscription tariff limits.
 - **Billing → Access**: Downgrade/grace-period may suspend shared access when limits shrink.
 - **All → Audit**: Every context records user/admin/system actions to the audit log.

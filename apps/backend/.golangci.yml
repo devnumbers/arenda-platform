@@ -127,6 +127,8 @@ linters:
               desc: domain must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters
               desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters
+              desc: domain must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters
               desc: domain must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters
@@ -170,6 +172,8 @@ linters:
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters
               desc: application layer must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters
               desc: application layer must not depend on adapters
             - pkg: github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters
               desc: application layer must not depend on adapters

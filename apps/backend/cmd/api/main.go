@@ -109,6 +109,15 @@ func run() error {
 		return err
 	}
 
+	// 7.6 Tasks (ADR 0051): the task rule CRUD service, the task use cases
+	//     and the materialization tick service with its own hourly worker
+	//     loop; wired after access so the membership-aware policy resolves
+	//     the actor/scope matrix (ADR 0028).
+	tasksMod, err := wire.WireTasks(p)
+	if err != nil {
+		return err
+	}
+
 	// 8. Cross-module user_registered subscribers.
 	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
 
@@ -129,7 +138,7 @@ func run() error {
 	// 11. Popups service.
 	popupsMod := wire.WirePopups(p)
 
-	// 12. Background workers (4 goroutines). Started before the HTTP server so
+	// 12. Background workers (5 goroutines). Started before the HTTP server so
 	//     they are live while serving. The Web Push sender was constructed in
 	//     step 9 together with the grace notification delivery.
 	workers := wire.NewWorkers(
@@ -139,6 +148,7 @@ func run() error {
 		identityMod.AttemptRepo,
 		billingMod.Services.Workers,
 		paymentsMod.TickService,
+		tasksMod.TickService,
 	)
 
 	// 13. HTTP rate limiters.
@@ -173,6 +183,8 @@ func run() error {
 		AddressSuggester:         propertiesMod.DadataClient,
 		PropertyPayments:         paymentsMod.PaymentService,
 		PropertyOperations:       paymentsMod.OperationService,
+		PropertyTaskRules:        tasksMod.RuleService,
+		PropertyTasks:            tasksMod.TaskService,
 		Access:                   accessMod.AccessService,
 		Invitations:              accessMod.InvitationService,
 		NotificationPreferences:  notificationsMod.PreferenceService,

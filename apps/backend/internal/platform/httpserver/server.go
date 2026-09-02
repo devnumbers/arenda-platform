@@ -28,6 +28,8 @@ import (
 	propertieshttp "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/http"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	taskshttp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters/http"
+	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -61,6 +63,8 @@ type Deps struct {
 	AddressSuggester         propertiesapp.AddressSuggester
 	PropertyPayments         *paymentsapp.PaymentService
 	PropertyOperations       *paymentsapp.OperationService
+	PropertyTaskRules        *tasksapp.RuleService
+	PropertyTasks            *tasksapp.TaskService
 	Access                   *accessapp.AccessService
 	Invitations              *accessapp.InvitationService
 	NotificationPreferences  *notificationsapp.PreferenceService
@@ -157,6 +161,8 @@ func New(deps Deps) http.Handler {
 		deps.AdminSubscriptions, deps.Logger)
 	paymentHandlers := paymentshttp.NewPaymentHandlers(deps.PropertyPayments, deps.Logger)
 	operationHandlers := paymentshttp.NewOperationsHandlers(deps.PropertyOperations, deps.Logger)
+	taskRuleHandlers := taskshttp.NewRuleHandlers(deps.PropertyTaskRules, deps.Logger)
+	taskHandlers := taskshttp.NewTaskHandlers(deps.PropertyTasks, deps.Logger)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
 
@@ -171,6 +177,8 @@ func New(deps Deps) http.Handler {
 		BillingHandlers:                billingHandlers,
 		PaymentHandlers:                paymentHandlers,
 		OperationsHandlers:             operationHandlers,
+		RuleHandlers:                   taskRuleHandlers,
+		TaskHandlers:                   taskHandlers,
 		AdminHandlers:                  adminHandlers,
 		ClientErrorsHandlers:           clientErrorsHandlers,
 	}
@@ -292,6 +300,8 @@ type composedHandler struct {
 	*billinghttp.BillingHandlers
 	*paymentshttp.PaymentHandlers
 	*paymentshttp.OperationsHandlers
+	*taskshttp.RuleHandlers
+	*taskshttp.TaskHandlers
 	*adminhttp.AdminHandlers
 	*httpsupport.ClientErrorsHandlers
 }

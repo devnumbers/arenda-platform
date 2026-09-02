@@ -51,16 +51,15 @@ func TestPaymentsTickWorker_Tick_LogsCompletion(t *testing.T) {
 
 	now := time.Date(2026, 8, 25, 20, 0, 0, 0, time.UTC)
 	svc := &fakePaymentsTicker{}
-	w := NewPaymentsTickWorker(nil, nil, fakeClockForWorker{now: now}, time.Hour, logger)
-	w.ticker = svc
+	w := NewPaymentsTickWorker(svc, nil, fakeClockForWorker{now: now}, time.Hour, logger)
 
 	if err := w.tick(context.Background()); err != nil {
 		t.Fatalf("tick error: %v", err)
 	}
 
 	logs := logBuf.String()
-	if !strings.Contains(logs, "payments tick sweep completed") {
-		t.Errorf("expected completion log, got:\n%s", logs)
+	if !strings.Contains(logs, `worker="payments tick"`) || !strings.Contains(logs, "zone tick sweep completed") {
+		t.Errorf("expected completion log for the payments worker, got:\n%s", logs)
 	}
 	// The sweep runs on the clock's instant, not on time.Now — the zone's
 	// "today" must be reproducible.
@@ -77,8 +76,7 @@ func TestPaymentsTickWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 
 	sensitive := testSensitivePayload
 	svc := &fakePaymentsTicker{err: errors.New("zone sweep failed: " + sensitive)}
-	w := NewPaymentsTickWorker(nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
-	w.ticker = svc
+	w := NewPaymentsTickWorker(svc, nil, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 
 	if err := w.tick(context.Background()); err == nil {
 		t.Fatal("expected tick to return error")
@@ -90,8 +88,8 @@ func TestPaymentsTickWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 			t.Errorf("log contains sensitive substring %q:\n%s", s, logs)
 		}
 	}
-	if !strings.Contains(logs, "payments tick sweep failed") {
-		t.Errorf("expected sweep failed log, got:\n%s", logs)
+	if !strings.Contains(logs, "zone tick sweep failed") || !strings.Contains(logs, `worker="payments tick"`) {
+		t.Errorf("expected sweep failed log for the payments worker, got:\n%s", logs)
 	}
 }
 
@@ -113,12 +111,11 @@ func TestPaymentsTickWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 	started := make(chan struct{}, 1)
 	delay := make(chan struct{})
 
-	w := NewPaymentsTickWorker(nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
-	w.ticker = &delayedPaymentsTicker{
+	w := NewPaymentsTickWorker(&delayedPaymentsTicker{
 		fakePaymentsTicker: fakePaymentsTicker{},
 		started:            started,
 		delay:              delay,
-	}
+	}, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
 
 	tickDone := make(chan error, 1)
 	go func() {

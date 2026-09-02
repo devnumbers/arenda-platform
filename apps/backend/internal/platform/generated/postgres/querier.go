@@ -24,6 +24,10 @@ type Querier interface {
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)).
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
+	// «Выполнить»: the completion fact stamped on the still-active task; rows
+	// affected = 0 surfaces as ErrAlreadyCompleted (the use case has already
+	// proven existence under the property lock).
+	CompleteTask(ctx context.Context, arg CompleteTaskParams) (int64, error)
 	// Occupied recipient tariff slots: memberships on archived properties do not
 	// occupy a slot (issue #163).
 	CountActiveMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
@@ -50,6 +54,9 @@ type Querier interface {
 	// hidden_shared_count badge). Memberships on archived properties are excluded
 	// (issue #163): those objects are hidden by the archive, not by the tariff.
 	CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// The total count of one bucket — the «Выполненные N» counter (false =
+	// active tasks, true = the completed journal).
+	CountTasksByProperty(ctx context.Context, arg CountTasksByPropertyParams) (int64, error)
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
 	CountUsersTotalAdmin(ctx context.Context) (int64, error)
@@ -80,8 +87,14 @@ type Querier interface {
 	// Admin tariff creation (issue #256). The name is UNIQUE; a duplicate surfaces
 	// as a unique violation the adapter narrows to ErrAlreadyExists.
 	CreateTariff(ctx context.Context, arg CreateTariffParams) (Tariff, error)
+	CreateTaskRule(ctx context.Context, arg CreateTaskRuleParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
+	// «Удалить все выполненные» (resolution #497): the completed tasks of the
+	// property's deleted rules (rule_id IS NULL) are removed forever. The
+	// completed tasks of live rules stay — they hold the tick's dedup keys, and
+	// clearing them would re-materialize the rule's whole past (ADR 0051).
+	DeleteCompletedJournal(ctx context.Context, arg DeleteCompletedJournalParams) (int64, error)
 	// The hygiene batch (ticket #433): sessions past their lifetime, whatever
 	// their status — an expired session never produces a payment method, and the
 	// only later read of an old row is the binding limit's sliding window, which
@@ -97,6 +110,10 @@ type Querier interface {
 	// them all — the rule is paused or ended, no future planned may remain
 	// (ADR 0049 §2).
 	DeleteFuturePlannedExcept(ctx context.Context, arg DeleteFuturePlannedExceptParams) (int64, error)
+	// Future rebuild in one statement: remove every uncompleted strictly future
+	// task of the rule except the single allowed one. A NULL keep removes them
+	// all — an undated rule keeps no dated future (stale rows from rule edits).
+	DeleteFutureTasksExcept(ctx context.Context, arg DeleteFutureTasksExceptParams) (int64, error)
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
@@ -127,10 +144,24 @@ type Querier interface {
 	// Delete a push subscription by endpoint scoped to a user. Returns 0 rows when
 	// the subscription does not exist or belongs to another user (404 in the API).
 	DeletePushSubscriptionByEndpointAndUser(ctx context.Context, arg DeletePushSubscriptionByEndpointAndUserParams) (int64, error)
+	// The edit invalidation (resolution #496): the rule's uncompleted tasks that
+	// have not fallen due yet — the undated one and the strictly future ones —
+	// are removed; the in-transaction tick stands the single future again with
+	// fresh snapshots. Already due and completed tasks keep their frozen
+	// snapshots.
+	DeleteRuleNotDueUncompleted(ctx context.Context, arg DeleteRuleNotDueUncompletedParams) error
+	// The rule deletion semantics (resolution #496): every uncompleted task of
+	// the rule — planned, overdue, today's and the single future — is physically
+	// removed; completed rows stay in the journal.
+	DeleteRuleUncompleted(ctx context.Context, ruleID pgtype.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error
 	DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteStaleLoginAttemptsBatchParams) (int64, error)
+	// The hard rule deletion (resolution #496): the completed journal keeps its
+	// rows with rule_id set to NULL by the FK; the uncompleted tasks are
+	// physically removed by DeleteRuleUncompleted before this runs.
+	DeleteTaskRule(ctx context.Context, arg DeleteTaskRuleParams) error
 	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
 	GetAuditLogByIDAdmin(ctx context.Context, id pgtype.UUID) (AuditLog, error)
 	GetCardBindingSessionByRequestKeyForUpdate(ctx context.Context, arg GetCardBindingSessionByRequestKeyForUpdateParams) (CardBindingSession, error)
@@ -196,6 +227,17 @@ type Querier interface {
 	// locked FOR UPDATE before the rule is read or written, so mutation-vs-tick,
 	// mutation-vs-mutation and archive-vs-mutation serialize on one point.
 	GetPropertyForPaymentMutation(ctx context.Context, id pgtype.UUID) (GetPropertyForPaymentMutationRow, error)
+	// Tasks context queries: the task rule CRUD with the property serialization
+	// lock and the rule's task invalidations (ADR 0051). The property lock
+	// mirrors the payments precedent (ADR 0049 §3); the tick's persistence lives
+	// in tasks_tick.sql, the task reads/completions in tasks_tasks.sql.
+	// The payments-scoped read of the property (ADR 0028): the data owner and
+	// the archived flag, no lock.
+	GetPropertyForTask(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskRow, error)
+	// The mutation's serialization point: the property row locked inside the
+	// caller's transaction, so mutation-vs-tick, mutation-vs-mutation and
+	// archive-vs-mutation serialize on one point (ADR 0049 §3).
+	GetPropertyForTaskMutation(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskMutationRow, error)
 	GetPropertyMember(ctx context.Context, arg GetPropertyMemberParams) (PropertyMember, error)
 	GetPropertyMemberByPropertyAndUser(ctx context.Context, arg GetPropertyMemberByPropertyAndUserParams) (PropertyMember, error)
 	GetPropertyMemberInvitation(ctx context.Context, arg GetPropertyMemberInvitationParams) (PropertyMemberInvitation, error)
@@ -227,6 +269,21 @@ type Querier interface {
 	// dashboard live here. The payment, payment-method and webhook queries return
 	// with their tickets (#250, #251, #254).
 	GetTariffByName(ctx context.Context, name string) (Tariff, error)
+	// Tasks context queries: the task reads, the completion toggle and the
+	// «Удалить все выполненные» journal clear (ADR 0051, resolutions #496/#497).
+	// Rule CRUD lives in tasks_rules.sql, the tick's persistence in
+	// tasks_tick.sql.
+	// The nested path task→property is part of the key: a foreign or re-hung row
+	// is the privacy 404.
+	GetTask(ctx context.Context, arg GetTaskParams) (Task, error)
+	// The data owner's IANA timezone (ADR 0048): the tick's "today" and the
+	// listings' computed buckets are resolved in the property owner's timezone.
+	// NOT NULL with the 'Europe/Moscow' default (migration 000088);
+	// IANA-validated on write.
+	GetTaskOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
+	// The nested path rule→property is part of the key: a foreign or re-hung
+	// row is the privacy 404.
+	GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (TaskRule, error)
 	GetUserByEmail(ctx context.Context, dollar_1 string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
@@ -243,6 +300,13 @@ type Querier interface {
 	// repeated run inserts nothing. Always planned — the auto-pay closes today's
 	// occurrence separately, strictly on its day (ADR 0049 §2).
 	InsertMaterializedOperation(ctx context.Context, arg InsertMaterializedOperationParams) error
+	// Idempotent by the partial unique (rule_id, due_date): a concurrent or
+	// repeated run inserts nothing. Always uncompleted — the completion is a
+	// manual act only.
+	InsertMaterializedTask(ctx context.Context, arg InsertMaterializedTaskParams) error
+	// The undated task of an undated rule («Без срока»): idempotent by the
+	// partial unique (rule_id) over the undated rows.
+	InsertMaterializedUndatedTask(ctx context.Context, arg InsertMaterializedUndatedTaskParams) error
 	// ids and since are app-side (UUIDv7, the owner's today); recurrence is the
 	// domain-validated jsonb; the category arrives as a default-catalog slug in
 	// this slice (user_category_id stays NULL).
@@ -258,10 +322,16 @@ type Querier interface {
 	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
+	// The active tasks (uncompleted) of the property: the screen's main
+	// sections. Due order with the undated last — the client buckets sections
+	// against the owner's today delivered by the response.
+	ListActiveTasksByProperty(ctx context.Context, arg ListActiveTasksByPropertyParams) ([]Task, error)
 	// Admin tariff listing: every tariff including hidden ones (issue #247).
 	ListAllTariffs(ctx context.Context) ([]Tariff, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
+	// The completed journal of the property, newest completions first.
+	ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]Task, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	// The operations of one scope with pagination (limit/offset), the view status
@@ -344,6 +414,13 @@ type Querier interface {
 	// User-facing tariff listing: hidden tariffs stay referable by FK but are not
 	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)
+	// The hourly zone sweep of the tasks tick worker (ADR 0048 p.3): the
+	// distinct owner timezones having task rules on active/maintenance
+	// properties, with the data owners of each zone. One "today" is computed per
+	// zone in Go; owners without rules on such properties are not sweep targets.
+	// Stateless — every run re-lists, no per-zone or per-owner tick state is
+	// kept.
+	ListTaskTickZones(ctx context.Context) ([]ListTaskTickZonesRow, error)
 	// Dedup keys and statuses of the listed payments' operations: existence by
 	// (payment_id, date), status for the future-planned rebuild.
 	ListTickOperationStatuses(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickOperationStatusesRow, error)
@@ -354,6 +431,12 @@ type Querier interface {
 	// category's current name resolved for the materialization snapshot. Pauses
 	// are listed separately (ListTickPausesByPaymentIDs).
 	ListTickPaymentsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickPaymentsByOwnerRow, error)
+	// Dedup keys of the listed rules' tasks: existence by (rule_id, due_date)
+	// for dated rows and by rule_id alone for the undated one; the completed
+	// flag steers the single-future walk (completed-ahead rows are skipped).
+	ListTickTaskKeys(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickTaskKeysRow, error)
+	// The owner's task rules on non-archived properties — the tick's read side.
+	ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickTaskRulesByOwnerRow, error)
 	// The hourly zone sweep of the tick worker (ADR 0048 p.3): the distinct owner
 	// timezones having payment rules on active/maintenance properties, with the
 	// data owners of each zone. One "today" is computed per zone in Go; owners
@@ -377,6 +460,17 @@ type Querier interface {
 	// pair must not interleave with a concurrent switch, or the one-active
 	// partial unique index rejects the second committer.
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
+	// Tasks context queries: the materialization tick's persistence (ADR 0051,
+	// mirroring ADR 0049 §3). The owner-level rule listing, the task dedup keys,
+	// the idempotent inserts and the future rebuild. Rule CRUD lives in
+	// tasks_rules.sql, task reads/completions in tasks_tasks.sql.
+	// Serialization point of the tick: the run locks the owner's
+	// active/maintenance property rows, ordered by id, before reading or writing
+	// anything. Context mutations take the same lock per property through
+	// GetPropertyForTaskMutation, so update-vs-tick, archive-vs-tick and
+	// delete-vs-tick serialize on one point. Archived properties are skipped by
+	// the tick entirely.
+	LockTaskOwnerProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
 	// «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
@@ -399,6 +493,9 @@ type Querier interface {
 	SetPaymentFavorite(ctx context.Context, arg SetPaymentFavoriteParams) (int64, error)
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
+	// «Отменить выполнение»: the completion fact cleared; rows affected = 0
+	// surfaces as ErrNotCompleted.
+	UncompleteTask(ctx context.Context, arg UncompleteTaskParams) (int64, error)
 	UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error)
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set (since is never among it — server-set,
@@ -417,6 +514,10 @@ type Querier interface {
 	// flag. The name is immutable — user-facing tariff selection is by name, so a
 	// rename would silently change what existing references point at.
 	UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tariff, error)
+	// The editable fields of the rule (the anchor included: edit invalidates the
+	// not-yet-due uncompleted tasks, the in-transaction tick stands the single
+	// future again); id/owner_id/property_id never move.
+	UpdateTaskRule(ctx context.Context, arg UpdateTaskRuleParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)

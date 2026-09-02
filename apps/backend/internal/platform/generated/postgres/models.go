@@ -424,6 +424,33 @@ type Tariff struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Task struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TaskRule struct {
+	ID         pgtype.UUID        `json:"id"`
+	OwnerID    pgtype.UUID        `json:"owner_id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	Title      string             `json:"title"`
+	Comment    pgtype.Text        `json:"comment"`
+	DueDate    pgtype.Date        `json:"due_date"`
+	DueTime    pgtype.Time        `json:"due_time"`
+	Repeat     string             `json:"repeat"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type User struct {
 	ID              pgtype.UUID        `json:"id"`
 	Phone           string             `json:"phone"`

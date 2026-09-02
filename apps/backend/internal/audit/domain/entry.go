@@ -132,6 +132,23 @@ const (
 	// (the extended ADR 0020 gap); it has no action here.
 	ActionOperationPaid Action = "operation.paid"
 
+	// ActionTaskRuleCreated and its neighbours record the Tasks context user
+	// mutations (ADR 0051, tickets #496/#498): in-tx fail-safe; the bulk tick
+	// never writes audit (the extended ADR 0020 gap). Rule deletion is hard —
+	// the completed journal survives with snapshots (resolution #496).
+	ActionTaskRuleCreated Action = "task_rule.created"
+	ActionTaskRuleUpdated Action = "task_rule.updated"
+	ActionTaskRuleDeleted Action = "task_rule.deleted"
+	// ActionTaskCompleted and ActionTaskUncompleted record the manual
+	// completion toggle: completed_date = today in the owner's timezone, and
+	// its revert — possible only while the rule lives (resolution #496).
+	ActionTaskCompleted   Action = "task.completed"
+	ActionTaskUncompleted Action = "task.uncompleted"
+	// ActionTaskCompletedCleared records «Удалить все выполненные»
+	// (resolution #497): the completed tasks of the property's deleted rules
+	// removed forever; Context carries the removed count, never titles.
+	ActionTaskCompletedCleared Action = "task.completed_cleared"
+
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
@@ -179,7 +196,12 @@ const (
 	EntityOperationCategory        EntityType = "operation_category"
 	// EntityPayment is a payment rule of the Payments context (ADR 0047):
 	// the rule itself, not its materialized operations.
-	EntityPayment             EntityType = "payment"
+	EntityPayment EntityType = "payment"
+	// EntityTaskRule is a task rule of the Tasks context (ADR 0051); the
+	// EntityTask covers both its materialized occurrences and the completed
+	// journal (the journal clear has no single entity id — Context.count).
+	EntityTaskRule            EntityType = "task_rule"
+	EntityTask                EntityType = "task"
 	EntitySubscription        EntityType = "subscription"
 	EntityPaymentMethod       EntityType = "payment_method"
 	EntitySubscriptionPayment EntityType = "subscription_payment"

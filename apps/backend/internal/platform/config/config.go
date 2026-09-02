@@ -66,6 +66,7 @@ type Config struct {
 	BillingWorkerInterval               time.Duration
 	PaymentReconciliationWorkerInterval time.Duration
 	PaymentsTickWorkerInterval          time.Duration
+	TasksTickWorkerInterval             time.Duration
 	IdentityCleanerInterval             time.Duration
 	IdentityCleanerRetention            time.Duration
 	LogSuccessfulRequests               bool
@@ -863,6 +864,12 @@ func (c *Config) loadSchedulerIntervals() error {
 	// above it is a domain decision, not an operational knob: deliberately
 	// not tunable through the environment.
 	c.PaymentsTickWorkerInterval = time.Hour
+
+	// The tasks tick cadence is fixed the same way as the payments one
+	// (ADR 0051, mirroring ADR 0048 p.3): one sweep over the owner timezones
+	// per hour, idempotent between the zones' midnights — a domain decision,
+	// deliberately not tunable through the environment.
+	c.TasksTickWorkerInterval = time.Hour
 	return nil
 }
 
