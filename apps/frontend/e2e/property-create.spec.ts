@@ -7,12 +7,18 @@ import {
 
 // Визард создания объекта: каркас флоу и шаг «Выбор категории» (#480,
 // Figma 1213-52111), шаг «Адрес» с подсказками (#481, Figma 1213-52017/
-// 52391, 1519-94336). Один маршрут /properties/new, шаги — клиентское
-// состояние, черновик переживает перезагрузку (sessionStorage).
+// 52391, 1519-94336), шаг «Характеристики» (#482, Figma 1218-54295) и
+// экран успеха (#483, Figma 1425-55788). Один маршрут /properties/new,
+// шаги — клиентское состояние, черновик переживает перезагрузку
+// (sessionStorage). Успех шагом не считается; с ?returnTo= он пропускается.
 //
 // Живые подсказки проверяются только при настроенном стабе Dadata
 // (DADATA_BASE_URL локального прогона): в CI ключа нет, endpoint тихо
 // деградирует — каркасные тесты от этого не зависят.
+//
+// Полный флоу создаёт объекты поверх трёх сидовых: подписка pro сида
+// (лимит 5) вмещает ровно два создания на прогон — новые сценарии
+// создания согласовывают с этим бюджетом.
 
 const dadataStubConfigured = process.env.DADATA_BASE_URL !== undefined;
 
@@ -166,4 +172,54 @@ test('шаг 2: черновик переживает перезагрузку, 
   await page.getByRole('button', { name: 'Очистить поле' }).click();
   await expect(address).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Продолжить' })).toBeHidden();
+});
+
+test('полный флоу: «Создать объект» ведёт на успех, «Открыть объект» — на карточку', async ({ page, seededUser }, testInfo) => {
+  await openWizard(page, seededUser);
+  await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Дом' }).click();
+  await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 2');
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  const name = page.getByRole('textbox', { name: 'Название объекта' });
+  await name.fill('Дом на Ленина');
+  await page.getByRole('button', { name: 'Создать объект' }).click();
+
+  // Успех (Figma 1425-55788): заголовок с названием, подзаголовок макета,
+  // пара кнопок (override владельца: «Добавить аренду» — заглушка); хедер
+  // без чипа шага — только крестик.
+  await expect(page.getByRole('heading', { name: 'Объект «Дом на Ленина» создан' })).toBeVisible();
+  await expect(page.getByText('Вы создали объект, теперь можете добавить аренду')).toBeVisible();
+  await expect(page.getByText(/шаг \d из/)).toHaveCount(0);
+  const openProperty = page.getByRole('button', { name: 'Открыть объект' });
+  await expect(page.getByRole('button', { name: 'Добавить аренду' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Закрыть' })).toBeVisible();
+
+  // Заглушка аренды: тост-объяснение, экран остаётся на месте.
+  await page.getByRole('button', { name: 'Добавить аренду' }).click();
+  await expect(page.getByText('Раздел «Аренда» скоро появится')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Объект «Дом на Ленина» создан' })).toBeVisible();
+  await captureScreen(page, testInfo, '05-success');
+
+  // «Открыть объект» ведёт на карточку созданного объекта (крестик —
+  // тот же переход, проверяется живой приёмкой).
+  await openProperty.click();
+  await expect(page).toHaveURL(/\/properties\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole('heading', { name: 'Дом на Ленина' })).toBeVisible();
+});
+
+test('returnTo: успех пропускается, redirect на returnTo с propertyId', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/properties/new?returnTo=%2Fproperties');
+  await expect(page.getByRole('heading', { name: 'Выберите, какая у вас недвижимость' })).toBeVisible();
+
+  await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Гараж' }).click();
+  await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Садовая, 3');
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('textbox', { name: 'Название объекта' }).fill('Гараж на Садовой 3');
+  await page.getByRole('button', { name: 'Создать объект' }).click();
+
+  // Экран успеха пропущен: визард заменяет запись истории на returnTo,
+  // дополненный параметром propertyId созданного объекта.
+  await expect(page).toHaveURL(/\/properties\?propertyId=[0-9a-f-]{36}$/);
+  await expect(page.getByRole('heading', { name: 'Мои объекты' })).toBeVisible();
+  await expect(page.getByText('Гараж на Садовой 3', { exact: true })).toBeVisible();
 });

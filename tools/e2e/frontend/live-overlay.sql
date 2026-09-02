@@ -82,19 +82,3 @@ SET date = EXCLUDED.date,
     paid_date = EXCLUDED.paid_date,
     status = EXCLUDED.status;
 
--- Живые приёмки создания объекта (#480): у сид-владельца дефолтный тариф
--- basic (active_property_limit = 1), при трёх засеянных объектах вход
--- «Добавить объект» превращается в «Сменить тариф». Подписка pro (лимит 5)
--- делает кнопку активной. Тариф ищется по имени: id тарифов генерирует
--- бэкенд при сида. Приёмки, которым нужен исчерпанный лимит, ставят своё
--- поверх.
-INSERT INTO user_subscriptions (id, user_id, tariff_id, source, status,
-                                current_period)
-VALUES ('99999999-9999-4999-8999-999999999901',
-        '11111111-1111-4111-8111-111111111111',
-        (SELECT id FROM tariffs WHERE name = 'pro'),
-        'service', 'active', 'month')
-ON CONFLICT (id) DO UPDATE
-SET tariff_id = EXCLUDED.tariff_id,
-    status = EXCLUDED.status,
-    current_period = EXCLUDED.current_period;

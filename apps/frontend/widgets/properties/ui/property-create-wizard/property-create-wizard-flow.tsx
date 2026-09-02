@@ -5,7 +5,7 @@ import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { fieldsForType, toWireAttributes, validateAttributes } from '@/features/property-attributes';
 import {
   buildPropertyCreateCommand,
@@ -26,11 +26,12 @@ import {
   TopNav,
   useTabBarSuppression,
 } from '@/shared/ui/design';
-import type { PropertyType } from '@/entities/property';
+import type { Property, PropertyType } from '@/entities/property';
 import { AddressStep } from './address-step';
 import { CategoryStep } from './category-step';
 import { CharacteristicsStep } from './characteristics-step';
 import { PropertyWizardBottomBar, PropertyWizardHeading } from './wizard-chrome';
+import { WizardSuccess } from './wizard-success';
 
 /**
  * Поток шагов визарда создания объекта (#480): клиентское состояние на
@@ -38,9 +39,15 @@ import { PropertyWizardBottomBar, PropertyWizardHeading } from './wizard-chrome'
  * незавершённый шаг черновика. Хедер шагов (Figma 1213-52111 /
  * 1213-52017): шаг 1 — крестик слева; шаги 2–3 — «назад» слева и крестик
  * справа; в центре чип «шаг N из 3». Шаг 3 «Характеристики» (#482) —
- * экран рендерится по каталогу и сабмитит POST /properties; успех ведёт
- * на карточку объекта (экран успеха — #483). Экран успеха шагом не
- * считается.
+ * экран рендерится по каталогу и сабмитит POST /properties; после
+ * успешного POST показывается экран успеха (#483, Figma 1425-55788) —
+ * он шагом не считается и черновик к тому моменту очищен. Хедер успеха —
+ * только крестик слева (без чипа), он ведёт на карточку созданного
+ * объекта; туда же ведёт кнопка «Открыть объект».
+ *
+ * С заданным returnTo (#483, контракт возврата в вызывающий флоу) экран
+ * успеха пропускается: визард заменяет запись истории на адрес returnTo,
+ * дополненный параметром propertyId созданного объекта.
  */
 
 // Порт каталога характеристик для сабмит-либы: реальные реализации
@@ -54,7 +61,13 @@ const attributeCatalog: PropertyAttributesPort = {
 const SUBMIT_ERROR_MESSAGE =
   'Не удалось создать объект. Проверьте соединение и попробуйте ещё раз';
 
-export function PropertyCreateWizardFlow(): JSX.Element {
+export type PropertyCreateWizardFlowProps = {
+  /** Санитизированный ?returnTo= маршрута: внутренний абсолютный путь.
+   * Задан — успеха не показываем, после создания уводим обратно. */
+  readonly returnTo?: string;
+};
+
+export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowProps): JSX.Element {
   const router = useRouter();
   const createProperty = useCreateProperty();
   const { draft, setDraft, clearDraft } = usePropertyCreateDraft();
@@ -63,6 +76,22 @@ export function PropertyCreateWizardFlow(): JSX.Element {
   useTabBarSuppression();
   const [step, setStep] = useState<PropertyCreateStep>(() => initialPropertyCreateStep(draft));
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [created, setCreated] = useState<Property | null>(null);
+
+  if (created !== null) {
+    return (
+      <>
+        <TopNav
+          leading={
+            <IconButton icon={<Cancel />} label="Закрыть" onClick={openCreatedProperty} />
+          }
+        />
+        <PageContent>
+          <WizardSuccess created={created} onOpen={openCreatedProperty} />
+        </PageContent>
+      </>
+    );
+  }
 
   return (
     <>
@@ -170,6 +199,15 @@ export function PropertyCreateWizardFlow(): JSX.Element {
     goBack(router, ROUTES.properties);
   }
 
+  /** Карточка созданного объекта — заменой записи истории (правило
+   * навигации): и крестик хедера успеха, и кнопка «Открыть объект». */
+  function openCreatedProperty(): void {
+    if (created === null) {
+      return;
+    }
+    router.replace(ROUTES.property(created.id));
+  }
+
   function navigateBack(): void {
     if (step > 1) {
       setStep((prev) => ((prev - 1) as PropertyCreateStep));
@@ -192,9 +230,13 @@ export function PropertyCreateWizardFlow(): JSX.Element {
     try {
       const property = await createProperty.mutateAsync(command);
       clearDraft();
-      // Создание сущности ведёт на её страницу заменой записи истории
-      // (правило навигации); экран успеха заменит этот переход (#483).
-      router.replace(ROUTES.property(property.id));
+      // Возврат в вызывающий флоу (например, будущего визарда операции):
+      // успех пропускается, объект передаётся параметром propertyId.
+      if (returnTo !== undefined) {
+        router.replace(buildReturnUrl(returnTo, { propertyId: property.id }));
+        return;
+      }
+      setCreated(property);
     } catch {
       setSubmitError(SUBMIT_ERROR_MESSAGE);
     }

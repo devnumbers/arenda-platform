@@ -16,7 +16,13 @@ import { PropertyCreateWizardFlow } from './property-create-wizard-flow';
 /** Ширины чипов скелета — по меткам категорий шага 1. */
 const SKELETON_CHIP_WIDTHS = [104, 104, 72, 208, 72, 88, 88, 136, 160] as const;
 
-export function PropertyCreateWizardScreen(): JSX.Element {
+export type PropertyCreateWizardScreenProps = {
+  /** Санитизированный ?returnTo= маршрута (sanitizeReturnTo на серверной
+   * странице): внутренний абсолютный путь возврата после создания. */
+  readonly returnTo?: string;
+};
+
+export function PropertyCreateWizardScreen({ returnTo }: PropertyCreateWizardScreenProps): JSX.Element {
   const { isLoaded } = usePropertyCreateDraft();
 
   if (!isLoaded) {
@@ -39,5 +45,5 @@ export function PropertyCreateWizardScreen(): JSX.Element {
     );
   }
 
-  return <PropertyCreateWizardFlow />;
+  return <PropertyCreateWizardFlow returnTo={returnTo} />;
 }

@@ -22,5 +22,10 @@ export {
   type PropertyAttributesPort,
 } from './lib/property-create-submit';
 export { addressSuggestionRow } from './lib/address-suggestion';
+export {
+  PROPERTY_CREATE_RENTAL_STUB_TOAST,
+  propertyCreateSuccessCopy,
+} from './lib/property-create-success';
+export { propertyTypeIcons } from './lib/property-type-icons';
 export { usePropertyCreateDraft } from './lib/use-property-create-draft';
 export { PropertyStatusBadge } from './ui/PropertyStatusBadge';
