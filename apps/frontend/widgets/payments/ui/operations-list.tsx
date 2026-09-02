@@ -69,13 +69,16 @@ export function OperationsEmptyPeriod(): JSX.Element {
 
 /** Строка операции (1332:61665, Row Button White): иконка категории с белым
  * кантом, название, знаковая сумма — доход зелёным с плюсом, расход тёмным
- * с минусом (Figma 1492:42480). */
+ * с минусом (Figma 1492:42480). Опциональный подзаголовок — дата в строках
+ * результатов поиска (Figma 1494-61679), списки по датам его не передают. */
 export function OperationRow({
   operation,
   onSelect,
+  subtitle,
 }: {
   readonly operation: PaymentOperation;
   readonly onSelect: () => void;
+  readonly subtitle?: ReactNode;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
   return (
@@ -83,6 +86,7 @@ export function OperationRow({
       className="px-3 py-3"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
       title={operation.title}
+      subtitle={subtitle}
       amountKopecks={
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }

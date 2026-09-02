@@ -953,7 +953,7 @@ paths:
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
         - $ref: '#/components/parameters/OperationsOffset'
-        - $ref: '#/components/parameters/TitleSearch'
+        - $ref: '#/components/parameters/OperationsSearch'
         - $ref: '#/components/parameters/OperationsTypeFilter'
         - $ref: '#/components/parameters/OperationsCategoriesFilter'
       responses:
@@ -984,6 +984,7 @@ paths:
         - $ref: '#/components/parameters/OperationsStatusFilter'
         - $ref: '#/components/parameters/OperationsDateFrom'
         - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsSearch'
         - $ref: '#/components/parameters/OperationsTypeFilter'
       responses:
         '200':
@@ -2790,6 +2791,21 @@ components:
       description: >-
         Case-insensitive substring search by title. A missing or empty value
         disables the filter; LIKE metacharacters in the value are literals.
+      schema:
+        type: string
+    OperationsSearch:
+      name: search
+      in: query
+      required: false
+      description: >-
+        Case-insensitive substring search over the operation title and the
+        operation's category snapshot. A query made only of digits and amount
+        separators (spaces, commas, points, dashes) additionally matches the
+        amount: its digits are searched inside the amount's decimal digits
+        (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽,
+        while a query holding any letter never matches amounts. A missing or
+        empty value disables the filter; LIKE metacharacters in the value are
+        literals.
       schema:
         type: string
     OperationsTypeFilter:

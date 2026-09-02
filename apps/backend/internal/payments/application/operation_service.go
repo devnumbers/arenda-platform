@@ -57,6 +57,10 @@ type OperationsSummaryQuery struct {
 	Type     *domain.PaymentType
 	DateFrom *time.Time
 	DateTo   *time.Time
+	// Search is the listing's search predicate (OperationsListQuery.Search):
+	// the summary of the searched scope feeds the search screen's matched
+	// category chips (ticket #476).
+	Search string
 	// Today carries the owner's today the overdue semantics are resolved
 	// against; set by the service, never by callers.
 	Today time.Time

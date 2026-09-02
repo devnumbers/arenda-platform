@@ -1,9 +1,12 @@
+import { Suspense, type JSX } from 'react';
 import type { Metadata } from 'next';
-import { OperationsSearchStubScreen } from './operations-search-stub-screen';
+import { OperationsSearchScreen } from '@/widgets/payments';
 
 /**
- * Временная заглушка поиска операций (иконка поиска «Операций объекта»,
- * #474). Полноценный экран — тикет #476.
+ * Экран поиска операций объекта (#476, Figma 1494-61633…): хедер-поиск с
+ * чипами совпавших категорий и списком операций. Ввод живёт в query-параметре
+ * `q` (useSearchQueryState), поэтому клиентский экран со useSearchParams
+ * стоит за Suspense-границей — требование App Router.
  */
 
 export const metadata: Metadata = {
@@ -16,8 +19,12 @@ type OperationsSearchPageProps = {
 
 export default async function PropertyOperationsSearchRoutePage({
   params,
-}: OperationsSearchPageProps) {
+}: OperationsSearchPageProps): Promise<JSX.Element> {
   const { id } = await params;
 
-  return <OperationsSearchStubScreen propertyId={id} />;
+  return (
+    <Suspense fallback={null}>
+      <OperationsSearchScreen propertyId={id} />
+    </Suspense>
+  );
 }

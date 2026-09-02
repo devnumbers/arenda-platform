@@ -149,6 +149,7 @@ func listOperationsParams(
 	params.DateFrom = pgconv.DatePtrToPgtype(q.DateFrom)
 	params.DateTo = pgconv.DatePtrToPgtype(q.DateTo)
 	params.Search = escapeLikePattern(q.Search)
+	params.SearchDigits = searchAmountDigits(q.Search)
 	params.Type = operationsTypeFilter(q.Type)
 	params.Categories = joinCategorySlugs(q.Categories)
 	params.Order = operationsOrder(q.Asc)
@@ -168,13 +169,17 @@ func (s *OperationStore) SummarizeByProperty(
 ) (application.OperationsSummary, error) {
 	// The totals deliberately carry no direction filter — the contract
 	// reports both directions whatever the categories are narrowed to.
+	search := escapeLikePattern(q.Search)
+	searchDigits := searchAmountDigits(q.Search)
 	params := postgres.SumOperationTotalsParams{
-		Owner:    pgconv.UUIDToPgtype(scope),
-		Property: pgconv.UUIDToPgtype(propertyID),
-		Status:   operationsStatusFilter(q.Status),
-		Today:    pgconv.DateToPgtype(q.Today),
-		DateFrom: pgconv.DatePtrToPgtype(q.DateFrom),
-		DateTo:   pgconv.DatePtrToPgtype(q.DateTo),
+		Owner:        pgconv.UUIDToPgtype(scope),
+		Property:     pgconv.UUIDToPgtype(propertyID),
+		Status:       operationsStatusFilter(q.Status),
+		Today:        pgconv.DateToPgtype(q.Today),
+		DateFrom:     pgconv.DatePtrToPgtype(q.DateFrom),
+		DateTo:       pgconv.DatePtrToPgtype(q.DateTo),
+		Search:       search,
+		SearchDigits: searchDigits,
 	}
 	totals, err := s.q().SumOperationTotals(ctx, params)
 	if err != nil {
@@ -182,13 +187,15 @@ func (s *OperationStore) SummarizeByProperty(
 	}
 
 	categories, err := s.q().SumOperationsByCategory(ctx, postgres.SumOperationsByCategoryParams{
-		Owner:    params.Owner,
-		Property: params.Property,
-		Status:   params.Status,
-		Today:    params.Today,
-		DateFrom: params.DateFrom,
-		DateTo:   params.DateTo,
-		Type:     operationsTypeFilter(q.Type),
+		Owner:        params.Owner,
+		Property:     params.Property,
+		Status:       params.Status,
+		Today:        params.Today,
+		DateFrom:     params.DateFrom,
+		DateTo:       params.DateTo,
+		Search:       search,
+		SearchDigits: searchDigits,
+		Type:         operationsTypeFilter(q.Type),
 	})
 	if err != nil {
 		return application.OperationsSummary{}, fmt.Errorf("sum operations by category of property %s: %w", propertyID, err)
@@ -266,6 +273,48 @@ func operationsOrder(asc bool) string {
 		return "asc"
 	}
 	return "desc"
+}
+
+// amountQuerySeparators are the characters besides digits a query may carry
+// and still count as an amount query: the thousand separators and the decimal
+// comma/point of the display format and the minus of a negative amount —
+// regular, nbsp and narrow-nbsp spaces; comma and point; the minus family
+// (hyphen, figure dash, en/em dash, minus sign).
+var amountQuerySeparators = func() map[rune]bool {
+	separators := map[rune]bool{}
+	for _, r := range []rune{
+		' ', '\u00a0', '\u202f',
+		',', '.',
+		'-', '\u2010', '\u2012', '\u2013', '\u2014', '\u2212',
+	} {
+		separators[r] = true
+	}
+	return separators
+}()
+
+// searchAmountDigits extracts the digits of a query that reads as an amount
+// (digits plus amount separators only, at least one digit): the SQL searches
+// them inside the operation amount's decimal digits in kopecks — the display
+// amount without separators, so «2 500» finds 2 500,00 ₽ and «2500,50» finds
+// 2 500,50 ₽ (ticket #476). Any letter switches the amount match off — a
+// word with a stray digit must not widen the search onto every amount. An
+// empty result disables the amount clause on the SQL side.
+func searchAmountDigits(q string) string {
+	hasDigit := false
+	var digits strings.Builder
+	for _, r := range strings.TrimSpace(q) {
+		switch {
+		case r >= '0' && r <= '9':
+			hasDigit = true
+			digits.WriteRune(r)
+		case !amountQuerySeparators[r]:
+			return ""
+		}
+	}
+	if !hasDigit {
+		return ""
+	}
+	return digits.String()
 }
 
 // paginationToInt32 narrows the validated pagination values onto SQL's LIMIT/

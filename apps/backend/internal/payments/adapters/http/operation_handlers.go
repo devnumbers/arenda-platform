@@ -326,7 +326,17 @@ func summarizeFromParams(
 		Type:     typ,
 		DateFrom: datePtrFromWire(params.DateFrom),
 		DateTo:   datePtrFromWire(params.DateTo),
+		Search:   derefString(params.Search),
 	}, nil
+}
+
+// derefString lifts an optional string parameter onto its value form; a
+// missing parameter is the empty no-filter value.
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // foldType decodes the direction filter onto the domain payment type; a

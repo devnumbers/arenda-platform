@@ -44,8 +44,8 @@ export type PaymentOperationOrder = 'asc' | 'desc';
 
 /**
  * Скоуп операций объекта для экранов «Операции объекта» (#474): статус,
- * направление, категории (слаги) и границы периода. Целиком уходит в ключ
- * react-query и в query-параметры запроса.
+ * направление, категории (слаги), границы периода и поисковый запрос
+ * (#476). Целиком уходит в ключ react-query и в query-параметры запроса.
  */
 export type PaymentOperationScope = {
   readonly status: PaymentOperationStatusFilter;
@@ -55,6 +55,9 @@ export type PaymentOperationScope = {
   /** Границы периода включительно, 'YYYY-MM-DD'. */
   readonly dateFrom?: string;
   readonly dateTo?: string;
+  /** Поиск операций (#476): подстрока по названию/категории, числовой
+   * запрос — и по сумме; '' и undefined — без поиска. */
+  readonly search?: string;
 };
 
 // features/payments
@@ -124,8 +127,9 @@ export const paymentOperationKeys = {
       scope.categories?.join(',') ?? '',
       scope.dateFrom ?? '',
       scope.dateTo ?? '',
+      scope.search ?? '',
     ] as const,
-  /** Сводка периода объекта (#474): статус/тип/период — часть ключа. */
+  /** Сводка периода объекта (#474): статус/тип/период/поиск — часть ключа. */
   summary: (propertyId: string, scope: PaymentOperationScope) =>
     [
       ...paymentOperationKeys.all,
@@ -135,6 +139,7 @@ export const paymentOperationKeys = {
       scope.type ?? '',
       scope.dateFrom ?? '',
       scope.dateTo ?? '',
+      scope.search ?? '',
     ] as const,
 };
 

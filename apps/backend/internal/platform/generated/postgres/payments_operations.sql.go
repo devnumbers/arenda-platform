@@ -147,31 +147,35 @@ WHERE op.owner_id = $1
   AND ($6::date IS NULL OR op.date >= $6)
   AND ($7::date IS NULL OR op.date <= $7)
   AND ($8::text = ''
-       OR op.title ILIKE '%' || $8::text || '%' ESCAPE '\')
-  AND ($9::text = '' OR op.type = $9::text)
-  AND ($10::text = ''
-       OR op.category_slug = ANY(string_to_array($10::text, ',')))
+       OR op.title ILIKE '%' || $8::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $8::text || '%' ESCAPE '\'
+       OR ($9::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $9::text || '%'))
+  AND ($10::text = '' OR op.type = $10::text)
+  AND ($11::text = ''
+       OR op.category_slug = ANY(string_to_array($11::text, ',')))
 ORDER BY
-  CASE WHEN $11::text = 'asc' THEN op.date END ASC,
-  CASE WHEN $11::text = 'desc' THEN op.date END DESC,
+  CASE WHEN $12::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $12::text = 'desc' THEN op.date END DESC,
   op.id DESC
-LIMIT $13 OFFSET $12
+LIMIT $14 OFFSET $13
 `
 
 type ListOperationsParams struct {
-	Owner      pgtype.UUID `json:"owner"`
-	Property   pgtype.UUID `json:"property"`
-	Payment    pgtype.UUID `json:"payment"`
-	Status     string      `json:"status"`
-	Today      pgtype.Date `json:"today"`
-	DateFrom   pgtype.Date `json:"date_from"`
-	DateTo     pgtype.Date `json:"date_to"`
-	Search     string      `json:"search"`
-	Type       string      `json:"type"`
-	Categories string      `json:"categories"`
-	Order      string      `json:"order"`
-	Offset     int32       `json:"offset"`
-	Limit      int32       `json:"limit"`
+	Owner        pgtype.UUID `json:"owner"`
+	Property     pgtype.UUID `json:"property"`
+	Payment      pgtype.UUID `json:"payment"`
+	Status       string      `json:"status"`
+	Today        pgtype.Date `json:"today"`
+	DateFrom     pgtype.Date `json:"date_from"`
+	DateTo       pgtype.Date `json:"date_to"`
+	Search       string      `json:"search"`
+	SearchDigits string      `json:"search_digits"`
+	Type         string      `json:"type"`
+	Categories   string      `json:"categories"`
+	Order        string      `json:"order"`
+	Offset       int32       `json:"offset"`
+	Limit        int32       `json:"limit"`
 }
 
 type ListOperationsRow struct {
@@ -193,10 +197,13 @@ type ListOperationsRow struct {
 
 // The operations of one scope with pagination (limit/offset), the view status
 // filter (” is any), an inclusive period on the operation date, the sort
-// direction, a case-insensitive substring search by title (” = no filter;
-// the application layer escapes the ILIKE metacharacters, ESCAPE '\'), the
-// direction filter (” is any) and the comma-separated category slugs filter
-// (” is any; rows without a category snapshot never match a slug).
+// direction, a search filter (” = no filter; the application layer escapes
+// the ILIKE metacharacters, ESCAPE '\'): a case-insensitive substring over
+// the title and the category snapshot — and, when the query reads as an
+// amount, its digits inside the amount's decimal digits in kopecks (the
+// display amount without separators; ticket #476), the direction filter (”
+// is any) and the comma-separated category slugs filter (” is any; rows
+// without a category snapshot never match a slug).
 // A NULL payment widens the scope from one rule to every rule of
 // the property: "planned" and "overdue" split the stored planned rows against
 // the owner's today — overdue is computed here from the same truth the
@@ -212,6 +219,7 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 		arg.DateFrom,
 		arg.DateTo,
 		arg.Search,
+		arg.SearchDigits,
 		arg.Type,
 		arg.Categories,
 		arg.Order,
@@ -291,16 +299,23 @@ WHERE op.owner_id = $1
   )
   AND ($5::date IS NULL OR op.date >= $5)
   AND ($6::date IS NULL OR op.date <= $6)
+  AND ($7::text = ''
+       OR op.title ILIKE '%' || $7::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $7::text || '%' ESCAPE '\'
+       OR ($8::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $8::text || '%'))
 GROUP BY op.type
 `
 
 type SumOperationTotalsParams struct {
-	Owner    pgtype.UUID `json:"owner"`
-	Property pgtype.UUID `json:"property"`
-	Status   string      `json:"status"`
-	Today    pgtype.Date `json:"today"`
-	DateFrom pgtype.Date `json:"date_from"`
-	DateTo   pgtype.Date `json:"date_to"`
+	Owner        pgtype.UUID `json:"owner"`
+	Property     pgtype.UUID `json:"property"`
+	Status       string      `json:"status"`
+	Today        pgtype.Date `json:"today"`
+	DateFrom     pgtype.Date `json:"date_from"`
+	DateTo       pgtype.Date `json:"date_to"`
+	Search       string      `json:"search"`
+	SearchDigits string      `json:"search_digits"`
 }
 
 type SumOperationTotalsRow struct {
@@ -315,7 +330,8 @@ type SumOperationTotalsRow struct {
 // report both directions (the contract: the type filter narrows only the
 // category breakdown). Types absent from the scope simply miss from the
 // result — the adapter reports them as zero. Cancelled tombstones never
-// count.
+// count. The search filter (ticket #476) is the listing's predicate — the
+// summary of the searched scope stays consistent with its list.
 func (q *Queries) SumOperationTotals(ctx context.Context, arg SumOperationTotalsParams) ([]SumOperationTotalsRow, error) {
 	rows, err := q.db.Query(ctx, sumOperationTotals,
 		arg.Owner,
@@ -324,6 +340,8 @@ func (q *Queries) SumOperationTotals(ctx context.Context, arg SumOperationTotals
 		arg.Today,
 		arg.DateFrom,
 		arg.DateTo,
+		arg.Search,
+		arg.SearchDigits,
 	)
 	if err != nil {
 		return nil, err
@@ -363,19 +381,26 @@ WHERE op.owner_id = $1
   )
   AND ($5::date IS NULL OR op.date >= $5)
   AND ($6::date IS NULL OR op.date <= $6)
-  AND ($7::text = '' OR op.type = $7::text)
+  AND ($7::text = ''
+       OR op.title ILIKE '%' || $7::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $7::text || '%' ESCAPE '\'
+       OR ($8::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $8::text || '%'))
+  AND ($9::text = '' OR op.type = $9::text)
 GROUP BY op.category_slug, op.category_label, op.type
 ORDER BY total_kopecks DESC, op.category_slug
 `
 
 type SumOperationsByCategoryParams struct {
-	Owner    pgtype.UUID `json:"owner"`
-	Property pgtype.UUID `json:"property"`
-	Status   string      `json:"status"`
-	Today    pgtype.Date `json:"today"`
-	DateFrom pgtype.Date `json:"date_from"`
-	DateTo   pgtype.Date `json:"date_to"`
-	Type     string      `json:"type"`
+	Owner        pgtype.UUID `json:"owner"`
+	Property     pgtype.UUID `json:"property"`
+	Status       string      `json:"status"`
+	Today        pgtype.Date `json:"today"`
+	DateFrom     pgtype.Date `json:"date_from"`
+	DateTo       pgtype.Date `json:"date_to"`
+	Search       string      `json:"search"`
+	SearchDigits string      `json:"search_digits"`
+	Type         string      `json:"type"`
 }
 
 type SumOperationsByCategoryRow struct {
@@ -388,7 +413,9 @@ type SumOperationsByCategoryRow struct {
 // The per-category breakdown behind the category chips and the summary
 // cards' bar (ticket #473): one row per category snapshot present in the
 // scope, largest total first; rows without a category snapshot are skipped
-// (no chip identity — their amounts still count in the totals).
+// (no chip identity — their amounts still count in the totals). The search
+// filter (ticket #476) is the listing's predicate: the breakdown over the
+// searched scope is the search screen's matched-category chips.
 func (q *Queries) SumOperationsByCategory(ctx context.Context, arg SumOperationsByCategoryParams) ([]SumOperationsByCategoryRow, error) {
 	rows, err := q.db.Query(ctx, sumOperationsByCategory,
 		arg.Owner,
@@ -397,6 +424,8 @@ func (q *Queries) SumOperationsByCategory(ctx context.Context, arg SumOperations
 		arg.Today,
 		arg.DateFrom,
 		arg.DateTo,
+		arg.Search,
+		arg.SearchDigits,
 		arg.Type,
 	)
 	if err != nil {

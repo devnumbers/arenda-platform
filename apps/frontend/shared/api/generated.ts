@@ -2142,6 +2142,8 @@ export interface components {
         OperationsOffset: number;
         /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
         TitleSearch: string;
+        /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+        OperationsSearch: string;
         /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
         OperationsTypeFilter: "income" | "expense";
         /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
@@ -3059,8 +3061,8 @@ export interface operations {
                 order?: components["parameters"]["OperationsOrder"];
                 limit?: components["parameters"]["OperationsLimit"];
                 offset?: components["parameters"]["OperationsOffset"];
-                /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
-                search?: components["parameters"]["TitleSearch"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
                 /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
                 type?: components["parameters"]["OperationsTypeFilter"];
                 /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
@@ -3097,6 +3099,8 @@ export interface operations {
                 date_from?: components["parameters"]["OperationsDateFrom"];
                 /** @description Inclusive upper bound of the period on the operation date. */
                 date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
                 /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
                 type?: components["parameters"]["OperationsTypeFilter"];
             };

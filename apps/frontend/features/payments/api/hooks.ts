@@ -275,13 +275,15 @@ export function usePaymentOperationsPaged(
 /**
  * Порции операций объекта для экранов «Операции объекта» (#474): тот же
  * контракт, что у usePropertyOperationsPaged, но весь скоуп (тип, категории,
- * период) уходит и в ключ, и в query — переключение фильтра читает свой кэш
- * с первой порции. pageParam — offset; следующая страница есть, пока порция
- * полная.
+ * период, поиск #476) уходит и в ключ, и в query — переключение фильтра
+ * читает свой кэш с первой порции. pageParam — offset; следующая страница
+ * есть, пока порция полная. `options.enabled` глушит запрос (поиск #476 не
+ * стреляет, пока запрос не введён).
  */
 export function usePropertyOperationsScopedPaged(
   propertyId: string,
   scope: PaymentOperationScope,
+  options: { readonly enabled?: boolean } = {},
 ): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
   return useInfiniteQuery({
     queryKey: paymentOperationKeys.byPropertyScopedPaged(propertyId, scope),
@@ -304,6 +306,9 @@ export function usePropertyOperationsScopedPaged(
       if (scope.dateTo !== undefined) {
         params.set('date_to', scope.dateTo);
       }
+      if (scope.search !== undefined && scope.search !== '') {
+        params.set('search', scope.search);
+      }
       const response = await apiClient<OperationsResponse>(
         `/properties/${encodeURIComponent(propertyId)}/operations?${params.toString()}`,
       );
@@ -315,7 +320,7 @@ export function usePropertyOperationsScopedPaged(
         ? undefined
         : allPages.length * OPERATIONS_PAGE_SIZE,
     select: (data) => data.pages.flat(),
-    enabled: Boolean(propertyId),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
 
@@ -323,11 +328,15 @@ export function usePropertyOperationsScopedPaged(
  * Сводка периода объекта (#474) за карточками «Расходы/Доходы» и чипом
  * «Категория»: итоги всегда оба направления, разбивка — только категории с
  * операциями (по сумме убывание). Статус и период — те же, что у списка,
- * поэтому карточки и список всегда согласны друг с другом.
+ * поэтому карточки и список всегда согласны друг с другом. Поиск (#476) —
+ * тот же предикат, что у списка: разбивка становится чипами совпавших
+ * категорий экрана поиска; `options.enabled` глушит запрос, пока запрос
+ * поиска не введён.
  */
 export function usePropertyOperationsSummary(
   propertyId: string,
   scope: PaymentOperationScope,
+  options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<OperationsSummary, ApiError> {
   return useQuery({
     queryKey: paymentOperationKeys.summary(propertyId, scope),
@@ -343,12 +352,15 @@ export function usePropertyOperationsSummary(
       if (scope.dateTo !== undefined) {
         params.set('date_to', scope.dateTo);
       }
+      if (scope.search !== undefined && scope.search !== '') {
+        params.set('search', scope.search);
+      }
       const response = await apiClient<OperationsSummaryResponse>(
         `/properties/${encodeURIComponent(propertyId)}/operations/summary?${params.toString()}`,
       );
       return mapOperationsSummary(response);
     },
-    enabled: Boolean(propertyId),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
 

@@ -51,10 +51,13 @@ WHERE id = $1 AND owner_id = $2 AND property_id = $3
 -- name: ListOperations :many
 -- The operations of one scope with pagination (limit/offset), the view status
 -- filter ('' is any), an inclusive period on the operation date, the sort
--- direction, a case-insensitive substring search by title ('' = no filter;
--- the application layer escapes the ILIKE metacharacters, ESCAPE '\'), the
--- direction filter ('' is any) and the comma-separated category slugs filter
--- ('' is any; rows without a category snapshot never match a slug).
+-- direction, a search filter ('' = no filter; the application layer escapes
+-- the ILIKE metacharacters, ESCAPE '\'): a case-insensitive substring over
+-- the title and the category snapshot — and, when the query reads as an
+-- amount, its digits inside the amount's decimal digits in kopecks (the
+-- display amount without separators; ticket #476), the direction filter (''
+-- is any) and the comma-separated category slugs filter ('' is any; rows
+-- without a category snapshot never match a slug).
 -- A NULL payment widens the scope from one rule to every rule of
 -- the property: "planned" and "overdue" split the stored planned rows against
 -- the owner's today — overdue is computed here from the same truth the
@@ -92,7 +95,10 @@ WHERE op.owner_id = sqlc.arg('owner')
   AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
   AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
-       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('search_digits')::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || sqlc.arg('search_digits')::text || '%'))
   AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
   AND (sqlc.arg('categories')::text = ''
        OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
@@ -110,7 +116,8 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 -- report both directions (the contract: the type filter narrows only the
 -- category breakdown). Types absent from the scope simply miss from the
 -- result — the adapter reports them as zero. Cancelled tombstones never
--- count.
+-- count. The search filter (ticket #476) is the listing's predicate — the
+-- summary of the searched scope stays consistent with its list.
 SELECT op.type,
        SUM(op.amount_kopecks)::bigint AS total_kopecks
 FROM operations op
@@ -127,13 +134,20 @@ WHERE op.owner_id = sqlc.arg('owner')
   )
   AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
   AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('search')::text = ''
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('search_digits')::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || sqlc.arg('search_digits')::text || '%'))
 GROUP BY op.type;
 
 -- name: SumOperationsByCategory :many
 -- The per-category breakdown behind the category chips and the summary
 -- cards' bar (ticket #473): one row per category snapshot present in the
 -- scope, largest total first; rows without a category snapshot are skipped
--- (no chip identity — their amounts still count in the totals).
+-- (no chip identity — their amounts still count in the totals). The search
+-- filter (ticket #476) is the listing's predicate: the breakdown over the
+-- searched scope is the search screen's matched-category chips.
 SELECT op.category_slug,
        op.category_label,
        op.type,
@@ -153,6 +167,11 @@ WHERE op.owner_id = sqlc.arg('owner')
   )
   AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
   AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('search')::text = ''
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('search_digits')::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || sqlc.arg('search_digits')::text || '%'))
   AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
 GROUP BY op.category_slug, op.category_label, op.type
 ORDER BY total_kopecks DESC, op.category_slug;
