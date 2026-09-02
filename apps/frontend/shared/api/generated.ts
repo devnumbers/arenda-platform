@@ -245,36 +245,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/contacts": {
+    "/contacts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["listPropertyContacts"];
+        get: operations["listContacts"];
         put?: never;
-        post: operations["createPropertyContact"];
+        post: operations["createContact"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/contacts/{contactId}": {
+    "/contacts/{contactId}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getPropertyContact"];
+        get: operations["getContact"];
         put?: never;
         post?: never;
-        delete: operations["deletePropertyContact"];
+        delete: operations["deleteContact"];
         options?: never;
         head?: never;
-        patch: operations["updatePropertyContact"];
+        patch: operations["updateContact"];
         trace?: never;
     };
     "/properties/{propertyId}/payments": {
@@ -1665,28 +1665,58 @@ export interface components {
         PropertyPhotosResponse: {
             items: components["schemas"]["PropertyPhoto"][];
         };
-        PropertyContactCreateRequest: {
-            name: string;
-            phone: string;
-        };
-        PropertyContactUpdateRequest: {
-            name?: string;
+        /** @description The create payload of a contact card (ADR 0051). Only the first name is required; the phone travels in any accepted Russian spelling and is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands in the property owner's book (the edit gate applies); without one it is created «без объекта» in the actor's own book. */
+        ContactCreateRequest: {
+            /** Format: uuid */
+            propertyId?: string | null;
+            firstName: string;
+            lastName?: string;
+            patronymic?: string;
+            /** @description What the person is to the property — «сантехник», «консьерж». Free text, never an access role. */
+            role?: string;
             phone?: string;
+            email?: string;
+            /** @description The messenger's name — any service, one pair per contact. */
+            messengerName?: string;
+            messengerUsername?: string;
+            note?: string;
         };
-        PropertyContactResponse: {
+        /** @description The partial-update payload of a contact card: an omitted field keeps the stored value, and a text field clears by sending an empty string. The propertyId is tri-state — omitted keeps the current binding, null clears it («без объекта»), a uuid moves the card onto that property (the target's edit gate applies). */
+        ContactUpdateRequest: {
+            /** Format: uuid */
+            propertyId?: string | null;
+            firstName?: string;
+            lastName?: string;
+            patronymic?: string;
+            role?: string;
+            phone?: string;
+            email?: string;
+            messengerName?: string;
+            messengerUsername?: string;
+            note?: string;
+        };
+        /** @description One card of the owner's contact book (ADR 0051): a person useful for a property — not a service user. propertyId null means «без объекта»; the card survives the property's deletion. */
+        ContactResponse: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            property_id: string;
-            name: string;
+            propertyId?: string | null;
+            firstName: string;
+            lastName: string;
+            patronymic: string;
+            role: string;
             phone: string;
+            email: string;
+            messengerName: string;
+            messengerUsername: string;
+            note: string;
             /** Format: date-time */
-            created_at: string;
+            createdAt: string;
             /** Format: date-time */
-            updated_at: string;
+            updatedAt: string;
         };
-        PropertyContactsResponse: {
-            items: components["schemas"]["PropertyContactResponse"][];
+        ContactsResponse: {
+            items: components["schemas"]["ContactResponse"][];
         };
         /** @description The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts. */
         Recurrence: components["schemas"]["RecurrenceDaily"] | components["schemas"]["RecurrenceWeekly"] | components["schemas"]["RecurrenceMonthly"] | components["schemas"]["RecurrenceYearly"];
@@ -2604,142 +2634,138 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    listPropertyContacts: {
+    listContacts: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
+            query?: {
+                /** @description Filter by the bound property. A missing value lists the actor's whole book; a property-bound listing resolves through the view gate of that property (ADR 0028) and reads the data owner's slice. */
+                property_id?: string;
+                /** @description Case-insensitive substring search over the name fields, phone, email, messenger username and role. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Property contacts list */
+            /** @description Contacts list */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyContactsResponse"];
+                    "application/json": components["schemas"]["ContactsResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
-    createPropertyContact: {
+    createContact: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                propertyId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PropertyContactCreateRequest"];
+                "application/json": components["schemas"]["ContactCreateRequest"];
             };
         };
         responses: {
-            /** @description Property contact created */
+            /** @description Contact created */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyContactResponse"];
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
         };
     };
-    getPropertyContact: {
+    getContact: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                propertyId: string;
                 contactId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Property contact */
+            /** @description Contact */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyContactResponse"];
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
-    deletePropertyContact: {
+    deleteContact: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                propertyId: string;
                 contactId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Property contact deleted */
+            /** @description Contact deleted */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
         };
     };
-    updatePropertyContact: {
+    updateContact: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                propertyId: string;
                 contactId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PropertyContactUpdateRequest"];
+                "application/json": components["schemas"]["ContactUpdateRequest"];
             };
         };
         responses: {
-            /** @description Property contact updated */
+            /** @description Contact updated */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyContactResponse"];
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
         };
     };
     listPayments: {

@@ -11,6 +11,7 @@ import (
 
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
@@ -133,6 +134,9 @@ var userFacingDetails = []struct {
 
 	// Payments (payment rules, ADR 0047).
 	{paymentsapp.ErrInvalidInput, "Некорректные данные платежа"},
+
+	// Contacts (the contact book, ADR 0051).
+	{contactsapp.ErrInvalidInput, "Некорректные данные контакта"},
 }
 
 // UserFacingDetail maps known domain errors to fixed, non-sensitive messages

@@ -5,9 +5,10 @@ import (
 	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
 )
 
-// Contacts holds the contacts module's service wired by WireContacts. The
-// HTTP surface arrives with the contacts API slice (ticket #507); the wire
-// keeps the context ready for it.
+// Contacts holds the contacts module's service wired by WireContacts; the
+// HTTP adapters of the contact book live in
+// internal/contacts/adapters/http and mount the service in the composition
+// root.
 type Contacts struct {
 	ContactService *contactsapp.ContactService
 }

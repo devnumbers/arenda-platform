@@ -11,18 +11,17 @@ import (
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 )
 
-// Properties holds the properties module's services and the dadata address
+// Properties holds the properties module's service and the dadata address
 // suggester wired by WireProperties.
 type Properties struct {
-	PropertyService        *propertiesapp.PropertyService
-	PropertyContactService *propertiesapp.PropertyContactService
-	DadataClient           *dadata.Client
+	PropertyService *propertiesapp.PropertyService
+	DadataClient    *dadata.Client
 }
 
 // WireProperties constructs the properties repositories, the subscription
-// limiter (billing-backed), the photo storage (S3 or fake based on config), the
-// property and property-contact services and the dadata address suggester. It
-// takes the billing subscription limiter deps.
+// limiter (billing-backed), the photo storage (S3 or fake based on config),
+// the property service and the dadata address suggester. It takes the billing
+// subscription limiter deps.
 func WireProperties(
 	ctx context.Context,
 	p platformDeps,
@@ -30,7 +29,6 @@ func WireProperties(
 ) (*Properties, error) {
 	propertyRepo := propertiespg.NewPropertyRepository(p.DB)
 	propertyPhotoRepo := propertiespg.NewPropertyPhotoRepository(p.DB)
-	propertyContactRepo := propertiespg.NewPropertyContactRepository(p.DB)
 	propertyLimiter := billing.Services.Limiter
 	limiter := billingpg.NewSubscriptionLimiter(propertyLimiter)
 
@@ -62,12 +60,11 @@ func WireProperties(
 
 	// The single canonical txStoreFactory bundles the properties
 	// repositories, the cross-context ports, the audit recorder, and the UoW
-	// (ADR 0033 γ-factory). It is passed to both properties services so adding
-	// an Nth repository is a change here, not in several constructors.
+	// (ADR 0033 γ-factory). Adding an Nth repository is a change here, not in
+	// several constructors.
 	factory := propertiesapp.NewTxStoreFactory(
 		propertyRepo,
 		propertyPhotoRepo,
-		propertyContactRepo,
 		limiter,
 		p.AuditRecorder,
 		p.UoW,
@@ -83,8 +80,6 @@ func WireProperties(
 		p.Logger,
 	)
 
-	propertyContactService := propertiesapp.NewPropertyContactService(propertyContactRepo, propertyRepo, factory, p.Logger)
-
 	dadataClient := dadata.NewClient(dadata.Config{
 		BaseURL:   p.Cfg.DaDataBaseURL,
 		APIKey:    p.Cfg.DaDataAPIKey,
@@ -94,8 +89,7 @@ func WireProperties(
 	})
 
 	return &Properties{
-		PropertyService:        propertyService,
-		PropertyContactService: propertyContactService,
-		DadataClient:           dadataClient,
+		PropertyService: propertyService,
+		DadataClient:    dadataClient,
 	}, nil
 }

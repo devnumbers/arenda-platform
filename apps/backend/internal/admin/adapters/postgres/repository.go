@@ -42,11 +42,11 @@ func (r *AdminRepository) q() *postgres.Queries {
 
 // Compile-time interface checks.
 var (
-	_ adminapp.UserRepository            = (*AdminRepository)(nil)
-	_ adminapp.PropertyRepository        = (*AdminRepository)(nil)
-	_ adminapp.PropertyContactRepository = (*AdminRepository)(nil)
-	_ adminapp.StatsRepository           = (*AdminRepository)(nil)
-	_ adminapp.AuditLogRepository        = (*AdminRepository)(nil)
+	_ adminapp.UserRepository     = (*AdminRepository)(nil)
+	_ adminapp.PropertyRepository = (*AdminRepository)(nil)
+	_ adminapp.ContactRepository  = (*AdminRepository)(nil)
+	_ adminapp.StatsRepository    = (*AdminRepository)(nil)
+	_ adminapp.AuditLogRepository = (*AdminRepository)(nil)
 )
 
 // ListUsers implements UserRepository.ListUsers.
@@ -259,13 +259,13 @@ func (r *AdminRepository) propertyViewFromRow(
 	}, nil
 }
 
-// ListPropertyContacts implements PropertyContactRepository.ListPropertyContacts.
-// Reads the contacts context (ADR 0051): the property's bound cards, the
-// display name composed from the name fields; the phone column is plaintext,
-// so no decryption is needed.
-func (r *AdminRepository) ListPropertyContacts(
-	ctx context.Context, filters adminapp.AdminPropertyContactFilters,
-) ([]adminapp.AdminPropertyContactView, int64, error) {
+// ListContacts implements ContactRepository.ListContacts: the property's
+// bound cards of the contacts context (ADR 0051), the display name composed
+// from the name fields; the phone column is plaintext, so no decryption is
+// needed.
+func (r *AdminRepository) ListContacts(
+	ctx context.Context, filters adminapp.AdminContactFilters,
+) ([]adminapp.AdminContactView, int64, error) {
 	total, err := r.q().CountContactsAdmin(ctx, pgconv.UUIDToPgtype(filters.PropertyID))
 	if err != nil {
 		return nil, 0, fmt.Errorf("count contacts: %w", err)
@@ -277,26 +277,24 @@ func (r *AdminRepository) ListPropertyContacts(
 		Offset:     toInt32(filters.Offset),
 	})
 	if err != nil {
-		return nil, 0, fmt.Errorf("list property contacts: %w", err)
+		return nil, 0, fmt.Errorf("list contacts: %w", err)
 	}
 
-	views := make([]adminapp.AdminPropertyContactView, 0, len(rows))
+	views := make([]adminapp.AdminContactView, 0, len(rows))
 	for _, row := range rows {
 		name := contactsdomain.Contact{
 			FirstName:  row.FirstName,
 			LastName:   pgconv.TextToString(row.LastName),
 			Patronymic: pgconv.TextToString(row.Patronymic),
 		}.FullName()
-		views = append(views, adminapp.AdminPropertyContactView{
-			PropertyContact: propertiesdomain.PropertyContact{
-				ID:         pgconv.UUIDFromPgtype(row.ID),
-				PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
-				OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
-				Name:       name,
-				Phone:      pgconv.TextToString(row.Phone),
-				CreatedAt:  row.CreatedAt.Time,
-				UpdatedAt:  row.UpdatedAt.Time,
-			},
+		views = append(views, adminapp.AdminContactView{
+			ID:         pgconv.UUIDFromPgtype(row.ID),
+			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+			OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
+			Name:       name,
+			Phone:      pgconv.TextToString(row.Phone),
+			CreatedAt:  row.CreatedAt.Time,
+			UpdatedAt:  row.UpdatedAt.Time,
 		})
 	}
 

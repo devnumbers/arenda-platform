@@ -91,8 +91,8 @@ func run() error {
 	}
 	p.Policy = accessMod.Policy
 
-	// 7. Properties: repos, subscription limiter, photo storage, property and
-	//    property-contact services, dadata suggester.
+	// 7. Properties: repos, subscription limiter, photo storage, the property
+	//    service and the dadata suggester.
 	propertiesMod, err := wire.WireProperties(ctx, p, billingMod)
 	if err != nil {
 		return err
@@ -105,6 +105,14 @@ func run() error {
 	//     heartbeat metrics; wired after access so the membership-aware
 	//     policy resolves the actor/scope matrix (ADR 0028).
 	paymentsMod, err := wire.WirePayments(p)
+	if err != nil {
+		return err
+	}
+
+	// 7.6 Contacts (ADR 0051): the owner's contact book CRUD with the
+	//     property-scope role gates; wired after access so the
+	//     membership-aware policy resolves the actor/scope matrix (ADR 0028).
+	contactsMod, err := wire.WireContacts(p)
 	if err != nil {
 		return err
 	}
@@ -169,7 +177,7 @@ func run() error {
 		ReadonlyGate:             billingMod.MutationGate,
 		Admin:                    adminMod.Service,
 		Properties:               propertiesMod.PropertyService,
-		PropertyContacts:         propertiesMod.PropertyContactService,
+		Contacts:                 contactsMod.ContactService,
 		AddressSuggester:         propertiesMod.DadataClient,
 		PropertyPayments:         paymentsMod.PaymentService,
 		PropertyOperations:       paymentsMod.OperationService,

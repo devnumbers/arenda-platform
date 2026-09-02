@@ -98,15 +98,6 @@ export const paymentOperationKeys = {
     ] as const,
 };
 
-// features/property-contacts
-export const propertyContactKeys = {
-  all: ['property-contacts'] as const,
-  list: (propertyId: string) =>
-    [...propertyContactKeys.all, 'list', propertyId] as const,
-  detail: (propertyId: string, contactId: string) =>
-    [...propertyContactKeys.all, 'detail', propertyId, contactId] as const,
-};
-
 // features/subscription
 export const subscriptionKeys = {
   subscription: ['subscription'] as const,

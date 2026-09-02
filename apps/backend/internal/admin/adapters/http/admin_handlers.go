@@ -130,9 +130,11 @@ func (h *AdminHandlers) GetAdminProperty(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-// ListAdminPropertyContacts implements GET /admin/property-contacts.
+// ListAdminPropertyContacts implements GET /admin/property-contacts (the
+// wire path keeps the historical name; the reads come from the contacts
+// context, ADR 0051).
 func (h *AdminHandlers) ListAdminPropertyContacts(w http.ResponseWriter, r *http.Request, params openapi.ListAdminPropertyContactsParams) {
-	filters := adminapp.AdminPropertyContactFilters{Limit: 20, Offset: 0}
+	filters := adminapp.AdminContactFilters{Limit: 20, Offset: 0}
 	httpsupport.OptInt(&filters.Limit, params.Limit)
 	httpsupport.OptInt(&filters.Offset, params.Offset)
 	if params.PropertyId != nil {
@@ -140,11 +142,11 @@ func (h *AdminHandlers) ListAdminPropertyContacts(w http.ResponseWriter, r *http
 	}
 
 	httpsupport.RespondAdminList(w, r,
-		func(ctx context.Context) ([]adminapp.AdminPropertyContactView, int64, error) {
-			return h.adminService.ListPropertyContacts(ctx, filters)
+		func(ctx context.Context) ([]adminapp.AdminContactView, int64, error) {
+			return h.adminService.ListContacts(ctx, filters)
 		},
 		h.handleAdminError,
-		adminPropertyContactResponse,
+		adminContactResponse,
 	)
 }
 
@@ -330,7 +332,7 @@ func adminPropertyResponse(view adminapp.AdminPropertyView) openapi.AdminPropert
 	return resp
 }
 
-func adminPropertyContactResponse(view adminapp.AdminPropertyContactView) openapi.AdminPropertyContact {
+func adminContactResponse(view adminapp.AdminContactView) openapi.AdminPropertyContact {
 	return openapi.AdminPropertyContact{
 		Id:         view.ID,
 		PropertyId: view.PropertyID,

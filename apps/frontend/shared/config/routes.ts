@@ -5,9 +5,6 @@ export const ROUTES = {
   propertyArchive: '/properties/archive',
   propertyNew: '/properties/new',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
-  propertyContactsNew: (id: string) => `/properties/${id}/contacts/new`,
-  propertyContactEdit: (propertyId: string, contactId: string) =>
-    `/properties/${propertyId}/contacts/${contactId}/edit`,
   /** Экран «Платежи объекта» — новый хром (#463). */
   propertyPayments: (id: string) => `/properties/${id}/payments`,
   /** Страницы секций «Платежей объекта» (Figma 1043:57610): клик по

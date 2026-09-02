@@ -18,7 +18,7 @@ import (
 // ticket #506): the property's bound cards with the display name composed
 // from the name fields; unbound contacts belong to no property card.
 
-func TestAdminListPropertyContactsIntegration(t *testing.T) {
+func TestAdminListContactsIntegration(t *testing.T) {
 	t.Parallel()
 
 	pool := testdb.Setup(t)
@@ -34,7 +34,7 @@ func TestAdminListPropertyContactsIntegration(t *testing.T) {
 	seedAdminContact(t, ctx, pool, owner, otherProperty, "Чужой", "", "", "")
 	seedAdminContact(t, ctx, pool, owner, uuid.Nil, "БезОбъекта", "", "", "")
 
-	views, total, err := repo.ListPropertyContacts(ctx, application.AdminPropertyContactFilters{
+	views, total, err := repo.ListContacts(ctx, application.AdminContactFilters{
 		PropertyID: property,
 		Limit:      20,
 		Offset:     0,
@@ -63,7 +63,7 @@ func TestAdminListPropertyContactsIntegration(t *testing.T) {
 	}
 
 	// Pagination: the second page over the same property is empty.
-	views, total, err = repo.ListPropertyContacts(ctx, application.AdminPropertyContactFilters{
+	views, total, err = repo.ListContacts(ctx, application.AdminContactFilters{
 		PropertyID: property,
 		Limit:      20,
 		Offset:     2,

@@ -468,75 +468,77 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-  /properties/{propertyId}/contacts:
+  /contacts:
     post:
-      operationId: createPropertyContact
+      operationId: createContact
       security:
         - sessionCookie: []
-      parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PropertyContactCreateRequest'
+              $ref: '#/components/schemas/ContactCreateRequest'
       responses:
         '201':
-          description: Property contact created
+          description: Contact created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PropertyContactResponse'
+                $ref: '#/components/schemas/ContactResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          $ref: '#/components/responses/SubscriptionBlocked'
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
     get:
-      operationId: listPropertyContacts
+      operationId: listContacts
       security:
         - sessionCookie: []
       parameters:
-        - name: propertyId
-          in: path
-          required: true
+        - name: property_id
+          in: query
+          required: false
+          description: >-
+            Filter by the bound property. A missing value lists the actor's
+            whole book; a property-bound listing resolves through the view
+            gate of that property (ADR 0028) and reads the data owner's
+            slice.
           schema:
             type: string
             format: uuid
+        - name: search
+          in: query
+          required: false
+          description: >-
+            Case-insensitive substring search over the name fields, phone,
+            email, messenger username and role. A missing or empty value
+            disables the filter; LIKE metacharacters in the value are
+            literals.
+          schema:
+            type: string
       responses:
         '200':
-          description: Property contacts list
+          description: Contacts list
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PropertyContactsResponse'
+                $ref: '#/components/schemas/ContactsResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-  /properties/{propertyId}/contacts/{contactId}:
+  /contacts/{contactId}:
     get:
-      operationId: getPropertyContact
+      operationId: getContact
       security:
         - sessionCookie: []
       parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
         - name: contactId
           in: path
           required: true
@@ -545,26 +547,22 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Property contact
+          description: Contact
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PropertyContactResponse'
+                $ref: '#/components/schemas/ContactResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
-      operationId: updatePropertyContact
+      operationId: updateContact
       security:
         - sessionCookie: []
       parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
         - name: contactId
           in: path
           required: true
@@ -576,35 +574,27 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PropertyContactUpdateRequest'
+              $ref: '#/components/schemas/ContactUpdateRequest'
       responses:
         '200':
-          description: Property contact updated
+          description: Contact updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PropertyContactResponse'
+                $ref: '#/components/schemas/ContactResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          $ref: '#/components/responses/SubscriptionBlocked'
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
     delete:
-      operationId: deletePropertyContact
+      operationId: deleteContact
       security:
         - sessionCookie: []
       parameters:
-        - name: propertyId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
         - name: contactId
           in: path
           required: true
@@ -613,17 +603,13 @@ paths:
             format: uuid
       responses:
         '204':
-          description: Property contact deleted
-        '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Contact deleted
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          $ref: '#/components/responses/SubscriptionBlocked'
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/payments:
     post:
       operationId: createPayment
@@ -3739,54 +3725,127 @@ components:
           items:
             $ref: '#/components/schemas/PropertyPhoto'
 
-    PropertyContactCreateRequest:
+    ContactCreateRequest:
+      description: >-
+        The create payload of a contact card (ADR 0051). Only the first name
+        is required; the phone travels in any accepted Russian spelling and
+        is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands
+        in the property owner's book (the edit gate applies); without one it
+        is created «без объекта» in the actor's own book.
       type: object
-      required: [name, phone]
+      required: [firstName]
       properties:
-        name:
+        propertyId:
+          type: string
+          format: uuid
+          nullable: true
+        firstName:
           type: string
           maxLength: 255
-        phone:
-          type: string
-
-    PropertyContactUpdateRequest:
-      type: object
-      properties:
-        name:
+        lastName:
           type: string
           maxLength: 255
+        patronymic:
+          type: string
+          maxLength: 255
+        role:
+          type: string
+          description: What the person is to the property — «сантехник», «консьерж». Free text, never an access role.
         phone:
           type: string
+        email:
+          type: string
+        messengerName:
+          type: string
+          description: The messenger's name — any service, one pair per contact.
+        messengerUsername:
+          type: string
+        note:
+          type: string
 
-    PropertyContactResponse:
+    ContactUpdateRequest:
+      description: >-
+        The partial-update payload of a contact card: an omitted field keeps
+        the stored value, and a text field clears by sending an empty string.
+        The propertyId is tri-state — omitted keeps the current binding, null
+        clears it («без объекта»), a uuid moves the card onto that property
+        (the target's edit gate applies).
       type: object
-      required: [id, property_id, name, phone, created_at, updated_at]
+      properties:
+        propertyId:
+          type: string
+          format: uuid
+          nullable: true
+        firstName:
+          type: string
+          maxLength: 255
+        lastName:
+          type: string
+          maxLength: 255
+        patronymic:
+          type: string
+          maxLength: 255
+        role:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        messengerName:
+          type: string
+        messengerUsername:
+          type: string
+        note:
+          type: string
+
+    ContactResponse:
+      description: >-
+        One card of the owner's contact book (ADR 0051): a person useful for
+        a property — not a service user. propertyId null means «без
+        объекта»; the card survives the property's deletion.
+      type: object
+      required: [id, firstName, lastName, patronymic, role, phone, email, messengerName, messengerUsername, note, createdAt, updatedAt]
       properties:
         id:
           type: string
           format: uuid
-        property_id:
+        propertyId:
           type: string
           format: uuid
-        name:
+          nullable: true
+        firstName:
+          type: string
+        lastName:
+          type: string
+        patronymic:
+          type: string
+        role:
           type: string
         phone:
           type: string
-        created_at:
+        email:
+          type: string
+        messengerName:
+          type: string
+        messengerUsername:
+          type: string
+        note:
+          type: string
+        createdAt:
           type: string
           format: date-time
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
 
-    PropertyContactsResponse:
+    ContactsResponse:
       type: object
       required: [items]
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/PropertyContactResponse'
+            $ref: '#/components/schemas/ContactResponse'
 
     Recurrence:
       description: >-
