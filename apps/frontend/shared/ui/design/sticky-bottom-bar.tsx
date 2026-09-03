@@ -24,9 +24,8 @@ export function StickyBottomBar({ children, dragHandle = false, className }: Sti
   return (
     <div className={cn('fixed inset-x-0 bottom-0 z-40 rounded-t-sheet bg-surface font-sans', className)}>
       {dragHandle && <SheetDragHandle />}
-      {/* На мобайле (768 и уже) панель во всю ширину вьюпорта; колонка 560 —
-       * только на десктопе. */}
-      <div className="mx-auto flex w-full desktop:max-w-[560px] flex-col gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      {/* Колонка контента 560 по центру на любой ширине — как PageContent. */}
+      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {children}
       </div>
     </div>
