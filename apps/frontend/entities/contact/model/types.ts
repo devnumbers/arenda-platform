@@ -20,3 +20,22 @@ export type Contact = {
   readonly createdAt: string;
   readonly updatedAt: string;
 };
+
+/**
+ * Черновик создания карточки (контракт #507, POST /contacts): camelCase
+ * 1:1 с ContactCreateRequest. Тексты — уже нормализованные (трим, пустые
+ * строки вместо отсутствующих), телефон — в каноническом +7XXXXXXXXXX,
+ * привязка — uuid объекта или null («без объекта»).
+ */
+export type ContactCreateCommand = {
+  readonly propertyId: string | null;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly patronymic: string;
+  readonly role: string;
+  readonly phone: string;
+  readonly email: string;
+  readonly messengerName: string;
+  readonly messengerUsername: string;
+  readonly note: string;
+};
