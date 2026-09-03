@@ -107,6 +107,15 @@ export const propertyContactKeys = {
     [...propertyContactKeys.all, 'detail', propertyId, contactId] as const,
 };
 
+// features/tasks
+export const taskKeys = {
+  all: ['tasks'] as const,
+  /** Активные задачи объекта (секции Просроченные/Сегодня/даты/Без даты). */
+  active: (propertyId: string) => [...taskKeys.all, 'active', propertyId] as const,
+  /** Журнал выполненных (сворачиваемая секция; total — счётчик «Выполненные N»). */
+  completed: (propertyId: string) => [...taskKeys.all, 'completed', propertyId] as const,
+};
+
 // features/subscription
 export const subscriptionKeys = {
   subscription: ['subscription'] as const,

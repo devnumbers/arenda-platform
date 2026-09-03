@@ -19,6 +19,8 @@ export const ROUTES = {
   /** Страница платежа (#465): карточка, мутации, секции вхождений. */
   propertyPayment: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}`,
+  /** Экран «Задачи объекта» (#499): единый список групп-секций. */
+  propertyTasks: (id: string) => `/properties/${id}/tasks`,
   /** Подэкраны страницы платежа (#466): график, история, просрочки. */
   propertyPaymentSchedule: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}/schedule`,
