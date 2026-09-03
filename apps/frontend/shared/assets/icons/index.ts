@@ -122,8 +122,7 @@ export { default as HomeMain } from './home-main.svg';
 export { default as NotificationSettings } from './notification-settings.svg';
 export { default as MenuLines } from './menu-lines.svg';
 
-// Сплошные домики страницы «Выбрать объект» (#509, Figma 1539:83846):
-// силуэт контурного HomeMain, залитый (fill); HomeCopy — «дом со стеной
-// позади» для строки «Общий контакт».
-export { default as HomeFilled } from './home-filled.svg';
-export { default as HomeCopy } from './home-copy.svg';
+// Иконки страницы «Выбрать объект» (#509, Figma 1539:83846): аватары строк —
+// Icon/Bold/Objects 208:2994 («Общий контакт») и Icon/Bold/Home 189:931
+// (объекты; в наборе это BoldHome).
+export { default as BoldObjects } from './bold-objects.svg';

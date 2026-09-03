@@ -3,12 +3,12 @@
 import { useState, type JSX, type SubmitEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  BoldHome,
+  BoldObjects,
   BoldUser,
   Cancel,
   Check,
   ChevronDown,
-  HomeCopy,
-  HomeFilled,
   RadioFalse,
   RadioTrue,
 } from '@/shared/assets/icons';
@@ -445,8 +445,10 @@ export function ContactCreateScreen({
 }
 
 /** Строка-радио страницы «Выбрать объект» (компонент Figma «Row Button»,
- * 936:39347): аватар-круг 48 с фото или сплошным домом, заголовок,
- * подпись, кружок выбора RadioFalse/RadioTrue справа. */
+ * 936:39347): аватар Category Icon 44px (#F3F4F6 + белое кольцо 2.5px) с
+ * иконкой 24 — Icon/Bold/Objects у «Общего контакта», Icon/Bold/Home
+ * (BoldHome) у объектов, или фото; заголовок 16/500, подпись 14 #6F787C,
+ * кружок выбора RadioFalse/RadioTrue справа. */
 function ObjectRowButton({
   title,
   subtitle,
@@ -468,21 +470,23 @@ function ObjectRowButton({
       role="radio"
       aria-checked={checked}
       onClick={onCheck}
-      className="flex w-full cursor-pointer items-center gap-2 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
+      className="flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
     >
       <span
         aria-hidden
-        className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted"
+        className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
       >
         {photoUrl !== undefined ? (
           <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+        ) : isGeneral ? (
+          <BoldObjects className="h-6 w-6 text-content-tertiary" />
         ) : (
-          <HomeIcon general={isGeneral} />
+          <BoldHome className="h-6 w-6 text-content-tertiary" />
         )}
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">{title}</span>
-        <span className="truncate text-sm text-content-secondary">{subtitle}</span>
+        <span className="truncate text-sm leading-4 text-content-secondary">{subtitle}</span>
       </span>
       {checked ? (
         <RadioTrue className="h-6 w-6 shrink-0" aria-hidden />
@@ -490,16 +494,6 @@ function ObjectRowButton({
         <RadioFalse className="h-6 w-6 shrink-0" aria-hidden />
       )}
     </button>
-  );
-}
-
-/** Иконка аватара строки: сплошной дом у объектов, «дом со стеной позади»
- * у «Общего контакта» — оба силуэта из макета 1539:83846. */
-function HomeIcon({ general = false }: { readonly general?: boolean }): JSX.Element {
-  return general ? (
-    <HomeCopy className="h-6 w-6 text-content-tertiary" />
-  ) : (
-    <HomeFilled className="h-6 w-6 text-content-tertiary" />
   );
 }
 
