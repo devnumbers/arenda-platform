@@ -274,8 +274,10 @@ type Querier interface {
 	// Rule CRUD lives in tasks_rules.sql, the tick's persistence in
 	// tasks_tick.sql.
 	// The nested path task→property is part of the key: a foreign or re-hung row
-	// is the privacy 404.
-	GetTask(ctx context.Context, arg GetTaskParams) (Task, error)
+	// is the privacy 404. rule_repeat is the live rule's repeat read through the
+	// LEFT JOIN (null once the rule is deleted) — the wire's ↻ mark; the task
+	// row itself carries no repeat snapshot.
+	GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error)
 	// The data owner's IANA timezone (ADR 0048): the tick's "today" and the
 	// listings' computed buckets are resolved in the property owner's timezone.
 	// NOT NULL with the 'Europe/Moscow' default (migration 000088);
@@ -325,13 +327,13 @@ type Querier interface {
 	// The active tasks (uncompleted) of the property: the screen's main
 	// sections. Due order with the undated last — the client buckets sections
 	// against the owner's today delivered by the response.
-	ListActiveTasksByProperty(ctx context.Context, arg ListActiveTasksByPropertyParams) ([]Task, error)
+	ListActiveTasksByProperty(ctx context.Context, arg ListActiveTasksByPropertyParams) ([]ListActiveTasksByPropertyRow, error)
 	// Admin tariff listing: every tariff including hidden ones (issue #247).
 	ListAllTariffs(ctx context.Context) ([]Tariff, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
 	// The completed journal of the property, newest completions first.
-	ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]Task, error)
+	ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]ListCompletedTasksByPropertyRow, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	// The operations of one scope with pagination (limit/offset), the view status

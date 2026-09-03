@@ -28,8 +28,13 @@ type Task struct {
 	// CompletedDate is the completion fact; it may differ from the due date
 	// and there is no "late" term (tasks/CONTEXT.md «Выполненная задача»).
 	CompletedDate *time.Time
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// Repeat is a read projection of the producing rule's repeat (the
+	// screen's ↻ mark): the readers LEFT JOIN the live rule, nil once the
+	// rule is deleted. Never persisted on the task and not part of the
+	// snapshot — writers leave it nil.
+	Repeat    *RepeatKind
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // NewMaterializedTask builds the task of the rule at date (nil = the

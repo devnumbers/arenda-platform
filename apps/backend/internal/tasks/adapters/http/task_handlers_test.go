@@ -319,9 +319,12 @@ func TestTaskHandlers_ListPropertyTasks_FoldsParamsAndBuckets(t *testing.T) {
 			_ context.Context, _, _ uuid.UUID, q application.TasksListQuery,
 		) (application.TasksPage, error) {
 			gotQ = q
+			first := fixtureTask()
+			repeat := domain.RepeatWeekly
+			first.Repeat = &repeat
 			return application.TasksPage{
 				Items: []application.TaskListItem{
-					{Task: fixtureTask(), Status: domain.ViewOverdue},
+					{Task: first, Status: domain.ViewOverdue},
 					{Task: fixtureTask(), Status: domain.ViewCompleted},
 				},
 				Total: 7,
@@ -358,6 +361,12 @@ func TestTaskHandlers_ListPropertyTasks_FoldsParamsAndBuckets(t *testing.T) {
 	}
 	if resp.Items[0].Status != openapi.TaskResponseStatus(domain.ViewOverdue) {
 		t.Fatalf("bucket = %q", resp.Items[0].Status)
+	}
+	if resp.Items[0].Repeat == nil || *resp.Items[0].Repeat != openapi.TaskRepeat(domain.RepeatWeekly) {
+		t.Fatalf("repeat = %v, want weekly", resp.Items[0].Repeat)
+	}
+	if resp.Items[1].Repeat != nil {
+		t.Fatalf("repeat without the rule projection = %q, want null", *resp.Items[1].Repeat)
 	}
 }
 

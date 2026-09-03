@@ -155,11 +155,22 @@ func taskResponse(item application.TaskListItem) openapi.TaskResponse {
 		DueTime:       dueTimeToWire(task.DueTime),
 		Title:         task.Title,
 		Comment:       copyStringPtr(task.Comment),
+		Repeat:        repeatToWire(task.Repeat),
 		CompletedDate: httpsupport.DatePtrToOpenAPI(task.CompletedDate),
 		Status:        openapi.TaskResponseStatus(item.Status),
 		CreatedAt:     task.CreatedAt,
 		UpdatedAt:     task.UpdatedAt,
 	}
+}
+
+// repeatToWire converts the read projection of the rule's repeat; nil (rule
+// deleted or the writer-built task) stays the wire's null.
+func repeatToWire(repeat *domain.RepeatKind) *openapi.TaskRepeat {
+	if repeat == nil {
+		return nil
+	}
+	wire := openapi.TaskRepeat(*repeat)
+	return &wire
 }
 
 // openAPIUUIDPtr converts an optional domain UUID into the wire pointer form.

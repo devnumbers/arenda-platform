@@ -39,6 +39,10 @@ type taskFields struct {
 	CompletedDate pgtype.Date
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+	// RuleRepeat is the live rule's repeat read through the LEFT JOIN of the
+	// task readers; NULL once the rule is deleted. A read projection for the
+	// wire, never persisted on the task.
+	RuleRepeat pgtype.Text
 }
 
 // mapRuleRow builds the domain rule from a row; an unknown repeat string is a
@@ -59,9 +63,11 @@ func mapRuleRow(f taskRuleFields) domain.TaskRule {
 	}
 }
 
-// mapTaskRow builds the domain task from a row.
+// mapTaskRow builds the domain task from a row; the joined rule repeat goes
+// along as the read projection (unknown strings stay nil — the CHECK
+// constraint of migration 000118 is the durable guard).
 func mapTaskRow(f taskFields) domain.Task {
-	return domain.Task{
+	task := domain.Task{
 		ID:            f.ID,
 		OwnerID:       f.OwnerID,
 		PropertyID:    f.PropertyID,
@@ -74,6 +80,11 @@ func mapTaskRow(f taskFields) domain.Task {
 		CreatedAt:     pgconv.TimestamptzToTime(f.CreatedAt),
 		UpdatedAt:     pgconv.TimestamptzToTime(f.UpdatedAt),
 	}
+	if f.RuleRepeat.Valid {
+		repeat := domain.RepeatKind(f.RuleRepeat.String)
+		task.Repeat = &repeat
+	}
+	return task
 }
 
 // timeOfDayToPgtype converts the minutes-since-midnight value into the TIME

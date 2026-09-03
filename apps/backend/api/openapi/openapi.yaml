@@ -4531,7 +4531,7 @@ components:
         overdue — from the due minute inclusive, or from the end of the day
         for a date-only task; undated; completed).
       type: object
-      required: [id, propertyId, ruleId, dueDate, dueTime, title, comment, completedDate, status, createdAt, updatedAt]
+      required: [id, propertyId, ruleId, dueDate, dueTime, title, comment, repeat, completedDate, status, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -4558,6 +4558,15 @@ components:
         comment:
           type: string
           nullable: true
+        repeat:
+          allOf:
+            - $ref: '#/components/schemas/TaskRepeat'
+          nullable: true
+          description: >
+            The producing rule's repeat as of the read — the screen's ↻ mark.
+            Read through the live rule, not snapshotted: null once the rule
+            is deleted (the journal row keeps its content snapshots, not the
+            rule's settings).
         completedDate:
           type: string
           format: date

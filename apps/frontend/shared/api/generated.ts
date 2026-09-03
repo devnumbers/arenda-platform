@@ -2028,6 +2028,8 @@ export interface components {
             dueTime: string | null;
             title: string;
             comment: string | null;
+            /** @description The producing rule's repeat as of the read — the screen's ↻ mark. Read through the live rule, not snapshotted: null once the rule is deleted (the journal row keeps its content snapshots, not the rule's settings). */
+            repeat: components["schemas"]["TaskRepeat"] | null;
             /**
              * Format: date
              * @description The completion fact; it may differ from the due date.

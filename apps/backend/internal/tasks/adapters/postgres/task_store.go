@@ -72,6 +72,7 @@ func (s *TaskStore) Get(
 		CompletedDate: row.CompletedDate,
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,
+		RuleRepeat:    row.RuleRepeat,
 	}), nil
 }
 
@@ -99,9 +100,46 @@ func (s *TaskStore) ListByProperty(
 		Limit:      int32(q.Limit),
 		Offset:     int32(q.Offset),
 	}
-	rows, err := s.list(ctx, q.Completed, params)
+	tasks, err := s.list(ctx, q.Completed, params)
 	if err != nil {
 		return nil, 0, err
+	}
+	return tasks, int(total), nil
+}
+
+// list dispatches the two bucket queries; the generated row shapes are
+// identical (both carry the joined rule repeat), so one projection serves
+// both — each branch maps onto the shared taskFields.
+func (s *TaskStore) list(
+	ctx context.Context, completed bool, params postgres.ListActiveTasksByPropertyParams,
+) ([]domain.Task, error) {
+	if completed {
+		rows, err := s.q().ListCompletedTasksByProperty(ctx, postgres.ListCompletedTasksByPropertyParams(params))
+		if err != nil {
+			return nil, fmt.Errorf("list completed tasks: %w", err)
+		}
+		tasks := make([]domain.Task, 0, len(rows))
+		for _, row := range rows {
+			tasks = append(tasks, mapTaskRow(taskFields{
+				ID:            pgconv.UUIDFromPgtype(row.ID),
+				OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
+				PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
+				RuleID:        row.RuleID,
+				DueDate:       row.DueDate,
+				DueTime:       row.DueTime,
+				Title:         row.Title,
+				Comment:       row.Comment,
+				CompletedDate: row.CompletedDate,
+				CreatedAt:     row.CreatedAt,
+				UpdatedAt:     row.UpdatedAt,
+				RuleRepeat:    row.RuleRepeat,
+			}))
+		}
+		return tasks, nil
+	}
+	rows, err := s.q().ListActiveTasksByProperty(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list active tasks: %w", err)
 	}
 	tasks := make([]domain.Task, 0, len(rows))
 	for _, row := range rows {
@@ -117,20 +155,10 @@ func (s *TaskStore) ListByProperty(
 			CompletedDate: row.CompletedDate,
 			CreatedAt:     row.CreatedAt,
 			UpdatedAt:     row.UpdatedAt,
+			RuleRepeat:    row.RuleRepeat,
 		}))
 	}
-	return tasks, int(total), nil
-}
-
-// list dispatches the two bucket queries; the generated row shapes are
-// identical, so one projection serves both.
-func (s *TaskStore) list(
-	ctx context.Context, completed bool, params postgres.ListActiveTasksByPropertyParams,
-) ([]postgres.Task, error) {
-	if completed {
-		return s.q().ListCompletedTasksByProperty(ctx, postgres.ListCompletedTasksByPropertyParams(params))
-	}
-	return s.q().ListActiveTasksByProperty(ctx, params)
+	return tasks, nil
 }
 
 // Complete stamps the completion fact on the still-active task; rows

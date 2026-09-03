@@ -94,6 +94,17 @@ func TestDeleteRule_KillsUncompletedKeepsCompletedJournal(t *testing.T) {
 			t.Fatalf("snapshot lost: %q", task.Title)
 		}
 	}
+	// The read projection follows the rule's fate: journal rows of the
+	// deleted rule read back with no repeat (the wire's null ↻).
+	journalPage, err := h.tasks.ListTasks(h.ctx(), h.owner, h.propID, application.TasksListQuery{Completed: true})
+	if err != nil {
+		t.Fatalf("list journal: %v", err)
+	}
+	for _, item := range journalPage.Items {
+		if item.Task.Repeat != nil {
+			t.Fatalf("journal row of the deleted rule carries repeat %q, want nil", *item.Task.Repeat)
+		}
+	}
 
 	// The journal row is read-only: uncompleting it is ErrRuleDeleted.
 	if _, err := h.tasks.UncompleteTask(h.ctx(), h.owner, h.propID, journal[0].ID); !errors.Is(err, application.ErrRuleDeleted) {
@@ -172,6 +183,13 @@ func TestListTasks_BucketsAndTotal(t *testing.T) {
 		t.Fatalf("today = %v, want 2026-09-10", active.Today)
 	}
 	assertActiveBuckets(t, active.Items)
+	// The live rule's repeat rides along as the read projection (the wire's
+	// ↻ mark).
+	for _, item := range active.Items {
+		if item.Task.Repeat == nil || *item.Task.Repeat != domain.RepeatWeekly {
+			t.Fatalf("repeat projection = %v, want weekly", item.Task.Repeat)
+		}
+	}
 
 	completed, err := h.tasks.ListTasks(h.ctx(), h.owner, h.propID, application.TasksListQuery{Completed: true})
 	if err != nil {
@@ -183,6 +201,9 @@ func TestListTasks_BucketsAndTotal(t *testing.T) {
 	for _, item := range completed.Items {
 		if item.Status != domain.ViewCompleted {
 			t.Fatalf("completed bucket = %q", item.Status)
+		}
+		if item.Task.Repeat == nil || *item.Task.Repeat != domain.RepeatWeekly {
+			t.Fatalf("completed repeat projection = %v, want weekly", item.Task.Repeat)
 		}
 	}
 }

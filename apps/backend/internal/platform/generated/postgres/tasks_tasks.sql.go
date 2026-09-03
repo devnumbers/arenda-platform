@@ -81,9 +81,11 @@ func (q *Queries) DeleteCompletedJournal(ctx context.Context, arg DeleteComplete
 
 const getTask = `-- name: GetTask :one
 
-SELECT id, owner_id, property_id, rule_id, due_date, due_time, title, comment, completed_date, created_at, updated_at
-FROM tasks
-WHERE id = $1 AND owner_id = $2 AND property_id = $3
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.id = $1 AND t.owner_id = $2 AND t.property_id = $3
 `
 
 type GetTaskParams struct {
@@ -92,15 +94,32 @@ type GetTaskParams struct {
 	PropertyID pgtype.UUID `json:"property_id"`
 }
 
+type GetTaskRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+}
+
 // Tasks context queries: the task reads, the completion toggle and the
 // «Удалить все выполненные» journal clear (ADR 0051, resolutions #496/#497).
 // Rule CRUD lives in tasks_rules.sql, the tick's persistence in
 // tasks_tick.sql.
 // The nested path task→property is part of the key: a foreign or re-hung row
-// is the privacy 404.
-func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (Task, error) {
+// is the privacy 404. rule_repeat is the live rule's repeat read through the
+// LEFT JOIN (null once the rule is deleted) — the wire's ↻ mark; the task
+// row itself carries no repeat snapshot.
+func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error) {
 	row := q.db.QueryRow(ctx, getTask, arg.ID, arg.OwnerID, arg.PropertyID)
-	var i Task
+	var i GetTaskRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -113,15 +132,18 @@ func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (Task, error) 
 		&i.CompletedDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RuleRepeat,
 	)
 	return i, err
 }
 
 const listActiveTasksByProperty = `-- name: ListActiveTasksByProperty :many
-SELECT id, owner_id, property_id, rule_id, due_date, due_time, title, comment, completed_date, created_at, updated_at
-FROM tasks
-WHERE owner_id = $1 AND property_id = $2 AND completed_date IS NULL
-ORDER BY due_date ASC NULLS LAST, due_time ASC NULLS FIRST, created_at ASC, id ASC
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.owner_id = $1 AND t.property_id = $2 AND t.completed_date IS NULL
+ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
 LIMIT $3 OFFSET $4
 `
 
@@ -132,10 +154,25 @@ type ListActiveTasksByPropertyParams struct {
 	Offset     int32       `json:"offset"`
 }
 
+type ListActiveTasksByPropertyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+}
+
 // The active tasks (uncompleted) of the property: the screen's main
 // sections. Due order with the undated last — the client buckets sections
 // against the owner's today delivered by the response.
-func (q *Queries) ListActiveTasksByProperty(ctx context.Context, arg ListActiveTasksByPropertyParams) ([]Task, error) {
+func (q *Queries) ListActiveTasksByProperty(ctx context.Context, arg ListActiveTasksByPropertyParams) ([]ListActiveTasksByPropertyRow, error) {
 	rows, err := q.db.Query(ctx, listActiveTasksByProperty,
 		arg.OwnerID,
 		arg.PropertyID,
@@ -146,9 +183,9 @@ func (q *Queries) ListActiveTasksByProperty(ctx context.Context, arg ListActiveT
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Task{}
+	items := []ListActiveTasksByPropertyRow{}
 	for rows.Next() {
-		var i Task
+		var i ListActiveTasksByPropertyRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,
@@ -161,6 +198,7 @@ func (q *Queries) ListActiveTasksByProperty(ctx context.Context, arg ListActiveT
 			&i.CompletedDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RuleRepeat,
 		); err != nil {
 			return nil, err
 		}
@@ -173,10 +211,12 @@ func (q *Queries) ListActiveTasksByProperty(ctx context.Context, arg ListActiveT
 }
 
 const listCompletedTasksByProperty = `-- name: ListCompletedTasksByProperty :many
-SELECT id, owner_id, property_id, rule_id, due_date, due_time, title, comment, completed_date, created_at, updated_at
-FROM tasks
-WHERE owner_id = $1 AND property_id = $2 AND completed_date IS NOT NULL
-ORDER BY completed_date DESC, created_at DESC, id ASC
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.owner_id = $1 AND t.property_id = $2 AND t.completed_date IS NOT NULL
+ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
 LIMIT $3 OFFSET $4
 `
 
@@ -187,8 +227,23 @@ type ListCompletedTasksByPropertyParams struct {
 	Offset     int32       `json:"offset"`
 }
 
+type ListCompletedTasksByPropertyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+}
+
 // The completed journal of the property, newest completions first.
-func (q *Queries) ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]Task, error) {
+func (q *Queries) ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]ListCompletedTasksByPropertyRow, error) {
 	rows, err := q.db.Query(ctx, listCompletedTasksByProperty,
 		arg.OwnerID,
 		arg.PropertyID,
@@ -199,9 +254,9 @@ func (q *Queries) ListCompletedTasksByProperty(ctx context.Context, arg ListComp
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Task{}
+	items := []ListCompletedTasksByPropertyRow{}
 	for rows.Next() {
-		var i Task
+		var i ListCompletedTasksByPropertyRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,
@@ -214,6 +269,7 @@ func (q *Queries) ListCompletedTasksByProperty(ctx context.Context, arg ListComp
 			&i.CompletedDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RuleRepeat,
 		); err != nil {
 			return nil, err
 		}
