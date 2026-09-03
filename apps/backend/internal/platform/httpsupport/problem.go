@@ -16,6 +16,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
 )
 
 // Problem builds an RFC 7807 problem detail with request ID from the context.
@@ -133,6 +134,9 @@ var userFacingDetails = []struct {
 
 	// Payments (payment rules, ADR 0047).
 	{paymentsapp.ErrInvalidInput, "Некорректные данные платежа"},
+
+	// Tasks (task rules and tasks, ADR 0051).
+	{tasksapp.ErrInvalidInput, "Некорректные данные задачи"},
 }
 
 // UserFacingDetail maps known domain errors to fixed, non-sensitive messages

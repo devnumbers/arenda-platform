@@ -441,6 +441,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the property's tasks (active ones or the completed journal) */
+        get: operations["listPropertyTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a task rule (creating a task is creating a rule)
+         * @description The first materialization happens in the same call: the undated task of an undated rule, every occurrence due today, and the single future one. The due date must be today or later in the property owner's timezone — backdated rules are rejected.
+         */
+        post: operations["createTaskRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTaskRule"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete the task rule (hard; not covered by the v1 UI)
+         * @description Every uncompleted task of the rule — planned, overdue, today's and the single future — is physically removed; the completed journal stays with its snapshots (ruleId set to null). There is no keep_overdue analogue: у задач нет долга.
+         */
+        delete: operations["deleteTaskRule"];
+        options?: never;
+        head?: never;
+        /**
+         * Partial task rule update
+         * @description Omitted fields stay unchanged; comment, dueDate and dueTime are tri-state (null clears). The edit invalidates the not-yet-due uncompleted tasks (the undated and strictly future ones) — the tick stands the single future again with fresh snapshots; already due and completed tasks keep their frozen snapshots. A newly set due date must be today or later.
+         */
+        patch: operations["updateTaskRule"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * «Удалить все выполненные» — clear the completed journal
+         * @description Removes the completed tasks of the property's deleted rules forever; rules and active tasks are untouched. The completed tasks of live rules stay — they hold the materialization dedup keys, and clearing them would re-materialize the rule's whole past (ADR 0051).
+         */
+        delete: operations["deleteCompletedTasks"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Выполнить» the task
+         * @description The completion fact is stamped with today in the property owner's timezone; a repeated completion is a 409. The rule's schedule is not touched.
+         */
+        post: operations["completeTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/{taskId}/uncomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Отменить выполнение» the task
+         * @description The completion fact is cleared and the task returns to the active ones; the rule's schedule is untouched. Possible only while the rule lives — a journal row of a deleted rule is a 409.
+         */
+        post: operations["uncompleteTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/access/members": {
         parameters: {
             query?: never;
@@ -1878,6 +1999,94 @@ export interface components {
             categories: components["schemas"]["OperationsSummaryCategory"][];
         };
         /**
+         * @description How often the rule produces tasks. Parameters (weekday sets, day-of-month lists) do not exist in v1 — the anchor date alone drives the schedule: weekly keeps the anchor's weekday, monthly/yearly clamp to the month's length (the 31st → 28/29, February 29 → 28).
+         * @enum {string}
+         */
+        TaskRepeat: "once" | "daily" | "weekly" | "monthly" | "yearly";
+        /** @description Wall-clock time HH:MM at minute precision; seconds never enter the system. */
+        TaskTime: string;
+        /** @description The task rule create payload. The date is optional — an undated rule (only once) produces a single dateless task («Без срока») that materializes immediately; the time requires the date; a repeat other than once requires the date. */
+        TaskRuleCreateRequest: {
+            title: string;
+            comment?: string;
+            /** Format: date */
+            dueDate?: string;
+            dueTime?: components["schemas"]["TaskTime"];
+            repeat: components["schemas"]["TaskRepeat"];
+        };
+        /** @description Partial rule update: an omitted field is left unchanged; comment, dueDate and dueTime are tri-state — null clears them. */
+        TaskRuleUpdateRequest: {
+            title?: string;
+            comment?: string | null;
+            /** Format: date */
+            dueDate?: string | null;
+            dueTime?: components["schemas"]["TaskTime"] | null;
+            repeat?: components["schemas"]["TaskRepeat"];
+        };
+        /** @description One task rule: the setting that produces tasks. It is never itself completed, overdue or undated — those are states of its tasks. */
+        TaskRuleResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            title: string;
+            comment: string | null;
+            /**
+             * Format: date
+             * @description The rule's anchor — the first occurrence date; null = undated (once only).
+             */
+            dueDate: string | null;
+            /** @description Wall-clock time HH:MM at minute precision; null = the date only. */
+            dueTime: string | null;
+            repeat: components["schemas"]["TaskRepeat"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description One task — a rule occurrence and the unit that gets completed by hand. title/comment/dueDate/dueTime are snapshots taken at materialization; status is the server-computed view bucket (active, overdue — from the due minute inclusive, or from the end of the day for a date-only task; undated; completed). */
+        TaskResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /**
+             * Format: uuid
+             * @description The producing rule; null marks it deleted (the journal row is read-only).
+             */
+            ruleId: string | null;
+            /** Format: date */
+            dueDate: string | null;
+            /** @description Snapshot of the rule's due time; null = the date only. */
+            dueTime: string | null;
+            title: string;
+            comment: string | null;
+            /** @description The producing rule's repeat as of the read — the screen's ↻ mark. Read through the live rule, not snapshotted: null once the rule is deleted (the journal row keeps its content snapshots, not the rule's settings). */
+            repeat: components["schemas"]["TaskRepeat"] | null;
+            /**
+             * Format: date
+             * @description The completion fact; it may differ from the due date.
+             */
+            completedDate: string | null;
+            /** @enum {string} */
+            status: "active" | "overdue" | "undated" | "completed";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description One tasks page: the items of the requested bucket, its total count (the «Выполненные N» counter) and the data owner's today — the day boundary for the «Сегодня»/«Завтра» sections. */
+        TasksResponse: {
+            items: components["schemas"]["TaskResponse"][];
+            /** @description The total count of the same bucket (not the page). */
+            total: number;
+            /**
+             * Format: date
+             * @description The data owner's current date (ADR 0048).
+             */
+            today: string;
+        };
+        /**
          * @description The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
          * @enum {string}
          */
@@ -2140,6 +2349,8 @@ export interface components {
         OperationsOrder: "asc" | "desc";
         OperationsLimit: number;
         OperationsOffset: number;
+        TasksLimit: number;
+        TasksOffset: number;
         /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
         TitleSearch: string;
         /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
@@ -3196,6 +3407,225 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPropertyTasks: {
+        parameters: {
+            query?: {
+                /** @description The bucket selector: false (default) — the active tasks (the screen's Просроченные/Сегодня/даты/Без даты sections), true — the completed journal (the collapsible «Выполненные» section). total always counts the same bucket. */
+                completed?: boolean;
+                limit?: components["parameters"]["TasksLimit"];
+                offset?: components["parameters"]["TasksOffset"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tasks page. status is the server-computed view bucket (active, overdue, undated, completed) — the client never needs the owner's timezone; today is the data owner's current date for the «Сегодня»/«Завтра» sections. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasksResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createTaskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task rule created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getTaskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTaskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task rule deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTaskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRuleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task rule updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteCompletedTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Completed journal cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    completeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task completed (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    uncompleteTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task reopened (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];

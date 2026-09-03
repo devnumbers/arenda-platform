@@ -195,6 +195,28 @@
     }
 }
 
+/* Сворачиваемая секция дизайн-слоя (#499): раскрытие/скрытие по высоте
+   контента — переменную ведёт Radix Collapsible. */
+@keyframes collapsible-down {
+    from {
+        height: 0;
+    }
+
+    to {
+        height: var(--radix-collapsible-content-height);
+    }
+}
+
+@keyframes collapsible-up {
+    from {
+        height: var(--radix-collapsible-content-height);
+    }
+
+    to {
+        height: 0;
+    }
+}
+
 /* Document
    ========================================================================== */
 

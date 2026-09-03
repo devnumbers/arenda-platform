@@ -555,7 +555,7 @@ func recurrenceResponse(r domain.Recurrence) (openapi.Recurrence, error) {
 	var err error
 	switch r.Kind() {
 	case domain.RecurrenceDaily:
-		err = out.FromRecurrenceDaily(openapi.RecurrenceDaily{Kind: openapi.Daily})
+		err = out.FromRecurrenceDaily(openapi.RecurrenceDaily{Kind: openapi.RecurrenceDailyKindDaily})
 	case domain.RecurrenceWeekly:
 		weekdays := make([]int, len(r.Weekdays()))
 		for i, wd := range r.Weekdays() {

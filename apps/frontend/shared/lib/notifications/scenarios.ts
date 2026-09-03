@@ -216,6 +216,24 @@ const payments = {
   favoriteError: errorScenario('Не удалось обновить избранное'),
 } as const;
 
+/** Контекст «Задачи» (#499): тосты ошибок мутаций; выполнение/снятие/
+ * удаление проходят без уведомлений (решение владельца 2026-09-03: задача
+ * просто переезжает между секциями). Исключение — сохранение правки
+ * (#502, требование тикета): сообщаем, что изменения коснутся будущих
+ * задач, а история останется (формат подсказки — решить на приёмке). */
+const tasks = {
+  completeError: errorScenario('Не удалось выполнить задачу'),
+  uncompleteError: errorScenario('Не удалось снять выполнение'),
+  deleteCompletedError: errorScenario('Не удалось удалить выполненные задачи'),
+  createError: errorScenario('Не удалось создать задачу'),
+  updated: ((options?) =>
+    notify.success('Задача сохранена', {
+      description: 'Изменения коснутся будущих задач — история останется',
+      ...options,
+    })) satisfies ScenarioFn,
+  updateError: errorScenario('Не удалось сохранить задачу'),
+} as const;
+
 const demo = {
   success: ((options?) =>
     notify.success('Успех', options)) satisfies ScenarioFn,
@@ -242,6 +260,7 @@ export type Scenarios = {
   readonly tariff: typeof tariff;
   readonly paymentMethods: typeof paymentMethods;
   readonly payments: typeof payments;
+  readonly tasks: typeof tasks;
   readonly demo: typeof demo;
 };
 
@@ -254,5 +273,6 @@ export const scenarios: Scenarios = {
   tariff,
   paymentMethods,
   payments,
+  tasks,
   demo,
 };

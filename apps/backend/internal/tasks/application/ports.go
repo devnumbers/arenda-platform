@@ -1,0 +1,265 @@
+// Package application holds the tasks use cases and ports: the rule CRUD,
+// the task completion use cases and the property-wide listings, and the
+// materialization tick run (ADR 0051). The context is modelled on Payments
+// (ADR 0049 §3) without the payments-specific machinery: no pauses, no
+// end dates, no money — the rule generates tasks, the tick materializes
+// them, and the journal of completed tasks survives rule deletion.
+package application
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+// The application error vocabulary of the tasks use cases: the transport
+// maps them onto the wire contract (400/403/404/409).
+var (
+	// ErrNotFound covers a missing property, a missing or foreign rule or
+	// task and an actor without the view capability — the privacy 404.
+	ErrNotFound = errors.New("tasks: not found")
+	// ErrInvalidInput marks a command that violates the create/update
+	// contract (empty title, an unknown repeat, time without date, a
+	// backdated anchor, pagination out of bounds).
+	ErrInvalidInput = errors.New("tasks: invalid input")
+	// ErrForbidden marks an actor whose role grants the view capability but
+	// not the mutation capability (viewer — the ADR 0028 matrix).
+	ErrForbidden = errors.New("tasks: forbidden")
+	// ErrArchivedProperty marks a mutation on an archived property — the
+	// read-only state (ADR 0025 in the ADR 0049 revision).
+	ErrArchivedProperty = errors.New("tasks: property is archived")
+	// ErrAlreadyCompleted marks a completion of an already completed task —
+	// the contract's 409 on a repeated complete.
+	ErrAlreadyCompleted = errors.New("tasks: task already completed")
+	// ErrNotCompleted marks «Отменить выполнение» on an active task.
+	ErrNotCompleted = errors.New("tasks: task is not completed")
+	// ErrRuleDeleted marks «Отменить выполнение» on a journal row whose rule
+	// is gone: the completion is irreversible there (tasks/CONTEXT.md
+	// «Выполненная задача» — только пока правило живо).
+	ErrRuleDeleted = errors.New("tasks: task rule is deleted")
+)
+
+// PropertyRef is the tasks view of the property a use case targets: the data
+// owner (the SQL scope, ADR 0028) and the archived flag. The properties
+// context owns the entity; tasks never needs its rest.
+type PropertyRef struct {
+	OwnerID  uuid.UUID
+	Archived bool
+}
+
+// PropertyStore resolves the property a tasks use case targets. The
+// ForUpdate variant is the context's serialization point (the payments
+// precedent, ADR 0049 §3): every mutation locks the property row before
+// reading or writing a rule, so mutation-vs-tick, mutation-vs-mutation and
+// archive-vs-mutation serialize on one point.
+type PropertyStore interface {
+	// Get loads the property reference without locking; ErrNotFound when no
+	// such property exists.
+	Get(ctx context.Context, propertyID uuid.UUID) (PropertyRef, error)
+	// GetForUpdate loads the property reference with the row locked inside
+	// the caller's transaction.
+	GetForUpdate(ctx context.Context, propertyID uuid.UUID) (PropertyRef, error)
+	WithTx(tx transaction.Tx) (PropertyStore, error)
+}
+
+// RuleStore is the persistence port of the task rules. Reads and writes are
+// scoped by the data owner (ADR 0028) and the nested path rule→property is
+// enforced in the queries themselves.
+type RuleStore interface {
+	// Get loads one rule; ErrNotFound when the id is unknown, belongs to
+	// another owner or hangs on another property.
+	Get(ctx context.Context, id, scope, propertyID uuid.UUID) (domain.TaskRule, error)
+	// Create inserts a new rule (id and owner_id are app-side).
+	Create(ctx context.Context, rule domain.TaskRule) error
+	// Update writes the editable fields of the rule.
+	Update(ctx context.Context, rule domain.TaskRule) error
+	// Delete removes the rule row; the journal rows keep their snapshots
+	// with rule_id set to NULL by the FK. The caller has already resolved
+	// the fate of the rule's uncompleted tasks.
+	Delete(ctx context.Context, id, scope uuid.UUID) error
+	// DeleteNotDueUncompleted removes the rule's uncompleted tasks that have
+	// not fallen due yet — the undated one and the strictly future ones
+	// (date > today): the edit invalidation whose in-transaction tick then
+	// stands the single future again with fresh snapshots. Already due and
+	// completed tasks keep their frozen snapshots.
+	DeleteNotDueUncompleted(ctx context.Context, ruleID uuid.UUID, today time.Time) error
+	// DeleteUncompleted removes every uncompleted task of the rule —
+	// planned, overdue, today's and the single future: the rule deletion
+	// semantics (resolution #496 — всё невыполненное гасится физически).
+	DeleteUncompleted(ctx context.Context, ruleID uuid.UUID) error
+	WithTx(tx transaction.Tx) (RuleStore, error)
+}
+
+// TaskStore is the persistence port of the tasks (the occurrences and the
+// completed journal). Reads and writes are scoped by the data owner and the
+// nested property path lives in the queries themselves. The mutating methods
+// must run inside the transaction holding the property serialization lock.
+type TaskStore interface {
+	// Get loads one task; ErrNotFound when the id is unknown, foreign or
+	// hangs on another property.
+	Get(ctx context.Context, id, scope, propertyID uuid.UUID) (domain.Task, error)
+	// ListByProperty returns one page of the property's tasks — active
+	// (uncompleted) or completed per the query — with the total count of the
+	// same filter (the «Выполненные N» section header).
+	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, q TasksListQuery) ([]domain.Task, int, error)
+	// Complete stamps the completion fact (completed_date = day) on the
+	// still-active task; rows affected = 0 surfaces as ErrAlreadyCompleted.
+	Complete(ctx context.Context, id, scope uuid.UUID, day time.Time) error
+	// Uncomplete clears the completion fact; rows affected = 0 surfaces as
+	// ErrNotCompleted.
+	Uncomplete(ctx context.Context, id, scope uuid.UUID) error
+	// DeleteCompletedJournal removes the property's completed tasks whose
+	// rule is deleted (rule_id IS NULL) — the «Удалить все выполненные»
+	// operation (resolution #497). It returns the number of removed rows.
+	// The completed tasks of live rules stay: they hold the tick's dedup
+	// keys, and clearing them would re-materialize the rule's whole past
+	// (ADR 0051).
+	DeleteCompletedJournal(ctx context.Context, scope, propertyID uuid.UUID) (int64, error)
+	WithTx(tx transaction.Tx) (TaskStore, error)
+}
+
+// Pagination bounds of the tasks lists: the wire default is a page of 100
+// with a hard ceiling at 500.
+const (
+	DefaultTasksPageSize = 100
+	MaxTasksPageSize     = 500
+)
+
+// TasksListQuery is the property listing request. Completed selects the
+// bucket: false = the active tasks (the screen's main sections), true = the
+// completed journal (the collapsible «Выполненные» section). The transport
+// fills everything; PrepareTasksQuery applies the page-size default and the
+// pagination bounds.
+type TasksListQuery struct {
+	Completed bool
+	Limit     int
+	Offset    int
+}
+
+// PrepareTasksQuery validates the listing request in place and applies the
+// page-size default: a zero limit becomes the default page, anything out of
+// range or a negative offset is ErrInvalidInput mapped to the contract's 400.
+func PrepareTasksQuery(q *TasksListQuery) error {
+	if q.Limit == 0 {
+		q.Limit = DefaultTasksPageSize
+	}
+	if q.Limit < 1 || q.Limit > MaxTasksPageSize || q.Offset < 0 {
+		return ErrInvalidInput
+	}
+	return nil
+}
+
+// TaskListItem pairs one task with its server-computed view status
+// (CONTEXT.md «Просрочка», «Без срока»): the buckets are never stored — they
+// are derived against the owner's current moment before the response leaves
+// the use case; clients never need the owner's timezone.
+type TaskListItem struct {
+	Task   domain.Task
+	Status domain.TaskViewStatus
+}
+
+// TasksPage is one listing page plus the total count of the same filter (the
+// «Выполненные N» counter) and the data owner's today — the day boundary the
+// client buckets «Сегодня»/«Завтра» sections against.
+type TasksPage struct {
+	Items []TaskListItem
+	Total int
+	Today time.Time
+}
+
+// OwnerSnapshot is the tick's read side in one interface fact: the owner's
+// task rules on non-archived properties and the dedup keys of their existing
+// tasks. How many queries build it is the adapter's business.
+type OwnerSnapshot struct {
+	Rules []domain.TaskRule
+	// Existing keys the listed rules' tasks by rule: dated rows by due date
+	// (the value is the completed flag), the undated row as a flag.
+	Existing map[uuid.UUID]domain.TaskExistence
+}
+
+// TickStore is the persistence port of the materialization tick (ADR 0051):
+// the serialization lock, the owner snapshot, and the application of a tick
+// plan. Every method must run inside the tick's unit of work.
+type TickStore interface {
+	// LockOwnerProperties takes the tick's serialization point: FOR UPDATE on
+	// the owner's active/maintenance property rows. Context mutations lock
+	// the same rows per property, so update-vs-tick, archive-vs-tick and
+	// delete-vs-tick serialize on one point.
+	LockOwnerProperties(ctx context.Context, ownerID uuid.UUID) error
+	// LoadOwnerSnapshot returns the owner's task rules on non-archived
+	// properties with the dedup keys of their existing tasks.
+	LoadOwnerSnapshot(ctx context.Context, ownerID uuid.UUID) (OwnerSnapshot, error)
+	// ApplyTickPlan applies one rule's plan inside the caller's transaction:
+	// the idempotent task inserts (due dates, the missing single future and
+	// the undated task) and the future rebuild in one keep-or-none statement.
+	// Ordering and the keep-or-none duality live here, not in the caller.
+	ApplyTickPlan(ctx context.Context, rule domain.TaskRule, today time.Time, plan domain.TaskTickPlan) error
+	WithTx(tx transaction.Tx) (TickStore, error)
+}
+
+// OwnerCalendar gives the data owner's calendar date (ADR 0048): "today" as
+// the date in the property owner's timezone — users.timezone, NOT NULL with
+// the Europe/Moscow default, IANA-validated on write — normalized to the
+// domain's UTC-midnight convention. The tasks context shares the payments
+// decision verbatim: a timezone change never rewrites history — it only
+// shifts future day boundaries.
+type OwnerCalendar interface {
+	Today(ctx context.Context, ownerID uuid.UUID) (time.Time, error)
+}
+
+// OwnerMoment is the read-side counterpart of the calendar: the owner's
+// current instant with seconds truncated to minutes (the overdue precision,
+// resolution #496 — seconds never participate) plus the instant's calendar
+// date under the module's UTC-midnight convention.
+type OwnerMoment struct {
+	// Now is the current instant in the owner's location, seconds truncated
+	// to minutes (the overdue precision).
+	Now time.Time
+	// Today is Now's calendar date at UTC midnight (the date convention).
+	Today time.Time
+}
+
+// OwnerClock resolves the data owner's current moment (the OwnerMoment
+// contract) for the computed read-side views. Mutations and the tick need
+// only the day boundary (OwnerCalendar); the listings need the moment.
+type OwnerClock interface {
+	Moment(ctx context.Context, ownerID uuid.UUID) (OwnerMoment, error)
+}
+
+// DateAtUTCMidnight is the module's date convention (ADR 0048 p.2): read
+// the instant's calendar date in loc, then rebuild it at UTC midnight, so
+// the result compares correctly against the UTC-midnight dates stored in
+// DATE columns. The single home of the normalization both calendar paths —
+// the owner lookup and the zone sweep — share.
+func DateAtUTCMidnight(t time.Time, loc *time.Location) time.Time {
+	zoned := t.In(loc)
+	return time.Date(zoned.Year(), zoned.Month(), zoned.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// MomentAt truncates the instant to minutes in loc and pairs it with its
+// calendar date — the adapter-side builder of OwnerMoment.
+func MomentAt(now time.Time, loc *time.Location) OwnerMoment {
+	local := now.In(loc).Truncate(time.Minute)
+	return OwnerMoment{Now: local, Today: DateAtUTCMidnight(now, loc)}
+}
+
+// TickZone is one work item of the tick's hourly zone sweep (ADR 0048 p.3):
+// a distinct owner timezone and the data owners in it that have task rules
+// on active/maintenance properties. One "today" is computed per zone and
+// every owner of the zone is materialized on it.
+type TickZone struct {
+	Timezone string
+	Owners   []uuid.UUID
+}
+
+// TickZoneDirectory lists the hourly sweep targets of the materialization
+// tick. Stateless by design: every run re-lists the zones — idempotent
+// materialization makes the midnights-between runs no-ops, so no per-zone or
+// per-owner tick state is kept.
+type TickZoneDirectory interface {
+	ListTickZones(ctx context.Context) ([]TickZone, error)
+}

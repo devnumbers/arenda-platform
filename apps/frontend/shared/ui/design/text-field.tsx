@@ -1,7 +1,7 @@
 'use client';
 
-import { useId } from 'react';
-import type { ComponentProps, JSX } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
+import type { ComponentProps, JSX, ReactNode } from 'react';
 import { Cancel } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { IconButton } from './icon-button';
@@ -16,11 +16,20 @@ import { IconButton } from './icon-button';
  * Disabled (opacity 0.5), Hover (inset-обводка 2px) — фокус-кольца у поля
  * нет намеренно (решение владельца 2026-08-26): видимый признак фокуса —
  * каретка. Кнопка очистки появляется при непустом значении и переданном
- * onClear; остаётся в таб-порядке. */
+ * onClear; остаётся в таб-порядке.
+ * Суффикс и префикс (Figma 1218:54295 — единицы «м²», «м» в полях
+ * характеристик) — серый текст внутри бокса, только декоративный
+ * (aria-hidden): префикс стоит слева до ввода, суффикс — справа.
+ * Многострочное поле (Figma 1227:58065 «Title Out Multi Lines») — textarea
+ * в том же боксе: бокс растёт от контента, минимум 56px; вариант titleIn
+ * с multiline не сочетается — плавающий лейбл рассчитан на одну строку.
+ * autoGrow — опциональное авторасширение: поле тянется по контенту от 3
+ * строк до 200px, дальше скролл внутри (комментарий задачи, решение
+ * владельца 2026-09-03); без него textarea фиксированная на 3 строки. */
 
 export type TextFieldVariant = 'titleOut' | 'titleIn';
 
-export type TextFieldProps = Omit<ComponentProps<'input'>, 'size'> & {
+type TextFieldBaseProps = {
   readonly variant?: TextFieldVariant;
   readonly title?: string;
   readonly description?: string;
@@ -29,7 +38,23 @@ export type TextFieldProps = Omit<ComponentProps<'input'>, 'size'> & {
    * счётчик «длина/лимит»; красным — при достижении лимита. */
   readonly maxLength?: number;
   readonly onClear?: () => void;
+  /** Декоративный хвост бокса (единица измерения справа), aria-hidden. */
+  readonly suffix?: ReactNode;
+  /** Декоративная головка бокса (единица измерения слева, до ввода),
+   * aria-hidden. */
+  readonly prefix?: ReactNode;
+  /** Только с multiline: поле растёт по контенту от 3 строк до ~10
+   * (200px), дальше — скролл внутри; при очистке сжимается обратно. */
+  readonly autoGrow?: boolean;
 };
+
+/** Однострочное поле — пропсы input; многострочное (multiline) — пропсы
+ * textarea: обработчики получают события соответствующего элемента. */
+export type TextFieldProps = TextFieldBaseProps &
+  (
+    | ({ readonly multiline?: false } & Omit<ComponentProps<'input'>, 'size' | 'maxLength'>)
+    | ({ readonly multiline: true } & Omit<ComponentProps<'textarea'>, 'maxLength' | 'ref'>)
+  );
 
 /** Показатели счётчика и ошибок — кегль Figma Mobile/Text/S (13/15). */
 
@@ -41,12 +66,26 @@ export function TextField({
   error,
   maxLength,
   onClear,
+  suffix,
+  prefix,
+  multiline = false,
+  autoGrow = false,
   value,
   disabled,
   placeholder,
   ...props
 }: TextFieldProps): JSX.Element {
   const inputId = useId();
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Авторасширение multiline-поля: высота подгоняется под контент на
+  // каждое изменение значения; потолок — CSS max-h (скролл внутри).
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el || !autoGrow) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [autoGrow, value]);
   const hasValue = typeof value === 'string' && value.length > 0;
   const showClear = onClear !== undefined && hasValue && !disabled;
   const counter =
@@ -57,12 +96,14 @@ export function TextField({
   const bottomLeft = error ?? description;
 
   const box = cn(
-    'flex h-14 w-full items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 transition-shadow',
+    'flex w-full items-center rounded-button bg-surface-muted pl-[18px] pr-2 transition-shadow',
+    multiline ? 'min-h-14 flex-col justify-center py-[10px]' : 'h-14 py-0',
     !disabled && error === undefined && 'hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
     error !== undefined && 'bg-surface-danger hover:shadow-none',
   );
   const input = cn(
-    'h-full w-full min-w-0 border-none bg-transparent text-base leading-[18px] text-content outline-none placeholder:text-content-secondary',
+    'w-full min-w-0 border-none bg-transparent text-base leading-[18px] text-content outline-none placeholder:text-content-secondary',
+    multiline ? 'resize-none' : 'h-full',
   );
 
   return (
@@ -73,7 +114,7 @@ export function TextField({
         </label>
       )}
       <div className={box}>
-        {variant === 'titleIn' && title !== undefined && (
+        {variant === 'titleIn' && !multiline && title !== undefined && (
           <div className="relative h-full min-w-0 flex-1">
             {/* Инпут идёт перед лейблом: peer-варианты требуют, чтобы peer
                 предшествовал цели (~). Строка значения заперта на 27..45
@@ -90,7 +131,7 @@ export function TextField({
               value={value}
               placeholder={title}
               maxLength={maxLength}
-              {...props}
+              {...(props as ComponentProps<'input'>)}
             />
             <label
               htmlFor={inputId}
@@ -105,16 +146,42 @@ export function TextField({
             </label>
           </div>
         )}
-        {(variant === 'titleOut' || title === undefined) && (
-          <input
-            id={inputId}
-            className={input}
-            disabled={disabled}
-            value={value}
-            placeholder={placeholder}
-            maxLength={maxLength}
-            {...props}
-          />
+        {(variant === 'titleOut' || title === undefined || multiline) && (
+          <>
+            {prefix !== undefined && (
+              <span aria-hidden className="pr-1 text-base leading-[18px] text-content-secondary">
+                {prefix}
+              </span>
+            )}
+            {multiline ? (
+              <textarea
+                id={inputId}
+                ref={textareaRef}
+                className={cn(input, 'min-h-[54px]', autoGrow && 'max-h-[200px] overflow-y-auto')}
+                disabled={disabled}
+                value={value}
+                placeholder={placeholder}
+                maxLength={maxLength}
+                rows={3}
+                {...(props as ComponentProps<'textarea'>)}
+              />
+            ) : (
+              <input
+                id={inputId}
+                className={cn(input, prefix !== undefined && 'px-0')}
+                disabled={disabled}
+                value={value}
+                placeholder={placeholder}
+                maxLength={maxLength}
+                {...(props as ComponentProps<'input'>)}
+              />
+            )}
+            {suffix !== undefined && (
+              <span aria-hidden className="pl-1 text-base leading-[18px] text-content-secondary">
+                {suffix}
+              </span>
+            )}
+          </>
         )}
         {showClear && (
           <IconButton

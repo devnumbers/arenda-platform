@@ -36,7 +36,7 @@ import { SheetDragHandle } from './sheet-drag-handle';
 /** SSR-безопасное определение широкого вьюпорта: до гидратации — true
  * (карточка), после — факт; модалки открываются только по взаимодействию
  * пользователя, к тому времени ветвление уже скорректировано. */
-function useIsDesktop(): boolean {
+export function useIsDesktop(): boolean {
   const [isDesktop, setIsDesktop] = useState(true);
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
@@ -83,7 +83,14 @@ export function ModalClose(props: { children: ReactNode; className?: string; asC
 
 export type ModalContentProps = {
   readonly title: ReactNode;
+  /** Дополнение к классу заголовка: каноника — H3 20/24, макетам с серой
+   * меткой 16 (шит сортировки #499) даёт text-base font-medium
+   * text-content-tertiary. */
+  readonly titleClassName?: string;
   readonly description?: ReactNode;
+  /** Дополнение к классу описания: каноника — 14px, макетам с R/400 16
+   * (диалог подтверждения #499) даёт text-base text-content-secondary. */
+  readonly descriptionClassName?: string;
   readonly children: ReactNode;
   readonly className?: string;
   /** Крестик закрытия в правом верхнем углу карточки (только попап). */
@@ -95,7 +102,9 @@ export type ModalContentProps = {
 
 export function ModalContent({
   title,
+  titleClassName,
   description,
+  descriptionClassName,
   children,
   className,
   showClose = false,
@@ -106,7 +115,7 @@ export function ModalContent({
     <DialogTitle className="sr-only">{title}</DialogTitle>
   ) : (
     <div className="flex items-start justify-between gap-4">
-      <DialogTitle className="text-xl font-semibold leading-6 text-content">{title}</DialogTitle>
+      <DialogTitle className={cn('text-xl font-semibold leading-6 text-content', titleClassName)}>{title}</DialogTitle>
       {isDesktop && showClose && (
         <DialogClose asChild>
           <IconButton icon={<Cancel />} label="Закрыть" />
@@ -120,7 +129,9 @@ export function ModalContent({
       <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {titleBlock}
         {description !== undefined && (
-          <DialogDescription className="text-sm text-content-secondary">{description}</DialogDescription>
+          <DialogDescription className={cn('text-sm text-content-secondary', descriptionClassName)}>
+            {description}
+          </DialogDescription>
         )}
         {children}
       </div>

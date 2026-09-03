@@ -1104,6 +1104,302 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/tasks:
+    get:
+      operationId: listPropertyTasks
+      summary: List the property's tasks (active ones or the completed journal)
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: completed
+          in: query
+          required: false
+          description: >
+            The bucket selector: false (default) — the active tasks (the
+            screen's Просроченные/Сегодня/даты/Без даты sections), true — the
+            completed journal (the collapsible «Выполненные» section). total
+            always counts the same bucket.
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/TasksLimit'
+        - $ref: '#/components/parameters/TasksOffset'
+      responses:
+        '200':
+          description: >
+            Tasks page. status is the server-computed view bucket (active,
+            overdue, undated, completed) — the client never needs the owner's
+            timezone; today is the data owner's current date for the
+            «Сегодня»/«Завтра» sections.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TasksResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/tasks/rules:
+    post:
+      operationId: createTaskRule
+      summary: Create a task rule (creating a task is creating a rule)
+      description: >
+        The first materialization happens in the same call: the undated task
+        of an undated rule, every occurrence due today, and the single future
+        one. The due date must be today or later in the property owner's
+        timezone — backdated rules are rejected.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRuleCreateRequest'
+      responses:
+        '201':
+          description: Task rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/tasks/rules/{ruleId}:
+    get:
+      operationId: getTaskRule
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRuleResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateTaskRule
+      summary: Partial task rule update
+      description: >
+        Omitted fields stay unchanged; comment, dueDate and dueTime are
+        tri-state (null clears). The edit invalidates the not-yet-due
+        uncompleted tasks (the undated and strictly future ones) — the tick
+        stands the single future again with fresh snapshots; already due and
+        completed tasks keep their frozen snapshots. A newly set due date must
+        be today or later.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRuleUpdateRequest'
+      responses:
+        '200':
+          description: Task rule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: deleteTaskRule
+      summary: Delete the task rule (hard; not covered by the v1 UI)
+      description: >
+        Every uncompleted task of the rule — planned, overdue, today's and the
+        single future — is physically removed; the completed journal stays
+        with its snapshots (ruleId set to null). There is no keep_overdue
+        analogue: у задач нет долга.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Task rule deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/tasks/completed:
+    delete:
+      operationId: deleteCompletedTasks
+      summary: «Удалить все выполненные» — clear the completed journal
+      description: >
+        Removes the completed tasks of the property's deleted rules forever;
+        rules and active tasks are untouched. The completed tasks of live
+        rules stay — they hold the materialization dedup keys, and clearing
+        them would re-materialize the rule's whole past (ADR 0051).
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Completed journal cleared
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/tasks/{taskId}/complete:
+    post:
+      operationId: completeTask
+      summary: «Выполнить» the task
+      description: >
+        The completion fact is stamped with today in the property owner's
+        timezone; a repeated completion is a 409. The rule's schedule is not
+        touched.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task completed (status is the server-computed view)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/tasks/{taskId}/uncomplete:
+    post:
+      operationId: uncompleteTask
+      summary: «Отменить выполнение» the task
+      description: >
+        The completion fact is cleared and the task returns to the active
+        ones; the rule's schedule is untouched. Possible only while the rule
+        lives — a journal row of a deleted rule is a 409.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task reopened (status is the server-computed view)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/access/members:
     post:
       operationId: createPropertyAccessMember
@@ -2784,6 +3080,23 @@ components:
         type: integer
         default: 0
         minimum: 0
+    TasksLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 100
+        minimum: 1
+        maximum: 500
+    TasksOffset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
     TitleSearch:
       name: search
       in: query
@@ -4220,6 +4533,187 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OperationsSummaryCategory'
+
+    TaskRepeat:
+      type: string
+      enum: [once, daily, weekly, monthly, yearly]
+      description: >
+        How often the rule produces tasks. Parameters (weekday sets,
+        day-of-month lists) do not exist in v1 — the anchor date alone drives
+        the schedule: weekly keeps the anchor's weekday, monthly/yearly clamp
+        to the month's length (the 31st → 28/29, February 29 → 28).
+
+    TaskTime:
+      type: string
+      pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+      description: Wall-clock time HH:MM at minute precision; seconds never enter the system.
+
+    TaskRuleCreateRequest:
+      description: >
+        The task rule create payload. The date is optional — an undated rule
+        (only once) produces a single dateless task («Без срока») that
+        materializes immediately; the time requires the date; a repeat other
+        than once requires the date.
+      type: object
+      required: [title, repeat]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        comment:
+          type: string
+          maxLength: 1000
+        dueDate:
+          type: string
+          format: date
+        dueTime:
+          $ref: '#/components/schemas/TaskTime'
+        repeat:
+          $ref: '#/components/schemas/TaskRepeat'
+
+    TaskRuleUpdateRequest:
+      description: >
+        Partial rule update: an omitted field is left unchanged; comment,
+        dueDate and dueTime are tri-state — null clears them.
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        comment:
+          type: string
+          maxLength: 1000
+          nullable: true
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        # nullable рядом с $ref генераторы OpenAPI игнорируют — оборачиваем
+        # в allOf, чтобы три-стейт dueTime дошёл до клиентов (#502).
+        dueTime:
+          allOf:
+            - $ref: '#/components/schemas/TaskTime'
+          nullable: true
+        repeat:
+          $ref: '#/components/schemas/TaskRepeat'
+
+    TaskRuleResponse:
+      description: >
+        One task rule: the setting that produces tasks. It is never itself
+        completed, overdue or undated — those are states of its tasks.
+      type: object
+      required: [id, propertyId, title, comment, dueDate, dueTime, repeat, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        comment:
+          type: string
+          nullable: true
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+          description: The rule's anchor — the first occurrence date; null = undated (once only).
+        dueTime:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          nullable: true
+          description: Wall-clock time HH:MM at minute precision; null = the date only.
+        repeat:
+          $ref: '#/components/schemas/TaskRepeat'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TaskResponse:
+      description: >
+        One task — a rule occurrence and the unit that gets completed by
+        hand. title/comment/dueDate/dueTime are snapshots taken at
+        materialization; status is the server-computed view bucket (active,
+        overdue — from the due minute inclusive, or from the end of the day
+        for a date-only task; undated; completed).
+      type: object
+      required: [id, propertyId, ruleId, dueDate, dueTime, title, comment, repeat, completedDate, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The producing rule; null marks it deleted (the journal row is read-only).
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        dueTime:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          nullable: true
+          description: Snapshot of the rule's due time; null = the date only.
+        title:
+          type: string
+        comment:
+          type: string
+          nullable: true
+        repeat:
+          allOf:
+            - $ref: '#/components/schemas/TaskRepeat'
+          nullable: true
+          description: >
+            The producing rule's repeat as of the read — the screen's ↻ mark.
+            Read through the live rule, not snapshotted: null once the rule
+            is deleted (the journal row keeps its content snapshots, not the
+            rule's settings).
+        completedDate:
+          type: string
+          format: date
+          nullable: true
+          description: The completion fact; it may differ from the due date.
+        status:
+          type: string
+          enum: [active, overdue, undated, completed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TasksResponse:
+      description: >
+        One tasks page: the items of the requested bucket, its total count
+        (the «Выполненные N» counter) and the data owner's today — the day
+        boundary for the «Сегодня»/«Завтра» sections.
+      type: object
+      required: [items, total, today]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskResponse'
+        total:
+          type: integer
+          description: The total count of the same bucket (not the page).
+        today:
+          type: string
+          format: date
+          description: The data owner's current date (ADR 0048).
 
     PropertyAccessMemberRole:
       type: string

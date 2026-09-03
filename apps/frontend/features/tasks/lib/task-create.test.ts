@@ -1,0 +1,123 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildTaskRuleCreateRequest,
+  calendarMonthOf,
+  canCreateTask,
+  EMPTY_TASK_CREATE_DRAFT,
+  isTaskTitleFilled,
+  listCalendarMonths,
+  TASK_REPEAT_OPTIONS,
+  type TaskCreateDraft,
+} from './task-create';
+
+function draft(partial: Partial<TaskCreateDraft>): TaskCreateDraft {
+  return { ...EMPTY_TASK_CREATE_DRAFT, ...partial };
+}
+
+describe('TASK_REPEAT_OPTIONS — чипы «Повторять каждый»', () => {
+  it('перечисляет День/Неделю/Месяц/Год значениями контракта', () => {
+    expect(TASK_REPEAT_OPTIONS).toEqual([
+      { value: 'daily', label: 'День' },
+      { value: 'weekly', label: 'Неделю' },
+      { value: 'monthly', label: 'Месяц' },
+      { value: 'yearly', label: 'Год' },
+    ]);
+  });
+});
+
+describe('isTaskTitleFilled — шаг 1, «Далее» без названия недоступен', () => {
+  it('название непустое — заполнено', () => {
+    expect(isTaskTitleFilled('Вызвать сантехника')).toBe(true);
+  });
+
+  it('пустое и пробельное название — не заполнено', () => {
+    expect(isTaskTitleFilled('')).toBe(false);
+    expect(isTaskTitleFilled('   ')).toBe(false);
+  });
+});
+
+describe('canCreateTask — контрактные зависимости шага 2', () => {
+  it('без названия создать нельзя', () => {
+    expect(canCreateTask(draft({ title: '  ' }))).toBe(false);
+  });
+
+  it('только название — достаточно (всё остальное необязательно)', () => {
+    expect(canCreateTask(draft({ title: 'Полить цветы' }))).toBe(true);
+  });
+
+  it('время без даты — нельзя (время требует дату)', () => {
+    expect(
+      canCreateTask(draft({ title: 'Т', dueTime: '12:00' })),
+    ).toBe(false);
+    expect(
+      canCreateTask(draft({ title: 'Т', dueDate: '2026-09-10', dueTime: '12:00' })),
+    ).toBe(true);
+  });
+
+  it('повтор без даты — нельзя (повтор требует дату)', () => {
+    expect(canCreateTask(draft({ title: 'Т', repeat: 'weekly' }))).toBe(false);
+    expect(
+      canCreateTask(draft({ title: 'Т', dueDate: '2026-09-10', repeat: 'weekly' })),
+    ).toBe(true);
+  });
+});
+
+describe('buildTaskRuleCreateRequest — payload POST /tasks/rules', () => {
+  it('только название: repeat = once, остальное опущено', () => {
+    expect(buildTaskRuleCreateRequest(draft({ title: '  Разобрать кладовку ' }))).toEqual({
+      title: 'Разобрать кладовку',
+      repeat: 'once',
+    });
+  });
+
+  it('полный черновик передаёт все поля', () => {
+    expect(
+      buildTaskRuleCreateRequest(
+        draft({
+          title: 'Полить цветы',
+          comment: '  На балконе и в кухне  ',
+          dueDate: '2026-09-10',
+          dueTime: '21:00',
+          repeat: 'weekly',
+        }),
+      ),
+    ).toEqual({
+      title: 'Полить цветы',
+      comment: 'На балконе и в кухне',
+      dueDate: '2026-09-10',
+      dueTime: '21:00',
+      repeat: 'weekly',
+    });
+  });
+
+  it('пробельный комментарий опускается', () => {
+    const request = buildTaskRuleCreateRequest(draft({ title: 'Т', comment: '   ' }));
+    expect(request).not.toBeNull();
+    expect(request?.comment).toBeUndefined();
+  });
+
+  it('нарушенный контракт (время без даты) не превращается в запрос', () => {
+    expect(buildTaskRuleCreateRequest(draft({ title: 'Т', dueTime: '09:00' }))).toBeNull();
+  });
+});
+
+describe('listCalendarMonths — лента месяцев пикера даты', () => {
+  it('начинает с месяца стартовой даты и переводит год на границе', () => {
+    expect(listCalendarMonths('2026-11-05', 3)).toEqual([
+      { year: 2026, month0: 10 },
+      { year: 2026, month0: 11 },
+      { year: 2027, month0: 0 },
+    ]);
+  });
+
+  it('один месяц — один блок', () => {
+    expect(listCalendarMonths('2026-09-17', 1)).toEqual([{ year: 2026, month0: 8 }]);
+  });
+});
+
+describe('calendarMonthOf — месяц даты для чипа и черновиков', () => {
+  it('разбирает ISO-дату в год и месяц', () => {
+    expect(calendarMonthOf('2026-09-17')).toEqual({ year: 2026, month0: 8 });
+    expect(calendarMonthOf('2027-01-01')).toEqual({ year: 2027, month0: 0 });
+  });
+});
