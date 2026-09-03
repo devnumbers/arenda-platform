@@ -8,9 +8,9 @@ import {
   Add,
   ArrowLeft,
   Checkmark,
+  SortingBigSmall,
   SortingSmallBig,
   SmallArrowDown,
-  SmallArrowUp,
   TrashBin,
   VerticalMenu,
 } from '@/shared/assets/icons';
@@ -60,8 +60,9 @@ import { TasksSortSheet } from './tasks-sort-sheet';
  * сворачиваемая «Выполненные N» (по умолчанию свёрнута, пустая не
  * показывается). Тап по строке — «Изменить задачу» (#502), тап по кружку —
  * выполнить/снять без уведомлений (решение владельца 2026-09-03). Чип
- * сортировки: стрелка показывает направление (вверх — возрастание, вниз —
- * убывание); на десктопе открывает меню «Сортировать» (Figma 1603-94487,
+ * сортировки: ведущая иконка показывает направление (SortingSmallBig —
+ * возрастание, SortingBigSmall — убывание); на десктопе открывает меню
+ * «Сортировать» (Figma 1603-94487,
  * выбор применяет и закрывает), на мобильной ширине — шит. Кебаб ⋮
  * (Figma 1535-77633) —
  * «Отметить все задачи» (все активные, по одному POST, молча — без шитов и
@@ -268,8 +269,10 @@ export function TasksOfPropertyScreen({
   );
 }
 
-/** Чип сортировки (Figma 1535-76222): «Дата»/«Название» и стрелка
- * направления — вверх у возрастания, вниз у убывания (671:7463/671:7320).
+/** Чип сортировки (Figma 1535-76222): «Дата»/«Название»; ведущая иконка —
+ * направление (возрастание — SortingSmallBig 418:4608, от меньшего к
+ * большему; убывание — SortingBigSmall 418:4607, от большего к меньшему —
+ * решение владельца 2026-09-03), хвостовая стрелка всегда вниз (671:7320).
  * Прокидывает все пропсы кнопки: на десктопе через него Slot триггера
  * Radix-меню передаёт свои обработчики и aria. */
 function SortChip({
@@ -280,8 +283,10 @@ function SortChip({
 } & ComponentProps<'button'>): JSX.Element {
   return (
     <ChipButton
-      leadingIcon={<SortingSmallBig />}
-      trailingIcon={sort.direction === 'asc' ? <SmallArrowUp /> : <SmallArrowDown />}
+      leadingIcon={
+        sort.direction === 'asc' ? <SortingSmallBig /> : <SortingBigSmall />
+      }
+      trailingIcon={<SmallArrowDown />}
       {...props}
     >
       {sort.field === 'date' ? 'Дата' : 'Название'}

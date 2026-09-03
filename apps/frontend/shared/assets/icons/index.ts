@@ -121,11 +121,12 @@ export { default as NotificationSettings } from './notification-settings.svg';
 export { default as MenuLines } from './menu-lines.svg';
 
 // Список задач объекта (#499, Figma 1535-75894): чип сортировки
-// (SortingSmallBig 418:4608 + SmallArrowDown 671:7320), стрелка
-// сворачиваемой секции (SmallArrowUp 671:7463), кебаб-меню
-// (VerticalMenu 185:175) и часы подзаголовка строки (ClockSmall
-// 594:13394, 16×16) — currentColor.
+// (SortingSmallBig 418:4608 — возрастание, SortingBigSmall 418:4607 —
+// убывание, SmallArrowDown 671:7320), стрелка сворачиваемой секции
+// (SmallArrowUp 671:7463), кебаб-меню (VerticalMenu 185:175) и часы
+// подзаголовка строки (ClockSmall 594:13394, 16×16) — currentColor.
 export { default as SortingSmallBig } from './sorting-small-big.svg';
+export { default as SortingBigSmall } from './sorting-big-small.svg';
 export { default as SmallArrowDown } from './small-arrow-down.svg';
 export { default as SmallArrowUp } from './small-arrow-up.svg';
 export { default as VerticalMenu } from './vertical-menu.svg';
