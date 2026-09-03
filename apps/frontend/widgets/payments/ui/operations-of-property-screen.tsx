@@ -13,6 +13,7 @@ import {
   groupOperationsByDate,
   operationsCategoryChipLabel,
   operationsCategoryRows,
+  operationsFiltersHref,
   operationsPeriodDefaultChipLabel,
   operationsPeriodRangeChipLabel,
   useOperationsFilters,
@@ -218,14 +219,30 @@ export function OperationsOfPropertyScreen({
                         totalKopecks={summaryQuery.data?.expenseTotalKopecks}
                         segments={summaryBarSegments(summaryQuery.data, 'expense')}
                         openLabel="Открыть расходы объекта"
-                        onOpen={() => router.push(ROUTES.propertyOperationsExpense(propertyId))}
+                        // Период и категории переживают переход на
+                        // направление (решение владельца, #472).
+                        onOpen={() =>
+                          router.push(
+                            operationsFiltersHref(
+                              ROUTES.propertyOperationsExpense(propertyId),
+                              filters,
+                            ),
+                          )
+                        }
                       />
                       <SummaryCard
                         label="Доходы"
                         totalKopecks={summaryQuery.data?.incomeTotalKopecks}
                         segments={summaryBarSegments(summaryQuery.data, 'income')}
                         openLabel="Открыть доходы объекта"
-                        onOpen={() => router.push(ROUTES.propertyOperationsIncome(propertyId))}
+                        onOpen={() =>
+                          router.push(
+                            operationsFiltersHref(
+                              ROUTES.propertyOperationsIncome(propertyId),
+                              filters,
+                            ),
+                          )
+                        }
                       />
                     </div>
 

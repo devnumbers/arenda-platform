@@ -7,6 +7,7 @@ import {
   defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
+  operationsFiltersHref,
   operationsFiltersParams,
   operationsPeriodBoundLabel,
   operationsPeriodDefaultChipLabel,
@@ -107,7 +108,7 @@ describe('operationsFiltersParams', () => {
 });
 
 describe('shiftOperationsPeriod', () => {
-  it('целый месяц сдвигается в соседний с границами месяца', () => {
+  it('целый месяц сдвигается в соседний целый месяц', () => {
     expect(shiftOperationsPeriod({ from: '2026-09-01', to: '2026-09-30' }, -1)).toEqual({
       from: '2026-08-01',
       to: '2026-08-31',
@@ -124,22 +125,51 @@ describe('shiftOperationsPeriod', () => {
       to: '2025-12-31',
     });
     expect(shiftOperationsPeriod({ from: '2025-12-10', to: '2026-01-20' }, 1)).toEqual({
-      from: '2026-01-10',
-      to: '2026-02-20',
+      from: '2026-01-01',
+      to: '2026-01-31',
     });
   });
 
-  it('граница-последний-день месяца якорится к последнему дню результата', () => {
-    // Полный месяц при листании остаётся полным месяцем (стрелки #475).
-    expect(shiftOperationsPeriod({ from: '2026-09-01', to: '2026-09-30' }, -1)).toEqual({
-      from: '2026-08-01',
-      to: '2026-08-31',
+  it('произвольный диапазон листается месяцами целиком — 3–14 августа становится целым июлем, а не «3–14 июля» (как фильтр в Т-Банке, решение владельца #472)', () => {
+    expect(shiftOperationsPeriod({ from: '2026-08-03', to: '2026-08-14' }, -1)).toEqual({
+      from: '2026-07-01',
+      to: '2026-07-31',
     });
-    // 31-е зажимается в короткий месяц, конец-последний-день — на конец марта.
+    expect(shiftOperationsPeriod({ from: '2026-08-03', to: '2026-08-14' }, 1)).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-30',
+    });
+  });
+
+  it('якорь листания — месяц начала периода', () => {
+    // Диапазон через границу месяца листается от месяца from.
     expect(shiftOperationsPeriod({ from: '2026-01-31', to: '2026-02-28' }, 1)).toEqual({
-      from: '2026-02-28',
-      to: '2026-03-31',
+      from: '2026-02-01',
+      to: '2026-02-28',
     });
+  });
+});
+
+describe('operationsFiltersHref', () => {
+  it('явные фильтры — from/to/category в query поверх базы', () => {
+    expect(
+      operationsFiltersHref(
+        '/properties/p/operations/income',
+        { period: { from: '2026-08-03', to: '2026-08-14' }, categories: ['internet'] },
+      ),
+    ).toBe('/properties/p/operations/income?from=2026-08-03&to=2026-08-14&category=internet');
+  });
+
+  it('дефолтные фильтры — чистая база без query', () => {
+    expect(
+      operationsFiltersHref('/properties/p/operations', { period: null, categories: [] }),
+    ).toBe('/properties/p/operations');
+  });
+
+  it('только категории — без from/to', () => {
+    expect(
+      operationsFiltersHref('/properties/p/operations', { period: null, categories: ['rent'] }),
+    ).toBe('/properties/p/operations?category=rent');
   });
 });
 

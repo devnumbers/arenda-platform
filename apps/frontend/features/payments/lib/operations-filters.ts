@@ -3,7 +3,6 @@ import { formatDayMonth } from '@/entities/payment';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
 import { daysInMonth } from '@/shared/ui/design/month-grid';
 import {
-  operationsMonthIso,
   operationsMonthOf,
   operationsMonthRange,
   shiftOperationsMonth,
@@ -64,9 +63,6 @@ const isoParts = (iso: IsoDate): { year: number; month: number; day: number } =>
   day: Number(iso.slice(8, 10)),
 });
 
-const isoOfDay = (year: number, month: number, day: number): IsoDate =>
-  operationsMonthIso({ year, month: month - 1 }, day);
-
 /** Календарно корректная ISO-дата (не «2026-13-40»). */
 function isRealIsoDate(iso: string): boolean {
   if (!ISO_DATE_RE.test(iso)) {
@@ -125,21 +121,31 @@ export function operationsFiltersParams(filters: OperationsFilters): Record<stri
 }
 
 /**
- * Сдвиг периода на целые месяцы (стрелки листания экранов направлений
- * #475): день сохраняется и зажимается в короткий месяц, а граница —
- * последний день своего месяца — якорится к последнему дню результата,
- * поэтому полный месяц при листании остаётся полным месяцем.
+ * Листание периода стрелками экранов направлений (#475) — месяцами
+ * целиком, как фильтр в Т-Банке (решение владельца, #472): произвольный
+ * диапазон 3–14 августа при листании превращается в целый соседний месяц,
+ * а не «3–14 июля»; целый месяц остаётся целым месяцем. Якорь — месяц
+ * начала периода.
  */
 export function shiftOperationsPeriod(period: OperationsPeriod, delta: number): OperationsPeriod {
-  const shiftBound = (iso: IsoDate): IsoDate => {
-    const { year, month, day } = isoParts(iso);
-    const shifted = shiftOperationsMonth({ year, month: month - 1 }, delta);
-    const lastDay = daysInMonth(shifted.year, shifted.month);
-    const isLastDayOfMonth = day === daysInMonth(year, month - 1);
-    const shiftedDay = isLastDayOfMonth ? lastDay : Math.min(day, lastDay);
-    return isoOfDay(shifted.year, shifted.month + 1, shiftedDay);
-  };
-  return { from: shiftBound(period.from), to: shiftBound(period.to) };
+  const { from, to } = operationsMonthRange(
+    shiftOperationsMonth(operationsMonthOf(period.from), delta),
+  );
+  return { from, to };
+}
+
+/**
+ * Ссылка на список операций с текущими фильтрами (#472): период и
+ * категории переживают переход между списками (главный ↔ направления) —
+ * решению владельца о несбрасываемых фильтрах. Дефолтные фильтры дают
+ * чистую базу без query, как и в operationsFiltersParams.
+ */
+export function operationsFiltersHref(
+  base: string,
+  filters: OperationsFilters,
+): string {
+  const query = new URLSearchParams(operationsFiltersParams(filters)).toString();
+  return query.length > 0 ? `${base}?${query}` : base;
 }
 
 /** Сокращения месяцев для лейблов диапазона: «1 — 30 ноя». */

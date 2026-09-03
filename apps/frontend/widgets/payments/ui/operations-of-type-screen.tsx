@@ -16,6 +16,7 @@ import {
   groupOperationsByDate,
   operationsCategoryChipLabel,
   operationsCategoryRows,
+  operationsFiltersHref,
   operationsMonthIndex,
   operationsMonthOf,
   operationsPeriodDefaultChipLabel,
@@ -62,10 +63,14 @@ export function OperationsOfTypeScreen({
 
   const today = clientTodayIso();
   const period = filters.period ?? defaultOperationsPeriod(today);
-  // Правая стрелка гасится, когда период упёрся в текущий месяц.
+  // Правая стрелка гасится, когда листание уходит в будущее (экраны
+  // операций — только paid, резолюция #474): стрелки листают месяцами
+  // целиком (решение владельца, как фильтр в Т-Банке, #472), якорь —
+  // месяц начала периода; следующий за ним месяц должен быть не позже
+  // текущего.
   const atCurrentMonth =
-    operationsMonthIndex(operationsMonthOf(period.to))
-    >= operationsMonthIndex(operationsMonthOf(today));
+    operationsMonthIndex(operationsMonthOf(period.from)) + 1
+    > operationsMonthIndex(operationsMonthOf(today));
 
   const periodScope: PaymentOperationScope = {
     status: 'paid',
@@ -134,8 +139,12 @@ export function OperationsOfTypeScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            // Назад — на главный список операций, не по истории браузера.
-            onClick={() => router.push(ROUTES.propertyOperations(propertyId))}
+            // Назад — на главный список операций с текущими фильтрами
+            // (период и категории переживают переход — решение владельца,
+            // #472), а не по истории браузера.
+            onClick={() =>
+              router.push(operationsFiltersHref(ROUTES.propertyOperations(propertyId), filters))
+            }
           />
         }
         trailing={

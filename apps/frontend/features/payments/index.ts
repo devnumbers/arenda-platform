@@ -62,6 +62,7 @@ export {
   defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
+  operationsFiltersHref,
   operationsFiltersParams,
   operationsPeriodBoundLabel,
   operationsPeriodDefaultChipLabel,

@@ -276,4 +276,61 @@ test.describe('экраны операций — сквозной флоу', () 
     await expect(page.getByText(/2\s000\s₽/)).toBeVisible();
     await expect(page.getByText(/3\s000\s₽/)).toBeVisible({ timeout: 5_000 });
   });
+
+  test('фильтры периода и категории не сбрасываются при переходе между списками', async ({
+    page,
+    seededUser,
+  }) => {
+    const previousMonth = new Date();
+    previousMonth.setDate(1);
+    previousMonth.setMonth(previousMonth.getMonth() - 1);
+    const ym = `${previousMonth.getFullYear()}-${String(previousMonth.getMonth() + 1).padStart(2, '0')}`;
+    const from = `${ym}-03`;
+    const to = `${ym}-14`;
+
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`${APARTMENT_OPERATIONS_URL}?from=${from}&to=${to}&category=internet`);
+    await expect(page.getByRole('button', { name: 'Открыть доходы объекта' })).toBeVisible();
+
+    // Карточка направления открывает его с теми же фильтрами.
+    await page.getByRole('button', { name: 'Открыть доходы объекта' }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/operations/income\\?from=${from}&to=${to}&category=internet$`),
+    );
+
+    // «Назад» — на главный список с теми же фильтрами.
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/operations\\?from=${from}&to=${to}&category=internet$`),
+    );
+  });
+
+  test('стрелки листают месяцами целиком — произвольный диапазон превращается в целый месяц', async ({
+    page,
+    seededUser,
+  }) => {
+    const first = new Date();
+    first.setDate(1);
+    first.setMonth(first.getMonth() - 1);
+    const second = new Date(first);
+    second.setMonth(second.getMonth() - 1);
+    const ym = (date: Date): string =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const lastDay = (date: Date): number =>
+      new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense?from=${ym(first)}-03&to=${ym(first)}-14`);
+    await expect(page.getByRole('button', { name: 'Предыдущий месяц' })).toBeVisible();
+
+    // 3–14 <прошлый месяц> при листании назад — весь <позапрошлый>,
+    // а не «3–14» (решение владельца, как фильтр в Т-Банке).
+    await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
+    await expect(page).toHaveURL(new RegExp(`from=${ym(second)}-01&to=${ym(second)}-${lastDay(second)}$`));
+    await expect(page.getByRole('button', { name: 'Следующий месяц' })).toBeEnabled();
+
+    // Вперёд — целиком <прошлый месяц>.
+    await page.getByRole('button', { name: 'Следующий месяц' }).click();
+    await expect(page).toHaveURL(new RegExp(`from=${ym(first)}-01&to=${ym(first)}-${lastDay(first)}$`));
+  });
 });
