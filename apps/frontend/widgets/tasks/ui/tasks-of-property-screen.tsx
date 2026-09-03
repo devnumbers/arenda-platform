@@ -61,8 +61,8 @@ import { TasksSortSheet } from './tasks-sort-sheet';
  * «Отметить все задачи» (все активные, по одному POST, молча — без шитов и
  * уведомлений, решение владельца 2026-09-03) и «Удалить выполненные
  * задачи»; кебаб виден, когда есть активные или выполненные, пункты — по
- * наличию своих строк. Создание — шитом из «+»/«Создать задачу» (#500),
- * редактирование — тапом по строке (#502), кнопки заготовлены экраном.
+ * наличию своих строк. Создание — страницей /tasks/new из «+»/«Создать
+ * задачу» (#500), редактирование — тапом по строке (#502).
  * Смотрящий читает без мутаций (матрица ADR 0028), мутации глушатся и по
  * архиву (#446).
  */
@@ -135,8 +135,7 @@ export function TasksOfPropertyScreen({
             <IconButton
               icon={<Add />}
               label="Создать задачу"
-              // Шит создания — тикет #500; кнопка заготовлена экраном.
-              onClick={() => undefined}
+              onClick={() => router.push(ROUTES.propertyTaskCreate(propertyId))}
             />
           ) : undefined
         }
@@ -213,8 +212,10 @@ export function TasksOfPropertyScreen({
 
       {canMutate && (
         <StickyBottomBar>
-          {/* Шит создания — тикет #500; кнопка заготовлена экраном. */}
-          <Button className="w-full" onClick={() => undefined}>
+          <Button
+            className="w-full"
+            onClick={() => router.push(ROUTES.propertyTaskCreate(propertyId))}
+          >
             Создать задачу
           </Button>
         </StickyBottomBar>

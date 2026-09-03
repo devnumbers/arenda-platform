@@ -13,6 +13,7 @@ import { mapTask, mapTasksPage } from '@/entities/task';
 import type { Task, TasksPage } from '@/entities/task';
 import { taskKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
+import { buildTaskRuleCreateRequest, type TaskCreateDraft } from '../lib/task-create';
 
 type TaskResponseDto = components['schemas']['TaskResponse'];
 type TasksPageDto = components['schemas']['TasksResponse'];
@@ -155,6 +156,36 @@ export function useDeleteCompletedTasks(
       await apiClient<void>(
         `/properties/${encodeURIComponent(propertyId)}/tasks/completed`,
         { method: 'DELETE' },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
+ * Создание задачи = создание правила (словарь #494, #500): POST /tasks/rules
+ * сразу материализует вхождения. Дата опциональна — без неё задача попадает
+ * в «Без срока»; repeat в контракте обязателен, «без повтора» уходит как
+ * once (черновик собирает lib/task-create). Тело ответа экрану не нужно —
+ * результат виден по перечитанному списку (инвалидация всего taskKeys,
+ * как у остальных мутаций контекста).
+ */
+export function useCreateTaskRule(
+  propertyId: string,
+): UseMutationResult<void, ApiError, TaskCreateDraft> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (draft: TaskCreateDraft) => {
+      const request = buildTaskRuleCreateRequest(draft);
+      if (request === null) {
+        // Недостижимо через UI: кнопка «Создать» задизейблена canCreateTask.
+        throw new Error('Черновик задачи не прошёл валидацию');
+      }
+      await apiClient<unknown>(
+        `/properties/${encodeURIComponent(propertyId)}/tasks/rules`,
+        { method: 'POST', body: JSON.stringify(request) },
       );
     },
     onSuccess: () => {

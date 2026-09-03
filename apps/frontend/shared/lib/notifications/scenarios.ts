@@ -223,6 +223,7 @@ const tasks = {
   completeError: errorScenario('Не удалось выполнить задачу'),
   uncompleteError: errorScenario('Не удалось снять выполнение'),
   deleteCompletedError: errorScenario('Не удалось удалить выполненные задачи'),
+  createError: errorScenario('Не удалось создать задачу'),
 } as const;
 
 const demo = {

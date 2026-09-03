@@ -21,6 +21,8 @@ export const ROUTES = {
     `/properties/${id}/payments/${paymentId}`,
   /** Экран «Задачи объекта» (#499): единый список групп-секций. */
   propertyTasks: (id: string) => `/properties/${id}/tasks`,
+  /** Экран «Создать задачу» (#500): полноэкранная форма в два шага. */
+  propertyTaskCreate: (id: string) => `/properties/${id}/tasks/new`,
   /** Подэкраны страницы платежа (#466): график, история, просрочки. */
   propertyPaymentSchedule: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}/schedule`,
