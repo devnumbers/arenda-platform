@@ -252,4 +252,28 @@ test.describe('экраны операций — сквозной флоу', () 
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(new RegExp('/operations$'));
   });
+
+  test('смена периода не подменяет страницу скелетоном — сумма и список на месте', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    // Замедляем сводку: детерминированное окно «загрузка идёт», в котором
+    // раньше страница целиком подменялась скелетонами.
+    await page.route('**/operations/summary*', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await route.continue();
+    });
+    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense`);
+    await expect(page.getByRole('button', { name: 'Предыдущий месяц' })).toBeVisible();
+    await expect(page.getByText(/2\s000\s₽/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
+
+    // Пока сводка августа в полёте: скелетона нет, H1-сумма (прежнего
+    // периода) не исчезает — страница не дёргается.
+    await expect(page.locator('section[aria-hidden] .animate-pulse')).toHaveCount(0);
+    await expect(page.getByText(/2\s000\s₽/)).toBeVisible();
+    await expect(page.getByText(/3\s000\s₽/)).toBeVisible({ timeout: 5_000 });
+  });
 });

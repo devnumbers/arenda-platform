@@ -104,7 +104,16 @@ export function OperationsOfPropertyScreen({
   );
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  const pending = listQuery.isPending || summaryQuery.isPending || everQuery.isPending;
+  // Скелетон — только пока данных нет вовсе (первая загрузка): смена
+  // фильтров держит прежние данные (keepPreviousData) и не дёргает
+  // страницу; ошибка без данных показывает карточку повтора, не скелетон.
+  const pending =
+    (listQuery.data === undefined
+      || summaryQuery.data === undefined
+      || everQuery.data === undefined)
+    && !listQuery.isError
+    && !summaryQuery.isError
+    && !everQuery.isError;
   const neverHad = !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
   const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
 

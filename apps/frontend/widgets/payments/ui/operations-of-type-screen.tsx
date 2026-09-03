@@ -98,7 +98,13 @@ export function OperationsOfTypeScreen({
       : type === 'expense'
         ? summaryQuery.data.expenseTotalKopecks
         : summaryQuery.data.incomeTotalKopecks;
-  const pending = listQuery.isPending || summaryQuery.isPending;
+  // Скелетон — только пока данных нет вовсе (первая загрузка): смена
+  // периода держит прежние данные (keepPreviousData) и не дёргает
+  // страницу; ошибка без данных показывает карточку повтора, не скелетон.
+  const pending =
+    (listQuery.data === undefined || summaryQuery.data === undefined)
+    && !listQuery.isError
+    && !summaryQuery.isError;
   const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
 
   const openOperation = (operation: PaymentOperation): void =>

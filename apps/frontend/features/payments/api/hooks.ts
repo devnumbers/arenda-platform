@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -278,7 +279,9 @@ export function usePaymentOperationsPaged(
  * период, поиск #476) уходит и в ключ, и в query — переключение фильтра
  * читает свой кэш с первой порции. pageParam — offset; следующая страница
  * есть, пока порция полная. `options.enabled` глушит запрос (поиск #476 не
- * стреляет, пока запрос не введён).
+ * стреляет, пока запрос не введён). keepPreviousData держит предыдущий
+ * период на экране, пока едет новый — смена фильтра не подменяет страницу
+ * скелетоном (решение владельца о плавности, #472).
  */
 export function usePropertyOperationsScopedPaged(
   propertyId: string,
@@ -320,6 +323,7 @@ export function usePropertyOperationsScopedPaged(
         ? undefined
         : allPages.length * OPERATIONS_PAGE_SIZE,
     select: (data) => data.pages.flat(),
+    placeholderData: keepPreviousData,
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
@@ -331,7 +335,8 @@ export function usePropertyOperationsScopedPaged(
  * поэтому карточки и список всегда согласны друг с другом. Поиск (#476) —
  * тот же предикат, что у списка: разбивка становится чипами совпавших
  * категорий экрана поиска; `options.enabled` глушит запрос, пока запрос
- * поиска не введён.
+ * поиска не введён; keepPreviousData — сводка не мигает при смене периода
+ * или запроса (решение владельца о плавности, #472).
  */
 export function usePropertyOperationsSummary(
   propertyId: string,
@@ -360,6 +365,7 @@ export function usePropertyOperationsSummary(
       );
       return mapOperationsSummary(response);
     },
+    placeholderData: keepPreviousData,
     enabled: (options.enabled ?? true) && Boolean(propertyId),
   });
 }
