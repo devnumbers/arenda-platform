@@ -22,6 +22,7 @@ import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyAttributesSection} from './PropertyAttributesSection';
 import {PropertyPaymentsSection} from './PropertyPaymentsSection';
+import {PropertyContactsSection} from './PropertyContactsSection';
 import {PropertyActionMenu} from './PropertyActionMenu';
 import {PropertyArchiveModal} from './PropertyArchiveModal';
 import {PropertyDeleteModal} from './PropertyDeleteModal';
@@ -192,6 +193,8 @@ export function PropertyDetailPage(): JSX.Element {
                     />
 
                     <PropertyPaymentsSection propertyId={id}/>
+
+                    <PropertyContactsSection propertyId={id}/>
                 </>
             )}
 
