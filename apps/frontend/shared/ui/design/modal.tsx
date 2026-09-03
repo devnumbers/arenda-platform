@@ -36,7 +36,7 @@ import { SheetDragHandle } from './sheet-drag-handle';
 /** SSR-безопасное определение широкого вьюпорта: до гидратации — true
  * (карточка), после — факт; модалки открываются только по взаимодействию
  * пользователя, к тому времени ветвление уже скорректировано. */
-function useIsDesktop(): boolean {
+export function useIsDesktop(): boolean {
   const [isDesktop, setIsDesktop] = useState(true);
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');

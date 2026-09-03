@@ -47,6 +47,7 @@ export {
   ModalClose,
   ModalContent,
   ModalTrigger,
+  useIsDesktop,
   type ModalContentProps,
 } from './modal';
 export { RoundCheckbox, type RoundCheckboxProps } from './round-checkbox';

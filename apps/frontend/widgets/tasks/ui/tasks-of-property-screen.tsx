@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { JSX } from 'react';
+import type { ComponentProps, JSX } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
@@ -10,6 +10,7 @@ import {
   Checkmark,
   SortingSmallBig,
   SmallArrowDown,
+  SmallArrowUp,
   TrashBin,
   VerticalMenu,
 } from '@/shared/assets/icons';
@@ -45,9 +46,11 @@ import {
   StickyBottomBar,
   TopNav,
   TopNavTitle,
+  useIsDesktop,
 } from '@/shared/ui/design';
 import { TaskRow, type TaskRowTone } from './task-row';
 import { TaskSectionCard } from './task-section-card';
+import { TasksSortMenu } from './tasks-sort-menu';
 import { TasksSortSheet } from './tasks-sort-sheet';
 
 /**
@@ -57,7 +60,10 @@ import { TasksSortSheet } from './tasks-sort-sheet';
  * сворачиваемая «Выполненные N» (по умолчанию свёрнута, пустая не
  * показывается). Тап по строке — «Изменить задачу» (#502), тап по кружку —
  * выполнить/снять без уведомлений (решение владельца 2026-09-03). Чип
- * сортировки открывает шит «Сортировать». Кебаб ⋮ (Figma 1535-77633) —
+ * сортировки: стрелка показывает направление (вверх — возрастание, вниз —
+ * убывание); на десктопе открывает меню «Сортировать» (Figma 1603-94487,
+ * выбор применяет и закрывает), на мобильной ширине — шит. Кебаб ⋮
+ * (Figma 1535-77633) —
  * «Отметить все задачи» (все активные, по одному POST, молча — без шитов и
  * уведомлений, решение владельца 2026-09-03) и «Удалить выполненные
  * задачи»; кебаб виден, когда есть активные или выполненные, пункты — по
@@ -80,6 +86,7 @@ export function TasksOfPropertyScreen({
   const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
   const [sortOpen, setSortOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const isDesktop = useIsDesktop();
 
   const complete = useCompleteTask(propertyId);
   const uncomplete = useUncompleteTask(propertyId);
@@ -158,13 +165,13 @@ export function TasksOfPropertyScreen({
       <PageContent>
         <div className="flex flex-col gap-6 pb-6">
           <div className="flex items-center justify-between pr-3.5 pl-6">
-            <ChipButton
-              leadingIcon={<SortingSmallBig />}
-              trailingIcon={<SmallArrowDown />}
-              onClick={() => setSortOpen(true)}
-            >
-              {sort.field === 'date' ? 'Дата' : 'Название'}
-            </ChipButton>
+            {isDesktop ? (
+              <TasksSortMenu sort={sort} onSortChange={setSort}>
+                <SortChip sort={sort} />
+              </TasksSortMenu>
+            ) : (
+              <SortChip sort={sort} onClick={() => setSortOpen(true)} />
+            )}
             {canMutate && (active.length > 0 || completedTotal > 0) && (
               <Menu>
                 <MenuTrigger asChild>
@@ -233,7 +240,14 @@ export function TasksOfPropertyScreen({
         </StickyBottomBar>
       )}
 
-      <TasksSortSheet open={sortOpen} onOpenChange={setSortOpen} sort={sort} onSortChange={setSort} />
+      {!isDesktop && (
+        <TasksSortSheet
+          open={sortOpen}
+          onOpenChange={setSortOpen}
+          sort={sort}
+          onSortChange={setSort}
+        />
+      )}
 
       <ConfirmModal
         open={deleteOpen}
@@ -251,6 +265,27 @@ export function TasksOfPropertyScreen({
         }
       />
     </>
+  );
+}
+
+/** Чип сортировки (Figma 1535-76222): «Дата»/«Название» и стрелка
+ * направления — вверх у возрастания, вниз у убывания (671:7463/671:7320).
+ * Прокидывает все пропсы кнопки: на десктопе через него Slot триггера
+ * Radix-меню передаёт свои обработчики и aria. */
+function SortChip({
+  sort,
+  ...props
+}: {
+  readonly sort: TasksSort;
+} & ComponentProps<'button'>): JSX.Element {
+  return (
+    <ChipButton
+      leadingIcon={<SortingSmallBig />}
+      trailingIcon={sort.direction === 'asc' ? <SmallArrowUp /> : <SmallArrowDown />}
+      {...props}
+    >
+      {sort.field === 'date' ? 'Дата' : 'Название'}
+    </ChipButton>
   );
 }
 
