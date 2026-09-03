@@ -214,6 +214,23 @@ type CardBindingSession struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Contact struct {
+	ID                pgtype.UUID        `json:"id"`
+	OwnerID           pgtype.UUID        `json:"owner_id"`
+	PropertyID        pgtype.UUID        `json:"property_id"`
+	FirstName         string             `json:"first_name"`
+	LastName          pgtype.Text        `json:"last_name"`
+	Patronymic        pgtype.Text        `json:"patronymic"`
+	Role              pgtype.Text        `json:"role"`
+	Phone             pgtype.Text        `json:"phone"`
+	Email             pgtype.Text        `json:"email"`
+	MessengerName     pgtype.Text        `json:"messenger_name"`
+	MessengerUsername pgtype.Text        `json:"messenger_username"`
+	Note              pgtype.Text        `json:"note"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type LoginAttempt struct {
 	ID             pgtype.UUID        `json:"id"`
 	Phone          string             `json:"phone"`
@@ -317,16 +334,6 @@ type Property struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	Attributes  []byte             `json:"attributes"`
-}
-
-type PropertyContact struct {
-	ID         pgtype.UUID        `json:"id"`
-	PropertyID pgtype.UUID        `json:"property_id"`
-	OwnerID    pgtype.UUID        `json:"owner_id"`
-	Name       string             `json:"name"`
-	Phone      string             `json:"phone"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PropertyMember struct {

@@ -21,8 +21,8 @@ import {PropertyGallery} from './PropertyGallery';
 import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyAttributesSection} from './PropertyAttributesSection';
-import {PropertyContactsSection} from './PropertyContactsSection';
 import {PropertyPaymentsSection} from './PropertyPaymentsSection';
+import {PropertyContactsSection} from './PropertyContactsSection';
 import {PropertyActionMenu} from './PropertyActionMenu';
 import {PropertyArchiveModal} from './PropertyArchiveModal';
 import {PropertyDeleteModal} from './PropertyDeleteModal';
@@ -192,12 +192,9 @@ export function PropertyDetailPage(): JSX.Element {
                         isArchived={property.status === 'archived'}
                     />
 
-                    <PropertyContactsSection
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
-
                     <PropertyPaymentsSection propertyId={id}/>
+
+                    <PropertyContactsSection propertyId={id}/>
                 </>
             )}
 

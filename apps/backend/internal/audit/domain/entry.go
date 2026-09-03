@@ -149,6 +149,15 @@ const (
 	// removed forever; Context carries the removed count, never titles.
 	ActionTaskCompletedCleared Action = "task.completed_cleared"
 
+	// ActionContactCreated and its neighbours record the Contacts context
+	// user mutations (ADR 0051, ticket #506): in-tx fail-safe. The context
+	// never carries the contact's PII (names, phone, email) — ids and field
+	// names only. The property_contact.* vocabulary above belongs to the
+	// demolished ADR 0026 surface and stays for the historical audit rows.
+	ActionContactCreated Action = "contact.created"
+	ActionContactUpdated Action = "contact.updated"
+	ActionContactDeleted Action = "contact.deleted"
+
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
@@ -200,8 +209,10 @@ const (
 	// EntityTaskRule is a task rule of the Tasks context (ADR 0051); the
 	// EntityTask covers both its materialized occurrences and the completed
 	// journal (the journal clear has no single entity id — Context.count).
-	EntityTaskRule            EntityType = "task_rule"
-	EntityTask                EntityType = "task"
+	EntityTaskRule EntityType = "task_rule"
+	EntityTask     EntityType = "task"
+	// EntityContact is a contact card of the Contacts context (ADR 0051).
+	EntityContact             EntityType = "contact"
 	EntitySubscription        EntityType = "subscription"
 	EntityPaymentMethod       EntityType = "payment_method"
 	EntitySubscriptionPayment EntityType = "subscription_payment"

@@ -12,7 +12,7 @@ import {
   usePropertyOperationsPaged,
   usePropertyOverdueOperations,
 } from '@/features/payments';
-import { useProperty } from '@/features/properties';
+import { canMutateProperty, useProperty } from '@/features/properties';
 import {
   Button,
   IconButton,
@@ -84,9 +84,7 @@ export function PaymentsCatalogScreen({
 
   const propertyQuery = useProperty(propertyId);
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const role = property?.access?.role;
-  const canMutate =
-    property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
+  const canMutate = canMutateProperty(property);
 
   return (
     <>

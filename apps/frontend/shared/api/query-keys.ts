@@ -27,6 +27,16 @@ export const billingKeys = {
   payment: (id: string) => ['billing', 'payments', id] as const,
 };
 
+// features/contacts
+export const contactKeys = {
+  all: ['contacts'] as const,
+  /** Книга контактов объекта (ADR 0051); search — серверный фильтр ('' = без). */
+  list: (propertyId: string, search = '') =>
+    [...contactKeys.all, 'list', propertyId, search] as const,
+  /** Карточка контакта (экран #510). */
+  detail: (contactId: string) => [...contactKeys.all, 'detail', contactId] as const,
+};
+
 // features/properties
 export const propertyKeys = {
   all: ['properties'] as const,
@@ -141,15 +151,6 @@ export const paymentOperationKeys = {
       scope.dateTo ?? '',
       scope.search ?? '',
     ] as const,
-};
-
-// features/property-contacts
-export const propertyContactKeys = {
-  all: ['property-contacts'] as const,
-  list: (propertyId: string) =>
-    [...propertyContactKeys.all, 'list', propertyId] as const,
-  detail: (propertyId: string, contactId: string) =>
-    [...propertyContactKeys.all, 'detail', propertyId, contactId] as const,
 };
 
 // features/tasks

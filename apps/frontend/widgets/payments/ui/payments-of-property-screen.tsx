@@ -10,7 +10,7 @@ import {
   usePayments,
   usePropertyOverdueOperations,
 } from '@/features/payments';
-import { useProperty } from '@/features/properties';
+import { canMutateProperty, useProperty } from '@/features/properties';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import {
   formatOverdueDays,
@@ -93,9 +93,7 @@ export function PaymentsOfPropertyScreen({
   // без кнопок (история 47), архив read-only для финансов (#446). Пока
   // объект не загружен или не загрузился — без кнопки.
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const role = property?.access?.role;
-  const canMutate =
-    property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
+  const canMutate = canMutateProperty(property);
 
   const openPayment = (payment: Payment): void =>
     router.push(ROUTES.propertyPayment(propertyId, payment.id));

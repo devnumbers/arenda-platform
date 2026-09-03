@@ -5,9 +5,6 @@ export const ROUTES = {
   propertyArchive: '/properties/archive',
   propertyNew: '/properties/new',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
-  propertyContactsNew: (id: string) => `/properties/${id}/contacts/new`,
-  propertyContactEdit: (propertyId: string, contactId: string) =>
-    `/properties/${propertyId}/contacts/${contactId}/edit`,
   /** Экран «Платежи объекта» — новый хром (#463). */
   propertyPayments: (id: string) => `/properties/${id}/payments`,
   /** Страницы секций «Платежей объекта» (Figma 1043:57610): клик по
@@ -56,6 +53,16 @@ export const ROUTES = {
   /** Визард создания платежа; тип выбирается в шите выбора «Платёж / Автоплатёж». */
   propertyPaymentNew: (id: string, type: 'payment' | 'autopayment') =>
     `/properties/${id}/payments/new?type=${type}`,
+  /** Экран «Контакты объекта» (#508) — новый хром, книга контактов (ADR 0051). */
+  propertyContacts: (id: string) => `/properties/${id}/contacts`,
+  /** Создание контакта (#509); до тикета путь ведёт на 404. */
+  propertyContactNew: (id: string) => `/properties/${id}/contacts/new`,
+  /** Карточка контакта (#510): деталка с правкой и удалением. */
+  propertyContact: (id: string, contactId: string) =>
+    `/properties/${id}/contacts/${contactId}`,
+  /** Экран правки контакта (#510): форма создания в режиме правки. */
+  propertyContactEdit: (id: string, contactId: string) =>
+    `/properties/${id}/contacts/${contactId}/edit`,
   profile: '/profile',
   profilePersonal: '/profile/personal',
   profileNotifications: '/profile/notifications',

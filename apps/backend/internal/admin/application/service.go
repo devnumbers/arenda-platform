@@ -21,13 +21,13 @@ var (
 
 // AdminService orchestrates cross-user read-only admin operations.
 type AdminService struct {
-	users            UserRepository
-	properties       PropertyRepository
-	stats            StatsRepository
-	subscriptions    SubscriptionProvider
-	auditLogs        AuditLogRepository
-	propertyContacts PropertyContactRepository
-	clock            clock.Clock
+	users         UserRepository
+	properties    PropertyRepository
+	stats         StatsRepository
+	subscriptions SubscriptionProvider
+	auditLogs     AuditLogRepository
+	contacts      ContactRepository
+	clock         clock.Clock
 }
 
 // NewAdminService creates a new admin application service.
@@ -37,17 +37,17 @@ func NewAdminService(
 	stats StatsRepository,
 	subscriptions SubscriptionProvider,
 	auditLogs AuditLogRepository,
-	propertyContacts PropertyContactRepository,
+	contacts ContactRepository,
 	clk clock.Clock,
 ) *AdminService {
 	return &AdminService{
-		users:            users,
-		properties:       properties,
-		stats:            stats,
-		subscriptions:    subscriptions,
-		auditLogs:        auditLogs,
-		propertyContacts: propertyContacts,
-		clock:            clk,
+		users:         users,
+		properties:    properties,
+		stats:         stats,
+		subscriptions: subscriptions,
+		auditLogs:     auditLogs,
+		contacts:      contacts,
+		clock:         clk,
 	}
 }
 
@@ -184,13 +184,14 @@ func (s *AdminService) GetProperty(ctx context.Context, id uuid.UUID) (AdminProp
 	return s.properties.GetProperty(ctx, id)
 }
 
-// ListPropertyContacts returns a paginated list of property contacts for a property.
+// ListContacts returns a paginated list of the contact cards bound to a
+// property (ADR 0051).
 // Sort is fixed to created_at ASC; there is no client-controlled sort.
-func (s *AdminService) ListPropertyContacts(
-	ctx context.Context, filters AdminPropertyContactFilters,
-) ([]AdminPropertyContactView, int64, error) {
+func (s *AdminService) ListContacts(
+	ctx context.Context, filters AdminContactFilters,
+) ([]AdminContactView, int64, error) {
 	filters.Limit, filters.Offset = normalizePagination(filters.Limit, filters.Offset)
-	return s.propertyContacts.ListPropertyContacts(ctx, filters)
+	return s.contacts.ListContacts(ctx, filters)
 }
 
 // GetStats returns platform-wide counters and recent activity for the admin dashboard.

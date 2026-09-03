@@ -1,4 +1,4 @@
-// Package http holds the properties HTTP adapters: property lifecycle endpoints with photos and contacts.
+// Package http holds the properties HTTP adapters: property lifecycle endpoints with photos.
 package http
 
 import (
@@ -22,7 +22,6 @@ import (
 type PropertyHandlers struct {
 	svc              *propertiesapp.PropertyService
 	addressSuggester propertiesapp.AddressSuggester
-	contactSvc       *propertiesapp.PropertyContactService
 	logger           *slog.Logger
 	clock            clock.Clock
 }
@@ -31,14 +30,12 @@ type PropertyHandlers struct {
 func NewPropertyHandlers(
 	svc *propertiesapp.PropertyService,
 	addressSuggester propertiesapp.AddressSuggester,
-	contactSvc *propertiesapp.PropertyContactService,
 	logger *slog.Logger,
 	clk clock.Clock,
 ) *PropertyHandlers {
 	return &PropertyHandlers{
 		svc:              svc,
 		addressSuggester: addressSuggester,
-		contactSvc:       contactSvc,
 		logger:           logger,
 		clock:            clk,
 	}
@@ -467,134 +464,6 @@ func (h *PropertyHandlers) DeletePropertyPhoto(w http.ResponseWriter, r *http.Re
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// CreatePropertyContact implements POST /properties/{propertyId}/contacts.
-func (h *PropertyHandlers) CreatePropertyContact(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	var body openapi.PropertyContactCreateRequest
-	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode create property contact request",
-			slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	contact, err := h.contactSvc.CreatePropertyContact(r.Context(), actor, propertyID, propertiesapp.CreatePropertyContactCommand{
-		Name:  body.Name,
-		Phone: body.Phone,
-	})
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, h.propertyContactResponse(contact))
-}
-
-// ListPropertyContacts implements GET /properties/{propertyId}/contacts.
-func (h *PropertyHandlers) ListPropertyContacts(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	contacts, err := h.contactSvc.ListPropertyContacts(r.Context(), actor, propertyID)
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	items := make([]openapi.PropertyContactResponse, 0, len(contacts))
-	for _, c := range contacts {
-		items = append(items, h.propertyContactResponse(c))
-	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertyContactsResponse{Items: items})
-}
-
-// GetPropertyContact implements GET /properties/{propertyId}/contacts/{contactId}.
-func (h *PropertyHandlers) GetPropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	contact, err := h.contactSvc.GetPropertyContact(r.Context(), actor, propertyID, contactID)
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, h.propertyContactResponse(contact))
-}
-
-// UpdatePropertyContact implements PATCH /properties/{propertyId}/contacts/{contactId}.
-func (h *PropertyHandlers) UpdatePropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	var body openapi.PropertyContactUpdateRequest
-	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.ErrorContext(r.Context(), "failed to decode update property contact request",
-			slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	contact, err := h.contactSvc.UpdatePropertyContact(r.Context(), actor, propertyID, contactID, propertiesapp.UpdatePropertyContactCommand{
-		Name:  body.Name,
-		Phone: body.Phone,
-	})
-	if err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, h.propertyContactResponse(contact))
-}
-
-// DeletePropertyContact implements DELETE /properties/{propertyId}/contacts/{contactId}.
-func (h *PropertyHandlers) DeletePropertyContact(w http.ResponseWriter, r *http.Request, propertyID, contactID uuid.UUID) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	if err := h.contactSvc.DeletePropertyContact(r.Context(), actor, propertyID, contactID); err != nil {
-		h.handlePropertyError(w, r, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *PropertyHandlers) propertyContactResponse(c domain.PropertyContact) openapi.PropertyContactResponse {
-	return openapi.PropertyContactResponse{
-		Id:         c.ID,
-		PropertyId: c.PropertyID,
-		Name:       c.Name,
-		Phone:      c.Phone,
-		CreatedAt:  c.CreatedAt,
-		UpdatedAt:  c.UpdatedAt,
-	}
 }
 
 // GetAddressSuggestions implements GET /dadata/suggestions/address.

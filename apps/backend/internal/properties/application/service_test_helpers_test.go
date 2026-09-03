@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
@@ -26,18 +25,7 @@ func newPropertyTestFactory(
 	photos PropertyPhotoRepository,
 	limiter SubscriptionLimiter,
 ) txStoreFactory {
-	return NewTxStoreFactory(repo, photos, nil, limiter, nil, fakeUoW{beginner: fakePropertyTxBeginner{}})
-}
-
-// newContactTestFactory builds the txStoreFactory for the property contact
-// service tests: the property repository, the contact repository and the
-// audit recorder over the same fakeUoW as the property tests.
-func newContactTestFactory(
-	propertyRepo PropertyRepository,
-	contacts PropertyContactRepository,
-	audit auditapp.Recorder,
-) txStoreFactory {
-	return NewTxStoreFactory(propertyRepo, nil, contacts, nil, audit, fakeUoW{beginner: fakePropertyTxBeginner{}})
+	return NewTxStoreFactory(repo, photos, limiter, nil, fakeUoW{beginner: fakePropertyTxBeginner{}})
 }
 
 // testOwnerPolicy is the policy used by property service tests that pre-date

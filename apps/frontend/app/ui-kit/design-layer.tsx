@@ -5,6 +5,7 @@ import type { JSX } from 'react';
 import {
     ArrowDown,
     ArrowLeft,
+    BoldHome,
     BoldPerson,
     BoldSofa,
     ChangeHorizontal,
@@ -23,6 +24,7 @@ import {
     CalendarMonth,
     Checkbox,
     ChipButton,
+    ConfirmDialog,
     IconButton,
     ListRow,
     Modal,
@@ -32,6 +34,7 @@ import {
     MonthDaysGrid,
     MonthYearPicker,
     PageContent,
+    PickerField,
     RadioGroup,
     RadioGroupItem,
     SearchField,
@@ -40,11 +43,13 @@ import {
     StepsChip,
     StickyBottomBar,
     Switch,
+    Textarea,
     TextField,
     TopNav,
     TopNavTitle,
     amountKopecks,
     monthTitle,
+    type PickerOption,
 } from '@/shared/ui/design';
 import {
     CategoryIcon,
@@ -90,6 +95,22 @@ function showcaseEntry(slug: string): PaymentCategoryEntry {
     return entry;
 }
 
+/** Витринные объекты пикера (#505): с домашней иконкой в сером круге,
+ * как строка «Объект» на карточке контакта. */
+function ObjectAvatar(): JSX.Element {
+    return (
+        <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted text-content">
+            <BoldHome className="h-6 w-6" />
+        </span>
+    );
+}
+
+const showcaseObjects: ReadonlyArray<PickerOption> = [
+    { value: 'kv-1', label: 'Моя квартира', hint: 'Новаторов, 8', icon: <ObjectAvatar /> },
+    { value: 'kv-2', label: 'Квартира на набережной', hint: 'Набережная, 15', icon: <ObjectAvatar /> },
+    { value: 'kv-3', label: 'Дача', hint: 'Приозёрная, 2', icon: <ObjectAvatar /> },
+];
+
 /** Витрина дизайн-слоя (ADR 0050, тикет #455): шадкн/ui поверх Radix,
  * Tailwind на токенах, шрифт Onest. Внешний вид сверен с экспортами
  * Figma-фреймов «Рентли. Новые экраны сервиса» (node-id — резолюция #449). */
@@ -117,6 +138,12 @@ export function DesignLayerShowcase(): JSX.Element {
     const [amount, setAmount] = useState('');
     const [paymentForm, setPaymentForm] = useState<'transfer' | 'cash'>('transfer');
     const [direction, setDirection] = useState<'income' | 'expense'>('income');
+    const [note, setNote] = useState('');
+    const [noteError, setNoteError] = useState('Страховка не оформлена');
+    const [pickerValue, setPickerValue] = useState<string | null>('kv-1');
+    const [pickerEmpty, setPickerEmpty] = useState<string | null>(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
 
     return (
         <>
@@ -666,6 +693,99 @@ export function DesignLayerShowcase(): JSX.Element {
                             </ModalContent>
                         </Modal>
                     </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>Textarea · многострочное поле (#505)</h3>
+                    <p className={styles.groupTitle}>
+                        Shell как у TextField (Title Out), бокс 92px — четыре строки 16/18 с
+                        прокруткой сверх; счётчик «длина/лимит» краснеет на лимите (Figma
+                        1281:48439, «Заметка» формы контакта).
+                    </p>
+                    <div className={styles.textFields}>
+                        <Textarea
+                            title="Заметка"
+                            placeholder="Заметка о контакте"
+                            description="Необязательно"
+                            maxLength={1024}
+                            value={note}
+                            onChange={(event) => setNote(event.target.value)}
+                        />
+                        <Textarea
+                            title="Заметка"
+                            error="Ошибка"
+                            maxLength={1024}
+                            value={noteError}
+                            onChange={(event) => setNoteError(event.target.value)}
+                        />
+                        <Textarea title="Заметка" placeholder="Заметка о контакте" disabled />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>PickerField · пикер с поиском (#505)</h3>
+                    <p className={styles.groupTitle}>
+                        Триггер — бокс поля с шевроном; список — в адаптивном Modal (шит на
+                        мобильном, карточка на десктопе), поиск по названию и подсказке,
+                        строка «Без объекта» очищает значение. Первый потребитель —
+                        «Привязанный объект» формы контакта.
+                    </p>
+                    <div className={styles.textFields}>
+                        <PickerField
+                            title="Привязанный объект"
+                            placeholder="Выберите объект"
+                            options={showcaseObjects}
+                            clearable
+                            value={pickerValue}
+                            onValueChange={setPickerValue}
+                        />
+                        <PickerField
+                            title="Привязанный объект"
+                            placeholder="Выберите объект"
+                            options={showcaseObjects}
+                            clearable
+                            value={pickerEmpty}
+                            onValueChange={setPickerEmpty}
+                        />
+                        <PickerField
+                            title="Привязанный объект"
+                            placeholder="Выберите объект"
+                            options={showcaseObjects}
+                            disabled
+                        />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>ConfirmDialog (#505)</h3>
+                    <p className={styles.groupTitle}>
+                        Замена легаси HeroUI ConfirmModal поверх адаптивного Modal: отмена
+                        secondary + подтверждение primary; разрушительное действие —
+                        confirmVariant=&quot;danger&quot;. Подтверждение закрывает диалог сам.
+                    </p>
+                    <div className={styles.grid}>
+                        <Button onClick={() => setConfirmOpen(true)}>Подтвердить действие</Button>
+                        <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+                            Удалить (danger)
+                        </Button>
+                    </div>
+                    <ConfirmDialog
+                        open={confirmOpen}
+                        onOpenChange={setConfirmOpen}
+                        title="Сменить тариф?"
+                        description="Новые условия применятся со следующего периода"
+                        confirmLabel="Сменить"
+                        onConfirm={() => undefined}
+                    />
+                    <ConfirmDialog
+                        open={deleteOpen}
+                        onOpenChange={setDeleteOpen}
+                        title="Удалить контакт?"
+                        description="Контакт исчезнет из книги контактов объекта"
+                        confirmLabel="Удалить"
+                        confirmVariant="danger"
+                        onConfirm={() => undefined}
+                    />
                 </div>
 
                 <div className={styles.group}>

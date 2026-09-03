@@ -21,9 +21,10 @@ type PropertyRepository interface {
 	GetProperty(ctx context.Context, id uuid.UUID) (AdminPropertyView, error)
 }
 
-// PropertyContactRepository provides cross-user property contact reads for the admin context.
-type PropertyContactRepository interface {
-	ListPropertyContacts(ctx context.Context, filters AdminPropertyContactFilters) ([]AdminPropertyContactView, int64, error)
+// ContactRepository provides cross-user contact reads for the admin context
+// (ADR 0051: the book lives in the contacts context; admin only reads).
+type ContactRepository interface {
+	ListContacts(ctx context.Context, filters AdminContactFilters) ([]AdminContactView, int64, error)
 }
 
 // StatsRepository provides platform-wide aggregates for the admin dashboard.

@@ -16,6 +16,8 @@ import (
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
+	contactshttp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters/http"
+	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	notificationshttp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/http"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
@@ -59,7 +61,7 @@ type Deps struct {
 	ReadonlyGate             httpsupport.SubscriptionMutationChecker
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
-	PropertyContacts         *propertiesapp.PropertyContactService
+	Contacts                 *contactsapp.ContactService
 	AddressSuggester         propertiesapp.AddressSuggester
 	PropertyPayments         *paymentsapp.PaymentService
 	PropertyOperations       *paymentsapp.OperationService
@@ -146,10 +148,10 @@ func New(deps Deps) http.Handler {
 	propertyHandlers := propertieshttp.NewPropertyHandlers(
 		deps.Properties,
 		deps.AddressSuggester,
-		deps.PropertyContacts,
 		deps.Logger,
 		deps.Clock,
 	)
+	contactHandlers := contactshttp.NewContactHandlers(deps.Contacts, deps.Logger)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
 	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
@@ -169,6 +171,7 @@ func New(deps Deps) http.Handler {
 	handler := &composedHandler{
 		AuthHandlers:                   authHandlers,
 		PropertyHandlers:               propertyHandlers,
+		ContactHandlers:                contactHandlers,
 		MemberHandlers:                 accessMemberHandlers,
 		InvitationHandlers:             accessInvitationHandlers,
 		NotificationPreferenceHandlers: notificationPreferenceHandlers,
@@ -292,6 +295,7 @@ func clientErrorsBodyLimitMiddleware(next http.Handler) http.Handler {
 type composedHandler struct {
 	*identityhttp.AuthHandlers
 	*propertieshttp.PropertyHandlers
+	*contactshttp.ContactHandlers
 	*accesshttp.MemberHandlers
 	*accesshttp.InvitationHandlers
 	*notificationshttp.NotificationPreferenceHandlers

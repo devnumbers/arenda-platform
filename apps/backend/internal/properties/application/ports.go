@@ -129,13 +129,3 @@ type PropertyPhotoRepository interface {
 	Delete(ctx context.Context, photoID uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyPhotoRepository
 }
-
-// PropertyContactRepository persists property contact records.
-type PropertyContactRepository interface {
-	Create(ctx context.Context, contact domain.PropertyContact) (domain.PropertyContact, error)
-	ListByProperty(ctx context.Context, propertyID, scope uuid.UUID) ([]domain.PropertyContact, error)
-	GetByIDAndOwner(ctx context.Context, contactID, scope uuid.UUID) (domain.PropertyContact, error)
-	Update(ctx context.Context, scope uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error)
-	Delete(ctx context.Context, contactID, scope uuid.UUID) error
-	WithTx(tx transaction.Tx) PropertyContactRepository
-}

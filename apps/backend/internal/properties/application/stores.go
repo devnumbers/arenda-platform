@@ -14,15 +14,11 @@ import (
 // a use case receives inside runInTx, so it is impossible to forget WithTx or
 // to record audit outside the transaction (ADR 0033, ADR 0020).
 //
-// The optional stores (photos, contacts, limiter) cover the two
-// services of the context, which need different subsets: the property service
-// never touches contacts, the contact service never touches photos/limiter.
-// Production wires the full set once and
-// shares the factory between both services, so every store is bound in every
-// transaction there; runInTx skips binding an unwired optional store instead
-// of panicking on a nil WithTx — same shape as the billing lifecycle bridges —
-// which keeps a test or a future wiring free to supply only the stores its
-// use cases reach.
+// The optional stores (photos, limiter) cover what the property service uses
+// beyond the main repository; runInTx skips binding an unwired optional store
+// instead of panicking on a nil WithTx — same shape as the billing lifecycle
+// bridges — which keeps a test or a future wiring free to supply only the
+// stores its use cases reach.
 //
 // The tx field additionally exposes the raw transaction handle: the
 // RecipientSlotPolicy and SharedMembersDeleteMailer ports take a
@@ -30,36 +26,33 @@ import (
 // transaction, so a use case passes stores.tx through when it needs slot
 // enforcement or former-member collection in its transaction.
 type txStores struct {
-	repo     PropertyRepository
-	photos   PropertyPhotoRepository
-	contacts PropertyContactRepository
-	limiter  SubscriptionLimiter
-	audit    auditapp.Recorder
-	tx       transaction.Tx
+	repo    PropertyRepository
+	photos  PropertyPhotoRepository
+	limiter SubscriptionLimiter
+	audit   auditapp.Recorder
+	tx      transaction.Tx
 }
 
 // txStoreFactory holds the non-transactional properties repositories, the
 // cross-context ports and the audit recorder plus the Unit-of-Work, and builds
 // a transactional txStores from each runInTx call. It is embedded anonymously
-// by both properties services so they share one canonical transactional shape
-// (ADR 0033 γ-factory): a use case only sees runInTx(ctx, work) and the
+// by the property service so the context shares one canonical transactional
+// shape (ADR 0033 γ-factory): a use case only sees runInTx(ctx, work) and the
 // *txStores it hands out.
 //
-// Build it once with NewTxStoreFactory at the wire layer and pass the same
-// value to both services, so adding an Nth repository is a change to one
-// constructor call, not several.
+// Build it once with NewTxStoreFactory at the wire layer, so adding an Nth
+// repository is a change to one constructor call, not several.
 type txStoreFactory struct {
-	repo     PropertyRepository
-	photos   PropertyPhotoRepository
-	contacts PropertyContactRepository
-	limiter  SubscriptionLimiter
-	audit    auditapp.Recorder
-	uow      transaction.UoW
+	repo    PropertyRepository
+	photos  PropertyPhotoRepository
+	limiter SubscriptionLimiter
+	audit   auditapp.Recorder
+	uow     transaction.UoW
 }
 
 // NewTxStoreFactory bundles the properties repositories, the cross-context
 // ports, the audit recorder, and the Unit-of-Work into the single
-// txStoreFactory both properties services embed (ADR 0033 γ-factory). A nil
+// txStoreFactory the property service embeds (ADR 0033 γ-factory). A nil
 // audit defaults to a Noop recorder so a caller that does not care about audit
 // still gets a safe factory; the optional stores may be nil (see txStores).
 // The type stays unexported; callers use := to hold it (standard Go pattern
@@ -67,7 +60,6 @@ type txStoreFactory struct {
 func NewTxStoreFactory(
 	repo PropertyRepository,
 	photos PropertyPhotoRepository,
-	contacts PropertyContactRepository,
 	limiter SubscriptionLimiter,
 	audit auditapp.Recorder,
 	uow transaction.UoW,
@@ -76,12 +68,11 @@ func NewTxStoreFactory(
 		audit = auditapp.Noop{}
 	}
 	return txStoreFactory{
-		repo:     repo,
-		photos:   photos,
-		contacts: contacts,
-		limiter:  limiter,
-		audit:    audit,
-		uow:      uow,
+		repo:    repo,
+		photos:  photos,
+		limiter: limiter,
+		audit:   audit,
+		uow:     uow,
 	}
 }
 
@@ -111,9 +102,6 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		}
 		if f.photos != nil {
 			stores.photos = f.photos.WithTx(tx)
-		}
-		if f.contacts != nil {
-			stores.contacts = f.contacts.WithTx(tx)
 		}
 		var err error
 		if f.limiter != nil {

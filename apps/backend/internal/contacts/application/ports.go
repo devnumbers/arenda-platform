@@ -1,0 +1,90 @@
+// Package application holds the contacts use cases and ports: the CRUD and
+// search over the owner's contact book (ADR 0051, ticket #506).
+package application
+
+import (
+	"context"
+	"errors"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+// The application error vocabulary of the contact use cases: the transport
+// maps them onto the wire contract (400/403/404).
+var (
+	// ErrNotFound covers a missing contact, a foreign one and an actor
+	// without the view capability — the privacy-preserving 404.
+	ErrNotFound = errors.New("contacts: not found")
+	// ErrForbidden marks an actor whose role grants the view capability but
+	// not the one the use case needs (a viewer on mutations — the ADR 0028
+	// matrix).
+	ErrForbidden = errors.New("contacts: forbidden")
+	// ErrInvalidInput marks a command that violates the create/update
+	// contract (empty or overlong name, malformed phone or email). The same
+	// sentinel the domain validator returns, re-exported for the transport.
+	ErrInvalidInput = domain.ErrInvalidInput
+)
+
+// ListScope selects which slice of the book a listing reads: the owner's
+// whole book, only the unbound contacts («без объекта»), or one property's
+// contacts. The property scope is the shared-members surface — it resolves
+// the data owner through the policy; the book scopes are always the actor's
+// own book.
+type ListScope string
+
+const (
+	ListScopeAll             ListScope = "all"
+	ListScopeWithoutProperty ListScope = "without_property"
+	ListScopeProperty        ListScope = "property"
+)
+
+// ListQuery is the listing filter. Search is a case-insensitive substring
+// match over the name fields, phone, email, messenger username and role
+// (” = no filter); the store escapes the LIKE metacharacters.
+type ListQuery struct {
+	Scope      ListScope
+	PropertyID uuid.UUID // ListScopeProperty only.
+	Search     string
+}
+
+// ContactStore is the persistence port of the contact book. Every method is
+// scoped by the data owner where the SQL contract needs it; the by-id read is
+// deliberately unscoped — the service loads the card first and authorizes
+// from its own property binding, never leaking the miss as a success.
+type ContactStore interface {
+	// GetByID loads one card by id alone; ErrNotFound when unknown. The
+	// service gates the result before it travels anywhere.
+	GetByID(ctx context.Context, id uuid.UUID) (domain.Contact, error)
+	// List returns the owner's contacts per the query's scope and search.
+	List(ctx context.Context, ownerID uuid.UUID, q ListQuery) ([]domain.Contact, error)
+	// Create inserts a new card (the id and owner are app-side) and returns
+	// the stored row with its timestamps.
+	Create(ctx context.Context, c domain.Contact) (domain.Contact, error)
+	// Update writes the editable fields of the card keyed by (id, owner_id)
+	// and returns the stored row; a zero-rows update is ErrNotFound — the
+	// use case has gated the actor from a pre-transaction read, so the miss
+	// means the card is gone.
+	Update(ctx context.Context, c domain.Contact) (domain.Contact, error)
+	// Delete removes the card keyed by (id, owner_id); zero rows deleted is
+	// ErrNotFound for the same reason.
+	Delete(ctx context.Context, id, ownerID uuid.UUID) error
+	WithTx(tx transaction.Tx) (ContactStore, error)
+}
+
+// PropertyRef is the contacts view of the property a use case targets: just
+// the data owner (the SQL scope, ADR 0028). The properties context owns the
+// entity; contacts never needs its rest.
+type PropertyRef struct {
+	OwnerID uuid.UUID
+}
+
+// PropertyStore resolves the property a contact use case targets: the owner
+// whose book a property-bound card lands in. Reads only — the store never
+// participates in a contact transaction, so it has no WithTx.
+type PropertyStore interface {
+	// Get loads the property reference; ErrNotFound when no such property
+	// exists (the policy gate has already hidden it from strangers).
+	Get(ctx context.Context, propertyID uuid.UUID) (PropertyRef, error)
+}

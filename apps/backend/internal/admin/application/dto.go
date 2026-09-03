@@ -51,9 +51,17 @@ type AdminPropertyView struct {
 	UpdatedAt   time.Time
 }
 
-// AdminPropertyContactView is a read-only view of a property contact for admin operations.
-type AdminPropertyContactView struct {
-	propertiesdomain.PropertyContact
+// AdminContactView is the admin read model of one contact card bound
+// to a property (ADR 0051): the display name is composed from the contact's
+// name fields by the repository.
+type AdminContactView struct {
+	ID         uuid.UUID
+	PropertyID uuid.UUID
+	OwnerID    uuid.UUID
+	Name       string
+	Phone      string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // AdminUserFilters carries optional filters for the admin users list.
@@ -80,9 +88,9 @@ type AdminPropertyFilters struct {
 	Order   string
 }
 
-// AdminPropertyContactFilters carries filters for the admin property contacts list.
+// AdminContactFilters carries filters for the admin property contacts list.
 // Sort is fixed (created_at ASC) and not configurable.
-type AdminPropertyContactFilters struct {
+type AdminContactFilters struct {
 	PropertyID uuid.UUID
 	Limit      int
 	Offset     int

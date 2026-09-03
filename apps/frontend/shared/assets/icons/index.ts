@@ -80,6 +80,16 @@ export { default as Check } from './check.svg';
 export { default as Edit } from './edit.svg';
 export { default as ArrowDown } from './arrow-down.svg';
 export { default as SortingDown } from './sorting-down.svg';
+// Направление сортировки: SortingSmallBig 418:4608 — возрастание (от
+// меньшего к большему), SortingBigSmall 418:4607 — убывание; SmallArrowDown
+// 671:7320 — хвостовая стрелка чипа, всегда вниз. currentColor.
+export { default as SortingSmallBig } from './sorting-small-big.svg';
+export { default as SortingBigSmall } from './sorting-big-small.svg';
+export { default as SmallArrowDown } from './small-arrow-down.svg';
+export { default as SmallArrowRight } from './small-arrow-right.svg';
+export { default as Kebab } from './kebab.svg';
+export { default as Copy } from './copy.svg';
+export { default as TrashBin } from './trash-bin.svg';
 export { default as Move } from './move.svg';
 export { default as Star } from './star.svg';
 export { default as StarOff } from './star-off.svg';
@@ -122,20 +132,21 @@ export { default as HomeMain } from './home-main.svg';
 export { default as NotificationSettings } from './notification-settings.svg';
 export { default as MenuLines } from './menu-lines.svg';
 
-// Список задач объекта (#499, Figma 1535-75894): чип сортировки
-// (SortingSmallBig 418:4608 — возрастание, SortingBigSmall 418:4607 —
-// убывание, SmallArrowDown 671:7320), стрелка сворачиваемой секции
-// (SmallArrowUp 671:7463), кебаб-меню (VerticalMenu 185:175) и часы
+// Список задач объекта (#499, Figma 1535-75894): стрелка сворачиваемой
+// секции (SmallArrowUp 671:7463), кебаб-меню (VerticalMenu 185:175) и часы
 // подзаголовка строки (ClockSmall 594:13394, 16×16) — currentColor.
-export { default as SortingSmallBig } from './sorting-small-big.svg';
-export { default as SortingBigSmall } from './sorting-big-small.svg';
-export { default as SmallArrowDown } from './small-arrow-down.svg';
+// Сортировочный чип (SortingSmallBig/SortingBigSmall/SmallArrowDown)
+// канонично экспортируется в блоке «Направление сортировки» выше.
 export { default as SmallArrowUp } from './small-arrow-up.svg';
 export { default as VerticalMenu } from './vertical-menu.svg';
 export { default as ClockSmall } from './clock-small.svg';
 
 // Меню кебаба списка задач (#499, Figma 1535-77633): «Отметить все задачи»
-// (Checkmark 1535:77389) и «Удалить выполненные задачи» (TrashBin
-// 189:853) — currentColor.
+// (Checkmark 1535:77389) — currentColor. «Удалить выполненные задачи»
+// использует TrashBin из блока «Направление сортировки» выше.
 export { default as Checkmark } from './checkmark.svg';
-export { default as TrashBin } from './trashbin.svg';
+
+// Иконки страницы «Выбрать объект» (#509, Figma 1539:83846): аватары строк —
+// Icon/Bold/Objects 208:2994 («Общий контакт») и Icon/Bold/Home 189:931
+// (объекты; в наборе это BoldHome).
+export { default as BoldObjects } from './bold-objects.svg';
