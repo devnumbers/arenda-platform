@@ -26,9 +26,39 @@ Work through five steps. Testing is **black-box** while it runs: interact only w
 
 3. **Open and log in** — `browser_navigate` to the frontend URL; the user watches the session's own browser window. Log in through the real login screen: type the seeded phone, take the code from the backend log (`.tmp/e2e-frontend/backend.log`, pattern «Код для входа в Рентли» — parse the 6 digits from the log line's `text` field, not from anywhere else in the line: its timestamp also contains six-digit runs), type it. Re-requesting a code too soon hits the product's resend cooldown (429; the button shows «Отправить новый код MM:SS») — wait out the timer. The in-memory profile holds no state between browser closes, so every walkthrough logs in fresh; `--storage-state` (a per-session config override, not the committed one) is the optional shortcut when a storage-state file exists. Done when the cabinet's «Мои объекты» is on screen.
 
-4. **Walk the plan** — one action per observation cycle: act, then capture the cheapest proof (`browser_snapshot` for state and locators; `browser_take_screenshot` whenever vision decides the verdict — pass the full artifacts path as the filename, `.playwright-mcp/artifacts/<ticket>-NN-<slug>.png`: a bare filename is written to the session cwd, not the artifacts dir (0.0.80 behavior, #517) — and view it before judging the check passed; copying a per-ticket bundle to `.scratch/ui-walkthroughs/<ticket>/` is an optional extra, never the primary location). A blocked path gets recorded and skipped, never forced. Done when every numbered check carries a viewed screenshot and a verdict.
+4. **Walk the plan** — one action per observation cycle: act, then capture the cheapest proof (`browser_snapshot` for state and locators; `browser_take_screenshot` whenever vision decides the verdict — pass the full artifacts path as the filename, `.playwright-mcp/artifacts/<ticket>-NN-<slug>.png`: a bare filename is written to the session cwd, not the artifacts dir (0.0.80 behavior, #517) — and view it before judging the check passed; copying a per-ticket bundle to `.scratch/ui-walkthroughs/<ticket>/` is an optional extra, never the primary location). A blocked path gets recorded and skipped, never forced. Width-varying checks from the P3 tier go through «Adaptive widths» below. Done when every numbered check carries a viewed screenshot and a verdict.
 
 5. **Report and gate** — post the checklist to chat: per tier, passed/failed/blocked, each item linked to its screenshot; failed items become Issues. Acceptance gate: the ticket ships only with **P0 + P1 green**; P2/P3 findings report without blocking. Close with `make frontend-e2e-live-down`. Done when the commit message can honestly carry «живая приёмка N/N».
+
+## Adaptive widths
+
+Two lanes, split by a hard physical limit of desktop Chrome: the OS window is never narrower than ~500 px and never taller than the screen's work area (verified live on 0.0.80; on the dev MacBook that caps the viewport at ~816 px tall).
+
+**Lane A — widths ≥ 500 (tablet, desktop): real window.** Resize the actual OS window via `browser_run_code_unsafe` and CDP `Browser.setWindowBounds` — the window moves and the viewport follows it. The snippet measures `innerWidth`/`innerHeight`, compensates for Chrome's toolbar height and corrects once (heights beyond the screen cap out — trust the returned `viewport`, width is the primary axis):
+
+```js
+async (page) => {
+  const target = { width: 1440, height: 900 }; // desired viewport in CSS px
+  const session = await page.context().newCDPSession(page);
+  const { windowId } = await session.send('Browser.getWindowForTarget');
+  const set = (width, height) => session.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal', width, height } });
+  const inner = () => page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  await set(target.width, target.height);
+  await page.waitForTimeout(300);
+  let v = await inner();
+  if (v.w !== target.width || v.h !== target.height) {
+    const { bounds } = await session.send('Browser.getWindowForTarget');
+    await set(bounds.width + target.width - v.w, bounds.height + target.height - v.h);
+    await page.waitForTimeout(300);
+    v = await inner();
+  }
+  return { target, viewport: v };
+}
+```
+
+**Lane B — widths < 500 (mobile): viewport emulation in a throwaway tab.** A real window physically cannot go there, so emulate: open a fresh tab (`browser_tabs` action `new`), call `browser_resize` with the mobile size, run the checks, close the tab. `browser_resize` calls `page.setViewportSize()`, which flips a tab into permanent viewport emulation — the site re-lays-out but the window keeps its old size, and the tab never returns to window-sized rendering (`Emulation.clearDeviceMetricsOverride` does not help). That is why this lane never touches the walkthrough's main tab: a contaminated main tab keeps failing after the sweep is over. CSS, media queries and screenshots are honest under emulation — mark the check as emulated in the report.
+
+Default sweep: 375 (lane B) / 768 / 1440 (lane A) — mobile / tablet / desktop; exact widths from the ticket or its Figma mockup override the defaults. Trust the snippet's returned `viewport` (lane A) or `browser_resize`'s applied size (lane B), never an assumption, and capture a screenshot per width (`.playwright-mcp/artifacts/<ticket>-NN-w375.png`) — each width carries its own P3 verdict.
 
 ## Mode: headed run
 
