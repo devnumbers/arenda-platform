@@ -13,6 +13,8 @@ node_modules/
 apps/landing/dist
 *.log
 .tmp
+# Одноразовые экспорты макетов из Figma (скретч сессий)
+.tmp-figma-*
 
 # Bruno runtime environment (contains session ids and dynamic object ids)
 tools/bruno/arenda-api/environments/Local.bru
