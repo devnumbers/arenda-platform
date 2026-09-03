@@ -71,7 +71,7 @@ export function OperationsRangeCalendarMonth({
   return (
     <section
       aria-label={monthTitle(month.year, month.month)}
-      className={cn('flex w-full flex-col gap-2', monthFuture && 'opacity-50')}
+      className={cn('flex w-full flex-col gap-4', monthFuture && 'opacity-50')}
     >
       <h3 className="px-6 text-xl font-semibold leading-6 text-content">
         {monthTitle(month.year, month.month)}

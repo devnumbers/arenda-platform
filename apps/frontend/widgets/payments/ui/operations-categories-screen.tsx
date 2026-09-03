@@ -89,9 +89,9 @@ export function OperationsCategoriesScreen({
 
   return (
     <div className="flex h-dvh flex-col bg-white font-sans desktop:mx-auto desktop:max-w-[560px]">
-      {/* Закреплённый верх: заголовок и контекстные чипы (решение владельца
-       * 2026-09-02). */}
-      <header className="relative flex h-14 shrink-0 items-center justify-center">
+      {/* Закреплённый верх: заголовок (полоса 72px, как TopNav экранов) и
+       * контекстные чипы (решение владельца 2026-09-02). */}
+      <header className="relative flex h-[72px] shrink-0 items-center justify-center">
         <div className="absolute left-0 top-0 flex h-full items-center pl-2">
           <IconButton icon={<Cancel />} label="Закрыть" onClick={cancel} />
         </div>
@@ -100,7 +100,7 @@ export function OperationsCategoriesScreen({
         </span>
       </header>
 
-      <div className="flex shrink-0 flex-wrap gap-1.5 px-6 pb-3">
+      <div className="flex shrink-0 flex-wrap gap-1.5 px-6 pt-6">
         <span
           aria-hidden
           className="inline-flex h-11 items-center rounded-pill bg-primary px-5 text-sm font-medium text-white"

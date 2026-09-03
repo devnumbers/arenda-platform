@@ -141,16 +141,18 @@ export function OperationsPeriodScreen({
 
   return (
     <div className="flex h-dvh flex-col bg-white font-sans desktop:mx-auto desktop:max-w-[560px]">
-      {/* Закреплённый верх: заголовок, границы, дни недели — выбор всегда
-       * перед глазами (решение владельца 2026-09-02). */}
-      <header className="relative flex h-14 shrink-0 items-center justify-center">
+      {/* Закреплённый верх: заголовок (полоса 72px, как TopNav экранов),
+       * границы, дни недели — выбор всегда перед глазами (решение владельца
+       * 2026-09-02). Отступы — Figma 1495-64165: поля 24 от хедера, по 24
+       * по бокам, зазор до дней недели 8, плашки дней 48px. */}
+      <header className="relative flex h-[72px] shrink-0 items-center justify-center">
         <div className="absolute left-0 top-0 flex h-full items-center pl-2">
           <IconButton icon={<Cancel />} label="Закрыть" onClick={cancel} />
         </div>
         <span className="text-base font-medium leading-[18px] text-content">Выберите период</span>
       </header>
 
-      <div aria-live="polite" className="grid shrink-0 grid-cols-2 gap-2 px-6 pb-2">
+      <div aria-live="polite" className="grid shrink-0 grid-cols-2 gap-2 px-6 pt-6">
         <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
           с {operationsPeriodBoundLabel(shown.from, today)}
         </span>
@@ -161,10 +163,12 @@ export function OperationsPeriodScreen({
 
       <div
         aria-hidden
-        className="grid shrink-0 grid-cols-7 gap-0.5 px-5 pb-1 text-center text-base font-medium leading-[18px] text-content-tertiary"
+        className="mt-2 grid shrink-0 grid-cols-7 gap-0.5 px-5 text-center text-base font-medium leading-[18px] text-content-tertiary"
       >
         {WEEKDAY_LABELS.map((weekday) => (
-          <span key={weekday}>{weekday}</span>
+          <span key={weekday} className="flex h-12 items-center justify-center">
+            {weekday}
+          </span>
         ))}
       </div>
 
