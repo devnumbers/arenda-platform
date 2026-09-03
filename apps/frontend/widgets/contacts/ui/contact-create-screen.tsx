@@ -7,7 +7,8 @@ import {
   Cancel,
   Check,
   ChevronDown,
-  HomeMain,
+  HomeCopy,
+  HomeFilled,
   RadioFalse,
   RadioTrue,
 } from '@/shared/assets/icons';
@@ -444,10 +445,8 @@ export function ContactCreateScreen({
 }
 
 /** Строка-радио страницы «Выбрать объект» (компонент Figma «Row Button»,
- * 936:39347): аватар-круг 48 с фото или серым домом, заголовок, подпись,
- * кружок выбора RadioFalse/RadioTrue справа. Для «Общего контакта» —
- * «дом с домом» из двух HomeMain со смещением (в наборе иконок такого
- * глифа нет). */
+ * 936:39347): аватар-круг 48 с фото или сплошным домом, заголовок,
+ * подпись, кружок выбора RadioFalse/RadioTrue справа. */
 function ObjectRowButton({
   title,
   subtitle,
@@ -494,18 +493,13 @@ function ObjectRowButton({
   );
 }
 
-/** Иконка аватара строки: одиночный дом у объектов, «дом с домом» (два
- * HomeMain со смещением) у «Общего контакта». */
+/** Иконка аватара строки: сплошной дом у объектов, «дом со стеной позади»
+ * у «Общего контакта» — оба силуэта из макета 1539:83846. */
 function HomeIcon({ general = false }: { readonly general?: boolean }): JSX.Element {
-  const iconClass = 'h-6 w-6 text-content-tertiary';
-  if (!general) {
-    return <HomeMain className={iconClass} />;
-  }
-  return (
-    <>
-      <HomeMain className={`${iconClass} absolute -translate-x-1 -translate-y-1 opacity-60`} />
-      <HomeMain className={`${iconClass} translate-x-1 translate-y-1`} />
-    </>
+  return general ? (
+    <HomeCopy className="h-6 w-6 text-content-tertiary" />
+  ) : (
+    <HomeFilled className="h-6 w-6 text-content-tertiary" />
   );
 }
 

@@ -121,3 +121,9 @@ export { default as TimeHistory } from './time-history.svg';
 export { default as HomeMain } from './home-main.svg';
 export { default as NotificationSettings } from './notification-settings.svg';
 export { default as MenuLines } from './menu-lines.svg';
+
+// Сплошные домики страницы «Выбрать объект» (#509, Figma 1539:83846):
+// силуэт контурного HomeMain, залитый (fill); HomeCopy — «дом со стеной
+// позади» для строки «Общий контакт».
+export { default as HomeFilled } from './home-filled.svg';
+export { default as HomeCopy } from './home-copy.svg';
