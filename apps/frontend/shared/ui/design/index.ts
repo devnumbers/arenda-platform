@@ -49,6 +49,15 @@ export {
   ModalClose,
   ModalContent,
   ModalTrigger,
+  useIsDesktop,
   type ModalContentProps,
 } from './modal';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog';
+export {
+  Menu,
+  MenuContent,
+  type MenuContentProps,
+  MenuItem,
+  type MenuItemProps,
+  MenuTrigger,
+} from './menu';

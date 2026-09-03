@@ -78,7 +78,11 @@ export { default as Check } from './check.svg';
 export { default as Edit } from './edit.svg';
 export { default as ArrowDown } from './arrow-down.svg';
 export { default as SortingDown } from './sorting-down.svg';
+// Направление сортировки: SortingSmallBig 418:4608 — возрастание (от
+// меньшего к большему), SortingBigSmall 418:4607 — убывание; SmallArrowDown
+// 671:7320 — хвостовая стрелка чипа, всегда вниз. currentColor.
 export { default as SortingSmallBig } from './sorting-small-big.svg';
+export { default as SortingBigSmall } from './sorting-big-small.svg';
 export { default as SmallArrowDown } from './small-arrow-down.svg';
 export { default as SmallArrowRight } from './small-arrow-right.svg';
 export { default as Kebab } from './kebab.svg';

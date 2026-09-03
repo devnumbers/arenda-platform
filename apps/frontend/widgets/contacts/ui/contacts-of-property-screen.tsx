@@ -17,6 +17,7 @@ import {
   StickyBottomBar,
   TopNav,
   TopNavTitle,
+  useIsDesktop,
 } from '@/shared/ui/design';
 import { contactSortByName, groupContactsByLetter } from '../lib/contact-list-model';
 import type { ContactSortOrder } from '../lib/contact-list-model';
@@ -28,7 +29,8 @@ import {
   ContactsSearchHint,
   ContactsSkeleton,
 } from './contacts-states';
-import { ContactsSortButton, ContactsSortSheet } from './contacts-sort-sheet';
+import { ContactsSortMenu } from './contacts-sort-menu';
+import { ContactsSortChip, ContactsSortSheet } from './contacts-sort-sheet';
 
 /** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -39,8 +41,11 @@ const SEARCH_DEBOUNCE_MS = 300;
  * лупой в правом слоте — по тапу шапка переключается в поисковый режим
  * (вариант search, конвенция платёжного поиска, fixme-спека #491), «назад»
  * в нём закрывает поиск. Список — серая карточка с алфавитными группами,
- * строка: имя + роль (телефона в строке нет), пилюля «Имя» открывает шит
- * сортировки А→Я / Я→А (клиентская). Пустой список — иллюстрация
+ * строка: имя + роль (телефона в строке нет). Чип «Имя»: на десктопе
+ * открывает меню сортировки (механика меню задач, Figma 1603-94487 —
+ * выбор применяет и закрывает), на мобильной ширине — шит А→Я / Я→А
+ * (клиентская, макет 1539:85395; выбор применяет, шит остаётся открытым —
+ * как в задачах). Пустой список — иллюстрация
  * «Контактов нет»; в поиске — подсказка по началу и «Такого контакта нет».
  * Полноширинная кнопка «Добавить контакт» — тому, кто может мутировать
  * (как у платежей: не смотрящий и не архив, #446); ведёт на создание —
@@ -58,6 +63,7 @@ export function ContactsOfPropertyScreen({
   const [search, setSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<ContactSortOrder>('asc');
   const [sortSheetOpen, setSortSheetOpen] = useState(false);
+  const isDesktop = useIsDesktop();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Открытие поиска сразу делает поле активным (программный фокус —
@@ -151,8 +157,14 @@ export function ContactsOfPropertyScreen({
           <ContactsEmptyState />
         ) : (
           <>
-            <div className="mb-6">
-              <ContactsSortButton onOpen={() => setSortSheetOpen(true)} />
+            <div className="mx-6 mb-6">
+              {isDesktop ? (
+                <ContactsSortMenu order={sortOrder} onOrderChange={setSortOrder}>
+                  <ContactsSortChip order={sortOrder} />
+                </ContactsSortMenu>
+              ) : (
+                <ContactsSortChip order={sortOrder} onClick={() => setSortSheetOpen(true)} />
+              )}
             </div>
             {/* Книга (1527:74139): одна серая карточка с алфавитными
              * группами; буква — над своими строками. */}
@@ -187,15 +199,14 @@ export function ContactsOfPropertyScreen({
         </StickyBottomBar>
       )}
 
-      <ContactsSortSheet
-        open={sortSheetOpen}
-        onOpenChange={setSortSheetOpen}
-        order={sortOrder}
-        onOrderChange={(next) => {
-          setSortOrder(next);
-          setSortSheetOpen(false);
-        }}
-      />
+      {!isDesktop && (
+        <ContactsSortSheet
+          open={sortSheetOpen}
+          onOpenChange={setSortSheetOpen}
+          order={sortOrder}
+          onOrderChange={setSortOrder}
+        />
+      )}
     </>
   );
 }
