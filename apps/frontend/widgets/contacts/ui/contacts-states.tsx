@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import Image from 'next/image';
 import { Button } from '@/shared/ui/design';
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
@@ -46,8 +47,13 @@ export function ContactsErrorCard({ onRetry }: { readonly onRetry: () => void })
 export function ContactsEmptyState(): JSX.Element {
   return (
     <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/images/contacts/empty-contacts.png" alt="" width={128} height={128} className="h-32 w-32 object-cover" />
+      <Image
+        src="/images/contacts/empty-contacts.png"
+        alt=""
+        width={128}
+        height={128}
+        className="h-32 w-32 object-cover"
+      />
       <h2 className={headingClass}>Контактов нет</h2>
       <p className={`${hintClass} max-w-[360px]`}>
         Добавьте контакты арендатора, мастеров и других специалистов
@@ -56,18 +62,19 @@ export function ContactsEmptyState(): JSX.Element {
   );
 }
 
-/** Поиск открыт, поле пустое (1527:74813): подсказка, по чему ищем. */
+/** Поиск открыт, поле пустое (1527:74813): подсказка, по чему ищем — текст
+ * по центру (textStyle Mobile/Text/R/400, textAlignHorizontal CENTER). */
 export function ContactsSearchHint(): JSX.Element {
   return (
-    <p className={`${searchNoteClass} px-6 pt-16`}>
+    <p className={`${searchNoteClass} px-6 pt-16 text-center`}>
       Начните искать по имени, номеру телефона, электронной почте, имени пользователя или по роли
     </p>
   );
 }
 
-/** Поиск без совпадений (1527:74825): «Такого контакта нет». */
+/** Поиск без совпадений (1527:74825): «Такого контакта нет», по центру. */
 export function ContactsNoResults(): JSX.Element {
-  return <p className={`${searchNoteClass} px-6 pt-16`}>Такого контакта нет</p>;
+  return <p className={`${searchNoteClass} px-6 pt-16 text-center`}>Такого контакта нет</p>;
 }
 
 /** Правка недоступна (гейт ADR 0028, тексты — как у правки платежей):
