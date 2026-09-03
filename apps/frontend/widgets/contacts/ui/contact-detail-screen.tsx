@@ -137,6 +137,7 @@ function ContactCardBody({
 }): JSX.Element {
   const router = useRouter();
   const rows = contactValueRows(contact);
+  const boundPropertyId = contact.propertyId;
 
   return (
     <div className="flex flex-col gap-6 px-6 pb-8 pt-2">
@@ -175,12 +176,24 @@ function ContactCardBody({
       </section>
 
       {/* «Объект» — только у привязанного контакта (решение владельца
-       * 2026-09-03): непривязанный — «общий», пункта у него нет. */}
-      {contact.propertyId !== undefined && (
-        <section className="rounded-card bg-surface-muted px-6 py-4">
-          <ObjectHeaderButton propertyId={contact.propertyId} />
+       * 2026-09-03): непривязанный — «общий», пункта у него нет. Вся
+       * карточка — одна зона клика, ведёт на объект (решение владельца
+       * в правке #510). */}
+      {boundPropertyId !== undefined && (
+        <button
+          type="button"
+          onClick={() => router.push(ROUTES.property(boundPropertyId))}
+          aria-label="Открыть объект"
+          className="w-full cursor-pointer rounded-card bg-surface-muted px-6 py-4 text-left transition-opacity outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary active:opacity-80"
+        >
+          <span className="flex w-full items-center gap-2">
+            <span className="min-w-0 flex-1 text-xl font-semibold leading-6 text-content">
+              Объект
+            </span>
+            <SmallArrowRight className="h-6 w-6 shrink-0 text-content-secondary" />
+          </span>
           {boundProperty !== undefined && (
-            <div className="flex items-center gap-3 pt-2">
+            <span className="flex items-center gap-3 pt-2">
               <span
                 aria-hidden
                 className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white"
@@ -203,9 +216,9 @@ function ContactCardBody({
                   {boundProperty.address}
                 </span>
               </span>
-            </div>
+            </span>
           )}
-        </section>
+        </button>
       )}
 
       <section className="flex flex-col gap-2">
@@ -267,22 +280,6 @@ function ContactValueRowView({
         onClick={handleCopy}
       />
     </div>
-  );
-}
-
-/** Заголовок карточки «Объект» — переход на карточку объекта. */
-function ObjectHeaderButton({ propertyId }: { readonly propertyId: string }): JSX.Element {
-  const router = useRouter();
-  return (
-    <button
-      type="button"
-      onClick={() => router.push(ROUTES.property(propertyId))}
-      className="flex w-full cursor-pointer items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
-      aria-label="Открыть объект"
-    >
-      <span className="min-w-0 flex-1 text-xl font-semibold leading-6 text-content">Объект</span>
-      <SmallArrowRight className="h-6 w-6 shrink-0 text-content-secondary" />
-    </button>
   );
 }
 
