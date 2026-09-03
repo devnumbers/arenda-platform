@@ -12,8 +12,10 @@ import { PaymentsHeading } from './payments-sections';
  * «Доходы/Расходы объекта» (#475): группы по датам с лейблами Figma,
  * строки Row Button White со знаковыми суммами (доход зелёным с плюсом,
  * расход тёмным с минусом — 1492:42480), пустой период — иллюстрация 128
- * и одна строка серым (1510-77308). Хвост — слот бесконечного скролла
- * (sentinel + индикатор подгрузки), список его не знает.
+ * и одна строка серым (1510-77308). Здесь же — состояние совсем пустого
+ * объекта «Операций еще не было» (1518-92899, #478). Хвост — слот
+ * бесконечного скролла (sentinel + индикатор подгрузки), список его
+ * не знает.
  */
 
 export function OperationsDateList({
@@ -49,7 +51,8 @@ export function OperationsDateList({
 }
 
 /** Пустой период (Figma 1510-77308): иллюстрация 128, одна строка 16/18
- * серым, блок с отступами 64. */
+ * серым — центрирована и с боковыми полями на любой ширине, блок с
+ * отступами 64. */
 export function OperationsEmptyPeriod(): JSX.Element {
   return (
     <div className="flex flex-col items-center gap-4 py-16">
@@ -60,9 +63,38 @@ export function OperationsEmptyPeriod(): JSX.Element {
         height={128}
         className="h-32 w-32"
       />
-      <p className="text-base leading-[18px] text-content-secondary">
+      <p className="px-6 text-center text-base leading-[18px] text-content-secondary">
         Операции не найдены. Попробуйте выбрать другой период
       </p>
+    </div>
+  );
+}
+
+/**
+ * Полностью пустой объект (Figma 1518-92899, #478): вместо чипов, сводки
+ * и списка — иллюстрация 128 через 64px после хедера (pt-10 поверх
+ * встроенных pt-6 PageContent), заголовок 16/500 и подпись 14/400 серым
+ * (320 по ширине). Иконка поиска в хедере вместе с этим состоянием
+ * скрывается — искать нечего.
+ */
+export function OperationsNeverHad(): JSX.Element {
+  return (
+    <div className="flex flex-col items-center px-6 pt-10">
+      <Image
+        src="/images/payments/operations-empty.png"
+        alt=""
+        width={128}
+        height={128}
+        className="h-32 w-32"
+      />
+      <div className="mt-4 flex max-w-[320px] flex-col gap-1 text-center">
+        <p className="text-base font-medium leading-[18px] text-content">
+          Операций еще не было
+        </p>
+        <p className="text-sm leading-4 text-content-secondary">
+          Добавьте аренду, другие платежи и начните отмечать оплату
+        </p>
+      </div>
     </div>
   );
 }

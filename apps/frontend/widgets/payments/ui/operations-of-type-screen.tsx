@@ -6,7 +6,6 @@ import { ArrowLeft, ArrowSLeft, ArrowSRight, Search } from '@/shared/assets/icon
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
-import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import type { PaymentOperationScope } from '@/shared/api/query-keys';
 import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import {
@@ -27,6 +26,7 @@ import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from '@/features/payments';
+import { operationsTypeHeadline } from '../lib/operations-empty-states';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import { LoadingMoreIndicator, OperationsDateList } from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
@@ -40,7 +40,8 @@ const SCREEN_COPY = {
 /**
  * Экран «Доходы объекта» / «Расходы объекта» (#475, Figma 1494-61191 и
  * 1492-59865): те же чипы, что на главном экране операций, вместо двух
- * карточек — H1-сумма направления за период с круглыми стрелками листания
+ * карточек — H1 направления за период («Нет доходов»/«Нет трат» при
+ * пустом периоде, #478) с круглыми стрелками листания
  * по месяцам (ArrowSLeft/ArrowSRight 44×44); ниже — список операций одного
  * типа за период, группировка и строки как на главном (общий
  * OperationsDateList). Скоуп сужен `type` — фильтр списка и сводки #473.
@@ -194,7 +195,9 @@ export function OperationsOfTypeScreen({
                     />
                     <div className="flex min-w-0 flex-1 items-center justify-center">
                       <span className="truncate text-[28px] font-semibold leading-8 text-content">
-                        {totalKopecks === undefined ? '—' : formatMoneyKopecks(totalKopecks)}
+                        {/* Пустой период — «Нет доходов»/«Нет трат» вместо
+                         * «0 ₽» (Figma 1510-76177, 1510-75650, #478). */}
+                        {operationsTypeHeadline(type, totalKopecks)}
                       </span>
                     </div>
                     <IconButton

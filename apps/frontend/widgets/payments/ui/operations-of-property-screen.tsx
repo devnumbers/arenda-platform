@@ -31,8 +31,13 @@ import {
   PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
-import { LoadingMoreIndicator, OperationsDateList } from './operations-list';
+import {
+  LoadingMoreIndicator,
+  OperationsDateList,
+  OperationsNeverHad,
+} from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
+import { hasNoPaidOperationsEver } from '../lib/operations-empty-states';
 import { summaryBarSegments, type SummaryBarSegment } from '../lib/summary-bar';
 
 /** Пилюля полосы без операций в периоде (Figma 1510-77101): серая #D3D7D9. */
@@ -53,7 +58,9 @@ const EMPTY_BAR_COLOR = '#D3D7D9';
  * в адресе (?from=&to=&category= — шарабельно, назад возвращает к
  * списку), пересчёт сводки при смене периода — ключ react-query. Порции
  * по 50 с бесконечным скроллом; строка ведёт на страницу операции. Поиск —
- * иконка в хедере (экран поиска — тикет #476).
+ * иконка в хедере (экран поиска — тикет #476). Совсем пустой объект
+ * (all-time сводка без операций, #478) вместо всего контента показывает
+ * «Операций еще не было» (Figma 1518-92899) — без чипов, сводки и поиска.
  */
 export function OperationsOfPropertyScreen({
   propertyId,
@@ -81,6 +88,12 @@ export function OperationsOfPropertyScreen({
 
   const listQuery = usePropertyOperationsScopedPaged(propertyId, listScope);
   const summaryQuery = usePropertyOperationsSummary(propertyId, periodScope);
+  // All-time сводка (тот же контракт #473 без периода): отличает «операций
+  // не было никогда» (#478, Figma 1518-92899) от пустого периода.
+  const everQuery = usePropertyOperationsSummary(propertyId, {
+    status: 'paid',
+    order: 'desc',
+  });
 
   const sentinelRef = useInfiniteScroll(
     () => {
@@ -92,7 +105,8 @@ export function OperationsOfPropertyScreen({
   );
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
-  const pending = listQuery.isPending || summaryQuery.isPending;
+  const pending = listQuery.isPending || summaryQuery.isPending || everQuery.isPending;
+  const neverHad = !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
   const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
 
   const openOperation = (operation: { readonly id: string }): void =>
@@ -126,93 +140,101 @@ export function OperationsOfPropertyScreen({
           />
         }
         trailing={
-          <IconButton
-            icon={<Search />}
-            label="Поиск операций"
-            onClick={() => router.push(ROUTES.propertyOperationsSearch(propertyId))}
-          />
+          // Совсем пустому объекту поиск не нужен (Figma 1518-92899 —
+          // правая кнопка хедера скрыта).
+          neverHad ? undefined : (
+            <IconButton
+              icon={<Search />}
+              label="Поиск операций"
+              onClick={() => router.push(ROUTES.propertyOperationsSearch(propertyId))}
+            />
+          )
         }
       >
         <TopNavTitle title="Операции объекта" />
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-6 pt-4">
-          {/* Чипы фильтров (Figma 1492:59532): период выбран — синий; категории
-           * подсвечиваются при активном фильтре. Выбор — отдельные страницы
-           * (#477), состояние живёт в адресе. */}
-          <OperationsFilterChips
-            periodLabel={
-              filters.period !== null
-                ? operationsPeriodRangeChipLabel(period)
-                : operationsPeriodDefaultChipLabel(period)
-            }
-            categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
-            categoriesActive={filters.categories.length > 0}
-            onOpenPeriod={() => openFilters('period')}
-            onOpenCategories={() => openFilters('categories')}
-          />
+        {neverHad ? (
+          <OperationsNeverHad />
+        ) : (
+          <div className="flex flex-col gap-6 pt-4">
+            {/* Чипы фильтров (Figma 1492:59532): период выбран — синий; категории
+             * подсвечиваются при активном фильтре. Выбор — отдельные страницы
+             * (#477), состояние живёт в адресе. */}
+            <OperationsFilterChips
+              periodLabel={
+                filters.period !== null
+                  ? operationsPeriodRangeChipLabel(period)
+                  : operationsPeriodDefaultChipLabel(period)
+              }
+              categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
+              categoriesActive={filters.categories.length > 0}
+              onOpenPeriod={() => openFilters('period')}
+              onOpenCategories={() => openFilters('categories')}
+            />
 
-          {pending && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
-          )}
+            {pending && (
+              <>
+                <PaymentsSkeleton withHeading />
+                <PaymentsSkeleton withHeading />
+              </>
+            )}
 
-          {!pending && (
-            <>
-              {listQuery.isError ? (
-                <PaymentsStateCard
-                  title="Не удалось загрузить операции"
-                  hint="Проверьте подключение и попробуйте еще раз"
-                  action={
-                    <Button
-                      variant="secondary"
-                      size="small"
-                      onClick={() => void listQuery.refetch()}
-                    >
-                      Повторить
-                    </Button>
-                  }
-                />
-              ) : (
-                <>
-                  {/* Карточки сводки (Figma 1510-77101): сумма за период +
-                   * полоса-разбивка пилюлями категорий у обоих направлений.
-                   * Клик — вход на экран направления (#475). */}
-                  <div className="flex gap-2 px-6">
-                    <SummaryCard
-                      label="Расходы"
-                      totalKopecks={summaryQuery.data?.expenseTotalKopecks}
-                      segments={summaryBarSegments(summaryQuery.data, 'expense')}
-                      openLabel="Открыть расходы объекта"
-                      onOpen={() => router.push(ROUTES.propertyOperationsExpense(propertyId))}
-                    />
-                    <SummaryCard
-                      label="Доходы"
-                      totalKopecks={summaryQuery.data?.incomeTotalKopecks}
-                      segments={summaryBarSegments(summaryQuery.data, 'income')}
-                      openLabel="Открыть доходы объекта"
-                      onOpen={() => router.push(ROUTES.propertyOperationsIncome(propertyId))}
-                    />
-                  </div>
-
-                  <OperationsDateList
-                    groups={groups}
-                    onSelectOperation={openOperation}
-                    tail={
-                      <>
-                        {listQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                        {listQuery.isFetchingNextPage && <LoadingMoreIndicator />}
-                      </>
+            {!pending && (
+              <>
+                {listQuery.isError ? (
+                  <PaymentsStateCard
+                    title="Не удалось загрузить операции"
+                    hint="Проверьте подключение и попробуйте еще раз"
+                    action={
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => void listQuery.refetch()}
+                      >
+                        Повторить
+                      </Button>
                     }
                   />
-                </>
-              )}
-            </>
-          )}
-        </div>
+                ) : (
+                  <>
+                    {/* Карточки сводки (Figma 1510-77101): сумма за период +
+                     * полоса-разбивка пилюлями категорий у обоих направлений.
+                     * Клик — вход на экран направления (#475). */}
+                    <div className="flex gap-2 px-6">
+                      <SummaryCard
+                        label="Расходы"
+                        totalKopecks={summaryQuery.data?.expenseTotalKopecks}
+                        segments={summaryBarSegments(summaryQuery.data, 'expense')}
+                        openLabel="Открыть расходы объекта"
+                        onOpen={() => router.push(ROUTES.propertyOperationsExpense(propertyId))}
+                      />
+                      <SummaryCard
+                        label="Доходы"
+                        totalKopecks={summaryQuery.data?.incomeTotalKopecks}
+                        segments={summaryBarSegments(summaryQuery.data, 'income')}
+                        openLabel="Открыть доходы объекта"
+                        onOpen={() => router.push(ROUTES.propertyOperationsIncome(propertyId))}
+                      />
+                    </div>
+
+                    <OperationsDateList
+                      groups={groups}
+                      onSelectOperation={openOperation}
+                      tail={
+                        <>
+                          {listQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
+                          {listQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                        </>
+                      }
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </PageContent>
     </>
   );

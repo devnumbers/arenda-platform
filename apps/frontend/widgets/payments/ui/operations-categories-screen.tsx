@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type JSX } from 'react';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
@@ -42,6 +43,8 @@ export type OperationsCategoriesScreenProps = {
  * нижняя панель, видна при непустом черновике или применённом фильтре
  * (иначе возврат к «Все категории» был бы недостижим); применяет выбор
  * возвратом на список (router.replace), крестик — goBack без изменений.
+ * Пустой период — иллюстрация и подпись вместо строк (Figma 1518-92530,
+ * #478), «Выбрать» в этом состоянии не нужен и не показывается.
  */
 export function OperationsCategoriesScreen({
   propertyId,
@@ -141,9 +144,21 @@ export function OperationsCategoriesScreen({
               }
             />
           ) : rows.length === 0 ? (
-            <p className="px-6 py-8 text-center text-base leading-[18px] text-content-secondary">
-              В этом периоде нет операций
-            </p>
+            // Пустой выбор категорий (Figma 1518-92530, #478): папка 128
+            // через 80px после чипов, подпись 16/18 серым (320 по ширине).
+            <div className="flex flex-col items-center px-6 pt-[72px]">
+              <Image
+                src="/images/payments/operations-categories.png"
+                alt=""
+                width={128}
+                height={128}
+                className="h-32 w-32"
+              />
+              <p className="mt-4 max-w-[320px] text-center text-base leading-[18px] text-content-secondary">
+                Категорий, по которым были операции в этот период не было.
+                Попробуйте выбрать другой период
+              </p>
+            </div>
           ) : (
             <div className="flex flex-col">
               {rows.map((row) => {
