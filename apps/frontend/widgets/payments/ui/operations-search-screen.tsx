@@ -5,7 +5,6 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
 import { clientTodayIso, formatDayMonthWithYear } from '@/entities/payment';
@@ -106,7 +105,8 @@ export function OperationsSearchScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            onClick={() => goBack(router, ROUTES.propertyOperations(propertyId))}
+            // Назад — на главный список операций, не по истории браузера.
+            onClick={() => router.push(ROUTES.propertyOperations(propertyId))}
           />
         }
       >

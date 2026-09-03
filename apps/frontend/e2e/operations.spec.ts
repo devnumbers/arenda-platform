@@ -206,4 +206,50 @@ test.describe('экраны операций — сквозной флоу', () 
     await expect(page).toHaveURL(/\?category=internet$/);
     await expect(page.getByRole('button', { name: 'Интернет' }).first()).toBeVisible();
   });
+
+  test('«Назад» ведёт на родительский экран, а не листает историю браузера', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(APARTMENT_OPERATIONS_URL);
+
+    // Лейбл чипа периода зависит от применённого выбора («Сентябрь 2026»,
+    // «5 — 10 сент.»…), поэтому берём его как соседа стабильного «Все
+    // категории». Диапазон выбираем в прошлом месяце — все его дни
+    // доступны при любом дне прогона.
+    const periodChip = page
+      .getByRole('button', { name: 'Все категории' })
+      .locator('xpath=preceding-sibling::button[1]');
+
+    const applyRange = async (days: readonly [string, string]): Promise<void> => {
+      await periodChip.click();
+      await expect(page.getByText('Выберите период')).toBeVisible();
+      const previousMonth = new Date();
+      previousMonth.setDate(1);
+      previousMonth.setMonth(previousMonth.getMonth() - 1);
+      const monthId = `operations-period-month-${previousMonth.getFullYear()}-`
+        + `${String(previousMonth.getMonth() + 1).padStart(2, '0')}`;
+      const monthBlock = page.locator(`#${monthId}`);
+      for (const day of days) {
+        await monthBlock.getByRole('button', { name: day, exact: true }).click();
+      }
+      await page.getByRole('button', { name: 'Выбрать период' }).click();
+      await expect(page).toHaveURL(/\?from=/);
+    };
+
+    // Период применён дважды: каждое применение replace-ит запись списка,
+    // поэтому в истории браузера лежат прежние периоды списка.
+    await applyRange(['5', '10']);
+    await applyRange(['5', '15']);
+
+    // «Назад» — структурный переход на объект, а не на прошлый период.
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`));
+
+    // С направления «Назад» — на главный список операций, без query.
+    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense`);
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page).toHaveURL(new RegExp('/operations$'));
+  });
 });

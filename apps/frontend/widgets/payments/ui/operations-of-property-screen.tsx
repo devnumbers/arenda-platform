@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { clientTodayIso } from '@/entities/payment';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import type { PaymentOperationScope } from '@/shared/api/query-keys';
@@ -19,7 +19,6 @@ import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from '@/features/payments';
-import { clientTodayIso } from '@/entities/payment';
 import {
   Button,
   IconButton,
@@ -136,7 +135,9 @@ export function OperationsOfPropertyScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            onClick={() => goBack(router, ROUTES.property(propertyId))}
+            // Назад — на объект, а не по истории браузера: страница period
+            // replace-ит список, и прежние периоды остаются в истории.
+            onClick={() => router.push(ROUTES.property(propertyId))}
           />
         }
         trailing={

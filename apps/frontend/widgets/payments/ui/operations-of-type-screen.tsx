@@ -4,7 +4,6 @@ import type { JSX } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowSLeft, ArrowSRight, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import type { PaymentOperationScope } from '@/shared/api/query-keys';
 import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
@@ -129,7 +128,8 @@ export function OperationsOfTypeScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            onClick={() => goBack(router, ROUTES.propertyOperations(propertyId))}
+            // Назад — на главный список операций, не по истории браузера.
+            onClick={() => router.push(ROUTES.propertyOperations(propertyId))}
           />
         }
         trailing={
