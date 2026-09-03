@@ -4,7 +4,15 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Add, ArrowLeft, SortingSmallBig, SmallArrowDown, VerticalMenu } from '@/shared/assets/icons';
+import {
+  Add,
+  ArrowLeft,
+  Checkmark,
+  SortingSmallBig,
+  SmallArrowDown,
+  TrashBin,
+  VerticalMenu,
+} from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
@@ -13,6 +21,7 @@ import {
   DEFAULT_TASKS_SORT,
   groupTasks,
   useActiveTasks,
+  useCompleteAllTasks,
   useCompletedTasks,
   useCompleteTask,
   useDeleteCompletedTasks,
@@ -48,11 +57,14 @@ import { TasksSortSheet } from './tasks-sort-sheet';
  * сворачиваемая «Выполненные N» (по умолчанию свёрнута, пустая не
  * показывается). Тап по строке — «Изменить задачу» (#502), тап по кружку —
  * выполнить/снять без уведомлений (решение владельца 2026-09-03). Чип
- * сортировки открывает шит «Сортировать»; кебаб ⋮ — «Удалить все
- * выполненные» (виден, только когда выполненные есть). Создание — шитом из
- * «+»/«Создать задачу» (#500), редактирование — тапом по строке (#502),
- * кнопки заготовлены экраном. Смотрящий читает без
- * мутаций (матрица ADR 0028), мутации глушатся и по архиву (#446).
+ * сортировки открывает шит «Сортировать». Кебаб ⋮ (Figma 1535-77633) —
+ * «Отметить все задачи» (все активные, по одному POST, молча — без шитов и
+ * уведомлений, решение владельца 2026-09-03) и «Удалить выполненные
+ * задачи»; кебаб виден, когда есть активные или выполненные, пункты — по
+ * наличию своих строк. Создание — шитом из «+»/«Создать задачу» (#500),
+ * редактирование — тапом по строке (#502), кнопки заготовлены экраном.
+ * Смотрящий читает без мутаций (матрица ADR 0028), мутации глушатся и по
+ * архиву (#446).
  */
 export function TasksOfPropertyScreen({
   propertyId,
@@ -71,6 +83,7 @@ export function TasksOfPropertyScreen({
 
   const complete = useCompleteTask(propertyId);
   const uncomplete = useUncompleteTask(propertyId);
+  const completeAll = useCompleteAllTasks(propertyId);
   const deleteCompleted = useDeleteCompletedTasks(propertyId);
 
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
@@ -141,15 +154,26 @@ export function TasksOfPropertyScreen({
             >
               {sort.field === 'date' ? 'Дата' : 'Название'}
             </ChipButton>
-            {canMutate && completedTotal > 0 && (
+            {canMutate && (active.length > 0 || completedTotal > 0) && (
               <Menu>
                 <MenuTrigger asChild>
                   <IconButton icon={<VerticalMenu />} label="Действия со списком" />
                 </MenuTrigger>
                 <MenuContent>
-                  <MenuItem danger onSelect={() => setDeleteOpen(true)}>
-                    Удалить все выполненные
-                  </MenuItem>
+                  {active.length > 0 && (
+                    <MenuItem
+                      icon={<Checkmark />}
+                      disabled={completeAll.isPending}
+                      onSelect={() => completeAll.mutate(active.map((task) => task.id))}
+                    >
+                      Отметить все задачи
+                    </MenuItem>
+                  )}
+                  {completedTotal > 0 && (
+                    <MenuItem icon={<TrashBin />} onSelect={() => setDeleteOpen(true)}>
+                      Удалить выполненные задачи
+                    </MenuItem>
+                  )}
                 </MenuContent>
               </Menu>
             )}

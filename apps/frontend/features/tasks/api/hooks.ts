@@ -112,6 +112,36 @@ export function useUncompleteTask(
 }
 
 /**
+ * «Отметить все задачи» (меню кебаба #499, Figma 1535-77633): выполняет
+ * все активные задачи объекта по одному POST /complete на задачу —
+ * bulk-эндпоинта в контракте нет, задач у объекта обычно единицы. Сбои
+ * отдельных запросов (в т.ч. контрактный 409 на уже выполненную) глотаются
+ * осознанно — никаких уведомлений, список перечитается и покажет факт
+ * (решение владельца 2026-09-03). Инвалидация одна, на весь прогон.
+ */
+export function useCompleteAllTasks(
+  propertyId: string,
+): UseMutationResult<void, ApiError, readonly string[]> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskIds: readonly string[]) => {
+      await Promise.allSettled(
+        taskIds.map((taskId) =>
+          apiClient<TaskResponseDto>(
+            `/properties/${encodeURIComponent(propertyId)}`
+              + `/tasks/${encodeURIComponent(taskId)}/complete`,
+            { method: 'POST' },
+          ),
+        ),
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
  * «Удалить все выполненные» (кебаб ⋮ → шит подтверждения): скоуп — журнал
  * удалённых правил (ADR 0051 §3), выполненные живых правил остаются
  * (держат дедуп-ключи тика). Счётчик секции после операции перечитается.

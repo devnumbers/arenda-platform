@@ -130,3 +130,9 @@ export { default as SmallArrowDown } from './small-arrow-down.svg';
 export { default as SmallArrowUp } from './small-arrow-up.svg';
 export { default as VerticalMenu } from './vertical-menu.svg';
 export { default as ClockSmall } from './clock-small.svg';
+
+// Меню кебаба списка задач (#499, Figma 1535-77633): «Отметить все задачи»
+// (Checkmark 1535:77389) и «Удалить выполненные задачи» (TrashBin
+// 189:853) — currentColor.
+export { default as Checkmark } from './checkmark.svg';
+export { default as TrashBin } from './trashbin.svg';

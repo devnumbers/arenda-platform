@@ -1,5 +1,6 @@
 export {
   useActiveTasks,
+  useCompleteAllTasks,
   useCompletedTasks,
   useCompleteTask,
   useDeleteCompletedTasks,
