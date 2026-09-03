@@ -1,36 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Add, ArrowLeft, BoldUser } from '@/shared/assets/icons';
+import { ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { useContacts } from '@/features/contacts';
 import { useProperty } from '@/features/properties';
 import {
+  Button,
   IconButton,
-  ListRow,
   PageContent,
-  RoundActionButton,
   SearchField,
   StickyBottomBar,
   TopNav,
+  TopNavTitle,
 } from '@/shared/ui/design';
-import { contactRowModel } from '../lib/contact-list-model';
-import { ContactsEmptyState, ContactsErrorCard, ContactsSkeleton } from './contacts-states';
+import { contactSortByName, groupContactsByLetter } from '../lib/contact-list-model';
+import type { ContactSortOrder } from '../lib/contact-list-model';
+import { ContactRowButton } from './contact-row-button';
+import {
+  ContactsEmptyState,
+  ContactsErrorCard,
+  ContactsNoResults,
+  ContactsSearchHint,
+  ContactsSkeleton,
+} from './contacts-states';
+import { ContactsSortButton, ContactsSortSheet } from './contacts-sort-sheet';
 
 /** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
 const SEARCH_DEBOUNCE_MS = 300;
 
 /**
- * Экран «Контакты объекта» (#508, карта #503): TopNav в варианте поиска
- * (паттерн платёжного поиска), серверный регистронезависимый ?search= по
- * имени, телефону, почте, мессенджеру и роли с дебаунсом, строки ListRow —
- * ФИО + роль, второй строкой телефон. Кнопка «Добавить» видна тому, кто
- * может мутировать (как у платежей: не смотрящий и не архив, #446); ведёт
- * на экран создания — появляется в #509 по порядку приёмки карты.
+ * Экран «Контакты объекта» (#508, переделан по макетам 1527:74479/74138/
+ * 74139, 1539:85395, 1527:74813/74837/74825): шапка «Контакты объекта» с
+ * лупой в правом слоте — по тапу шапка переключается в поисковый режим
+ * (вариант search, конвенция платёжного поиска, fixme-спека #491), «назад»
+ * в нём закрывает поиск. Список — серая карточка с алфавитными группами,
+ * строка: имя + роль (телефона в строке нет), пилюля «Имя» открывает шит
+ * сортировки А→Я / Я→А (клиентская). Пустой список — иллюстрация
+ * «Контактов нет»; в поиске — подсказка по началу и «Такого контакта нет».
+ * Полноширинная кнопка «Добавить контакт» — тому, кто может мутировать
+ * (как у платежей: не смотрящий и не архив, #446); ведёт на создание —
+ * #509 по порядку приёмки карты.
  */
 export function ContactsOfPropertyScreen({
   propertyId,
@@ -40,15 +54,31 @@ export function ContactsOfPropertyScreen({
   const router = useRouter();
   const propertyQuery = useProperty(propertyId);
 
+  const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [sortOrder, setSortOrder] = useState<ContactSortOrder>('asc');
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Открытие поиска сразу делает поле активным (программный фокус —
+  // устоявшийся a11y-паттерн вместо autoFocus, как на платёжных экранах).
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus();
+    }
+  }, [searchOpen]);
+
   const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
-  // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски:
-  // запрос из одних пробелов не должен уходить в ?search=.
+  // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски;
+  // закрытый поиск не фильтрует вовсе.
   const trimmedSearch = debouncedSearch.trim();
-  const contactsQuery = useContacts(propertyId, trimmedSearch);
+  const contactsQuery = useContacts(propertyId, searchOpen ? trimmedSearch : '');
 
   const contacts = contactsQuery.data ?? [];
   const searching = trimmedSearch.length > 0;
+
+  const sorted = contactSortByName(contacts, sortOrder);
+  const groups = groupContactsByLetter(sorted);
 
   // Мутационный вход — тому, кому можно мутировать: смотрящий читает без
   // кнопок (как у платежей, история 47), архив read-only (#446). Пока
@@ -58,86 +88,105 @@ export function ContactsOfPropertyScreen({
   const canMutate =
     property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
 
+  const closeSearch = (): void => {
+    setSearchOpen(false);
+    setSearch('');
+  };
+
   return (
     <>
-      <TopNav
-        variant="search"
-        leading={
-          <IconButton
-            icon={<ArrowLeft />}
-            label="Назад"
-            onClick={() => goBack(router, ROUTES.property(propertyId))}
+      {searchOpen ? (
+        <TopNav
+          variant="search"
+          leading={
+            <IconButton icon={<ArrowLeft />} label="Закрыть поиск" onClick={closeSearch} />
+          }
+        >
+          <SearchField
+            ref={searchInputRef}
+            aria-label="Поиск контактов"
+            placeholder="Найти контакт"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onClear={() => setSearch('')}
           />
-        }
-      >
-        <SearchField
-          aria-label="Поиск контактов"
-          placeholder="Поиск"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          onClear={() => setSearch('')}
-        />
-      </TopNav>
+        </TopNav>
+      ) : (
+        <TopNav
+          leading={
+            <IconButton
+              icon={<ArrowLeft />}
+              label="Назад"
+              onClick={() => goBack(router, ROUTES.property(propertyId))}
+            />
+          }
+          trailing={<IconButton icon={<Search />} label="Поиск" onClick={() => setSearchOpen(true)} />}
+        >
+          <TopNavTitle title="Контакты объекта" />
+        </TopNav>
+      )}
 
       <PageContent>
         {contactsQuery.isPending ? (
           <ContactsSkeleton />
         ) : contactsQuery.isError ? (
           <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
+        ) : searchOpen && !searching ? (
+          <ContactsSearchHint />
+        ) : searching && contacts.length === 0 ? (
+          <ContactsNoResults />
+        ) : searchOpen ? (
+          /* Результаты поиска (1527:74837): белые строки на белом фоне,
+           * без алфавитных групп. */
+          <div className="flex flex-col px-6">
+            {sorted.map((contact) => (
+              <ContactRowButton key={contact.id} contact={contact} surface="white" />
+            ))}
+          </div>
         ) : contacts.length === 0 ? (
-          searching ? (
-            <ContactsEmptyState
-              title="Ничего не нашлось"
-              hint="Поиск ищет по имени, телефону, почте, мессенджеру и роли"
-            />
-          ) : (
-            <ContactsEmptyState
-              title="Нет контактов"
-              hint="Добавьте тех, кто помогает с объектом, — сантехника, управляющую компанию, консьержа"
-            />
-          )
+          <ContactsEmptyState />
         ) : (
-          <section className="mx-6 rounded-card bg-surface-muted py-2">
-            {contacts.map((contact) => {
-              const row = contactRowModel(contact);
-              return (
-                <ListRow
-                  key={contact.id}
-                  leading={<ContactAvatar />}
-                  title={row.title}
-                  subtitle={row.subtitle}
-                />
-              );
-            })}
-          </section>
+          <>
+            <div className="mb-6">
+              <ContactsSortButton onOpen={() => setSortSheetOpen(true)} />
+            </div>
+            {/* Книга (1527:74139): одна серая карточка с алфавитными
+             * группами; буква — над своими строками. */}
+            <section className="mx-6 flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6">
+              {groups.map((group) => (
+                <div key={group.letter} className="flex flex-col">
+                  <span aria-hidden className="pl-2 text-base font-medium text-content-tertiary">
+                    {group.letter}
+                  </span>
+                  <div className="flex flex-col">
+                    {group.contacts.map((contact) => (
+                      <ContactRowButton key={contact.id} contact={contact} surface="muted" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+          </>
         )}
       </PageContent>
 
-      {canMutate && (
+      {canMutate && !searchOpen && (
         <StickyBottomBar>
-          <div className="flex justify-center">
-            <RoundActionButton
-              variant="primary"
-              icon={<Add />}
-              caption="Добавить"
-              onClick={() => router.push(ROUTES.propertyContactNew(propertyId))}
-            />
-          </div>
+          <Button className="w-full" onClick={() => router.push(ROUTES.propertyContactNew(propertyId))}>
+            Добавить контакт
+          </Button>
         </StickyBottomBar>
       )}
-    </>
-  );
-}
 
-/** Нейтральный аватар строки: белый круг 44×44 с кантом под серую
- * поверхность (та же геометрия, что у CategoryIcon, резолюция #449). */
-function ContactAvatar(): JSX.Element {
-  return (
-    <span
-      aria-hidden
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface text-content-tertiary shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
-    >
-      <BoldUser className="h-6 w-6" />
-    </span>
+      <ContactsSortSheet
+        open={sortSheetOpen}
+        onOpenChange={setSortSheetOpen}
+        order={sortOrder}
+        onOrderChange={(next) => {
+          setSortOrder(next);
+          setSortSheetOpen(false);
+        }}
+      />
+    </>
   );
 }

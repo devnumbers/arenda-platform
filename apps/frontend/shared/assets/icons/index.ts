@@ -78,6 +78,8 @@ export { default as Check } from './check.svg';
 export { default as Edit } from './edit.svg';
 export { default as ArrowDown } from './arrow-down.svg';
 export { default as SortingDown } from './sorting-down.svg';
+export { default as SortingSmallBig } from './sorting-small-big.svg';
+export { default as SmallArrowDown } from './small-arrow-down.svg';
 export { default as Move } from './move.svg';
 export { default as Star } from './star.svg';
 export { default as StarOff } from './star-off.svg';

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Contact } from '@/entities/contact';
-import { contactRowModel } from './contact-list-model';
+import {
+  contactRowModel,
+  contactSortByName,
+  groupContactsByLetter,
+  type ContactSortOrder,
+} from './contact-list-model';
 
 const contact: Contact = {
   id: '0198b6a7-1000-7000-8000-0000000000c1',
@@ -18,23 +23,66 @@ const contact: Contact = {
   updatedAt: '2026-09-01T09:00:00Z',
 };
 
-describe('contactRowModel — модель строки списка контактов (#508)', () => {
-  it('первая строка — ФИО + роль через разделитель, вторая — телефон', () => {
+const named = (firstName: string, lastName = '', role = ''): Contact => ({
+  ...contact,
+  id: `id-${firstName}-${lastName}`,
+  firstName,
+  lastName,
+  role,
+});
+
+describe('contactRowModel — модель строки списка контактов (#508, макет 1527:74139)', () => {
+  it('заголовок — имя, подзаголовок — роль; телефона в строке нет', () => {
     expect(contactRowModel(contact)).toStrictEqual({
-      title: 'Анна Петрова · сантехник',
-      subtitle: '+79001234567',
+      title: 'Анна Петрова',
+      subtitle: 'сантехник',
     });
   });
 
-  it('без роли — только имя, без висячего разделителя', () => {
-    const row = contactRowModel({ ...contact, role: '' });
+  it('без роли — строка без подзаголовка', () => {
+    expect(contactRowModel(named('ООО «Чистый дом»'))).toStrictEqual({
+      title: 'ООО «Чистый дом»',
+      subtitle: undefined,
+    });
+  });
+});
 
-    expect(row.title).toBe('Анна Петрова');
+describe('contactSortByName — сортировка по имени (кнопка «Имя», макет 1539:85395)', () => {
+  const list = [named('Григорий'), named('борис'), named('Анна'), named('Анна', 'Архипова')];
+
+  it('asc — от А до Я, регистр не влияет', () => {
+    const sorted = contactSortByName(list, 'asc').map((item) => item.firstName);
+    expect(sorted).toStrictEqual(['Анна', 'Анна', 'борис', 'Григорий']);
   });
 
-  it('без телефона — вторая строка не рисуется', () => {
-    const row = contactRowModel({ ...contact, phone: '' });
+  it('desc — от Я до А', () => {
+    const sorted = contactSortByName(list, 'desc').map((item) => item.firstName);
+    expect(sorted).toStrictEqual(['Григорий', 'борис', 'Анна', 'Анна']);
+  });
+});
 
-    expect(row.subtitle).toBeUndefined();
+describe('groupContactsByLetter — алфавитные группы (макет 1527:74139)', () => {
+  it('группирует по первой букве имени в верхнем регистре, порядок групп — по входному списку', () => {
+    const groups = groupContactsByLetter([
+      named('Анна'),
+      named('артем'),
+      named('Борис'),
+      named('Анна', 'Архипова'),
+    ]);
+
+    expect(groups.map((group) => group.letter)).toStrictEqual(['А', 'Б']);
+    expect(groups[0]?.contacts.map((item) => item.firstName)).toStrictEqual(['Анна', 'артем', 'Анна']);
+    expect(groups[1]?.contacts.map((item) => item.firstName)).toStrictEqual(['Борис']);
+  });
+
+  it('пустой список — без групп', () => {
+    expect(groupContactsByLetter([])).toStrictEqual([]);
+  });
+});
+
+describe('ContactSortOrder', () => {
+  it('два направления — asc и desc', () => {
+    const orders: ContactSortOrder[] = ['asc', 'desc'];
+    expect(orders).toHaveLength(2);
   });
 });
