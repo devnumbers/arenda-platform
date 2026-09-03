@@ -29,6 +29,18 @@ export const ROUTES = {
   /** Страница операции: вхождение правила; «Отметить оплаченной» — отсюда. */
   propertyOperation: (id: string, operationId: string) =>
     `/properties/${id}/operations/${operationId}`,
+  /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
+  propertyOperations: (id: string) => `/properties/${id}/operations`,
+  /** Экраны «Доходы объекта»/«Расходы объекта» (#475): список одного
+   * направления за месяц с листанием. */
+  propertyOperationsIncome: (id: string) => `/properties/${id}/operations/income`,
+  propertyOperationsExpense: (id: string) => `/properties/${id}/operations/expense`,
+  /** Поиск по операциям объекта (Figma 1494-61633…; экран — тикет #476). */
+  propertyOperationsSearch: (id: string) => `/properties/${id}/operations/search`,
+  /** Страницы выбора периода и категорий (#477, Figma 1495-64015,
+   * 1502-65940, 1502-66758 / 1506-72116, 1510-74149). */
+  propertyOperationsPeriod: (id: string) => `/properties/${id}/operations/period`,
+  propertyOperationsCategories: (id: string) => `/properties/${id}/operations/categories`,
   /** Просмотр проекции будущего вхождения (чисто фронт, без id операции). */
   propertyPaymentProjectedOperation: (id: string, paymentId: string, date: string) =>
     `/properties/${id}/payments/${paymentId}/operations/projected/${date}`,

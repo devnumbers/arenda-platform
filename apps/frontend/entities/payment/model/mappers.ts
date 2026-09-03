@@ -5,10 +5,11 @@
  */
 
 import type { components } from '@/shared/api/dto';
-import type { Payment, PaymentOperation } from './types';
+import type { OperationsSummary, Payment, PaymentOperation } from './types';
 
 type PaymentDto = components['schemas']['PaymentResponse'];
 type OperationDto = components['schemas']['OperationResponse'];
+type OperationsSummaryDto = components['schemas']['OperationsSummaryResponse'];
 
 export function mapPayment(dto: PaymentDto): Payment {
   return {
@@ -60,5 +61,18 @@ export function mapPaymentOperation(dto: OperationDto): PaymentOperation {
     paymentForm: dto.paymentForm ?? undefined,
     categoryLabel: dto.categoryLabel,
     categorySlug: dto.categorySlug ?? undefined,
+  };
+}
+
+export function mapOperationsSummary(dto: OperationsSummaryDto): OperationsSummary {
+  return {
+    incomeTotalKopecks: dto.incomeTotalKopecks,
+    expenseTotalKopecks: dto.expenseTotalKopecks,
+    categories: dto.categories.map((category) => ({
+      slug: category.categorySlug,
+      label: category.categoryLabel,
+      type: category.type,
+      totalKopecks: category.totalKopecks,
+    })),
   };
 }

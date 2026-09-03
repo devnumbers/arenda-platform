@@ -953,7 +953,9 @@ paths:
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
         - $ref: '#/components/parameters/OperationsOffset'
-        - $ref: '#/components/parameters/TitleSearch'
+        - $ref: '#/components/parameters/OperationsSearch'
+        - $ref: '#/components/parameters/OperationsTypeFilter'
+        - $ref: '#/components/parameters/OperationsCategoriesFilter'
       responses:
         '200':
           description: Property operations list (overdue included with status=overdue)
@@ -961,6 +963,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /properties/{propertyId}/operations/summary:
+    get:
+      operationId: summarizePropertyOperations
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/OperationsStatusFilter'
+        - $ref: '#/components/parameters/OperationsDateFrom'
+        - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsSearch'
+        - $ref: '#/components/parameters/OperationsTypeFilter'
+      responses:
+        '200':
+          description: >-
+            Period totals of the property's operations by direction plus the
+            per-category breakdown. The totals always report both directions —
+            the summary cards read them together — while the type filter
+            narrows only the categories array. Categories with no operations
+            in scope are absent; the array is ordered by total, largest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsSummaryResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2756,6 +2793,41 @@ components:
         disables the filter; LIKE metacharacters in the value are literals.
       schema:
         type: string
+    OperationsSearch:
+      name: search
+      in: query
+      required: false
+      description: >-
+        Case-insensitive substring search over the operation title and the
+        operation's category snapshot. A query made only of digits and amount
+        separators (spaces, commas, points, dashes) additionally matches the
+        amount: its digits are searched inside the amount's decimal digits
+        (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽,
+        while a query holding any letter never matches amounts. A missing or
+        empty value disables the filter; LIKE metacharacters in the value are
+        literals.
+      schema:
+        type: string
+    OperationsTypeFilter:
+      name: type
+      in: query
+      required: false
+      description: >-
+        Filter by the operation direction: the payment's type snapshot every
+        operation carries. A missing value disables the filter.
+      schema:
+        type: string
+        enum: [income, expense]
+    OperationsCategoriesFilter:
+      name: category
+      in: query
+      required: false
+      description: >-
+        Comma-separated category slugs (the chips multi-select); operations of
+        any other category are filtered out. A missing or empty value disables
+        the filter; whitespace around slugs is ignored.
+      schema:
+        type: string
 
   schemas:
 
@@ -4110,6 +4182,44 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OperationResponse'
+
+    OperationsSummaryCategory:
+      description: >-
+        One category's total over the summarized scope. Rows without a
+        category snapshot never appear here — their amounts still count in
+        the totals.
+      type: object
+      required: [categorySlug, categoryLabel, type, totalKopecks]
+      properties:
+        categorySlug:
+          type: string
+        categoryLabel:
+          type: string
+        type:
+          type: string
+          enum: [income, expense]
+        totalKopecks:
+          type: integer
+          format: int64
+
+    OperationsSummaryResponse:
+      description: >-
+        The operations summary behind the «Операции объекта» screens: the
+        period totals by direction and the per-category breakdown. Money is
+        integer kopecks (ADR 0008).
+      type: object
+      required: [incomeTotalKopecks, expenseTotalKopecks, categories]
+      properties:
+        incomeTotalKopecks:
+          type: integer
+          format: int64
+        expenseTotalKopecks:
+          type: integer
+          format: int64
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationsSummaryCategory'
 
     PropertyAccessMemberRole:
       type: string

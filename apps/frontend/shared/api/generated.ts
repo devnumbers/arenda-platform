@@ -389,6 +389,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/operations/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["summarizePropertyOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/operations/{operationId}": {
         parameters: {
             query?: never;
@@ -1844,6 +1860,23 @@ export interface components {
         OperationsResponse: {
             items: components["schemas"]["OperationResponse"][];
         };
+        /** @description One category's total over the summarized scope. Rows without a category snapshot never appear here — their amounts still count in the totals. */
+        OperationsSummaryCategory: {
+            categorySlug: string;
+            categoryLabel: string;
+            /** @enum {string} */
+            type: "income" | "expense";
+            /** Format: int64 */
+            totalKopecks: number;
+        };
+        /** @description The operations summary behind the «Операции объекта» screens: the period totals by direction and the per-category breakdown. Money is integer kopecks (ADR 0008). */
+        OperationsSummaryResponse: {
+            /** Format: int64 */
+            incomeTotalKopecks: number;
+            /** Format: int64 */
+            expenseTotalKopecks: number;
+            categories: components["schemas"]["OperationsSummaryCategory"][];
+        };
         /**
          * @description The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
          * @enum {string}
@@ -2109,6 +2142,12 @@ export interface components {
         OperationsOffset: number;
         /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
         TitleSearch: string;
+        /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+        OperationsSearch: string;
+        /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+        OperationsTypeFilter: "income" | "expense";
+        /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+        OperationsCategoriesFilter: string;
     };
     requestBodies: never;
     headers: never;
@@ -3022,8 +3061,12 @@ export interface operations {
                 order?: components["parameters"]["OperationsOrder"];
                 limit?: components["parameters"]["OperationsLimit"];
                 offset?: components["parameters"]["OperationsOffset"];
-                /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
-                search?: components["parameters"]["TitleSearch"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
+                /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+                type?: components["parameters"]["OperationsTypeFilter"];
+                /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+                category?: components["parameters"]["OperationsCategoriesFilter"];
             };
             header?: never;
             path: {
@@ -3040,6 +3083,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    summarizePropertyOperations: {
+        parameters: {
+            query?: {
+                /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
+                status?: components["parameters"]["OperationsStatusFilter"];
+                /** @description Inclusive lower bound of the period on the operation date. */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the operation date. */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
+                /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+                type?: components["parameters"]["OperationsTypeFilter"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Period totals of the property's operations by direction plus the per-category breakdown. The totals always report both directions — the summary cards read them together — while the type filter narrows only the categories array. Categories with no operations in scope are absent; the array is ordered by total, largest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSummaryResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

@@ -126,6 +126,12 @@ type OperationStore interface {
 	) ([]domain.Operation, error)
 	// ListByProperty returns the property's operations across its rules.
 	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, q OperationsListQuery) ([]domain.Operation, error)
+	// SummarizeByProperty returns the property's period aggregate (ticket
+	// #473): the totals by direction and the per-category breakdown, with
+	// the query's status/period/direction predicate. Read-only.
+	SummarizeByProperty(
+		ctx context.Context, scope, propertyID uuid.UUID, q OperationsSummaryQuery,
+	) (OperationsSummary, error)
 	WithTx(tx transaction.Tx) (OperationStore, error)
 }
 

@@ -1,5 +1,5 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
-import { addDays, formatDayMonthWithYear } from '@/entities/payment';
+import { addDays, formatDayMonth, formatDayMonthWithYear } from '@/entities/payment';
 
 /**
  * Группировка «Истории платежей» по датам (резолюция #452): «Сегодня»,
@@ -11,6 +11,8 @@ import { addDays, formatDayMonthWithYear } from '@/entities/payment';
  * расхождение с TZ собственника ограничено краевыми часами суток.
  */
 export type PaymentHistoryGroup = {
+  /** Дата группы ('YYYY-MM-DD') — стабильный ключ секции списка. */
+  readonly date: IsoDate;
   readonly label: string;
   readonly operations: ReadonlyArray<PaymentOperation>;
 };
@@ -19,9 +21,31 @@ export function groupPaidOperations(
   operations: ReadonlyArray<PaymentOperation>,
   today: IsoDate,
 ): ReadonlyArray<PaymentHistoryGroup> {
+  return groupOperationsByLabel(operations, today, historyGroupLabel);
+}
+
+/**
+ * Группировка списков «Операций объекта» (#474, Figma 1492-41825): тот же
+ * обход, лейблы дня — с датой через запятую: «Сегодня, 10 ноября»,
+ * «Вчера, 9 ноября», дальше «1 ноября» («10 декабря, 2025» вне текущего
+ * года). Порядок групп и оговорка о «клиентском сегодня» — как в истории.
+ */
+export function groupOperationsByDate(
+  operations: ReadonlyArray<PaymentOperation>,
+  today: IsoDate,
+): ReadonlyArray<PaymentHistoryGroup> {
+  return groupOperationsByLabel(operations, today, operationsGroupLabel);
+}
+
+/** Общий обход: подряд идущие операции одной даты складываются в группу,
+ * лейбл решает стиль подписи. Внутри группы мутабельны — наружу тип отдаёт
+ * их только на чтение. */
+function groupOperationsByLabel(
+  operations: ReadonlyArray<PaymentOperation>,
+  today: IsoDate,
+  label: (date: IsoDate, today: IsoDate, yesterday: IsoDate) => string,
+): ReadonlyArray<PaymentHistoryGroup> {
   const yesterday = addDays(today, -1);
-  // Внутренне страницы мутабельны — группа дополняется подряд идущими
-  // операциями той же даты; наружу тип отдаёт их только на чтение.
   const groups: { label: string; date: IsoDate; operations: PaymentOperation[] }[] = [];
   for (const operation of operations) {
     const current = groups.at(-1);
@@ -30,7 +54,7 @@ export function groupPaidOperations(
       continue;
     }
     groups.push({
-      label: historyGroupLabel(operation.date, today, yesterday),
+      label: label(operation.date, today, yesterday),
       date: operation.date,
       operations: [operation],
     });
@@ -44,6 +68,16 @@ function historyGroupLabel(date: IsoDate, today: IsoDate, yesterday: IsoDate): s
   }
   if (date === yesterday) {
     return 'Вчера';
+  }
+  return formatDayMonthWithYear(date, today);
+}
+
+function operationsGroupLabel(date: IsoDate, today: IsoDate, yesterday: IsoDate): string {
+  if (date === today) {
+    return `Сегодня, ${formatDayMonth(date)}`;
+  }
+  if (date === yesterday) {
+    return `Вчера, ${formatDayMonth(date)}`;
   }
   return formatDayMonthWithYear(date, today);
 }

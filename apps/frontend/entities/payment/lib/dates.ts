@@ -22,6 +22,11 @@ export function addDays(iso: IsoDate, days: number): IsoDate {
   return next.toISOString().slice(0, 10);
 }
 
+/** Длина периода включительно, в днях: с 3 по 14 августа — 12 дней. */
+export function inclusiveDays(from: IsoDate, to: IsoDate): number {
+  return Math.round((fromIso(to).getTime() - fromIso(from).getTime()) / MS_PER_DAY) + 1;
+}
+
 export function lastDayOfMonth(year: number, monthIndex0: number): number {
   return new Date(Date.UTC(year, monthIndex0 + 1, 0)).getUTCDate();
 }

@@ -21,7 +21,7 @@ export { AmountField, type AmountFieldProps } from './amount-field';
 export { amountKopecks, groupedAmount, sanitizeAmountInput, syncAmountInputDom } from './amount-input';
 export { CalendarMonth, type CalendarMonthProps } from './calendar-month';
 export { MonthDaysGrid, type MonthDaysGridProps } from './month-days-grid';
-export { monthTitle } from './month-grid';
+export { monthTitle, MONTH_LABELS } from './month-grid';
 export { MonthYearPicker, type MonthYearPickerProps } from './month-year-picker';
 export { WheelPicker, type WheelPickerProps } from './wheel-picker';
 export { ListRow, type ListRowProps } from './list-row';

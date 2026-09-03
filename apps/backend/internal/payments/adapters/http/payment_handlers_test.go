@@ -21,6 +21,7 @@ import (
 // Shared wire fixtures of the handler tests.
 const (
 	testSlugRent     = "rent"
+	testLabelRent    = "Арендная плата"
 	testDetailNotFmt = "Не найдено"
 	testTitleRent    = "Аренда"
 )
@@ -326,7 +327,7 @@ func TestCreatePayment_MapsCommandToService(t *testing.T) {
 		propertyID)
 
 	// The command reaches the application layer with the parsed wire payload.
-	if gotCmd.Type != domain.TypeExpense || gotCmd.Title != "Арендная плата" || gotCmd.AmountKopecks != 5000000 {
+	if gotCmd.Type != domain.TypeExpense || gotCmd.Title != testLabelRent || gotCmd.AmountKopecks != 5000000 {
 		t.Fatalf("command scalars = %+v", gotCmd)
 	}
 	if gotCmd.Recurrence.Kind() != domain.RecurrenceWeekly {
@@ -416,7 +417,7 @@ func TestCreatePayment_MapsResponseContract(t *testing.T) {
 	if resp.Category.Source != "default" || resp.Category.Slug == nil || *resp.Category.Slug != testSlugRent {
 		t.Fatalf("category = %+v", resp.Category)
 	}
-	if resp.Category.Label != "Арендная плата" {
+	if resp.Category.Label != testLabelRent {
 		t.Fatalf("category label = %q, want the catalog label", resp.Category.Label)
 	}
 	assertPauseViews(t, resp.Pauses)

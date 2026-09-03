@@ -1,6 +1,8 @@
-export { mapPayment, mapPaymentOperation } from './model/mappers';
+export { mapPayment, mapPaymentOperation, mapOperationsSummary } from './model/mappers';
 export type {
   IsoDate,
+  OperationsCategorySummary,
+  OperationsSummary,
   PauseInterval,
   Payment,
   PaymentCategoryView,
@@ -15,7 +17,7 @@ export type {
   Recurrence,
 } from './model/types';
 export { firstOccurrence, isDatePaused, nextOccurrenceAfter, nextOccurrencesAfter, occurrencesBetween } from './lib/occurrences';
-export { addDays } from './lib/dates';
+export { addDays, inclusiveDays } from './lib/dates';
 export { clientTodayIso } from './lib/client-today';
 export { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from './lib/date-format';
 export { recurrenceLabel } from './lib/recurrence-label';

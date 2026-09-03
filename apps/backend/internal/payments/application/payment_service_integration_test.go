@@ -66,7 +66,7 @@ func assertPaymentReadBack(t *testing.T, h *paymentsHarness, created domain.Paym
 	if err != nil {
 		t.Fatalf("get payment: %v", err)
 	}
-	if got.Title != "Аренда" || got.Category.SlugString() != "rent" {
+	if got.Title != "Аренда" || got.Category.SlugString() != testIntegrationSlugRent {
 		t.Fatalf("get payment = %+v", got)
 	}
 	list, err := h.svc.ListPayments(h.ctx(), h.owner, h.propID, "")

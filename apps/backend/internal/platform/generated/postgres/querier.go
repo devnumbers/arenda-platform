@@ -266,8 +266,13 @@ type Querier interface {
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	// The operations of one scope with pagination (limit/offset), the view status
 	// filter ('' is any), an inclusive period on the operation date, the sort
-	// direction and a case-insensitive substring search by title ('' = no filter;
-	// the application layer escapes the ILIKE metacharacters, ESCAPE '\').
+	// direction, a search filter ('' = no filter; the application layer escapes
+	// the ILIKE metacharacters, ESCAPE '\'): a case-insensitive substring over
+	// the title and the category snapshot — and, when the query reads as an
+	// amount, its digits inside the amount's decimal digits in kopecks (the
+	// display amount without separators; ticket #476), the direction filter (''
+	// is any) and the comma-separated category slugs filter ('' is any; rows
+	// without a category snapshot never match a slug).
 	// A NULL payment widens the scope from one rule to every rule of
 	// the property: "planned" and "overdue" split the stored planned rows against
 	// the owner's today — overdue is computed here from the same truth the
@@ -397,6 +402,23 @@ type Querier interface {
 	// Existence is already proven inside the same transaction under the property
 	// lock; :execrows keeps the store honest independently of that ordering.
 	SetPaymentFavorite(ctx context.Context, arg SetPaymentFavoriteParams) (int64, error)
+	// The period totals of one property's operations by direction (ticket #473):
+	// the same status/period predicate as ListOperations, aggregated in SQL so
+	// the summary cards never re-add a paginated listing client-side. The
+	// direction filter deliberately does not apply here — the totals always
+	// report both directions (the contract: the type filter narrows only the
+	// category breakdown). Types absent from the scope simply miss from the
+	// result — the adapter reports them as zero. Cancelled tombstones never
+	// count. The search filter (ticket #476) is the listing's predicate — the
+	// summary of the searched scope stays consistent with its list.
+	SumOperationTotals(ctx context.Context, arg SumOperationTotalsParams) ([]SumOperationTotalsRow, error)
+	// The per-category breakdown behind the category chips and the summary
+	// cards' bar (ticket #473): one row per category snapshot present in the
+	// scope, largest total first; rows without a category snapshot are skipped
+	// (no chip identity — their amounts still count in the totals). The search
+	// filter (ticket #476) is the listing's predicate: the breakdown over the
+	// searched scope is the search screen's matched-category chips.
+	SumOperationsByCategory(ctx context.Context, arg SumOperationsByCategoryParams) ([]SumOperationsByCategoryRow, error)
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error)

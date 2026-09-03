@@ -2,6 +2,8 @@ export { default as Clock } from './clock.svg';
 export { default as Loading } from './loading.svg';
 export { default as ArrowLeft } from './arrow-left.svg';
 export { default as ArrowRight } from './arrow-right.svg';
+export { default as ArrowSLeft } from './arrow-s-left.svg';
+export { default as ArrowSRight } from './arrow-s-right.svg';
 export { default as Menu } from './menu.svg';
 export { default as Cancel } from './cancel.svg';
 export { default as Search } from './search.svg';

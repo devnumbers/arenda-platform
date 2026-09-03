@@ -42,6 +42,24 @@ export type PaymentOperationStatusFilter = 'planned' | 'paid' | 'overdue';
 /** Направление сортировки операций по дате вхождения (query `order`). */
 export type PaymentOperationOrder = 'asc' | 'desc';
 
+/**
+ * Скоуп операций объекта для экранов «Операции объекта» (#474): статус,
+ * направление, категории (слаги), границы периода и поисковый запрос
+ * (#476). Целиком уходит в ключ react-query и в query-параметры запроса.
+ */
+export type PaymentOperationScope = {
+  readonly status: PaymentOperationStatusFilter;
+  readonly order: PaymentOperationOrder;
+  readonly type?: 'income' | 'expense';
+  readonly categories?: ReadonlyArray<string>;
+  /** Границы периода включительно, 'YYYY-MM-DD'. */
+  readonly dateFrom?: string;
+  readonly dateTo?: string;
+  /** Поиск операций (#476): подстрока по названию/категории, числовой
+   * запрос — и по сумме; '' и undefined — без поиска. */
+  readonly search?: string;
+};
+
 // features/payments
 export const paymentKeys = {
   all: ['payments'] as const,
@@ -95,6 +113,33 @@ export const paymentOperationKeys = {
       status,
       order,
       search,
+    ] as const,
+  /** Порции операций объекта со скоупом экранов операций (#474): весь
+   * скоуп — часть ключа, переключение фильтра читает свой кэш. */
+  byPropertyScopedPaged: (propertyId: string, scope: PaymentOperationScope) =>
+    [
+      ...paymentOperationKeys.all,
+      'by-property-scoped-paged',
+      propertyId,
+      scope.status,
+      scope.order,
+      scope.type ?? '',
+      scope.categories?.join(',') ?? '',
+      scope.dateFrom ?? '',
+      scope.dateTo ?? '',
+      scope.search ?? '',
+    ] as const,
+  /** Сводка периода объекта (#474): статус/тип/период/поиск — часть ключа. */
+  summary: (propertyId: string, scope: PaymentOperationScope) =>
+    [
+      ...paymentOperationKeys.all,
+      'summary',
+      propertyId,
+      scope.status,
+      scope.type ?? '',
+      scope.dateFrom ?? '',
+      scope.dateTo ?? '',
+      scope.search ?? '',
     ] as const,
 };
 

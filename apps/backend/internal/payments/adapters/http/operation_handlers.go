@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
@@ -17,9 +18,9 @@ import (
 )
 
 // OperationsManager is the consumer-side port of the operation endpoints
-// (ADR 0035): the pay-now use case and the two listings. The concrete
-// application service satisfies it; the handler tests run against func-backed
-// fakes.
+// (ADR 0035): the pay-now use case, the two listings and the period summary.
+// The concrete application service satisfies it; the handler tests run
+// against func-backed fakes.
 type OperationsManager interface {
 	GetOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	DeleteOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) error
@@ -32,6 +33,10 @@ type OperationsManager interface {
 		ctx context.Context, actor, propertyID uuid.UUID,
 		cmd application.OperationsListQuery,
 	) ([]application.OperationListItem, error)
+	SummarizePropertyOperations(
+		ctx context.Context, actor, propertyID uuid.UUID,
+		cmd application.OperationsSummaryQuery,
+	) (application.OperationsSummary, error)
 }
 
 // OperationsHandlers implements the generated operation endpoints.
@@ -99,6 +104,33 @@ func (h *OperationsHandlers) ListPropertyOperations(
 	}
 
 	writeOperations(w, r, items)
+}
+
+// SummarizePropertyOperations implements GET
+// /properties/{propertyId}/operations/summary — the period totals by
+// direction plus the per-category breakdown behind the operations screens
+// (ticket #473). The overdue view status is computed server-side.
+func (h *OperationsHandlers) SummarizePropertyOperations(
+	w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID,
+	params openapi.SummarizePropertyOperationsParams,
+) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	cmd, err := summarizeFromParams(params)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+	summary, err := h.svc.SummarizePropertyOperations(r.Context(), actor, propertyID, cmd)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationsSummaryResponse(summary))
 }
 
 // GetOperation implements GET /properties/{propertyId}/operations/{operationId}
@@ -265,7 +297,94 @@ func listOperationsFromPropertyParams(
 	if err != nil {
 		return application.OperationsListQuery{}, err
 	}
-	return newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, params.Search), nil
+	typ, err := foldType(params.Type, openapi.ListPropertyOperationsParamsType.Valid)
+	if err != nil {
+		return application.OperationsListQuery{}, err
+	}
+	query := newListOperationsQuery(status, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, params.Search)
+	query.Type = typ
+	query.Categories = splitCategorySlugs(params.Category)
+	return query, nil
+}
+
+// summarizeFromParams adapts the summary endpoint's params onto the summary
+// request: the same status/period/type vocabulary as the listing, minus the
+// pagination — the aggregate runs in SQL.
+func summarizeFromParams(
+	params openapi.SummarizePropertyOperationsParams,
+) (application.OperationsSummaryQuery, error) {
+	status, err := foldStatus(params.Status, openapi.SummarizePropertyOperationsParamsStatus.Valid)
+	if err != nil {
+		return application.OperationsSummaryQuery{}, err
+	}
+	typ, err := foldType(params.Type, openapi.SummarizePropertyOperationsParamsType.Valid)
+	if err != nil {
+		return application.OperationsSummaryQuery{}, err
+	}
+	return application.OperationsSummaryQuery{
+		Status:   status,
+		Type:     typ,
+		DateFrom: datePtrFromWire(params.DateFrom),
+		DateTo:   datePtrFromWire(params.DateTo),
+		Search:   derefString(params.Search),
+	}, nil
+}
+
+// derefString lifts an optional string parameter onto its value form; a
+// missing parameter is the empty no-filter value.
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// foldType decodes the direction filter onto the domain payment type; a
+// missing filter simply means no filter — not an error.
+func foldType[T ~string](typ *T, valid func(T) bool) (*domain.PaymentType, error) {
+	var lifted *domain.PaymentType
+	if typ != nil {
+		if !valid(*typ) {
+			return lifted, application.ErrInvalidInput
+		}
+		value := domain.PaymentType(*typ)
+		lifted = &value
+	}
+	return lifted, nil
+}
+
+// splitCategorySlugs decodes the comma-separated category slugs parameter:
+// whitespace around slugs is ignored, empty items are dropped, and an empty
+// or missing value means no filter (nil).
+func splitCategorySlugs(raw *string) []string {
+	if raw == nil {
+		return nil
+	}
+	var slugs []string
+	for item := range strings.SplitSeq(*raw, ",") {
+		if slug := strings.TrimSpace(item); slug != "" {
+			slugs = append(slugs, slug)
+		}
+	}
+	return slugs
+}
+
+// operationsSummaryResponse maps the summary onto the wire response shape.
+func operationsSummaryResponse(summary application.OperationsSummary) openapi.OperationsSummaryResponse {
+	categories := make([]openapi.OperationsSummaryCategory, 0, len(summary.Categories))
+	for _, category := range summary.Categories {
+		categories = append(categories, openapi.OperationsSummaryCategory{
+			CategorySlug:  category.Slug,
+			CategoryLabel: category.Label,
+			Type:          openapi.OperationsSummaryCategoryType(category.Type),
+			TotalKopecks:  category.TotalKopecks,
+		})
+	}
+	return openapi.OperationsSummaryResponse{
+		IncomeTotalKopecks:  summary.IncomeTotalKopecks,
+		ExpenseTotalKopecks: summary.ExpenseTotalKopecks,
+		Categories:          categories,
+	}
 }
 
 // writeOperations maps the listed items onto the wire response shape.

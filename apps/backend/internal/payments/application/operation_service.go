@@ -37,9 +37,54 @@ type OperationsListQuery struct {
 	// Asc is false by default and by contract: sorting is newest-first unless
 	// explicitly requested otherwise.
 	Asc bool
+	// Type filters on the operation direction (nil = no filter) — the
+	// income/expense split the «Доходы/Расходы объекта» screens read.
+	Type *domain.PaymentType
+	// Categories filters on the operation's category snapshot (nil = no
+	// filter); a row without a category snapshot never matches.
+	Categories []string
 	// Today carries the owner's today the overdue semantics are resolved
 	// against; set by the service, never by callers.
 	Today time.Time
+}
+
+// OperationsSummaryQuery is the summary request of the property scope
+// (ticket #473): the same status/period/direction vocabulary as the listing
+// minus the pagination — the totals and the category breakdown aggregate in
+// SQL, never over a client-side page. Today is resolved by the service.
+type OperationsSummaryQuery struct {
+	Status   *domain.OperationViewStatus
+	Type     *domain.PaymentType
+	DateFrom *time.Time
+	DateTo   *time.Time
+	// Search is the listing's search predicate (OperationsListQuery.Search):
+	// the summary of the searched scope feeds the search screen's matched
+	// category chips (ticket #476).
+	Search string
+	// Today carries the owner's today the overdue semantics are resolved
+	// against; set by the service, never by callers.
+	Today time.Time
+}
+
+// CategorySummary is one category's total over the summarized scope: the
+// snapshot the chips render (slug for the icon and style, label for the
+// text). Rows without a category snapshot never appear in the breakdown —
+// their amounts still count in OperationsSummary's totals.
+type CategorySummary struct {
+	Slug         string
+	Label        string
+	Type         domain.PaymentType
+	TotalKopecks int64
+}
+
+// OperationsSummary is the period aggregate behind the «Операции объекта»
+// screens (ticket #473): the totals by direction — always both, the summary
+// cards read them together — plus the per-category breakdown ordered by
+// total, largest first.
+type OperationsSummary struct {
+	IncomeTotalKopecks  int64
+	ExpenseTotalKopecks int64
+	Categories          []CategorySummary
 }
 
 // PrepareOperationsQuery validates the listing request in place and applies
@@ -231,6 +276,27 @@ func (s *OperationService) ListPropertyOperations(
 	return s.listScoped(ctx, scope, q, func(prepared OperationsListQuery) ([]domain.Operation, error) {
 		return s.operations.ListByProperty(ctx, scope, propertyID, prepared)
 	})
+}
+
+// SummarizePropertyOperations returns the period aggregate of the property's
+// operations (ticket #473): the totals by direction and the per-category
+// breakdown. A pure read with the listing's scope discipline — a viewer
+// reads it, a stranger gets the privacy ErrNotFound — and the same today
+// semantics: the service resolves the owner's today once, before the store
+// aggregates.
+func (s *OperationService) SummarizePropertyOperations(
+	ctx context.Context, actor, propertyID uuid.UUID, q OperationsSummaryQuery,
+) (OperationsSummary, error) {
+	scope, err := resolveReadScope(ctx, s.policy, s.properties, actor, propertyID)
+	if err != nil {
+		return OperationsSummary{}, err
+	}
+	today, err := ownerToday(s.calendar, ctx, scope)
+	if err != nil {
+		return OperationsSummary{}, err
+	}
+	q.Today = today
+	return s.operations.SummarizeByProperty(ctx, scope, propertyID, q)
 }
 
 // listScoped prepares the query, resolves the owner's today once and maps
