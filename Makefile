@@ -558,10 +558,16 @@ squawk-install:
 # (tools/screenshots, a local playwright utility, stays out of the gate).
 # Every package runs even after a failure, so one red report doesn't hide the
 # rest.
-npm-audit: ## Run npm audit (high+) across all lockfile packages
+npm-audit: ## Run npm audit (high+) across all lockfile packages; 3 попытки на каталог — bulk-endpoint реестра моргает ETIMEDOUT'ом
 	@set -e; status=0; for dir in $(NPM_AUDIT_DIRS); do \
 		echo "==> npm audit $$dir"; \
-		(cd $$dir && npm audit --audit-level=high) || status=1; \
+		ok=0; \
+		for attempt in 1 2 3; do \
+			if (cd $$dir && npm audit --audit-level=high); then ok=1; break; fi; \
+			echo "==> npm audit $$dir failed (attempt $$attempt/3)"; \
+			sleep 3; \
+		done; \
+		if [ $$ok -ne 1 ]; then status=1; fi; \
 	done; \
 	if [ $$status -ne 0 ]; then echo "ERROR: npm audit found advisories (see above)"; exit 1; fi
 
