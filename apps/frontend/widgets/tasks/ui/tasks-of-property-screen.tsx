@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Add, ArrowLeft, SortingSmallBig, SmallArrowDown, VerticalMenu } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
+import { notify } from '@/shared/lib/notifications';
 import { useProperty } from '@/features/properties';
 import {
   DEFAULT_TASKS_SORT,
@@ -91,9 +93,13 @@ export function TasksOfPropertyScreen({
 
   const toggleTask = (task: Task): void => {
     if (task.status === 'completed') {
-      uncomplete.mutate(task.id);
+      uncomplete.mutate(task.id, {
+        onError: (error) => notify.scenarios.tasks.uncompleteError(error),
+      });
     } else {
-      complete.mutate(task.id);
+      complete.mutate(task.id, {
+        onError: (error) => notify.scenarios.tasks.completeError(error),
+      });
     }
   };
 
@@ -169,6 +175,7 @@ export function TasksOfPropertyScreen({
             <TasksEmptyState />
           ) : (
             sections.map((section) => (
+              // Пока today не пришёл, sections пуст — заглушка '' не рисуется.
               <TaskSection key={sectionKey(section)} section={section}
                 today={today ?? ''} canMutate={canMutate}
                 completedTotal={completedTotal}
@@ -199,9 +206,12 @@ export function TasksOfPropertyScreen({
         cancelLabel="Отменить"
         confirmLabel="Удалить"
         pending={deleteCompleted.isPending}
-        onConfirm={() => {
-          void deleteCompleted.mutateAsync(undefined, { onSuccess: () => setDeleteOpen(false) });
-        }}
+        onConfirm={() =>
+          deleteCompleted.mutate(undefined, {
+            onSuccess: () => setDeleteOpen(false),
+            onError: (error) => notify.scenarios.tasks.deleteCompletedError(error),
+          })
+        }
       />
     </>
   );
@@ -297,8 +307,7 @@ function TasksStateCard({
 function TasksEmptyState(): JSX.Element {
   return (
     <div className="flex flex-col items-center gap-4 pt-16">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Image
         src="/images/tasks/empty-tasks.png"
         alt=""
         width={128}

@@ -64,8 +64,9 @@ func mapRuleRow(f taskRuleFields) domain.TaskRule {
 }
 
 // mapTaskRow builds the domain task from a row; the joined rule repeat goes
-// along as the read projection (unknown strings stay nil — the CHECK
-// constraint of migration 000118 is the durable guard).
+// along as the read projection — any non-null string maps through, the
+// CHECK constraint of migration 000118 is the durable guard, same as in
+// mapRuleRow.
 func mapTaskRow(f taskFields) domain.Task {
 	task := domain.Task{
 		ID:            f.ID,

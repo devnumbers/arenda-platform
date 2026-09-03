@@ -115,9 +115,13 @@ export function groupTasks(
   // направление сортировки на их порядок не влияет).
   const datedGroups = new Map<IsoDate, Task[]>();
   for (const task of rest) {
-    const bucket = datedGroups.get(task.dueDate ?? '');
+    const date = task.dueDate;
+    if (date === null) {
+      continue;
+    }
+    const bucket = datedGroups.get(date);
     if (bucket === undefined) {
-      datedGroups.set(task.dueDate ?? '', [task]);
+      datedGroups.set(date, [task]);
     } else {
       bucket.push(task);
     }

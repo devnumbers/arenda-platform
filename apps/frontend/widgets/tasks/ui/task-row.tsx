@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX } from 'react';
+import type { JSX, KeyboardEvent } from 'react';
 import { Check, ClockSmall, Repeat } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
@@ -51,7 +51,7 @@ export function TaskRow({
   const completed = task.status === 'completed';
   const timeLabel = timeSubtitle(task, today, tone);
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     // Фокус на чекбоксе не должен открывать редактирование: строка
     // реагирует только на собственные Enter/Space.
     if (event.target !== event.currentTarget) {
@@ -63,6 +63,12 @@ export function TaskRow({
     }
   };
 
+  // Журнал удалённого правила — только чтение (словарь #494): кружок
+  // выполненной задачи без живого правила показывается, но не тапается —
+  // сервер всё равно ответил бы контрактным 409.
+  const journalLocked = completed && task.ruleId === null;
+  const toggleAvailable = canMutate && !journalLocked;
+
   return (
     <div
       role="button"
@@ -72,7 +78,7 @@ export function TaskRow({
       onKeyDown={handleKeyDown}
       className="flex w-full cursor-pointer items-start gap-4 px-6 py-3 text-left font-sans outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white"
     >
-      {canMutate ? (
+      {toggleAvailable ? (
         <RoundCheckbox
           checked={completed}
           disabled={toggling}

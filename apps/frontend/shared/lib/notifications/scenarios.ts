@@ -216,6 +216,15 @@ const payments = {
   favoriteError: errorScenario('Не удалось обновить избранное'),
 } as const;
 
+/** Контекст «Задачи» (#499): тосты только ошибок мутаций — успешное
+ * выполнение/снятие/удаление проходит без уведомлений (решение владельца
+ * 2026-09-03: задача просто переезжает между секциями). */
+const tasks = {
+  completeError: errorScenario('Не удалось выполнить задачу'),
+  uncompleteError: errorScenario('Не удалось снять выполнение'),
+  deleteCompletedError: errorScenario('Не удалось удалить выполненные задачи'),
+} as const;
+
 const demo = {
   success: ((options?) =>
     notify.success('Успех', options)) satisfies ScenarioFn,
@@ -242,6 +251,7 @@ export type Scenarios = {
   readonly tariff: typeof tariff;
   readonly paymentMethods: typeof paymentMethods;
   readonly payments: typeof payments;
+  readonly tasks: typeof tasks;
   readonly demo: typeof demo;
 };
 
@@ -254,5 +264,6 @@ export const scenarios: Scenarios = {
   tariff,
   paymentMethods,
   payments,
+  tasks,
   demo,
 };
