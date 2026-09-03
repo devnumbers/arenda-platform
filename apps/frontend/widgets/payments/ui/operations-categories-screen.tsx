@@ -16,7 +16,16 @@ import {
 } from '@/features/payments';
 import { categoryStyle, CategoryIcon } from '@/features/payment-categories';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { Button, Checkbox, IconButton, ListRow, StickyBottomBar } from '@/shared/ui/design';
+import {
+  Button,
+  Checkbox,
+  IconButton,
+  ListRow,
+  PageContent,
+  StickyBottomBar,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 
 export type OperationsCategoriesScreenProps = {
@@ -88,40 +97,36 @@ export function OperationsCategoriesScreen({
   };
 
   return (
-    <div className="flex h-dvh flex-col bg-white font-sans desktop:mx-auto desktop:max-w-[560px]">
-      {/* Закреплённый верх: заголовок (полоса 72px, как TopNav экранов) и
-       * контекстные чипы (решение владельца 2026-09-02). */}
-      <header className="relative flex h-[72px] shrink-0 items-center justify-center">
-        <div className="absolute left-0 top-0 flex h-full items-center pl-2">
-          <IconButton icon={<Cancel />} label="Закрыть" onClick={cancel} />
+    <>
+      {/* Каркас — как у всех страниц: TopNav (на десктопе — с «крыльями»
+       * лого/профиль, закреплён наверху) + PageContent 560 + StickyBottomBar.
+       * Верх закреплён: заголовок в TopNav, контекстные чипы — шапка колонки
+       * (решение владельца 2026-09-02). Колонка во всю высоту вьюпорта минус
+       * TopNav — строки скроллятся внутри себя, страница остаётся на месте. */}
+      <TopNav leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={cancel} />}>
+        <TopNavTitle title="Выбрать категорию" />
+      </TopNav>
+
+      <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
+        <div className="flex shrink-0 flex-wrap gap-1.5 px-6">
+          <span
+            aria-hidden
+            className="inline-flex h-11 items-center rounded-pill bg-primary px-5 text-sm font-medium text-white"
+          >
+            {operationsPeriodRangeChipLabel(period)}
+          </span>
+          <span
+            aria-hidden
+            className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"
+          >
+            Все категории
+          </span>
         </div>
-        <span className="text-base font-medium leading-[18px] text-content">
-          Выбрать категорию
-        </span>
-      </header>
 
-      <div className="flex shrink-0 flex-wrap gap-1.5 px-6 pt-6">
-        <span
-          aria-hidden
-          className="inline-flex h-11 items-center rounded-pill bg-primary px-5 text-sm font-medium text-white"
-        >
-          {operationsPeriodRangeChipLabel(period)}
-        </span>
-        <span
-          aria-hidden
-          className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"
-        >
-          Все категории
-        </span>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
-        {summaryQuery.isPending ? (
-          <div className="pt-2">
+        <div className="min-h-0 flex-1 overflow-y-auto pt-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
+          {summaryQuery.isPending ? (
             <PaymentsSkeleton />
-          </div>
-        ) : summaryQuery.isError ? (
-          <div className="pt-2">
+          ) : summaryQuery.isError ? (
             <PaymentsStateCard
               title="Не удалось загрузить категории"
               hint="Проверьте подключение и попробуйте еще раз"
@@ -135,38 +140,38 @@ export function OperationsCategoriesScreen({
                 </Button>
               }
             />
-          </div>
-        ) : rows.length === 0 ? (
-          <p className="px-6 py-8 text-center text-base leading-[18px] text-content-secondary">
-            В этом периоде нет операций
-          </p>
-        ) : (
-          <div className="flex flex-col">
-            {rows.map((row) => {
-              const style = categoryStyle('default', row.slug);
-              return (
-                <ListRow
-                  key={row.slug}
-                  leading={<CategoryIcon icon={style.icon} color={style.color} />}
-                  title={row.label}
-                  value={formatMoneyKopecks(row.totalKopecks)}
-                  trailing={
-                    // Клик по чекбоксу не должен дощёлкивать до строки —
-                    // иначе toggle сработает дважды (чекбокс + строка).
-                    <Checkbox
-                      aria-label={`Категория ${row.label}`}
-                      checked={draft.includes(row.slug)}
-                      onCheckedChange={() => toggle(row.slug)}
-                      onClick={(event) => event.stopPropagation()}
-                    />
-                  }
-                  onSelect={() => toggle(row.slug)}
-                />
-              );
-            })}
-          </div>
-        )}
-      </div>
+          ) : rows.length === 0 ? (
+            <p className="px-6 py-8 text-center text-base leading-[18px] text-content-secondary">
+              В этом периоде нет операций
+            </p>
+          ) : (
+            <div className="flex flex-col">
+              {rows.map((row) => {
+                const style = categoryStyle('default', row.slug);
+                return (
+                  <ListRow
+                    key={row.slug}
+                    leading={<CategoryIcon icon={style.icon} color={style.color} />}
+                    title={row.label}
+                    value={formatMoneyKopecks(row.totalKopecks)}
+                    trailing={
+                      // Клик по чекбоксу не должен дощёлкивать до строки —
+                      // иначе toggle сработает дважды (чекбокс + строка).
+                      <Checkbox
+                        aria-label={`Категория ${row.label}`}
+                        checked={draft.includes(row.slug)}
+                        onCheckedChange={() => toggle(row.slug)}
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                    }
+                    onSelect={() => toggle(row.slug)}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </PageContent>
 
       {draft.length > 0 || filters.categories.length > 0 ? (
         // Пустой черновик при применённом фильтре — легитимное применение
@@ -177,6 +182,7 @@ export function OperationsCategoriesScreen({
           </Button>
         </StickyBottomBar>
       ) : null}
-    </div>
+    </>
   );
 }
+

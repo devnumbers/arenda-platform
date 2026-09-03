@@ -19,7 +19,7 @@ import {
   type OperationsMonth,
   type OperationsPeriodDraft,
 } from '@/features/payments';
-import { Button, IconButton, StickyBottomBar } from '@/shared/ui/design';
+import { Button, IconButton, PageContent, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { WEEKDAY_LABELS } from '@/shared/ui/design/month-grid';
 import { OperationsRangeCalendarMonth } from './operations-range-calendar';
 
@@ -140,69 +140,73 @@ export function OperationsPeriodScreen({
   const shown = settledOperationsPeriod(draft);
 
   return (
-    <div className="flex h-dvh flex-col bg-white font-sans desktop:mx-auto desktop:max-w-[560px]">
-      {/* Закреплённый верх: заголовок (полоса 72px, как TopNav экранов),
-       * границы, дни недели — выбор всегда перед глазами (решение владельца
-       * 2026-09-02). Отступы — Figma 1495-64165: поля 24 от хедера, по 24
-       * по бокам, зазор до дней недели 8, плашки дней 48px. */}
-      <header className="relative flex h-[72px] shrink-0 items-center justify-center">
-        <div className="absolute left-0 top-0 flex h-full items-center pl-2">
-          <IconButton icon={<Cancel />} label="Закрыть" onClick={cancel} />
-        </div>
-        <span className="text-base font-medium leading-[18px] text-content">Выберите период</span>
-      </header>
-
-      <div aria-live="polite" className="grid shrink-0 grid-cols-2 gap-2 px-6 pt-6">
-        <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
-          с {operationsPeriodBoundLabel(shown.from, today)}
-        </span>
-        <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
-          по {operationsPeriodBoundLabel(shown.to, today)}
-        </span>
-      </div>
-
-      <div
-        aria-hidden
-        className="mt-2 grid shrink-0 grid-cols-7 gap-0.5 px-5 text-center text-base font-medium leading-[18px] text-content-tertiary"
+    <>
+      {/* Каркас — как у всех страниц: TopNav (на десктопе — с «крыльями»
+       * лого/профиль, закреплён наверху) + PageContent 560 + StickyBottomBar.
+       * Верх блока выбора закреплён: заголовок в TopNav, поля границ и дни
+       * недели — шапка колонки (Figma 1495-64165: поля 24 по бокам, от
+       * хедера 24, зазор до дней недели 8, плашки дней 48px). Колонка во
+       * всю высоту вьюпорта минус TopNav — календарь скроллится внутри
+       * себя, страница остаётся на месте. */}
+      <TopNav
+        leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={cancel} />}
       >
-        {WEEKDAY_LABELS.map((weekday) => (
-          <span key={weekday} className="flex h-12 items-center justify-center">
-            {weekday}
+        <TopNavTitle title="Выберите период" />
+      </TopNav>
+
+      <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
+        <div aria-live="polite" className="grid shrink-0 grid-cols-2 gap-2 px-6">
+          <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
+            с {operationsPeriodBoundLabel(shown.from, today)}
           </span>
-        ))}
-      </div>
+          <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
+            по {operationsPeriodBoundLabel(shown.to, today)}
+          </span>
+        </div>
 
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
-      >
-        {months.map((month) => (
-          <div
-            key={`${month.year}-${month.month}`}
-            id={`operations-period-month-${month.year}-${String(month.month + 1).padStart(2, '0')}`}
-            ref={
-              month.year === targetMonth.year && month.month === targetMonth.month
-                ? attachTarget
-                : undefined
-            }
-          >
-            <OperationsRangeCalendarMonth
-              month={month}
-              draft={draft}
-              today={today}
-              onPick={(day) => setDraft(pickOperationsPeriodDay(draft, day))}
-            />
-          </div>
-        ))}
-      </div>
+        <div
+          aria-hidden
+          className="mt-2 grid shrink-0 grid-cols-7 gap-0.5 px-5 text-center text-base font-medium leading-[18px] text-content-tertiary"
+        >
+          {WEEKDAY_LABELS.map((weekday) => (
+            <span key={weekday} className="flex h-12 items-center justify-center">
+              {weekday}
+            </span>
+          ))}
+        </div>
+
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="min-h-0 flex-1 overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+        >
+          {months.map((month) => (
+            <div
+              key={`${month.year}-${month.month}`}
+              id={`operations-period-month-${month.year}-${String(month.month + 1).padStart(2, '0')}`}
+              ref={
+                month.year === targetMonth.year && month.month === targetMonth.month
+                  ? attachTarget
+                  : undefined
+              }
+            >
+              <OperationsRangeCalendarMonth
+                month={month}
+                draft={draft}
+                today={today}
+                onPick={(day) => setDraft(pickOperationsPeriodDay(draft, day))}
+              />
+            </div>
+          ))}
+        </div>
+      </PageContent>
 
       <StickyBottomBar>
         <Button className="w-full" onClick={apply} aria-label="Выбрать период">
           Выбрать
         </Button>
       </StickyBottomBar>
-    </div>
+    </>
   );
 }
 

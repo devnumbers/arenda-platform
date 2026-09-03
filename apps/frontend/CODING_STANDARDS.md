@@ -61,6 +61,18 @@ No form library and no schema validator — this is deliberate, not a gap:
 - Entering a flow ("Create" buttons, `handleEdit`) and ordinary content navigation — `router.push`.
 - The Back button walks history (`goBack`), so completed flow pages must not remain in it — otherwise Back returns the user to an already-finished form.
 
+## Screen shell (как строится страница)
+
+Каждая страница новых экранов собирает хром сама, из трёх дизайн-слой примитивов — порядок и состав не варьируются от экрана к экрану (прецедент: #477, страницы выбора периода/категорий):
+
+- **`<TopNav>`** — единый хедер. `leading` — кнопка выхода из экрана (`ArrowLeft` «Назад» или `Cancel` «Закрыть»), дети — `<TopNavTitle>` (заголовок 16/18, опциональный подзаголовок), `trailing` — действия. Мобайл (≤768): полоса в потоке, 72px, во всю ширину. Десктоп (≥769, брейкпоинт `--breakpoint-desktop`): закреплена над прокруткой, центральная часть — колонка max-560, по краям «крылья» — лого и кнопка профиля; ScreenLayout компенсирует высоту своим `desktop:pt-[72px]`. Экран не рисует собственный `<header>` и не двигает хедер — варианты внутри TopNav.
+- **`<PageContent>`** — единственная колонка контента: `max-w-[560px]` по центру на любой ширине (не только на десктопе), `pt-6`, снизу `pb-[136px]` под StickyBottomBar/TabBar. Строки списков приносят свой горизонтальный паддинг (24px), остальной контент оборачивается экраном. Странице не нужна своя рамка-контейнер с max-width — она уже здесь.
+- **`<StickyBottomBar>`** — закреплённая нижняя панель действия (кнопка экрана). Сама глушит TabBar; если панель видна не всегда (зависит от состояния) — TabBar возвращается сам при её исчезновении.
+
+Полновысотные экраны с внутренней прокруткой (календарь, длинный список под закреплённой шапкой) не строят собственный `h-dvh`-каркас: `PageContent` получает `className="flex h-[calc(100dvh-72px)] flex-col pb-0"`, закреплённые блоки — `shrink-0`, прокручиваемая область — `flex-1 min-h-0 overflow-y-auto` с внутренним нижним паддингом под панель. Колесо над такой областью скроллит её, страница при этом остаётся на месте.
+
+Ширины: мобильный макет — 393; 561–768 — колонка 560 по центру (не тянем контент во всю ширину окна); десктоп — та же колонка 560 внутри «крыльев» TopNav.
+
 ## Testing
 
 Unit tests are pure-logic only — vitest runs in a node environment with no DOM, no testing-library, no msw. This is the standard, not a gap:
