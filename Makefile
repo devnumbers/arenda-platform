@@ -570,7 +570,7 @@ npm-audit: ## Run npm audit (high+) across all lockfile packages
 # exit 1). node_modules, .git, and .tmp are skipped: they are never the shipped
 # dependency set and would dominate scan time. The vuln DB is cached in a named
 # docker volume so repeat runs don't re-download it.
-trivy-fs: ## Scan the repo filesystem with trivy (vuln, HIGH/CRITICAL)
+trivy-fs: ## Scan the repo filesystem with trivy (vuln, HIGH/CRITICAL); .worktrees skipped — локальные чекауты, CI их не видит
 	docker run --rm \
 		-v "$(CURDIR):/repo" \
 		-v $(TRIVY_CACHE_VOLUME):/root/.cache \
@@ -581,7 +581,8 @@ trivy-fs: ## Scan the repo filesystem with trivy (vuln, HIGH/CRITICAL)
 		--exit-code 1 \
 		--skip-dirs node_modules \
 		--skip-dirs .git \
-		--skip-dirs .tmp
+		--skip-dirs .tmp \
+		--skip-dirs .worktrees
 
 # Advisory dead-code/unused-exports/unused-dependencies report (knip, decision
 # #295 / issue #305). NOT a gate: --no-exit-code keeps the run green on
