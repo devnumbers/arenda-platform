@@ -26,7 +26,12 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * «Выбрать» активна без действий (подсказка владельца к #500); дни раньше
  * сегодня недоступны — задним числом правила не создаются (контракт
  * #498). Рендерится только в открытом состоянии — состояние ленты и
- * черновик живут, пока пикер смонтирован. */
+ * черновик живут, пока пикер смонтирован.
+ *
+ * Снятие даты (решение владельца 2026-09-03): повторный тап по выбранному
+ * дню опустошает черновик, «Выбрать» остаётся активной и подтверждает
+ * «без даты» (onConfirm(null)) — выбор по-прежнему коммитится явной
+ * кнопкой, кнопка активна всегда. */
 
 /** Лента: год вперёд от стартового месяца. */
 const FEED_MONTHS = 12;
@@ -41,7 +46,8 @@ export type TaskDatePickerProps = {
   /** Текущая дата формы; null — черновиком становится сегодня. */
   readonly value: IsoDate | null;
   readonly onClose: () => void;
-  readonly onConfirm: (date: IsoDate) => void;
+  /** «Выбрать»: коммитит черновик; null — дата снята («без срока»). */
+  readonly onConfirm: (date: IsoDate | null) => void;
 };
 
 export function TaskDatePicker({
@@ -50,7 +56,7 @@ export function TaskDatePicker({
   onClose,
   onConfirm,
 }: TaskDatePickerProps): JSX.Element {
-  const [draft, setDraft] = useState<IsoDate>(value ?? today);
+  const [draft, setDraft] = useState<IsoDate | null>(value ?? today);
   // Лента — год вперёд от сегодня; значение дальше года открывает ленту
   // от себя (прошлое недоступно, назад лента не идёт).
   const [feedStart, setFeedStart] = useState<CalendarMonthRef>(() => {
@@ -73,7 +79,8 @@ export function TaskDatePicker({
   const monthRefs = useRef(new Map<string, HTMLElement>());
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const draftMonth = calendarMonthOf(draft);
+  // Чип месяца показывает месяц черновика; у пустого — текущий месяц.
+  const draftMonth = calendarMonthOf(draft ?? today);
 
   // Пересборка ленты (прыжок за её пределы) начинается с выбранного месяца
   // — остаточный скролл прошлой ленты сбрасывается.
@@ -179,7 +186,9 @@ export function TaskDatePicker({
                         state={selected ? 'selected' : isToday ? 'today' : 'default'}
                         aria-current={isToday ? 'date' : undefined}
                         disabled={iso < today}
-                        onClick={() => setDraft(iso)}
+                        // Повторный тап по выбранному дню снимает выбор
+                        // (решение владельца 2026-09-03).
+                        onClick={() => setDraft(selected ? null : iso)}
                       >
                         {day + 1}
                       </CalendarButton>
@@ -193,6 +202,7 @@ export function TaskDatePicker({
       </div>
 
       <StickyBottomBar>
+        {/* Активна всегда: с пустым черновиком подтверждает «без даты». */}
         <Button className="w-full" onClick={() => onConfirm(draft)}>
           Выбрать
         </Button>

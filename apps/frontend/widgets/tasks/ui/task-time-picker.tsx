@@ -11,12 +11,18 @@ import type { WheelPickerItem } from '@/shared/ui/design/wheel-picker';
  * «Отменить»/«Выбрать». Черновик колёс живёт, пока шит открыт (контент
  * модалки размонтируется при закрытии): «Выбрать» коммитит HH:MM разом,
  * «Отменить» и свайп вниз закрывают без изменений. Без выбранного времени
- * колёса стоят на 09:00 (макет). */
-
-const DEFAULT_TASK_TIME = '09:00';
+ * колёса стоят на текущем времени устройства, точное до минуты (решение
+ * владельца 2026-09-03; в поле формы время попадает только по «Выбрать» —
+ * симметрично дате). */
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
+}
+
+/** Локальное время устройства HH:MM — дефолт колёс. */
+function currentTimeHHMM(): string {
+  const now = new Date();
+  return `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
 }
 
 const HOUR_ITEMS: ReadonlyArray<WheelPickerItem> = Array.from({ length: 24 }, (_, value) => {
@@ -37,7 +43,8 @@ function timeParts(time: string): { readonly hour: string; readonly minute: stri
 export type TaskTimePickerProps = {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  /** Текущее значение формы (HH:MM); null — шит открывается на 09:00. */
+  /** Текущее значение формы (HH:MM); null — шит открывается на текущем
+   * времени устройства. */
   readonly value: string | null;
   readonly onConfirm: (time: string) => void;
 };
@@ -52,7 +59,7 @@ export function TaskTimePicker({
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent title="Время" titleSrOnly>
         <TimeWheelBody
-          initial={value ?? DEFAULT_TASK_TIME}
+          initial={value ?? currentTimeHHMM()}
           onCancel={() => onOpenChange(false)}
           onConfirm={onConfirm}
         />

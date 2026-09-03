@@ -187,7 +187,13 @@ export function TaskCreateScreen({
           value={draft.dueDate}
           onClose={() => setDateOpen(false)}
           onConfirm={(dueDate) => {
-            patch({ dueDate });
+            if (dueDate === null) {
+              // Дата снята — время и повтор без неё невалидны, чистый сброс
+              // (решение владельца 2026-09-03): «Создать» остаётся активной.
+              patch({ dueDate: null, dueTime: null, repeat: null });
+            } else {
+              patch({ dueDate });
+            }
             setDateOpen(false);
           }}
         />
