@@ -33,6 +33,8 @@ export const contactKeys = {
   /** Книга контактов объекта (ADR 0051); search — серверный фильтр ('' = без). */
   list: (propertyId: string, search = '') =>
     [...contactKeys.all, 'list', propertyId, search] as const,
+  /** Карточка контакта (экран #510). */
+  detail: (contactId: string) => [...contactKeys.all, 'detail', contactId] as const,
 };
 
 // features/properties

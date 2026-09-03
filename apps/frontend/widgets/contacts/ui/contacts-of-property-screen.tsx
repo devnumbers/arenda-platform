@@ -8,7 +8,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { useContacts } from '@/features/contacts';
-import { useProperty } from '@/features/properties';
+import { canMutateProperty, useProperty } from '@/features/properties';
 import {
   Button,
   IconButton,
@@ -84,9 +84,8 @@ export function ContactsOfPropertyScreen({
   // кнопок (как у платежей, история 47), архив read-only (#446). Пока
   // объект не загружен или не загрузился — без кнопки.
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
-  const role = property?.access?.role;
-  const canMutate =
-    property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
+  // Мутационный вход — общий предикат (платежи #446/история 47, контакты #508).
+  const canMutate = canMutateProperty(property);
 
   const closeSearch = (): void => {
     setSearchOpen(false);
@@ -140,7 +139,12 @@ export function ContactsOfPropertyScreen({
            * без алфавитных групп. */
           <div className="flex flex-col px-6">
             {sorted.map((contact) => (
-              <ContactRowButton key={contact.id} contact={contact} surface="white" />
+              <ContactRowButton
+                key={contact.id}
+                contact={contact}
+                surface="white"
+                onSelect={() => router.push(ROUTES.propertyContact(propertyId, contact.id))}
+              />
             ))}
           </div>
         ) : contacts.length === 0 ? (
@@ -160,7 +164,12 @@ export function ContactsOfPropertyScreen({
                   </span>
                   <div className="flex flex-col">
                     {group.contacts.map((contact) => (
-                      <ContactRowButton key={contact.id} contact={contact} surface="muted" />
+                      <ContactRowButton
+                        key={contact.id}
+                        contact={contact}
+                        surface="muted"
+                        onSelect={() => router.push(ROUTES.propertyContact(propertyId, contact.id))}
+                      />
                     ))}
                   </div>
                 </div>

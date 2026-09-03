@@ -25,3 +25,11 @@ export function isPhoneValid(formatted: string): boolean {
   const normalized = normalizePhone(formatted);
   return /^\+7\d{10}$/.test(normalized);
 }
+
+/** Канонический +7XXXXXXXXXX → маска +7 (XXX) XXX-XX-XX для отображения
+ * (деталка контакта #510). Не-каноническое значение возвращается как есть. */
+export function formatPhoneDisplay(canonical: string): string {
+  const digits = canonical.replace(/\D/g, '');
+  if (digits.length !== 11 || !digits.startsWith('7')) return canonical;
+  return `+7 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9, 11)}`;
+}

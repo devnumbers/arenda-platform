@@ -39,3 +39,12 @@ export type ContactCreateCommand = {
   readonly messengerUsername: string;
   readonly note: string;
 };
+
+/**
+ * Черновик правки карточки (контракт #507, PATCH /contacts/{id}): тот же
+ * состав, что у создания. Поля необязательные на проводе (опущенное
+ * сохраняет значение), но форма #510 всегда отдаёт полный состав —
+ * пустая строка явным образом очищает текст, propertyId: null снимает
+ * привязку («без объекта»).
+ */
+export type ContactUpdateCommand = ContactCreateCommand;

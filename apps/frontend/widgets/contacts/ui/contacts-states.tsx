@@ -69,3 +69,18 @@ export function ContactsSearchHint(): JSX.Element {
 export function ContactsNoResults(): JSX.Element {
   return <p className={`${searchNoteClass} px-6 pt-16`}>Такого контакта нет</p>;
 }
+
+/** Правка недоступна (гейт ADR 0028, тексты — как у правки платежей):
+ * смотрящий или архив. */
+export function ContactsUnavailableCard({
+  hint,
+}: {
+  readonly hint: string;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+      <h2 className={headingClass}>Правка недоступна</h2>
+      <p className={`${hintClass} max-w-[360px]`}>{hint}</p>
+    </div>
+  );
+}

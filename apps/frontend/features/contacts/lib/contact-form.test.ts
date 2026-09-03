@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildContactCreateCommand,
+  buildContactUpdateCommand,
   contactFormErrors,
   contactFormReady,
 } from './contact-form';
@@ -110,5 +111,34 @@ describe('contactFormReady', () => {
 
   it('не готова, пока имя из одних пробелов', () => {
     expect(contactFormReady({ ...filled, firstName: '  ' })).toBe(false);
+  });
+});
+
+describe('buildContactUpdateCommand', () => {
+  it('нормализует так же, как создание: трим, телефон в +7XXXXXXXXXX', () => {
+    expect(
+      buildContactUpdateCommand({
+        ...filled,
+        firstName: '  Александр ',
+        phone: '89123456789',
+        propertyId: null,
+      }),
+    ).toStrictEqual({
+      propertyId: null,
+      firstName: 'Александр',
+      lastName: 'Петров',
+      patronymic: 'Сергеевич',
+      role: 'Арендатор',
+      phone: '+79123456789',
+      email: 'a.petrov@mail.ru',
+      messengerName: 'Телеграм',
+      messengerUsername: 'apetrov',
+      note: 'Код домофона 1234',
+    });
+  });
+
+  it('сброс привязки передаётся явным propertyId: null («без объекта»)', () => {
+    expect(buildContactUpdateCommand({ ...filled, propertyId: null }).propertyId).toBeNull();
+    expect(buildContactUpdateCommand({ ...filled }).propertyId).toBe('p1');
   });
 });

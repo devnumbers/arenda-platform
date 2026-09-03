@@ -39,6 +39,12 @@ export const ROUTES = {
   propertyContacts: (id: string) => `/properties/${id}/contacts`,
   /** Создание контакта (#509); до тикета путь ведёт на 404. */
   propertyContactNew: (id: string) => `/properties/${id}/contacts/new`,
+  /** Карточка контакта (#510): деталка с правкой и удалением. */
+  propertyContact: (id: string, contactId: string) =>
+    `/properties/${id}/contacts/${contactId}`,
+  /** Экран правки контакта (#510): форма создания в режиме правки. */
+  propertyContactEdit: (id: string, contactId: string) =>
+    `/properties/${id}/contacts/${contactId}/edit`,
   profile: '/profile',
   profilePersonal: '/profile/personal',
   profileNotifications: '/profile/notifications',
