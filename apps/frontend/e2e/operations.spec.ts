@@ -305,7 +305,7 @@ test.describe('экраны операций — сквозной флоу', () 
     );
   });
 
-  test('стрелки листают месяцами целиком — произвольный диапазон превращается в целый месяц', async ({
+  test('стрелки сдвигают произвольный период на его же длину — 3–14 становится соседними 12 днями', async ({
     page,
     seededUser,
   }) => {
@@ -316,21 +316,23 @@ test.describe('экраны операций — сквозной флоу', () 
     second.setMonth(second.getMonth() - 1);
     const ym = (date: Date): string =>
       `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const lastDay = (date: Date): number =>
-      new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(`${APARTMENT_OPERATIONS_URL}/expense?from=${ym(first)}-03&to=${ym(first)}-14`);
     await expect(page.getByRole('button', { name: 'Предыдущий месяц' })).toBeVisible();
 
-    // 3–14 <прошлый месяц> при листании назад — весь <позапрошлый>,
-    // а не «3–14» (решение владельца, как фильтр в Т-Банке).
+    // 3–14 <прошлый месяц> при листании назад — предыдущие 12 дней:
+    // 22 <позапрошлый> — 2 <прошлый>, окна стыкуются без нахлёста.
     await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
-    await expect(page).toHaveURL(new RegExp(`from=${ym(second)}-01&to=${ym(second)}-${lastDay(second)}$`));
-    await expect(page.getByRole('button', { name: 'Следующий месяц' })).toBeEnabled();
+    await expect(page).toHaveURL(new RegExp(`from=${ym(second)}-22&to=${ym(first)}-02$`));
 
-    // Вперёд — целиком <прошлый месяц>.
+    // Вперёд — исходное окно 3–14 (листание обратимо).
+    await expect(page.getByRole('button', { name: 'Следующий месяц' })).toBeEnabled();
     await page.getByRole('button', { name: 'Следующий месяц' }).click();
-    await expect(page).toHaveURL(new RegExp(`from=${ym(first)}-01&to=${ym(first)}-${lastDay(first)}$`));
+    await expect(page).toHaveURL(new RegExp(`from=${ym(first)}-03&to=${ym(first)}-14$`));
+
+    // Дефолтный период — текущий месяц: следующее окно ушло бы в будущее.
+    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense`);
+    await expect(page.getByRole('button', { name: 'Следующий месяц' })).toBeDisabled();
   });
 });

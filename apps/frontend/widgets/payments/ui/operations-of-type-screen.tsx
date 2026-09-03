@@ -17,8 +17,6 @@ import {
   operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsFiltersHref,
-  operationsMonthIndex,
-  operationsMonthOf,
   operationsPeriodDefaultChipLabel,
   operationsPeriodRangeChipLabel,
   shiftOperationsPeriod,
@@ -63,14 +61,10 @@ export function OperationsOfTypeScreen({
 
   const today = clientTodayIso();
   const period = filters.period ?? defaultOperationsPeriod(today);
-  // Правая стрелка гасится, когда листание уходит в будущее (экраны
-  // операций — только paid, резолюция #474): стрелки листают месяцами
-  // целиком (решение владельца, как фильтр в Т-Банке, #472), якорь —
-  // месяц начала периода; следующий за ним месяц должен быть не позже
-  // текущего.
-  const atCurrentMonth =
-    operationsMonthIndex(operationsMonthOf(period.from)) + 1
-    > operationsMonthIndex(operationsMonthOf(today));
+  // Правая стрелка гасится, когда следующее окно уходит в будущее (экраны
+  // операций — только paid, резолюция #474): период листается на свою же
+  // длину (решение владельца, #472).
+  const nextIsFuture = shiftOperationsPeriod(period, 1).from > today;
 
   const periodScope: PaymentOperationScope = {
     status: 'paid',
@@ -218,7 +212,7 @@ export function OperationsOfTypeScreen({
                     <IconButton
                       icon={<ArrowSRight />}
                       label="Следующий месяц"
-                      disabled={atCurrentMonth}
+                      disabled={nextIsFuture}
                       onClick={() => applyPeriod(shiftOperationsPeriod(period, 1))}
                     />
                   </div>

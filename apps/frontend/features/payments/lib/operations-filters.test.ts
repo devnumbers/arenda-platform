@@ -117,35 +117,44 @@ describe('shiftOperationsPeriod', () => {
       from: '2026-12-01',
       to: '2026-12-31',
     });
-  });
-
-  it('через границу года в обе стороны', () => {
     expect(shiftOperationsPeriod({ from: '2026-01-01', to: '2026-01-31' }, -1)).toEqual({
       from: '2025-12-01',
       to: '2025-12-31',
     });
-    expect(shiftOperationsPeriod({ from: '2025-12-10', to: '2026-01-20' }, 1)).toEqual({
-      from: '2026-01-01',
-      to: '2026-01-31',
-    });
   });
 
-  it('произвольный диапазон листается месяцами целиком — 3–14 августа становится целым июлем, а не «3–14 июля» (как фильтр в Т-Банке, решение владельца #472)', () => {
+  it('произвольный диапазон сдвигается на свою же длину: 3–14 августа назад — 22 июля — 2 августа (решение владельца #472)', () => {
     expect(shiftOperationsPeriod({ from: '2026-08-03', to: '2026-08-14' }, -1)).toEqual({
-      from: '2026-07-01',
-      to: '2026-07-31',
+      from: '2026-07-22',
+      to: '2026-08-02',
     });
     expect(shiftOperationsPeriod({ from: '2026-08-03', to: '2026-08-14' }, 1)).toEqual({
-      from: '2026-09-01',
-      to: '2026-09-30',
+      from: '2026-08-15',
+      to: '2026-08-26',
     });
   });
 
-  it('якорь листания — месяц начала периода', () => {
-    // Диапазон через границу месяца листается от месяца from.
-    expect(shiftOperationsPeriod({ from: '2026-01-31', to: '2026-02-28' }, 1)).toEqual({
-      from: '2026-02-01',
-      to: '2026-02-28',
+  it('окна стыкуются: назад и вперёд возвращает исходный период, без нахлёста и дыр', () => {
+    const period = { from: '2026-08-03', to: '2026-08-14' };
+    expect(shiftOperationsPeriod(shiftOperationsPeriod(period, -1), 1)).toEqual(period);
+    expect(shiftOperationsPeriod(shiftOperationsPeriod(period, 1), -1)).toEqual(period);
+  });
+
+  it('один день листается по одному дню', () => {
+    expect(shiftOperationsPeriod({ from: '2026-11-05', to: '2026-11-05' }, -1)).toEqual({
+      from: '2026-11-04',
+      to: '2026-11-04',
+    });
+    expect(shiftOperationsPeriod({ from: '2026-11-05', to: '2026-11-05' }, 1)).toEqual({
+      from: '2026-11-06',
+      to: '2026-11-06',
+    });
+  });
+
+  it('диапазон через границу года сдвигается своей длиной', () => {
+    expect(shiftOperationsPeriod({ from: '2025-12-25', to: '2026-01-05' }, -1)).toEqual({
+      from: '2025-12-13',
+      to: '2025-12-24',
     });
   });
 });

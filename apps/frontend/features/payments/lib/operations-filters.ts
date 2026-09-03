@@ -1,5 +1,5 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
-import { formatDayMonth } from '@/entities/payment';
+import { addDays, formatDayMonth, inclusiveDays } from '@/entities/payment';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
 import { daysInMonth } from '@/shared/ui/design/month-grid';
 import {
@@ -121,17 +121,29 @@ export function operationsFiltersParams(filters: OperationsFilters): Record<stri
 }
 
 /**
- * Листание периода стрелками экранов направлений (#475) — месяцами
- * целиком, как фильтр в Т-Банке (решение владельца, #472): произвольный
- * диапазон 3–14 августа при листании превращается в целый соседний месяц,
- * а не «3–14 июля»; целый месяц остаётся целым месяцем. Якорь — месяц
- * начала периода.
+ * Листание периода стрелками экранов направлений (#475) — период сдвигается
+ * на свою же длину (решение владельца, #472): 3–14 августа при листании
+ * назад становится 22 июля — 2 августа, окна стыкуются без нахлёста и дыр;
+ * один день листается по одному дню. Целый календарный месяц листается
+ * соседним месяцем (1–30 сентября → 1–31 августа), чтобы дефолтные экраны
+ * не «плыли» по дням.
  */
 export function shiftOperationsPeriod(period: OperationsPeriod, delta: number): OperationsPeriod {
-  const { from, to } = operationsMonthRange(
-    shiftOperationsMonth(operationsMonthOf(period.from), delta),
-  );
-  return { from, to };
+  const from = isoParts(period.from);
+  const to = isoParts(period.to);
+  const wholeMonth =
+    from.day === 1
+    && from.year === to.year
+    && from.month === to.month
+    && to.day === daysInMonth(to.year, to.month - 1);
+  if (wholeMonth) {
+    const shifted = operationsMonthRange(
+      shiftOperationsMonth(operationsMonthOf(period.from), delta),
+    );
+    return { from: shifted.from, to: shifted.to };
+  }
+  const length = inclusiveDays(period.from, period.to);
+  return { from: addDays(period.from, length * delta), to: addDays(period.to, length * delta) };
 }
 
 /**
