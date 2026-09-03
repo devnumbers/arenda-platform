@@ -77,7 +77,9 @@ export function TaskCreateScreen({
 
   useEffect(() => {
     if (propertyQuery.isSuccess && !canMutate) {
-      router.replace(ROUTES.propertyTasks(propertyId));
+      // Отмена потока, не замена URL: replace оставил бы «мёртвый» Back
+      // (стандарт навигации CODING_STANDARDS).
+      goBack(router, ROUTES.propertyTasks(propertyId));
     }
   }, [propertyQuery.isSuccess, canMutate, router, propertyId]);
 
@@ -124,9 +126,12 @@ export function TaskCreateScreen({
               }
             />
             <div className="grid grid-cols-2 gap-2">
+              {/* «Сегодня» ещё не пришло из листинга — пикеру не на что
+                  опереться (ADR 0048), кнопка ждёт. */}
               <TaskFieldButton
                 title="Дата"
                 label={draft.dueDate === null ? 'Выбрать' : formatDayMonth(draft.dueDate)}
+                disabled={today === undefined}
                 onClick={() => setDateOpen(true)}
               />
               {/* Время требует дату (контракт) — без неё пикер недоступен. */}

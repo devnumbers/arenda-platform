@@ -18,7 +18,6 @@ export {
   type TasksSortField,
 } from './lib/tasks-list';
 export {
-  buildTaskRuleCreateRequest,
   calendarMonthOf,
   canCreateTask,
   EMPTY_TASK_CREATE_DRAFT,
@@ -27,5 +26,4 @@ export {
   TASK_REPEAT_OPTIONS,
   type CalendarMonthRef,
   type TaskCreateDraft,
-  type TaskRepeatChoice,
 } from './lib/task-create';
