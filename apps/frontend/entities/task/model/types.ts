@@ -39,6 +39,25 @@ export type Task = {
   readonly updatedAt: string;
 };
 
+/**
+ * Правило — источник задач (словарь #494): настройка, порождающая
+ * вхождения; её и правит экран «Изменить задачу» (#502). Состояний
+ * «просрочено/выполнено» у правила нет — это состояния его задач.
+ */
+export type TaskRule = {
+  readonly id: string;
+  readonly propertyId: string;
+  readonly title: string;
+  readonly comment: string | null;
+  /** Якорь — дата первого вхождения; null — правило без даты (только once). */
+  readonly dueDate: IsoDate | null;
+  /** HH:MM; null — на весь день. */
+  readonly dueTime: string | null;
+  readonly repeat: TaskRepeat;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
 /** Страница листинга задач (активные или журнал) с серверным today. */
 export type TasksPage = {
   readonly items: ReadonlyArray<Task>;

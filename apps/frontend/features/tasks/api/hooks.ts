@@ -9,13 +9,15 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapTask, mapTasksPage } from '@/entities/task';
-import type { Task, TasksPage } from '@/entities/task';
+import { mapTask, mapTaskRule, mapTasksPage } from '@/entities/task';
+import type { Task, TaskRule, TasksPage } from '@/entities/task';
 import { taskKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 import { buildTaskRuleCreateRequest, type TaskCreateDraft } from '../lib/task-create';
+import type { TaskRuleUpdateCommand } from '../lib/task-edit';
 
 type TaskResponseDto = components['schemas']['TaskResponse'];
+type TaskRuleResponseDto = components['schemas']['TaskRuleResponse'];
 type TasksPageDto = components['schemas']['TasksResponse'];
 
 /** Лимит листинга: экран группирует весь список целиком, поэтому берёт
@@ -186,6 +188,48 @@ export function useCreateTaskRule(
       await apiClient<unknown>(
         `/properties/${encodeURIComponent(propertyId)}/tasks/rules`,
         { method: 'POST', body: JSON.stringify(request) },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/** Правило задачи — предзаполнение формы «Изменить задачу» (#502). */
+export function useTaskRule(
+  propertyId: string,
+  ruleId: string,
+): UseQueryResult<TaskRule, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.rule(propertyId, ruleId),
+    queryFn: async () => {
+      const response = await apiClient<TaskRuleResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/tasks/rules/${encodeURIComponent(ruleId)}`,
+      );
+      return mapTaskRule(response);
+    },
+    enabled: Boolean(propertyId) && Boolean(ruleId),
+  });
+}
+
+/**
+ * Сохранение правки правила (#502): частичный PATCH — команду-дифф собирает
+ * lib/task-edit (только изменённые поля; comment/dueDate/dueTime —
+ * три-стейт, null очищает). Сервер перематериализует будущие вхождения
+ * свежими снимками, выполненные остаются — список и журнал перечитываются
+ * инвалидацией taskKeys.
+ */
+export function useUpdateTaskRule(
+  propertyId: string,
+  ruleId: string,
+): UseMutationResult<void, ApiError, TaskRuleUpdateCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: TaskRuleUpdateCommand) => {
+      await apiClient<unknown>(
+        `/properties/${encodeURIComponent(propertyId)}/tasks/rules/${encodeURIComponent(ruleId)}`,
+        { method: 'PATCH', body: JSON.stringify(command) },
       );
     },
     onSuccess: () => {

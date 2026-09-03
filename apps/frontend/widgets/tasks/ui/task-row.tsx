@@ -36,7 +36,9 @@ export type TaskRowProps = {
   /** Кружок в полёте: чекбокс глушится, чтобы не ушёл дубль-мутации. */
   readonly toggling?: boolean;
   readonly onToggle: () => void;
-  readonly onOpen: () => void;
+  /** Тап по строке — правка правила (#502); не передан — строка только
+   * для чтения (выполненные — история со снимком, зритель/архив). */
+  readonly onOpen?: () => void;
 };
 
 export function TaskRow({
@@ -49,6 +51,7 @@ export function TaskRow({
   onOpen,
 }: TaskRowProps): JSX.Element {
   const completed = task.status === 'completed';
+  const openable = onOpen !== undefined;
   const timeLabel = timeSubtitle(task, today, tone);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -59,7 +62,7 @@ export function TaskRow({
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      onOpen();
+      onOpen?.();
     }
   };
 
@@ -71,12 +74,19 @@ export function TaskRow({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-label={`Изменить задачу: ${task.title}`}
-      onClick={onOpen}
-      onKeyDown={handleKeyDown}
-      className="flex w-full cursor-pointer items-start gap-4 px-6 py-3 text-left font-sans outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+      {...(openable
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            'aria-label': `Изменить задачу: ${task.title}`,
+            onClick: onOpen,
+            onKeyDown: handleKeyDown,
+          }
+        : {})}
+      className={cn(
+        'flex w-full items-start gap-4 px-6 py-3 text-left font-sans outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        openable && 'cursor-pointer',
+      )}
     >
       {toggleAvailable ? (
         <RoundCheckbox

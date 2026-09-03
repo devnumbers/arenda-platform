@@ -1,5 +1,12 @@
-export { mapTask, mapTasksPage } from './model/mappers';
-export type { IsoDate, Task, TaskRepeat, TaskStatus, TasksPage } from './model/types';
+export { mapTask, mapTaskRule, mapTasksPage } from './model/mappers';
+export type {
+  IsoDate,
+  Task,
+  TaskRepeat,
+  TaskRule,
+  TaskStatus,
+  TasksPage,
+} from './model/types';
 export { addDays, fromIso } from './lib/dates';
 export {
   daysOverdue,

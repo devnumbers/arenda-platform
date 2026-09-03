@@ -213,8 +213,9 @@ export function TaskCreateScreen({
 }
 
 /** Поле-кнопка «Дата»/«Время» (макет 1539-82273): бокс TextField (h-14,
- * radius 16, серый) с меткой Title Out, открывает пикер. */
-function TaskFieldButton({
+ * radius 16, серый) с меткой Title Out, открывает пикер. Общая с экраном
+ * правки (#502). */
+export function TaskFieldButton({
   title,
   label,
   disabled = false,

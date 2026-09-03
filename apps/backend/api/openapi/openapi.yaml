@@ -4480,8 +4480,11 @@ components:
           type: string
           format: date
           nullable: true
+        # nullable рядом с $ref генераторы OpenAPI игнорируют — оборачиваем
+        # в allOf, чтобы три-стейт dueTime дошёл до клиентов (#502).
         dueTime:
-          $ref: '#/components/schemas/TaskTime'
+          allOf:
+            - $ref: '#/components/schemas/TaskTime'
           nullable: true
         repeat:
           $ref: '#/components/schemas/TaskRepeat'

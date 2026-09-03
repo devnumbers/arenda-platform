@@ -120,6 +120,18 @@ export function TasksOfPropertyScreen({
     (complete.isPending || uncomplete.isPending) &&
     (complete.variables === task.id || uncomplete.variables === task.id);
 
+  // Правка касается правила (#502): тап по активной строке открывает форму;
+  // выполненные — история со снимком (правило правится из активной строки),
+  // у журнала удалённого правила правила нет. Зрителю и в архиве правка
+  // недоступна — строки списка не открываются вовсе.
+  const openTaskFor = (task: Task): (() => void) | undefined => {
+    if (!canMutate || task.status === 'completed' || task.ruleId === null) {
+      return undefined;
+    }
+    const ruleId = task.ruleId;
+    return () => router.push(ROUTES.propertyTaskEdit(propertyId, ruleId));
+  };
+
   return (
     <>
       <TopNav
@@ -203,7 +215,7 @@ export function TasksOfPropertyScreen({
                 today={today ?? ''} canMutate={canMutate}
                 completedTotal={completedTotal}
                 onToggle={toggleTask} toggling={togglePendingFor}
-                onOpen={() => undefined}
+                onOpen={openTaskFor}
               />
             ))
           )}
@@ -259,7 +271,7 @@ function TaskSection({
   readonly completedTotal: number;
   readonly onToggle: (task: Task) => void;
   readonly toggling: (task: Task) => boolean;
-  readonly onOpen: (task: Task) => void;
+  readonly onOpen: (task: Task) => (() => void) | undefined;
 }): JSX.Element {
   const rows = section.tasks.map((task) => (
     <TaskRow
@@ -270,7 +282,7 @@ function TaskSection({
       canMutate={canMutate}
       toggling={toggling(task)}
       onToggle={() => onToggle(task)}
-      onOpen={() => onOpen(task)}
+      onOpen={onOpen(task)}
     />
   ));
 
@@ -304,8 +316,9 @@ function sectionKey(section: TaskSection): string {
   return section.kind === 'dated' ? `dated-${section.date}` : section.kind;
 }
 
-/** Карточка состояния с действием — ошибка загрузки с кнопкой «Повторить». */
-function TasksStateCard({
+/** Карточка состояния с действием — ошибка загрузки с кнопкой «Повторить».
+ * Общая с экраном правки задачи (#502). */
+export function TasksStateCard({
   title,
   onRetry,
 }: {
@@ -349,8 +362,9 @@ function TasksEmptyState(): JSX.Element {
   );
 }
 
-/** Скелет секции на время загрузки — серая карточка с пульсирующими строками. */
-function TasksSkeleton(): JSX.Element {
+/** Скелет секции на время загрузки — серая карточка с пульсирующими строками.
+ * Общая с экраном правки задачи (#502). */
+export function TasksSkeleton(): JSX.Element {
   return (
     <section className="mx-6 rounded-card bg-surface-muted px-6 py-6" aria-hidden>
       <div className="mb-4 h-6 w-40 animate-pulse rounded-pill bg-surface-muted-hover" />

@@ -5,7 +5,9 @@ export {
   useCompleteTask,
   useCreateTaskRule,
   useDeleteCompletedTasks,
+  useTaskRule,
   useUncompleteTask,
+  useUpdateTaskRule,
 } from './api/hooks';
 export {
   DEFAULT_TASKS_SORT,
@@ -27,3 +29,10 @@ export {
   type CalendarMonthRef,
   type TaskCreateDraft,
 } from './lib/task-create';
+export {
+  buildTaskRuleUpdateRequest,
+  canSaveTask,
+  initialTaskEditDraft,
+  type TaskEditDraft,
+  type TaskRuleUpdateCommand,
+} from './lib/task-edit';

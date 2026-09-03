@@ -114,6 +114,9 @@ export const taskKeys = {
   active: (propertyId: string) => [...taskKeys.all, 'active', propertyId] as const,
   /** Журнал выполненных (сворачиваемая секция; total — счётчик «Выполненные N»). */
   completed: (propertyId: string) => [...taskKeys.all, 'completed', propertyId] as const,
+  /** Правило задачи — экран «Изменить задачу» (#502). */
+  rule: (propertyId: string, ruleId: string) =>
+    [...taskKeys.all, 'rule', propertyId, ruleId] as const,
 };
 
 // features/subscription

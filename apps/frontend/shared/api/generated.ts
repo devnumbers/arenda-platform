@@ -1987,7 +1987,7 @@ export interface components {
             comment?: string | null;
             /** Format: date */
             dueDate?: string | null;
-            dueTime?: components["schemas"]["TaskTime"];
+            dueTime?: components["schemas"]["TaskTime"] | null;
             repeat?: components["schemas"]["TaskRepeat"];
         };
         /** @description One task rule: the setting that produces tasks. It is never itself completed, overdue or undated — those are states of its tasks. */
