@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import type { ComponentProps, JSX, ReactNode } from 'react';
 import { Cancel } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
@@ -22,7 +22,10 @@ import { IconButton } from './icon-button';
  * (aria-hidden): префикс стоит слева до ввода, суффикс — справа.
  * Многострочное поле (Figma 1227:58065 «Title Out Multi Lines») — textarea
  * в том же боксе: бокс растёт от контента, минимум 56px; вариант titleIn
- * с multiline не сочетается — плавающий лейбл рассчитан на одну строку. */
+ * с multiline не сочетается — плавающий лейбл рассчитан на одну строку.
+ * autoGrow — опциональное авторасширение: поле тянется по контенту от 3
+ * строк до 200px, дальше скролл внутри (комментарий задачи, решение
+ * владельца 2026-09-03); без него textarea фиксированная на 3 строки. */
 
 export type TextFieldVariant = 'titleOut' | 'titleIn';
 
@@ -40,6 +43,9 @@ type TextFieldBaseProps = {
   /** Декоративная головка бокса (единица измерения слева, до ввода),
    * aria-hidden. */
   readonly prefix?: ReactNode;
+  /** Только с multiline: поле растёт по контенту от 3 строк до ~10
+   * (200px), дальше — скролл внутри; при очистке сжимается обратно. */
+  readonly autoGrow?: boolean;
 };
 
 /** Однострочное поле — пропсы input; многострочное (multiline) — пропсы
@@ -47,7 +53,7 @@ type TextFieldBaseProps = {
 export type TextFieldProps = TextFieldBaseProps &
   (
     | ({ readonly multiline?: false } & Omit<ComponentProps<'input'>, 'size' | 'maxLength'>)
-    | ({ readonly multiline: true } & Omit<ComponentProps<'textarea'>, 'maxLength'>)
+    | ({ readonly multiline: true } & Omit<ComponentProps<'textarea'>, 'maxLength' | 'ref'>)
   );
 
 /** Показатели счётчика и ошибок — кегль Figma Mobile/Text/S (13/15). */
@@ -63,12 +69,23 @@ export function TextField({
   suffix,
   prefix,
   multiline = false,
+  autoGrow = false,
   value,
   disabled,
   placeholder,
   ...props
 }: TextFieldProps): JSX.Element {
   const inputId = useId();
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Авторасширение multiline-поля: высота подгоняется под контент на
+  // каждое изменение значения; потолок — CSS max-h (скролл внутри).
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el || !autoGrow) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [autoGrow, value]);
   const hasValue = typeof value === 'string' && value.length > 0;
   const showClear = onClear !== undefined && hasValue && !disabled;
   const counter =
@@ -139,7 +156,8 @@ export function TextField({
             {multiline ? (
               <textarea
                 id={inputId}
-                className={cn(input, 'min-h-[54px]')}
+                ref={textareaRef}
+                className={cn(input, 'min-h-[54px]', autoGrow && 'max-h-[200px] overflow-y-auto')}
                 disabled={disabled}
                 value={value}
                 placeholder={placeholder}

@@ -177,6 +177,7 @@ function TaskEditForm({
         />
         <TextField
           multiline
+          autoGrow
           title="Комментарий"
           value={draft.comment}
           onChange={(event) =>

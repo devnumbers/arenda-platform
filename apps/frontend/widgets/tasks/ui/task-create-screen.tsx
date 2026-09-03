@@ -119,6 +119,7 @@ export function TaskCreateScreen({
           <div className="flex flex-col gap-8 px-6">
             <TextField
               multiline
+              autoGrow
               title="Комментарий"
               value={draft.comment}
               onChange={(event) =>
