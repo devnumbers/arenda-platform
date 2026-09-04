@@ -79,12 +79,14 @@ export function ContactBookScreen(): JSX.Element {
 
       <PageContent>
         {contactsQuery.isPending ? (
-          <ContactsSkeleton />
+          /* Отступы книги — единые с карточкой списка (решение владельца
+           * 2026-09-04: боковой отступ как у основного контента). */
+          <ContactsSkeleton className="mx-0" />
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} className="mx-0" />
         ) : (
           <>
-            <div className="mb-6 px-6">
+            <div className="mb-6">
               <BookSearchPill
                 value={search}
                 onChange={setSearch}
@@ -98,7 +100,7 @@ export function ContactBookScreen(): JSX.Element {
               <ContactsEmptyState />
             ) : (
               <>
-                <div className="mb-4 px-6">
+                <div className="mb-4">
                   <PickerMenu
                     title="Сортировать"
                     groups={sortPickerGroups(sortField, sortOrder, setSortField, setSortOrder)}
@@ -109,8 +111,9 @@ export function ContactBookScreen(): JSX.Element {
 
                 {searching ? (
                   /* Результаты поиска: белые строки на белом фоне, без
-                   * групп (конвенция результатов #508). */
-                  <div className="flex flex-col px-6">
+                   * групп (конвенция результатов #508); края — как у
+                   * карточки книги. */
+                  <div className="flex flex-col">
                     {contacts.map((contact) => (
                       <ContactRowButton
                         key={contact.id}
