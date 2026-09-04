@@ -25,7 +25,7 @@ import (
 // handler tests run against func-backed fakes.
 type ContactManager interface {
 	CreateContact(ctx context.Context, actor uuid.UUID, cmd application.CreateContactCommand) (domain.Contact, error)
-	ListContacts(ctx context.Context, actor uuid.UUID, q application.ListQuery) ([]domain.Contact, error)
+	ListContacts(ctx context.Context, actor uuid.UUID, q application.ListQuery) ([]application.ListedContact, error)
 	GetContact(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
 	UpdateContact(ctx context.Context, actor, id uuid.UUID, cmd application.UpdateContactCommand) (domain.Contact, error)
 	DeleteContact(ctx context.Context, actor, id uuid.UUID) error
@@ -118,13 +118,23 @@ func (h *ContactHandlers) ListContacts(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	q := application.ListQuery{Scope: application.ListScopeAll}
+	q := application.ListQuery{
+		Scope: application.ListScopeAll,
+		Sort:  application.ListSortName,
+		Order: application.ListOrderAsc,
+	}
 	if params.PropertyId != nil {
 		q.Scope = application.ListScopeProperty
 		q.PropertyID = *params.PropertyId
 	}
 	if params.Search != nil {
 		q.Search = *params.Search
+	}
+	if params.Sort != nil && *params.Sort != "" {
+		q.Sort = application.ListSort(*params.Sort)
+	}
+	if params.Order != nil && *params.Order != "" {
+		q.Order = application.ListOrder(*params.Order)
 	}
 
 	contacts, err := h.svc.ListContacts(r.Context(), actor, q)
@@ -134,8 +144,8 @@ func (h *ContactHandlers) ListContacts(w http.ResponseWriter, r *http.Request, p
 	}
 
 	items := make([]openapi.ContactResponse, 0, len(contacts))
-	for _, c := range contacts {
-		items = append(items, contactResponse(c))
+	for _, listed := range contacts {
+		items = append(items, listContactResponse(listed))
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.ContactsResponse{Items: items})
 }
@@ -303,4 +313,16 @@ func contactResponse(c domain.Contact) openapi.ContactResponse {
 		CreatedAt:         c.CreatedAt,
 		UpdatedAt:         c.UpdatedAt,
 	}
+}
+
+// listContactResponse maps the list projection onto the wire response: the
+// bound property's display name travels alongside the id (null when the card
+// is unbound), so the client labels and groups rows without re-reading
+// properties.
+func listContactResponse(l application.ListedContact) openapi.ContactResponse {
+	response := contactResponse(l.Contact)
+	if l.PropertyName != "" {
+		response.PropertyName = &l.PropertyName
+	}
+	return response
 }

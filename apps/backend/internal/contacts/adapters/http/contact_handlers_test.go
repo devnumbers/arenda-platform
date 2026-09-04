@@ -25,7 +25,7 @@ type fakeContactManager struct {
 	create func(ctx context.Context, actor uuid.UUID, cmd application.CreateContactCommand) (domain.Contact, error)
 	del    func(ctx context.Context, actor, id uuid.UUID) error
 	get    func(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
-	list   func(ctx context.Context, actor uuid.UUID, q application.ListQuery) ([]domain.Contact, error)
+	list   func(ctx context.Context, actor uuid.UUID, q application.ListQuery) ([]application.ListedContact, error)
 	update func(ctx context.Context, actor, id uuid.UUID, cmd application.UpdateContactCommand) (domain.Contact, error)
 }
 
@@ -40,7 +40,7 @@ func (f *fakeContactManager) CreateContact(
 
 func (f *fakeContactManager) ListContacts(
 	ctx context.Context, actor uuid.UUID, q application.ListQuery,
-) ([]domain.Contact, error) {
+) ([]application.ListedContact, error) {
 	if f.list == nil {
 		return nil, errors.New("unexpected ListContacts call")
 	}
@@ -292,15 +292,15 @@ func TestListContacts(t *testing.T) {
 	propertyID := uuid.Must(uuid.NewV7())
 	var gotQueries []application.ListQuery
 	svc := &fakeContactManager{
-		list: func(_ context.Context, _ uuid.UUID, q application.ListQuery) ([]domain.Contact, error) {
+		list: func(_ context.Context, _ uuid.UUID, q application.ListQuery) ([]application.ListedContact, error) {
 			gotQueries = append(gotQueries, q)
-			return []domain.Contact{storedContact()}, nil
+			return nil, nil
 		},
 	}
 	h := NewContactHandlers(svc, nil)
 	actor := uuid.Must(uuid.NewV7())
 
-	// The whole book: no property filter, search on.
+	// The whole book: no property filter, search on, sort defaults.
 	search := "петр"
 	w := httptest.NewRecorder()
 	h.ListContacts(w, contactRequest(t, http.MethodGet, actor, ""),
@@ -316,11 +316,44 @@ func TestListContacts(t *testing.T) {
 	if len(gotQueries) != 2 {
 		t.Fatalf("queries = %d, want 2", len(gotQueries))
 	}
-	if gotQueries[0].Scope != application.ListScopeAll || gotQueries[0].Search != "петр" {
+	if gotQueries[0].Scope != application.ListScopeAll || gotQueries[0].Search != "петр" ||
+		gotQueries[0].Sort != application.ListSortName || gotQueries[0].Order != application.ListOrderAsc {
 		t.Fatalf("book query = %+v", gotQueries[0])
 	}
 	if gotQueries[1].Scope != application.ListScopeProperty || gotQueries[1].PropertyID != propertyID {
 		t.Fatalf("property query = %+v", gotQueries[1])
+	}
+}
+
+// TestListContactsSortAndProjection pins the sort params on the wire and the
+// list projection: sort/order travel into the query, the bound property's
+// display name rides along in the response items.
+func TestListContactsSortAndProjection(t *testing.T) {
+	t.Parallel()
+
+	var gotQuery application.ListQuery
+	stored := storedContact()
+	propName := "Моя квартира"
+	svc := &fakeContactManager{
+		list: func(_ context.Context, _ uuid.UUID, q application.ListQuery) ([]application.ListedContact, error) {
+			gotQuery = q
+			return []application.ListedContact{{Contact: stored, PropertyName: propName}}, nil
+		},
+	}
+	h := NewContactHandlers(svc, nil)
+	actor := uuid.Must(uuid.NewV7())
+
+	sortProp := openapi.ListContactsParamsSort("property")
+	orderDesc := openapi.ListContactsParamsOrder("desc")
+	w := httptest.NewRecorder()
+	h.ListContacts(w, contactRequest(t, http.MethodGet, actor, ""),
+		openapi.ListContactsParams{Sort: &sortProp, Order: &orderDesc})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if gotQuery.Sort != application.ListSortProperty || gotQuery.Order != application.ListOrderDesc {
+		t.Fatalf("query = %+v", gotQuery)
 	}
 
 	var resp openapi.ContactsResponse
@@ -329,6 +362,9 @@ func TestListContacts(t *testing.T) {
 	}
 	if len(resp.Items) != 1 || resp.Items[0].FirstName != testFirstName {
 		t.Fatalf("response items = %+v", resp.Items)
+	}
+	if resp.Items[0].PropertyName == nil || *resp.Items[0].PropertyName != propName {
+		t.Fatalf("response propertyName = %v, want %q", resp.Items[0].PropertyName, propName)
 	}
 }
 

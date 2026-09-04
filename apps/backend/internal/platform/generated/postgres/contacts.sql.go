@@ -151,49 +151,117 @@ func (q *Queries) InsertContact(ctx context.Context, arg InsertContactParams) (C
 }
 
 const listContacts = `-- name: ListContacts :many
-SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at
-FROM contacts
-WHERE owner_id = $1
-  AND (
-        $2::text = 'all'
-        OR ($2::text = 'without_property' AND property_id IS NULL)
-        OR ($2::text = 'property' AND property_id = $3::uuid)
+SELECT c.id, c.owner_id, c.property_id, c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_name, c.messenger_username, c.note, c.created_at, c.updated_at, p.name AS property_name
+FROM contacts c
+LEFT JOIN properties p ON p.id = c.property_id
+WHERE (
+       ($1::text = 'all' AND (
+          c.owner_id = $2::uuid
+          OR (
+            c.property_id IS NOT NULL
+            AND (
+                  EXISTS (
+                    SELECT 1 FROM properties op
+                    WHERE op.id = c.property_id
+                      AND op.owner_id = $2::uuid
+                  )
+               OR EXISTS (
+                    SELECT 1 FROM property_members pm
+                    WHERE pm.property_id = c.property_id
+                      AND pm.user_id = $2::uuid
+                      AND pm.status = 'active'
+                  )
+            )
+          )
+       ))
+    OR ($1::text = 'without_property'
+        AND c.owner_id = $2::uuid
+        AND c.property_id IS NULL)
+    OR ($1::text = 'property'
+        AND c.property_id = $3::uuid)
       )
   AND (
         $4::text = ''
-        OR concat_ws(' ', first_name, last_name, patronymic, role, phone, email, messenger_username)
+        OR concat_ws(' ', c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_username)
            ILIKE '%' || $4::text || '%' ESCAPE '\'
       )
-ORDER BY created_at ASC, id ASC
+ORDER BY
+  CASE WHEN $5::text = 'property'
+       THEN (c.property_id IS NULL) END DESC,
+  CASE WHEN $5::text = 'name' AND $6::text = 'asc'
+       THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END ASC,
+  CASE WHEN $5::text = 'name' AND $6::text = 'desc'
+       THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
+  CASE WHEN $5::text = 'property' AND $6::text = 'asc'
+       THEN p.name COLLATE "ru-RU-x-icu" END ASC,
+  CASE WHEN $5::text = 'property' AND $6::text = 'asc'
+       THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END ASC,
+  CASE WHEN $5::text = 'property' AND $6::text = 'desc'
+       THEN p.name COLLATE "ru-RU-x-icu" END DESC,
+  CASE WHEN $5::text = 'property' AND $6::text = 'desc'
+       THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
+  c.id ASC
 `
 
 type ListContactsParams struct {
-	OwnerID    pgtype.UUID `json:"owner_id"`
 	Scope      string      `json:"scope"`
+	ActorID    pgtype.UUID `json:"actor_id"`
 	PropertyID pgtype.UUID `json:"property_id"`
 	Search     string      `json:"search"`
+	Sort       string      `json:"sort"`
+	Order      string      `json:"order"`
 }
 
-// The owner's slice per the query scope: 'all' — the whole book,
-// 'without_property' — the unbound cards, 'property' — one property's cards
-// (property_id must be set for it). search (” = no filter) is a
-// case-insensitive substring match over the name fields, role, phone, email
-// and messenger username; the application layer escapes the ILIKE
-// metacharacters (ESCAPE '\').
-func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]Contact, error) {
+type ListContactsRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	OwnerID           pgtype.UUID        `json:"owner_id"`
+	PropertyID        pgtype.UUID        `json:"property_id"`
+	FirstName         string             `json:"first_name"`
+	LastName          pgtype.Text        `json:"last_name"`
+	Patronymic        pgtype.Text        `json:"patronymic"`
+	Role              pgtype.Text        `json:"role"`
+	Phone             pgtype.Text        `json:"phone"`
+	Email             pgtype.Text        `json:"email"`
+	MessengerName     pgtype.Text        `json:"messenger_name"`
+	MessengerUsername pgtype.Text        `json:"messenger_username"`
+	Note              pgtype.Text        `json:"note"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	PropertyName      pgtype.Text        `json:"property_name"`
+}
+
+// The actor's visible slice per the query scope (ADR 0051, ADR 0028):
+// 'all' — the flat book: the actor's own cards plus the cards bound to
+// properties the actor owns or shares with an active membership (the merged
+// visibility the global book page reads);
+// 'without_property' — the actor's own unbound cards;
+// 'property' — the cards bound to one property whatever book they live in:
+// visibility is driven by the binding (the book owner never changes on a
+// move), and the service has already gated the actor's view capability on
+// the property. property_id must be set for the property scope.
+// search (” = no filter) is a case-insensitive substring match over the
+// name fields, role, phone, email and messenger username; the application
+// layer escapes the ILIKE metacharacters (ESCAPE '\').
+// sort 'name' orders by the display name; 'property' — by the bound
+// property's name, unbound cards first in both directions («Общие
+// контакты»), contact name ordering inside the groups. Both keys use the
+// Russian ICU collation to match the client's letter grouping; id ties off.
+func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error) {
 	rows, err := q.db.Query(ctx, listContacts,
-		arg.OwnerID,
 		arg.Scope,
+		arg.ActorID,
 		arg.PropertyID,
 		arg.Search,
+		arg.Sort,
+		arg.Order,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Contact{}
+	items := []ListContactsRow{}
 	for rows.Next() {
-		var i Contact
+		var i ListContactsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,
@@ -209,6 +277,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]C
 			&i.Note,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PropertyName,
 		); err != nil {
 			return nil, err
 		}

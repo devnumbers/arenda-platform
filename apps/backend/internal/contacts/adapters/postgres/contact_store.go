@@ -62,23 +62,29 @@ func (s *ContactStore) GetByID(ctx context.Context, id uuid.UUID) (domain.Contac
 	return contactFromRow(row), nil
 }
 
-// List returns the owner's slice per the query scope and search
-// (” = no filter).
+// List returns the actor's visible contacts per the query scope, search and
+// sort (” search = no filter, ” sort/order = the defaults), each with the
+// display name of its bound property.
 func (s *ContactStore) List(
-	ctx context.Context, ownerID uuid.UUID, q application.ListQuery,
-) ([]domain.Contact, error) {
+	ctx context.Context, actorID uuid.UUID, q application.ListQuery,
+) ([]application.ListedContact, error) {
 	rows, err := s.q().ListContacts(ctx, postgres.ListContactsParams{
-		OwnerID:    pgconv.UUIDToPgtype(ownerID),
+		ActorID:    pgconv.UUIDToPgtype(actorID),
 		Scope:      string(q.Scope),
 		PropertyID: pgconv.UUIDToPgtype(q.PropertyID),
 		Search:     escapeLikePattern(q.Search),
+		Sort:       string(q.Sort),
+		Order:      string(q.Order),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list contacts of owner %s: %w", ownerID, err)
+		return nil, fmt.Errorf("list contacts of actor %s: %w", actorID, err)
 	}
-	contacts := make([]domain.Contact, 0, len(rows))
+	contacts := make([]application.ListedContact, 0, len(rows))
 	for _, row := range rows {
-		contacts = append(contacts, contactFromRow(row))
+		contacts = append(contacts, application.ListedContact{
+			Contact:      contactFromListRow(row),
+			PropertyName: pgconv.TextToString(row.PropertyName),
+		})
 	}
 	return contacts, nil
 }
@@ -179,6 +185,27 @@ func (s *PropertyStore) Get(ctx context.Context, propertyID uuid.UUID) (applicat
 // contactFromRow maps the generated row onto the domain card: NULL folds to
 // "" (the domain's «not set»).
 func contactFromRow(row postgres.Contact) domain.Contact {
+	return domain.Contact{
+		ID:                pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:           pgconv.UUIDFromPgtype(row.OwnerID),
+		PropertyID:        pgconv.UUIDFromPgtypePtr(row.PropertyID),
+		FirstName:         row.FirstName,
+		LastName:          pgconv.TextToString(row.LastName),
+		Patronymic:        pgconv.TextToString(row.Patronymic),
+		Role:              pgconv.TextToString(row.Role),
+		Phone:             pgconv.TextToString(row.Phone),
+		Email:             pgconv.TextToString(row.Email),
+		MessengerName:     pgconv.TextToString(row.MessengerName),
+		MessengerUsername: pgconv.TextToString(row.MessengerUsername),
+		Note:              pgconv.TextToString(row.Note),
+		CreatedAt:         pgconv.TimestamptzToTime(row.CreatedAt),
+		UpdatedAt:         pgconv.TimestamptzToTime(row.UpdatedAt),
+	}
+}
+
+// contactFromListRow maps the listing row (the card's columns plus the
+// bound property's display name from the LEFT JOIN) onto the domain card.
+func contactFromListRow(row postgres.ListContactsRow) domain.Contact {
 	return domain.Contact{
 		ID:                pgconv.UUIDFromPgtype(row.ID),
 		OwnerID:           pgconv.UUIDFromPgtype(row.OwnerID),

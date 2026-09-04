@@ -54,13 +54,13 @@ type UpdateContactCommand struct {
 }
 
 // ContactService orchestrates the contact book use cases (ADR 0051): create,
-// read, list with scope and search, partial update and delete. Access follows
-// the ADR 0028 matrix through the shared policy: a property-bound card is
-// visible to the property's shared members (CanView) and editable by them
-// (CanEdit), the owner rules their whole book, and a card without a property
-// belongs to the owner's book alone. Every mutation records its audit entry
-// inside the same transaction (ADR 0020); the context never carries the
-// card's PII.
+// read, list with scope, search and sort, partial update and delete. Access
+// follows the ADR 0028 matrix through the shared policy: a property-bound
+// card is visible to the property's shared members (CanView) and editable by
+// them (CanEdit), the owner rules their whole book, and a card without a
+// property belongs to the owner's book alone. Every mutation records its
+// audit entry inside the same transaction (ADR 0020); the context never
+// carries the card's PII.
 type ContactService struct {
 	txStoreFactory
 	policy sharedpolicy.Policy
@@ -139,29 +139,36 @@ func (s *ContactService) GetContact(ctx context.Context, actor, id uuid.UUID) (d
 	return contact, nil
 }
 
-// ListContacts lists a slice of the book. The book scopes (all, without
-// property) read the actor's own book; the property scope gates the actor's
-// view capability on the property and reads the data owner's slice.
+// ListContacts lists a slice of the visible book. The flat book scope reads
+// the merged visibility — the actor's own cards plus the property-bound
+// cards of the properties the actor can view; the store enforces that
+// predicate, visibility being driven by the binding (ADR 0051). The property
+// scope gates the actor's view capability on the property; the unbound scope
+// reads the actor's own cards alone. Sort/order are validated against the
+// known keys; the empty values mean the defaults (name/asc).
 func (s *ContactService) ListContacts(
 	ctx context.Context, actor uuid.UUID, q ListQuery,
-) ([]domain.Contact, error) {
-	var owner uuid.UUID
+) ([]ListedContact, error) {
 	switch q.Scope {
 	case ListScopeProperty:
 		if _, err := s.gate(ctx, actor, q.PropertyID, sharedpolicy.CanView); err != nil {
 			return nil, err
 		}
-		ref, err := s.properties.Get(ctx, q.PropertyID)
-		if err != nil {
-			return nil, err
-		}
-		owner = ref.OwnerID
 	case ListScopeAll, ListScopeWithoutProperty:
-		owner = actor
 	default:
 		return nil, ErrInvalidInput
 	}
-	contacts, err := s.contacts.List(ctx, owner, q)
+	switch q.Sort {
+	case "", ListSortName, ListSortProperty:
+	default:
+		return nil, ErrInvalidInput
+	}
+	switch q.Order {
+	case "", ListOrderAsc, ListOrderDesc:
+	default:
+		return nil, ErrInvalidInput
+	}
+	contacts, err := s.contacts.List(ctx, actor, q)
 	if err != nil {
 		return nil, fmt.Errorf("list contacts: %w", err)
 	}

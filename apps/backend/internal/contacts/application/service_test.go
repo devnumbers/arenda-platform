@@ -50,9 +50,10 @@ type fakeContactStore struct {
 	created []domain.Contact
 	updates []domain.Contact
 	deleted []uuid.UUID
-	// ListFn overrides List when a test needs to observe the owner scope the
-	// service resolved; unset, List filters the map by owner.
-	listFn func(ownerID uuid.UUID, q ListQuery) ([]domain.Contact, error)
+	// ListFn overrides List when a test needs to observe the actor scope and
+	// the query the service forwarded; unset, List filters the map by the
+	// card's owner.
+	listFn func(actorID uuid.UUID, q ListQuery) ([]ListedContact, error)
 }
 
 func newFakeContactStore(contacts ...domain.Contact) *fakeContactStore {
@@ -71,14 +72,14 @@ func (s *fakeContactStore) GetByID(_ context.Context, id uuid.UUID) (domain.Cont
 	return c, nil
 }
 
-func (s *fakeContactStore) List(ctx context.Context, ownerID uuid.UUID, q ListQuery) ([]domain.Contact, error) {
+func (s *fakeContactStore) List(ctx context.Context, actorID uuid.UUID, q ListQuery) ([]ListedContact, error) {
 	if s.listFn != nil {
-		return s.listFn(ownerID, q)
+		return s.listFn(actorID, q)
 	}
-	out := []domain.Contact{}
+	out := []ListedContact{}
 	for _, c := range s.byID {
-		if c.OwnerID == ownerID {
-			out = append(out, c)
+		if c.OwnerID == actorID {
+			out = append(out, ListedContact{Contact: c})
 		}
 	}
 	return out, nil
@@ -419,24 +420,24 @@ func TestGetContact(t *testing.T) {
 func TestListContacts(t *testing.T) {
 	t.Parallel()
 
-	t.Run("property scope resolves the data owner for shared members", func(t *testing.T) {
+	t.Run("property scope forwards the actor and gates shared members in", func(t *testing.T) {
 		t.Parallel()
 		h := newServiceHarness(t, sharedpolicy.RoleViewer)
-		var listedOwner uuid.UUID
-		h.contacts.listFn = func(owner uuid.UUID, _ ListQuery) ([]domain.Contact, error) {
-			listedOwner = owner
+		var listedActor uuid.UUID
+		h.contacts.listFn = func(actor uuid.UUID, _ ListQuery) ([]ListedContact, error) {
+			listedActor = actor
 			return nil, nil
 		}
 		q := ListQuery{Scope: ListScopeProperty, PropertyID: h.property}
 		if _, err := h.svc.ListContacts(t.Context(), h.member, q); err != nil {
 			t.Fatalf("list as member: %v", err)
 		}
-		if listedOwner != h.owner {
-			t.Fatalf("store owner scope: want %s, got %s", h.owner, listedOwner)
+		if listedActor != h.member {
+			t.Fatalf("store actor scope: want %s, got %s", h.member, listedActor)
 		}
 	})
 
-	t.Run("book scopes read the actor's own book", func(t *testing.T) {
+	t.Run("book scopes forward the actor untouched", func(t *testing.T) {
 		t.Parallel()
 		for name, scope := range map[string]ListScope{
 			"all":              ListScopeAll,
@@ -445,16 +446,16 @@ func TestListContacts(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 				h := newServiceHarness(t, sharedpolicy.RoleOwner)
-				var listedOwner uuid.UUID
-				h.contacts.listFn = func(owner uuid.UUID, _ ListQuery) ([]domain.Contact, error) {
-					listedOwner = owner
+				var listedActor uuid.UUID
+				h.contacts.listFn = func(actor uuid.UUID, _ ListQuery) ([]ListedContact, error) {
+					listedActor = actor
 					return nil, nil
 				}
 				if _, err := h.svc.ListContacts(t.Context(), h.owner, ListQuery{Scope: scope}); err != nil {
 					t.Fatalf("list: %v", err)
 				}
-				if listedOwner != h.owner {
-					t.Fatalf("store owner scope: want %s, got %s", h.owner, listedOwner)
+				if listedActor != h.owner {
+					t.Fatalf("store actor scope: want %s, got %s", h.owner, listedActor)
 				}
 			})
 		}
@@ -476,6 +477,51 @@ func TestListContacts(t *testing.T) {
 			t.Fatalf("want ErrInvalidInput, got %v", err)
 		}
 	})
+}
+
+// TestListContactsSortOrderForwarded pins the sort validation: known keys
+// travel to the store as-is, the empty values mean the defaults, unknown
+// keys are the invalid input.
+func TestListContactsSortOrderForwarded(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		sort    ListSort
+		order   ListOrder
+		wantErr bool
+	}{
+		{"defaults", "", "", false},
+		{"name ascending", ListSortName, ListOrderAsc, false},
+		{"property descending", ListSortProperty, ListOrderDesc, false},
+		{"unknown sort", "sideways", ListOrderAsc, true},
+		{"unknown order", ListSortName, "upside", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newServiceHarness(t, sharedpolicy.RoleOwner)
+			var gotQuery ListQuery
+			h.contacts.listFn = func(_ uuid.UUID, q ListQuery) ([]ListedContact, error) {
+				gotQuery = q
+				return nil, nil
+			}
+			_, err := h.svc.ListContacts(t.Context(), h.owner, ListQuery{
+				Scope: ListScopeAll, Sort: tc.sort, Order: tc.order,
+			})
+			if tc.wantErr {
+				if !errors.Is(err, ErrInvalidInput) {
+					t.Fatalf("want ErrInvalidInput, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			if gotQuery.Sort != tc.sort || gotQuery.Order != tc.order {
+				t.Fatalf("forwarded sort/order: want %q/%q, got %q/%q", tc.sort, tc.order, gotQuery.Sort, gotQuery.Order)
+			}
+		})
+	}
 }
 
 func TestUpdateContactFoldAndNormalize(t *testing.T) {

@@ -343,13 +343,23 @@ type Querier interface {
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
 	// The completed journal of the property, newest completions first.
 	ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]ListCompletedTasksByPropertyRow, error)
-	// The owner's slice per the query scope: 'all' — the whole book,
-	// 'without_property' — the unbound cards, 'property' — one property's cards
-	// (property_id must be set for it). search ('' = no filter) is a
-	// case-insensitive substring match over the name fields, role, phone, email
-	// and messenger username; the application layer escapes the ILIKE
-	// metacharacters (ESCAPE '\').
-	ListContacts(ctx context.Context, arg ListContactsParams) ([]Contact, error)
+	// The actor's visible slice per the query scope (ADR 0051, ADR 0028):
+	// 'all' — the flat book: the actor's own cards plus the cards bound to
+	// properties the actor owns or shares with an active membership (the merged
+	// visibility the global book page reads);
+	// 'without_property' — the actor's own unbound cards;
+	// 'property' — the cards bound to one property whatever book they live in:
+	// visibility is driven by the binding (the book owner never changes on a
+	// move), and the service has already gated the actor's view capability on
+	// the property. property_id must be set for the property scope.
+	// search ('' = no filter) is a case-insensitive substring match over the
+	// name fields, role, phone, email and messenger username; the application
+	// layer escapes the ILIKE metacharacters (ESCAPE '\').
+	// sort 'name' orders by the display name; 'property' — by the bound
+	// property's name, unbound cards first in both directions («Общие
+	// контакты»), contact name ordering inside the groups. Both keys use the
+	// Russian ICU collation to match the client's letter grouping; id ties off.
+	ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error)
 	// The admin read of one property's contacts (ADR 0051 consequences): the
 	// bound cards only — an unbound contact belongs to no property card.
 	ListContactsAdmin(ctx context.Context, arg ListContactsAdminParams) ([]Contact, error)

@@ -182,7 +182,7 @@ func TestListPaymentOperations_FoldsParamsIntoCommand(t *testing.T) {
 	status := openapi.ListPaymentOperationsParamsStatusOverdue
 	from := openapi_types.Date{Time: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
 	to := openapi_types.Date{Time: time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC)}
-	asc := openapi.Asc
+	asc := openapi.ListPaymentOperationsParamsOrderAsc
 	req := httptest.NewRequestWithContext(
 		httpsupport.WithUserID(t.Context(), actor), http.MethodGet, "/operations", nil,
 	)

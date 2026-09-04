@@ -38,6 +38,14 @@ const contactFirstName = "Пётр"
 // plumberRole is the shared role literal of the fixtures.
 const plumberRole = "сантехник"
 
+// flatPropertyName is the display name of the property the union and
+// book-span tests seed.
+const flatPropertyName = "Квартира"
+
+// memberFirstName is the given name of the member's own card in the union
+// and book-span fixtures.
+const memberFirstName = "Мария"
+
 // mustEqual is the assertion helper keeping the test bodies branch-free.
 func mustEqual[T comparable](t *testing.T, name string, got, want T) {
 	t.Helper()
@@ -106,14 +114,20 @@ func (h *contactsHarness) seedUser() uuid.UUID {
 // seedProperty inserts an active property of the owner and returns the id.
 func (h *contactsHarness) seedProperty(owner uuid.UUID) uuid.UUID {
 	h.t.Helper()
+	return h.seedPropertyNamed(owner, "Квартира")
+}
+
+// seedPropertyNamed inserts an active property with the given display name.
+func (h *contactsHarness) seedPropertyNamed(owner uuid.UUID, name string) uuid.UUID {
+	h.t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
 		h.t.Fatalf("new uuid: %v", err)
 	}
 	if _, err := h.pool.Exec(h.t.Context(),
 		`INSERT INTO properties (id, owner_id, name, type, address, status)
-		 VALUES ($1, $2, 'Квартира', 'apartment', 'Москва, Тверская 1', 'active')`,
-		id, owner,
+		 VALUES ($1, $2, $3, 'apartment', 'Москва, Тверская 1', 'active')`,
+		id, owner, name,
 	); err != nil {
 		h.t.Fatalf("seed property: %v", err)
 	}
@@ -297,7 +311,7 @@ func TestContactsIntegration_SearchAndScopes(t *testing.T) {
 			}
 			gotIDs := make([]uuid.UUID, 0, len(got))
 			for _, c := range got {
-				gotIDs = append(gotIDs, c.ID)
+				gotIDs = append(gotIDs, c.Contact.ID)
 			}
 			mustEqual(t, "listed contacts", len(gotIDs), len(tc.want))
 			for i := range tc.want {
@@ -337,7 +351,7 @@ func TestContactsIntegration_PropertyDeleteDetaches(t *testing.T) {
 		t.Fatalf("list unbound: %v", err)
 	}
 	mustEqual(t, "unbound contacts", len(unbound), 1)
-	mustEqual(t, "detached contact", unbound[0].ID, created.ID)
+	mustEqual(t, "detached contact", unbound[0].Contact.ID, created.ID)
 }
 
 // TestContactsIntegration_RoleMatrix exercises the shared-access enforcement
@@ -463,4 +477,251 @@ func TestContactsIntegration_MoveBetweenProperties(t *testing.T) {
 	if detached.PropertyID != nil {
 		t.Fatalf("detached property: want nil, got %s", *detached.PropertyID)
 	}
+}
+
+// listFlat runs the whole-book listing for the actor and returns the card
+// ids with the property-name projection.
+func listFlat(
+	t *testing.T, svc *contactsapp.ContactService, actorID uuid.UUID, q contactsapp.ListQuery,
+) (ids []uuid.UUID, propertyNames map[uuid.UUID]string) {
+	t.Helper()
+	got, err := svc.ListContacts(t.Context(), actorID, q)
+	if err != nil {
+		t.Fatalf("flat list: %v", err)
+	}
+	ids = make([]uuid.UUID, 0, len(got))
+	propertyNames = make(map[uuid.UUID]string, len(got))
+	for _, listed := range got {
+		ids = append(ids, listed.Contact.ID)
+		propertyNames[listed.Contact.ID] = listed.PropertyName
+	}
+	return ids, propertyNames
+}
+
+// TestContactsIntegration_FlatBookUnion exercises the merged visibility of
+// the whole-book listing (ADR 0051, ADR 0028): a shared member sees the
+// property-bound cards of the shared properties plus their own unbound
+// cards, never the owner's unbound ones; a suspended membership sees only
+// its own book; the owner sees the whole own book.
+func TestContactsIntegration_FlatBookUnion(t *testing.T) {
+	t.Parallel()
+
+	h := newContactsHarness(t)
+	h.owner = h.seedUser()
+	h.member = h.seedUser()
+	h.viewer = h.seedUser()
+	h.suspended = h.seedUser()
+	h.property = h.seedPropertyNamed(h.owner, flatPropertyName)
+	h.seedMembership(h.member, h.property, accessdomain.RoleFullAccess)
+	h.seedMembership(h.viewer, h.property, accessdomain.RoleViewer)
+	h.seedSuspendedMembership(h.suspended, h.property)
+	ctx := t.Context()
+
+	propID := h.property
+	bound := h.create(contactsapp.CreateContactCommand{
+		FirstName: "Борис", Role: plumberRole, PropertyID: &propID,
+	})
+	unbound := h.create(contactsapp.CreateContactCommand{
+		FirstName: "Анна", Role: "уборщица",
+	})
+	memberUnbound, err := h.svc.CreateContact(ctx, h.member, contactsapp.CreateContactCommand{
+		FirstName: memberFirstName,
+	})
+	if err != nil {
+		t.Fatalf("create member unbound: %v", err)
+	}
+	suspendedUnbound, err := h.svc.CreateContact(ctx, h.suspended, contactsapp.CreateContactCommand{
+		FirstName: "Олег",
+	})
+	if err != nil {
+		t.Fatalf("create suspended unbound: %v", err)
+	}
+
+	t.Run("member sees the bound cards of the shared property and own unbound", func(t *testing.T) {
+		t.Parallel()
+		ids, names := listFlat(t, h.svc, h.member, contactsapp.ListQuery{Scope: contactsapp.ListScopeAll})
+		want := []uuid.UUID{bound.ID, memberUnbound.ID}
+		if len(ids) != len(want) {
+			t.Fatalf("listed ids = %v, want %v", ids, want)
+		}
+		for i := range want {
+			mustEqual(t, "listed contact", ids[i], want[i])
+		}
+		mustEqual(t, "bound property name", names[bound.ID], flatPropertyName)
+		mustEqual(t, "unbound property name", names[memberUnbound.ID], "")
+	})
+
+	t.Run("viewer sees the bound cards only", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.viewer, contactsapp.ListQuery{Scope: contactsapp.ListScopeAll})
+		if len(ids) != 1 || ids[0] != bound.ID {
+			t.Fatalf("listed ids = %v, want [%s]", ids, bound.ID)
+		}
+	})
+
+	t.Run("suspended membership hides the shared property", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.suspended, contactsapp.ListQuery{Scope: contactsapp.ListScopeAll})
+		if len(ids) != 1 || ids[0] != suspendedUnbound.ID {
+			t.Fatalf("listed ids = %v, want [%s]", ids, suspendedUnbound.ID)
+		}
+	})
+
+	t.Run("owner sees the whole own book", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.owner, contactsapp.ListQuery{Scope: contactsapp.ListScopeAll})
+		if len(ids) != 2 {
+			t.Fatalf("listed ids = %v, want 2 own cards", ids)
+		}
+	})
+
+	t.Run("unbound scope keeps the owner's unbound alone", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.owner, contactsapp.ListQuery{Scope: contactsapp.ListScopeWithoutProperty})
+		if len(ids) != 1 || ids[0] != unbound.ID {
+			t.Fatalf("listed ids = %v, want [%s]", ids, unbound.ID)
+		}
+	})
+}
+
+// TestContactsIntegration_FlatBookSort pins the server-side ordering of the
+// whole-book listing: Russian collation by display name (ё next to е), and
+// the property sort with the unbound cards first in both directions and
+// contact-name order inside the groups.
+func TestContactsIntegration_FlatBookSort(t *testing.T) {
+	t.Parallel()
+
+	h := newContactsHarness(t)
+	h.owner = h.seedUser()
+	anna := h.create(contactsapp.CreateContactCommand{FirstName: "Анна"})
+	yolkin := h.create(contactsapp.CreateContactCommand{FirstName: "Ёлкин"})
+	p1 := h.seedPropertyNamed(h.owner, "Моя квартира")
+	p2 := h.seedPropertyNamed(h.owner, "Студия")
+	p1id, p2id := p1, p2
+	boris := h.create(contactsapp.CreateContactCommand{
+		FirstName: "Борис", PropertyID: &p1id,
+	})
+	ezhov := h.create(contactsapp.CreateContactCommand{
+		FirstName: "Ежов", LastName: "Игорь", PropertyID: &p2id,
+	})
+
+	t.Run("name ascending: Russian collation, ё next to е", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.owner, contactsapp.ListQuery{
+			Scope: contactsapp.ListScopeAll, Sort: contactsapp.ListSortName, Order: contactsapp.ListOrderAsc,
+		})
+		want := []uuid.UUID{anna.ID, boris.ID, ezhov.ID, yolkin.ID}
+		if len(ids) != len(want) {
+			t.Fatalf("listed ids = %v, want %v", ids, want)
+		}
+		for i := range want {
+			mustEqual(t, "sort order", ids[i], want[i])
+		}
+	})
+
+	t.Run("name descending reverses exactly", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.owner, contactsapp.ListQuery{
+			Scope: contactsapp.ListScopeAll, Sort: contactsapp.ListSortName, Order: contactsapp.ListOrderDesc,
+		})
+		want := []uuid.UUID{yolkin.ID, ezhov.ID, boris.ID, anna.ID}
+		if len(ids) != len(want) {
+			t.Fatalf("listed ids = %v, want %v", ids, want)
+		}
+		for i := range want {
+			mustEqual(t, "sort order", ids[i], want[i])
+		}
+	})
+
+	t.Run("property ascending: unbound first, groups by property, names inside", func(t *testing.T) {
+		t.Parallel()
+		ids, names := listFlat(t, h.svc, h.owner, contactsapp.ListQuery{
+			Scope: contactsapp.ListScopeAll, Sort: contactsapp.ListSortProperty, Order: contactsapp.ListOrderAsc,
+		})
+		want := []uuid.UUID{anna.ID, yolkin.ID, boris.ID, ezhov.ID}
+		if len(ids) != len(want) {
+			t.Fatalf("listed ids = %v, want %v", ids, want)
+		}
+		for i := range want {
+			mustEqual(t, "sort order", ids[i], want[i])
+		}
+		mustEqual(t, "unbound group property name", names[anna.ID], "")
+		mustEqual(t, "first property group name", names[boris.ID], "Моя квартира")
+		mustEqual(t, "second property group name", names[ezhov.ID], "Студия")
+	})
+
+	t.Run("property descending: unbound still first, groups reverse, names reverse", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.owner, contactsapp.ListQuery{
+			Scope: contactsapp.ListScopeAll, Sort: contactsapp.ListSortProperty, Order: contactsapp.ListOrderDesc,
+		})
+		want := []uuid.UUID{yolkin.ID, anna.ID, ezhov.ID, boris.ID}
+		if len(ids) != len(want) {
+			t.Fatalf("listed ids = %v, want %v", ids, want)
+		}
+		for i := range want {
+			mustEqual(t, "sort order", ids[i], want[i])
+		}
+	})
+}
+
+// TestContactsIntegration_PropertyScopeSpansBooks pins the binding-driven
+// visibility: a card moved onto a property is listed in that property's
+// slice and in the flat book of everyone who can view the property, whatever
+// book the card lives in (the book owner never changes on a move).
+func TestContactsIntegration_PropertyScopeSpansBooks(t *testing.T) {
+	t.Parallel()
+
+	h := newContactsHarness(t)
+	h.owner = h.seedUser()
+	h.member = h.seedUser()
+	h.property = h.seedPropertyNamed(h.owner, flatPropertyName)
+	h.seedMembership(h.member, h.property, accessdomain.RoleFullAccess)
+	ctx := t.Context()
+
+	// The member's own card moves onto the owner's property: the book stays
+	// the member's, the binding now points at the owner's property.
+	memberCard, err := h.svc.CreateContact(ctx, h.member, contactsapp.CreateContactCommand{
+		FirstName: memberFirstName,
+	})
+	if err != nil {
+		t.Fatalf("create member card: %v", err)
+	}
+	moved, err := h.svc.UpdateContact(ctx, h.member, memberCard.ID, contactsapp.UpdateContactCommand{
+		PropertyID: &contactsapp.PropertyIDUpdate{Value: &h.property},
+	})
+	if err != nil {
+		t.Fatalf("move member card: %v", err)
+	}
+	mustEqual(t, "moved book owner", moved.OwnerID, h.member)
+
+	t.Run("owner's property slice spans books", func(t *testing.T) {
+		t.Parallel()
+		got, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
+			Scope: contactsapp.ListScopeProperty, PropertyID: h.property,
+		})
+		if err != nil {
+			t.Fatalf("property list: %v", err)
+		}
+		if len(got) != 1 || got[0].Contact.ID != memberCard.ID {
+			t.Fatalf("listed = %v, want [%s]", got, memberCard.ID)
+		}
+		mustEqual(t, "property name", got[0].PropertyName, flatPropertyName)
+	})
+
+	t.Run("the flat book of the property owner sees the foreign-book card", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.owner, contactsapp.ListQuery{Scope: contactsapp.ListScopeAll})
+		if len(ids) != 1 || ids[0] != memberCard.ID {
+			t.Fatalf("listed ids = %v, want [%s]", ids, memberCard.ID)
+		}
+	})
+
+	t.Run("the card's owner still sees it in the flat book", func(t *testing.T) {
+		t.Parallel()
+		ids, _ := listFlat(t, h.svc, h.member, contactsapp.ListQuery{Scope: contactsapp.ListScopeAll})
+		if len(ids) != 1 || ids[0] != memberCard.ID {
+			t.Fatalf("listed ids = %v, want [%s]", ids, memberCard.ID)
+		}
+	})
 }
