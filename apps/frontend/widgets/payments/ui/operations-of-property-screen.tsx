@@ -1,6 +1,6 @@
 'use client';
 
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -37,6 +37,7 @@ import {
   OperationsNeverHad,
 } from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
+import { OperationsPeriodPickerDialog } from './operations-period-picker';
 import { hasNoPaidOperationsEver } from '../lib/operations-empty-states';
 import { summaryBarSegments, type SummaryBarSegment } from '../lib/summary-bar';
 
@@ -73,6 +74,10 @@ export function OperationsOfPropertyScreen({
 
   const today = clientTodayIso();
   const period = filters.period ?? defaultOperationsPeriod(today);
+  // Пикер периода — канонический оверлей поверх списка (решение владельца
+  // 2026-09-04, раньше — отдельный маршрут /operations/period): состояние
+  // живёт в адресе, черновик — в пикере.
+  const [periodOpen, setPeriodOpen] = useState(false);
   // Список сужается выбранными категориями; сводка (#473) категорийный
   // фильтр не принимает — карточки всегда показывают весь период.
   const periodScope: PaymentOperationScope = {
@@ -121,7 +126,7 @@ export function OperationsOfPropertyScreen({
   const openOperation = (operation: { readonly id: string }): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
 
-  const openFilters = (which: 'period' | 'categories'): void => {
+  const openCategories = (): void => {
     const params = new URLSearchParams();
     if (filters.period !== null) {
       params.set('from', filters.period.from);
@@ -131,11 +136,7 @@ export function OperationsOfPropertyScreen({
       params.set('category', filters.categories.join(','));
     }
     params.set('return', pathname);
-    const base =
-      which === 'period'
-        ? ROUTES.propertyOperationsPeriod(propertyId)
-        : ROUTES.propertyOperationsCategories(propertyId);
-    router.push(`${base}?${params.toString()}`);
+    router.push(`${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`);
   };
 
   return (
@@ -181,8 +182,8 @@ export function OperationsOfPropertyScreen({
               }
               categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
               categoriesActive={filters.categories.length > 0}
-              onOpenPeriod={() => openFilters('period')}
-              onOpenCategories={() => openFilters('categories')}
+              onOpenPeriod={() => setPeriodOpen(true)}
+              onOpenCategories={openCategories}
             />
 
             {pending && (
@@ -263,6 +264,10 @@ export function OperationsOfPropertyScreen({
           </div>
         )}
       </PageContent>
+
+      {/* Пикер периода — рендер только в открытом состоянии: лента и
+          черновик живут, пока смонтирован. */}
+      {periodOpen && <OperationsPeriodPickerDialog onClose={() => setPeriodOpen(false)} />}
     </>
   );
 }

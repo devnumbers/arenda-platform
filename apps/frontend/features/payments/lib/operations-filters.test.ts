@@ -3,18 +3,14 @@ import { describe, expect, it } from 'vitest';
 import type { OperationsCategorySummary } from '@/entities/payment';
 
 import {
-  booleanRunSegments,
   defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
-  operationsPeriodBoundLabel,
   operationsPeriodDefaultChipLabel,
   operationsPeriodRangeChipLabel,
-  pickOperationsPeriodDay,
   readOperationsFilters,
-  settledOperationsPeriod,
   shiftOperationsPeriod,
 } from './operations-filters';
 
@@ -212,44 +208,6 @@ describe('лейблы чипа периода', () => {
   });
 });
 
-describe('operationsPeriodBoundLabel', () => {
-  it('текущий год — день и склонённый месяц («с 1 ноября»)', () => {
-    expect(operationsPeriodBoundLabel('2026-11-01', TODAY)).toBe('1 ноября');
-    expect(operationsPeriodBoundLabel('2026-09-19', TODAY)).toBe('19 сентября');
-  });
-
-  it('другой год — полная дата через точку («по 01.01.2026»)', () => {
-    expect(operationsPeriodBoundLabel('2025-01-01', TODAY)).toBe('01.01.2025');
-  });
-});
-
-describe('черновик выбора периода', () => {
-  it('открывается по применённому периоду — конец не пуст', () => {
-    const draft = { start: '2026-09-01', end: '2026-09-30' as const };
-    expect(settledOperationsPeriod(draft)).toEqual({ from: '2026-09-01', to: '2026-09-30' });
-  });
-
-  it('первый тап задаёт границу без конца; применение сводится к одному дню', () => {
-    const draft = pickOperationsPeriodDay({ start: '2026-09-01', end: '2026-09-30' }, '2026-08-15');
-    expect(draft).toEqual({ start: '2026-08-15', end: null });
-    expect(settledOperationsPeriod(draft)).toEqual({ from: '2026-08-15', to: '2026-08-15' });
-  });
-
-  it('второй тап правее — завершает диапазон, следующий тап перезапускает', () => {
-    let draft = pickOperationsPeriodDay({ start: '2026-09-01', end: null }, '2026-09-19');
-    expect(draft).toEqual({ start: '2026-09-01', end: '2026-09-19' });
-    draft = pickOperationsPeriodDay(draft, '2026-09-20');
-    expect(draft).toEqual({ start: '2026-09-20', end: null });
-  });
-
-  it('второй тап левее — перезапуск с новой границей', () => {
-    expect(pickOperationsPeriodDay({ start: '2026-09-10', end: null }, '2026-09-05')).toEqual({
-      start: '2026-09-05',
-      end: null,
-    });
-  });
-});
-
 describe('operationsCategoryRows', () => {
   it('собирает направления одного слага в строку с суммой', () => {
     const summary: ReadonlyArray<OperationsCategorySummary> = [
@@ -291,20 +249,3 @@ describe('operationsCategoryChipLabel', () => {
   });
 });
 
-describe('booleanRunSegments', () => {
-  it('находит непрерывные отрезки true', () => {
-    expect(booleanRunSegments([false, true, true, true, false, true, true])).toEqual([
-      [1, 3],
-      [5, 6],
-    ]);
-  });
-
-  it('полная неделя и пустая неделя', () => {
-    expect(booleanRunSegments([true, true, true, true, true, true, true])).toEqual([[0, 6]]);
-    expect(booleanRunSegments([false, false, false, false, false, false, false])).toEqual([]);
-  });
-
-  it('одиночный день', () => {
-    expect(booleanRunSegments([false, false, true, false, false, false, false])).toEqual([[2, 2]]);
-  });
-});

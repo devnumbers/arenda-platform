@@ -48,6 +48,9 @@ export type WheelPickerProps = {
   /** Прокрутка дошла до края списка (за 2 ряда) — родитель может удлинить
    * items (бесконечная лента годов пикера месяц/год). */
   readonly onNearEnd?: () => void;
+  /** То же у верхнего края: родитель может удлинить items назад
+   * (лента годов пикера периода операций уходит в прошлое без предела). */
+  readonly onNearStart?: () => void;
   /** Полоса выбора за центральным рядом; false — когда полосу рисует общий
    * контейнер (WheelPickerSheet: одна полоса на все колонки, скругление
    * только по внешним краям — решение владельца 2026-09-04). */
@@ -61,6 +64,7 @@ export function WheelPicker({
   onValueChange,
   label,
   onNearEnd,
+  onNearStart,
   strip = true,
   className,
 }: WheelPickerProps): JSX.Element {
@@ -69,9 +73,11 @@ export function WheelPicker({
   // Первая установка колеса — мгновенная (как у iOS: выбранная строка уже
   // в центре при открытии), дальнейшие синхронизации — плавные.
   const instantRef = useRef(true);
-  // Длина списка, о крае которой колесо уже сообщило (onNearEnd): защита
-  // от повторных вызовов на каждом скролл-событии, пока родитель удлиняет.
+  // Длина списка, о крае которого колесо уже сообщило (onNearEnd /
+  // onNearStart): защита от повторных вызовов на каждом скролл-событии,
+  // пока родитель удлиняет.
   const nearEndAtLengthRef = useRef<number | null>(null);
+  const nearStartAtLengthRef = useRef<number | null>(null);
   const optionId = useId();
   const valueIndex = Math.max(items.findIndex((item) => item.value === value), 0);
   const [scrollIndex, setScrollIndex] = useState(valueIndex);
@@ -123,6 +129,14 @@ export function WheelPicker({
     ) {
       nearEndAtLengthRef.current = items.length;
       onNearEnd();
+    }
+    if (
+      onNearStart !== undefined &&
+      index <= 1 &&
+      nearStartAtLengthRef.current !== items.length
+    ) {
+      nearStartAtLengthRef.current = items.length;
+      onNearStart();
     }
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
     settleTimerRef.current = window.setTimeout(() => commitIndex(index), SETTLE_TIMEOUT_MS);

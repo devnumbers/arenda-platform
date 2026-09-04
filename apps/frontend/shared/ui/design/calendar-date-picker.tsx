@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+} from 'react';
 import { ArrowLeft, ChevronDown } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
@@ -15,14 +21,23 @@ import {
 // Математика ленты и месяца — прямой импорт модулей shared (общие слои —
 // точки входа сами по себе), как в мастере платежей.
 import {
+  booleanRunSegments,
   calendarFeedStart,
   calendarMonthIndex,
   calendarMonthOf,
   calendarMonthOfIndex,
-  isoDateOf,
-  listCalendarMonths,
+  type CalendarMonthRef,
   type IsoDate,
+  type IsoRange,
+  type IsoRangeDraft,
+  isoDateOf,
+  isoDayOfMonth,
+  listCalendarMonths,
+  pickIsoRange,
+  rangeFeedWindow,
+  settleIsoRange,
 } from '@/shared/lib/calendar';
+import { formatRangeBound } from '@/shared/lib/date-format';
 import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '@/shared/ui/design/month-grid';
 
 /** Полноэкранный пикер даты (общий компонент дизайн-слоя, вырос из пикера
@@ -131,9 +146,13 @@ export function CalendarDatePicker({
       return;
     }
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        onClose();
+      // Esc, поглощённый шитом месяца, доходит сюда после синхронного
+      // закрытия шита: слушатель перерегистрируется в том же диспатче, а
+      // Radix помечает событие preventDefault — такой Esc пикер не закрывает.
+      if (event.defaultPrevented || event.key !== 'Escape') {
+        return;
       }
+      onClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -182,14 +201,10 @@ export function CalendarDatePicker({
       <div className="shrink-0 desktop:mt-[72px]">
         <div className="mx-auto w-full max-w-[560px]">
           <div className="px-6 pt-6">
-            <button
-              type="button"
+            <MonthJumpChip
+              label={`${MONTH_LABELS[draftMonth.month0]} ${draftMonth.year}`}
               onClick={() => setMonthPickerOpen(true)}
-              className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-pill bg-surface-muted px-5 text-base font-medium text-content outline-none transition-colors hover:bg-surface-muted-hover active:bg-surface-muted-hover focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              {MONTH_LABELS[draftMonth.month0]} {draftMonth.year}
-              <ChevronDown className="h-6 w-6 text-content-secondary" aria-hidden />
-            </button>
+            />
           </div>
 
           {/* Шапка дней недели — одна на ленту (макет 1539-78660); сетки
@@ -299,6 +314,385 @@ export function CalendarDatePicker({
           jumpTo(year, month0);
         }}
       />
+    </div>
+  );
+}
+
+
+/** Чип «Месяц Год ⌄» прыжка по ленте — общий для обоих пикеров. */
+function MonthJumpChip({
+  label,
+  onClick,
+}: {
+  readonly label: string;
+  readonly onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-pill bg-surface-muted px-5 text-base font-medium text-content outline-none transition-colors hover:bg-surface-muted-hover active:bg-surface-muted-hover focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {label}
+      <ChevronDown className="h-6 w-6 text-content-secondary" aria-hidden />
+    </button>
+  );
+}
+
+/** Порог дорисовки назад: до верха контейнера осталось меньше этого. */
+const RANGE_PREPEND_THRESHOLD_PX = 32;
+/** Сколько месяцев дорисовывается назад за одно дотягивание к верху. */
+const RANGE_PREPEND_CHUNK = 6;
+
+export type CalendarRangePickerProps = {
+  readonly title?: string;
+  readonly confirmLabel?: string;
+  /** «Сегодня» собственника (ADR 0048) — граница доступных дней. */
+  readonly today: IsoDate;
+  /** Применённый диапазон — преселект и стартовое окно ленты. */
+  readonly value: IsoRange;
+  readonly onClose: () => void;
+  /** «Выбрать»: коммитит завершённый диапазон (неполный — один день). */
+  readonly onConfirm: (range: IsoRange) => void;
+};
+
+/** Полноэкранный пикер диапазона дат — канон периода операций (решение
+ * владельца 2026-09-04: фильтр «Период» переведён с самописной страницы
+ * #477 на общий компонент; визуал шапки и ячеек — 1:1 с ним, Figma
+ * 1495-64015, 1502-65940/66060/66758, 1495-64165). Отличия от одиночного
+ * пикера продиктованы операционной историей: лента бесконечна назад —
+ * месяцы дорисовываются порциями при дотягивании к верху (позиция
+ * прокрутки сохраняется якорем), вперёд — только текущий месяц с двумя
+ * приглушёнными будущими; дни позже «сегодня» недоступны (операции —
+ * только paid, резолюция #474). Тап до границы задаёт её, правее —
+ * завершает диапазон, по завершённому — перезапускает; серые «пилюли»
+ * подчёркивают недели диапазона, границы — синие ячейки. Поля «с …/по …»
+ * над сеткой следуют за тапами вживую (Figma 1502-66060). Кнопка выхода —
+ * «Назад» (иконка канона) вместо креста «Закрыть» прежней страницы. Чип
+ * «Месяц Год ⌄» прыгает по ленте: колесо годов уходит в прошлое без предела
+ * (onNearStart), будущее закрыто границей max. Футер на планшете тянется
+ * вместе с шитом (fullWidthContent). Рендерится только в открытом
+ * состоянии — лента и черновик живут, пока пикер смонтирован. */
+export function CalendarRangePicker({
+  title = 'Выберите период',
+  confirmLabel = 'Выбрать',
+  today,
+  value,
+  onClose,
+  onConfirm,
+}: CalendarRangePickerProps): JSX.Element {
+  // Черновик открывается по применённому диапазону — обе границы заданы.
+  const [draft, setDraft] = useState<IsoRangeDraft>(() => ({
+    start: value.from,
+    end: value.to,
+  }));
+  const shown = settleIsoRange(draft);
+  const draftMonth = calendarMonthOf(shown.from);
+
+  // Окно ленты: стартовое — по rangeFeedWindow, назад дорисовывается
+  // порциями без предела, вперёд — жёсткий край у приглушённого будущего.
+  const feedWindow = rangeFeedWindow(value, today);
+  const [firstMonth, setFirstMonth] = useState<CalendarMonthRef>(feedWindow.first);
+  const months = listCalendarMonths(
+    firstMonth,
+    calendarMonthIndex(feedWindow.last) - calendarMonthIndex(firstMonth) + 1,
+  );
+  const todayIdx = calendarMonthIndex(calendarMonthOf(today));
+
+  const monthRefs = useRef(new Map<string, HTMLElement>());
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Высота стека до дорисовки: прокрутка возвращается на место, чтобы
+  // prepend не дёргал экран (тот же приём, что на странице периода).
+  const anchorRef = useRef<number | null>(null);
+  // Месяц прыжка чипа за дорисованный назад край — скроллится после
+  // монтирования новых месяцев.
+  const pendingJumpRef = useRef<string | undefined>(undefined);
+  // Первый рендер — сразу к месяцу конца применённого диапазона.
+  const scrolledRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (container !== null && anchorRef.current !== null) {
+      container.scrollTop += container.scrollHeight - anchorRef.current;
+      anchorRef.current = null;
+    }
+    const jump = pendingJumpRef.current;
+    if (jump !== undefined) {
+      pendingJumpRef.current = undefined;
+      monthRefs.current.get(jump)?.scrollIntoView({ block: 'start' });
+    }
+  });
+
+  const handleScroll = (): void => {
+    const container = scrollRef.current;
+    if (container === null || anchorRef.current !== null) {
+      return;
+    }
+    if (container.scrollTop > RANGE_PREPEND_THRESHOLD_PX) {
+      return;
+    }
+    anchorRef.current = container.scrollHeight;
+    setFirstMonth((month) =>
+      calendarMonthOfIndex(calendarMonthIndex(month) - RANGE_PREPEND_CHUNK),
+    );
+  };
+
+  /** Прыжок по чипу: месяц ленты — скроллом; глубже дорисованного края —
+   * дорисовка порциями назад и скролл после монтирования. */
+  const jumpTo = (year: number, month0: number): void => {
+    const targetIdx = calendarMonthIndex({ year, month0 });
+    if (targetIdx >= calendarMonthIndex(firstMonth)) {
+      monthRefs.current.get(monthKey(year, month0))?.scrollIntoView({ block: 'start' });
+      return;
+    }
+    let nextFirst = calendarMonthIndex(firstMonth);
+    while (nextFirst > targetIdx) {
+      nextFirst -= RANGE_PREPEND_CHUNK;
+    }
+    pendingJumpRef.current = monthKey(year, month0);
+    setFirstMonth(calendarMonthOfIndex(nextFirst));
+  };
+
+  // Escape закрывает пикер; при открытом шите месяца его Esc обрабатывает
+  // Radix — глобальный слушатель в этот момент глушится.
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
+  useEffect(() => {
+    if (monthPickerOpen) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      // Esc, поглощённый шитом месяца, доходит сюда после синхронного
+      // закрытия шита: слушатель перерегистрируется в том же диспатче, а
+      // Radix помечает событие preventDefault — такой Esc пикер не закрывает.
+      if (event.defaultPrevented || event.key !== 'Escape') {
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [monthPickerOpen, onClose]);
+
+  const attachTarget = (node: HTMLElement | null): void => {
+    if (node !== null && !scrolledRef.current) {
+      scrolledRef.current = true;
+      node.scrollIntoView({ block: 'start' });
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex flex-col bg-surface font-sans"
+    >
+      <TopNav
+        leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />}
+      >
+        <TopNavTitle title={title} />
+      </TopNav>
+
+      {/* Закреплённая шапка: поля границ «с …/по …» (следуют за тапами
+          вживую), чип месяца для прыжка и строка дней недели над
+          прокруткой; на десктопе TopNav зафиксирован над экраном. */}
+      <div className="shrink-0 desktop:mt-[72px]">
+        <div className="mx-auto w-full max-w-[560px]">
+          <div aria-live="polite" className="grid grid-cols-2 gap-2 px-6 pt-6">
+            <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
+              с {formatRangeBound(shown.from, today)}
+            </span>
+            <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">
+              по {formatRangeBound(shown.to, today)}
+            </span>
+          </div>
+
+          <div className="px-6 pt-3">
+            <MonthJumpChip
+              label={`${MONTH_LABELS[draftMonth.month0]} ${draftMonth.year}`}
+              onClick={() => setMonthPickerOpen(true)}
+            />
+          </div>
+
+          <div className="mt-3 grid grid-cols-7 gap-0.5 px-5 text-center text-base font-medium leading-[18px] text-content-tertiary">
+            {WEEKDAY_LABELS.map((weekday) => (
+              <div key={weekday} className="flex h-12 items-center justify-center">
+                {weekday}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[560px] pb-[136px]">
+          {months.map(({ year, month0 }, index) => {
+            const future = calendarMonthIndex({ year, month0 }) > todayIdx;
+            return (
+              <section
+                key={monthKey(year, month0)}
+                ref={(node) => {
+                  const key = monthKey(year, month0);
+                  if (node !== null) {
+                    monthRefs.current.set(key, node);
+                  } else {
+                    monthRefs.current.delete(key);
+                  }
+                  if (year === calendarMonthOf(shown.to).year && month0 === calendarMonthOf(shown.to).month0) {
+                    attachTarget(node);
+                  }
+                }}
+                // Без content-visibility: якорь дорисовки назад считает
+                // высоты по реальному layout (оценка офскрина прыгала).
+                className={cn(index === 0 ? undefined : 'mt-8', future && 'opacity-50')}
+              >
+                <h3 className="px-6 text-xl font-semibold leading-6 text-content">
+                  {MONTH_LABELS[month0]}, {year}
+                </h3>
+                <RangeMonthGrid
+                  year={year}
+                  month0={month0}
+                  draft={draft}
+                  today={today}
+                  onPick={(day) => setDraft(pickIsoRange(draft, day))}
+                />
+              </section>
+            );
+          })}
+        </div>
+      </div>
+
+      <StickyBottomBar fullWidthContent>
+        <Button className="w-full" onClick={() => onConfirm(settleIsoRange(draft))}>
+          {confirmLabel}
+        </Button>
+      </StickyBottomBar>
+
+      <MonthYearPicker
+        open={monthPickerOpen}
+        onOpenChange={setMonthPickerOpen}
+        month={draftMonth.month0}
+        year={draftMonth.year}
+        max={calendarMonthOf(today)}
+        onConfirm={(month0, year) => {
+          setMonthPickerOpen(false);
+          jumpTo(year, month0);
+        }}
+      />
+    </div>
+  );
+}
+
+/** Недельная сетка одного месяца диапазона: серые «пилюли»-подложки
+ * недель диапазона и синие граничные ячейки (визуал — 1:1 со страницей
+ * периода #477). Будущие дни «сегодня» недоступны. */
+function RangeMonthGrid({
+  year,
+  month0,
+  draft,
+  today,
+  onPick,
+}: {
+  readonly year: number;
+  readonly month0: number;
+  readonly draft: IsoRangeDraft;
+  readonly today: IsoDate;
+  readonly onPick: (day: IsoDate) => void;
+}): JSX.Element {
+  const days = daysInMonth(year, month0);
+  const leadingBlanks = firstWeekdayOfMonth(year, month0);
+  // Недели с пустыми колонками до 1-го числа и после последнего — пилюли
+  // стелятся отрезками внутри одного ряда.
+  const weeks: Array<Array<IsoDate | null>> = [];
+  let week: Array<IsoDate | null> = Array.from({ length: leadingBlanks }, () => null);
+  for (let day = 1; day <= days; day += 1) {
+    week.push(isoDateOf(year, month0, day));
+    if (week.length === 7) {
+      weeks.push(week);
+      week = [];
+    }
+  }
+  if (week.length > 0) {
+    weeks.push([...week, ...Array.from({ length: 7 - week.length }, () => null)]);
+  }
+
+  const complete = draft.end !== null ? { from: draft.start, to: draft.end } : null;
+
+  return (
+    <div className="mt-4 flex flex-col gap-0.5 px-4">
+      {weeks.map((weekDays, weekIndex) => (
+        <RangeWeekRow
+          key={weekIndex}
+          days={weekDays}
+          draft={draft}
+          complete={complete}
+          today={today}
+          onPick={onPick}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Недельный ряд: серые отрезки диапазона + ячейки дней одного грида. */
+function RangeWeekRow({
+  days,
+  draft,
+  complete,
+  today,
+  onPick,
+}: {
+  readonly days: ReadonlyArray<IsoDate | null>;
+  readonly draft: IsoRangeDraft;
+  readonly complete: IsoRange | null;
+  readonly today: IsoDate;
+  readonly onPick: (day: IsoDate) => void;
+}): JSX.Element {
+  const inRange = days.map(
+    (day) => day !== null && complete !== null && day >= complete.from && day <= complete.to,
+  );
+  const segments = booleanRunSegments(inRange);
+
+  return (
+    <div className="grid grid-cols-7 gap-0.5">
+      {segments.map(([from, to]) => (
+        <div
+          key={`segment-${from}-${to}`}
+          aria-hidden
+          className="row-start-1 h-full rounded-xl bg-surface-muted"
+          style={{ gridColumn: `${from + 1} / ${to + 2}`, gridRow: 1 }}
+        />
+      ))}
+      {days.map((day, column) =>
+        day === null ? (
+          <div
+            key={`blank-${column}`}
+            className="row-start-1 aspect-square"
+            style={{ gridColumn: column + 1, gridRow: 1 }}
+          />
+        ) : (
+          <button
+            key={day}
+            type="button"
+            disabled={day > today}
+            onClick={() => onPick(day)}
+            aria-pressed={day === draft.start || day === draft.end}
+            className={cn(
+              'aspect-square w-full cursor-pointer rounded-xl text-center font-sans text-base font-medium leading-[18px] text-content outline-none transition-colors',
+              'focus-visible:ring-2 focus-visible:ring-primary',
+              'disabled:pointer-events-none disabled:opacity-50',
+              day === draft.start || day === draft.end
+                ? 'bg-primary text-white hover:bg-primary-hover active:bg-primary-active'
+                : inRange[column] === true
+                  ? 'bg-transparent hover:bg-black/5 active:bg-black/10'
+                  : 'bg-transparent hover:bg-surface-muted active:bg-surface-muted-hover',
+            )}
+            style={{ gridColumn: column + 1, gridRow: 1 }}
+          >
+            {isoDayOfMonth(day)}
+          </button>
+        ),
+      )}
     </div>
   );
 }

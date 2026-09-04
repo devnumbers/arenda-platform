@@ -18,6 +18,10 @@ import {
   isoYear,
   lastDayOfMonth,
   listCalendarMonths,
+  booleanRunSegments,
+  pickIsoRange,
+  rangeFeedWindow,
+  settleIsoRange,
 } from './calendar';
 
 describe('calendar: ISO-парсинг', () => {
@@ -125,5 +129,65 @@ describe('calendar: месяцы ленты', () => {
     expect(isoDateOf(2026, 7, 17)).toBe('2026-08-17');
     expect(isoDateOf(2026, 0, 1)).toBe('2026-01-01');
     expect(isoDateOf(2026, 11, 31)).toBe('2026-12-31');
+  });
+});
+
+describe('calendar: выбор диапазона (пикер периода операций)', () => {
+  it('первый тап задаёт границу без конца; применение сводится к одному дню', () => {
+    const draft = pickIsoRange({ start: '2026-09-01', end: '2026-09-30' }, '2026-08-15');
+    expect(draft).toEqual({ start: '2026-08-15', end: null });
+    expect(settleIsoRange(draft)).toEqual({ from: '2026-08-15', to: '2026-08-15' });
+  });
+
+  it('второй тап правее — завершает диапазон, следующий тап перезапускает', () => {
+    let draft = pickIsoRange({ start: '2026-09-01', end: null }, '2026-09-19');
+    expect(draft).toEqual({ start: '2026-09-01', end: '2026-09-19' });
+    draft = pickIsoRange(draft, '2026-09-20');
+    expect(draft).toEqual({ start: '2026-09-20', end: null });
+  });
+
+  it('второй тап левее — перезапуск с новой границей', () => {
+    expect(pickIsoRange({ start: '2026-09-10', end: null }, '2026-09-05')).toEqual({
+      start: '2026-09-05',
+      end: null,
+    });
+  });
+
+  it('завершённый черновик применяется как есть', () => {
+    expect(settleIsoRange({ start: '2026-09-01', end: '2026-09-30' })).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-30',
+    });
+  });
+});
+
+describe('calendar: окно ленты пикера диапазона', () => {
+  it('свежий период — от 5 месяцев назад до 2 месяцев вперёд от текущего', () => {
+    expect(rangeFeedWindow({ from: '2026-09-01', to: '2026-09-30' }, '2026-09-19')).toEqual({
+      first: { year: 2026, month0: 3 },
+      last: { year: 2026, month0: 10 },
+    });
+  });
+
+  it('глубокий период — старт от его начала минус месяц (глубже дорисуется скроллом)', () => {
+    expect(rangeFeedWindow({ from: '2024-03-10', to: '2024-03-25' }, '2026-09-19')).toEqual({
+      first: { year: 2024, month0: 1 },
+      last: { year: 2026, month0: 10 },
+    });
+  });
+});
+
+describe('calendar: отрезки подложки недели диапазона', () => {
+  it('находит непрерывные отрезки true', () => {
+    expect(booleanRunSegments([false, true, true, true, false, true, true])).toEqual([
+      [1, 3],
+      [5, 6],
+    ]);
+  });
+
+  it('полная неделя, пустая неделя, одиночный день', () => {
+    expect(booleanRunSegments([true, true, true, true, true, true, true])).toEqual([[0, 6]]);
+    expect(booleanRunSegments([false, false, false, false, false, false, false])).toEqual([]);
+    expect(booleanRunSegments([false, false, true, false, false, false, false])).toEqual([[2, 2]]);
   });
 });

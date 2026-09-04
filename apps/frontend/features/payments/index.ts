@@ -51,33 +51,25 @@ export {
   type PaymentHistoryGroup,
 } from './lib/operations-history';
 export {
-  operationsMonthIndex,
-  operationsMonthIso,
   operationsMonthOf,
   operationsMonthRange,
   shiftOperationsMonth,
   type OperationsMonth,
 } from './lib/operations-month';
 export {
-  booleanRunSegments,
   defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
-  operationsPeriodBoundLabel,
   operationsPeriodDefaultChipLabel,
-  operationsPeriodDraftOf,
   operationsPeriodRangeChipLabel,
-  pickOperationsPeriodDay,
   readOperationsFilters,
   resolveFilterReturnPath,
-  settledOperationsPeriod,
   shiftOperationsPeriod,
   type OperationsCategoryRow,
   type OperationsFilters,
   type OperationsPeriod,
-  type OperationsPeriodDraft,
 } from './lib/operations-filters';
 export { useOperationsFilters } from './lib/use-operations-filters';
 export {

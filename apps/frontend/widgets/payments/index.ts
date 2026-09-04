@@ -1,6 +1,5 @@
 export { PaymentsOfPropertyScreen } from './ui/payments-of-property-screen';
 export { OperationsOfPropertyScreen } from './ui/operations-of-property-screen';
-export { OperationsPeriodScreen } from './ui/operations-period-screen';
 export { OperationsCategoriesScreen } from './ui/operations-categories-screen';
 export { OperationsOfTypeScreen } from './ui/operations-of-type-screen';
 export { OperationsSearchScreen } from './ui/operations-search-screen';

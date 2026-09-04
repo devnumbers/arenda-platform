@@ -17,12 +17,14 @@ import {
     Star,
     StarOff,
 } from '@/shared/assets/icons';
+import type { IsoRange } from '@/shared/lib/calendar';
 import {
     AmountField,
     Button,
     CalendarButton,
     CalendarDatePicker,
     CalendarMonth,
+    CalendarRangePicker,
     Checkbox,
     ChipButton,
     ConfirmDialog,
@@ -159,6 +161,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [datePickerValue, setDatePickerValue] = useState<string | null>(null);
     const [datePickerRequiredOpen, setDatePickerRequiredOpen] = useState(false);
     const [datePickerRequiredValue, setDatePickerRequiredValue] = useState<string | null>(null);
+    const [rangePickerOpen, setRangePickerOpen] = useState(false);
+    const [rangePickerValue, setRangePickerValue] = useState<IsoRange | null>(null);
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
     const [lastDayOfMonth, setLastDayOfMonth] = useState(false);
     const [amount, setAmount] = useState('');
@@ -572,6 +576,39 @@ export function DesignLayerShowcase(): JSX.Element {
                             onConfirm={(date) => {
                                 setDatePickerRequiredValue(date);
                                 setDatePickerRequiredOpen(false);
+                            }}
+                        />
+                    )}
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>CalendarRangePicker · пикер периода</h3>
+                    <p className={styles.groupTitle}>
+                        Диапазон дат: лента назад без предела (дорисовка при прокрутке вверх), будущее
+                        закрыто; поля «с …/по …» следуют за тапами, чип прыгает по ленте (колесо годов
+                        назад). Фильтр периода операций, решение владельца 2026-09-04.
+                    </p>
+                    <div className={styles.column}>
+                        <Button onClick={() => setRangePickerOpen(true)}>Открыть пикер периода</Button>
+                        {rangePickerValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: с {rangePickerValue.from} по {rangePickerValue.to}
+                            </p>
+                        )}
+                    </div>
+                    {rangePickerOpen && (
+                        <CalendarRangePicker
+                            today={dateToIso(new Date())}
+                            value={
+                                rangePickerValue ?? {
+                                    from: dateToIso(new Date()),
+                                    to: dateToIso(new Date()),
+                                }
+                            }
+                            onClose={() => setRangePickerOpen(false)}
+                            onConfirm={(range) => {
+                                setRangePickerValue(range);
+                                setRangePickerOpen(false);
                             }}
                         />
                     )}
