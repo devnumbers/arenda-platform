@@ -70,5 +70,4 @@ export {
   CollapsibleSection,
   type CollapsibleSectionProps,
 } from './collapsible-section';
-export { ConfirmModal, type ConfirmModalProps } from './confirm-modal';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog';

@@ -36,7 +36,7 @@ import {
   Button,
   ChipButton,
   CollapsibleSection,
-  ConfirmModal,
+  ConfirmDialog,
   IconButton,
   Menu,
   MenuContent,
@@ -233,13 +233,14 @@ export function TasksOfPropertyScreen({
         </StickyBottomBar>
       )}
 
-      <ConfirmModal
+      <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Удалить все выполненные задачи?"
         description="Все выполненные задачи будут навсегда удалены"
         cancelLabel="Отменить"
         confirmLabel="Удалить"
+        confirmVariant="danger"
         pending={deleteCompleted.isPending}
         onConfirm={() =>
           deleteCompleted.mutate(undefined, {

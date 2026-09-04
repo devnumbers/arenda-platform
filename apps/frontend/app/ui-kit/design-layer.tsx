@@ -901,7 +901,7 @@ export function DesignLayerShowcase(): JSX.Element {
                         title="Сменить тариф?"
                         description="Новые условия применятся со следующего периода"
                         confirmLabel="Сменить"
-                        onConfirm={() => undefined}
+                        onConfirm={() => setConfirmOpen(false)}
                     />
                     <ConfirmDialog
                         open={deleteOpen}
@@ -910,7 +910,7 @@ export function DesignLayerShowcase(): JSX.Element {
                         description="Контакт исчезнет из книги контактов объекта"
                         confirmLabel="Удалить"
                         confirmVariant="danger"
-                        onConfirm={() => undefined}
+                        onConfirm={() => setDeleteOpen(false)}
                     />
                 </div>
 
