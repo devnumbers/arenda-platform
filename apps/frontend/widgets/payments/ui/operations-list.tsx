@@ -2,6 +2,7 @@
 
 import type { JSX, ReactNode } from 'react';
 import Image from 'next/image';
+import { EmptyState } from '@/shared/ui/design';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import { PaymentRowButton, type PaymentOperation } from '@/entities/payment';
 import type { PaymentHistoryGroup } from '@/features/payments';
@@ -51,22 +52,14 @@ export function OperationsDateList({
 }
 
 /** Пустой период (Figma 1510-77308): иллюстрация 128, одна строка 16/18
- * серым — центрирована и с боковыми полями на любой ширине, блок с
- * отступами 64. */
+ * серым — на каноне EmptyState (py-16, без заголовка). */
 export function OperationsEmptyPeriod(): JSX.Element {
   return (
-    <div className="flex flex-col items-center gap-4 py-16">
-      <Image
-        src="/images/payments/operations-empty.png"
-        alt=""
-        width={128}
-        height={128}
-        className="h-32 w-32"
-      />
-      <p className="px-6 text-center text-base leading-[18px] text-content-secondary">
-        Операции не найдены. Попробуйте выбрать другой период
-      </p>
-    </div>
+    <EmptyState
+      imageSrc="/images/payments/operations-empty.png"
+      className="py-16"
+      description="Операции не найдены. Попробуйте выбрать другой период"
+    />
   );
 }
 

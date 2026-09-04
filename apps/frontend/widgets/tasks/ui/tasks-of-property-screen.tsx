@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import type { ComponentProps, JSX } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Add,
@@ -37,6 +36,7 @@ import {
   ChipButton,
   CollapsibleSection,
   ConfirmDialog,
+  EmptyState,
   IconButton,
   Menu,
   MenuContent,
@@ -207,7 +207,12 @@ export function TasksOfPropertyScreen({
               onRetry={() => void completedQuery.refetch()}
             />
           ) : showEmpty ? (
-            <TasksEmptyState />
+            <EmptyState
+              imageSrc="/images/tasks/empty-tasks.png"
+              imageRounded
+              title="Задач нет"
+              description="Добавьте задачу — например, позвонить арендатору, вызвать мастера или проверить состояние объекта"
+            />
           ) : (
             sections.map((section) => (
               // Пока today не пришёл, sections пуст — заглушка '' не рисуется.
@@ -399,28 +404,6 @@ export function TasksStateCard({
         </Button>
       </div>
     </section>
-  );
-}
-
-/** Пустое состояние (Figma 1535-75363): 3D-иллюстрация, «Задач нет» и
- * подсказка с примерами. */
-function TasksEmptyState(): JSX.Element {
-  return (
-    <div className="flex flex-col items-center gap-4 pt-16">
-      <Image
-        src="/images/tasks/empty-tasks.png"
-        alt=""
-        width={128}
-        height={128}
-        className="h-32 w-32 rounded-pill object-cover"
-      />
-      <div className="flex flex-col items-center gap-3 text-center">
-        <h2 className="text-xl font-semibold leading-6 text-content">Задач нет</h2>
-        <p className="max-w-[360px] text-base leading-[18px] text-content-secondary">
-          Добавьте задачу — например, позвонить арендатору, вызвать мастера или проверить состояние объекта
-        </p>
-      </div>
-    </div>
   );
 }
 

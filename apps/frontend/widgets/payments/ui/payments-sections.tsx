@@ -6,6 +6,7 @@ import {
   formatOverdueDays,
   PaymentRowButton,
 } from '@/entities/payment';
+import { EmptyState } from '@/shared/ui/design';
 import type { IsoDate, Payment, PaymentOperation } from '@/entities/payment';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import { daysOverdue } from '../lib/overdue-days';
@@ -130,7 +131,7 @@ export function PaymentsEmptyCard({
 
 /** Пустое состояние целой страницы с иллюстрацией (1043:60174/60502):
  * картинка 128, заголовок и пояснение по центру — «Нет платежей», «Нет
- * просроченных операций» и т.п. */
+ * просроченных операций» и т.п. — на каноне EmptyState дизайн-слоя. */
 export function PaymentsEmptyState({
   image,
   title,
@@ -141,20 +142,7 @@ export function PaymentsEmptyState({
   readonly hint: string;
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center gap-6 pt-16">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={image}
-        alt=""
-        width={128}
-        height={128}
-        className="h-32 w-32 rounded-pill object-cover"
-      />
-      <div className="flex flex-col items-center gap-3 text-center">
-        <h2 className="text-xl font-semibold leading-6 text-content">{title}</h2>
-        <p className="max-w-[360px] text-base leading-[18px] text-content">{hint}</p>
-      </div>
-    </div>
+    <EmptyState imageSrc={image} imageRounded title={title} description={hint} />
   );
 }
 

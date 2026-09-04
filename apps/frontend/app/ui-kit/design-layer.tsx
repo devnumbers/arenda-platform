@@ -26,6 +26,7 @@ import {
     Checkbox,
     ChipButton,
     ConfirmDialog,
+    EmptyState,
     IconButton,
     ListRow,
     Modal,
@@ -883,11 +884,27 @@ export function DesignLayerShowcase(): JSX.Element {
                 </div>
 
                 <div className={styles.group}>
-                    <h3 className={styles.groupTitle}>ConfirmDialog (#505)</h3>
+                    <h3 className={styles.groupTitle}>EmptyState · пустое состояние</h3>
                     <p className={styles.groupTitle}>
-                        Замена легаси HeroUI ConfirmModal поверх адаптивного Modal: отмена
-                        secondary + подтверждение primary; разрушительное действие —
-                        confirmVariant=&quot;danger&quot;. Подтверждение закрывает диалог сам.
+                        Иллюстрация 128 + заголовок + серое описание (максимум 360) и действие.
+                        Полноэкранные «пусто» — задачи, контакты, операции (Figma 1535-75363,
+                        1527:74479, 1510-77308).
+                    </p>
+                    <div className={styles.grid}>
+                        <EmptyState
+                            imageSrc="/images/contacts/empty-contacts.png"
+                            title="Контактов нет"
+                            description="Добавьте контакты арендатора, мастеров и других специалистов"
+                        />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>ConfirmDialog · подтверждение</h3>
+                    <p className={styles.groupTitle}>
+                        Карточка на десктопе, нижний шит на мобиле: отмена secondary +
+                        подтверждение primary; разрушительное — confirmVariant=&quot;danger&quot;.
+                        Закрытие — на потребителе.
                     </p>
                     <div className={styles.grid}>
                         <Button onClick={() => setConfirmOpen(true)}>Подтвердить действие</Button>

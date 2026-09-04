@@ -71,3 +71,4 @@ export {
   type CollapsibleSectionProps,
 } from './collapsible-section';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog';
+export { EmptyState, type EmptyStateProps } from './empty-state';

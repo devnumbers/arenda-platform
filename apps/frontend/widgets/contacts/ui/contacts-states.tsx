@@ -1,6 +1,5 @@
 import type { JSX } from 'react';
-import Image from 'next/image';
-import { Button } from '@/shared/ui/design';
+import { Button, EmptyState } from '@/shared/ui/design';
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
 /** Пояснение состояния (16/18, серый #6F787C — макет 1527:74479). */
@@ -43,22 +42,15 @@ export function ContactsErrorCard({ onRetry }: { readonly onRetry: () => void })
   );
 }
 
-/** Пустой список (1527:74479): иллюстрация 128, «Контактов нет», пояснение. */
+/** Пустой список (1527:74479): иллюстрация 128, «Контактов нет», пояснение —
+ * на каноне EmptyState дизайн-слоя. */
 export function ContactsEmptyState(): JSX.Element {
   return (
-    <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
-      <Image
-        src="/images/contacts/empty-contacts.png"
-        alt=""
-        width={128}
-        height={128}
-        className="h-32 w-32 object-cover"
-      />
-      <h2 className={headingClass}>Контактов нет</h2>
-      <p className={`${hintClass} max-w-[360px]`}>
-        Добавьте контакты арендатора, мастеров и других специалистов
-      </p>
-    </div>
+    <EmptyState
+      imageSrc="/images/contacts/empty-contacts.png"
+      title="Контактов нет"
+      description="Добавьте контакты арендатора, мастеров и других специалистов"
+    />
   );
 }
 
