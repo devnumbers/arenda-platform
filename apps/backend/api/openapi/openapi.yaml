@@ -2993,6 +2993,211 @@ paths:
               schema:
                 type: string
 
+  /properties/{propertyId}/rentals:
+    post:
+      operationId: createRental
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RentalCreateRequest'
+      responses:
+        '201':
+          description: Rental created (with its managed rent payment)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RentalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      operationId: listRentals
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '200':
+          description: Rentals list (unfinished first, then completed by completion date)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RentalsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /properties/{propertyId}/rentals/{rentalId}:
+    get:
+      operationId: getRental
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: rentalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Rental
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RentalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateRental
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: rentalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RentalUpdateRequest'
+      responses:
+        '200':
+          description: Rental updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RentalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: deleteRental
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: rentalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Rental deleted (with its managed rent payment)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /properties/{propertyId}/rentals/{rentalId}/complete:
+    post:
+      operationId: completeRental
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: rentalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RentalCompleteRequest'
+      responses:
+        '200':
+          description: Rental completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RentalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /properties/{propertyId}/rentals/{rentalId}/summary:
+    get:
+      operationId: getRentalSummary
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: rentalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: until
+          in: query
+          required: false
+          description: >-
+            Period end (inclusive). Defaults to the completion date for a
+            completed rental, otherwise today in the owner's timezone; the
+            completion master previews with the chosen date before completing.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: The property's paid-operations totals over the rental period
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RentalSummaryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     sessionCookie:
@@ -5039,6 +5244,309 @@ components:
           type: string
           maxLength: 500
           description: Page URL where the error occurred
+
+    RentalPaymentDay:
+      description: >-
+        День оплаты аренды: число месяца 1–31 или строка "last" — «последний
+        день месяца». «31-е число» и "last" — одно поведение: в коротком
+        месяце прижимается к последнему дню (ADR 0053 §4).
+      oneOf:
+        - type: integer
+          minimum: 1
+          maximum: 31
+        - type: string
+          enum: [last]
+
+    RentalCreateRequest:
+      description: >-
+        Создание аренды (= атомарное создание её Платежа арендной платы).
+        Начало — сегодня или позже по TZ собственника (задним числом аренда
+        не создаётся); плановое окончание — строго позже начала.
+      type: object
+      required: [amountKopecks, paymentDay, startDate, utilities, autoPay]
+      properties:
+        amountKopecks:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000000000
+        paymentDay:
+          $ref: '#/components/schemas/RentalPaymentDay'
+        startDate:
+          type: string
+          format: date
+        plannedEndDate:
+          type: string
+          format: date
+          nullable: true
+          description: Null/omitted — бессрочная аренда.
+        utilities:
+          type: string
+          enum: [included, meters_only, full_receipt]
+        depositKopecks:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+          nullable: true
+        commissionKopecks:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+          nullable: true
+        contactId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Арендатор — контакт из книги владельца скоупа.
+        comment:
+          type: string
+          maxLength: 2000
+        autoPay:
+          type: boolean
+
+    RentalUpdateRequest:
+      description: >-
+        Частичная правка условий аренды. Начало не правится. Nullable-поля
+        (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment)
+        — tri-state: omitted оставляет значение, явный null очищает. Сумма,
+        день оплаты, автоплатёж и плановое окончание синхронно правят Платёж
+        арендной платы. Завершённая аренда — 409.
+      type: object
+      properties:
+        amountKopecks:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000000000
+        paymentDay:
+          $ref: '#/components/schemas/RentalPaymentDay'
+        autoPay:
+          type: boolean
+        plannedEndDate:
+          type: string
+          format: date
+          nullable: true
+          description: Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала).
+        utilities:
+          type: string
+          enum: [included, meters_only, full_receipt]
+        depositKopecks:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+          nullable: true
+        commissionKopecks:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+          nullable: true
+        contactId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Явный null — «Контакта нет».
+        comment:
+          type: string
+          maxLength: 2000
+          nullable: true
+
+    RentalCompleteRequest:
+      description: >-
+        Завершение аренды: фактическая дата (начало ≤ дата ≤ сегодня; «По
+        плану» подставляет клиент) и опциональный возврат залога.
+      type: object
+      required: [completedDate]
+      properties:
+        completedDate:
+          type: string
+          format: date
+        depositReturn:
+          type: object
+          required: [amountKopecks]
+          properties:
+            amountKopecks:
+              type: integer
+              format: int64
+              minimum: 0
+              maximum: 1000000000
+              description: 0 валиден — «не вернул».
+            comment:
+              type: string
+              description: Только при сумме.
+
+    TenantView:
+      description: >-
+        Встроенный арендатор — поля карточки контакта. После удаления контакта
+        — null без пометки: UI пишет «Контакта нет» (решение #528).
+      type: object
+      required: [contactId, firstName, lastName, phone]
+      properties:
+        contactId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+
+    RentalNextPayment:
+      description: Единственное будущее planned-вхождение Платежа арендной платы.
+      type: object
+      required: [operationId, date, amountKopecks, daysUntil]
+      properties:
+        operationId:
+          type: string
+          format: uuid
+          description: Цель существующего «Оплатить платёж» — POST /properties/{propertyId}/operations/{operationId}/pay.
+        date:
+          type: string
+          format: date
+        amountKopecks:
+          type: integer
+          format: int64
+        daysUntil:
+          type: integer
+          description: date − today по TZ собственника.
+
+    RentalProgress:
+      description: >-
+        Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число
+        paid-операций Платежа; totalMonths и monthsRemaining — только у
+        срочной аренды (null у бессрочной).
+      type: object
+      required: [paidMonths, totalMonths, monthsRemaining]
+      properties:
+        paidMonths:
+          type: integer
+        totalMonths:
+          type: integer
+          nullable: true
+        monthsRemaining:
+          type: integer
+          nullable: true
+
+    RentalPaymentView:
+      description: >-
+        Состояние Платежа арендной платы: рендер читается из платежа — дня
+        оплаты на аренде нет (решение №5).
+      type: object
+      required: [amountKopecks, paymentDay, autoPay]
+      properties:
+        amountKopecks:
+          type: integer
+          format: int64
+        paymentDay:
+          $ref: '#/components/schemas/RentalPaymentDay'
+        autoPay:
+          type: boolean
+        nextPayment:
+          $ref: '#/components/schemas/RentalNextPayment'
+          nullable: true
+          description: Null, когда будущего вхождения нет (после планового окончания, у завершённой).
+
+    RentalResponse:
+      description: >-
+        Аренда с вычисляемым сервером состоянием: статус, прогресс, будущее
+        плановое вхождение и today — клиент пояса не знает (ADR 0053 §2).
+      type: object
+      required: [id, propertyId, status, startDate, completedDate, utilities,
+                 depositKopecks, commissionKopecks, depositReturnKopecks,
+                 depositReturnComment, comment, rentPayment, progress,
+                 today, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [upcoming, active, needs_attention, completed]
+        startDate:
+          type: string
+          format: date
+        plannedEndDate:
+          type: string
+          format: date
+          nullable: true
+        completedDate:
+          type: string
+          format: date
+          nullable: true
+        utilities:
+          type: string
+          enum: [included, meters_only, full_receipt]
+        depositKopecks:
+          type: integer
+          format: int64
+          nullable: true
+        commissionKopecks:
+          type: integer
+          format: int64
+          nullable: true
+        depositReturnKopecks:
+          type: integer
+          format: int64
+          nullable: true
+        depositReturnComment:
+          type: string
+          nullable: true
+        tenant:
+          $ref: '#/components/schemas/TenantView'
+          nullable: true
+        comment:
+          type: string
+        rentPayment:
+          $ref: '#/components/schemas/RentalPaymentView'
+        progress:
+          $ref: '#/components/schemas/RentalProgress'
+        today:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+
+    RentalsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RentalResponse'
+
+    RentalSummaryResponse:
+      description: >-
+        Итоги аренды (решение №13): все paid-операции объекта — любого
+        платежа и ручные — с датой вхождения в периоде [startDate, until];
+        период — по дате вхождения. Прибыль = доходы − расходы, может быть
+        отрицательной.
+      type: object
+      required: [from, until, incomeKopecks, expenseKopecks, profitKopecks]
+      properties:
+        from:
+          type: string
+          format: date
+        until:
+          type: string
+          format: date
+        incomeKopecks:
+          type: integer
+          format: int64
+        expenseKopecks:
+          type: integer
+          format: int64
+        profitKopecks:
+          type: integer
+          format: int64
 
   responses:
     BadRequest:

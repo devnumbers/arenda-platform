@@ -37,6 +37,32 @@ func (q *Queries) CancelOperationByID(ctx context.Context, arg CancelOperationBy
 	return result.RowsAffected(), nil
 }
 
+const countPaidOperationsByPayment = `-- name: CountPaidOperationsByPayment :one
+SELECT COUNT(*)::bigint
+FROM operations
+WHERE owner_id = $1
+  AND property_id = $2
+  AND payment_id = $3
+  AND status = 'paid'
+`
+
+type CountPaidOperationsByPaymentParams struct {
+	Owner    pgtype.UUID `json:"owner"`
+	Property pgtype.UUID `json:"property"`
+	Payment  pgtype.UUID `json:"payment"`
+}
+
+// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
+// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
+// Cancelled tombstones never count; the nested payment→property path is
+// enforced in the WHERE clause.
+func (q *Queries) CountPaidOperationsByPayment(ctx context.Context, arg CountPaidOperationsByPaymentParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPaidOperationsByPayment, arg.Owner, arg.Property, arg.Payment)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getOperationByID = `-- name: GetOperationByID :one
 
 SELECT op.id,

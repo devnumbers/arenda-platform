@@ -158,6 +158,16 @@ const (
 	ActionContactUpdated Action = "contact.updated"
 	ActionContactDeleted Action = "contact.deleted"
 
+	// ActionRentalCreated and its neighbours record the Rentals context user
+	// mutations (ADR 0053 §3, ticket #529): in-tx fail-safe. There is no
+	// rental.extended — «продление» is a UI scenario of the planned-end edit
+	// (rental.updated). The sync of the managed payment is audited by the
+	// rental action, not twice as payment.*.
+	ActionRentalCreated   Action = "rental.created"
+	ActionRentalUpdated   Action = "rental.updated"
+	ActionRentalCompleted Action = "rental.completed"
+	ActionRentalDeleted   Action = "rental.deleted"
+
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
@@ -212,7 +222,11 @@ const (
 	EntityTaskRule EntityType = "task_rule"
 	EntityTask     EntityType = "task"
 	// EntityContact is a contact card of the Contacts context (ADR 0051).
-	EntityContact             EntityType = "contact"
+	EntityContact EntityType = "contact"
+	// EntityRental is a rental of the Rentals context (ADR 0053): the
+	// occupancy period with its terms; its managed payment audits through
+	// the rental actions, not as a second payment.* entry.
+	EntityRental              EntityType = "rental"
 	EntitySubscription        EntityType = "subscription"
 	EntityPaymentMethod       EntityType = "payment_method"
 	EntitySubscriptionPayment EntityType = "subscription_payment"

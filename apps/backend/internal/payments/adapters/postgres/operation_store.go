@@ -138,6 +138,23 @@ func (s *OperationStore) ListByProperty(
 	return mapOperationRows(rows), nil
 }
 
+// CountPaidOperationsByPayment counts one rule's paid operations (ADR 0053
+// §2: the rentals progress' paidMonths). The query counts in SQL — the
+// count never rides a paginated listing.
+func (s *OperationStore) CountPaidOperationsByPayment(
+	ctx context.Context, scope, propertyID, paymentID uuid.UUID,
+) (int64, error) {
+	count, err := s.q().CountPaidOperationsByPayment(ctx, postgres.CountPaidOperationsByPaymentParams{
+		Owner:    pgconv.UUIDToPgtype(scope),
+		Property: pgconv.UUIDToPgtype(propertyID),
+		Payment:  pgconv.UUIDToPgtype(paymentID),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count paid operations of payment %s: %w", paymentID, err)
+	}
+	return count, nil
+}
+
 // listOperationsParams folds the normalized query into the merged SQL
 // parameters; the pagination width clamp and the direction/status encodings
 // are this adapter's business.

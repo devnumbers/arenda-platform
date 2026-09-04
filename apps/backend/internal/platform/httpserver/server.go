@@ -29,6 +29,8 @@ import (
 	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	propertieshttp "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/http"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	rentalshttp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/http"
+	rentalsapp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	taskshttp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters/http"
 	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
@@ -65,6 +67,7 @@ type Deps struct {
 	AddressSuggester         propertiesapp.AddressSuggester
 	PropertyPayments         *paymentsapp.PaymentService
 	PropertyOperations       *paymentsapp.OperationService
+	PropertyRentals          *rentalsapp.RentalService
 	PropertyTaskRules        *tasksapp.RuleService
 	PropertyTasks            *tasksapp.TaskService
 	Access                   *accessapp.AccessService
@@ -163,6 +166,7 @@ func New(deps Deps) http.Handler {
 		deps.AdminSubscriptions, deps.Logger)
 	paymentHandlers := paymentshttp.NewPaymentHandlers(deps.PropertyPayments, deps.Logger)
 	operationHandlers := paymentshttp.NewOperationsHandlers(deps.PropertyOperations, deps.Logger)
+	rentalHandlers := rentalshttp.NewRentalHandlers(deps.PropertyRentals, deps.Logger)
 	taskRuleHandlers := taskshttp.NewRuleHandlers(deps.PropertyTaskRules, deps.Logger)
 	taskHandlers := taskshttp.NewTaskHandlers(deps.PropertyTasks, deps.Logger)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
@@ -180,6 +184,7 @@ func New(deps Deps) http.Handler {
 		BillingHandlers:                billingHandlers,
 		PaymentHandlers:                paymentHandlers,
 		OperationsHandlers:             operationHandlers,
+		RentalHandlers:                 rentalHandlers,
 		RuleHandlers:                   taskRuleHandlers,
 		TaskHandlers:                   taskHandlers,
 		AdminHandlers:                  adminHandlers,
@@ -304,6 +309,7 @@ type composedHandler struct {
 	*billinghttp.BillingHandlers
 	*paymentshttp.PaymentHandlers
 	*paymentshttp.OperationsHandlers
+	*rentalshttp.RentalHandlers
 	*taskshttp.RuleHandlers
 	*taskshttp.TaskHandlers
 	*adminhttp.AdminHandlers

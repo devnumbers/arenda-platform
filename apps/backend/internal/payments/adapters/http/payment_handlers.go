@@ -562,7 +562,7 @@ func recurrenceResponse(r domain.Recurrence) (openapi.Recurrence, error) {
 			weekdays[i] = int(wd)
 		}
 		err = out.FromRecurrenceWeekly(openapi.RecurrenceWeekly{
-			Kind: openapi.Weekly, Weekdays: weekdays,
+			Kind: openapi.RecurrenceWeeklyKindWeekly, Weekdays: weekdays,
 		})
 	case domain.RecurrenceMonthly:
 		days := r.DaysOfMonth()
@@ -571,11 +571,11 @@ func recurrenceResponse(r domain.Recurrence) (openapi.Recurrence, error) {
 		}
 		lastDay := r.LastDay()
 		err = out.FromRecurrenceMonthly(openapi.RecurrenceMonthly{
-			Kind: openapi.Monthly, DaysOfMonth: &days, LastDay: &lastDay,
+			Kind: openapi.RecurrenceMonthlyKindMonthly, DaysOfMonth: &days, LastDay: &lastDay,
 		})
 	case domain.RecurrenceYearly:
 		err = out.FromRecurrenceYearly(openapi.RecurrenceYearly{
-			Kind: openapi.Yearly, Month: int(r.Month()), Day: r.Day(),
+			Kind: openapi.RecurrenceYearlyKindYearly, Month: int(r.Month()), Day: r.Day(),
 		})
 	default:
 		err = fmt.Errorf("payments: unknown recurrence kind %q", r.Kind())
