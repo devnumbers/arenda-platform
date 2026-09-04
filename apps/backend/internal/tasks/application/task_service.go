@@ -187,6 +187,77 @@ func (s *TaskService) ClearCompletedJournal(
 	return cleared, err
 }
 
+// CompleteTaskWithoutProperty implements «Выполнить» on the property-less
+// slice (POST /tasks/{taskId}/complete, ADR 0052): the same completion fact
+// as CompleteTask, stamped with today in the owner's timezone and serialized
+// on the owner's users row. A stranger — or a bound task, the slices never
+// mix — gets the privacy 404.
+func (s *TaskService) CompleteTaskWithoutProperty(
+	ctx context.Context, actor, taskID uuid.UUID,
+) (domain.Task, error) {
+	return runOwnerMutation(s.conveyor(), ctx, actor, uuid.Nil,
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.TaskRule, today time.Time,
+		) (mutationOutcome[domain.Task], error) {
+			task, err := stores.tasks.GetWithoutProperty(ctx, taskID, scope)
+			if err != nil {
+				return mutationOutcome[domain.Task]{}, err
+			}
+			if task.CompletedDate != nil {
+				return mutationOutcome[domain.Task]{}, ErrAlreadyCompleted
+			}
+			if err := stores.tasks.Complete(ctx, taskID, scope, today); err != nil {
+				return mutationOutcome[domain.Task]{}, err
+			}
+			completed := today
+			task.CompletedDate = &completed
+			return mutationOutcome[domain.Task]{
+				Response:      task,
+				Audit:         auditdomain.ActionTaskCompleted,
+				AuditEntity:   auditdomain.EntityTask,
+				AuditEntityID: &task.ID,
+				AuditCtx:      auditRuleCtx(task.RuleID),
+				Tick:          true,
+			}, nil
+		})
+}
+
+// UncompleteTaskWithoutProperty implements «Отменить выполнение» on the
+// property-less slice (POST /tasks/{taskId}/uncomplete, ADR 0052): the same
+// semantics as UncompleteTask — possible only while the rule lives —
+// serialized on the owner's users row.
+func (s *TaskService) UncompleteTaskWithoutProperty(
+	ctx context.Context, actor, taskID uuid.UUID,
+) (domain.Task, error) {
+	return runOwnerMutation(s.conveyor(), ctx, actor, uuid.Nil,
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.TaskRule, _ time.Time,
+		) (mutationOutcome[domain.Task], error) {
+			task, err := stores.tasks.GetWithoutProperty(ctx, taskID, scope)
+			if err != nil {
+				return mutationOutcome[domain.Task]{}, err
+			}
+			if task.CompletedDate == nil {
+				return mutationOutcome[domain.Task]{}, ErrNotCompleted
+			}
+			if task.RuleID == nil {
+				return mutationOutcome[domain.Task]{}, ErrRuleDeleted
+			}
+			if err := stores.tasks.Uncomplete(ctx, taskID, scope); err != nil {
+				return mutationOutcome[domain.Task]{}, err
+			}
+			task.CompletedDate = nil
+			return mutationOutcome[domain.Task]{
+				Response:      task,
+				Audit:         auditdomain.ActionTaskUncompleted,
+				AuditEntity:   auditdomain.EntityTask,
+				AuditEntityID: &task.ID,
+				AuditCtx:      auditRuleCtx(task.RuleID),
+				Tick:          true,
+			}, nil
+		})
+}
+
 // ownerMoment resolves the data owner's current moment for the computed
 // view buckets, failing loudly when the clock was never wired.
 func (s *TaskService) ownerMoment(ctx context.Context, ownerID uuid.UUID) (OwnerMoment, error) {

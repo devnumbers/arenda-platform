@@ -23,7 +23,8 @@ export type TaskStatus = 'active' | 'overdue' | 'undated' | 'completed';
  */
 export type Task = {
   readonly id: string;
-  readonly propertyId: string;
+  /** Объект задачи; null — задача без объекта (ADR 0052, книга владельца). */
+  readonly propertyId: string | null;
   /** Правило-источник; null — строка журнала удалённого правила. */
   readonly ruleId: string | null;
   readonly dueDate: IsoDate | null;
@@ -46,7 +47,8 @@ export type Task = {
  */
 export type TaskRule = {
   readonly id: string;
-  readonly propertyId: string;
+  /** Объект правила; null — правило без объекта (ADR 0052, книга владельца). */
+  readonly propertyId: string | null;
   readonly title: string;
   readonly comment: string | null;
   /** Якорь — дата первого вхождения; null — правило без даты (только once). */

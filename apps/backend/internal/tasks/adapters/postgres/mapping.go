@@ -12,11 +12,12 @@ import (
 )
 
 // taskRuleFields is the projection-free row of every rule reader: everything
-// any caller needs, read once.
+// any caller needs, read once. PropertyID is nullable since 000120 (ADR 0052
+// — the property-less slice).
 type taskRuleFields struct {
 	ID         uuid.UUID
 	OwnerID    uuid.UUID
-	PropertyID uuid.UUID
+	PropertyID pgtype.UUID
 	Title      string
 	Comment    pgtype.Text
 	DueDate    pgtype.Date
@@ -30,7 +31,7 @@ type taskRuleFields struct {
 type taskFields struct {
 	ID            uuid.UUID
 	OwnerID       uuid.UUID
-	PropertyID    uuid.UUID
+	PropertyID    pgtype.UUID
 	RuleID        pgtype.UUID
 	DueDate       pgtype.Date
 	DueTime       pgtype.Time
@@ -52,7 +53,7 @@ func mapRuleRow(f taskRuleFields) domain.TaskRule {
 	return domain.TaskRule{
 		ID:         f.ID,
 		OwnerID:    f.OwnerID,
-		PropertyID: f.PropertyID,
+		PropertyID: pgconv.UUIDFromPgtypePtr(f.PropertyID),
 		Title:      f.Title,
 		Comment:    pgconv.TextToPtrString(f.Comment),
 		DueDate:    pgconv.DatePtrFromPgtype(f.DueDate),
@@ -71,7 +72,7 @@ func mapTaskRow(f taskFields) domain.Task {
 	task := domain.Task{
 		ID:            f.ID,
 		OwnerID:       f.OwnerID,
-		PropertyID:    f.PropertyID,
+		PropertyID:    pgconv.UUIDFromPgtypePtr(f.PropertyID),
 		RuleID:        pgconv.UUIDFromPgtypePtr(f.RuleID),
 		DueDate:       pgconv.DatePtrFromPgtype(f.DueDate),
 		DueTime:       timeOfDayFromPgtype(f.DueTime),

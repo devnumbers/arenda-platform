@@ -110,7 +110,7 @@ func runMutation[T any](
 		if !out.Tick {
 			return nil
 		}
-		return stores.tickOwner(ctx, scope, today)
+		return stores.tickOwnerProperties(ctx, scope, today)
 	})
 	if err != nil {
 		return zero, err
@@ -130,6 +130,83 @@ func rereadRule[T any](
 ) (T, error) {
 	var zero T
 	stored, err := g.factory.rules.Get(ctx, ruleID, scope, propertyID)
+	if err != nil {
+		return zero, err
+	}
+	resp, ok := any(stored).(T)
+	if !ok {
+		return zero, errors.New("tasks conveyor: reread requires a rule-shaped response")
+	}
+	return resp, nil
+}
+
+// runOwnerMutation is the property-less twin of runMutation (ADR 0052): the
+// same ordering invariants over the owner's own book, where there is no
+// property to resolve a role on — the actor is the data owner (scope =
+// actor, the ADR 0028 matrix defines no members outside a property) or the
+// privacy 404 hides the data. It runs, in one transaction and in this order:
+// the owner-row serialization lock (FOR UPDATE users — the anchor ADR 0052
+// chose for the property-less slice), the owner's today, the load of the
+// target property-less rule (skipped for a zero ruleID), the change step,
+// its audit entry and the property-less materialization tick. After commit
+// it returns the step's response, post-commit-re-read applied.
+func runOwnerMutation[T any](
+	g mutationGates,
+	ctx context.Context, actor, ruleID uuid.UUID,
+	change changeStep[T],
+) (T, error) {
+	var zero T
+	var out mutationOutcome[T]
+	err := g.factory.runInTx(ctx, func(stores *txStores) error {
+		if err := stores.tick.LockOwner(ctx, actor); err != nil {
+			return err
+		}
+		today, err := ownerToday(g.calendar, ctx, actor)
+		if err != nil {
+			return err
+		}
+		rule := domain.TaskRule{}
+		if ruleID != uuid.Nil {
+			rule, err = stores.rules.GetWithoutProperty(ctx, ruleID, actor)
+			if err != nil {
+				return err
+			}
+		}
+		out, err = change(ctx, stores, actor, rule, today)
+		if err != nil {
+			return err
+		}
+		entityType := out.AuditEntity
+		if entityType == "" {
+			entityType = auditdomain.EntityTaskRule
+		}
+		if err := recordAudit(ctx, stores, actor, sharedpolicy.RoleOwner,
+			out.Audit, entityType, out.AuditEntityID, out.AuditCtx); err != nil {
+			return err
+		}
+		if !out.Tick {
+			return nil
+		}
+		return stores.tickOwnerWithoutProperty(ctx, actor, today)
+	})
+	if err != nil {
+		return zero, err
+	}
+	if out.RereadRuleID == nil {
+		return out.Response, nil
+	}
+	return rereadOwnerRule[T](g, ctx, actor, *out.RereadRuleID)
+}
+
+// rereadOwnerRule is rereadRule's property-less counterpart: the re-read
+// goes through the property-less cut key, so a response can never describe a
+// bound rule.
+func rereadOwnerRule[T any](
+	g mutationGates,
+	ctx context.Context, owner, ruleID uuid.UUID,
+) (T, error) {
+	var zero T
+	stored, err := g.factory.rules.GetWithoutProperty(ctx, ruleID, owner)
 	if err != nil {
 		return zero, err
 	}

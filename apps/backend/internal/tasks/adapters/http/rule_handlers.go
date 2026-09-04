@@ -23,13 +23,18 @@ import (
 )
 
 // TaskRulesManager is the consumer-side port of the rule endpoints (ADR
-// 0035): the rule CRUD use cases. The concrete application service satisfies
-// it; the handler tests run against func-backed fakes.
+// 0035): the rule CRUD use cases, the property-bound paths and the
+// property-less slice alike (ADR 0052). The concrete application service
+// satisfies it; the handler tests run against func-backed fakes.
 type TaskRulesManager interface {
 	CreateRule(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreateRuleCommand) (domain.TaskRule, error)
 	GetRule(ctx context.Context, actor, propertyID, ruleID uuid.UUID) (domain.TaskRule, error)
 	UpdateRule(ctx context.Context, actor, propertyID, ruleID uuid.UUID, cmd application.UpdateRuleCommand) (domain.TaskRule, error)
 	DeleteRule(ctx context.Context, actor, propertyID, ruleID uuid.UUID) error
+	CreateRuleWithoutProperty(ctx context.Context, actor uuid.UUID, cmd application.CreateRuleCommand) (domain.TaskRule, error)
+	GetRuleWithoutProperty(ctx context.Context, actor, ruleID uuid.UUID) (domain.TaskRule, error)
+	UpdateRuleWithoutProperty(ctx context.Context, actor, ruleID uuid.UUID, cmd application.UpdateRuleCommand) (domain.TaskRule, error)
+	DeleteRuleWithoutProperty(ctx context.Context, actor, ruleID uuid.UUID) error
 }
 
 // RuleHandlers implements the generated task rule endpoints.
@@ -132,6 +137,99 @@ func (h *RuleHandlers) DeleteTaskRule(w http.ResponseWriter, r *http.Request, pr
 	}
 
 	if err := h.svc.DeleteRule(r.Context(), actor, propertyID, ruleID); err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// CreateTaskRuleWithoutProperty implements POST /tasks/rules — the
+// property-less slice (ADR 0052). The first materialization happens inside
+// the use case's transaction; the serialization point is the actor's users
+// row.
+func (h *RuleHandlers) CreateTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	var body openapi.TaskRuleCreateRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode create task rule request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	cmd, err := createCommand(body)
+	if err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+	rule, err := h.svc.CreateRuleWithoutProperty(r.Context(), actor, cmd)
+	if err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, taskRuleResponse(rule))
+}
+
+// GetTaskRuleWithoutProperty implements GET /tasks/rules/{ruleId} — the
+// property-less edit screen's load. A foreign actor is the privacy 404.
+func (h *RuleHandlers) GetTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleID openapi_types.UUID) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	rule, err := h.svc.GetRuleWithoutProperty(r.Context(), actor, ruleID)
+	if err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, taskRuleResponse(rule))
+}
+
+// UpdateTaskRuleWithoutProperty implements PATCH /tasks/rules/{ruleId} — the
+// same tri-state PATCH semantics as the property path, serialized on the
+// owner's users row.
+func (h *RuleHandlers) UpdateTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleID openapi_types.UUID) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	var body openapi.TaskRuleUpdateRequest
+	cmd, err := h.decodeUpdateBody(w, r, &body)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode update task rule request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	rule, err := h.svc.UpdateRuleWithoutProperty(r.Context(), actor, ruleID, cmd)
+	if err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, taskRuleResponse(rule))
+}
+
+// DeleteTaskRuleWithoutProperty implements DELETE /tasks/rules/{ruleId}: the
+// hard deletion on the property-less slice — the uncompleted tasks die, the
+// completed journal survives.
+func (h *RuleHandlers) DeleteTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleID openapi_types.UUID) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.DeleteRuleWithoutProperty(r.Context(), actor, ruleID); err != nil {
 		handleTaskError(h.logger, w, r, err)
 		return
 	}
@@ -309,11 +407,12 @@ func utf8Len(s string) int {
 	return utf8.RuneCountInString(s)
 }
 
-// taskRuleResponse maps one rule onto the wire response shape.
+// taskRuleResponse maps one rule onto the wire response shape; a nil
+// property maps to the wire's null (the property-less slice, ADR 0052).
 func taskRuleResponse(rule domain.TaskRule) openapi.TaskRuleResponse {
 	return openapi.TaskRuleResponse{
 		Id:         rule.ID,
-		PropertyId: rule.PropertyID,
+		PropertyId: openAPIUUIDPtr(rule.PropertyID),
 		Title:      rule.Title,
 		Comment:    copyStringPtr(rule.Comment),
 		DueDate:    httpsupport.DatePtrToOpenAPI(rule.DueDate),

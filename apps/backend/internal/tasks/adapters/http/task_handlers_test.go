@@ -22,12 +22,21 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 )
 
-// fakeTaskRulesManager is the func-backed TaskRulesManager double.
+// fakeTaskRulesManager is the func-backed TaskRulesManager double. The
+// property-less slice doubles live in a nested struct (ADR 0052) — the two
+// contracts stay visibly distinct and the slices never blur in a test.
 type fakeTaskRulesManager struct {
 	create func(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreateRuleCommand) (domain.TaskRule, error)
 	get    func(ctx context.Context, actor, propertyID, ruleID uuid.UUID) (domain.TaskRule, error)
 	update func(ctx context.Context, actor, propertyID, ruleID uuid.UUID, cmd application.UpdateRuleCommand) (domain.TaskRule, error)
 	del    func(ctx context.Context, actor, propertyID, ruleID uuid.UUID) error
+
+	withoutProperty struct {
+		create func(ctx context.Context, actor uuid.UUID, cmd application.CreateRuleCommand) (domain.TaskRule, error)
+		get    func(ctx context.Context, actor, ruleID uuid.UUID) (domain.TaskRule, error)
+		update func(ctx context.Context, actor, ruleID uuid.UUID, cmd application.UpdateRuleCommand) (domain.TaskRule, error)
+		del    func(ctx context.Context, actor, ruleID uuid.UUID) error
+	}
 }
 
 func (f *fakeTaskRulesManager) CreateRule(
@@ -64,12 +73,51 @@ func (f *fakeTaskRulesManager) DeleteRule(ctx context.Context, actor, propertyID
 	return f.del(ctx, actor, propertyID, ruleID)
 }
 
+func (f *fakeTaskRulesManager) CreateRuleWithoutProperty(
+	ctx context.Context, actor uuid.UUID, cmd application.CreateRuleCommand,
+) (domain.TaskRule, error) {
+	if f.withoutProperty.create == nil {
+		return domain.TaskRule{}, errors.New("unexpected CreateRuleWithoutProperty call")
+	}
+	return f.withoutProperty.create(ctx, actor, cmd)
+}
+
+func (f *fakeTaskRulesManager) GetRuleWithoutProperty(
+	ctx context.Context, actor, ruleID uuid.UUID,
+) (domain.TaskRule, error) {
+	if f.withoutProperty.get == nil {
+		return domain.TaskRule{}, errors.New("unexpected GetRuleWithoutProperty call")
+	}
+	return f.withoutProperty.get(ctx, actor, ruleID)
+}
+
+func (f *fakeTaskRulesManager) UpdateRuleWithoutProperty(
+	ctx context.Context, actor, ruleID uuid.UUID, cmd application.UpdateRuleCommand,
+) (domain.TaskRule, error) {
+	if f.withoutProperty.update == nil {
+		return domain.TaskRule{}, errors.New("unexpected UpdateRuleWithoutProperty call")
+	}
+	return f.withoutProperty.update(ctx, actor, ruleID, cmd)
+}
+
+func (f *fakeTaskRulesManager) DeleteRuleWithoutProperty(
+	ctx context.Context, actor, ruleID uuid.UUID,
+) error {
+	if f.withoutProperty.del == nil {
+		return errors.New("unexpected DeleteRuleWithoutProperty call")
+	}
+	return f.withoutProperty.del(ctx, actor, ruleID)
+}
+
 // fakeTasksManager is the func-backed TasksManager double.
 type fakeTasksManager struct {
 	list       func(ctx context.Context, actor, propertyID uuid.UUID, q application.TasksListQuery) (application.TasksPage, error)
 	complete   func(ctx context.Context, actor, propertyID, taskID uuid.UUID) (domain.Task, error)
 	uncomplete func(ctx context.Context, actor, propertyID, taskID uuid.UUID) (domain.Task, error)
 	clear      func(ctx context.Context, actor, propertyID uuid.UUID) (int64, error)
+
+	completeWithoutProperty   func(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
+	uncompleteWithoutProperty func(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
 }
 
 func (f *fakeTasksManager) ListTasks(
@@ -108,6 +156,24 @@ func (f *fakeTasksManager) ClearCompletedJournal(
 	return f.clear(ctx, actor, propertyID)
 }
 
+func (f *fakeTasksManager) CompleteTaskWithoutProperty(
+	ctx context.Context, actor, taskID uuid.UUID,
+) (domain.Task, error) {
+	if f.completeWithoutProperty == nil {
+		return domain.Task{}, errors.New("unexpected CompleteTaskWithoutProperty call")
+	}
+	return f.completeWithoutProperty(ctx, actor, taskID)
+}
+
+func (f *fakeTasksManager) UncompleteTaskWithoutProperty(
+	ctx context.Context, actor, taskID uuid.UUID,
+) (domain.Task, error) {
+	if f.uncompleteWithoutProperty == nil {
+		return domain.Task{}, errors.New("unexpected UncompleteTaskWithoutProperty call")
+	}
+	return f.uncompleteWithoutProperty(ctx, actor, taskID)
+}
+
 // fixtureRule is the tests' fixture rule.
 func fixtureRule() domain.TaskRule {
 	id := uuid.Must(uuid.NewV7())
@@ -115,7 +181,7 @@ func fixtureRule() domain.TaskRule {
 	created := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
 	tod := domain.TimeOfDay(15*60 + 13)
 	return domain.TaskRule{
-		ID: id, PropertyID: uuid.Must(uuid.NewV7()),
+		ID: id, PropertyID: new(uuid.Must(uuid.NewV7())),
 		Title: "Проверить счётчики", DueDate: &due, DueTime: &tod,
 		Repeat: domain.RepeatWeekly, CreatedAt: created, UpdatedAt: created,
 	}
@@ -128,7 +194,7 @@ func fixtureTask() domain.Task {
 	due := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	created := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
 	return domain.Task{
-		ID: id, PropertyID: uuid.Must(uuid.NewV7()), RuleID: &ruleID,
+		ID: id, PropertyID: new(uuid.Must(uuid.NewV7())), RuleID: &ruleID,
 		DueDate: &due, Title: "Вынести мусор",
 		CreatedAt: created, UpdatedAt: created,
 	}
@@ -171,6 +237,25 @@ func TestTaskHandlers_Unauthorized(t *testing.T) {
 		"complete":         func(w http.ResponseWriter, r *http.Request) { th.CompleteTask(w, r, propertyID, otherID) },
 		"uncomplete":       func(w http.ResponseWriter, r *http.Request) { th.UncompleteTask(w, r, propertyID, otherID) },
 		"delete completed": func(w http.ResponseWriter, r *http.Request) { th.DeleteCompletedTasks(w, r, propertyID) },
+
+		"create rule without property": func(w http.ResponseWriter, r *http.Request) {
+			rh.CreateTaskRuleWithoutProperty(w, r)
+		},
+		"get rule without property": func(w http.ResponseWriter, r *http.Request) {
+			rh.GetTaskRuleWithoutProperty(w, r, otherID)
+		},
+		"update rule without property": func(w http.ResponseWriter, r *http.Request) {
+			rh.UpdateTaskRuleWithoutProperty(w, r, otherID)
+		},
+		"delete rule without property": func(w http.ResponseWriter, r *http.Request) {
+			rh.DeleteTaskRuleWithoutProperty(w, r, otherID)
+		},
+		"complete task without property": func(w http.ResponseWriter, r *http.Request) {
+			th.CompleteTaskWithoutProperty(w, r, otherID)
+		},
+		"uncomplete task without property": func(w http.ResponseWriter, r *http.Request) {
+			th.UncompleteTaskWithoutProperty(w, r, otherID)
+		},
 	}
 	for name, call := range cases {
 		t.Run(name, func(t *testing.T) {

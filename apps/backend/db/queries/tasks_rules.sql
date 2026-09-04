@@ -45,6 +45,14 @@ SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, cr
 FROM task_rules
 WHERE id = $1 AND owner_id = $2 AND property_id = $3;
 
+-- name: GetTaskRuleWithoutProperty :one
+-- The property-less cut of the rule read (ADR 0052: the slices never mix —
+-- the predicate over property_id picks the slice explicitly). The id-scoped
+-- owner key is the privacy 404; a bound rule is invisible here by design.
+SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, created_at, updated_at
+FROM task_rules
+WHERE id = $1 AND owner_id = $2 AND property_id IS NULL;
+
 -- name: DeleteRuleNotDueUncompleted :exec
 -- The edit invalidation (resolution #496): the rule's uncompleted tasks that
 -- have not fallen due yet — the undated one and the strictly future ones —

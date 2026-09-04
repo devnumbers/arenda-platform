@@ -171,6 +171,38 @@ func (q *Queries) GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (TaskR
 	return i, err
 }
 
+const getTaskRuleWithoutProperty = `-- name: GetTaskRuleWithoutProperty :one
+SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, created_at, updated_at
+FROM task_rules
+WHERE id = $1 AND owner_id = $2 AND property_id IS NULL
+`
+
+type GetTaskRuleWithoutPropertyParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+// The property-less cut of the rule read (ADR 0052: the slices never mix —
+// the predicate over property_id picks the slice explicitly). The id-scoped
+// owner key is the privacy 404; a bound rule is invisible here by design.
+func (q *Queries) GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRuleWithoutPropertyParams) (TaskRule, error) {
+	row := q.db.QueryRow(ctx, getTaskRuleWithoutProperty, arg.ID, arg.OwnerID)
+	var i TaskRule
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.Title,
+		&i.Comment,
+		&i.DueDate,
+		&i.DueTime,
+		&i.Repeat,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateTaskRule = `-- name: UpdateTaskRule :exec
 UPDATE task_rules
 SET title = $2,

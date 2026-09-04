@@ -38,17 +38,22 @@ func IsValidRepeat(r RepeatKind) bool {
 	}
 }
 
-// TaskRule is the rule: a named setting on a property that produces tasks —
-// title (required), optional comment, an optional due date and due time (the
-// time requires the date), and a repeat. A once rule produces a single task;
-// an undated rule (no due date) may only be a once rule — the schema
+// TaskRule is the rule: a named setting that produces tasks — title
+// (required), optional comment, an optional due date and due time (the time
+// requires the date), and a repeat. A once rule produces a single task; an
+// undated rule (no due date) may only be a once rule — the schema
 // constraint task_rules_repeat_needs_anchor pins that, the application
 // validates it before insert. The rule itself is never completed, overdue or
 // undated — those are states of its tasks (tasks/CONTEXT.md «Правило»).
 type TaskRule struct {
-	ID         uuid.UUID
-	OwnerID    uuid.UUID
-	PropertyID uuid.UUID
+	ID      uuid.UUID
+	OwnerID uuid.UUID
+	// PropertyID is the rule's property binding; nil = the rule without a
+	// property («Задача без объекта», ADR 0052): it lives in the owner's own
+	// book, owner-only, and its «today» is the owner's timezone. A bound rule
+	// never becomes property-less: deleting the property deletes its rules
+	// and tasks outright (the cascade stays).
+	PropertyID *uuid.UUID
 	Title      string
 	Comment    *string
 	// DueDate is the rule's anchor: the first occurrence date and the

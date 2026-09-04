@@ -66,7 +66,7 @@ func (s *RuleStore) Get(
 	return mapRuleRow(taskRuleFields{
 		ID:         pgconv.UUIDFromPgtype(row.ID),
 		OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+		PropertyID: row.PropertyID,
 		Title:      row.Title,
 		Comment:    row.Comment,
 		DueDate:    row.DueDate,
@@ -77,12 +77,43 @@ func (s *RuleStore) Get(
 	}), nil
 }
 
-// Create inserts a new rule (id, owner_id are app-side, ADR 0019/0028).
+// GetWithoutProperty loads one rule of the property-less cut (ADR 0052);
+// pgx.ErrNoRows — an unknown id, another owner's rule or a bound rule (the
+// slices never mix) — becomes the application ErrNotFound.
+func (s *RuleStore) GetWithoutProperty(
+	ctx context.Context, id, scope uuid.UUID,
+) (domain.TaskRule, error) {
+	row, err := s.q().GetTaskRuleWithoutProperty(ctx, postgres.GetTaskRuleWithoutPropertyParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(scope),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.TaskRule{}, application.ErrNotFound
+		}
+		return domain.TaskRule{}, fmt.Errorf("get task rule %s without property: %w", id, err)
+	}
+	return mapRuleRow(taskRuleFields{
+		ID:         pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
+		PropertyID: row.PropertyID,
+		Title:      row.Title,
+		Comment:    row.Comment,
+		DueDate:    row.DueDate,
+		DueTime:    row.DueTime,
+		Repeat:     row.Repeat,
+		CreatedAt:  row.CreatedAt,
+		UpdatedAt:  row.UpdatedAt,
+	}), nil
+}
+
+// Create inserts a new rule (id, owner_id are app-side, ADR 0019/0028); a
+// nil property creates the rule in the owner's own book (ADR 0052).
 func (s *RuleStore) Create(ctx context.Context, rule domain.TaskRule) error {
 	if err := s.q().CreateTaskRule(ctx, postgres.CreateTaskRuleParams{
 		ID:         pgconv.UUIDToPgtype(rule.ID),
 		OwnerID:    pgconv.UUIDToPgtype(rule.OwnerID),
-		PropertyID: pgconv.UUIDToPgtype(rule.PropertyID),
+		PropertyID: pgconv.UUIDToPgtypePtr(rule.PropertyID),
 		Title:      rule.Title,
 		Comment:    pgconv.StringPtrToPgtype(rule.Comment),
 		DueDate:    pgconv.DatePtrToPgtype(rule.DueDate),

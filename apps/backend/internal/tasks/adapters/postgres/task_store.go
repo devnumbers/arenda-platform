@@ -63,7 +63,39 @@ func (s *TaskStore) Get(
 	return mapTaskRow(taskFields{
 		ID:            pgconv.UUIDFromPgtype(row.ID),
 		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-		PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
+		PropertyID:    row.PropertyID,
+		RuleID:        row.RuleID,
+		DueDate:       row.DueDate,
+		DueTime:       row.DueTime,
+		Title:         row.Title,
+		Comment:       row.Comment,
+		CompletedDate: row.CompletedDate,
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
+		RuleRepeat:    row.RuleRepeat,
+	}), nil
+}
+
+// GetWithoutProperty loads one task of the property-less cut (ADR 0052);
+// pgx.ErrNoRows — an unknown id, another owner's task or a bound task (the
+// slices never mix) — becomes the application ErrNotFound.
+func (s *TaskStore) GetWithoutProperty(
+	ctx context.Context, id, scope uuid.UUID,
+) (domain.Task, error) {
+	row, err := s.q().GetTaskWithoutProperty(ctx, postgres.GetTaskWithoutPropertyParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(scope),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Task{}, application.ErrNotFound
+		}
+		return domain.Task{}, fmt.Errorf("get task %s without property: %w", id, err)
+	}
+	return mapTaskRow(taskFields{
+		ID:            pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
+		PropertyID:    row.PropertyID,
 		RuleID:        row.RuleID,
 		DueDate:       row.DueDate,
 		DueTime:       row.DueTime,
@@ -123,7 +155,7 @@ func (s *TaskStore) list(
 			tasks = append(tasks, mapTaskRow(taskFields{
 				ID:            pgconv.UUIDFromPgtype(row.ID),
 				OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-				PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
+				PropertyID:    row.PropertyID,
 				RuleID:        row.RuleID,
 				DueDate:       row.DueDate,
 				DueTime:       row.DueTime,
@@ -146,7 +178,7 @@ func (s *TaskStore) list(
 		tasks = append(tasks, mapTaskRow(taskFields{
 			ID:            pgconv.UUIDFromPgtype(row.ID),
 			OwnerID:       pgconv.UUIDFromPgtype(row.OwnerID),
-			PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
+			PropertyID:    row.PropertyID,
 			RuleID:        row.RuleID,
 			DueDate:       row.DueDate,
 			DueTime:       row.DueTime,

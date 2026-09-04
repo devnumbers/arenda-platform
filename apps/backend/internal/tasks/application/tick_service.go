@@ -107,23 +107,70 @@ func zoneToday(now time.Time, timezone string) (time.Time, error) {
 	return DateAtUTCMidnight(now, loc), nil
 }
 
-// tickOwner is the materialization tick body inside an open transaction of
-// this context: take the serialization lock, load the owner snapshot, then
-// compute and apply each rule's plan. The caller supplies today — computed
-// once per request by the owner calendar, so a mutation and the tick it
-// triggers always agree on the day boundary.
+// The three tick bodies below are the same plan-and-apply walk over
+// different doors and slices (ADR 0052): the lock set defines the
+// serialization, the keep predicate picks the slice. Property-bound
+// mutations must never take the owner-row lock, and owner mutations never
+// take the property rows — the slices' rules are disjoint row sets, and
+// crossed lock orders would invite deadlocks.
+
+// tickOwner is the full materialization tick body inside an open transaction
+// of this context — the worker's and RunOwnerTick's door: take both
+// serialization locks (the owner's property rows first, then the owner's own
+// users row — the property-less anchor of ADR 0052) and plan every rule
+// across both slices. The caller supplies today — computed once per request
+// by the owner calendar, so a mutation and the tick it triggers always agree
+// on the day boundary.
 func (s *txStores) tickOwner(ctx context.Context, ownerID uuid.UUID, today time.Time) error {
-	if err := s.tick.LockOwnerProperties(ctx, ownerID); err != nil {
-		return fmt.Errorf("lock owner properties: %w", err)
+	return s.runTickSlice(ctx, ownerID, today,
+		func(rule domain.TaskRule) bool { return true },
+		s.tick.LockOwnerProperties, s.tick.LockOwner)
+}
+
+// tickOwnerProperties is the property-bound slice of the tick — the body a
+// property mutation runs inside its transaction: its own property row is
+// already locked, and the slice's rules hang on properties, so the property
+// rows are the only serialization this cut needs. The property-less rules
+// are not this transaction's business: a bound-rule mutation cannot change
+// them.
+func (s *txStores) tickOwnerProperties(ctx context.Context, ownerID uuid.UUID, today time.Time) error {
+	return s.runTickSlice(ctx, ownerID, today,
+		func(rule domain.TaskRule) bool { return rule.PropertyID != nil },
+		s.tick.LockOwnerProperties)
+}
+
+// tickOwnerWithoutProperty is the property-less slice of the tick (ADR 0052)
+// — the body an owner-scope mutation runs inside its transaction, under the
+// owner-row lock it took at the conveyor's front: only property-less rules
+// are planned and applied.
+func (s *txStores) tickOwnerWithoutProperty(ctx context.Context, ownerID uuid.UUID, today time.Time) error {
+	return s.runTickSlice(ctx, ownerID, today,
+		func(rule domain.TaskRule) bool { return rule.PropertyID == nil },
+		s.tick.LockOwner)
+}
+
+// runTickSlice takes the serialization locks in the given order (the order
+// is the deadlock contract — see the bodies above), loads the owner
+// snapshot, then plans and applies the tick for the rules the keep predicate
+// admits — one plan per rule, in snapshot order.
+func (s *txStores) runTickSlice(
+	ctx context.Context, ownerID uuid.UUID, today time.Time,
+	keep func(domain.TaskRule) bool,
+	locks ...func(context.Context, uuid.UUID) error,
+) error {
+	for _, lock := range locks {
+		if err := lock(ctx, ownerID); err != nil {
+			return err
+		}
 	}
 	snapshot, err := s.tick.LoadOwnerSnapshot(ctx, ownerID)
 	if err != nil {
 		return fmt.Errorf("load owner snapshot: %w", err)
 	}
-	if len(snapshot.Rules) == 0 {
-		return nil
-	}
 	for _, rule := range snapshot.Rules {
+		if !keep(rule) {
+			continue
+		}
 		plan := domain.PlanTaskTick(rule, today, snapshot.Existing[rule.ID])
 		if err := s.tick.ApplyTickPlan(ctx, rule, today, plan); err != nil {
 			return fmt.Errorf("apply tick plan of rule %s: %w", rule.ID, err)

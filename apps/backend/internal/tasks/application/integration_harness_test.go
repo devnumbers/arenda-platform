@@ -143,6 +143,28 @@ func (h *tasksHarness) withOwner(tz string) *tasksHarness {
 	return h
 }
 
+// withOwnerWithoutProperty seeds a user with the given timezone and no
+// properties at all — the pure property-less book (ADR 0052). The propID
+// field stays the zero UUID: the property-less use cases never touch it.
+func (h *tasksHarness) withOwnerWithoutProperty(tz string) *tasksHarness {
+	t := h.t
+	t.Helper()
+
+	owner, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, $4)`,
+		owner, phone, actor.RoleOwner, tz,
+	); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	h.owner = owner
+	return h
+}
+
 // seedActor seeds a bare user row so audit_log's actor FK holds for members
 // and strangers of the role-matrix tests.
 func (h *tasksHarness) seedActor(id uuid.UUID) {
@@ -181,6 +203,34 @@ func (h *tasksHarness) seedRule(anchor, dueTime, repeat, title string) uuid.UUID
 		id, h.owner, h.propID, title, dueDate, timeOfDay, repeat,
 	); err != nil {
 		t.Fatalf("seed task rule: %v", err)
+	}
+	return id
+}
+
+// seedRuleWithoutProperty inserts a task rule without a property directly (raw
+// SQL — the same backdated-anchor driver as seedRule, on the property-less
+// slice of ADR 0052).
+func (h *tasksHarness) seedRuleWithoutProperty(anchor, dueTime, repeat, title string) uuid.UUID {
+	t := h.t
+	t.Helper()
+	id, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	var dueDate any
+	if anchor != "" {
+		dueDate = anchor
+	}
+	var timeOfDay any
+	if dueTime != "" {
+		timeOfDay = dueTime
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO task_rules (id, owner_id, property_id, title, comment, due_date, due_time, repeat)
+		 VALUES ($1, $2, NULL, $3, NULL, $4, $5, $6)`,
+		id, h.owner, title, dueDate, timeOfDay, repeat,
+	); err != nil {
+		t.Fatalf("seed property-less task rule: %v", err)
 	}
 	return id
 }
@@ -227,6 +277,33 @@ func (h *tasksHarness) loadTasks(t *testing.T) []taskRow {
 		ORDER BY created_at, id`, h.propID)
 	if err != nil {
 		t.Fatalf("query tasks: %v", err)
+	}
+	defer rows.Close()
+
+	out := []taskRow{}
+	for rows.Next() {
+		var r taskRow
+		if err := rows.Scan(&r.ID, &r.RuleID, &r.DueDate, &r.DueTime, &r.Title, &r.CompletedDate); err != nil {
+			t.Fatalf("scan task: %v", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate tasks: %v", err)
+	}
+	return out
+}
+
+// loadTasksWithoutProperty reads the owner's property-less tasks — the
+// property-less counterpart of loadTasks (ADR 0052).
+func (h *tasksHarness) loadTasksWithoutProperty(t *testing.T) []taskRow {
+	t.Helper()
+	rows, err := h.pool.Query(h.ctx(), `
+		SELECT id, rule_id, due_date::text, due_time::text, title, completed_date::text
+		FROM tasks WHERE owner_id = $1 AND property_id IS NULL
+		ORDER BY created_at, id`, h.owner)
+	if err != nil {
+		t.Fatalf("query property-less tasks: %v", err)
 	}
 	defer rows.Close()
 

@@ -4,8 +4,8 @@
 -- tasks_tick.sql.
 
 -- name: GetTask :one
--- The nested path task→property is part of the key: a foreign or re-hung row
--- is the privacy 404. rule_repeat is the live rule's repeat read through the
+-- The nested path task→property is part of the key: a foreign or re-hung
+-- row is the privacy 404. rule_repeat is the live rule's repeat read through the
 -- LEFT JOIN (null once the rule is deleted) — the wire's ↻ mark; the task
 -- row itself carries no repeat snapshot.
 SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
@@ -13,6 +13,15 @@ SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.tit
 FROM tasks t
 LEFT JOIN task_rules r ON r.id = t.rule_id
 WHERE t.id = $1 AND t.owner_id = $2 AND t.property_id = $3;
+
+-- name: GetTaskWithoutProperty :one
+-- The property-less cut of the task read (ADR 0052: the slices never mix).
+-- rule_repeat is the same live-rule read projection as in GetTask.
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.id = $1 AND t.owner_id = $2 AND t.property_id IS NULL;
 
 -- name: CountTasksByProperty :one
 -- The total count of one bucket — the «Выполненные N» counter (false =

@@ -27,6 +27,8 @@ type TasksManager interface {
 	CompleteTask(ctx context.Context, actor, propertyID, taskID uuid.UUID) (domain.Task, error)
 	UncompleteTask(ctx context.Context, actor, propertyID, taskID uuid.UUID) (domain.Task, error)
 	ClearCompletedJournal(ctx context.Context, actor, propertyID uuid.UUID) (int64, error)
+	CompleteTaskWithoutProperty(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
+	UncompleteTaskWithoutProperty(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
 }
 
 // TaskHandlers implements the generated task endpoints.
@@ -143,13 +145,58 @@ func (h *TaskHandlers) DeleteCompletedTasks(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// CompleteTaskWithoutProperty implements POST /tasks/{taskId}/complete — the
+// property-less slice (ADR 0052): the completion fact is stamped with today
+// in the owner's timezone; a repeated completion is the contract's 409. A
+// bound task is invisible here: the slices never mix.
+func (h *TaskHandlers) CompleteTaskWithoutProperty(w http.ResponseWriter, r *http.Request, taskID openapi_types.UUID) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	task, err := h.svc.CompleteTaskWithoutProperty(r.Context(), actor, taskID)
+	if err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, taskResponse(application.TaskListItem{
+		Task:   task,
+		Status: domain.ViewCompleted,
+	}))
+}
+
+// UncompleteTaskWithoutProperty implements POST /tasks/{taskId}/uncomplete —
+// the property-less slice (ADR 0052): the completion fact is cleared — only
+// while the rule lives; a journal row of a deleted rule is the contract's
+// 409.
+func (h *TaskHandlers) UncompleteTaskWithoutProperty(w http.ResponseWriter, r *http.Request, taskID openapi_types.UUID) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	task, err := h.svc.UncompleteTaskWithoutProperty(r.Context(), actor, taskID)
+	if err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, taskResponse(application.TaskListItem{
+		Task:   task,
+		Status: domain.ViewActive,
+	}))
+}
+
 // taskResponse maps one listed or just-mutated task onto the wire response:
-// status is always the server-computed view bucket.
+// status is always the server-computed view bucket; a nil property maps to
+// the wire's null (the property-less slice, ADR 0052).
 func taskResponse(item application.TaskListItem) openapi.TaskResponse {
 	task := item.Task
 	return openapi.TaskResponse{
 		Id:            task.ID,
-		PropertyId:    task.PropertyID,
+		PropertyId:    openAPIUUIDPtr(task.PropertyID),
 		RuleId:        openAPIUUIDPtr(task.RuleID),
 		DueDate:       httpsupport.DatePtrToOpenAPI(task.DueDate),
 		DueTime:       dueTimeToWire(task.DueTime),

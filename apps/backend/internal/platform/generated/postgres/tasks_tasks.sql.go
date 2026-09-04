@@ -113,13 +113,63 @@ type GetTaskRow struct {
 // «Удалить все выполненные» journal clear (ADR 0051, resolutions #496/#497).
 // Rule CRUD lives in tasks_rules.sql, the tick's persistence in
 // tasks_tick.sql.
-// The nested path task→property is part of the key: a foreign or re-hung row
-// is the privacy 404. rule_repeat is the live rule's repeat read through the
+// The nested path task→property is part of the key: a foreign or re-hung
+// row is the privacy 404. rule_repeat is the live rule's repeat read through the
 // LEFT JOIN (null once the rule is deleted) — the wire's ↻ mark; the task
 // row itself carries no repeat snapshot.
 func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error) {
 	row := q.db.QueryRow(ctx, getTask, arg.ID, arg.OwnerID, arg.PropertyID)
 	var i GetTaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.PropertyID,
+		&i.RuleID,
+		&i.DueDate,
+		&i.DueTime,
+		&i.Title,
+		&i.Comment,
+		&i.CompletedDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RuleRepeat,
+	)
+	return i, err
+}
+
+const getTaskWithoutProperty = `-- name: GetTaskWithoutProperty :one
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.id = $1 AND t.owner_id = $2 AND t.property_id IS NULL
+`
+
+type GetTaskWithoutPropertyParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+type GetTaskWithoutPropertyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+}
+
+// The property-less cut of the task read (ADR 0052: the slices never mix).
+// rule_repeat is the same live-rule read projection as in GetTask.
+func (q *Queries) GetTaskWithoutProperty(ctx context.Context, arg GetTaskWithoutPropertyParams) (GetTaskWithoutPropertyRow, error) {
+	row := q.db.QueryRow(ctx, getTaskWithoutProperty, arg.ID, arg.OwnerID)
+	var i GetTaskWithoutPropertyRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,

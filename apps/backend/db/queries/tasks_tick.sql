@@ -15,13 +15,24 @@ WHERE owner_id = $1 AND status IN ('active', 'maintenance')
 ORDER BY id
 FOR UPDATE;
 
+-- name: LockTaskOwner :one
+-- The owner row is the serialization anchor of the property-less cut (ADR
+-- 0052): owner-scope mutations lock it before reading or writing a rule, and
+-- the full tick locks it after the property rows, so owner-mutation-vs-tick
+-- serializes on one point. A bound-rule mutation never takes this lock — the
+-- two slices' rules are disjoint row sets, and crossing the lock orders
+-- would invite deadlocks.
+SELECT id FROM users WHERE id = $1 FOR UPDATE;
+
 -- name: ListTickTaskRulesByOwner :many
--- The owner's task rules on non-archived properties — the tick's read side.
+-- The owner's tick read side: rules without a property plus rules on
+-- non-archived properties (ADR 0052). The LEFT JOIN keeps the property-less
+-- cut while the status predicate still skips archived ones.
 SELECT r.id, r.owner_id, r.property_id, r.title, r.comment, r.due_date, r.due_time, r.repeat
 FROM task_rules r
-JOIN properties pr ON pr.id = r.property_id
+LEFT JOIN properties pr ON pr.id = r.property_id
 WHERE r.owner_id = $1
-  AND pr.status IN ('active', 'maintenance');
+  AND (r.property_id IS NULL OR pr.status IN ('active', 'maintenance'));
 
 -- name: ListTickTaskKeys :many
 -- Dedup keys of the listed rules' tasks: existence by (rule_id, due_date)
@@ -69,14 +80,14 @@ SELECT timezone FROM users WHERE id = $1;
 
 -- name: ListTaskTickZones :many
 -- The hourly zone sweep of the tasks tick worker (ADR 0048 p.3): the
--- distinct owner timezones having task rules on active/maintenance
--- properties, with the data owners of each zone. One "today" is computed per
--- zone in Go; owners without rules on such properties are not sweep targets.
--- Stateless — every run re-lists, no per-zone or per-owner tick state is
--- kept.
+-- distinct owner timezones having task rules — without a property (ADR 0052)
+-- or on active/maintenance properties — with the data owners of each zone.
+-- One "today" is computed per zone in Go; owners without tickable rules are
+-- not sweep targets. Stateless — every run re-lists, no per-zone or
+-- per-owner tick state is kept.
 SELECT DISTINCT u.timezone, r.owner_id
 FROM task_rules r
-JOIN properties pr ON pr.id = r.property_id
 JOIN users u ON u.id = r.owner_id
-WHERE pr.status IN ('active', 'maintenance')
+LEFT JOIN properties pr ON pr.id = r.property_id
+WHERE r.property_id IS NULL OR pr.status IN ('active', 'maintenance')
 ORDER BY u.timezone, r.owner_id;

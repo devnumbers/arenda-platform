@@ -58,6 +58,21 @@ func (s *TickStore) LockOwnerProperties(ctx context.Context, ownerID uuid.UUID) 
 	return nil
 }
 
+// LockOwner takes the property-less cut's serialization point (ADR 0052):
+// FOR UPDATE on the owner's users row. Owner-scope mutations hold it for
+// their whole transaction, so mutation-vs-tick on the property-less slice
+// serializes on one point. A missing users row surfaces through the :one
+// contract as pgx.ErrNoRows.
+func (s *TickStore) LockOwner(ctx context.Context, ownerID uuid.UUID) error {
+	if _, err := s.q().LockTaskOwner(ctx, pgconv.UUIDToPgtype(ownerID)); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return application.ErrNotFound
+		}
+		return fmt.Errorf("lock owner row: %w", err)
+	}
+	return nil
+}
+
 // LoadOwnerSnapshot returns the owner's task rules on non-archived
 // properties with the dedup keys of their existing tasks — the tick's read
 // side in one call.
@@ -75,7 +90,7 @@ func (s *TickStore) LoadOwnerSnapshot(ctx context.Context, ownerID uuid.UUID) (a
 		rule := mapRuleRow(taskRuleFields{
 			ID:         pgconv.UUIDFromPgtype(row.ID),
 			OwnerID:    pgconv.UUIDFromPgtype(row.OwnerID),
-			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+			PropertyID: row.PropertyID,
 			Title:      row.Title,
 			Comment:    row.Comment,
 			DueDate:    row.DueDate,
@@ -161,7 +176,7 @@ func (s *TickStore) insertTask(ctx context.Context, rule domain.TaskRule, day *t
 	if err := s.q().InsertMaterializedTask(ctx, postgres.InsertMaterializedTaskParams{
 		ID:         pgconv.UUIDToPgtype(task.ID),
 		OwnerID:    pgconv.UUIDToPgtype(task.OwnerID),
-		PropertyID: pgconv.UUIDToPgtype(task.PropertyID),
+		PropertyID: pgconv.UUIDToPgtypePtr(task.PropertyID),
 		RuleID:     pgconv.UUIDToPgtype(*task.RuleID),
 		DueDate:    pgconv.DateToPgtype(*day),
 		DueTime:    timeOfDayToPgtype(task.DueTime),
@@ -189,7 +204,7 @@ func (s *TickStore) insertUndatedTask(ctx context.Context, rule domain.TaskRule)
 	if err := s.q().InsertMaterializedUndatedTask(ctx, postgres.InsertMaterializedUndatedTaskParams{
 		ID:         pgconv.UUIDToPgtype(task.ID),
 		OwnerID:    pgconv.UUIDToPgtype(task.OwnerID),
-		PropertyID: pgconv.UUIDToPgtype(task.PropertyID),
+		PropertyID: pgconv.UUIDToPgtypePtr(task.PropertyID),
 		RuleID:     pgconv.UUIDToPgtype(*task.RuleID),
 		Title:      task.Title,
 		Comment:    pgconv.StringPtrToPgtype(task.Comment),

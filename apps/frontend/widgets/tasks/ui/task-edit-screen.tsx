@@ -115,7 +115,9 @@ export function TaskEditScreen({
           {!loading && !failed && rule !== undefined && canMutate && (
             // key — на случай переиспользования смонтированной формы под
             // другое правило (черновик не должен пережить смену источника).
-            <TaskEditForm key={rule.id} rule={rule} today={today} />
+            // propertyId — из маршрута: экран вложен в объект, правило здесь
+            // всегда объектное (срезы не смешиваются, ADR 0052).
+            <TaskEditForm key={rule.id} propertyId={propertyId} rule={rule} today={today} />
           )}
         </div>
       </PageContent>
@@ -127,9 +129,11 @@ export function TaskEditScreen({
  * команда-дифф против правила (как у правки платежа — команду собирает
  * lib/task-edit). */
 function TaskEditForm({
+  propertyId,
   rule,
   today,
 }: {
+  readonly propertyId: string;
   readonly rule: TaskRule;
   readonly today: IsoDate | undefined;
 }): JSX.Element {
@@ -138,9 +142,9 @@ function TaskEditForm({
   const [dateOpen, setDateOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
 
-  const update = useUpdateTaskRule(rule.propertyId, rule.id);
+  const update = useUpdateTaskRule(propertyId, rule.id);
 
-  const close = (): void => goBack(router, ROUTES.propertyTasks(rule.propertyId));
+  const close = (): void => goBack(router, ROUTES.propertyTasks(propertyId));
 
   const patch = (changes: Partial<TaskEditDraft>): void =>
     setDraft((prev) => ({ ...prev, ...changes }));

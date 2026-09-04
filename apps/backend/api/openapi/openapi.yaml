@@ -1090,6 +1090,191 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /tasks/rules:
+    post:
+      operationId: createTaskRuleWithoutProperty
+      summary: Create a task rule without a property (the owner's own book)
+      description: >
+        The property-less slice of the tasks context (ADR 0052): the rule
+        lives in the actor's own book — there is no property to resolve a
+        role on, the actor is the data owner and the only actor who can
+        create here. The first materialization happens in the same call: the
+        undated task of an undated rule, every occurrence due today, and the
+        single future one — today in the owner's timezone. The due date must
+        be today or later in the owner's timezone — backdated rules are
+        rejected.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRuleCreateRequest'
+      responses:
+        '201':
+          description: Task rule created (propertyId is null)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /tasks/rules/{ruleId}:
+    get:
+      operationId: getTaskRuleWithoutProperty
+      summary: Load a task rule of the property-less slice (the edit screen)
+      description: >
+        Owner-only (ADR 0052): a foreign actor — including a member of any
+        shared property — gets the privacy 404. A rule bound to a property is
+        invisible on this path: the slices never mix.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task rule (propertyId is null)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRuleResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateTaskRuleWithoutProperty
+      summary: Partial task rule update on the property-less slice
+      description: >
+        The same PATCH semantics as the property path: omitted fields stay
+        unchanged; comment, dueDate and dueTime are tri-state (null clears).
+        The edit invalidates the not-yet-due uncompleted tasks — the tick
+        stands the single future again with fresh snapshots; already due and
+        completed tasks keep their frozen snapshots. A newly set due date
+        must be today or later in the owner's timezone.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRuleUpdateRequest'
+      responses:
+        '200':
+          description: Task rule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: deleteTaskRuleWithoutProperty
+      summary: Delete a property-less task rule (hard)
+      description: >
+        Every uncompleted task of the rule is physically removed; the
+        completed journal stays with its snapshots (ruleId set to null).
+        Owner-only (ADR 0052).
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Task rule deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tasks/{taskId}/complete:
+    post:
+      operationId: completeTaskWithoutProperty
+      summary: «Выполнить» a property-less task
+      description: >
+        The completion fact is stamped with today in the owner's timezone; a
+        repeated completion is a 409. The rule's schedule is not touched.
+        Owner-only (ADR 0052); a task bound to a property is invisible on
+        this path.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task completed (status is the server-computed view)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{taskId}/uncomplete:
+    post:
+      operationId: uncompleteTaskWithoutProperty
+      summary: «Отменить выполнение» a property-less task
+      description: >
+        The completion fact is cleared and the task returns to the active
+        ones; the rule's schedule is untouched. Possible only while the rule
+        lives — a journal row of a deleted rule is a 409. Owner-only (ADR
+        0052); a task bound to a property is invisible on this path.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task reopened (status is the server-computed view)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/tasks:
     get:
       operationId: listPropertyTasks
@@ -4662,6 +4847,8 @@ components:
       description: >
         One task rule: the setting that produces tasks. It is never itself
         completed, overdue or undated — those are states of its tasks.
+        propertyId null marks the property-less slice (ADR 0052): the rule
+        lives in the owner's own book.
       type: object
       required: [id, propertyId, title, comment, dueDate, dueTime, repeat, createdAt, updatedAt]
       properties:
@@ -4671,6 +4858,8 @@ components:
         propertyId:
           type: string
           format: uuid
+          nullable: true
+          description: The bound property; null = the rule without a property (ADR 0052).
         title:
           type: string
         comment:
@@ -4711,6 +4900,8 @@ components:
         propertyId:
           type: string
           format: uuid
+          nullable: true
+          description: The bound property, snapshotted at materialization; null = the task without a property (ADR 0052).
         ruleId:
           type: string
           format: uuid

@@ -50,6 +50,7 @@ excluded_paths = [
   "*000112_drop_sent_sms_reminders.up.sql",          # ban-drop-table: осознанный drop (ADR 0044, канал SMS удалён)
   "*000114_drop_leases_and_operations.up.sql",       # ban-drop-table ×8: осознанный drop контекста аренд (тикет #438, спека #434)
   "*000119_contacts_context.up.sql",                 # ban-drop-table: осознанный drop property_contacts (ADR 0051, карта #503 — данные не переносятся)
+  "*000120_tasks_without_property.up.sql",           # ban-drop-not-null: свой смысл миграции — property_id в tasks становится опциональным (ADR 0052, карта #518); объектный срез не меняется, NULL-строки порождает только новый безобъектный срез
 ]
 
 excluded_rules = [

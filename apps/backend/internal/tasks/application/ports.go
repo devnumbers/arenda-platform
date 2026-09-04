@@ -68,11 +68,16 @@ type PropertyStore interface {
 
 // RuleStore is the persistence port of the task rules. Reads and writes are
 // scoped by the data owner (ADR 0028) and the nested path rule→property is
-// enforced in the queries themselves.
+// enforced in the queries themselves; the property-less cut (ADR 0052) is a
+// separate explicit key — the slices never mix.
 type RuleStore interface {
 	// Get loads one rule; ErrNotFound when the id is unknown, belongs to
 	// another owner or hangs on another property.
 	Get(ctx context.Context, id, scope, propertyID uuid.UUID) (domain.TaskRule, error)
+	// GetWithoutProperty loads one rule of the property-less cut; ErrNotFound
+	// when the id is unknown, belongs to another owner or hangs on a property
+	// (ADR 0052).
+	GetWithoutProperty(ctx context.Context, id, scope uuid.UUID) (domain.TaskRule, error)
 	// Create inserts a new rule (id and owner_id are app-side).
 	Create(ctx context.Context, rule domain.TaskRule) error
 	// Update writes the editable fields of the rule.
@@ -102,6 +107,10 @@ type TaskStore interface {
 	// Get loads one task; ErrNotFound when the id is unknown, foreign or
 	// hangs on another property.
 	Get(ctx context.Context, id, scope, propertyID uuid.UUID) (domain.Task, error)
+	// GetWithoutProperty loads one task of the property-less cut; ErrNotFound
+	// when the id is unknown, belongs to another owner or hangs on a property
+	// (ADR 0052).
+	GetWithoutProperty(ctx context.Context, id, scope uuid.UUID) (domain.Task, error)
 	// ListByProperty returns one page of the property's tasks — active
 	// (uncompleted) or completed per the query — with the total count of the
 	// same filter (the «Выполненные N» section header).
@@ -172,8 +181,9 @@ type TasksPage struct {
 }
 
 // OwnerSnapshot is the tick's read side in one interface fact: the owner's
-// task rules on non-archived properties and the dedup keys of their existing
-// tasks. How many queries build it is the adapter's business.
+// task rules — property-less and on non-archived properties (ADR 0052) —
+// and the dedup keys of their existing tasks. How many queries build it is
+// the adapter's business.
 type OwnerSnapshot struct {
 	Rules []domain.TaskRule
 	// Existing keys the listed rules' tasks by rule: dated rows by due date
@@ -190,8 +200,16 @@ type TickStore interface {
 	// the same rows per property, so update-vs-tick, archive-vs-tick and
 	// delete-vs-tick serialize on one point.
 	LockOwnerProperties(ctx context.Context, ownerID uuid.UUID) error
-	// LoadOwnerSnapshot returns the owner's task rules on non-archived
-	// properties with the dedup keys of their existing tasks.
+	// LockOwner takes the property-less cut's serialization point (ADR 0052):
+	// FOR UPDATE on the owner's users row. Owner-scope mutations hold it for
+	// their whole transaction. The full tick takes it after the property
+	// rows; bound-rule mutations never do — the slices' rules are disjoint
+	// row sets, and crossed lock orders would invite deadlocks.
+	LockOwner(ctx context.Context, ownerID uuid.UUID) error
+	// LoadOwnerSnapshot returns the owner's task rules — the property-less
+	// cut plus the rules on non-archived properties (ADR 0052) — with the
+	// dedup keys of their existing tasks. The tick bodies pick their slice
+	// by the rule's PropertyID.
 	LoadOwnerSnapshot(ctx context.Context, ownerID uuid.UUID) (OwnerSnapshot, error)
 	// ApplyTickPlan applies one rule's plan inside the caller's transaction:
 	// the idempotent task inserts (due dates, the missing single future and

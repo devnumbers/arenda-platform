@@ -281,8 +281,8 @@ type Querier interface {
 	// «Удалить все выполненные» journal clear (ADR 0051, resolutions #496/#497).
 	// Rule CRUD lives in tasks_rules.sql, the tick's persistence in
 	// tasks_tick.sql.
-	// The nested path task→property is part of the key: a foreign or re-hung row
-	// is the privacy 404. rule_repeat is the live rule's repeat read through the
+	// The nested path task→property is part of the key: a foreign or re-hung
+	// row is the privacy 404. rule_repeat is the live rule's repeat read through the
 	// LEFT JOIN (null once the rule is deleted) — the wire's ↻ mark; the task
 	// row itself carries no repeat snapshot.
 	GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error)
@@ -294,6 +294,13 @@ type Querier interface {
 	// The nested path rule→property is part of the key: a foreign or re-hung
 	// row is the privacy 404.
 	GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (TaskRule, error)
+	// The property-less cut of the rule read (ADR 0052: the slices never mix —
+	// the predicate over property_id picks the slice explicitly). The id-scoped
+	// owner key is the privacy 404; a bound rule is invisible here by design.
+	GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRuleWithoutPropertyParams) (TaskRule, error)
+	// The property-less cut of the task read (ADR 0052: the slices never mix).
+	// rule_repeat is the same live-rule read projection as in GetTask.
+	GetTaskWithoutProperty(ctx context.Context, arg GetTaskWithoutPropertyParams) (GetTaskWithoutPropertyRow, error)
 	GetUserByEmail(ctx context.Context, dollar_1 string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
@@ -439,11 +446,11 @@ type Querier interface {
 	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)
 	// The hourly zone sweep of the tasks tick worker (ADR 0048 p.3): the
-	// distinct owner timezones having task rules on active/maintenance
-	// properties, with the data owners of each zone. One "today" is computed per
-	// zone in Go; owners without rules on such properties are not sweep targets.
-	// Stateless — every run re-lists, no per-zone or per-owner tick state is
-	// kept.
+	// distinct owner timezones having task rules — without a property (ADR 0052)
+	// or on active/maintenance properties — with the data owners of each zone.
+	// One "today" is computed per zone in Go; owners without tickable rules are
+	// not sweep targets. Stateless — every run re-lists, no per-zone or
+	// per-owner tick state is kept.
 	ListTaskTickZones(ctx context.Context) ([]ListTaskTickZonesRow, error)
 	// Dedup keys and statuses of the listed payments' operations: existence by
 	// (payment_id, date), status for the future-planned rebuild.
@@ -459,7 +466,9 @@ type Querier interface {
 	// for dated rows and by rule_id alone for the undated one; the completed
 	// flag steers the single-future walk (completed-ahead rows are skipped).
 	ListTickTaskKeys(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickTaskKeysRow, error)
-	// The owner's task rules on non-archived properties — the tick's read side.
+	// The owner's tick read side: rules without a property plus rules on
+	// non-archived properties (ADR 0052). The LEFT JOIN keeps the property-less
+	// cut while the status predicate still skips archived ones.
 	ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickTaskRulesByOwnerRow, error)
 	// The hourly zone sweep of the tick worker (ADR 0048 p.3): the distinct owner
 	// timezones having payment rules on active/maintenance properties, with the
@@ -484,6 +493,13 @@ type Querier interface {
 	// pair must not interleave with a concurrent switch, or the one-active
 	// partial unique index rejects the second committer.
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
+	// The owner row is the serialization anchor of the property-less cut (ADR
+	// 0052): owner-scope mutations lock it before reading or writing a rule, and
+	// the full tick locks it after the property rows, so owner-mutation-vs-tick
+	// serializes on one point. A bound-rule mutation never takes this lock — the
+	// two slices' rules are disjoint row sets, and crossing the lock orders
+	// would invite deadlocks.
+	LockTaskOwner(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	// Tasks context queries: the materialization tick's persistence (ADR 0051,
 	// mirroring ADR 0049 §3). The owner-level rule listing, the task dedup keys,
 	// the idempotent inserts and the future rebuild. Rule CRUD lives in
