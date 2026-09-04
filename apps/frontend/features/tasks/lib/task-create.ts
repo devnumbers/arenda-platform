@@ -10,7 +10,6 @@
 
 import type { components } from '@/shared/api/dto';
 import type { IsoDate } from '@/entities/task';
-import { fromIso } from '@/entities/task';
 
 type TaskRuleCreateRequestDto = components['schemas']['TaskRuleCreateRequest'];
 
@@ -84,27 +83,4 @@ export function buildTaskRuleCreateRequest(
     ...(draft.dueTime !== null ? { dueTime: draft.dueTime } : {}),
     repeat: draft.repeat ?? 'once',
   };
-}
-
-/** Блок месяца для ленты пикера даты; month0 — 0..11, как у Date. */
-export type CalendarMonthRef = {
-  readonly year: number;
-  readonly month0: number;
-};
-
-/** Месяц даты — старт ленты, чип месяца и прыжки по ленте. */
-export function calendarMonthOf(iso: IsoDate): CalendarMonthRef {
-  const date = fromIso(iso);
-  return { year: date.getUTCFullYear(), month0: date.getUTCMonth() };
-}
-
-/** Лента месяцев пикера даты (Figma 1539-78660): начинается с месяца
- * стартовой даты (сегодня собственника) и идёт вперёд без конца ленты
- * назад — задним числом задачи не создаются. */
-export function listCalendarMonths(startIso: IsoDate, count: number): ReadonlyArray<CalendarMonthRef> {
-  const { year, month0 } = calendarMonthOf(startIso);
-  return Array.from({ length: count }, (_, index) => {
-    const total = month0 + index;
-    return { year: year + Math.floor(total / 12), month0: total % 12 };
-  });
 }

@@ -43,6 +43,9 @@ export type WheelPickerProps = {
   readonly onValueChange: (value: string) => void;
   /** Имя колеса для скринридеров («Месяц», «Год»). */
   readonly label: string;
+  /** Прокрутка дошла до края списка (за 2 ряда) — родитель может удлинить
+   * items (бесконечная лента годов пикера месяц/год). */
+  readonly onNearEnd?: () => void;
   readonly className?: string;
 };
 
@@ -51,6 +54,7 @@ export function WheelPicker({
   value,
   onValueChange,
   label,
+  onNearEnd,
   className,
 }: WheelPickerProps): JSX.Element {
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -100,6 +104,9 @@ export function WheelPicker({
       Math.min(Math.round(list.scrollTop / WHEEL_ROW_HEIGHT), maxIndex),
     );
     setScrollIndex(index);
+    if (onNearEnd !== undefined && index >= maxIndex - 1) {
+      onNearEnd();
+    }
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
     settleTimerRef.current = window.setTimeout(() => commitIndex(index), SETTLE_TIMEOUT_MS);
   };

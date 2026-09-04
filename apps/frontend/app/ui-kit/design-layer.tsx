@@ -21,6 +21,7 @@ import {
     AmountField,
     Button,
     CalendarButton,
+    CalendarDatePicker,
     CalendarMonth,
     Checkbox,
     ChipButton,
@@ -133,6 +134,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [calendarMonth, setCalendarMonth] = useState(7);
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date(2026, 7, 17));
     const [wheelOpen, setWheelOpen] = useState(false);
+    const [datePickerOpen, setDatePickerOpen] = useState(false);
+    const [datePickerValue, setDatePickerValue] = useState<string | null>(null);
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
     const [lastDayOfMonth, setLastDayOfMonth] = useState(false);
     const [amount, setAmount] = useState('');
@@ -422,6 +425,33 @@ export function DesignLayerShowcase(): JSX.Element {
                             />
                         </ModalContent>
                     </Modal>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>CalendarDatePicker · бесконечный пикер даты</h3>
+                    <p className={styles.groupTitle}>
+                        Полноэкранный: чип месяца и дни недели закреплены над прокруткой, лента месяцев
+                        бесконечно вперёд без подвисаний (общий компонент из пикера задач #500).
+                    </p>
+                    <div className={styles.column}>
+                        <Button onClick={() => setDatePickerOpen(true)}>Открыть пикер даты</Button>
+                        {datePickerValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: {datePickerValue}
+                            </p>
+                        )}
+                    </div>
+                    {datePickerOpen && (
+                        <CalendarDatePicker
+                            today={new Date().toISOString().slice(0, 10)}
+                            value={datePickerValue}
+                            onClose={() => setDatePickerOpen(false)}
+                            onConfirm={(date) => {
+                                setDatePickerValue(date);
+                                setDatePickerOpen(false);
+                            }}
+                        />
+                    )}
                 </div>
 
                 <div className={styles.group}>

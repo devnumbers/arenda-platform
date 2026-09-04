@@ -19,6 +19,7 @@ import {
 } from '@/features/tasks';
 import {
   Button,
+  CalendarDatePicker,
   ChipButton,
   IconButton,
   PageContent,
@@ -28,7 +29,6 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { TaskFieldButton } from './task-create-screen';
-import { TaskDatePicker } from './task-date-picker';
 import { TaskTimePicker } from './task-time-picker';
 import { TasksSkeleton, TasksStateCard } from './tasks-of-property-screen';
 
@@ -234,7 +234,7 @@ function TaskEditForm({
       </StickyBottomBar>
 
       {dateOpen && today !== undefined && (
-        <TaskDatePicker
+        <CalendarDatePicker
           today={today}
           value={draft.dueDate}
           onClose={() => setDateOpen(false)}

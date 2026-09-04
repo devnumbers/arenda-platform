@@ -19,6 +19,7 @@ import {
 } from '@/features/tasks';
 import {
   Button,
+  CalendarDatePicker,
   ChipButton,
   IconButton,
   PageContent,
@@ -27,7 +28,6 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { TaskDatePicker } from './task-date-picker';
 import { TaskTimePicker } from './task-time-picker';
 
 /** Лимиты контракта POST /tasks/rules (#498): название 1..255, комментарий
@@ -183,7 +183,7 @@ export function TaskCreateScreen({
       </StickyBottomBar>
 
       {dateOpen && today !== undefined && (
-        <TaskDatePicker
+        <CalendarDatePicker
           today={today}
           value={draft.dueDate}
           onClose={() => setDateOpen(false)}

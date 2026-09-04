@@ -20,13 +20,10 @@ export {
   type TasksSortField,
 } from './lib/tasks-list';
 export {
-  calendarMonthOf,
   canCreateTask,
   EMPTY_TASK_CREATE_DRAFT,
   isTaskTitleFilled,
-  listCalendarMonths,
   TASK_REPEAT_OPTIONS,
-  type CalendarMonthRef,
   type TaskCreateDraft,
 } from './lib/task-create';
 export {

@@ -25,6 +25,7 @@ export { CalendarMonth, type CalendarMonthProps } from './calendar-month';
 export { MonthDaysGrid, type MonthDaysGridProps } from './month-days-grid';
 export { monthTitle, MONTH_LABELS } from './month-grid';
 export { MonthYearPicker, type MonthYearPickerProps } from './month-year-picker';
+export { CalendarDatePicker, type CalendarDatePickerProps } from './calendar-date-picker';
 export { WheelPicker, type WheelPickerProps } from './wheel-picker';
 export { ListRow, type ListRowProps } from './list-row';
 export { RoundActionButton, type RoundActionButtonProps } from './round-action-button';

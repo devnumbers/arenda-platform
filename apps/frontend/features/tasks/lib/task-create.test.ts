@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTaskRuleCreateRequest,
-  calendarMonthOf,
   canCreateTask,
   EMPTY_TASK_CREATE_DRAFT,
   isTaskTitleFilled,
-  listCalendarMonths,
   TASK_REPEAT_OPTIONS,
   type TaskCreateDraft,
 } from './task-create';
@@ -101,23 +99,3 @@ describe('buildTaskRuleCreateRequest — payload POST /tasks/rules', () => {
   });
 });
 
-describe('listCalendarMonths — лента месяцев пикера даты', () => {
-  it('начинает с месяца стартовой даты и переводит год на границе', () => {
-    expect(listCalendarMonths('2026-11-05', 3)).toEqual([
-      { year: 2026, month0: 10 },
-      { year: 2026, month0: 11 },
-      { year: 2027, month0: 0 },
-    ]);
-  });
-
-  it('один месяц — один блок', () => {
-    expect(listCalendarMonths('2026-09-17', 1)).toEqual([{ year: 2026, month0: 8 }]);
-  });
-});
-
-describe('calendarMonthOf — месяц даты для чипа и черновиков', () => {
-  it('разбирает ISO-дату в год и месяц', () => {
-    expect(calendarMonthOf('2026-09-17')).toEqual({ year: 2026, month0: 8 });
-    expect(calendarMonthOf('2027-01-01')).toEqual({ year: 2027, month0: 0 });
-  });
-});
