@@ -7,11 +7,6 @@ export type {
   TaskStatus,
   TasksPage,
 } from './model/types';
-export { addDays, fromIso } from './lib/dates';
-export {
-  daysOverdue,
-  formatCompletedLabel,
-  formatDayMonth,
-  formatOverdueAgo,
-  formatSectionDate,
-} from './lib/date-format';
+export { addDays, daysOverdue } from '@/shared/lib/calendar';
+export { formatDayMonth, formatDayMonthWithYear } from '@/shared/lib/date-format';
+export { formatCompletedLabel, formatOverdueAgo } from './lib/date-format';

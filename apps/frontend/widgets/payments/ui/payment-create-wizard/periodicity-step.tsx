@@ -22,7 +22,7 @@ import {
   type PeriodicityBranch,
   type PeriodicityKind,
 } from '@/features/payments';
-import { isoDayOfMonth, isoMonthNumber, isoYear } from '../../lib/calendar-date';
+import { isoDayOfMonth, isoMonthNumber, isoYear } from '@/shared/lib/calendar';
 import { WizardHeading } from './wizard-chrome';
 
 /**

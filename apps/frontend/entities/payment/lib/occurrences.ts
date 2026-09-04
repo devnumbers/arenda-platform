@@ -18,7 +18,7 @@
 
 import type { PauseInterval, PaymentSchedule } from '../model/types';
 import type { IsoDate } from '../model/types';
-import { addDays, cmp, dateInMonth, fromIso } from './dates';
+import { addDays, cmp, dateInMonth, fromIso } from '@/shared/lib/calendar';
 
 /** Страховочный потолок перечисления внутри одного окна — как в прототипе. */
 const MAX_OCCURRENCES = 1000;

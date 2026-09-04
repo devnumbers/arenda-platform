@@ -7,8 +7,8 @@
  */
 
 import type { Recurrence } from '../model/types';
-import { dateInMonth } from './dates';
-import { formatDayMonth } from './date-format';
+import { dateInMonth } from '@/shared/lib/calendar';
+import { formatDayMonth } from '@/shared/lib/date-format';
 
 /** Короткие имена дней недели, 0=вс..6=сб — как в каталоге дат прототипа. */
 const WEEKDAYS_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'] as const;

@@ -9,7 +9,7 @@
 
 import {
   addDays,
-  formatSectionDate,
+  formatDayMonthWithYear,
   type IsoDate,
   type Task,
 } from '@/entities/task';
@@ -130,7 +130,7 @@ export function groupTasks(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, tasks]) => ({
       kind: 'dated' as const,
-      title: formatSectionDate(date, today),
+      title: formatDayMonthWithYear(date, today),
       date,
       tasks: sortTasks(tasks, sort),
     }));
@@ -147,7 +147,7 @@ export function groupTasks(
   if (todays.length > 0) {
     sections.push({
       kind: 'today',
-      title: `Сегодня, ${formatSectionDate(today, today)}`,
+      title: `Сегодня, ${formatDayMonthWithYear(today, today)}`,
       date: today,
       tasks: sortTasks(todays, sort),
     });
@@ -155,7 +155,7 @@ export function groupTasks(
   if (tomorrows.length > 0) {
     sections.push({
       kind: 'tomorrow',
-      title: `Завтра, ${formatSectionDate(tomorrow, today)}`,
+      title: `Завтра, ${formatDayMonthWithYear(tomorrow, today)}`,
       date: tomorrow,
       tasks: sortTasks(tomorrows, sort),
     });

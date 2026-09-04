@@ -1,7 +1,8 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
 import { addDays, formatDayMonth, inclusiveDays } from '@/entities/payment';
+import { lastDayOfMonth } from '@/shared/lib/calendar';
+import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
-import { daysInMonth } from '@/shared/ui/design/month-grid';
 import {
   operationsMonthOf,
   operationsMonthRange,
@@ -69,7 +70,7 @@ function isRealIsoDate(iso: string): boolean {
     return false;
   }
   const { year, month, day } = isoParts(iso);
-  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month - 1);
+  return month >= 1 && month <= 12 && day >= 1 && day <= lastDayOfMonth(year, month - 1);
 }
 
 /**
@@ -135,7 +136,7 @@ export function shiftOperationsPeriod(period: OperationsPeriod, delta: number): 
     from.day === 1
     && from.year === to.year
     && from.month === to.month
-    && to.day === daysInMonth(to.year, to.month - 1);
+    && to.day === lastDayOfMonth(to.year, to.month - 1);
   if (wholeMonth) {
     const shifted = operationsMonthRange(
       shiftOperationsMonth(operationsMonthOf(period.from), delta),
@@ -275,20 +276,10 @@ export function operationsCategoryRows(
   return [...bySlug.values()];
 }
 
-/** Русское склонение: 1 категория, 2/3/4 категории, 5+ и 11–14 категорий. */
+/** Русское склонение: 1 категория, 2/3/4 категории, 5+ и 11–14 категорий —
+ * через общий pluralize (унификация 2026-09-04). */
 function categoriesPlural(count: number): string {
-  const mod100 = Math.abs(count) % 100;
-  const mod10 = mod100 % 10;
-  if (mod100 >= 11 && mod100 <= 14) {
-    return 'категорий';
-  }
-  if (mod10 === 1) {
-    return 'категория';
-  }
-  if (mod10 >= 2 && mod10 <= 4) {
-    return 'категории';
-  }
-  return 'категорий';
+  return pluralize(Math.abs(count), 'категория', 'категории', 'категорий');
 }
 
 /**

@@ -22,7 +22,7 @@ import {
   isoDateOf,
   listCalendarMonths,
   type IsoDate,
-} from '@/shared/ui/design/calendar-feed';
+} from '@/shared/lib/calendar';
 import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '@/shared/ui/design/month-grid';
 
 /** Полноэкранный пикер даты (общий компонент дизайн-слоя, вырос из пикера

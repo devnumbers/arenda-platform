@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { clampMonthToMin, type CalendarMonthRef } from './calendar-feed';
+import { clampMonthToMin, type CalendarMonthRef } from '@/shared/lib/calendar';
 import { MONTH_LABELS } from './month-grid';
 import {
   WheelPicker,
