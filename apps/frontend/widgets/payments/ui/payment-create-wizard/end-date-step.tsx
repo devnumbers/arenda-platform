@@ -54,7 +54,6 @@ export function EndDateStep({
       <Modal open={pickerOpen} onOpenChange={setPickerOpen}>
         <ModalContent title="Выбрать дату" titleSrOnly>
           <YearMonthCalendar
-            wheelAsModal={false}
             padded={false}
             value={
               endDate === undefined
