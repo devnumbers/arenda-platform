@@ -7,8 +7,6 @@ import {
   Button,
   CalendarButton,
   IconButton,
-  Modal,
-  ModalContent,
   MonthYearPicker,
   StickyBottomBar,
   TopNav,
@@ -268,19 +266,19 @@ export function CalendarDatePicker({
         </Button>
       </StickyBottomBar>
 
-      <Modal open={monthPickerOpen} onOpenChange={setMonthPickerOpen}>
-        <ModalContent title="Месяц и год" titleSrOnly>
-          <MonthYearPicker
-            month={draftMonth.month0}
-            year={draftMonth.year}
-            min={feedStart}
-            onConfirm={(month0, year) => {
-              setMonthPickerOpen(false);
-              jumpTo(year, month0);
-            }}
-          />
-        </ModalContent>
-      </Modal>
+      {/* Шит месяца и года — самостоятельный WheelPickerSheet (общий
+          компонент), монтируется только в открытом состоянии. */}
+      <MonthYearPicker
+        open={monthPickerOpen}
+        onOpenChange={setMonthPickerOpen}
+        month={draftMonth.month0}
+        year={draftMonth.year}
+        min={feedStart}
+        onConfirm={(month0, year) => {
+          setMonthPickerOpen(false);
+          jumpTo(year, month0);
+        }}
+      />
     </div>
   );
 }

@@ -48,9 +48,12 @@ import {
     TextField,
     TopNav,
     TopNavTitle,
+    WheelPicker,
+    WheelPickerSheet,
     amountKopecks,
     monthTitle,
     type PickerOption,
+    type WheelPickerItem,
 } from '@/shared/ui/design';
 import {
     CategoryIcon,
@@ -68,6 +71,16 @@ import styles from './page.module.css';
 const dlButtonVariants = ['primary', 'secondary', 'danger', 'clear', 'white'] as const;
 const dlIconVariants = ['primary', 'secondary', 'danger'] as const;
 const statusGradations = ['danger', 'warning', 'good', 'check', 'info'] as const;
+
+/** Колёса демо-шита WheelPickerSheet: часы 00–23 и минуты 00–59. */
+const sheetHourItems: ReadonlyArray<WheelPickerItem> = Array.from({ length: 24 }, (_, value) => ({
+    value: String(value),
+    label: String(value).padStart(2, '0'),
+}));
+const sheetMinuteItems: ReadonlyArray<WheelPickerItem> = Array.from({ length: 60 }, (_, value) => ({
+    value: String(value),
+    label: String(value).padStart(2, '0'),
+}));
 
 /** Витринные категории из сгенерированного каталога #447. */
 const showcaseCategorySlugs = [
@@ -134,6 +147,10 @@ export function DesignLayerShowcase(): JSX.Element {
     const [calendarMonth, setCalendarMonth] = useState(7);
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date(2026, 7, 17));
     const [wheelOpen, setWheelOpen] = useState(false);
+    const [wheelSheetOpen, setWheelSheetOpen] = useState(false);
+    const [wheelSheetValue, setWheelSheetValue] = useState('09:00');
+    const [sheetHour, setSheetHour] = useState('09');
+    const [sheetMinute, setSheetMinute] = useState('00');
     const [datePickerOpen, setDatePickerOpen] = useState(false);
     const [datePickerValue, setDatePickerValue] = useState<string | null>(null);
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
@@ -404,27 +421,76 @@ export function DesignLayerShowcase(): JSX.Element {
                             onDateSelect={setSelectedDate}
                         />
                     </div>
-                    <Modal open={wheelOpen} onOpenChange={setWheelOpen}>
-                        <ModalContent title={<span className="sr-only">Месяц и год</span>}>
-                            <MonthYearPicker
-                                month={calendarMonth}
-                                year={calendarYear}
-                                onConfirm={(month, year) => {
-                                    setCalendarMonth(month);
-                                    setCalendarYear(year);
-                                    // выбранная дата жила в старом месяце —
-                                    // в новом блоке ничего не выбрано
-                                    if (
-                                        selectedDate !== undefined &&
-                                        (selectedDate.getMonth() !== month || selectedDate.getFullYear() !== year)
-                                    ) {
-                                        setSelectedDate(undefined);
-                                    }
-                                    setWheelOpen(false);
-                                }}
-                            />
-                        </ModalContent>
-                    </Modal>
+                    <MonthYearPicker
+                        open={wheelOpen}
+                        onOpenChange={setWheelOpen}
+                        month={calendarMonth}
+                        year={calendarYear}
+                        onConfirm={(month, year) => {
+                            setCalendarMonth(month);
+                            setCalendarYear(year);
+                            // выбранная дата жила в старом месяце —
+                            // в новом блоке ничего не выбрано
+                            if (
+                                selectedDate !== undefined &&
+                                (selectedDate.getMonth() !== month || selectedDate.getFullYear() !== year)
+                            ) {
+                                setSelectedDate(undefined);
+                            }
+                            setWheelOpen(false);
+                        }}
+                    />
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>WheelPickerSheet · универсальный шит колёс</h3>
+                    <p className={styles.groupTitle}>
+                        Любое число колёс + передаваемые кнопки (Figma 1539-82659); на мобиле —
+                        выезжающий шит (vaul), на десктопе — карточка.
+                    </p>
+                    <div className={styles.column}>
+                        <Button onClick={() => setWheelSheetOpen(true)}>Открыть шит колёс</Button>
+                        <p className="px-6 text-base text-content-secondary">
+                            Выбрано: {wheelSheetValue}
+                        </p>
+                    </div>
+                    <WheelPickerSheet
+                        title="Время"
+                        open={wheelSheetOpen}
+                        onOpenChange={setWheelSheetOpen}
+                        actions={[
+                            {
+                                label: 'Отменить',
+                                variant: 'secondary',
+                                onSelect: () => setWheelSheetOpen(false),
+                            },
+                            {
+                                label: 'Выбрать',
+                                onSelect: () => {
+                                    setWheelSheetValue(`${sheetHour}:${sheetMinute}`);
+                                    setWheelSheetOpen(false);
+                                },
+                            },
+                        ]}
+                        columns={[
+                            <WheelPicker
+                                key="hour"
+                                label="Часы"
+                                strip={false}
+                                items={sheetHourItems}
+                                value={sheetHour}
+                                onValueChange={setSheetHour}
+                            />,
+                            <WheelPicker
+                                key="minute"
+                                label="Минуты"
+                                strip={false}
+                                items={sheetMinuteItems}
+                                value={sheetMinute}
+                                onValueChange={setSheetMinute}
+                            />,
+                        ]}
+                    />
                 </div>
 
                 <div className={styles.group}>

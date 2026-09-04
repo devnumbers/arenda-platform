@@ -1,19 +1,20 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { Button, Modal, ModalContent, WheelPicker } from '@/shared/ui/design';
-// Именованные константы грида — прямой импорт модуля shared (общие слои —
-// точки входа сами по себе); в индекс слоя тип не выведен.
-import type { WheelPickerItem } from '@/shared/ui/design/wheel-picker';
-
-/** Пикер времени задачи (#500, Figma 1539-82656): нижний шит с двумя
- * колёсами WheelPicker — часы 00–23 и минуты 00–59 — и кнопками
- * «Отменить»/«Выбрать». Черновик колёс живёт, пока шит открыт (контент
- * модалки размонтируется при закрытии): «Выбрать» коммитит HH:MM разом,
- * «Отменить» и свайп вниз закрывают без изменений. Без выбранного времени
- * колёса стоят на текущем времени устройства, точное до минуты (решение
- * владельца 2026-09-03; в поле формы время попадает только по «Выбрать» —
- * симметрично дате). */
+import {
+  WheelPicker,
+  type WheelPickerItem,
+  WheelPickerSheet,
+  type WheelPickerSheetAction,
+} from '@/shared/ui/design';
+/** Пикер времени задачи (#500, Figma 1539-82656): нижний шит на общем
+ * WheelPickerSheet (редизайн 2026-09-04) — часы 00–23 и минуты 00–59,
+ * кнопки «Отменить»/«Выбрать» по макету 1539-82659. Черновик колёс живёт,
+ * пока шит открыт (при open=false тело не рендерится): «Выбрать» коммитит
+ * HH:MM разом, «Отменить» и свайп вниз закрывают без изменений. Без
+ * выбранного времени колёса стоят на текущем времени устройства, точное
+ * до минуты (решение владельца 2026-09-03; в поле формы время попадает
+ * только по «Выбрать» — симметрично дате). */
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
@@ -54,22 +55,23 @@ export function TaskTimePicker({
   onOpenChange,
   value,
   onConfirm,
-}: TaskTimePickerProps): JSX.Element {
+}: TaskTimePickerProps): JSX.Element | null {
+  if (!open) {
+    // Черновик колёс не переживает закрытие — тело смонтировано только
+    // в открытом шите.
+    return null;
+  }
   return (
-    <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent title="Время" titleSrOnly>
-        <TimeWheelBody
-          initial={value ?? currentTimeHHMM()}
-          onCancel={() => onOpenChange(false)}
-          onConfirm={onConfirm}
-        />
-      </ModalContent>
-    </Modal>
+    <TimeSheet
+      initial={value ?? currentTimeHHMM()}
+      onCancel={() => onOpenChange(false)}
+      onConfirm={onConfirm}
+    />
   );
 }
 
-/** Колёса с кнопками: черновик — локальное состояние тела шита. */
-function TimeWheelBody({
+/** Тело шита: черновик — локальное состояние, живёт при открытом шите. */
+function TimeSheet({
   initial,
   onCancel,
   onConfirm,
@@ -82,32 +84,39 @@ function TimeWheelBody({
   const [hour, setHour] = useState(initialHour);
   const [minute, setMinute] = useState(initialMinute);
 
+  const actions: ReadonlyArray<WheelPickerSheetAction> = [
+    { label: 'Отменить', variant: 'secondary', onSelect: onCancel },
+    { label: 'Выбрать', onSelect: () => onConfirm(`${hour}:${minute}`) },
+  ];
+
   return (
-    <>
-      <div className="flex items-stretch">
+    <WheelPickerSheet
+      title="Время"
+      open
+      onOpenChange={(next) => {
+        if (!next) {
+          onCancel();
+        }
+      }}
+      actions={actions}
+      columns={[
         <WheelPicker
-          className="min-w-0 flex-1"
+          key="hour"
           label="Часы"
+          strip={false}
           items={HOUR_ITEMS}
           value={hour}
           onValueChange={setHour}
-        />
+        />,
         <WheelPicker
-          className="min-w-0 flex-1"
+          key="minute"
           label="Минуты"
+          strip={false}
           items={MINUTE_ITEMS}
           value={minute}
           onValueChange={setMinute}
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Button variant="secondary" className="w-full" onClick={onCancel}>
-          Отменить
-        </Button>
-        <Button className="w-full" onClick={() => onConfirm(`${hour}:${minute}`)}>
-          Выбрать
-        </Button>
-      </div>
-    </>
+        />,
+      ]}
+    />
   );
 }

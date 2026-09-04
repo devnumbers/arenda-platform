@@ -1,44 +1,84 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { cn } from '@/shared/lib/cn';
-import { Button } from './button';
 import { clampMonthToMin, type CalendarMonthRef } from './calendar-feed';
 import { MONTH_LABELS } from './month-grid';
-import { WheelPicker, type WheelPickerItem } from './wheel-picker';
+import {
+  WheelPicker,
+  type WheelPickerItem,
+} from './wheel-picker';
+import {
+  WheelPickerSheet,
+  type WheelPickerSheetAction,
+} from './wheel-picker-sheet';
 
-/** Пикер месяц/год двумя колёсами (тикет #459, Figma 848:8720) — содержимое
- * шита выбора месяца и года для календаря. Колёса меняют черновик, кнопка
- * «Выбрать» коммитит оба значения разом: экран перелистывается на блок с
- * выбранным месяцем только по кнопке. Колёса стоят вплотную: серые полосы
- * выбора сливаются в одну ленту на всю ширину.
- *
- * Без min — годы ±3 вокруг выбранного, как в макете (2023..2029 вокруг
- * 2026). С min — нижняя граница (пикер даты задач: будущее без прошлого):
- * годы раньше min.year отсутствуют, в году min — месяцы раньше min.month0;
- * список годов расширяется вперёд бесконечно — колесо удлиняется на 10
- * лет, когда прокрутка доезжает до края (onNearEnd WheelPicker). */
+/** Шит выбора месяца и года двумя колёсами (Figma 848:8720, редизайн
+ * 2026-09-04 на общий WheelPickerSheet по Figma 1539-82659). Колёса меняют
+ * черновик, кнопки коммитят/закрывают разом: экран перелистывается на блок
+ * с выбранным месяцем только по «Выбрать», «Отменить» закрывает без
+ * изменений (пара кнопок — по макету 1539-82659, решение владельца).
+ * Без min — годы ±3 вокруг выбранного. С min — нижняя граница (пикер даты
+ * задач: будущее без прошлого): годы раньше min.year отсутствуют, в году
+ * min — месяцы раньше min.month0; список годов расширяется вперёд
+ * бесконечно — колесо удлиняется на 10 лет, когда прокрутка доезжает до
+ * края (onNearEnd WheelPicker). Черновик живёт, пока шит смонтирован:
+ * при open=false шит не рендерится. */
 export type MonthYearPickerProps = {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
   /** 0..11, как у Date. */
   readonly month: number;
   readonly year: number;
   /** Нижняя граница выбора: ничего раньше этого месяца. */
   readonly min?: CalendarMonthRef;
   readonly onConfirm: (month: number, year: number) => void;
-  readonly confirmLabel?: string;
   readonly className?: string;
 };
 
 const YEARS_EXTENSION = 10;
 
 export function MonthYearPicker({
+  open,
+  onOpenChange,
   month,
   year,
   min,
   onConfirm,
-  confirmLabel = 'Выбрать',
   className,
-}: MonthYearPickerProps): JSX.Element {
+}: MonthYearPickerProps): JSX.Element | null {
+  if (!open) {
+    // Черновик колёс не переживает закрытие — тело смонтировано только
+    // в открытом шите.
+    return null;
+  }
+  return (
+    <MonthYearSheet
+      month={month}
+      year={year}
+      min={min}
+      onConfirm={onConfirm}
+      onClose={() => onOpenChange(false)}
+      className={className}
+    />
+  );
+}
+
+/** Тело шита: черновик — локальное состояние, живёт при открытом шите. */
+function MonthYearSheet({
+  month,
+  year,
+  min,
+  onConfirm,
+  onClose,
+  className,
+}: {
+  readonly month: number;
+  readonly year: number;
+  readonly min?: CalendarMonthRef;
+  readonly onConfirm: (month: number, year: number) => void;
+  readonly onClose: () => void;
+  readonly className?: string;
+}): JSX.Element {
   const [draftMonth, setDraftMonth] = useState(month);
   const [draftYear, setDraftYear] = useState(year);
   // Лента годов вперёд без конца: от нижней границы (min.year либо
@@ -59,7 +99,8 @@ export function MonthYearPicker({
     value: String(index),
     label,
   })).slice(minMonth0);
-  const draftDisplayMonth = min !== undefined ? clampMonthToMin(min, draftYear, draftMonth) : draftMonth;
+  const draftDisplayMonth =
+    min !== undefined ? clampMonthToMin(min, draftYear, draftMonth) : draftMonth;
 
   const handleYearChange = (value: string): void => {
     const nextYear = Number(value);
@@ -71,31 +112,41 @@ export function MonthYearPicker({
     }
   };
 
+  const actions: ReadonlyArray<WheelPickerSheetAction> = [
+    { label: 'Отменить', variant: 'secondary', onSelect: onClose },
+    { label: 'Выбрать', onSelect: () => onConfirm(draftDisplayMonth, draftYear) },
+  ];
+
   return (
-    <div className={cn('flex flex-col gap-6', className)}>
-      <div className="flex items-stretch">
+    <WheelPickerSheet
+      title="Месяц и год"
+      open
+      onOpenChange={(next) => {
+        if (!next) {
+          onClose();
+        }
+      }}
+      actions={actions}
+      className={className}
+      columns={[
         <WheelPicker
-          className="min-w-0 flex-1"
+          key="month"
           label="Месяц"
+          strip={false}
           items={monthItems}
           value={String(draftDisplayMonth)}
           onValueChange={(value) => setDraftMonth(Number(value))}
-        />
+        />,
         <WheelPicker
-          className="min-w-0 flex-1"
+          key="year"
           label="Год"
+          strip={false}
           items={yearItems}
           value={String(draftYear)}
           onValueChange={handleYearChange}
           onNearEnd={() => setYearsEnd((end) => end + YEARS_EXTENSION)}
-        />
-      </div>
-      <Button
-        className="w-full"
-        onClick={() => onConfirm(draftDisplayMonth, draftYear)}
-      >
-        {confirmLabel}
-      </Button>
-    </div>
+        />,
+      ]}
+    />
   );
 }

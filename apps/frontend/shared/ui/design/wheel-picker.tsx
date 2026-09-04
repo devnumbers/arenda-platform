@@ -11,15 +11,17 @@ import {
 } from 'react';
 import { cn } from '@/shared/lib/cn';
 
-/** Колесо-«крутилка» дизайн-слоя (тикет #459, Figma 848:8720) — как
- * колесо таймера/будильника Apple: вертикальный список с нативным скроллом
+/** Колесо-«крутилка» дизайн-слоя (редизайн 2026-09-04 по решению
+ * владельца, Figma 1539-82659): вертикальный список с нативным скроллом
  * и снапом к ряду, инерция тач-скролла, ленты-градиенты сверху и снизу и
- * серая полоса выбора за центральной строкой. Кегли по расстоянию от
- * центра (Figma): 0 — 20/24 M/500 #171A1C; 1 — 16/18; дальше — 13/15;
- * нецентральные строки #6F787C. Геометрия: окно 240px (класс h-[240px]) =
- * 5 рядов по 48px (WHEEL_ROW_HEIGHT) — по 2 ряда над и под выбранным,
- * поля по 96px (класс py-[96px]), полоса выбора 48px radius 16 — ровно
- * один ряд, градиенты по 48px.
+ * серая полоса выбора за центральной строкой. Геометрия: окно 240px
+ * (класс h-[240px]) = 5 рядов по 48px (WHEEL_ROW_HEIGHT) — по 2 ряда над
+ * и под выбранным (правка владельца: видно на 2 ряда, не 3), поля по
+ * 96px (класс py-[96px]) — ряд садится в полосу пиксель в пиксель.
+ * Полоса выбора 48px без закруглений (правка владельца — прямые углы).
+ * Кегль всех рядов единый — Mobile/Text/XL (20/24 Regular), различие
+ * только цветом: выбранный #171A1C (content), остальные #6F787C
+ * (content-secondary) — каскад кеглей старого макета 848:8720 отменён.
  * Значение коммитится,
  * когда прокрутка осела; клик по ряду и клавиатура коммитят сразу.
  *
@@ -46,6 +48,10 @@ export type WheelPickerProps = {
   /** Прокрутка дошла до края списка (за 2 ряда) — родитель может удлинить
    * items (бесконечная лента годов пикера месяц/год). */
   readonly onNearEnd?: () => void;
+  /** Полоса выбора за центральным рядом; false — когда полосу рисует общий
+   * контейнер (WheelPickerSheet: одна полоса на все колонки, скругление
+   * только по внешним краям — решение владельца 2026-09-04). */
+  readonly strip?: boolean;
   readonly className?: string;
 };
 
@@ -55,6 +61,7 @@ export function WheelPicker({
   onValueChange,
   label,
   onNearEnd,
+  strip = true,
   className,
 }: WheelPickerProps): JSX.Element {
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -135,10 +142,12 @@ export function WheelPicker({
 
   return (
     <div className={cn('relative', className)}>
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 rounded-2xl bg-surface-muted"
-      />
+      {strip && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 bg-surface-muted"
+        />
+      )}
       <ul
         ref={listRef}
         role="listbox"
@@ -161,10 +170,10 @@ export function WheelPicker({
               data-index={index}
               style={{ height: WHEEL_ROW_HEIGHT }}
               className={cn(
-                'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-content-secondary transition-all',
-                distance === 0 && 'text-xl font-medium leading-6 text-content',
-                distance === 1 && 'text-base leading-[18px]',
-                distance >= 2 && 'text-[13px] leading-[15px]',
+                // Единый кегль всех рядов (Figma 1539-82659): выбранный
+                // темнеет, остальные серые — без каскада размеров.
+                'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-xl leading-6 text-content-secondary transition-colors',
+                distance === 0 && 'text-content',
               )}
             >
               {item.label}

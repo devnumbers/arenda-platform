@@ -25,8 +25,13 @@ export { CalendarMonth, type CalendarMonthProps } from './calendar-month';
 export { MonthDaysGrid, type MonthDaysGridProps } from './month-days-grid';
 export { monthTitle, MONTH_LABELS } from './month-grid';
 export { MonthYearPicker, type MonthYearPickerProps } from './month-year-picker';
+export { WheelPicker, type WheelPickerProps, type WheelPickerItem } from './wheel-picker';
+export {
+  WheelPickerSheet,
+  type WheelPickerSheetProps,
+  type WheelPickerSheetAction,
+} from './wheel-picker-sheet';
 export { CalendarDatePicker, type CalendarDatePickerProps } from './calendar-date-picker';
-export { WheelPicker, type WheelPickerProps } from './wheel-picker';
 export { ListRow, type ListRowProps } from './list-row';
 export { RoundActionButton, type RoundActionButtonProps } from './round-action-button';
 export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar';
