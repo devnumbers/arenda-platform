@@ -9,7 +9,7 @@
  */
 
 import type { IsoDate } from './calendar';
-import { fromIso } from './calendar';
+import { fromIso, isoYear } from './calendar';
 import { pluralize } from './pluralize';
 
 const dayMonthFormatter = new Intl.DateTimeFormat('ru-RU', {
@@ -26,10 +26,10 @@ export function formatDayMonth(iso: IsoDate): string {
 /** Тот же формат с годом вне текущего: «13 мая» / «13 мая, 2027». */
 export function formatDayMonthWithYear(iso: IsoDate, today: IsoDate): string {
   const base = formatDayMonth(iso);
-  if (iso.slice(0, 4) === today.slice(0, 4)) {
+  if (isoYear(iso) === isoYear(today)) {
     return base;
   }
-  return `${base}, ${iso.slice(0, 4)}`;
+  return `${base}, ${isoYear(iso)}`;
 }
 
 /** Русское склонение «день/дня/дней»: 1 день, 3 дня, 5 дней, 21 день. */

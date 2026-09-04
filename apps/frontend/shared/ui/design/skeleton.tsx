@@ -9,8 +9,8 @@ import { cn } from '@/shared/lib/cn';
  * (строка: `h-11`, заголовок: `h-6 w-40`, круглый аватар: `h-12 w-12
  * rounded-full`). Внутри серой карточки (фон `bg-surface-muted`) блок
  * приглушается до `bg-surface-muted-hover`, чтобы оставался видимым.
- * aria-hidden не нужен: сам элемент декоративен, экран обязан давать
- * текстовый статус загрузки рядом (role="status" и т.п.). */
+ * Элемент декоративен — рендерится с aria-hidden; текстовый статус
+ * загрузки даёт экран рядом (role="status" и т.п.). */
 export type SkeletonProps = ComponentProps<'div'>;
 
 export function Skeleton({ className, ...props }: SkeletonProps): JSX.Element {

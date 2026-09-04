@@ -58,6 +58,7 @@ import {
     type PickerOption,
     type WheelPickerItem,
 } from '@/shared/ui/design';
+import { dateToIso } from '@/shared/lib/calendar';
 import {
     CategoryIcon,
     categoryStyle,
@@ -541,7 +542,7 @@ export function DesignLayerShowcase(): JSX.Element {
                     </div>
                     {datePickerOpen && (
                         <CalendarDatePicker
-                            today={new Date().toISOString().slice(0, 10)}
+                            today={dateToIso(new Date())}
                             value={datePickerValue}
                             onClose={() => setDatePickerOpen(false)}
                             onConfirm={(date) => {

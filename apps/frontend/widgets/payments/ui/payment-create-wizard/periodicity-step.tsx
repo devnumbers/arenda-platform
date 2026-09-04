@@ -8,7 +8,7 @@ import {
   ListRow,
   MonthYearPicker,
 } from '@/shared/ui/design';
-import { type CalendarMonthRef } from '@/shared/lib/calendar';
+import { type CalendarMonthRef, calendarMonthOf } from '@/shared/lib/calendar';
 // Именованные константы грида — прямой импорт модуля shared (общие слои —
 // точки входа сами по себе).
 import { MONTH_LABELS } from '@/shared/ui/design/month-grid';
@@ -297,8 +297,10 @@ export function YearMonthCalendar({
       ? value.day
       : undefined;
 
-  const minYear = minDate !== undefined ? isoYear(minDate) : todayYear;
-  const min: CalendarMonthRef = { year: minYear, month0: 0 };
+  // Шит месяца/года: нижняя граница — календарный месяц minDate (или
+  // «сегодня»), как в задачах: прошлые годы и месяцы в шите отсутствуют.
+  const min: CalendarMonthRef =
+    minDate !== undefined ? calendarMonthOf(minDate) : { year: todayYear, month0: todayMonth0 };
 
   return (
     <>

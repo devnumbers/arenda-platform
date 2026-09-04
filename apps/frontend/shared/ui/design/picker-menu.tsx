@@ -90,7 +90,9 @@ export function PickerMenu({ title, groups, children }: PickerMenuProps): JSX.El
 type PickerMenuRowProps = {
   readonly variant: 'menu' | 'sheet';
   readonly option: PickerMenuOption;
-};/** Опция: в меню — пункт с ведущим selection-квадратом (Figma 1186:44732 +
+};
+
+/** Опция: в меню — пункт с ведущим selection-квадратом (Figma 1186:44732 +
  * Selection Button Checkbox, radius 8: синий с белой галкой у выбранного,
  * серое кольцо у остальных); в шите — серая плашка 48 radius 16 с
  * radio-кружком справа (Figma Row Button 1041:48796). */

@@ -29,7 +29,7 @@ import { cn } from '@/shared/lib/cn';
  * со скролл-снапом и aria-activedescendant, без roving focus, без Enter/
  * Space/Escape и без заворота по краям — семантика стрелок иная. */
 
-/** Высота ряда (px); окно колеса — 7 рядов. */
+/** Высота ряда (px); окно колеса — 5 рядов. */
 const WHEEL_ROW_HEIGHT = 48;
 /** Пауза тишины скролла, после которой ряд под полосой считается выбранным. */
 const SETTLE_TIMEOUT_MS = 150;
@@ -69,6 +69,9 @@ export function WheelPicker({
   // Первая установка колеса — мгновенная (как у iOS: выбранная строка уже
   // в центре при открытии), дальнейшие синхронизации — плавные.
   const instantRef = useRef(true);
+  // Длина списка, о крае которой колесо уже сообщило (onNearEnd): защита
+  // от повторных вызовов на каждом скролл-событии, пока родитель удлиняет.
+  const nearEndAtLengthRef = useRef<number | null>(null);
   const optionId = useId();
   const valueIndex = Math.max(items.findIndex((item) => item.value === value), 0);
   const [scrollIndex, setScrollIndex] = useState(valueIndex);
@@ -111,7 +114,14 @@ export function WheelPicker({
       Math.min(Math.round(list.scrollTop / WHEEL_ROW_HEIGHT), maxIndex),
     );
     setScrollIndex(index);
-    if (onNearEnd !== undefined && index >= maxIndex - 1) {
+    // Повторный сигнал о том же крае — только после удлинения списка
+    // родителем (иначе инерционный доскат у края растянет его на сотни).
+    if (
+      onNearEnd !== undefined &&
+      index >= maxIndex - 1 &&
+      nearEndAtLengthRef.current !== items.length
+    ) {
+      nearEndAtLengthRef.current = items.length;
       onNearEnd();
     }
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
