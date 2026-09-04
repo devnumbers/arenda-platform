@@ -25,6 +25,7 @@ export {
   togglePaymentType,
   toggleWeekday,
   wizardStepReady,
+  yearlyAnchorDate,
   type PeriodicityBranch,
   type PeriodicityKind,
   type WizardStep,

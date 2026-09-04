@@ -12,6 +12,7 @@ import {
   togglePaymentType,
   toggleWeekday,
   wizardStepReady,
+  yearlyAnchorDate,
 } from './wizard-model';
 
 const draft = (over: Partial<PaymentWizardDraft>): PaymentWizardDraft => ({
@@ -106,6 +107,36 @@ describe('periodicityReady / branchKind', () => {
     expect(periodicityReady({ kind: 'weekly', weekdays: [6] })).toBe(true);
     expect(periodicityReady({ kind: 'monthly', daysOfMonth: [], lastDay: true })).toBe(true);
     expect(periodicityReady({ kind: 'yearly', month: 12, day: 31 })).toBe(true);
+  });
+});
+
+describe('yearlyAnchorDate — ближайшее будущее вхождение годового правила', () => {
+  it('месяц впереди — вхождение в текущем году', () => {
+    expect(yearlyAnchorDate({ month: 12, day: 31 }, '2026-09-04')).toBe('2026-12-31');
+  });
+
+  it('месяц позади — вхождение в следующем году', () => {
+    expect(yearlyAnchorDate({ month: 1, day: 15 }, '2026-09-04')).toBe('2027-01-15');
+  });
+
+  it('тот же месяц, день раньше сегодняшнего — следующий год', () => {
+    expect(yearlyAnchorDate({ month: 9, day: 1 }, '2026-09-04')).toBe('2027-09-01');
+  });
+
+  it('тот же день — сегодня и есть ближайшее вхождение', () => {
+    expect(yearlyAnchorDate({ month: 9, day: 4 }, '2026-09-04')).toBe('2026-09-04');
+  });
+
+  it('несуществующий день прижимается к концу месяца (29.02, 31-е)', () => {
+    expect(yearlyAnchorDate({ month: 2, day: 29 }, '2026-09-04')).toBe('2027-02-28');
+    expect(yearlyAnchorDate({ month: 4, day: 31 }, '2026-09-04')).toBe('2027-04-30');
+  });
+
+  it('прижатый день в високосном году остаётся 29 февраля', () => {
+    // Как сервер: вхождение {29.02} в невисокосный год — 28.02, поэтому
+    // ближайшее будущее вхождение от 01.03.2026 — 28.02.2027, не високосный
+    // 2028-й; пользователь может отскроллить и выбрать 29.02.2028 заново.
+    expect(yearlyAnchorDate({ month: 2, day: 29 }, '2026-03-01')).toBe('2027-02-28');
   });
 });
 

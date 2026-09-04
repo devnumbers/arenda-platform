@@ -42,7 +42,12 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * Снятие даты (решение владельца 2026-09-03): повторный тап по выбранному
  * дню опустошает черновик, «Выбрать» остаётся активной и подтверждает
  * «без даты» (onConfirm(null)) — выбор по-прежнему коммитится явной
- * кнопкой, кнопка активна всегда. */
+ * кнопкой, кнопка активна всегда.
+ *
+ * Обязательная дата (проп required, решение владельца 2026-09-04): у
+ * правила «без даты» не существует — повторный тап по выбранному дню
+ * выбор не снимает, «Выбрать» с пустым черновиком неактивна (годовая
+ * ветка периодичности платежей). */
 
 /** Стартовая лента и шаг дорисовки — год месяцев. */
 const FEED_MONTHS = 12;
@@ -60,6 +65,8 @@ export type CalendarDatePickerProps = {
   readonly today: IsoDate;
   /** Текущая дата; null — черновиком становится сегодня. */
   readonly value: IsoDate | null;
+  /** Дата обязательна: пустой черновик «Выбрать» не подтверждает. */
+  readonly required?: boolean;
   readonly onClose: () => void;
   /** «Выбрать»: коммитит черновик; null — дата снята («без срока»). */
   readonly onConfirm: (date: IsoDate | null) => void;
@@ -70,6 +77,7 @@ export function CalendarDatePicker({
   confirmLabel = 'Выбрать',
   today,
   value,
+  required,
   onClose,
   onConfirm,
 }: CalendarDatePickerProps): JSX.Element {
@@ -245,8 +253,9 @@ export function CalendarDatePicker({
                         // тапабельным, повторный тап снимает дату.
                         disabled={iso < today && iso !== value}
                         // Повторный тап по выбранному дню снимает выбор
-                        // (решение владельца 2026-09-03).
-                        onClick={() => setDraft(selected ? null : iso)}
+                        // (решение владельца 2026-09-03); с required дата
+                        // обязательна — тап её держит.
+                        onClick={() => setDraft(selected && !required ? null : iso)}
                       >
                         {day + 1}
                       </CalendarButton>
@@ -260,8 +269,13 @@ export function CalendarDatePicker({
       </div>
 
       <StickyBottomBar>
-        {/* Активна всегда: с пустым черновиком подтверждает «без даты». */}
-        <Button className="w-full" onClick={() => onConfirm(draft)}>
+        {/* Без required активна всегда: с пустым черновиком подтверждает
+            «без даты»; с required — пустого подтверждения нет. */}
+        <Button
+          className="w-full"
+          disabled={required === true && draft === null}
+          onClick={() => onConfirm(draft)}
+        >
           {confirmLabel}
         </Button>
       </StickyBottomBar>

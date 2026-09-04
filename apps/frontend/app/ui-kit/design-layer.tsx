@@ -157,6 +157,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [sheetMinute, setSheetMinute] = useState('00');
     const [datePickerOpen, setDatePickerOpen] = useState(false);
     const [datePickerValue, setDatePickerValue] = useState<string | null>(null);
+    const [datePickerRequiredOpen, setDatePickerRequiredOpen] = useState(false);
+    const [datePickerRequiredValue, setDatePickerRequiredValue] = useState<string | null>(null);
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
     const [lastDayOfMonth, setLastDayOfMonth] = useState(false);
     const [amount, setAmount] = useState('');
@@ -548,6 +550,28 @@ export function DesignLayerShowcase(): JSX.Element {
                             onConfirm={(date) => {
                                 setDatePickerValue(date);
                                 setDatePickerOpen(false);
+                            }}
+                        />
+                    )}
+                    <div className={styles.column}>
+                        <Button onClick={() => setDatePickerRequiredOpen(true)}>
+                            Открыть пикер (required)
+                        </Button>
+                        {datePickerRequiredValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: {datePickerRequiredValue}
+                            </p>
+                        )}
+                    </div>
+                    {datePickerRequiredOpen && (
+                        <CalendarDatePicker
+                            required
+                            today={dateToIso(new Date())}
+                            value={datePickerRequiredValue}
+                            onClose={() => setDatePickerRequiredOpen(false)}
+                            onConfirm={(date) => {
+                                setDatePickerRequiredValue(date);
+                                setDatePickerRequiredOpen(false);
                             }}
                         />
                     )}
