@@ -8,6 +8,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 
 - [Identity](./apps/backend/internal/identity/CONTEXT.md) — accounts, sessions, user roles (Owner, Admin).
 - [Properties](./apps/backend/internal/properties/CONTEXT.md) — property cards only: photos, attributes, archive. The leases/operations domain was removed for a full rewrite (ADR 0046).
+- [Rentals](./apps/backend/internal/rentals/CONTEXT.md) — rental tenancy of a property: period, terms, payment day, utilities, deposit (the clean-slate successor of the removed leases domain, ADR 0046). Each rental manages exactly one rent payment in the Payments context.
 - [Contacts](./apps/backend/internal/contacts/CONTEXT.md) — the owner's contact book: cards of people for a property (plumber, management company, concierge); the property link is optional (ADR 0051).
 - [Payments](./apps/backend/internal/payments/CONTEXT.md) — payment rules and operation occurrences per property: income/expense record-keeping, auto pay, overdue debt, pauses (ADR 0047).
 - [Tasks](./apps/backend/internal/tasks/CONTEXT.md) — task rules and task occurrences per property: manual to-do tracking; overdue and «undated» are computed states, the completed journal survives rule deletion (ADR 0051).
@@ -24,6 +25,9 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - **Properties ↔ Access**: Access governs who can view/edit properties.
 - **Contacts → Properties**: a contact lives in its owner's contact book; the property link is optional (nullable `property_id`). Deleting a property — either ADR 0025 mode — nulls the link; the contact survives in the book (ADR 0051). Property-bound contacts are visible/editable to members by the property access roles (ADR 0028), as with payments; contacts without a property are owner-only.
 - **Properties → Payments**: a payment and its operations belong to exactly one property (`property_id`); access to them follows the property access roles (ADR 0028). Property lifecycle interplay (archive/delete) is decided with the payments schema (ADR 0047, ticket #446).
+- **Properties → Rentals**: a rental belongs to exactly one property (`property_id`); access to it follows the property access roles (ADR 0028).
+- **Rentals → Payments**: a rental manages exactly one rent payment (income, category `rent`): creating, editing terms, extending, completing, and deleting the rental atomically drive the payment; the payment cannot be deleted past the rental.
+- **Rentals → Contacts**: a rental may reference a contact from the owner's book as the tenant; deleting the contact nulls the reference (ADR 0051).
 - **Properties → Tasks**: a task rule and its tasks belong to exactly one property (`property_id`); access to them follows the property access roles (ADR 0028). Archive is read-only for tasks (the tick skips archived properties); deletion is a total cascade (ADR 0051).
 - **Properties → Billing**: Active property count feeds subscription tariff limits.
 - **Billing → Access**: Downgrade/grace-period may suspend shared access when limits shrink.
