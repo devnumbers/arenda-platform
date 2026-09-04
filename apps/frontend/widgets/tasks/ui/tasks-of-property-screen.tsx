@@ -43,15 +43,13 @@ import {
   MenuItem,
   MenuTrigger,
   PageContent,
+  PickerMenu,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
-  useIsDesktop,
-} from '@/shared/ui/design';
-import { TaskRow, type TaskRowTone } from './task-row';
+  type PickerMenuGroup,
+} from '@/shared/ui/design';import { TaskRow, type TaskRowTone } from './task-row';
 import { TaskSectionCard } from './task-section-card';
-import { TasksSortMenu } from './tasks-sort-menu';
-import { TasksSortSheet } from './tasks-sort-sheet';
 
 /**
  * Экран «Задачи объекта» (#499, Figma 1535-75363/1535-75894/1531-12784):
@@ -85,9 +83,7 @@ export function TasksOfPropertyScreen({
   const completedQuery = useCompletedTasks(propertyId);
 
   const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
-  const [sortOpen, setSortOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const isDesktop = useIsDesktop();
 
   const complete = useCompleteTask(propertyId);
   const uncomplete = useUncompleteTask(propertyId);
@@ -166,13 +162,9 @@ export function TasksOfPropertyScreen({
       <PageContent>
         <div className="flex flex-col gap-6 pb-6">
           <div className="flex items-center justify-between pr-3.5 pl-6">
-            {isDesktop ? (
-              <TasksSortMenu sort={sort} onSortChange={setSort}>
-                <SortChip sort={sort} />
-              </TasksSortMenu>
-            ) : (
-              <SortChip sort={sort} onClick={() => setSortOpen(true)} />
-            )}
+            <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
+              <SortChip sort={sort} />
+            </PickerMenu>
             {canMutate && (active.length > 0 || completedTotal > 0) && (
               <Menu>
                 <MenuTrigger asChild>
@@ -241,15 +233,6 @@ export function TasksOfPropertyScreen({
         </StickyBottomBar>
       )}
 
-      {!isDesktop && (
-        <TasksSortSheet
-          open={sortOpen}
-          onOpenChange={setSortOpen}
-          sort={sort}
-          onSortChange={setSort}
-        />
-      )}
-
       <ConfirmModal
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
@@ -273,8 +256,8 @@ export function TasksOfPropertyScreen({
  * направление (возрастание — SortingSmallBig 418:4608, от меньшего к
  * большему; убывание — SortingBigSmall 418:4607, от большего к меньшему —
  * решение владельца 2026-09-03), хвостовая стрелка всегда вниз (671:7320).
- * Прокидывает все пропсы кнопки: на десктопе через него Slot триггера
- * Radix-меню передаёт свои обработчики и aria. */
+ * Прокидывает все пропсы кнопки: триггер PickerMenu через asChild передаёт
+ * ему свои обработчики и aria. */
 function SortChip({
   sort,
   ...props
@@ -292,6 +275,44 @@ function SortChip({
       {sort.field === 'date' ? 'Дата' : 'Название'}
     </ChipButton>
   );
+}
+
+/** Группы опций пикера сортировки (Figma 1603-94487/1535-76225): поле и
+ * направление — два независимых «радио»; выбор применяет sort сразу. */
+function sortPickerGroups(
+  sort: TasksSort,
+  onSortChange: (sort: TasksSort) => void,
+): ReadonlyArray<PickerMenuGroup> {
+  return [
+    {
+      options: [
+        {
+          label: 'По дате создания',
+          selected: sort.field === 'date',
+          onSelect: () => onSortChange({ ...sort, field: 'date' }),
+        },
+        {
+          label: 'По названию',
+          selected: sort.field === 'title',
+          onSelect: () => onSortChange({ ...sort, field: 'title' }),
+        },
+      ],
+    },
+    {
+      options: [
+        {
+          label: 'Возрастание',
+          selected: sort.direction === 'asc',
+          onSelect: () => onSortChange({ ...sort, direction: 'asc' }),
+        },
+        {
+          label: 'Убывание',
+          selected: sort.direction === 'desc',
+          onSelect: () => onSortChange({ ...sort, direction: 'desc' }),
+        },
+      ],
+    },
+  ];
 }
 
 /** Секция экрана: обычные группы — карточкой, «Выполненные» — сворачиваемой

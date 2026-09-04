@@ -1,9 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { JSX } from 'react';
+import type { ComponentProps, JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Search } from '@/shared/assets/icons';
+import {
+  ArrowLeft,
+  Search,
+  SmallArrowDown,
+  SortingBigSmall,
+  SortingSmallBig,
+} from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
@@ -11,13 +17,15 @@ import { useContacts } from '@/features/contacts';
 import { canMutateProperty, useProperty } from '@/features/properties';
 import {
   Button,
+  ChipButton,
   IconButton,
   PageContent,
+  PickerMenu,
   SearchField,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
-  useIsDesktop,
+  type PickerMenuGroup,
 } from '@/shared/ui/design';
 import { contactSortByName, groupContactsByLetter } from '../lib/contact-list-model';
 import type { ContactSortOrder } from '../lib/contact-list-model';
@@ -29,8 +37,6 @@ import {
   ContactsSearchHint,
   ContactsSkeleton,
 } from './contacts-states';
-import { ContactsSortMenu } from './contacts-sort-menu';
-import { ContactsSortChip, ContactsSortSheet } from './contacts-sort-sheet';
 
 /** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -62,8 +68,6 @@ export function ContactsOfPropertyScreen({
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<ContactSortOrder>('asc');
-  const [sortSheetOpen, setSortSheetOpen] = useState(false);
-  const isDesktop = useIsDesktop();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Открытие поиска сразу делает поле активным (программный фокус —
@@ -158,13 +162,9 @@ export function ContactsOfPropertyScreen({
         ) : (
           <>
             <div className="mx-6 mb-6">
-              {isDesktop ? (
-                <ContactsSortMenu order={sortOrder} onOrderChange={setSortOrder}>
-                  <ContactsSortChip order={sortOrder} />
-                </ContactsSortMenu>
-              ) : (
-                <ContactsSortChip order={sortOrder} onClick={() => setSortSheetOpen(true)} />
-              )}
+              <PickerMenu title="Сортировать" groups={orderPickerGroups(sortOrder, setSortOrder)}>
+                <ContactsSortChip order={sortOrder} />
+              </PickerMenu>
             </div>
             {/* Книга (1527:74139): одна серая карточка с алфавитными
              * группами; буква — над своими строками. */}
@@ -198,15 +198,53 @@ export function ContactsOfPropertyScreen({
           </Button>
         </StickyBottomBar>
       )}
-
-      {!isDesktop && (
-        <ContactsSortSheet
-          open={sortSheetOpen}
-          onOpenChange={setSortSheetOpen}
-          order={sortOrder}
-          onOrderChange={setSortOrder}
-        />
-      )}
     </>
   );
+}
+
+/** Чип сортировки книги (макет 1527:74139, механика чипа задач
+ * 1535:76222): «Имя»; ведущая иконка — направление (возрастание —
+ * SortingSmallBig 418:4608, от меньшего к большему; убывание —
+ * SortingBigSmall 418:4607, от большего к меньшему), хвостовая стрелка
+ * всегда вниз (671:7320). Прокидывает все пропсы кнопки: триггер
+ * PickerMenu через asChild передаёт ему свои обработчики и aria. */
+function ContactsSortChip({
+  order,
+  ...props
+}: {
+  readonly order: ContactSortOrder;
+} & ComponentProps<'button'>): JSX.Element {
+  return (
+    <ChipButton
+      leadingIcon={order === 'asc' ? <SortingSmallBig /> : <SortingBigSmall />}
+      trailingIcon={<SmallArrowDown />}
+      {...props}
+    >
+      Имя
+    </ChipButton>
+  );
+}
+
+/** Группы опций пикера сортировки книги (макет 1539:85395): книга
+ * сортируется только по имени (#508). */
+function orderPickerGroups(
+  order: ContactSortOrder,
+  onOrderChange: (order: ContactSortOrder) => void,
+): ReadonlyArray<PickerMenuGroup> {
+  return [
+    {
+      options: [
+        {
+          label: 'Имя от А до Я',
+          selected: order === 'asc',
+          onSelect: () => onOrderChange('asc'),
+        },
+        {
+          label: 'Имя от Я до А',
+          selected: order === 'desc',
+          onSelect: () => onOrderChange('desc'),
+        },
+      ],
+    },
+  ];
 }

@@ -35,6 +35,7 @@ import {
     MonthDaysGrid,
     MonthYearPicker,
     PageContent,
+    PickerMenu,
     PickerField,
     RadioGroup,
     RadioGroupItem,
@@ -358,6 +359,35 @@ export function DesignLayerShowcase(): JSX.Element {
                         <ChipButton trailingIcon={<ArrowDown />} disabled>
                             disabled
                         </ChipButton>
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>PickerMenu · меню / шит опций</h3>
+                    <p className={styles.groupTitle}>
+                        Адаптивный выбор опций: на десктопе — меню-карточка, на мобиле — нижний шит
+                        (Figma 1603-94487 / 1535-76225). Триггер — любая кнопка (children).
+                    </p>
+                    <div className={styles.grid}>
+                        <PickerMenu
+                            title="Сортировать"
+                            groups={[
+                                {
+                                    options: [
+                                        { label: 'По дате создания', selected: true, onSelect: () => {} },
+                                        { label: 'По названию', selected: false, onSelect: () => {} },
+                                    ],
+                                },
+                                {
+                                    options: [
+                                        { label: 'Возрастание', selected: false, onSelect: () => {} },
+                                        { label: 'Убывание', selected: false, onSelect: () => {} },
+                                    ],
+                                },
+                            ]}
+                        >
+                            <ChipButton trailingIcon={<ArrowDown />}>Сортировать</ChipButton>
+                        </PickerMenu>
                     </div>
                 </div>
 

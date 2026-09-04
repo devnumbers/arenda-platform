@@ -59,14 +59,13 @@ export {
   type ModalContentProps,
 } from './modal';
 export { RoundCheckbox, type RoundCheckboxProps } from './round-checkbox';
+export { Menu, MenuTrigger, MenuContent, MenuItem, type MenuContentProps, type MenuItemProps } from './menu';
 export {
-  Menu,
-  MenuTrigger,
-  MenuContent,
-  MenuItem,
-  type MenuContentProps,
-  type MenuItemProps,
-} from './menu';
+  PickerMenu,
+  type PickerMenuProps,
+  type PickerMenuGroup,
+  type PickerMenuOption,
+} from './picker-menu';
 export {
   CollapsibleSection,
   type CollapsibleSectionProps,
