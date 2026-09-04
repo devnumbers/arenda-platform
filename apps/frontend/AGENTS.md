@@ -20,6 +20,10 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 - For current library docs before relying on non-obvious APIs, use `context7`.
 - Before shipping a ticket that touched screens, forms, flows, or widgets, run `/ui-walkthrough` — live black-box acceptance in the visible browser against the seeded e2e stack (P0+P1 green gates the commit; see the skill). To watch already-written e2e specs play in visible windows, use the same skill's headed-run mode (`make frontend-e2e-headed`).
 
+## Design Conventions
+
+Before building or changing any screen, surface, or design-layer component, read `DESIGN.md` (same directory): breakpoints and widths, header/page anatomy, which surface to choose (route / fullscreen overlay / modal / picker menu), pickers and wheels, list states, motion/hover/focus, date and money formatting, Figma-first workflow, and how owner design decisions get recorded. The live catalog of design-layer components is the `/ui-kit` route.
+
 ## MCP Servers
 
 - `playwright` — use for browser automation and UI verification when the `mcp__playwright__*` tools are available. Check desktop and mobile layouts, visible interaction states, loading/error states, and that text does not overlap or overflow. If they are unavailable, stop and tell the user (the server is wired by the committed repo `.zcode/config.json`; check Settings → MCP and restart the session) — manual inspection and build logs are the fallback.
