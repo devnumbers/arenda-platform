@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import type { JSX, ReactNode } from 'react';
-import { Inter, Manrope, Onest } from 'next/font/google';
 import { ErrorReporter } from '@/shared/lib/error-reporting/ErrorReporter';
 import { ScrollToTop } from '@/shared/lib/scroll/ScrollToTop';
 import { I18nProvider } from '@/shared/providers/i18n-provider';
@@ -10,27 +9,19 @@ import splashManifest from '@/shared/lib/pwa/splash-manifest.json';
 import '../shared/styles/tokens.css';
 import './globals.css';
 
-const inter = Inter({
-    variable: '--font-inter',
-    subsets: ['latin', 'cyrillic'],
-    display: 'swap',
-});
-
-const manrope = Manrope({
-    variable: '--font-manrope',
-    subsets: ['latin', 'cyrillic'],
-    weight: ['400', '500', '600', '700', '800'],
-    display: 'swap',
-});
-
-// Шрифт новых экранов (ADR 0050): дизайн-слой платежей и весь новый UI
-// верстаются на Onest; Manrope остаётся на старых экранах до миграции.
-// next/font самохостит файлы — внешних запросов нет, CSP не затрагивается.
-const onest = Onest({
-    variable: '--font-onest',
-    subsets: ['latin', 'cyrillic'],
-    display: 'swap',
-});
+// Шрифты самохостятся: @font-face и переменные --font-inter/--font-manrope/
+// --font-onest живут в globals.css, файлы — в public/fonts. Прелоуд основных
+// срезов (latin + cyrillic, то же, что preload'ил next/font с
+// subsets: ['latin', 'cyrillic']); latin-ext/cyrillic-ext доедут по
+// unicode-range по мере надобности.
+const fontPreloads = [
+    'inter-latin',
+    'inter-cyrillic',
+    'manrope-latin',
+    'manrope-cyrillic',
+    'onest-latin',
+    'onest-cyrillic',
+] as const;
 
 export const metadata: Metadata = {
     title: 'Рентли',
@@ -73,8 +64,18 @@ export default function RootLayout({
     children: ReactNode;
 }>): JSX.Element {
     return (
-        <html lang="ru" className={`${inter.variable} ${manrope.variable} ${onest.variable}`}>
+        <html lang="ru">
             <body>
+                {fontPreloads.map((font) => (
+                    <link
+                        key={font}
+                        rel="preload"
+                        href={`/fonts/${font}.woff2`}
+                        as="font"
+                        type="font/woff2"
+                        crossOrigin="anonymous"
+                    />
+                ))}
                 <ErrorReporter />
                 <ScrollToTop />
                 <I18nProvider locale="ru-RU">

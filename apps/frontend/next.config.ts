@@ -5,7 +5,8 @@ import { CSP_BASE_DIRECTIVES } from "./shared/lib/csp";
 // script/style, остальные директивы строгие (общий хвост обеих полис —
 // CSP_BASE_DIRECTIVES в shared/lib/csp.ts; шаг 2 — Report-Only в proxy.ts,
 // тикет #406 — строится на той же базе). Источники: API ходит через
-// same-origin route (app/api/[...path]), шрифты next/font self-hosted.
+// same-origin route (app/api/[...path]), шрифты самохостятся из public/fonts
+// (@font-face в app/globals.css, без next/font/google — см. комментарий там).
 // blob: убран из img-src вместе с PhotoGrid (#399) — превью загружаемых фото
 // были единственным его потребителем; возврат — осознанная правка здесь.
 // 'unsafe-eval' в dev: React Refresh реконструирует стектрейсы через eval —
