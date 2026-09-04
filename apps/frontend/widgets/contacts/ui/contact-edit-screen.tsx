@@ -40,30 +40,55 @@ import { ContactsErrorCard, ContactsSkeleton, ContactsUnavailableCard } from './
  * propertyId: null снимает привязку), после — возврат на карточку с
  * инвалидацией книги. Доступ: правит тот, кому можно мутировать (кебаб
  * карточки смотрящему не рисуется), сервер — последняя инстанция.
+ *
+ * Режим книги (глобальная страница контактов, propertyId не задан):
+ * доступ определяется привязкой самой карточки — без объекта правит
+ * владелец книги (сам актёр), привязанная — по доступу её объекта; архив
+ * привязанного объекта делает карточку read-only. Выход — на карточку
+ * книги.
  */
 export function ContactEditScreen({
   propertyId,
   contactId,
 }: {
-  readonly propertyId: string;
+  readonly propertyId?: string;
   readonly contactId: string;
 }): JSX.Element {
   const router = useRouter();
   const contactQuery = useContact(contactId);
-  const propertyQuery = useProperty(propertyId);
+  const propertyQuery = useProperty(propertyId ?? '');
   const contact = contactQuery.isSuccess ? contactQuery.data : undefined;
-
-  const backToCard = (): void =>
-    goBack(router, ROUTES.propertyContact(propertyId, contactId));
-
-  const loading = contactQuery.isPending || propertyQuery.isPending;
-  const failed = contactQuery.isError || propertyQuery.isError;
-  // Правка — по мутационному доступу на объекте (ADR 0028); сервер —
-  // последняя инстанция, как на правке платежей.
-  const canEdit = canMutateProperty(
-    propertyQuery.isSuccess ? propertyQuery.data : undefined,
+  const boundPropertyQuery = useProperty(
+    propertyId === undefined ? (contact?.propertyId ?? '') : '',
   );
-  const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
+
+  const backHref =
+    propertyId !== undefined ? ROUTES.propertyContact(propertyId, contactId) : ROUTES.contact(contactId);
+  const backToCard = (): void => goBack(router, backHref);
+
+  const contextProperty = propertyQuery.isSuccess ? propertyQuery.data : undefined;
+  const boundProperty = boundPropertyQuery.isSuccess ? boundPropertyQuery.data : undefined;
+  const archivedStatus =
+    propertyId !== undefined
+      ? (contextProperty?.status === 'archived' ? contextProperty.status : undefined)
+      : (boundProperty?.status === 'archived' ? boundProperty.status : undefined);
+  const loading =
+    contactQuery.isPending ||
+    (propertyId !== undefined ? propertyQuery.isPending : boundPropertyQuery.isPending);
+  const failed =
+    contactQuery.isError ||
+    (propertyId !== undefined ? propertyQuery.isError : boundPropertyQuery.isError);
+  // Правка — по мутационному доступу на объекте (ADR 0028); в режиме книги —
+  // по привязке самой карточки (без объекта — своя книга). Сервер —
+  // последняя инстанция, как на правке платежей.
+  const canEdit =
+    propertyId !== undefined
+      ? canMutateProperty(contextProperty)
+      : contact === undefined
+        ? false
+        : contact.propertyId !== undefined
+          ? canMutateProperty(boundProperty)
+          : true;
 
   if (loading) {
     return (
@@ -84,7 +109,11 @@ export function ContactEditScreen({
           <ContactsErrorCard
             onRetry={() => {
               void contactQuery.refetch();
-              void propertyQuery.refetch();
+              if (propertyId !== undefined) {
+                void propertyQuery.refetch();
+              } else {
+                void boundPropertyQuery.refetch();
+              }
             }}
           />
         </PageContent>
@@ -100,7 +129,7 @@ export function ContactEditScreen({
         <PageContent>
           <ContactsUnavailableCard
             hint={
-              property?.status === 'archived'
+              archivedStatus === 'archived'
                 ? 'Объект в архиве — контакты можно только смотреть'
                 : 'У вас доступ только для просмотра этого объекта'
             }
@@ -122,7 +151,7 @@ export function ContactEditScreen({
     );
   }
 
-  return <ContactEditForm propertyId={propertyId} contact={contact} />;
+  return <ContactEditForm backHref={backHref} contact={contact} />;
 }
 
 /** Шапка правки без ✓: пока карточка грузится, отправлять нечего. */
@@ -139,10 +168,10 @@ function EditHeader({ onBack }: { readonly onBack: () => void }): JSX.Element {
 /** Форма правки: рендерится, когда карточка загружена — предзаполнение
  * из неё (паттерн payment-edit-screen). */
 function ContactEditForm({
-  propertyId,
+  backHref,
   contact,
 }: {
-  readonly propertyId: string;
+  readonly backHref: string;
   readonly contact: Contact;
 }): JSX.Element {
   const router = useRouter();
@@ -180,7 +209,7 @@ function ContactEditForm({
     try {
       await updateContact.mutateAsync(buildContactUpdateCommand(form));
       notify.scenarios.propertyContacts.updated();
-      goBack(router, ROUTES.propertyContact(propertyId, contact.id));
+      goBack(router, backHref);
     } catch (error: unknown) {
       if (error instanceof ApiError && error.fieldErrors !== undefined) {
         setServerErrors(contactServerFieldErrors(error.fieldErrors));
@@ -217,7 +246,7 @@ function ContactEditForm({
           <IconButton
             icon={<Cancel />}
             label="Назад"
-            onClick={() => goBack(router, ROUTES.propertyContact(propertyId, contact.id))}
+            onClick={() => goBack(router, backHref)}
           />
         }
         trailing={

@@ -1838,6 +1838,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             propertyId?: string | null;
+            /** @description The display name of the bound property; null for an unbound card. A list projection only — the card read resolves the property by its id. */
+            propertyName?: string | null;
             firstName: string;
             lastName: string;
             patronymic: string;
@@ -2887,10 +2889,14 @@ export interface operations {
     listContacts: {
         parameters: {
             query?: {
-                /** @description Filter by the bound property. A missing value lists the actor's whole book; a property-bound listing resolves through the view gate of that property (ADR 0028) and reads the data owner's slice. */
+                /** @description Filter by the bound property. A missing value lists the actor's visible book: their own cards plus the property-bound cards of the properties they can view (ADR 0028 — for a shared member that is the bound cards of the shared properties plus their own unbound ones); a property-bound listing resolves through the view gate of that property (ADR 0028) and reads the cards bound to it. */
                 property_id?: string;
                 /** @description Case-insensitive substring search over the name fields, phone, email, messenger username and role. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
                 search?: string;
+                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside. The Russian collation matches the client's letter grouping. */
+                sort?: "name" | "property";
+                /** @description The sort direction: ascending (default) or descending. */
+                order?: "asc" | "desc";
             };
             header?: never;
             path?: never;

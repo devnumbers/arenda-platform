@@ -14,6 +14,9 @@ export type ContactRowSurface = 'muted' | 'white';
 export type ContactRowButtonProps = {
   readonly contact: Contact;
   readonly surface?: ContactRowSurface;
+  /** Подзаголовок вместо роли — плоская книга пишет «Роль (Объект)»
+   * (макеты 1726:65083/85937); по умолчанию роль. */
+  readonly subtitle?: string;
   /** Основное действие строки; без него строка статична (карточка контакта —
    * #510, в #508 строки не кликабельны). */
   readonly onSelect?: () => void;
@@ -28,10 +31,12 @@ export type ContactRowButtonProps = {
 export function ContactRowButton({
   contact,
   surface = 'muted',
+  subtitle,
   onSelect,
   className,
 }: ContactRowButtonProps): JSX.Element {
   const activatorProps = useKeyboardActivation({ onSelect });
+  const rowSubtitle = subtitle ?? (contact.role.length > 0 ? contact.role : undefined);
 
   return (
     <div
@@ -57,8 +62,8 @@ export function ContactRowButton({
       </span>
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">{contactFullName(contact)}</span>
-        {contact.role.length > 0 && (
-          <span className="truncate text-sm text-content-secondary">{contact.role}</span>
+        {rowSubtitle !== undefined && (
+          <span className="truncate text-sm text-content-secondary">{rowSubtitle}</span>
         )}
       </span>
     </div>

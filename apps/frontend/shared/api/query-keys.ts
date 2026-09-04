@@ -30,9 +30,18 @@ export const billingKeys = {
 // features/contacts
 export const contactKeys = {
   all: ['contacts'] as const,
-  /** Книга контактов объекта (ADR 0051); search — серверный фильтр ('' = без). */
-  list: (propertyId: string, search = '') =>
-    [...contactKeys.all, 'list', propertyId, search] as const,
+  /**
+   * Список книги контактов (ADR 0051). propertyId null — плоский список
+   * всей видимой книги (глобальная страница контактов), иначе — срез объекта.
+   * search — серверный фильтр ('' = без); sort/order — серверная сортировка
+   * плоского списка (значения — параметры GET /contacts).
+   */
+  list: (
+    propertyId: string | null,
+    search = '',
+    sort = 'name',
+    order = 'asc',
+  ) => [...contactKeys.all, 'list', propertyId, search, sort, order] as const,
   /** Карточка контакта (экран #510). */
   detail: (contactId: string) => [...contactKeys.all, 'detail', contactId] as const,
 };

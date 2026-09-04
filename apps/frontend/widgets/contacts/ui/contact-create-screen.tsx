@@ -43,16 +43,21 @@ const SHORT_TEXT_MAX = 256;
  * маршруте (макет 1539:83846, паттерн страниц категории/периодичности
  * платежей): строгий черновик — применяются только «Выбрать»/✓ (решения
  * владельца 2026-09-03).
+ *
+ * Режим книги (глобальная страница контактов, propertyId не задан): карточка
+ * создаётся без привязки («Общий контакт» — выбор объекта остаётся в форме),
+ * выход — в корень книги.
  */
 export function ContactCreateScreen({
   propertyId,
   initialRole,
 }: {
-  readonly propertyId: string;
+  readonly propertyId?: string;
   readonly initialRole: string;
 }): JSX.Element {
   const router = useRouter();
   const createContact = useCreateContact();
+  const backHref = propertyId !== undefined ? ROUTES.propertyContacts(propertyId) : ROUTES.contacts;
 
   const [form, setForm] = useState<ContactFormFields>(() => ({
     firstName: '',
@@ -64,7 +69,7 @@ export function ContactCreateScreen({
     messengerName: '',
     messengerUsername: '',
     note: '',
-    propertyId,
+    propertyId: propertyId ?? null,
   }));
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverErrors, setServerErrors] = useState<
@@ -97,7 +102,7 @@ export function ContactCreateScreen({
     try {
       await createContact.mutateAsync(buildContactCreateCommand(form));
       notify.scenarios.propertyContacts.created();
-      goBack(router, ROUTES.propertyContacts(propertyId));
+      goBack(router, backHref);
     } catch (error: unknown) {
       if (error instanceof ApiError && error.fieldErrors !== undefined) {
         setServerErrors(contactServerFieldErrors(error.fieldErrors));
@@ -134,7 +139,7 @@ export function ContactCreateScreen({
           <IconButton
             icon={<Cancel />}
             label="Отменить создание"
-            onClick={() => goBack(router, ROUTES.propertyContacts(propertyId))}
+            onClick={() => goBack(router, backHref)}
           />
         }
         trailing={

@@ -10,6 +10,9 @@ export type NavItemConfig = {
 
 export const navItems: ReadonlyArray<NavItemConfig> = [
   { label: 'Объекты', href: '/properties', icon: 'NavObjects', bottomIcon: 'BottomObjects', showInBottomNav: true },
+  // Точка входа книги контактов — только сайдбар десктопа (решение владельца
+  // 2026-09-04: мобильную навигацию ставит он позже).
+  { label: 'Контакты', href: '/contacts', icon: 'NavContacts', showInBottomNav: false },
   { label: 'Профиль', href: '/profile', icon: 'NavProfile', bottomIcon: 'BottomProfile', showInBottomNav: true },
   { label: 'Поддержка', href: '/support', icon: 'NavSupport', showInBottomNav: false },
 ];

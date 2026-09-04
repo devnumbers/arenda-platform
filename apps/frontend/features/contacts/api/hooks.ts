@@ -45,6 +45,47 @@ export function useContacts(
   });
 }
 
+/** Поле сортировки плоской книги: по имени или по объекту (макет
+ * 1726:65136 — шит «Сортировать»). */
+export type ContactBookSort = 'name' | 'property';
+
+/** Направление сортировки плоской книги. */
+export type ContactBookOrder = 'asc' | 'desc';
+
+/**
+ * Плоский список всей видимой книги (глобальная страница контактов, макет
+ * 1726:65083): GET /contacts без property_id — сервер отдаёт объединённый
+ * срез (свои карточки + привязанные к доступным объектам, ADR 0028/0051) с
+ * серверными search/sort/order; propertyName в ответе — имя привязанного
+ * объекта для подзаголовков и групп.
+ */
+export function useContactBook(
+  search = '',
+  sort: ContactBookSort = 'name',
+  order: ContactBookOrder = 'asc',
+): UseQueryResult<Contact[], ApiError> {
+  return useQuery({
+    queryKey: contactKeys.list(null, search, sort, order),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (search !== '') {
+        params.set('search', search);
+      }
+      if (sort !== 'name') {
+        params.set('sort', sort);
+      }
+      if (order !== 'asc') {
+        params.set('order', order);
+      }
+      const query = params.toString();
+      const response = await apiClient<ContactsResponse>(
+        `/contacts${query !== '' ? `?${query}` : ''}`,
+      );
+      return response.items.map(mapContact);
+    },
+  });
+}
+
 /**
  * Создание карточки (экран #509): POST /contacts с уже нормализованной
  * командой (трим и телефон собирает contact-form). Инвалидация — вся книга

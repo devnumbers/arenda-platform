@@ -7,6 +7,9 @@ export type Contact = {
   readonly id: string;
   /** Привязка к объекту; undefined — «без объекта» (wire null). */
   readonly propertyId: string | undefined;
+  /** Имя привязанного объекта — проекция плоского списка книги (глобальная
+   * страница контактов); на карточке и в списке объекта не приходит. */
+  readonly propertyName?: string | undefined;
   readonly firstName: string;
   readonly lastName: string;
   readonly patronymic: string;
