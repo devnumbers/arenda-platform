@@ -187,6 +187,98 @@ func (s *TaskService) ClearCompletedJournal(
 	return cleared, err
 }
 
+// ListGlobalTasks returns one page of the actor's visible tasks for the
+// global «Задачи» screen (ticket #521). Three filter states: one property —
+// resolved through its view gate (a stranger gets the privacy ErrNotFound)
+// and read in the data owner's scope; the property-less slice — the actor's
+// own book only (ADR 0052); no filter — the merged feed: their own tasks
+// plus the bound tasks of the properties they can view (ADR 0028), the
+// visibility predicate living in the store's SQL. Every item's view bucket is
+// computed against its data owner's current moment (CONTEXT.md «Просрочка» —
+// a merged page may span owners); the page's today is the reading actor's
+// calendar date, the data owner's on the property branch. Reads never tick.
+func (s *TaskService) ListGlobalTasks(
+	ctx context.Context, actor uuid.UUID, q GlobalTasksListQuery,
+) (TasksPage, error) {
+	if err := PrepareGlobalTasksQuery(&q); err != nil {
+		return TasksPage{}, err
+	}
+	switch {
+	case q.PropertyID != nil:
+		return s.listGlobalOfProperty(ctx, actor, *q.PropertyID, q.TasksListQuery)
+	case q.WithoutProperty:
+		return s.listGlobalSlice(ctx, actor, q.TasksListQuery, s.tasks.ListGlobalWithoutProperty)
+	default:
+		return s.listGlobalSlice(ctx, actor, q.TasksListQuery, s.tasks.ListGlobal)
+	}
+}
+
+// listGlobalOfProperty is the property-filtered branch of the global listing:
+// the same read scope and store query as the property screen, plus the
+// property's display name projected into every row.
+func (s *TaskService) listGlobalOfProperty(
+	ctx context.Context, actor, propertyID uuid.UUID, q TasksListQuery,
+) (TasksPage, error) {
+	scope, err := resolveReadScopeRef(ctx, s.policy, s.properties, actor, propertyID)
+	if err != nil {
+		return TasksPage{}, err
+	}
+	moment, err := s.ownerMoment(ctx, scope.OwnerID)
+	if err != nil {
+		return TasksPage{}, err
+	}
+	tasks, total, err := s.tasks.ListByProperty(ctx, scope.OwnerID, propertyID, q)
+	if err != nil {
+		return TasksPage{}, fmt.Errorf("list tasks of property %s: %w", propertyID, err)
+	}
+	items := make([]TaskListItem, len(tasks))
+	for i, task := range tasks {
+		items[i] = TaskListItem{
+			Task:         task,
+			Status:       domain.ViewStatus(task, moment.Now),
+			PropertyName: scope.Name,
+		}
+	}
+	return TasksPage{Items: items, Total: total, Today: moment.Today}, nil
+}
+
+// listGlobalSlice is the actor-scoped branch of the global listing — the
+// merged feed and the property-less slice differ only in the store query.
+// The rows may span several data owners, so each row's bucket is computed
+// against its owner's moment, resolved once per owner per page; the actor's
+// moment seeds the cache and drives the page's today.
+func (s *TaskService) listGlobalSlice(
+	ctx context.Context, actor uuid.UUID, q TasksListQuery,
+	list func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error),
+) (TasksPage, error) {
+	actorMoment, err := s.ownerMoment(ctx, actor)
+	if err != nil {
+		return TasksPage{}, err
+	}
+	moments := map[uuid.UUID]OwnerMoment{actor: actorMoment}
+	rows, total, err := list(ctx, actor, q)
+	if err != nil {
+		return TasksPage{}, fmt.Errorf("list global tasks: %w", err)
+	}
+	items := make([]TaskListItem, len(rows))
+	for i, row := range rows {
+		moment, ok := moments[row.Task.OwnerID]
+		if !ok {
+			moment, err = s.ownerMoment(ctx, row.Task.OwnerID)
+			if err != nil {
+				return TasksPage{}, err
+			}
+			moments[row.Task.OwnerID] = moment
+		}
+		items[i] = TaskListItem{
+			Task:         row.Task,
+			Status:       domain.ViewStatus(row.Task, moment.Now),
+			PropertyName: row.PropertyName,
+		}
+	}
+	return TasksPage{Items: items, Total: total, Today: actorMoment.Today}, nil
+}
+
 // CompleteTaskWithoutProperty implements «Выполнить» on the property-less
 // slice (POST /tasks/{taskId}/complete, ADR 0052): the same completion fact
 // as CompleteTask, stamped with today in the owner's timezone and serialized

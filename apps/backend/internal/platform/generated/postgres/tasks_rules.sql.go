@@ -97,25 +97,32 @@ func (q *Queries) DeleteTaskRule(ctx context.Context, arg DeleteTaskRuleParams) 
 
 const getPropertyForTask = `-- name: GetPropertyForTask :one
 
-SELECT id, owner_id, status FROM properties WHERE id = $1
+SELECT id, owner_id, status, name FROM properties WHERE id = $1
 `
 
 type GetPropertyForTaskRow struct {
 	ID      pgtype.UUID `json:"id"`
 	OwnerID pgtype.UUID `json:"owner_id"`
 	Status  string      `json:"status"`
+	Name    string      `json:"name"`
 }
 
 // Tasks context queries: the task rule CRUD with the property serialization
 // lock and the rule's task invalidations (ADR 0051). The property lock
 // mirrors the payments precedent (ADR 0049 §3); the tick's persistence lives
 // in tasks_tick.sql, the task reads/completions in tasks_tasks.sql.
-// The payments-scoped read of the property (ADR 0028): the data owner and
-// the archived flag, no lock.
+// The tasks-scoped read of the property (ADR 0028): the data owner, the
+// archived flag and the display name (the global listing's row projection,
+// ticket #521), no lock.
 func (q *Queries) GetPropertyForTask(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskRow, error) {
 	row := q.db.QueryRow(ctx, getPropertyForTask, id)
 	var i GetPropertyForTaskRow
-	err := row.Scan(&i.ID, &i.OwnerID, &i.Status)
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Status,
+		&i.Name,
+	)
 	return i, err
 }
 

@@ -29,6 +29,7 @@ type TasksManager interface {
 	ClearCompletedJournal(ctx context.Context, actor, propertyID uuid.UUID) (int64, error)
 	CompleteTaskWithoutProperty(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
 	UncompleteTaskWithoutProperty(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
+	ListGlobalTasks(ctx context.Context, actor uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error)
 }
 
 // TaskHandlers implements the generated task endpoints.
@@ -69,7 +70,14 @@ func (h *TaskHandlers) ListPropertyTasks(
 		handleTaskError(h.logger, w, r, err)
 		return
 	}
+	writeTasksPage(r, w, page)
+}
 
+// writeTasksPage maps one listing page onto the wire's TasksResponse: the
+// items through taskResponse (status stays the server-computed bucket,
+// propertyName the global listing's row projection), the filter's total and
+// the today boundary for the client's date sections.
+func writeTasksPage(r *http.Request, w http.ResponseWriter, page application.TasksPage) {
 	items := make([]openapi.TaskResponse, 0, len(page.Items))
 	for _, item := range page.Items {
 		items = append(items, taskResponse(item))
@@ -79,6 +87,38 @@ func (h *TaskHandlers) ListPropertyTasks(
 		Total: page.Total,
 		Today: openapi_types.Date{Time: page.Today},
 	})
+}
+
+// ListTasks implements GET /tasks — the global «Задачи» screen (ticket
+// #521). The property filters are mutually exclusive; both set is the
+// contract's 400 via the use case's ErrInvalidInput. The buckets are
+// computed server-side against each item's data owner's moment; the page
+// carries the reading actor's today for the section bucketing.
+func (h *TaskHandlers) ListTasks(w http.ResponseWriter, r *http.Request, params openapi.ListTasksParams) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	q := application.GlobalTasksListQuery{
+		TasksListQuery: application.TasksListQuery{
+			Completed: params.Completed != nil && *params.Completed,
+		},
+		PropertyID:      params.PropertyId,
+		WithoutProperty: params.WithoutProperty != nil && *params.WithoutProperty,
+	}
+	if params.Limit != nil {
+		q.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		q.Offset = *params.Offset
+	}
+	page, err := h.svc.ListGlobalTasks(r.Context(), actor, q)
+	if err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+	writeTasksPage(r, w, page)
 }
 
 // CompleteTask implements POST /properties/{propertyId}/tasks/{taskId}/complete:
@@ -191,12 +231,15 @@ func (h *TaskHandlers) UncompleteTaskWithoutProperty(w http.ResponseWriter, r *h
 
 // taskResponse maps one listed or just-mutated task onto the wire response:
 // status is always the server-computed view bucket; a nil property maps to
-// the wire's null (the property-less slice, ADR 0052).
+// the wire's null (the property-less slice, ADR 0052). The propertyName row
+// projection comes from the global listing; the property-scoped endpoints
+// and the property-less slice carry no name — the wire's null.
 func taskResponse(item application.TaskListItem) openapi.TaskResponse {
 	task := item.Task
 	return openapi.TaskResponse{
 		Id:            task.ID,
 		PropertyId:    openAPIUUIDPtr(task.PropertyID),
+		PropertyName:  stringPtrOrNil(item.PropertyName),
 		RuleId:        openAPIUUIDPtr(task.RuleID),
 		DueDate:       httpsupport.DatePtrToOpenAPI(task.DueDate),
 		DueTime:       dueTimeToWire(task.DueTime),
@@ -208,6 +251,15 @@ func taskResponse(item application.TaskListItem) openapi.TaskResponse {
 		CreatedAt:     task.CreatedAt,
 		UpdatedAt:     task.UpdatedAt,
 	}
+}
+
+// stringPtrOrNil maps the optional row projection onto the wire's nullable
+// string: the empty projection is the wire's null.
+func stringPtrOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // repeatToWire converts the read projection of the rule's repeat; nil (rule

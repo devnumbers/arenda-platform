@@ -44,11 +44,13 @@ var (
 )
 
 // PropertyRef is the tasks view of the property a use case targets: the data
-// owner (the SQL scope, ADR 0028) and the archived flag. The properties
-// context owns the entity; tasks never needs its rest.
+// owner (the SQL scope, ADR 0028), the archived flag and the display name
+// (the global listing's row projection, ticket #521). The properties context
+// owns the entity; tasks never needs its rest.
 type PropertyRef struct {
 	OwnerID  uuid.UUID
 	Archived bool
+	Name     string
 }
 
 // PropertyStore resolves the property a tasks use case targets. The
@@ -115,6 +117,18 @@ type TaskStore interface {
 	// (uncompleted) or completed per the query — with the total count of the
 	// same filter (the «Выполненные N» section header).
 	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, q TasksListQuery) ([]domain.Task, int, error)
+	// ListGlobal returns one page of the actor's visible merged feed
+	// (ticket #521): their own tasks — bound and property-less — plus the
+	// bound tasks of the properties they can view (ADR 0028, the merged
+	// visibility ADR 0052 decision 3). The rows carry the bound property's
+	// display name; Status is zero and stays the use case's to compute
+	// against each row owner's moment.
+	ListGlobal(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
+	// ListGlobalWithoutProperty returns one page of the property-less cut of
+	// the actor's own book (ADR 0052) — the global listing's «без объекта»
+	// filter. The same row contract as ListGlobal; PropertyName is always
+	// empty there.
+	ListGlobalWithoutProperty(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
 	// Complete stamps the completion fact (completed_date = day) on the
 	// still-active task; rows affected = 0 surfaces as ErrAlreadyCompleted.
 	Complete(ctx context.Context, id, scope uuid.UUID, day time.Time) error
@@ -165,10 +179,44 @@ func PrepareTasksQuery(q *TasksListQuery) error {
 // TaskListItem pairs one task with its server-computed view status
 // (CONTEXT.md «Просрочка», «Без срока»): the buckets are never stored — they
 // are derived against the owner's current moment before the response leaves
-// the use case; clients never need the owner's timezone.
+// the use case; clients never need the owner's timezone. PropertyName is the
+// global listing's row projection — the bound property's display name, empty
+// on the property-scoped listings and the property-less slice.
 type TaskListItem struct {
-	Task   domain.Task
-	Status domain.TaskViewStatus
+	Task         domain.Task
+	Status       domain.TaskViewStatus
+	PropertyName string
+}
+
+// GlobalTaskRow is one row of the global listings' read projection
+// (ticket #521): the task plus the bound property's display name — the
+// global screen's per-row label, empty on the property-less slice. The use
+// case turns it into a TaskListItem by computing Status against the row
+// owner's moment.
+type GlobalTaskRow struct {
+	Task         domain.Task
+	PropertyName string
+}
+
+// GlobalTasksListQuery is the global listing request (ticket #521): the
+// TasksListQuery pagination and bucket fields plus the property filter —
+// exactly one of PropertyID (the tasks of one property, resolved through its
+// view gate) or WithoutProperty (the property-less slice of the actor's own
+// book); both set is ErrInvalidInput. Neither set lists the actor's visible
+// merged feed.
+type GlobalTasksListQuery struct {
+	TasksListQuery
+	PropertyID      *uuid.UUID
+	WithoutProperty bool
+}
+
+// PrepareGlobalTasksQuery validates the global listing request in place: the
+// pagination rules of PrepareTasksQuery plus the one-filter-only rule.
+func PrepareGlobalTasksQuery(q *GlobalTasksListQuery) error {
+	if q.PropertyID != nil && q.WithoutProperty {
+		return ErrInvalidInput
+	}
+	return PrepareTasksQuery(&q.TasksListQuery)
 }
 
 // TasksPage is one listing page plus the total count of the same filter (the

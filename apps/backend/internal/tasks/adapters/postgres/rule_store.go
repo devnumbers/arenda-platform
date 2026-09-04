@@ -200,24 +200,25 @@ func (s *PropertyStore) WithTx(tx transaction.Tx) (application.PropertyStore, er
 	return NewPropertyStore(dbtx), nil
 }
 
-// Get loads the property reference without locking.
+// Get loads the property reference without locking; the display name rides
+// along as the global listing's row projection (ticket #521).
 func (s *PropertyStore) Get(ctx context.Context, propertyID uuid.UUID) (application.PropertyRef, error) {
 	row, err := s.q().GetPropertyForTask(ctx, pgconv.UUIDToPgtype(propertyID))
-	return propertyRefFromRow(row.OwnerID, row.Status, err, propertyID)
+	return propertyRefFromRow(row.OwnerID, row.Status, row.Name, err, propertyID)
 }
 
 // GetForUpdate loads the property reference with the row locked inside the
 // caller's transaction — the context's serialization point.
 func (s *PropertyStore) GetForUpdate(ctx context.Context, propertyID uuid.UUID) (application.PropertyRef, error) {
 	row, err := s.q().GetPropertyForTaskMutation(ctx, pgconv.UUIDToPgtype(propertyID))
-	return propertyRefFromRow(row.OwnerID, row.Status, err, propertyID)
+	return propertyRefFromRow(row.OwnerID, row.Status, "", err, propertyID)
 }
 
 // propertyRefFromRow maps one property read onto the application reference;
 // the archived flag is the status string's read view, pgx.ErrNoRows is the
-// privacy ErrNotFound.
+// privacy ErrNotFound. The name is empty on the reads that don't project it.
 func propertyRefFromRow(
-	ownerID pgtype.UUID, status string, err error, propertyID uuid.UUID,
+	ownerID pgtype.UUID, status, name string, err error, propertyID uuid.UUID,
 ) (application.PropertyRef, error) {
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -228,5 +229,6 @@ func propertyRefFromRow(
 	return application.PropertyRef{
 		OwnerID:  pgconv.UUIDFromPgtype(ownerID),
 		Archived: status == "archived",
+		Name:     name,
 	}, nil
 }

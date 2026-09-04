@@ -57,6 +57,25 @@ type Querier interface {
 	// The total count of one bucket — the «Выполненные N» counter (false =
 	// active tasks, true = the completed journal).
 	CountTasksByProperty(ctx context.Context, arg CountTasksByPropertyParams) (int64, error)
+	// The global listings' visibility predicate (ticket #521): the actor's own
+	// rows — bound and property-less — plus the bound rows of the properties
+	// they share with an active membership (ADR 0028 read scope with the merged
+	// visibility of ADR 0052 decision 3). The policy port maps an actor to a
+	// role per property; the merged feed has no single scope to resolve, so the
+	// actor-scoped read carries its visibility predicate here, beside the data.
+	// A suspended membership grants no read (the SQL-level status filter, the
+	// property_members precedent); the property-less rows are the owner's alone
+	// — the member EXISTS needs a property to match.
+	//
+	// The bound task rows always carry owner_id of the property's owner (there
+	// is no re-binding), so the owner branch covers the actor's own properties.
+	// The total of one bucket of the actor's visible merged feed. The tasks of
+	// archived properties are not in the global feed (карта #518 решение 9,
+	// тикет #522): non-archived properties plus the property-less cut.
+	CountTasksGlobal(ctx context.Context, arg CountTasksGlobalParams) (int64, error)
+	// The property-less cut of the global listing (ADR 0052: the actor's own
+	// book only). No property join — the label is always absent there.
+	CountTasksGlobalWithoutProperty(ctx context.Context, arg CountTasksGlobalWithoutPropertyParams) (int64, error)
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
 	CountUsersTotalAdmin(ctx context.Context) (int64, error)
@@ -239,8 +258,9 @@ type Querier interface {
 	// lock and the rule's task invalidations (ADR 0051). The property lock
 	// mirrors the payments precedent (ADR 0049 §3); the tick's persistence lives
 	// in tasks_tick.sql, the task reads/completions in tasks_tasks.sql.
-	// The payments-scoped read of the property (ADR 0028): the data owner and
-	// the archived flag, no lock.
+	// The tasks-scoped read of the property (ADR 0028): the data owner, the
+	// archived flag and the display name (the global listing's row projection,
+	// ticket #521), no lock.
 	GetPropertyForTask(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskRow, error)
 	// The mutation's serialization point: the property row locked inside the
 	// caller's transaction, so mutation-vs-tick, mutation-vs-mutation and
@@ -344,12 +364,27 @@ type Querier interface {
 	// sections. Due order with the undated last — the client buckets sections
 	// against the owner's today delivered by the response.
 	ListActiveTasksByProperty(ctx context.Context, arg ListActiveTasksByPropertyParams) ([]ListActiveTasksByPropertyRow, error)
+	// The active tasks of the actor's visible merged feed, due order with the
+	// undated last — the global screen's sections (ticket #521). property_name
+	// is the row's property label; the actor's today travels in the response.
+	// Archived properties are out of the feed (карта #518 решение 9): the
+	// sections stay contiguous for the client's pagination and bucketing.
+	ListActiveTasksGlobal(ctx context.Context, arg ListActiveTasksGlobalParams) ([]ListActiveTasksGlobalRow, error)
+	// The active property-less tasks of the actor's book, the same due order as
+	// the property listings (ticket #521).
+	ListActiveTasksGlobalWithoutProperty(ctx context.Context, arg ListActiveTasksGlobalWithoutPropertyParams) ([]ListActiveTasksGlobalWithoutPropertyRow, error)
 	// Admin tariff listing: every tariff including hidden ones (issue #247).
 	ListAllTariffs(ctx context.Context) ([]Tariff, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
 	// The completed journal of the property, newest completions first.
 	ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]ListCompletedTasksByPropertyRow, error)
+	// The completed journal of the actor's visible merged feed, newest
+	// completions first (ticket #521); archived properties are out (решение 9).
+	ListCompletedTasksGlobal(ctx context.Context, arg ListCompletedTasksGlobalParams) ([]ListCompletedTasksGlobalRow, error)
+	// The completed journal of the actor's property-less tasks, newest
+	// completions first (ticket #521).
+	ListCompletedTasksGlobalWithoutProperty(ctx context.Context, arg ListCompletedTasksGlobalWithoutPropertyParams) ([]ListCompletedTasksGlobalWithoutPropertyRow, error)
 	// The owner's slice per the query scope: 'all' — the whole book,
 	// 'without_property' — the unbound cards, 'property' — one property's cards
 	// (property_id must be set for it). search ('' = no filter) is a

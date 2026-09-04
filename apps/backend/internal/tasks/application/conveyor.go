@@ -311,29 +311,43 @@ func resolveReadScope(
 	ctx context.Context, policy sharedpolicy.Policy, properties PropertyStore,
 	actor, propertyID uuid.UUID,
 ) (uuid.UUID, error) {
+	scope, err := resolveReadScopeRef(ctx, policy, properties, actor, propertyID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return scope.OwnerID, nil
+}
+
+// resolveReadScopeRef is resolveReadScope returning the full property
+// reference — the data owner plus the display name the global listing
+// projects into its rows (ticket #521).
+func resolveReadScopeRef(
+	ctx context.Context, policy sharedpolicy.Policy, properties PropertyStore,
+	actor, propertyID uuid.UUID,
+) (PropertyRef, error) {
 	if policy == nil {
 		prop, err := properties.Get(ctx, propertyID)
 		if err != nil {
-			return uuid.Nil, err
+			return PropertyRef{}, err
 		}
 		if prop.OwnerID != actor {
-			return uuid.Nil, ErrNotFound
+			return PropertyRef{}, ErrNotFound
 		}
-		return actor, nil
+		return prop, nil
 	}
 	role, err := policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
+		return PropertyRef{}, fmt.Errorf("resolve role: %w", err)
 	}
 	// Every non-allow outcome hides the data's existence: none and suspended
 	// are the privacy 404, forbidden (unreachable for view today) would mean
 	// the same for reads.
 	if sharedpolicy.GateFor(role, sharedpolicy.CanView) != sharedpolicy.GateAllow {
-		return uuid.Nil, ErrNotFound
+		return PropertyRef{}, ErrNotFound
 	}
 	prop, err := properties.Get(ctx, propertyID)
 	if err != nil {
-		return uuid.Nil, err
+		return PropertyRef{}, err
 	}
-	return prop.OwnerID, nil
+	return prop, nil
 }

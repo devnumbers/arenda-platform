@@ -4,9 +4,10 @@
 -- in tasks_tick.sql, the task reads/completions in tasks_tasks.sql.
 
 -- name: GetPropertyForTask :one
--- The payments-scoped read of the property (ADR 0028): the data owner and
--- the archived flag, no lock.
-SELECT id, owner_id, status FROM properties WHERE id = $1;
+-- The tasks-scoped read of the property (ADR 0028): the data owner, the
+-- archived flag and the display name (the global listing's row projection,
+-- ticket #521), no lock.
+SELECT id, owner_id, status, name FROM properties WHERE id = $1;
 
 -- name: GetPropertyForTaskMutation :one
 -- The mutation's serialization point: the property row locked inside the

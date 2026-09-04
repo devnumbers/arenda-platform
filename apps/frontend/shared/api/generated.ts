@@ -441,6 +441,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible tasks (the global «Задачи» screen)
+         * @description The global read side of the tasks context (ADR 0052, ticket #521). Without a property filter the response is the actor's visible merged feed: their own tasks — bound and property-less — plus the bound tasks of the properties they can view (ADR 0028; a sharing member never sees the feed owner's property-less tasks). The tasks of archived properties are not in the feed — non-archived properties plus the property-less cut only (карта #518, решение 9). The property filters select one slice: propertyId — the tasks of that one property, resolved through its view gate (a stranger gets the privacy 404); withoutProperty — the property-less slice of the actor's own book. The two filters are mutually exclusive. Every item's status is computed against its data owner's current moment (a merged page may span owners); today is the reading actor's current date — the day boundary for the «Сегодня»/«Завтра» sections (the data owner's on the propertyId branch). The flat order is by due date — the property screen's section-contiguous backbone; the screen sorts rows inside the sections client-side (по дате создания / по названию, like the property screen). Reads never tick.
+         */
+        get: operations["listTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/rules": {
         parameters: {
             query?: never;
@@ -2174,6 +2194,8 @@ export interface components {
              * @description The bound property, snapshotted at materialization; null = the task without a property (ADR 0052).
              */
             propertyId: string | null;
+            /** @description The display name of the bound property — the global screen's row label (list projection only, filled on the global listing; null elsewhere — the property screen resolves the property by its id). */
+            propertyName?: string | null;
             /**
              * Format: uuid
              * @description The producing rule; null marks it deleted (the journal row is read-only).
@@ -3533,6 +3555,38 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                /** @description Filter by one bound property; resolved through the property's view gate (ADR 0028). Combining it with withoutProperty is a 400. */
+                propertyId?: string;
+                /** @description The property-less slice of the actor's own book («без объекта», ADR 0052). Combining it with propertyId is a 400. */
+                withoutProperty?: boolean;
+                /** @description The bucket selector: false (default) — the active tasks (the screen's Просроченные/Сегодня/даты/Без даты sections), true — the completed journal. total always counts the same bucket. */
+                completed?: boolean;
+                limit?: components["parameters"]["TasksLimit"];
+                offset?: components["parameters"]["TasksOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tasks page. status is the server-computed view bucket (active, overdue, undated, completed); propertyName is the bound property's display name for the global row — null on the property-less slice. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasksResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     createTaskRuleWithoutProperty: {

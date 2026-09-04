@@ -55,6 +55,71 @@ func (q *Queries) CountTasksByProperty(ctx context.Context, arg CountTasksByProp
 	return count, err
 }
 
+const countTasksGlobal = `-- name: CountTasksGlobal :one
+
+SELECT count(*) FROM tasks t
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
+  AND (t.completed_date IS NOT NULL) = $2::boolean
+`
+
+type CountTasksGlobalParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Column2 bool        `json:"column_2"`
+}
+
+// The global listings' visibility predicate (ticket #521): the actor's own
+// rows — bound and property-less — plus the bound rows of the properties
+// they share with an active membership (ADR 0028 read scope with the merged
+// visibility of ADR 0052 decision 3). The policy port maps an actor to a
+// role per property; the merged feed has no single scope to resolve, so the
+// actor-scoped read carries its visibility predicate here, beside the data.
+// A suspended membership grants no read (the SQL-level status filter, the
+// property_members precedent); the property-less rows are the owner's alone
+// — the member EXISTS needs a property to match.
+//
+// The bound task rows always carry owner_id of the property's owner (there
+// is no re-binding), so the owner branch covers the actor's own properties.
+// The total of one bucket of the actor's visible merged feed. The tasks of
+// archived properties are not in the global feed (карта #518 решение 9,
+// тикет #522): non-archived properties plus the property-less cut.
+func (q *Queries) CountTasksGlobal(ctx context.Context, arg CountTasksGlobalParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countTasksGlobal, arg.OwnerID, arg.Column2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTasksGlobalWithoutProperty = `-- name: CountTasksGlobalWithoutProperty :one
+
+SELECT count(*) FROM tasks
+WHERE owner_id = $1 AND property_id IS NULL
+  AND (completed_date IS NOT NULL) = $2::boolean
+`
+
+type CountTasksGlobalWithoutPropertyParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Column2 bool        `json:"column_2"`
+}
+
+// The property-less cut of the global listing (ADR 0052: the actor's own
+// book only). No property join — the label is always absent there.
+func (q *Queries) CountTasksGlobalWithoutProperty(ctx context.Context, arg CountTasksGlobalWithoutPropertyParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countTasksGlobalWithoutProperty, arg.OwnerID, arg.Column2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteCompletedJournal = `-- name: DeleteCompletedJournal :execrows
 DELETE FROM tasks
 WHERE owner_id = $1 AND property_id = $2
@@ -260,6 +325,155 @@ func (q *Queries) ListActiveTasksByProperty(ctx context.Context, arg ListActiveT
 	return items, nil
 }
 
+const listActiveTasksGlobal = `-- name: ListActiveTasksGlobal :many
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat,
+       p.name AS property_name
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
+  AND t.completed_date IS NULL
+ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
+LIMIT $2 OFFSET $3
+`
+
+type ListActiveTasksGlobalParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Limit   int32       `json:"limit"`
+	Offset  int32       `json:"offset"`
+}
+
+type ListActiveTasksGlobalRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+	PropertyName  pgtype.Text        `json:"property_name"`
+}
+
+// The active tasks of the actor's visible merged feed, due order with the
+// undated last — the global screen's sections (ticket #521). property_name
+// is the row's property label; the actor's today travels in the response.
+// Archived properties are out of the feed (карта #518 решение 9): the
+// sections stay contiguous for the client's pagination and bucketing.
+func (q *Queries) ListActiveTasksGlobal(ctx context.Context, arg ListActiveTasksGlobalParams) ([]ListActiveTasksGlobalRow, error) {
+	rows, err := q.db.Query(ctx, listActiveTasksGlobal, arg.OwnerID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveTasksGlobalRow{}
+	for rows.Next() {
+		var i ListActiveTasksGlobalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.RuleID,
+			&i.DueDate,
+			&i.DueTime,
+			&i.Title,
+			&i.Comment,
+			&i.CompletedDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuleRepeat,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveTasksGlobalWithoutProperty = `-- name: ListActiveTasksGlobalWithoutProperty :many
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.owner_id = $1 AND t.property_id IS NULL AND t.completed_date IS NULL
+ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
+LIMIT $2 OFFSET $3
+`
+
+type ListActiveTasksGlobalWithoutPropertyParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Limit   int32       `json:"limit"`
+	Offset  int32       `json:"offset"`
+}
+
+type ListActiveTasksGlobalWithoutPropertyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+}
+
+// The active property-less tasks of the actor's book, the same due order as
+// the property listings (ticket #521).
+func (q *Queries) ListActiveTasksGlobalWithoutProperty(ctx context.Context, arg ListActiveTasksGlobalWithoutPropertyParams) ([]ListActiveTasksGlobalWithoutPropertyRow, error) {
+	rows, err := q.db.Query(ctx, listActiveTasksGlobalWithoutProperty, arg.OwnerID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveTasksGlobalWithoutPropertyRow{}
+	for rows.Next() {
+		var i ListActiveTasksGlobalWithoutPropertyRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.RuleID,
+			&i.DueDate,
+			&i.DueTime,
+			&i.Title,
+			&i.Comment,
+			&i.CompletedDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuleRepeat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCompletedTasksByProperty = `-- name: ListCompletedTasksByProperty :many
 SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
        r.repeat AS rule_repeat
@@ -307,6 +521,152 @@ func (q *Queries) ListCompletedTasksByProperty(ctx context.Context, arg ListComp
 	items := []ListCompletedTasksByPropertyRow{}
 	for rows.Next() {
 		var i ListCompletedTasksByPropertyRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.RuleID,
+			&i.DueDate,
+			&i.DueTime,
+			&i.Title,
+			&i.Comment,
+			&i.CompletedDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuleRepeat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCompletedTasksGlobal = `-- name: ListCompletedTasksGlobal :many
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat,
+       p.name AS property_name
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
+  AND t.completed_date IS NOT NULL
+ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
+LIMIT $2 OFFSET $3
+`
+
+type ListCompletedTasksGlobalParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Limit   int32       `json:"limit"`
+	Offset  int32       `json:"offset"`
+}
+
+type ListCompletedTasksGlobalRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+	PropertyName  pgtype.Text        `json:"property_name"`
+}
+
+// The completed journal of the actor's visible merged feed, newest
+// completions first (ticket #521); archived properties are out (решение 9).
+func (q *Queries) ListCompletedTasksGlobal(ctx context.Context, arg ListCompletedTasksGlobalParams) ([]ListCompletedTasksGlobalRow, error) {
+	rows, err := q.db.Query(ctx, listCompletedTasksGlobal, arg.OwnerID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletedTasksGlobalRow{}
+	for rows.Next() {
+		var i ListCompletedTasksGlobalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.RuleID,
+			&i.DueDate,
+			&i.DueTime,
+			&i.Title,
+			&i.Comment,
+			&i.CompletedDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuleRepeat,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCompletedTasksGlobalWithoutProperty = `-- name: ListCompletedTasksGlobalWithoutProperty :many
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.owner_id = $1 AND t.property_id IS NULL AND t.completed_date IS NOT NULL
+ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
+LIMIT $2 OFFSET $3
+`
+
+type ListCompletedTasksGlobalWithoutPropertyParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Limit   int32       `json:"limit"`
+	Offset  int32       `json:"offset"`
+}
+
+type ListCompletedTasksGlobalWithoutPropertyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+}
+
+// The completed journal of the actor's property-less tasks, newest
+// completions first (ticket #521).
+func (q *Queries) ListCompletedTasksGlobalWithoutProperty(ctx context.Context, arg ListCompletedTasksGlobalWithoutPropertyParams) ([]ListCompletedTasksGlobalWithoutPropertyRow, error) {
+	rows, err := q.db.Query(ctx, listCompletedTasksGlobalWithoutProperty, arg.OwnerID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletedTasksGlobalWithoutPropertyRow{}
+	for rows.Next() {
+		var i ListCompletedTasksGlobalWithoutPropertyRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,

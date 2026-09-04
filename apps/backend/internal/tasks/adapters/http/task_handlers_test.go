@@ -112,6 +112,7 @@ func (f *fakeTaskRulesManager) DeleteRuleWithoutProperty(
 // fakeTasksManager is the func-backed TasksManager double.
 type fakeTasksManager struct {
 	list       func(ctx context.Context, actor, propertyID uuid.UUID, q application.TasksListQuery) (application.TasksPage, error)
+	listGlobal func(ctx context.Context, actor uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error)
 	complete   func(ctx context.Context, actor, propertyID, taskID uuid.UUID) (domain.Task, error)
 	uncomplete func(ctx context.Context, actor, propertyID, taskID uuid.UUID) (domain.Task, error)
 	clear      func(ctx context.Context, actor, propertyID uuid.UUID) (int64, error)
@@ -174,6 +175,15 @@ func (f *fakeTasksManager) UncompleteTaskWithoutProperty(
 	return f.uncompleteWithoutProperty(ctx, actor, taskID)
 }
 
+func (f *fakeTasksManager) ListGlobalTasks(
+	ctx context.Context, actor uuid.UUID, q application.GlobalTasksListQuery,
+) (application.TasksPage, error) {
+	if f.listGlobal == nil {
+		return application.TasksPage{}, errors.New("unexpected ListGlobalTasks call")
+	}
+	return f.listGlobal(ctx, actor, q)
+}
+
 // fixtureRule is the tests' fixture rule.
 func fixtureRule() domain.TaskRule {
 	id := uuid.Must(uuid.NewV7())
@@ -233,6 +243,9 @@ func TestTaskHandlers_Unauthorized(t *testing.T) {
 		"delete rule": func(w http.ResponseWriter, r *http.Request) { rh.DeleteTaskRule(w, r, propertyID, otherID) },
 		"list tasks": func(w http.ResponseWriter, r *http.Request) {
 			th.ListPropertyTasks(w, r, propertyID, openapi.ListPropertyTasksParams{})
+		},
+		"list global tasks": func(w http.ResponseWriter, r *http.Request) {
+			th.ListTasks(w, r, openapi.ListTasksParams{})
 		},
 		"complete":         func(w http.ResponseWriter, r *http.Request) { th.CompleteTask(w, r, propertyID, otherID) },
 		"uncomplete":       func(w http.ResponseWriter, r *http.Request) { th.UncompleteTask(w, r, propertyID, otherID) },
@@ -452,6 +465,133 @@ func TestTaskHandlers_ListPropertyTasks_FoldsParamsAndBuckets(t *testing.T) {
 	}
 	if resp.Items[1].Repeat != nil {
 		t.Fatalf("repeat without the rule projection = %q, want null", *resp.Items[1].Repeat)
+	}
+}
+
+func TestTaskHandlers_ListTasks_FoldsParamsAndProjectsName(t *testing.T) {
+	t.Parallel()
+
+	actor := uuid.Must(uuid.NewV7())
+	var gotActor uuid.UUID
+	var gotQ application.GlobalTasksListQuery
+	svc := &fakeTasksManager{
+		listGlobal: func(_ context.Context, a uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error) {
+			gotActor = a
+			gotQ = q
+			first := fixtureTask()
+			return application.TasksPage{
+				Items: []application.TaskListItem{
+					{Task: first, Status: domain.ViewOverdue, PropertyName: "Дача"},
+					{Task: fixtureTask(), Status: domain.ViewActive},
+				},
+				Total: 2,
+				Today: time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	}
+	h := NewTaskHandlers(svc, nil)
+
+	propertyID := uuid.Must(uuid.NewV7())
+	completed := true
+	limit := openapi.TasksLimit(10)
+	offset := openapi.TasksOffset(5)
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), actor),
+		http.MethodGet, "/tasks", nil,
+	)
+	w := httptest.NewRecorder()
+	h.ListTasks(w, req, openapi.ListTasksParams{
+		PropertyId: &propertyID,
+		Completed:  &completed,
+		Limit:      &limit,
+		Offset:     &offset,
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if gotActor != actor {
+		t.Fatalf("actor = %s, want %s", gotActor, actor)
+	}
+	if gotQ.PropertyID == nil || *gotQ.PropertyID != propertyID {
+		t.Fatalf("property filter = %v", gotQ.PropertyID)
+	}
+	if gotQ.WithoutProperty {
+		t.Fatalf("withoutProperty leaked: %+v", gotQ)
+	}
+	if !gotQ.Completed || gotQ.Limit != 10 || gotQ.Offset != 5 {
+		t.Fatalf("query = %+v", gotQ)
+	}
+
+	var resp openapi.TasksResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Items) != 2 || resp.Total != 2 {
+		t.Fatalf("response = %d items / total %d", len(resp.Items), resp.Total)
+	}
+	if resp.Items[0].PropertyName == nil || *resp.Items[0].PropertyName != "Дача" {
+		t.Fatalf("propertyName = %v, want Дача", resp.Items[0].PropertyName)
+	}
+	if resp.Items[1].PropertyName != nil {
+		t.Fatalf("property-less propertyName = %q, want null", *resp.Items[1].PropertyName)
+	}
+}
+
+func TestTaskHandlers_ListTasks_FoldsWithoutProperty(t *testing.T) {
+	t.Parallel()
+
+	var gotQ application.GlobalTasksListQuery
+	svc := &fakeTasksManager{
+		listGlobal: func(_ context.Context, _ uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error) {
+			gotQ = q
+			return application.TasksPage{Items: []application.TaskListItem{}, Total: 0, Today: time.Time{}}, nil
+		},
+	}
+	h := NewTaskHandlers(svc, nil)
+
+	without := true
+	req := userRequest(t, http.MethodGet, "/tasks", "")
+	w := httptest.NewRecorder()
+	h.ListTasks(w, req, openapi.ListTasksParams{WithoutProperty: &without})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if !gotQ.WithoutProperty || gotQ.PropertyID != nil {
+		t.Fatalf("query = %+v", gotQ)
+	}
+}
+
+func TestTaskHandlers_ListTasks_ErrorMapping(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"both property filters 400", application.ErrInvalidInput, http.StatusBadRequest},
+		{"foreign propertyId privacy 404", application.ErrNotFound, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc := &fakeTasksManager{
+				listGlobal: func(
+					_ context.Context, _ uuid.UUID, _ application.GlobalTasksListQuery,
+				) (application.TasksPage, error) {
+					return application.TasksPage{}, tt.err
+				},
+			}
+			h := NewTaskHandlers(svc, nil)
+			req := userRequest(t, http.MethodGet, "/tasks", "")
+			w := httptest.NewRecorder()
+			h.ListTasks(w, req, openapi.ListTasksParams{})
+			if w.Code != tt.want {
+				t.Fatalf("status = %d, want %d", w.Code, tt.want)
+			}
+		})
 	}
 }
 

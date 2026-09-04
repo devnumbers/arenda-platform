@@ -24,6 +24,10 @@ import (
 // callBookkeeperTitle is the canonical property-less rule title fixture.
 const callBookkeeperTitle = "Позвонить бухгалтеру"
 
+// boxesTitle is the canonical undated rule title fixture (the undated
+// materialization and the global feed's undated tail both use it).
+const boxesTitle = "Разобрать коробки"
+
 // withoutPropertyCreateCmd is the canonical property-less create fixture: the
 // same weekly Thursday task as the harness createCmd, no property.
 func withoutPropertyCreateCmd() application.CreateRuleCommand {
@@ -97,7 +101,7 @@ func TestWithoutPropertyUndatedRule(t *testing.T) {
 	h := newTasksHarness(t).withOwner(taskMoscowTZ)
 
 	rule, err := h.rules.CreateRuleWithoutProperty(h.ctx(), h.owner, application.CreateRuleCommand{
-		Title:  "Разобрать коробки",
+		Title:  boxesTitle,
 		Repeat: domain.RepeatOnce,
 	})
 	if err != nil {
@@ -287,7 +291,7 @@ func TestWithoutPropertyTickMaterialization(t *testing.T) {
 	// property-less slice.
 	once := h.seedRuleWithoutProperty(day03, "", "once", "Отдать показания")
 	weekly := h.seedRuleWithoutProperty(day03, "09:00", "weekly", "Проверить почту")
-	undated := h.seedRuleWithoutProperty("", "", "once", "Разобрать коробки")
+	undated := h.seedRuleWithoutProperty("", "", "once", boxesTitle)
 
 	h.runTick()
 

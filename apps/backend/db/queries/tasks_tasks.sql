@@ -52,6 +52,116 @@ WHERE t.owner_id = $1 AND t.property_id = $2 AND t.completed_date IS NOT NULL
 ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
 LIMIT $3 OFFSET $4;
 
+-- The global listings' visibility predicate (ticket #521): the actor's own
+-- rows — bound and property-less — plus the bound rows of the properties
+-- they share with an active membership (ADR 0028 read scope with the merged
+-- visibility of ADR 0052 decision 3). The policy port maps an actor to a
+-- role per property; the merged feed has no single scope to resolve, so the
+-- actor-scoped read carries its visibility predicate here, beside the data.
+-- A suspended membership grants no read (the SQL-level status filter, the
+-- property_members precedent); the property-less rows are the owner's alone
+-- — the member EXISTS needs a property to match.
+--
+-- The bound task rows always carry owner_id of the property's owner (there
+-- is no re-binding), so the owner branch covers the actor's own properties.
+
+-- name: CountTasksGlobal :one
+-- The total of one bucket of the actor's visible merged feed. The tasks of
+-- archived properties are not in the global feed (карта #518 решение 9,
+-- тикет #522): non-archived properties plus the property-less cut.
+SELECT count(*) FROM tasks t
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
+  AND (t.completed_date IS NOT NULL) = $2::boolean;
+
+-- name: ListActiveTasksGlobal :many
+-- The active tasks of the actor's visible merged feed, due order with the
+-- undated last — the global screen's sections (ticket #521). property_name
+-- is the row's property label; the actor's today travels in the response.
+-- Archived properties are out of the feed (карта #518 решение 9): the
+-- sections stay contiguous for the client's pagination and bucketing.
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat,
+       p.name AS property_name
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
+  AND t.completed_date IS NULL
+ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
+LIMIT $2 OFFSET $3;
+
+-- name: ListCompletedTasksGlobal :many
+-- The completed journal of the actor's visible merged feed, newest
+-- completions first (ticket #521); archived properties are out (решение 9).
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat,
+       p.name AS property_name
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
+  AND t.completed_date IS NOT NULL
+ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
+LIMIT $2 OFFSET $3;
+
+-- The property-less cut of the global listing (ADR 0052: the actor's own
+-- book only). No property join — the label is always absent there.
+
+-- name: CountTasksGlobalWithoutProperty :one
+SELECT count(*) FROM tasks
+WHERE owner_id = $1 AND property_id IS NULL
+  AND (completed_date IS NOT NULL) = $2::boolean;
+
+-- name: ListActiveTasksGlobalWithoutProperty :many
+-- The active property-less tasks of the actor's book, the same due order as
+-- the property listings (ticket #521).
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.owner_id = $1 AND t.property_id IS NULL AND t.completed_date IS NULL
+ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
+LIMIT $2 OFFSET $3;
+
+-- name: ListCompletedTasksGlobalWithoutProperty :many
+-- The completed journal of the actor's property-less tasks, newest
+-- completions first (ticket #521).
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+WHERE t.owner_id = $1 AND t.property_id IS NULL AND t.completed_date IS NOT NULL
+ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
+LIMIT $2 OFFSET $3;
+
 -- name: CompleteTask :execrows
 -- «Выполнить»: the completion fact stamped on the still-active task; rows
 -- affected = 0 surfaces as ErrAlreadyCompleted (the use case has already

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
@@ -191,6 +192,174 @@ func (s *TaskStore) list(
 		}))
 	}
 	return tasks, nil
+}
+
+// ListGlobal returns one page of the actor's visible merged feed with the
+// total count of the same filter; the SQL visibility predicate is the
+// adapter's (ticket #521, the merged visibility of ADR 0052 decision 3).
+func (s *TaskStore) ListGlobal(
+	ctx context.Context, actor uuid.UUID, q application.TasksListQuery,
+) (rows []application.GlobalTaskRow, total int, err error) {
+	return listGlobalPage(s.db, actor, q,
+		func(queries *postgres.Queries) (int64, error) {
+			return queries.CountTasksGlobal(ctx, postgres.CountTasksGlobalParams{
+				OwnerID: pgconv.UUIDToPgtype(actor),
+				Column2: q.Completed,
+			})
+		},
+		func(queries *postgres.Queries, page postgres.ListActiveTasksGlobalParams) ([]postgres.ListActiveTasksGlobalRow, error) {
+			return queries.ListActiveTasksGlobal(ctx, page)
+		},
+		func(queries *postgres.Queries, page postgres.ListCompletedTasksGlobalParams) ([]postgres.ListCompletedTasksGlobalRow, error) {
+			return queries.ListCompletedTasksGlobal(ctx, page)
+		},
+		globalRowFields,
+		globalCompletedRowFields,
+	)
+}
+
+// ListGlobalWithoutProperty returns one page of the property-less cut of the
+// actor's book with the total count of the same filter (ADR 0052).
+func (s *TaskStore) ListGlobalWithoutProperty(
+	ctx context.Context, actor uuid.UUID, q application.TasksListQuery,
+) (rows []application.GlobalTaskRow, total int, err error) {
+	return listGlobalPage(s.db, actor, q,
+		func(queries *postgres.Queries) (int64, error) {
+			return queries.CountTasksGlobalWithoutProperty(ctx, postgres.CountTasksGlobalWithoutPropertyParams{
+				OwnerID: pgconv.UUIDToPgtype(actor),
+				Column2: q.Completed,
+			})
+		},
+		func(queries *postgres.Queries, page postgres.ListActiveTasksGlobalParams) ([]postgres.ListActiveTasksGlobalWithoutPropertyRow, error) {
+			return queries.ListActiveTasksGlobalWithoutProperty(
+				ctx, postgres.ListActiveTasksGlobalWithoutPropertyParams(page))
+		},
+		func(queries *postgres.Queries, page postgres.ListCompletedTasksGlobalParams) (
+			[]postgres.ListCompletedTasksGlobalWithoutPropertyRow, error,
+		) {
+			return queries.ListCompletedTasksGlobalWithoutProperty(
+				ctx, postgres.ListCompletedTasksGlobalWithoutPropertyParams(page))
+		},
+		withoutPropertyRowFields,
+		withoutPropertyCompletedRowFields,
+	)
+}
+
+// listGlobalPage runs the global listings' shared shape: the bucket's total
+// count, then one page of the requested bucket, mapped onto the application
+// rows. The two cut queries differ only in their sqlc calls and the row
+// projectors, so the dispatch lives here once. The bounds re-check the
+// service applied (PrepareTasksQuery) guards the int→int32 narrowing.
+func listGlobalPage[ActiveRow, CompletedRow any](
+	db postgres.DBTX, actor uuid.UUID, q application.TasksListQuery,
+	count func(*postgres.Queries) (int64, error),
+	listActive func(*postgres.Queries, postgres.ListActiveTasksGlobalParams) ([]ActiveRow, error),
+	listCompleted func(*postgres.Queries, postgres.ListCompletedTasksGlobalParams) ([]CompletedRow, error),
+	projectActive func(ActiveRow) (taskFields, string),
+	projectCompleted func(CompletedRow) (taskFields, string),
+) ([]application.GlobalTaskRow, int, error) {
+	if q.Limit < 1 || q.Limit > application.MaxTasksPageSize || q.Offset < 0 || q.Offset > math.MaxInt32 {
+		return nil, 0, application.ErrInvalidInput
+	}
+	queries := postgres.New(db)
+	counted, err := count(queries)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count global tasks: %w", err)
+	}
+	page := postgres.ListActiveTasksGlobalParams{
+		OwnerID: pgconv.UUIDToPgtype(actor),
+		Limit:   int32(q.Limit),
+		Offset:  int32(q.Offset),
+	}
+	var rows []application.GlobalTaskRow
+	if q.Completed {
+		fetched, listErr := listCompleted(queries, postgres.ListCompletedTasksGlobalParams(page))
+		if listErr != nil {
+			return nil, 0, fmt.Errorf("list completed global tasks: %w", listErr)
+		}
+		rows = mapGlobalRows(fetched, projectCompleted)
+	} else {
+		fetched, listErr := listActive(queries, page)
+		if listErr != nil {
+			return nil, 0, fmt.Errorf("list active global tasks: %w", listErr)
+		}
+		rows = mapGlobalRows(fetched, projectActive)
+	}
+	return rows, int(counted), nil
+}
+
+// mapGlobalRows projects one fetched page onto the application rows: the
+// domain task per row plus the property label the query carried (the store
+// fills Task and PropertyName; Status stays the use case's — the buckets are
+// computed against each row owner's moment).
+func mapGlobalRows[T any](rows []T, project func(T) (taskFields, string)) []application.GlobalTaskRow {
+	items := make([]application.GlobalTaskRow, 0, len(rows))
+	for _, row := range rows {
+		fields, name := project(row)
+		items = append(items, application.GlobalTaskRow{Task: mapTaskRow(fields), PropertyName: name})
+	}
+	return items
+}
+
+// globalRowFields reads the merged feed's row shape (the property label
+// included).
+func globalRowFields(row postgres.ListActiveTasksGlobalRow) (fields taskFields, propertyName string) {
+	return taskFieldsFromRow(
+			row.ID, row.OwnerID, row.PropertyID, row.RuleID, row.DueDate, row.DueTime,
+			row.Title, row.Comment, row.CompletedDate, row.CreatedAt, row.UpdatedAt, row.RuleRepeat,
+		),
+		pgconv.TextToString(row.PropertyName)
+}
+
+// globalCompletedRowFields is globalRowFields for the completed journal's
+// row type — the shapes are column-identical.
+func globalCompletedRowFields(row postgres.ListCompletedTasksGlobalRow) (fields taskFields, propertyName string) {
+	return globalRowFields(postgres.ListActiveTasksGlobalRow(row))
+}
+
+// withoutPropertyRowFields is the property-less cut's row shape; the label
+// is always absent there.
+func withoutPropertyRowFields(
+	row postgres.ListActiveTasksGlobalWithoutPropertyRow,
+) (fields taskFields, propertyName string) {
+	return taskFieldsFromRow(
+			row.ID, row.OwnerID, row.PropertyID, row.RuleID, row.DueDate, row.DueTime,
+			row.Title, row.Comment, row.CompletedDate, row.CreatedAt, row.UpdatedAt, row.RuleRepeat,
+		),
+		""
+}
+
+// withoutPropertyCompletedRowFields is withoutPropertyRowFields for the
+// completed journal's row type.
+func withoutPropertyCompletedRowFields(
+	row postgres.ListCompletedTasksGlobalWithoutPropertyRow,
+) (fields taskFields, propertyName string) {
+	return withoutPropertyRowFields(postgres.ListActiveTasksGlobalWithoutPropertyRow(row))
+}
+
+// taskFieldsFromRow bundles the shared column projection of the task
+// readers.
+func taskFieldsFromRow(
+	id, ownerID, propertyID, ruleID pgtype.UUID,
+	dueDate pgtype.Date, dueTime pgtype.Time,
+	title string, comment pgtype.Text,
+	completedDate pgtype.Date, createdAt, updatedAt pgtype.Timestamptz,
+	ruleRepeat pgtype.Text,
+) taskFields {
+	return taskFields{
+		ID:            pgconv.UUIDFromPgtype(id),
+		OwnerID:       pgconv.UUIDFromPgtype(ownerID),
+		PropertyID:    propertyID,
+		RuleID:        ruleID,
+		DueDate:       dueDate,
+		DueTime:       dueTime,
+		Title:         title,
+		Comment:       comment,
+		CompletedDate: completedDate,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+		RuleRepeat:    ruleRepeat,
+	}
 }
 
 // Complete stamps the completion fact on the still-active task; rows
