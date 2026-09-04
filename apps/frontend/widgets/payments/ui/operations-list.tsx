@@ -2,7 +2,7 @@
 
 import type { JSX, ReactNode } from 'react';
 import Image from 'next/image';
-import { EmptyState } from '@/shared/ui/design';
+import { EmptyState, Skeleton } from '@/shared/ui/design';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import { PaymentRowButton, type PaymentOperation } from '@/entities/payment';
 import type { PaymentHistoryGroup } from '@/features/payments';
@@ -124,7 +124,7 @@ export function OperationRow({
 export function LoadingMoreIndicator(): JSX.Element {
   return (
     <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <div className="h-8 w-8 animate-pulse rounded-pill bg-surface-muted" />
+      <Skeleton className="h-8 w-8" />
     </div>
   );
 }

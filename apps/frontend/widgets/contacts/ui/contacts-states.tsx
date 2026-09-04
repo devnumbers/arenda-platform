@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { Button, EmptyState } from '@/shared/ui/design';
+import { Button, EmptyState, Skeleton } from '@/shared/ui/design';
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
 /** Пояснение состояния (16/18, серый #6F787C — макет 1527:74479). */
@@ -17,9 +17,9 @@ export function ContactsSkeleton(): JSX.Element {
   return (
     <section className="mx-6 rounded-card bg-surface-muted px-6 py-6" aria-hidden>
       <div className="flex flex-col gap-4">
-        <div className="h-11 animate-pulse rounded-pill bg-surface-muted-hover" />
-        <div className="h-11 w-4/5 animate-pulse rounded-pill bg-surface-muted-hover" />
-        <div className="h-11 w-3/5 animate-pulse rounded-pill bg-surface-muted-hover" />
+        <Skeleton className="h-11 bg-surface-muted-hover" />
+        <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
+        <Skeleton className="h-11 w-3/5 bg-surface-muted-hover" />
       </div>
     </section>
   );

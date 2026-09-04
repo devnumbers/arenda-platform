@@ -17,7 +17,7 @@ import {
   groupPaidOperations,
   usePaymentOperationsPaged,
 } from '@/features/payments';
-import { Button, ChipButton, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { Button, ChipButton, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { operationStatusLabel } from '../lib/operation-status-label';
 import {
   PaymentsHeading,
@@ -195,7 +195,7 @@ function HistoryRow({
 function LoadingMoreIndicator(): JSX.Element {
   return (
     <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <div className="h-8 w-8 animate-pulse rounded-pill bg-surface-muted" />
+      <Skeleton className="h-8 w-8" />
     </div>
   );
 }

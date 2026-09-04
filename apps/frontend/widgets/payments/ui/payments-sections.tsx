@@ -6,7 +6,7 @@ import {
   formatOverdueDays,
   PaymentRowButton,
 } from '@/entities/payment';
-import { EmptyState } from '@/shared/ui/design';
+import { EmptyState, Skeleton } from '@/shared/ui/design';
 import type { IsoDate, Payment, PaymentOperation } from '@/entities/payment';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import { daysOverdue } from '../lib/overdue-days';
@@ -175,10 +175,10 @@ export function PaymentsHeading({ children }: { readonly children: ReactNode }):
 export function PaymentsSkeleton({ withHeading }: { readonly withHeading?: boolean }): JSX.Element {
   return (
     <section className="mx-6 rounded-card bg-surface-muted px-6 py-6" aria-hidden>
-      <div className={`${withHeading ? 'mb-4' : ''} h-6 w-40 animate-pulse rounded-pill bg-surface-muted-hover`} />
+      <Skeleton className={`${withHeading ? 'mb-4' : ''} h-6 w-40 bg-surface-muted-hover`} />
       <div className="flex flex-col gap-4">
-        <div className="h-11 animate-pulse rounded-pill bg-surface-muted-hover" />
-        <div className="h-11 w-4/5 animate-pulse rounded-pill bg-surface-muted-hover" />
+        <Skeleton className="h-11 bg-surface-muted-hover" />
+        <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
       </div>
     </section>
   );

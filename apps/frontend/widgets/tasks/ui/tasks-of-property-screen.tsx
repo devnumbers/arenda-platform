@@ -44,11 +44,13 @@ import {
   MenuTrigger,
   PageContent,
   PickerMenu,
+  Skeleton,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
   type PickerMenuGroup,
-} from '@/shared/ui/design';import { TaskRow, type TaskRowTone } from './task-row';
+} from '@/shared/ui/design';
+import { TaskRow, type TaskRowTone } from './task-row';
 import { TaskSectionCard } from './task-section-card';
 
 /**
@@ -412,10 +414,10 @@ export function TasksStateCard({
 export function TasksSkeleton(): JSX.Element {
   return (
     <section className="mx-6 rounded-card bg-surface-muted px-6 py-6" aria-hidden>
-      <div className="mb-4 h-6 w-40 animate-pulse rounded-pill bg-surface-muted-hover" />
+      <Skeleton className="mb-4 h-6 w-40 bg-surface-muted-hover" />
       <div className="flex flex-col gap-4">
-        <div className="h-11 animate-pulse rounded-pill bg-surface-muted-hover" />
-        <div className="h-11 w-4/5 animate-pulse rounded-pill bg-surface-muted-hover" />
+        <Skeleton className="h-11 bg-surface-muted-hover" />
+        <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
       </div>
     </section>
   );

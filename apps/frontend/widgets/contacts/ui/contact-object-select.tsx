@@ -2,7 +2,7 @@
 
 import type { JSX } from 'react';
 import { BoldHome, BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
-import { Button, IconButton, PageContent, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { Button, IconButton, PageContent, Skeleton, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
 
 /**
@@ -152,10 +152,10 @@ function ObjectRowsSkeleton(): JSX.Element {
     <div aria-hidden className="flex flex-col gap-6 py-6">
       {[0, 1, 2, 3].map((row) => (
         <div key={row} className="flex items-center gap-2">
-          <div className="h-12 w-12 animate-pulse rounded-full bg-surface-muted" />
+          <Skeleton className="h-12 w-12 rounded-full" />
           <div className="flex flex-1 flex-col gap-2">
-            <div className="h-4 w-2/5 animate-pulse rounded-pill bg-surface-muted" />
-            <div className="h-3.5 w-3/5 animate-pulse rounded-pill bg-surface-muted" />
+            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-3.5 w-3/5" />
           </div>
         </div>
       ))}

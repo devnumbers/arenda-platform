@@ -72,3 +72,4 @@ export {
 } from './collapsible-section';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog';
 export { EmptyState, type EmptyStateProps } from './empty-state';
+export { Skeleton, type SkeletonProps } from './skeleton';

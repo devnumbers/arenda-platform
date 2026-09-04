@@ -38,6 +38,7 @@ import {
     PageContent,
     PickerMenu,
     PickerField,
+    Skeleton,
     RadioGroup,
     RadioGroupItem,
     SearchField,
@@ -896,6 +897,21 @@ export function DesignLayerShowcase(): JSX.Element {
                             title="Контактов нет"
                             description="Добавьте контакты арендатора, мастеров и других специалистов"
                         />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>Skeleton · скелетон загрузки</h3>
+                    <p className={styles.groupTitle}>
+                        Пульс на bg-surface-muted, размер и форма — через className; внутри
+                        серой карточки — bg-surface-muted-hover.
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex w-full flex-col gap-2">
+                            <Skeleton className="h-11 w-3/5 bg-surface-muted-hover" />
+                            <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
+                            <Skeleton className="h-11 w-2/5 bg-surface-muted-hover" />
+                        </div>
                     </div>
                 </div>
 
