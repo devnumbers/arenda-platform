@@ -214,6 +214,45 @@ export function useTaskRule(
 }
 
 /**
+ * Правило без объекта — предзаполнение плоской формы «Изменить задачу»
+ * (#537): глобальный GET /tasks/rules/{ruleId} (#520), owner-only. Правило,
+ * привязанное к объекту, на этом пути невидимо — privacy 404, срезы не
+ * смешиваются (ADR 0052).
+ */
+export function usePropertylessTaskRule(
+  ruleId: string,
+): UseQueryResult<TaskRule, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.propertylessRule(ruleId),
+    queryFn: async () => {
+      const response = await apiClient<TaskRuleResponseDto>(
+        `/tasks/rules/${encodeURIComponent(ruleId)}`,
+      );
+      return mapTaskRule(response);
+    },
+    enabled: Boolean(ruleId),
+  });
+}
+
+/**
+ * «Сегодня» владельца для плоской формы правки (ADR 0048) — страница
+ * глобального листинга GET /tasks?withoutProperty=true (#521); лимит 1:
+ * форме нужна только дата, ленту безобъектного среза строит экран #523.
+ * Владелец — сам читатель, today его календаря (контракт #521).
+ */
+export function usePropertylessTasks(): UseQueryResult<TasksPage, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.propertylessTasks(),
+    queryFn: async () => {
+      const response = await apiClient<TasksPageDto>(
+        '/tasks?withoutProperty=true&completed=false&limit=1',
+      );
+      return mapTasksPage(response);
+    },
+  });
+}
+
+/**
  * Сохранение правки правила (#502): частичный PATCH — команду-дифф собирает
  * lib/task-edit (только изменённые поля; comment/dueDate/dueTime —
  * три-стейт, null очищает). Сервер перематериализует будущие вхождения
@@ -229,6 +268,30 @@ export function useUpdateTaskRule(
     mutationFn: async (command: TaskRuleUpdateCommand) => {
       await apiClient<unknown>(
         `/properties/${encodeURIComponent(propertyId)}/tasks/rules/${encodeURIComponent(ruleId)}`,
+        { method: 'PATCH', body: JSON.stringify(command) },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
+ * Сохранение правки правила без объекта (#537): тот же частичный PATCH,
+ * что у объектного пути (#502), — глобальный /tasks/rules/{ruleId} (#520).
+ * Команду-дифф собирает общий lib/task-edit; сервер перематериализует
+ * будущие вхождения по поясу владельца (ADR 0052). Ответа экрану не нужно —
+ * инвалидация taskKeys.all перечитывает и объектный, и безобъектный срезы.
+ */
+export function useUpdatePropertylessTaskRule(
+  ruleId: string,
+): UseMutationResult<void, ApiError, TaskRuleUpdateCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: TaskRuleUpdateCommand) => {
+      await apiClient<unknown>(
+        `/tasks/rules/${encodeURIComponent(ruleId)}`,
         { method: 'PATCH', body: JSON.stringify(command) },
       );
     },

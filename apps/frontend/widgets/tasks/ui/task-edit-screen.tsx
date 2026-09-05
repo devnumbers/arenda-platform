@@ -2,20 +2,26 @@
 
 import { useEffect, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { formatDayMonth, type IsoDate, type TaskRule } from '@/entities/task';
+import type { ApiError } from '@/shared/api/errors';
 import { useProperty } from '@/features/properties';
 import {
   buildTaskRuleUpdateRequest,
   initialTaskEditDraft,
   TASK_REPEAT_OPTIONS,
   useActiveTasks,
+  usePropertylessTaskRule,
+  usePropertylessTasks,
   useTaskRule,
+  useUpdatePropertylessTaskRule,
   useUpdateTaskRule,
   type TaskEditDraft,
+  type TaskRuleUpdateCommand,
 } from '@/features/tasks';
 import {
   Button,
@@ -37,19 +43,27 @@ import { TasksSkeleton, TasksStateCard } from './tasks-of-property-screen';
 const TITLE_MAX_LENGTH = 255;
 const COMMENT_MAX_LENGTH = 1000;
 
+/** Мутация сохранения — одинаковая по форме на обоих срезах (правило
+ * объекта и правило без объекта), отличается только путь запроса. */
+type TaskRuleUpdateMutation = UseMutationResult<void, ApiError, TaskRuleUpdateCommand>;
+
 /**
- * Экран «Изменить задачу» (#502, Figma 1549-91324): одноэкранная форма
- * правки правила (словарь #494) — та же анатомия, что шаг 2 создания
- * (#500), плюс поле названия с очисткой ✕; без шагов и галочки в шапке
- * (решение #497). Семантика: правится правило — будущие вхождения
- * перематериализуются свежими снимками, выполненные остаются со своими
- * (сообщение об этом — success-тост после сохранения, формат решается на
- * приёмке). Сохранение — частичный PATCH: запрос — дифф черновика против
- * правила (lib/task-edit), без изменений «Сохранить» недоступна; снятие
- * даты повторным тапом чистит время и повтор (решение владельца к #500).
- * «Сегодня» пикеров — серверное today собственника из кэша листинга
- * (ADR 0048). После сохранения — возврат в список. Смотрящий и архив
- * глушат мутации (#446, ADR 0028) — форма сразу возвращает на список.
+ * Экран «Изменить задачу» (#502, Figma 1549-91324) на объектном срезе:
+ * одноэкранная форма правки правила (словарь #494) — та же анатомия, что
+ * шаг 2 создания (#500), плюс поле названия с очисткой ✕; без шагов и
+ * галочки в шапке (решение #497). Семантика: правится правило — будущие
+ * вхождения перематериализуются свежими снимками, выполненные остаются со
+ * своими (сообщение об этом — success-тост после сохранения). Сохранение —
+ * частичный PATCH: запрос — дифф черновика против правила (lib/task-edit),
+ * без изменений «Сохранить» недоступна. «Сегодня» пикеров — серверное
+ * today собственника из кэша листинга (ADR 0048). После сохранения —
+ * возврат в список. Смотрящий и архив глушат мутации (#446, ADR 0028) —
+ * форма сразу возвращает на список.
+ *
+ * Экран вынесен из-под объекта и реюзается на плоском маршруте
+ * /tasks/{ruleId}/edit (#537) — решение экранной карты #522; срезы (объект
+ * / без объекта) не смешиваются (ADR 0052), общие — каркас и форма
+ * (TaskEditBody + TaskEditForm), различия срезов — в обёртках ниже.
  */
 export function TaskEditScreen({
   propertyId,
@@ -61,6 +75,7 @@ export function TaskEditScreen({
   const router = useRouter();
   const propertyQuery = useProperty(propertyId);
   const ruleQuery = useTaskRule(propertyId, ruleId);
+  const update = useUpdateTaskRule(propertyId, ruleId);
   // «Сегодня» собственника — границы пикера (ADR 0048); источник — кэш
   // листинга, как на создании.
   const activeTasksQuery = useActiveTasks(propertyId);
@@ -81,10 +96,89 @@ export function TaskEditScreen({
 
   const close = (): void => goBack(router, ROUTES.propertyTasks(propertyId));
 
-  const rule = ruleQuery.isSuccess ? ruleQuery.data : undefined;
-  const loading = propertyQuery.isPending || ruleQuery.isPending;
-  const failed = propertyQuery.isError || ruleQuery.isError;
+  return (
+    <TaskEditBody
+      ruleQuery={ruleQuery}
+      today={today}
+      update={update}
+      close={close}
+      // Правило здесь всегда объектное (propertyId — из маршрута, срезы
+      // не смешиваются); монтируем форму только когда доступ подтверждён.
+      ready={canMutate}
+      loading={propertyQuery.isPending || ruleQuery.isPending}
+      failed={propertyQuery.isError || ruleQuery.isError}
+      onRetry={() => {
+        void ruleQuery.refetch();
+        void propertyQuery.refetch();
+      }}
+    />
+  );
+}
 
+/**
+ * Экран «Изменить задачу» на плоском маршруте /tasks/{ruleId}/edit (#537):
+ * та же форма правки правила без объекта. Срез owner-only (ADR 0052):
+ * гейта доступа как у объектного экрана нет — чужое или объектное правило
+ * даёт контрактный privacy 404, честная карточка ошибки с «Повторить».
+ * Тап по активной безобъектной строке глобальной ленты открывает этот
+ * маршрут (#523); выполненные строки ленты некликабельны.
+ */
+export function TaskPropertylessEditScreen({
+  ruleId,
+}: {
+  readonly ruleId: string;
+}): JSX.Element {
+  const router = useRouter();
+  const ruleQuery = usePropertylessTaskRule(ruleId);
+  const update = useUpdatePropertylessTaskRule(ruleId);
+  // «Сегодня» владельца — страница безобъектного листинга (ADR 0048).
+  const todayQuery = usePropertylessTasks();
+  const today = todayQuery.data?.today;
+
+  const close = (): void =>
+    // Fallback replace срабатывает только при прямом входе без истории;
+    // живой вход — с глобальной ленты (#523), пока её нет — хаб «Еще»
+    // (точка входа в задачи, решение #522).
+    goBack(router, ROUTES.profile);
+
+  return (
+    <TaskEditBody
+      ruleQuery={ruleQuery}
+      today={today}
+      update={update}
+      close={close}
+      ready
+      loading={ruleQuery.isPending}
+      failed={ruleQuery.isError}
+      onRetry={() => {
+        void ruleQuery.refetch();
+        void todayQuery.refetch();
+      }}
+    />
+  );
+}
+
+/** Общий каркас экрана правки обоих срезов: хедер, состояния и монтаж
+ * формы. Источники rule/today, мутация и выход из потока — из обёртки. */
+function TaskEditBody({
+  ruleQuery,
+  today,
+  update,
+  close,
+  ready,
+  loading,
+  failed,
+  onRetry,
+}: {
+  readonly ruleQuery: UseQueryResult<TaskRule, ApiError>;
+  readonly today: IsoDate | undefined;
+  readonly update: TaskRuleUpdateMutation;
+  readonly close: () => void;
+  readonly ready: boolean;
+  readonly loading: boolean;
+  readonly failed: boolean;
+  readonly onRetry: () => void;
+}): JSX.Element {
   return (
     <>
       <TopNav
@@ -103,21 +197,19 @@ export function TaskEditScreen({
           )}
 
           {!loading && failed && (
-            <TasksStateCard
-              title="Не удалось загрузить задачу"
-              onRetry={() => {
-                void ruleQuery.refetch();
-                void propertyQuery.refetch();
-              }}
-            />
+            <TasksStateCard title="Не удалось загрузить задачу" onRetry={onRetry} />
           )}
 
-          {!loading && !failed && rule !== undefined && canMutate && (
+          {!loading && !failed && ready && ruleQuery.isSuccess && (
             // key — на случай переиспользования смонтированной формы под
             // другое правило (черновик не должен пережить смену источника).
-            // propertyId — из маршрута: экран вложен в объект, правило здесь
-            // всегда объектное (срезы не смешиваются, ADR 0052).
-            <TaskEditForm key={rule.id} propertyId={propertyId} rule={rule} today={today} />
+            <TaskEditForm
+              key={ruleQuery.data.id}
+              rule={ruleQuery.data}
+              today={today}
+              update={update}
+              close={close}
+            />
           )}
         </div>
       </PageContent>
@@ -127,24 +219,23 @@ export function TaskEditScreen({
 
 /** Форма правки: черновик живёт в состоянии; в PATCH уходит только
  * команда-дифф против правила (как у правки платежа — команду собирает
- * lib/task-edit). */
+ * lib/task-edit); снятие даты повторным тапом чистит время и повтор
+ * (решение владельца к #500). Мутация и close приходят из обёртки среза —
+ * форма не знает, объектное правило или нет (ADR 0052). */
 function TaskEditForm({
-  propertyId,
   rule,
   today,
+  update,
+  close,
 }: {
-  readonly propertyId: string;
   readonly rule: TaskRule;
   readonly today: IsoDate | undefined;
+  readonly update: TaskRuleUpdateMutation;
+  readonly close: () => void;
 }): JSX.Element {
-  const router = useRouter();
   const [draft, setDraft] = useState<TaskEditDraft>(() => initialTaskEditDraft(rule));
   const [dateOpen, setDateOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
-
-  const update = useUpdateTaskRule(propertyId, rule.id);
-
-  const close = (): void => goBack(router, ROUTES.propertyTasks(propertyId));
 
   const patch = (changes: Partial<TaskEditDraft>): void =>
     setDraft((prev) => ({ ...prev, ...changes }));

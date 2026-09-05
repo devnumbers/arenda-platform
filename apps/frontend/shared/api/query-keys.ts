@@ -163,6 +163,12 @@ export const taskKeys = {
   /** Правило задачи — экран «Изменить задачу» (#502). */
   rule: (propertyId: string, ruleId: string) =>
     [...taskKeys.all, 'rule', propertyId, ruleId] as const,
+  /** Правило без объекта — плоская форма «Изменить задачу» (#537). */
+  propertylessRule: (ruleId: string) =>
+    [...taskKeys.all, 'rule', 'without-property', ruleId] as const,
+  /** Страница безобъектного среза GET /tasks (сейчас — источник «сегодня»
+   * для плоской формы; параметризуется лентой #523). */
+  propertylessTasks: () => [...taskKeys.all, 'without-property'] as const,
 };
 
 // features/subscription

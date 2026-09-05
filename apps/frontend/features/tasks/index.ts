@@ -5,8 +5,11 @@ export {
   useCompleteTask,
   useCreateTaskRule,
   useDeleteCompletedTasks,
+  usePropertylessTaskRule,
+  usePropertylessTasks,
   useTaskRule,
   useUncompleteTask,
+  useUpdatePropertylessTaskRule,
   useUpdateTaskRule,
 } from './api/hooks';
 export {
