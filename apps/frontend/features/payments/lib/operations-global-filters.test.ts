@@ -4,6 +4,7 @@ import {
   globalOperationsFiltersParams,
   operationsPropertyChipLabel,
   readGlobalOperationsFilters,
+  resolveGlobalFilterReturnPath,
 } from './operations-global-filters';
 
 const TODAY = '2026-09-02';
@@ -99,5 +100,32 @@ describe('operationsPropertyChipLabel', () => {
     expect(operationsPropertyChipLabel([PROP_A, PROP_B, PROP_A, PROP_B, PROP_A])).toBe(
       '5 объектов',
     );
+  });
+});
+
+describe('resolveGlobalFilterReturnPath', () => {
+  it('без параметра — главный список операций', () => {
+    expect(resolveGlobalFilterReturnPath(null)).toBe('/operations');
+    expect(resolveGlobalFilterReturnPath('')).toBe('/operations');
+  });
+
+  it('маршруты зоны операций возвращаются как есть, с их query', () => {
+    expect(resolveGlobalFilterReturnPath('/operations')).toBe('/operations');
+    expect(
+      resolveGlobalFilterReturnPath(
+        `/operations?from=2026-08-01&to=2026-08-31&property=${PROP_A}`,
+      ),
+    ).toBe(`/operations?from=2026-08-01&to=2026-08-31&property=${PROP_A}`);
+    expect(resolveGlobalFilterReturnPath('/operations/search?q=тест')).toBe(
+      '/operations/search?q=тест',
+    );
+  });
+
+  it('чужие и опасные пути отбрасываются — главный список', () => {
+    expect(resolveGlobalFilterReturnPath('/properties/x/operations')).toBe('/operations');
+    expect(resolveGlobalFilterReturnPath('/operations-archive')).toBe('/operations');
+    expect(resolveGlobalFilterReturnPath('//evil.example')).toBe('/operations');
+    expect(resolveGlobalFilterReturnPath('https://evil.example')).toBe('/operations');
+    expect(resolveGlobalFilterReturnPath('/login')).toBe('/operations');
   });
 });

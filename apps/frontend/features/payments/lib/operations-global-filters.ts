@@ -1,5 +1,6 @@
 import type { IsoDate } from '@/entities/payment';
 import { pluralize } from '@/shared/lib/pluralize';
+import { safeInternalPath } from '@/shared/lib/safe-internal-path';
 import {
   readOperationsFilters,
   type OperationsFilters,
@@ -19,6 +20,21 @@ export type GlobalOperationsFilters = OperationsFilters & {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Куда возвращаться со страниц выбора фильтров глобальной ленты (#542):
+ * только маршруты зоны /operations (главная лента, поиск #543, категории
+ * #544 открывают друг друга с ?return=), иначе — главный список. Тот же
+ * приём, что resolveFilterReturnPath у объектных экранов (#477).
+ */
+export function resolveGlobalFilterReturnPath(raw: string | null): string {
+  const candidate = safeInternalPath(raw);
+  const path = candidate?.split('?')[0] ?? '';
+  if (path === '/operations' || path.startsWith('/operations/')) {
+    return candidate as string;
+  }
+  return '/operations';
+}
 
 /** Чтение фильтров глобальной ленты: период и категории — правила
  * объектного экрана (битые даты/перевёрнутый период/будущий хвост

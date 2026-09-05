@@ -76,6 +76,7 @@ export {
   globalOperationsFiltersParams,
   operationsPropertyChipLabel,
   readGlobalOperationsFilters,
+  resolveGlobalFilterReturnPath,
   type GlobalOperationsFilters,
 } from './lib/operations-global-filters';
 export { useGlobalOperationsFilters } from './lib/use-global-operations-filters';
