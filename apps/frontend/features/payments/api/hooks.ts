@@ -22,8 +22,10 @@ import type {
   PaymentUpdateCommand,
 } from '@/entities/payment';
 import {
+  globalOperationKeys,
   paymentKeys,
   paymentOperationKeys,
+  type GlobalOperationScope,
   type PaymentOperationOrder,
   type PaymentOperationScope,
   type PaymentOperationStatusFilter,
@@ -371,12 +373,100 @@ export function usePropertyOperationsSummary(
 }
 
 /**
+ * Порции глобальной ленты операций (#541, контракт /operations #540):
+ * платёжные факты всех видимых объектов — свои плюс с активным членством
+ * (ADR 0028), архивные исключены сервером; лента paid-only. Тот же
+ * пагинационный контракт, что у объектных списков: pageParam — offset,
+ * следующая страница есть, пока порция полная. `options.enabled` глушит
+ * запрос (поиск #543 не стреляет, пока запрос не введён);
+ * keepPreviousData держит прежнюю страницу, пока едет новая.
+ */
+export function useGlobalOperationsPaged(
+  scope: GlobalOperationScope,
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
+  return useInfiniteQuery({
+    queryKey: globalOperationKeys.listPaged(scope),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams({
+        order: scope.order,
+        limit: String(OPERATIONS_PAGE_SIZE),
+        offset: String(pageParam),
+      });
+      if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
+        params.set('propertyIds', scope.propertyIds.join(','));
+      }
+      if (scope.categories !== undefined && scope.categories.length > 0) {
+        params.set('category', scope.categories.join(','));
+      }
+      if (scope.dateFrom !== undefined) {
+        params.set('date_from', scope.dateFrom);
+      }
+      if (scope.dateTo !== undefined) {
+        params.set('date_to', scope.dateTo);
+      }
+      if (scope.search !== undefined && scope.search !== '') {
+        params.set('search', scope.search);
+      }
+      const response = await apiClient<OperationsResponse>(`/operations?${params.toString()}`);
+      return response.items.map(mapPaymentOperation);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length < OPERATIONS_PAGE_SIZE
+        ? undefined
+        : allPages.length * OPERATIONS_PAGE_SIZE,
+    select: (data) => data.pages.flat(),
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/**
+ * Глобальная сводка периода (#540) за карточками «Расходы/Доходы» и чипом
+ * «Категория»: итоги всегда оба направления; категорийный фильтр сводку не
+ * сужает (решение владельца #539) — в запрос уходят только объекты, период
+ * и поиск. Поиск (#543) — тот же предикат, что у списка: разбивка
+ * становится чипами совпавших категорий; `options.enabled` глушит запрос,
+ * keepPreviousData — карточки не мигают при смене фильтров.
+ */
+export function useGlobalOperationsSummary(
+  scope: GlobalOperationScope,
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<OperationsSummary, ApiError> {
+  return useQuery({
+    queryKey: globalOperationKeys.summary(scope),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
+        params.set('propertyIds', scope.propertyIds.join(','));
+      }
+      if (scope.dateFrom !== undefined) {
+        params.set('date_from', scope.dateFrom);
+      }
+      if (scope.dateTo !== undefined) {
+        params.set('date_to', scope.dateTo);
+      }
+      if (scope.search !== undefined && scope.search !== '') {
+        params.set('search', scope.search);
+      }
+      const query = params.toString();
+      const response = await apiClient<OperationsSummaryResponse>(
+        `/operations/summary${query.length > 0 ? `?${query}` : ''}`,
+      );
+      return mapOperationsSummary(response);
+    },
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/**
  * Удаление операции (решение владельца): planned (долг) и paid получают
  * tombstone-статус cancelled — факт оплаты и долг исчезают, расписание не
  * трогается (надгробие блокирует повторную материализацию на тике).
  * Инвалидация операций и правил (isCompleted мог пересчитаться).
- */
-export function useDeleteOperation(
+ */export function useDeleteOperation(
   propertyId: string,
 ): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();

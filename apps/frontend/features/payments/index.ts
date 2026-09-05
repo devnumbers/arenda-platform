@@ -73,6 +73,13 @@ export {
 } from './lib/operations-filters';
 export { useOperationsFilters } from './lib/use-operations-filters';
 export {
+  globalOperationsFiltersParams,
+  operationsPropertyChipLabel,
+  readGlobalOperationsFilters,
+  type GlobalOperationsFilters,
+} from './lib/operations-global-filters';
+export { useGlobalOperationsFilters } from './lib/use-global-operations-filters';
+export {
   buildPaymentUpdateCommand,
   editFormReady,
   recurrencesEqual,
@@ -83,6 +90,8 @@ export {
   useCreatePayment,
   useDeleteOperation,
   useDeletePayment,
+  useGlobalOperationsPaged,
+  useGlobalOperationsSummary,
   usePayment,
   usePaymentOperationsByStatus,
   usePaymentOperationsPaged,

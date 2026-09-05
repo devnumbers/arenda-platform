@@ -23,11 +23,15 @@ export function OperationsDateList({
   groups,
   onSelectOperation,
   tail,
+  renderSubtitle,
 }: {
   readonly groups: ReadonlyArray<PaymentHistoryGroup>;
   readonly onSelectOperation: (operation: PaymentOperation) => void;
   /** Sentinel бесконечного скролла и индикатор подгрузки следующей порции. */
   readonly tail?: ReactNode;
+  /** Подзаголовок строки: глобальная лента (#541) пишет имя объекта
+   * (макет 1733-26973), объектные списки подзаголовка не передают. */
+  readonly renderSubtitle?: (operation: PaymentOperation) => ReactNode;
 }): JSX.Element {
   if (groups.length === 0) {
     return <OperationsEmptyPeriod />;
@@ -41,6 +45,7 @@ export function OperationsDateList({
             <OperationRow
               key={operation.id}
               operation={operation}
+              subtitle={renderSubtitle?.(operation)}
               onSelect={() => onSelectOperation(operation)}
             />
           ))}

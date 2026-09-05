@@ -10,6 +10,7 @@ export type NavItemConfig = {
 
 export const navItems: ReadonlyArray<NavItemConfig> = [
   { label: 'Объекты', href: '/properties', icon: 'NavObjects', bottomIcon: 'BottomObjects', showInBottomNav: true },
+  { label: 'Операции', href: '/operations', icon: 'NavOperations', showInBottomNav: false },
   { label: 'Профиль', href: '/profile', icon: 'NavProfile', bottomIcon: 'BottomProfile', showInBottomNav: true },
   { label: 'Поддержка', href: '/support', icon: 'NavSupport', showInBottomNav: false },
 ];

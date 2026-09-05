@@ -165,6 +165,52 @@ export const taskKeys = {
     [...taskKeys.all, 'rule', propertyId, ruleId] as const,
 };
 
+/**
+ * Скоуп глобальной ленты операций (#541, контракт /operations #540):
+ * paid-only — статусного фильтра нет, лента несёт только оплаченные факты.
+ * Мультивыбор объектов, категории (слаги), границы периода и поисковый
+ * запрос целиком уходят в ключ react-query и в query-параметры запроса.
+ */
+export type GlobalOperationScope = {
+  readonly order: PaymentOperationOrder;
+  readonly propertyIds?: ReadonlyArray<string>;
+  readonly categories?: ReadonlyArray<string>;
+  /** Границы периода включительно, 'YYYY-MM-DD'. */
+  readonly dateFrom?: string;
+  readonly dateTo?: string;
+  readonly search?: string;
+};
+
+// features/payments (глобальная лента операций)
+export const globalOperationKeys = {
+  all: ['global-operations'] as const,
+  /** Порции глобальной ленты (#541): весь скоуп — часть ключа. */
+  listPaged: (scope: GlobalOperationScope) =>
+    [
+      ...globalOperationKeys.all,
+      'list-paged',
+      scope.order,
+      scope.propertyIds?.join(',') ?? '',
+      scope.categories?.join(',') ?? '',
+      scope.dateFrom ?? '',
+      scope.dateTo ?? '',
+      scope.search ?? '',
+    ] as const,
+  /** Глобальная сводка (#540): период, объекты и поиск — часть ключа;
+   * категории в ключ не входят — сводка категорийный фильтр не принимает
+   * (решение владельца #539), а чипы поиска читают сводку поискового
+   * скоупа. */
+  summary: (scope: GlobalOperationScope) =>
+    [
+      ...globalOperationKeys.all,
+      'summary',
+      scope.propertyIds?.join(',') ?? '',
+      scope.dateFrom ?? '',
+      scope.dateTo ?? '',
+      scope.search ?? '',
+    ] as const,
+};
+
 // features/subscription
 export const subscriptionKeys = {
   subscription: ['subscription'] as const,

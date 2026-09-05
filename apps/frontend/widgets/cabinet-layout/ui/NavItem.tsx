@@ -4,6 +4,7 @@ import type { ComponentType, JSX } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import {
+  BoldBill,
   NavObjects,
   NavProfile,
   NavSupport,
@@ -27,6 +28,7 @@ const iconMap: Record<string, IconComponent> = {
   NavObjects,
   NavProfile,
   NavSupport,
+  NavOperations: BoldBill,
   BottomObjects,
   BottomProfile,
 };
