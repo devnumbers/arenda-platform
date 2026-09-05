@@ -230,6 +230,7 @@ export function DesignLayerShowcase(): JSX.Element {
                     <div className={styles.textFields}>
                         <TextField
                             title="Название платежа"
+                            required
                             placeholder="Название платежа"
                             description="Необязательно"
                             maxLength={256}
@@ -262,6 +263,7 @@ export function DesignLayerShowcase(): JSX.Element {
                         <TextField
                             variant="titleIn"
                             title="Название платежа"
+                            required
                             maxLength={256}
                             value={titleInValue}
                             onChange={(event) => setTitleInValue(event.target.value)}

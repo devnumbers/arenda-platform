@@ -12,6 +12,8 @@ import { IconButton } from './icon-button';
  * вертикальному центру бокса (Default: alignItems center), при фокусе или
  * непустом значении уменьшается до 13px и уходит наверх; строка значения —
  * 27..45 (Typing: 10 + лейбл 15 + 2 + значение 18).
+ * Обязательное поле — красная звёздочка сразу после заголовка в обоих
+ * вариантах (проп required; решение владельца 2026-09-05, визард аренды).
  * Состояния: Error (красный бокс + текст ошибки), Limited (счётчик красным),
  * Disabled (opacity 0.5), Hover (inset-обводка 2px) — фокус-кольца у поля
  * нет намеренно (решение владельца 2026-08-26): видимый признак фокуса —
@@ -32,6 +34,10 @@ export type TextFieldVariant = 'titleOut' | 'titleIn';
 type TextFieldBaseProps = {
   readonly variant?: TextFieldVariant;
   readonly title?: string;
+  /** Обязательное поле: после заголовка рисуется красная звёздочка
+   * (решение владельца 2026-09-05, визард аренды). Визуальный маркер —
+   * обязательность проверяет форма (error), не атрибут required. */
+  readonly required?: boolean;
   readonly description?: string;
   readonly error?: string;
   /** Лимит символов: нативный maxLength инпута (ввод сверх запрещён) +
@@ -62,6 +68,7 @@ export function TextField({
   className,
   variant = 'titleOut',
   title,
+  required = false,
   description,
   error,
   maxLength,
@@ -77,6 +84,15 @@ export function TextField({
 }: TextFieldProps): JSX.Element {
   const inputId = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  /** Заголовок с маркером обязательности — красная звёздочка следом. */
+  const titleNode =
+    title !== undefined && required ? (
+      <>
+        {title} <span aria-hidden className="text-error">*</span>
+      </>
+    ) : (
+      title
+    );
 
   // Авторасширение multiline-поля: высота подгоняется под контент на
   // каждое изменение значения; потолок — CSS max-h (скролл внутри).
@@ -108,9 +124,9 @@ export function TextField({
 
   return (
     <div className={cn('flex w-full flex-col gap-2 font-sans', disabled && 'opacity-50', className)}>
-      {variant === 'titleOut' && title !== undefined && (
+      {variant === 'titleOut' && titleNode !== undefined && (
         <label htmlFor={inputId} className="text-base font-medium leading-[18px] text-content">
-          {title}
+          {titleNode}
         </label>
       )}
       <div className={box}>
@@ -142,7 +158,7 @@ export function TextField({
                 'peer-[:not(:placeholder-shown)]:top-[10px] peer-[:not(:placeholder-shown)]:text-[13px] peer-[:not(:placeholder-shown)]:leading-[15px]',
               )}
             >
-              {title}
+              {titleNode}
             </label>
           </div>
         )}

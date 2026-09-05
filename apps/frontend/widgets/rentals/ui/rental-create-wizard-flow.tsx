@@ -64,12 +64,12 @@ export function RentalCreateWizardFlow({
       <>
         <TopNav
           leading={
-            <IconButton icon={<Cancel />} label="Закрыть" onClick={closeAfterCreation} />
+            <IconButton icon={<Cancel />} label="Закрыть" onClick={closeWizard} />
           }
         />
         <PageContent>
           <div className="pt-16">
-            <RentalWizardSuccess created={created} onClose={closeAfterCreation} />
+            <RentalWizardSuccess created={created} onClose={closeWizard} />
           </div>
         </PageContent>
       </>
@@ -78,8 +78,23 @@ export function RentalCreateWizardFlow({
 
   return (
     <>
+      {/* Хром шагов по макету (TopNav 1270:46906/46823): шаг 1 — крестик
+          «Закрыть» слева (назад внутри визарда нет); шаги 2–4 — стрелка
+          «Назад» слева и крестик «Закрыть» справа — выход из визарда
+          целиком с любого шага (черновик сохраняется). */}
       <TopNav
-        leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={navigateBack} />}
+        leading={
+          step === 1 ? (
+            <IconButton icon={<Cancel />} label="Закрыть" onClick={closeWizard} />
+          ) : (
+            <IconButton icon={<ArrowLeft />} label="Назад" onClick={navigateBack} />
+          )
+        }
+        trailing={
+          step > 1 ? (
+            <IconButton icon={<Cancel />} label="Закрыть" onClick={closeWizard} />
+          ) : undefined
+        }
       >
         <StepsChip step={step} total={WIZARD_TOTAL_STEPS} size="m" />
       </TopNav>
@@ -178,7 +193,9 @@ export function RentalCreateWizardFlow({
     </>
   );
 
-  function closeAfterCreation(): void {
+  /** Выход из визарда (крестик на любом шаге, «Хорошо» на экране успеха):
+   * история назад, черновик остаётся в localStorage. */
+  function closeWizard(): void {
     goBack(router, ROUTES.property(propertyId));
   }
 

@@ -13,24 +13,19 @@ import {
   MonthDaysGrid,
   PageContent,
   StickyBottomBar,
-  TextField,
   TopNav,
   TopNavTitle,
-  sanitizeAmountInput,
 } from '@/shared/ui/design';
-import {
-  kopecksToAmountInputString,
-  parseRublesToKopecks,
-} from '@/shared/lib/format-money';
-import { PickerTriggerBox, WizardHeading, WizardBottomBar } from './wizard-chrome';
+import { kopecksToAmountInputString, parseRublesToKopecks } from '@/shared/lib/format-money';
+import { MoneyField, PickerTriggerBox, WizardBottomBar, WizardHeading } from './wizard-chrome';
 
 /**
- * Шаг 1 «Цена и число оплаты» (Figma 1270:46904/47385): денежный ввод
- * (нум-пад макета заменён вводом с цифровой клавиатуры — тот же канон,
- * что у поля суммы платежа, решение владельца 2026-08-26) и поле дня
- * оплаты. Пикер дня (Figma 1270:37490 — донор из платежей, выбор
- * одиночный) — полноэкранный оверлей поверх формы: грид чисел месяца и
- * взаимоисключимая строка «Последний день месяца», «Выбрать» коммитит.
+ * Шаг 1 «Цена и число оплаты» (Figma 1270:46904/47385): денежный ввод с
+ * живой группировкой «56 000 ₽» (паттерн компактного поля правки
+ * платежа #467) и поле дня оплаты с иконкой Calendar. Пикер дня (Figma
+ * 1270:37490 — донор из платежей, выбор одиночный) — полноэкранный
+ * оверлей поверх формы: грид чисел месяца и взаимоисключимая строка
+ * «Последний день месяца», «Выбрать» коммитит.
  */
 
 export type AmountDayStepProps = {
@@ -48,29 +43,33 @@ export function AmountDayStep({
   onPaymentDayChange,
 }: AmountDayStepProps): JSX.Element {
   const [dayPickerOpen, setDayPickerOpen] = useState(false);
+  // «Сырое» набранное значение — источник отображения (группировка не
+  // должна сбрасывать каретку); копейки едут в черновик для валидации.
+  const [amountRaw, setAmountRaw] = useState(() =>
+    amountKopecks === undefined ? '' : kopecksToAmountInputString(amountKopecks),
+  );
 
   return (
     <>
       <WizardHeading title="Цена и число оплаты" />
       <div className="flex flex-col gap-8 px-6 pt-6">
-        <TextField
-          variant="titleOut"
-          title="Арендная плата *"
-          placeholder="0"
-          inputMode="decimal"
-          autoComplete="off"
-          value={amountKopecks === undefined ? '' : kopecksToAmountInputString(amountKopecks)}
-          onChange={(event) => {
-            // Значение — «сырая» маскированная строка, как набирает
-            // пользователь (группировка разрядов — на экране успеха).
-            onAmountChange(parseRublesToKopecks(sanitizeAmountInput(event.target.value), { positive: true }));
+        <MoneyField
+          title="Арендная плата"
+          required
+          raw={amountRaw}
+          onRawChange={(raw) => {
+            setAmountRaw(raw);
+            onAmountChange(parseRublesToKopecks(raw, { positive: true }));
           }}
-          onClear={() => onAmountChange(undefined)}
-          suffix="₽"
-          aria-label="Арендная плата, рублей"
+          onClear={() => {
+            setAmountRaw('');
+            onAmountChange(undefined);
+          }}
+          ariaLabel="Арендная плата, рублей"
         />
         <PickerTriggerBox
-          title="День оплаты *"
+          title="День оплаты"
+          required
           value={paymentDay === undefined ? undefined : paymentDayLabel(paymentDay)}
           placeholder="Выбрать день"
           icon={<Calendar className="h-6 w-6" />}
