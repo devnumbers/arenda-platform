@@ -3,9 +3,10 @@ package application
 // The mutation conveyor and the shared gate builders of the tasks use
 // cases. Every mutation of the context — rules and tasks alike — runs
 // through the same ordering invariants structurally (ADR 0051, mirroring
-// ADR 0049 §3): the role gate, the property row lock, the owner's today,
-// the change step, its audit entry in the same transaction and the
-// materialization tick after the change. Reads never tick and never write.
+// ADR 0049 §3): the role gate, the owner's ordered property-row set lock,
+// the owner's today, the change step, its audit entry in the same
+// transaction and the materialization tick after the change. Reads never
+// tick and never write.
 
 import (
 	"context"
@@ -64,11 +65,20 @@ type mutationGates struct {
 
 // runMutation is the mutation conveyor shared by every use case of this
 // context — rules and tasks alike. It runs, in one transaction and in this
-// order: the role gate, the property serialization lock (FOR UPDATE), the
-// owner's today, the load of the target rule (skipped for a zero ruleID),
-// the change step, its audit entry, and the materialization tick when the
-// step asked for it. After commit it returns the step's response,
+// order: the role gate, the owner-wide ordered property-row lock (the tick's
+// serialization point taken at the front — the deadlock-free global order,
+// #546), the owner's today, the load of the target rule (skipped for a zero
+// ruleID), the change step, its audit entry, and the materialization tick
+// when the step asked for it. After commit it returns the step's response,
 // post-commit-re-read applied.
+//
+// The owner-wide lock must be the transaction's first property lock: two
+// mutations that each held only their own property row and then scanned the
+// owner's set deadlocked (SQLSTATE 40P01, #546) — the set scan is ordered by
+// id, but a pre-held arbitrary member stands outside that order. The owner
+// is resolved by an unlocked read (owner_id never moves), the set lock
+// covers every active/maintenance row including this one, and the archived
+// check below still reads the row under its lock.
 func runMutation[T any](
 	g mutationGates,
 	ctx context.Context, actor, propertyID, ruleID uuid.UUID,
@@ -83,6 +93,13 @@ func runMutation[T any](
 	var scope uuid.UUID
 	var out mutationOutcome[T]
 	err = g.factory.runInTx(ctx, func(stores *txStores) error {
+		ref, err := stores.properties.Get(ctx, propertyID)
+		if err != nil {
+			return err
+		}
+		if err := stores.tick.LockOwnerProperties(ctx, ref.OwnerID); err != nil {
+			return err
+		}
 		prop, today, err := lockActiveProperty(ctx, stores, g.calendar, propertyID)
 		if err != nil {
 			return err
@@ -217,9 +234,11 @@ func rereadOwnerRule[T any](
 	return resp, nil
 }
 
-// lockActiveProperty loads the property with its row locked — the mutation's
-// serialization point — resolves the owner's today and rejects the read-only
-// archived state.
+// lockActiveProperty loads the property with its row locked — for an
+// active/maintenance row the conveyor's owner-wide lock already holds it, so
+// this re-lock is a no-op; an archived row stands outside that set, and the
+// lock here closes the archive-vs-mutation race before the read-only check.
+// It then resolves the owner's today and rejects the archived state.
 func lockActiveProperty(
 	ctx context.Context, stores *txStores, calendar OwnerCalendar, propertyID uuid.UUID,
 ) (PropertyRef, time.Time, error) {

@@ -6,10 +6,11 @@
 -- name: LockTaskOwnerProperties :many
 -- Serialization point of the tick: the run locks the owner's
 -- active/maintenance property rows, ordered by id, before reading or writing
--- anything. Context mutations take the same lock per property through
--- GetPropertyForTaskMutation, so update-vs-tick, archive-vs-tick and
--- delete-vs-tick serialize on one point. Archived properties are skipped by
--- the tick entirely.
+-- anything. Context mutations take the same ordered set at their
+-- transaction's front (#546 — the deadlock-free global order), so
+-- update-vs-tick, archive-vs-tick, delete-vs-tick and mutation-vs-mutation
+-- serialize on one lock order. Archived properties are skipped by the tick
+-- entirely.
 SELECT id FROM properties
 WHERE owner_id = $1 AND status IN ('active', 'maintenance')
 ORDER BY id

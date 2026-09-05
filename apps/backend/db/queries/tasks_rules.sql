@@ -10,9 +10,11 @@
 SELECT id, owner_id, status, name FROM properties WHERE id = $1;
 
 -- name: GetPropertyForTaskMutation :one
--- The mutation's serialization point: the property row locked inside the
--- caller's transaction, so mutation-vs-tick, mutation-vs-mutation and
--- archive-vs-mutation serialize on one point (ADR 0049 §3).
+-- The property row locked inside the caller's transaction: for an
+-- active/maintenance row the conveyor's owner-wide set lock already holds
+-- it (the #546 global order), so this re-lock is a no-op; an archived row
+-- stands outside that set, and this lock closes the archive-vs-mutation
+-- race before the read-only check (ADR 0049 §3).
 SELECT id, owner_id, status FROM properties WHERE id = $1 FOR UPDATE;
 
 -- name: CreateTaskRule :exec

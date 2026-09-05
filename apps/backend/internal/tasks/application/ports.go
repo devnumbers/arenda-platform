@@ -262,9 +262,10 @@ type OwnerSnapshot struct {
 // plan. Every method must run inside the tick's unit of work.
 type TickStore interface {
 	// LockOwnerProperties takes the tick's serialization point: FOR UPDATE on
-	// the owner's active/maintenance property rows. Context mutations lock
-	// the same rows per property, so update-vs-tick, archive-vs-tick and
-	// delete-vs-tick serialize on one point.
+	// the owner's active/maintenance property rows, ordered by id. Context
+	// mutations take the same ordered set at the transaction's front (#546),
+	// so update-vs-tick, archive-vs-tick, delete-vs-tick and
+	// mutation-vs-mutation serialize on one lock order without deadlocks.
 	LockOwnerProperties(ctx context.Context, ownerID uuid.UUID) error
 	// LockOwner takes the property-less cut's serialization point (ADR 0052):
 	// FOR UPDATE on the owner's users row. Owner-scope mutations hold it for

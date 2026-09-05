@@ -128,11 +128,12 @@ func (s *txStores) tickOwner(ctx context.Context, ownerID uuid.UUID, today time.
 }
 
 // tickOwnerProperties is the property-bound slice of the tick — the body a
-// property mutation runs inside its transaction: its own property row is
-// already locked, and the slice's rules hang on properties, so the property
-// rows are the only serialization this cut needs. The property-less rules
-// are not this transaction's business: a bound-rule mutation cannot change
-// them.
+// property mutation runs inside its transaction: the conveyor already holds
+// the owner's ordered property-row set (taken at the transaction's front,
+// #546), so the lock here is the re-entrant no-op that keeps this body
+// self-sufficient, and the slice's rules hang on those rows. The
+// property-less rules are not this transaction's business: a bound-rule
+// mutation cannot change them.
 func (s *txStores) tickOwnerProperties(ctx context.Context, ownerID uuid.UUID, today time.Time) error {
 	return s.runTickSlice(ctx, ownerID, today,
 		func(rule domain.TaskRule) bool { return rule.PropertyID != nil },
