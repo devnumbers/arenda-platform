@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -11,6 +11,7 @@ import {
   VerticalMenu,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { ApiError } from '@/shared/api/errors';
 import { notify } from '@/shared/lib/notifications';
 import { useProperties } from '@/features/properties';
 import {
@@ -23,6 +24,7 @@ import {
   useDeleteCompletedGlobalTasks,
   useGlobalActiveTasks,
   useGlobalCompletedTasks,
+  useTasksFeedFilter,
   type FeedPropertyRef,
   type TaskSection,
   type TasksSort,
@@ -44,6 +46,7 @@ import {
 import { TaskRow } from './task-row';
 import { TaskSectionCard } from './task-section-card';
 import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
+import { TasksPropertySelectPage } from './tasks-property-select';
 import { TasksSkeleton, TasksStateCard } from './tasks-of-property-screen';
 import { sectionKey, sectionTone } from './tasks-section-utils';
 import { SortChip, sortPickerGroups } from './tasks-sort';
@@ -65,19 +68,41 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  *
  * Шапка — стандартный TopNav хаба с «крыльями» и на мобайле (`mobileWings`,
  * Figma 1733-27411); смена на компактный заголовок по прокрутке (1733-92349)
- * отложена — решение владельца 2026-09-05. Чип «Объект» и «+» нарисованы по
- * макету, но пока без действия: фильтр — тикет #524, создание — тикет #525
- * (принять решение владельца на приёмке).
+ * отложена — решение владельца 2026-09-05. Чип «Объект» — фильтр по объекту
+ * (#524, Figma 1726-88880/1726-86913): выбранное значение живёт в адресе
+ * (?property=), страница выбора — строгий черновик без истории, при 404
+ * объекта фильтр сбрасывается сам (решение 8 #522). Подпись чипа всегда
+ * «Объект», активное состояние — признак включённого фильтра (правка
+ * владельца 2026-09-05, перекрывает «чип = имя объекта» из решения 7 #522).
+ * «+» нарисовано по макету, но пока без действия — создание, тикет #525.
  */
 export function TasksFeedScreen(): JSX.Element {
   const router = useRouter();
 
-  const activeQuery = useGlobalActiveTasks();
-  const completedQuery = useGlobalCompletedTasks();
+  const { filter, applyPropertyFilter } = useTasksFeedFilter();
+  const activeQuery = useGlobalActiveTasks(filter.propertyId);
+  const completedQuery = useGlobalCompletedTasks(filter.propertyId);
   const propertiesQuery = useProperties();
 
   const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Страница выбора объекта — строгий черновик (#524): черновик живёт,
+  // пока страница смонтирована, история не пишется.
+  const [selectOpen, setSelectOpen] = useState(false);
+  const [propertyDraft, setPropertyDraft] = useState<string | null>(null);
+
+  // Авто-сброс фильтра при 404 (решение 8 #522): объект удалён или доступ
+  // отозван — privacy 404, мёртвый фильтр из адреса убирает replace, чтобы
+  // «назад» не возвращало на ту же ошибку.
+  useEffect(() => {
+    if (filter.propertyId === null) {
+      return;
+    }
+    const error = activeQuery.error ?? completedQuery.error;
+    if (error instanceof ApiError && error.status === 404) {
+      applyPropertyFilter(null, { replace: true });
+    }
+  }, [filter.propertyId, activeQuery.error, completedQuery.error, applyPropertyFilter]);
 
   // Ручная мемоизация активных — требование react-hooks/exhaustive-deps:
   // массив входит в зависимости производных ниже (React Compiler прогоняет
@@ -155,6 +180,22 @@ export function TasksFeedScreen(): JSX.Element {
     <IconButton icon={<Add />} label="Создать задачу" disabled aria-disabled />
   );
 
+  // Выбор объекта фильтра (#524): URL не меняется, черновик применяется
+  // кнопкой (как выбор объекта контакта #509/#510).
+  if (selectOpen) {
+    return (
+      <TasksPropertySelectPage
+        draft={propertyDraft}
+        onDraftChange={setPropertyDraft}
+        onApply={() => {
+          applyPropertyFilter(propertyDraft);
+          setSelectOpen(false);
+        }}
+        onDismiss={() => setSelectOpen(false)}
+      />
+    );
+  }
+
   return (
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
@@ -173,8 +214,18 @@ export function TasksFeedScreen(): JSX.Element {
               <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
                 <SortChip sort={sort} />
               </PickerMenu>
-              {/* Фильтр по объекту — тикет #524: чип по макету, пока без действия. */}
-              <ChipButton trailingIcon={<SmallArrowDown />} disabled aria-disabled>
+              {/* Фильтр по объекту (#524): при выбранном фильтре чип просто
+               * активный (синий, макет 1726-86913), подпись всегда «Объект» —
+               * название объекта чип не показывает (правка владельца
+               * 2026-09-05). */}
+              <ChipButton
+                selected={filter.propertyId !== null}
+                trailingIcon={<SmallArrowDown />}
+                onClick={() => {
+                  setPropertyDraft(filter.propertyId);
+                  setSelectOpen(true);
+                }}
+              >
                 Объект
               </ChipButton>
             </div>

@@ -253,35 +253,38 @@ export function usePropertylessTasks(): UseQueryResult<TasksPage, ApiError> {
   });
 }
 
+/** Путь активного/выполненного бакета глобального листинга GET /tasks:
+ * фильтр объекта (#524) — необязательный сегмент перед бакетом. */
+const globalTasksPath = (completed: boolean, propertyId: string | null): string => {
+  const scope = propertyId === null ? '' : `propertyId=${encodeURIComponent(propertyId)}&`;
+  return `/tasks?${scope}completed=${completed}&limit=${TASKS_PAGE_LIMIT}`;
+};
+
 /**
  * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
  * merged-фид читателя (свои задачи + задачи видимых объектов, архивы мимо —
- * решения #522) без фильтра объекта; фильтр добавит #524. Лимит — максимум
- * контракта: лента группируется целиком, как на объекте. today — календарь
- * читателя. Сестринский хук журнала — useGlobalCompletedTasks.
+ * решения #522); фильтр объекта (#524) — срез одного объекта, смена фильтра
+ * меняет ключ и перечитывает. Лимит — максимум контракта: лента
+ * группируется целиком, как на объекте. today — календарь читателя
+ * (на срезе объекта — владельца данных). Сестринский хук журнала —
+ * useGlobalCompletedTasks.
  */
-export function useGlobalActiveTasks(): UseQueryResult<TasksPage, ApiError> {
+export function useGlobalActiveTasks(
+  propertyId: string | null,
+): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
-    queryKey: taskKeys.global(false),
-    queryFn: async () => {
-      const response = await apiClient<TasksPageDto>(
-        `/tasks?completed=false&limit=${TASKS_PAGE_LIMIT}`,
-      );
-      return mapTasksPage(response);
-    },
+    queryKey: taskKeys.global(false, propertyId),
+    queryFn: async () => mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(false, propertyId))),
   });
 }
 
 /** Журнал глобальной ленты — сворачиваемая секция «Выполненные N». */
-export function useGlobalCompletedTasks(): UseQueryResult<TasksPage, ApiError> {
+export function useGlobalCompletedTasks(
+  propertyId: string | null,
+): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
-    queryKey: taskKeys.global(true),
-    queryFn: async () => {
-      const response = await apiClient<TasksPageDto>(
-        `/tasks?completed=true&limit=${TASKS_PAGE_LIMIT}`,
-      );
-      return mapTasksPage(response);
-    },
+    queryKey: taskKeys.global(true, propertyId),
+    queryFn: async () => mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(true, propertyId))),
   });
 }
 

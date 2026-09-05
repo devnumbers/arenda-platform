@@ -32,6 +32,7 @@ export {
   mutableFeedTasks,
   type FeedPropertyRef,
 } from './lib/global-tasks';
+export { useTasksFeedFilter } from './lib/use-tasks-feed-filter';
 export {
   canCreateTask,
   EMPTY_TASK_CREATE_DRAFT,
