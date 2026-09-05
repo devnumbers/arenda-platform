@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import type { JSX } from 'react';
+import { Cancel } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
   groupedAmount,
+  IconButton,
   sanitizeAmountInput,
   syncAmountInputDom,
-  TextField,
 } from '@/shared/ui/design';
 
 /**
@@ -117,12 +118,15 @@ export function PickerTriggerBox({
   );
 }
 
-/** Компактное денежное поле (макет 1270:46905/47386): бокс 56px с живой
- * группировкой разрядов и «₽» справа — пустое поле показывает одинокий
- * серый «₽», заполненное — «56 000 ₽» тёмным (решение владельца
- * 2026-09-05); очистка — круглая Cancel-иконка. Паттерн компактного поля
- * правки платежа (#467): значение — «сырая» маскированная строка,
- * группировка рисуется синхронизацией DOM. */
+/** Компактное денежное поле (макет 1270:46905/47386, решение владельца
+ * 2026-09-05): бокс 56px с живой группировкой разрядов, «₽» прижата к
+ * сумме с небольшим зазором и едет вместе с вводом (пустое поле —
+ * одинокий серый «₽», заполненное — «56 000 ₽» тёмным); очистка —
+ * круглая Cancel-иконка. Техника канонного AmountField: невидимый
+ * измеритель задаёт ширину инпута по набранному тексту, «₽» — соседний
+ * элемент (внутри value ей не место — уводит каретку и ломает
+ * Backspace); «сырое» значение + syncAmountInputDom — паттерн поля
+ * правки платежа (#467). */
 export function MoneyField({
   title,
   required = false,
@@ -140,32 +144,55 @@ export function MoneyField({
   readonly ariaLabel: string;
 }): JSX.Element {
   const hasValue = raw.length > 0;
+  const grouped = groupedAmount(raw);
 
   return (
-    <TextField
-      variant="titleOut"
-      title={title}
-      required={required}
-      aria-label={ariaLabel}
-      inputMode="decimal"
-      autoComplete="off"
-      spellCheck={false}
-      value={groupedAmount(raw)}
-      placeholder=""
-      onChange={(event) => {
-        const sanitized = sanitizeAmountInput(event.target.value);
-        onRawChange(sanitized);
-        syncAmountInputDom(event.target, sanitized);
-      }}
-      onClear={onClear}
-      suffix={
+    <div className="flex w-full flex-col gap-2 font-sans">
+      <FieldTitle title={title} required={required} />
+      <div className="flex h-14 w-full items-center rounded-button bg-surface-muted pl-[18px] pr-2 transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]">
+        {/* обёртка инпута — ширины набранного текста (без flex-1): «₽»
+            прижимается к сумме, а не к правому краю бокса */}
+        <span className="relative inline-flex h-full items-center">
+          {/* измеритель: ширина инпута = ширине набранного текста (пустой
+              — незаметная «0», чтобы поле оставалось кликабельным) */}
+          <span aria-hidden className={cn('invisible whitespace-pre px-0.5 text-base leading-[18px]', hasValue ? 'text-content' : 'text-content-tertiary')}>
+            {grouped === '' ? '0' : grouped}
+          </span>
+          <input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            spellCheck={false}
+            pattern="[0-9]*"
+            aria-label={ariaLabel}
+            value={grouped}
+            onChange={(event) => {
+              const sanitized = sanitizeAmountInput(event.target.value);
+              onRawChange(sanitized);
+              syncAmountInputDom(event.target, sanitized);
+            }}
+            className="absolute inset-0 h-full w-full bg-transparent text-base leading-[18px] text-content outline-none"
+          />
+        </span>
         <span
           aria-hidden
-          className={cn('text-base leading-[18px]', hasValue ? 'text-content' : 'text-content-tertiary')}
+          className={cn(
+            'ml-2 text-base leading-[18px]',
+            hasValue ? 'text-content' : 'text-content-tertiary',
+          )}
         >
           ₽
         </span>
-      }
-    />
+        {hasValue && (
+          <IconButton
+            icon={<Cancel />}
+            label={`Очистить «${title}»`}
+            variant="secondary"
+            onClick={onClear}
+            className="ml-1"
+          />
+        )}
+      </div>
+    </div>
   );
 }
