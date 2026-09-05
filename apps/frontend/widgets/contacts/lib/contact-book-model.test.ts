@@ -6,6 +6,7 @@ import {
   contactBookRowSubtitle,
   groupBookByLetter,
   groupBookByProperty,
+  parseContactBookSortParams,
 } from './contact-book-model';
 
 const contact = (overrides: Partial<Contact>): Contact => ({
@@ -93,5 +94,33 @@ describe('contactBookRowSubtitle — подзаголовок строки кн�
 
   it('не задано ничего — подзаголовка нет', () => {
     expect(contactBookRowSubtitle(contact({}))).toBeUndefined();
+  });
+});
+
+describe('parseContactBookSortParams — разбор ?sort=&order= книги', () => {
+  it('известные значения проходят', () => {
+    expect(parseContactBookSortParams('property', 'desc')).toEqual({
+      sort: 'property',
+      order: 'desc',
+    });
+    expect(parseContactBookSortParams('name', 'asc')).toEqual({ sort: 'name', order: 'asc' });
+  });
+
+  it('отсутствующие и неизвестные — дефолт (имя по возрастанию)', () => {
+    expect(parseContactBookSortParams(undefined, undefined)).toEqual({
+      sort: 'name',
+      order: 'asc',
+    });
+    expect(parseContactBookSortParams('bogus', 'sideways')).toEqual({
+      sort: 'name',
+      order: 'asc',
+    });
+  });
+
+  it('массив значений трактуется как отсутствие', () => {
+    expect(parseContactBookSortParams(['property'], ['desc'])).toEqual({
+      sort: 'name',
+      order: 'asc',
+    });
   });
 });

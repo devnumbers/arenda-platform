@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ComponentProps, type JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Add,
   Search,
@@ -37,10 +37,13 @@ import { ContactsEmptyState, ContactsErrorCard, ContactsSkeleton } from './conta
  * макеты 1726:65083/65136/85937): заголовок кабинета, поисковая пилюля с
  * «+» (создание контакта книги), чип сортировки и одна серая карточка с
  * группами. Сортировка — серверная: поле «Имя/Объект» × «Возрастание/
- * Убывание» (меню/шит «Сортировать», 1726:65136); при сортировке по объекту
- * группы — «Общие контакты» (без объекта; сервер держит их первыми в обоих
- * направлениях) и имена объектов, при сортировке по имени — алфавитные.
- * Подзаголовок строки — «Роль (Объект)» (1726:85937).
+ * Убывание» (меню/шит «Сортировать», 1726:65136) уходит в ?sort/order
+ * GET /contacts; выбор живёт в query строки (?sort=&order=, конвенция
+ * страницы «Объекты») — переживает перезагрузку и назад/вперёд. При
+ * сортировке по объекту группы — «Общие контакты» (без объекта; сервер
+ * держит их первыми в обоих направлениях — решение владельца 2026-09-04) и
+ * имена объектов, при сортировке по имени — алфавитные. Подзаголовок
+ * строки — «Роль (Объект)» (1726:85937).
  *
  * Поиск — не здесь: пилюля — кнопка, тап открывает отдельную поисковую
  * страницу /contacts/search с поисковой шапкой 1:1 как у книги объекта
@@ -48,15 +51,40 @@ import { ContactsEmptyState, ContactsErrorCard, ContactsSkeleton } from './conta
  * Пустая книга — EmptyState (служебный чип сортировки прячется вместе со
  * списком, DESIGN.md).
  */
-export function ContactBookScreen(): JSX.Element {
+export function ContactBookScreen({
+  initialSort,
+  initialOrder,
+}: {
+  readonly initialSort?: ContactBookSort;
+  readonly initialOrder?: ContactBookOrder;
+}): JSX.Element {
   const router = useRouter();
+  const pathname = usePathname();
 
-  const [sortField, setSortField] = useState<ContactBookSort>('name');
-  const [sortOrder, setSortOrder] = useState<ContactBookOrder>('asc');
+  const [sortField, setSortField] = useState<ContactBookSort>(initialSort ?? 'name');
+  const [sortOrder, setSortOrder] = useState<ContactBookOrder>(initialOrder ?? 'asc');
 
-  const contactsQuery = useContactBook();
+  // Серверная сортировка книги: ключ и направление уходят в запрос —
+  // без них данные всегда приходят в дефолтном порядке (name asc).
+  const contactsQuery = useContactBook('', sortField, sortOrder);
 
   const contacts = contactsQuery.data ?? [];
+
+  // Смена сортировки синхронно переписывает query строки (дефолтные
+  // значения не пишутся — как на странице «Объекты»).
+  const changeSort = (field: ContactBookSort, order: ContactBookOrder): void => {
+    setSortField(field);
+    setSortOrder(order);
+    const params = new URLSearchParams();
+    if (field !== 'name') {
+      params.set('sort', field);
+    }
+    if (order !== 'asc') {
+      params.set('order', order);
+    }
+    const query = params.toString();
+    router.replace(query !== '' ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   const groups =
     sortField === 'property' ? groupBookByProperty(contacts) : groupBookByLetter(contacts);
@@ -90,7 +118,7 @@ export function ContactBookScreen(): JSX.Element {
                 <div className="mb-4">
                   <PickerMenu
                     title="Сортировать"
-                    groups={sortPickerGroups(sortField, sortOrder, setSortField, setSortOrder)}
+                    groups={sortPickerGroups(sortField, sortOrder, changeSort)}
                   >
                     <BookSortChip field={sortField} order={sortOrder} />
                   </PickerMenu>
@@ -189,21 +217,20 @@ function BookSortChip({
 
 /** Группы опций пикера сортировки книги (макет 1726:65136): поле
  * («Имя»/«Объект») и направление («Возрастание»/«Убывание») — выбор
- * применяется сразу. */
+ * применяется сразу и синхронно переписывает query строки. */
 function sortPickerGroups(
   field: ContactBookSort,
   order: ContactBookOrder,
-  onFieldChange: (field: ContactBookSort) => void,
-  onOrderChange: (order: ContactBookOrder) => void,
+  onChange: (field: ContactBookSort, order: ContactBookOrder) => void,
 ): ReadonlyArray<PickerMenuGroup> {
   return [
     {
       options: [
-        { label: 'Имя', selected: field === 'name', onSelect: () => onFieldChange('name') },
+        { label: 'Имя', selected: field === 'name', onSelect: () => onChange('name', order) },
         {
           label: 'Объект',
           selected: field === 'property',
-          onSelect: () => onFieldChange('property'),
+          onSelect: () => onChange('property', order),
         },
       ],
     },
@@ -212,12 +239,12 @@ function sortPickerGroups(
         {
           label: 'Возрастание',
           selected: order === 'asc',
-          onSelect: () => onOrderChange('asc'),
+          onSelect: () => onChange(field, 'asc'),
         },
         {
           label: 'Убывание',
           selected: order === 'desc',
-          onSelect: () => onOrderChange('desc'),
+          onSelect: () => onChange(field, 'desc'),
         },
       ],
     },

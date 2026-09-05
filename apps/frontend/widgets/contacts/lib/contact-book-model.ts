@@ -15,6 +15,20 @@ export type ContactBookGroup = {
 /** Заголовок группы контактов без объекта (макет 1726:85937). */
 export const UNBOUND_GROUP_LABEL = 'Общие контакты';
 
+/** Разбор ?sort=&order= строки книги (конвенция страницы «Объекты»):
+ * неизвестные и отсутствующие значения — дефолт (имя по возрастанию). */
+export function parseContactBookSortParams(
+  sort: string | string[] | undefined,
+  order: string | string[] | undefined,
+): { sort: 'name' | 'property'; order: 'asc' | 'desc' } {
+  const sortValue = typeof sort === 'string' ? sort : '';
+  const orderValue = typeof order === 'string' ? order : '';
+  return {
+    sort: sortValue === 'property' ? 'property' : 'name',
+    order: orderValue === 'desc' ? 'desc' : 'asc',
+  };
+}
+
 /**
  * Группы книги при сортировке по имени (макет 1726:65083): буква — первый
  * символ ФИО в верхнем регистре; порядок групп и строк следует входному
