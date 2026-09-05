@@ -10,7 +10,9 @@ import { CalendarRangePicker } from '@/shared/ui/design';
  * подтверждение пишет диапазон в адрес списка с заменой записи истории
  * (пикер в ней не остаётся, как прежняя страница периода). Подтверждение
  * неизменённого дефолта не делает период «явным» — чип остаётся
- * «Сентябрь 2026» (период не пишется в URL). */
+ * «Сентябрь 2026» (период не пишется в URL). Чип прыжка «Месяц Год ⌄»
+ * скрыт (решение владельца 2026-09-05) — вглубь прошлого ведёт прокрутка
+ * ленты с дорисовкой. */
 export function OperationsPeriodPickerDialog({
   onClose,
 }: {
@@ -24,6 +26,7 @@ export function OperationsPeriodPickerDialog({
     <CalendarRangePicker
       today={today}
       value={applied}
+      monthJump={false}
       onClose={onClose}
       onConfirm={(range) => {
         const stillDefault =

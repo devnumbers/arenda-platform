@@ -585,8 +585,10 @@ export function DesignLayerShowcase(): JSX.Element {
                     <h3 className={styles.groupTitle}>CalendarRangePicker · пикер периода</h3>
                     <p className={styles.groupTitle}>
                         Диапазон дат: лента назад без предела (дорисовка при прокрутке вверх), будущее
-                        закрыто; поля «с …/по …» следуют за тапами, чип прыгает по ленте (колесо годов
-                        назад). Фильтр периода операций, решение владельца 2026-09-04.
+                        закрыто; поля «с …/по …» следуют за тапами. Чип «Месяц Год ⌄» — опциональный
+                        проп monthJump (по умолчанию показан); на фильтре периода операций скрыт
+                        (решение владельца 2026-09-05), здесь — как в продукте, без него. Решение
+                        владельца 2026-09-04.
                     </p>
                     <div className={styles.column}>
                         <Button onClick={() => setRangePickerOpen(true)}>Открыть пикер периода</Button>
@@ -599,6 +601,7 @@ export function DesignLayerShowcase(): JSX.Element {
                     {rangePickerOpen && (
                         <CalendarRangePicker
                             today={dateToIso(new Date())}
+                            monthJump={false}
                             value={
                                 rangePickerValue ?? {
                                     from: dateToIso(new Date()),

@@ -351,6 +351,10 @@ export type CalendarRangePickerProps = {
   readonly today: IsoDate;
   /** Применённый диапазон — преселект и стартовое окно ленты. */
   readonly value: IsoRange;
+  /** Чип «Месяц Год ⌄» прыжка по ленте (по умолчанию показан). На фильтре
+   * периода операций скрыт (решение владельца 2026-09-05): путь вглубь
+   * прошлого — прокрутка с дорисовкой. */
+  readonly monthJump?: boolean;
   readonly onClose: () => void;
   /** «Выбрать»: коммитит завершённый диапазон (неполный — один день). */
   readonly onConfirm: (range: IsoRange) => void;
@@ -369,15 +373,19 @@ export type CalendarRangePickerProps = {
  * подчёркивают недели диапазона, границы — синие ячейки. Поля «с …/по …»
  * над сеткой следуют за тапами вживую (Figma 1502-66060). Кнопка выхода —
  * «Назад» (иконка канона) вместо креста «Закрыть» прежней страницы. Чип
- * «Месяц Год ⌄» прыгает по ленте: колесо годов уходит в прошлое без предела
- * (onNearStart), будущее закрыто границей max. Футер на планшете тянется
- * вместе с шитом (fullWidthContent). Рендерится только в открытом
- * состоянии — лента и черновик живут, пока пикер смонтирован. */
+ * «Месяц Год ⌄» прыжка по ленте опционален (monthJump, по умолчанию
+ * включён): колесо годов уходит в прошлое без предела (onNearStart),
+ * будущее закрыто границей max; на фильтре периода операций чип скрыт
+ * (решение владельца 2026-09-05) — вглубь прошлого ведёт прокрутка с
+ * дорисовкой. Футер на планшете тянется вместе с шитом (fullWidthContent).
+ * Рендерится только в открытом состоянии — лента и черновик живут, пока
+ * пикер смонтирован. */
 export function CalendarRangePicker({
   title = 'Выберите период',
   confirmLabel = 'Выбрать',
   today,
   value,
+  monthJump = true,
   onClose,
   onConfirm,
 }: CalendarRangePickerProps): JSX.Element {
@@ -507,12 +515,16 @@ export function CalendarRangePicker({
             </span>
           </div>
 
-          <div className="px-6 pt-3">
-            <MonthJumpChip
-              label={`${MONTH_LABELS[draftMonth.month0]} ${draftMonth.year}`}
-              onClick={() => setMonthPickerOpen(true)}
-            />
-          </div>
+          {/* Чип прыжка — опциональный (monthJump): на фильтре периода
+              операций скрыт (решение владельца 2026-09-05). */}
+          {monthJump && (
+            <div className="px-6 pt-3">
+              <MonthJumpChip
+                label={`${MONTH_LABELS[draftMonth.month0]} ${draftMonth.year}`}
+                onClick={() => setMonthPickerOpen(true)}
+              />
+            </div>
+          )}
 
           <div className="mt-3 grid grid-cols-7 gap-0.5 px-5 text-center text-base font-medium leading-[18px] text-content-tertiary">
             {WEEKDAY_LABELS.map((weekday) => (
@@ -568,17 +580,22 @@ export function CalendarRangePicker({
         </Button>
       </StickyBottomBar>
 
-      <MonthYearPicker
-        open={monthPickerOpen}
-        onOpenChange={setMonthPickerOpen}
-        month={draftMonth.month0}
-        year={draftMonth.year}
-        max={calendarMonthOf(today)}
-        onConfirm={(month0, year) => {
-          setMonthPickerOpen(false);
-          jumpTo(year, month0);
-        }}
-      />
+      {/* Шит месяца и года — только вместе с чипом прыжка (monthJump):
+          самостоятельный WheelPickerSheet, монтируется только в открытом
+          состоянии. */}
+      {monthJump && (
+        <MonthYearPicker
+          open={monthPickerOpen}
+          onOpenChange={setMonthPickerOpen}
+          month={draftMonth.month0}
+          year={draftMonth.year}
+          max={calendarMonthOf(today)}
+          onConfirm={(month0, year) => {
+            setMonthPickerOpen(false);
+            jumpTo(year, month0);
+          }}
+        />
+      )}
     </div>
   );
 }
