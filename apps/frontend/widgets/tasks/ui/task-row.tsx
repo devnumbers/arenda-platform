@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX, KeyboardEvent, ReactNode } from 'react';
-import { Check, ClockSmall, HomeMain, Repeat } from '@/shared/assets/icons';
+import { Check, ClockSmall, HomeMainSmall, Repeat } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
   daysOverdue,
@@ -126,7 +126,7 @@ export function TaskRow({
         )}
         {propertyLine !== undefined && (
           <span className="flex items-center gap-1.5 text-sm leading-4 text-content-secondary">
-            <HomeMain className="h-4 w-4 shrink-0" aria-hidden />
+            <HomeMainSmall className="h-4 w-4 shrink-0" aria-hidden />
             {propertyLine}
           </span>
         )}

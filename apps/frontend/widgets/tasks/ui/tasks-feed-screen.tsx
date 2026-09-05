@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -40,7 +40,6 @@ import {
   PageContent,
   PickerMenu,
   TopNav,
-  TopNavTitle,
 } from '@/shared/ui/design';
 import { TaskRow } from './task-row';
 import { TaskSectionCard } from './task-section-card';
@@ -51,24 +50,24 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
 
 /**
  * Экран «Задачи» — глобальная лента (карта #518, тикет #523, Figma
- * 1733-27411/1726-86913/1733-92349): merged-фид читателя из GET /tasks (#521)
- * — свои задачи и задачи видимых объектов, архивы мимо (решение 9 #522).
- * Секции — канон объектного экрана (#499): границы «Сегодня»/«Завтра»
- * считает сервер по календарю читателя, порядок секций приходит плоским по
- * сроку, строки внутри сортируются клиентски (дефолт «Дата, asc» — решение
- * 5 #522; чип «Название» на макете — не дефолт). У объектных строк — строка
- * объекта (HomeMain + имя, propertyName из контракта #521); тап по активной
+ * 1733-27411/1726-86913): merged-фид читателя из GET /tasks (#521) — свои
+ * задачи и задачи видимых объектов, архивы мимо (решение 9 #522). Секции —
+ * канон объектного экрана (#499): границы «Сегодня»/«Завтра» считает сервер
+ * по календаре читателя, порядок секций приходит плоским по сроку, строки
+ * внутри сортируются клиентски (дефолт «Дата, asc» — решение 5 #522; чип
+ * «Название» на макете — не дефолт). У объектных строк — строка объекта
+ * (HomeMainSmall + имя, propertyName из контракта #521); тап по активной
  * объектной строке — правка на объекте, по безобъектной — плоский маршрут
  * /tasks/{ruleId}/edit (#537, решения 2–3 #522), выполненные некликабельны.
  * Кебаб — «Отметить все» (только мутабельные строки) и «Удалить выполненные»
  * (глобальный DELETE /tasks/completed, #536); мутации выполнения
  * маршрутизируются по срезу (ADR 0052), зритель читает (ADR 0028).
  *
- * Шапка (Figma 1733-92349) закреплена и на мобайле: пока блок заголовка в
- * кадре — «крылья» хаба (лого + профиль, mobileWings); когда заголовок
- * уходит под прокрутку, в шапке появляются компактный заголовок и «+».
- * Чип «Объект» и «+» нарисованы по макету, но пока без действия: фильтр —
- * тикет #524, создание — тикет #525 (принять решение владельца на приёмке).
+ * Шапка — стандартный TopNav хаба с «крыльями» и на мобайле (`mobileWings`,
+ * Figma 1733-27411); смена на компактный заголовок по прокрутке (1733-92349)
+ * отложена — решение владельца 2026-09-05. Чип «Объект» и «+» нарисованы по
+ * макету, но пока без действия: фильтр — тикет #524, создание — тикет #525
+ * (принять решение владельца на приёмке).
  */
 export function TasksFeedScreen(): JSX.Element {
   const router = useRouter();
@@ -79,26 +78,6 @@ export function TasksFeedScreen(): JSX.Element {
 
   const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  // Компактная шапка: блок заголовка («Задачи» + «+») ушёл из кадра.
-  const [headerBlockOut, setHeaderBlockOut] = useState(false);
-  const [headerBlockRef, setHeaderBlockRef] = useState<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (headerBlockRef === null) {
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry !== undefined) {
-          setHeaderBlockOut(!entry.isIntersecting);
-        }
-      },
-      { rootMargin: '-72px 0px 0px 0px' },
-    );
-    observer.observe(headerBlockRef);
-    return () => observer.disconnect();
-  }, [headerBlockRef]);
 
   // Ручная мемоизация активных — требование react-hooks/exhaustive-deps:
   // массив входит в зависимости производных ниже (React Compiler прогоняет
@@ -178,105 +157,94 @@ export function TasksFeedScreen(): JSX.Element {
 
   return (
     <>
-      <TopNav
-        className="fixed inset-x-0 top-0"
-        mobileWings={!headerBlockOut}
-        trailing={headerBlockOut ? createButton : undefined}
-      >
-        {headerBlockOut && <TopNavTitle title="Задачи" />}
-      </TopNav>
+      {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
+       * стандартное — в потоке на мобайле, закреплена на десктопе. */}
+      <TopNav mobileWings />
 
-      {/* Шапка закреплена и на мобайле — контент компенсирует её высоту
-       * (на десктопе компенсирует ScreenLayout). */}
-      <div className="pt-[calc(72px+env(safe-area-inset-top))] desktop:pt-0">
-        <PageContent>
-          <div
-            ref={setHeaderBlockRef}
-            className="flex items-center justify-between pr-3.5 pl-6"
-          >
-            <h1 className="text-[28px] font-semibold leading-8 text-content">Задачи</h1>
-            {createButton}
-          </div>
+      <PageContent>
+        <div className="flex items-center justify-between pr-3.5 pl-6">
+          <h1 className="text-[28px] font-semibold leading-8 text-content">Задачи</h1>
+          {createButton}
+        </div>
 
-          {!showEmpty && (
-            <div className="mt-6 flex items-center justify-between pr-3.5 pl-6">
-              <div className="flex items-center gap-2">
-                <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
-                  <SortChip sort={sort} />
-                </PickerMenu>
-                {/* Фильтр по объекту — тикет #524: чип по макету, пока без действия. */}
-                <ChipButton trailingIcon={<SmallArrowDown />} disabled aria-disabled>
-                  Объект
-                </ChipButton>
-              </div>
-              {kebabVisible && (
-                <Menu>
-                  <MenuTrigger asChild>
-                    <IconButton icon={<VerticalMenu />} label="Действия со списком" />
-                  </MenuTrigger>
-                  <MenuContent>
-                    {mutableActive.length > 0 && (
-                      <MenuItem
-                        icon={<Checkmark />}
-                        disabled={completeAll.isPending}
-                        onSelect={() => completeAll.mutate(mutableActive)}
-                      >
-                        Отметить все задачи
-                      </MenuItem>
-                    )}
-                    {completedTotal > 0 && (
-                      <MenuItem icon={<TrashBin />} onSelect={() => setDeleteOpen(true)}>
-                        Удалить выполненные задачи
-                      </MenuItem>
-                    )}
-                  </MenuContent>
-                </Menu>
-              )}
+        {!showEmpty && (
+          <div className="mt-6 flex items-center justify-between pr-3.5 pl-6">
+            <div className="flex items-center gap-2">
+              <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
+                <SortChip sort={sort} />
+              </PickerMenu>
+              {/* Фильтр по объекту — тикет #524: чип по макету, пока без действия. */}
+              <ChipButton trailingIcon={<SmallArrowDown />} disabled aria-disabled>
+                Объект
+              </ChipButton>
             </div>
-          )}
-
-          <div className="mt-6 flex flex-col gap-6 pb-6">
-            {activeQuery.isPending || completedQuery.isPending ? (
-              <>
-                <TasksSkeleton />
-                <TasksSkeleton />
-                <TasksSkeleton />
-              </>
-            ) : activeQuery.isError ? (
-              <TasksStateCard
-                title="Не удалось загрузить задачи"
-                onRetry={() => void activeQuery.refetch()}
-              />
-            ) : completedQuery.isError ? (
-              <TasksStateCard
-                title="Не удалось загрузить выполненные"
-                onRetry={() => void completedQuery.refetch()}
-              />
-            ) : showEmpty ? (
-              <EmptyState
-                imageSrc="/images/tasks/empty-tasks.png"
-                imageRounded
-                title="Задач нет"
-                description="Добавьте задачу — например, позвонить арендатору, вызвать мастера или проверить состояние объекта"
-              />
-            ) : (
-              sections.map((section) => (
-                // Пока today не пришёл, sections пуст — заглушка '' не рисуется.
-                <FeedSection
-                  key={sectionKey(section)}
-                  section={section}
-                  today={today ?? ''}
-                  propertyOf={propertyOf}
-                  completedTotal={completedTotal}
-                  onToggle={toggleTask}
-                  toggling={togglePendingFor}
-                  onOpen={openTaskFor}
-                />
-              ))
+            {kebabVisible && (
+              <Menu>
+                <MenuTrigger asChild>
+                  <IconButton icon={<VerticalMenu />} label="Действия со списком" />
+                </MenuTrigger>
+                <MenuContent>
+                  {mutableActive.length > 0 && (
+                    <MenuItem
+                      icon={<Checkmark />}
+                      disabled={completeAll.isPending}
+                      onSelect={() => completeAll.mutate(mutableActive)}
+                    >
+                      Отметить все задачи
+                    </MenuItem>
+                  )}
+                  {completedTotal > 0 && (
+                    <MenuItem icon={<TrashBin />} onSelect={() => setDeleteOpen(true)}>
+                      Удалить выполненные задачи
+                    </MenuItem>
+                  )}
+                </MenuContent>
+              </Menu>
             )}
           </div>
-        </PageContent>
-      </div>
+        )}
+
+        <div className="mt-6 flex flex-col gap-6 pb-6">
+          {activeQuery.isPending || completedQuery.isPending ? (
+            <>
+              <TasksSkeleton />
+              <TasksSkeleton />
+              <TasksSkeleton />
+            </>
+          ) : activeQuery.isError ? (
+            <TasksStateCard
+              title="Не удалось загрузить задачи"
+              onRetry={() => void activeQuery.refetch()}
+            />
+          ) : completedQuery.isError ? (
+            <TasksStateCard
+              title="Не удалось загрузить выполненные"
+              onRetry={() => void completedQuery.refetch()}
+            />
+          ) : showEmpty ? (
+            <EmptyState
+              imageSrc="/images/tasks/empty-tasks.png"
+              imageRounded
+              title="Задач нет"
+              description="Добавьте задачу — например, позвонить арендатору, вызвать мастера или проверить состояние объекта"
+            />
+          ) : (
+            sections.map((section) => (
+              // Пока today не пришёл, sections пуст — заглушка '' не рисуется.
+              <FeedSection
+                key={sectionKey(section)}
+                section={section}
+                today={today ?? ''}
+                propertyOf={propertyOf}
+                completedTotal={completedTotal}
+                onToggle={toggleTask}
+                toggling={togglePendingFor}
+                onOpen={openTaskFor}
+              />
+            ))
+          )}
+        </div>
+      </PageContent>
 
       <TasksDeleteCompletedDialog
         open={deleteOpen}
