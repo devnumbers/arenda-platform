@@ -285,6 +285,150 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 	return items, nil
 }
 
+const listPaidOperationsGlobal = `-- name: ListPaidOperationsGlobal :many
+
+SELECT op.id,
+       op.owner_id,
+       op.property_id,
+       op.payment_id,
+       op.origin,
+       op.date,
+       op.paid_date,
+       op.status,
+       op.type,
+       op.title,
+       op.amount_kopecks,
+       op.payment_form,
+       op.category_label,
+       op.category_slug,
+       p.name AS property_name
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND ($2::text = ''
+       OR op.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+  AND ($3::date IS NULL OR op.date >= $3)
+  AND ($4::date IS NULL OR op.date <= $4)
+  AND ($5::text = ''
+       OR op.title ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR ($6::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $6::text || '%'))
+  AND ($7::text = '' OR op.type = $7::text)
+  AND ($8::text = ''
+       OR op.category_slug = ANY(string_to_array($8::text, ',')))
+ORDER BY
+  CASE WHEN $9::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $9::text = 'desc' THEN op.date END DESC,
+  op.id DESC
+LIMIT $11 OFFSET $10
+`
+
+type ListPaidOperationsGlobalParams struct {
+	Actor        pgtype.UUID `json:"actor"`
+	PropertyIds  string      `json:"property_ids"`
+	DateFrom     pgtype.Date `json:"date_from"`
+	DateTo       pgtype.Date `json:"date_to"`
+	Search       string      `json:"search"`
+	SearchDigits string      `json:"search_digits"`
+	Type         string      `json:"type"`
+	Categories   string      `json:"categories"`
+	Order        string      `json:"order"`
+	Offset       int32       `json:"offset"`
+	Limit        int32       `json:"limit"`
+}
+
+type ListPaidOperationsGlobalRow struct {
+	ID            pgtype.UUID `json:"id"`
+	OwnerID       pgtype.UUID `json:"owner_id"`
+	PropertyID    pgtype.UUID `json:"property_id"`
+	PaymentID     pgtype.UUID `json:"payment_id"`
+	Origin        string      `json:"origin"`
+	Date          pgtype.Date `json:"date"`
+	PaidDate      pgtype.Date `json:"paid_date"`
+	Status        string      `json:"status"`
+	Type          string      `json:"type"`
+	Title         string      `json:"title"`
+	AmountKopecks int64       `json:"amount_kopecks"`
+	PaymentForm   pgtype.Text `json:"payment_form"`
+	CategoryLabel string      `json:"category_label"`
+	CategorySlug  pgtype.Text `json:"category_slug"`
+	PropertyName  string      `json:"property_name"`
+}
+
+// The global read side (ticket #540): the actor-scoped cross-property read
+// over the paid facts of their own book plus the properties they can view.
+// The visibility predicate is this SQL's (the tasks global feed precedent,
+// ticket #521): no single scope exists to resolve through the
+// policy port, and an active membership grants the read right here; a
+// suspended one does not. The feed is paid-only — planned/overdue are the
+// property screens' vocabulary — and the archived properties are out of it,
+// so the property join doubles as the archive cut.
+// The propertyIds filter (” is any) is validated through the view gate by
+// the application layer before this SQL runs — the uuid[] cast never sees a
+// foreign id (its row would be invisible anyway) or a non-uuid.
+// One page of the actor's visible merged feed, the property listing's
+// ordering (op.date, id tiebreak) and filter vocabulary minus the status
+// filter: paid is the feed's only stored status. property_name is the row's
+// property label — the global screen's row label.
+func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error) {
+	rows, err := q.db.Query(ctx, listPaidOperationsGlobal,
+		arg.Actor,
+		arg.PropertyIds,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.Search,
+		arg.SearchDigits,
+		arg.Type,
+		arg.Categories,
+		arg.Order,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaidOperationsGlobalRow{}
+	for rows.Next() {
+		var i ListPaidOperationsGlobalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.PaymentID,
+			&i.Origin,
+			&i.Date,
+			&i.PaidDate,
+			&i.Status,
+			&i.Type,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PaymentForm,
+			&i.CategoryLabel,
+			&i.CategorySlug,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const payOperationByID = `-- name: PayOperationByID :execrows
 UPDATE operations
 SET status = 'paid', paid_date = $3
@@ -461,6 +605,171 @@ func (q *Queries) SumOperationsByCategory(ctx context.Context, arg SumOperations
 	items := []SumOperationsByCategoryRow{}
 	for rows.Next() {
 		var i SumOperationsByCategoryRow
+		if err := rows.Scan(
+			&i.CategorySlug,
+			&i.CategoryLabel,
+			&i.Type,
+			&i.TotalKopecks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sumPaidOperationTotalsGlobal = `-- name: SumPaidOperationTotalsGlobal :many
+SELECT op.type,
+       SUM(op.amount_kopecks)::bigint AS total_kopecks
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND ($2::text = ''
+       OR op.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+  AND ($3::date IS NULL OR op.date >= $3)
+  AND ($4::date IS NULL OR op.date <= $4)
+  AND ($5::text = ''
+       OR op.title ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR ($6::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $6::text || '%'))
+GROUP BY op.type
+`
+
+type SumPaidOperationTotalsGlobalParams struct {
+	Actor        pgtype.UUID `json:"actor"`
+	PropertyIds  string      `json:"property_ids"`
+	DateFrom     pgtype.Date `json:"date_from"`
+	DateTo       pgtype.Date `json:"date_to"`
+	Search       string      `json:"search"`
+	SearchDigits string      `json:"search_digits"`
+}
+
+type SumPaidOperationTotalsGlobalRow struct {
+	Type         string `json:"type"`
+	TotalKopecks int64  `json:"total_kopecks"`
+}
+
+// The period totals by direction of the actor's visible merged feed (ticket
+// #540): the propertyIds filter and the period narrow the totals, the type
+// and category filters deliberately do not — the totals always report both
+// directions whatever the breakdown is narrowed to. Types absent from the
+// scope miss from the result — the adapter reports them as zero.
+func (q *Queries) SumPaidOperationTotalsGlobal(ctx context.Context, arg SumPaidOperationTotalsGlobalParams) ([]SumPaidOperationTotalsGlobalRow, error) {
+	rows, err := q.db.Query(ctx, sumPaidOperationTotalsGlobal,
+		arg.Actor,
+		arg.PropertyIds,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.Search,
+		arg.SearchDigits,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumPaidOperationTotalsGlobalRow{}
+	for rows.Next() {
+		var i SumPaidOperationTotalsGlobalRow
+		if err := rows.Scan(&i.Type, &i.TotalKopecks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sumPaidOperationsByCategoryGlobal = `-- name: SumPaidOperationsByCategoryGlobal :many
+SELECT op.category_slug,
+       op.category_label,
+       op.type,
+       SUM(op.amount_kopecks)::bigint AS total_kopecks
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND op.category_slug IS NOT NULL
+  AND ($2::text = ''
+       OR op.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+  AND ($3::date IS NULL OR op.date >= $3)
+  AND ($4::date IS NULL OR op.date <= $4)
+  AND ($5::text = ''
+       OR op.title ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR ($6::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $6::text || '%'))
+  AND ($7::text = '' OR op.type = $7::text)
+  AND ($8::text = ''
+       OR op.category_slug = ANY(string_to_array($8::text, ',')))
+GROUP BY op.category_slug, op.category_label, op.type
+ORDER BY total_kopecks DESC, op.category_slug
+`
+
+type SumPaidOperationsByCategoryGlobalParams struct {
+	Actor        pgtype.UUID `json:"actor"`
+	PropertyIds  string      `json:"property_ids"`
+	DateFrom     pgtype.Date `json:"date_from"`
+	DateTo       pgtype.Date `json:"date_to"`
+	Search       string      `json:"search"`
+	SearchDigits string      `json:"search_digits"`
+	Type         string      `json:"type"`
+	Categories   string      `json:"categories"`
+}
+
+type SumPaidOperationsByCategoryGlobalRow struct {
+	CategorySlug  pgtype.Text `json:"category_slug"`
+	CategoryLabel string      `json:"category_label"`
+	Type          string      `json:"type"`
+	TotalKopecks  int64       `json:"total_kopecks"`
+}
+
+// The per-category breakdown of the actor's visible merged feed (ticket
+// #540), largest total first; rows without a category snapshot are skipped
+// (no chip identity — their amounts still count in the totals). Both the
+// type and the category filters narrow this read only.
+func (q *Queries) SumPaidOperationsByCategoryGlobal(ctx context.Context, arg SumPaidOperationsByCategoryGlobalParams) ([]SumPaidOperationsByCategoryGlobalRow, error) {
+	rows, err := q.db.Query(ctx, sumPaidOperationsByCategoryGlobal,
+		arg.Actor,
+		arg.PropertyIds,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.Search,
+		arg.SearchDigits,
+		arg.Type,
+		arg.Categories,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumPaidOperationsByCategoryGlobalRow{}
+	for rows.Next() {
+		var i SumPaidOperationsByCategoryGlobalRow
 		if err := rows.Scan(
 			&i.CategorySlug,
 			&i.CategoryLabel,

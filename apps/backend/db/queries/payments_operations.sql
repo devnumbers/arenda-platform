@@ -187,3 +187,136 @@ WHERE owner_id = sqlc.arg('owner')
   AND property_id = sqlc.arg('property')
   AND payment_id = sqlc.arg('payment')
   AND status = 'paid';
+
+-- The global read side (ticket #540): the actor-scoped cross-property read
+-- over the paid facts of their own book plus the properties they can view.
+-- The visibility predicate is this SQL's (the tasks global feed precedent,
+-- ticket #521): no single scope exists to resolve through the
+-- policy port, and an active membership grants the read right here; a
+-- suspended one does not. The feed is paid-only — planned/overdue are the
+-- property screens' vocabulary — and the archived properties are out of it,
+-- so the property join doubles as the archive cut.
+-- The propertyIds filter ('' is any) is validated through the view gate by
+-- the application layer before this SQL runs — the uuid[] cast never sees a
+-- foreign id (its row would be invisible anyway) or a non-uuid.
+
+-- name: ListPaidOperationsGlobal :many
+-- One page of the actor's visible merged feed, the property listing's
+-- ordering (op.date, id tiebreak) and filter vocabulary minus the status
+-- filter: paid is the feed's only stored status. property_name is the row's
+-- property label — the global screen's row label.
+SELECT op.id,
+       op.owner_id,
+       op.property_id,
+       op.payment_id,
+       op.origin,
+       op.date,
+       op.paid_date,
+       op.status,
+       op.type,
+       op.title,
+       op.amount_kopecks,
+       op.payment_form,
+       op.category_label,
+       op.category_slug,
+       p.name AS property_name
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = sqlc.arg('actor')
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = sqlc.arg('actor')
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND (sqlc.arg('property_ids')::text = ''
+       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('search')::text = ''
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('search_digits')::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || sqlc.arg('search_digits')::text || '%'))
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('categories')::text = ''
+       OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
+ORDER BY
+  CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
+  CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
+  op.id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: SumPaidOperationTotalsGlobal :many
+-- The period totals by direction of the actor's visible merged feed (ticket
+-- #540): the propertyIds filter and the period narrow the totals, the type
+-- and category filters deliberately do not — the totals always report both
+-- directions whatever the breakdown is narrowed to. Types absent from the
+-- scope miss from the result — the adapter reports them as zero.
+SELECT op.type,
+       SUM(op.amount_kopecks)::bigint AS total_kopecks
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = sqlc.arg('actor')
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = sqlc.arg('actor')
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND (sqlc.arg('property_ids')::text = ''
+       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('search')::text = ''
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('search_digits')::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || sqlc.arg('search_digits')::text || '%'))
+GROUP BY op.type;
+
+-- name: SumPaidOperationsByCategoryGlobal :many
+-- The per-category breakdown of the actor's visible merged feed (ticket
+-- #540), largest total first; rows without a category snapshot are skipped
+-- (no chip identity — their amounts still count in the totals). Both the
+-- type and the category filters narrow this read only.
+SELECT op.category_slug,
+       op.category_label,
+       op.type,
+       SUM(op.amount_kopecks)::bigint AS total_kopecks
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = sqlc.arg('actor')
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = sqlc.arg('actor')
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND op.category_slug IS NOT NULL
+  AND (sqlc.arg('property_ids')::text = ''
+       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('search')::text = ''
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('search_digits')::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || sqlc.arg('search_digits')::text || '%'))
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('categories')::text = ''
+       OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
+GROUP BY op.category_slug, op.category_label, op.type
+ORDER BY total_kopecks DESC, op.category_slug;

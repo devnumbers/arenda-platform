@@ -132,6 +132,14 @@ func (noopOperationStore) CountPaidOperationsByPayment(
 	panic("unused")
 }
 
+func (noopOperationStore) ListGlobal(context.Context, uuid.UUID, GlobalOperationsListQuery) ([]GlobalOperationRow, error) {
+	panic("unused")
+}
+
+func (noopOperationStore) SummarizeGlobal(context.Context, uuid.UUID, GlobalOperationsSummaryQuery) (OperationsSummary, error) {
+	panic("unused")
+}
+
 func (noopOperationStore) WithTx(tx transaction.Tx) (OperationStore, error) {
 	return noopOperationStore{}, nil
 }

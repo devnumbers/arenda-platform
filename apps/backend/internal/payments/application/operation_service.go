@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -108,6 +109,10 @@ func PrepareOperationsQuery(q *OperationsListQuery) error {
 type OperationListItem struct {
 	Operation  domain.Operation
 	ViewStatus domain.OperationViewStatus
+	// PropertyName is the global listing's row label (ticket #540); empty on
+	// the property-scope reads — the property screen resolves the property by
+	// its id.
+	PropertyName string
 }
 
 // OperationService carries the operation use cases of the second contracts
@@ -297,6 +302,127 @@ func (s *OperationService) SummarizePropertyOperations(
 	}
 	q.Today = today
 	return s.operations.SummarizeByProperty(ctx, scope, propertyID, q)
+}
+
+// GlobalOperationsListQuery is the global feed's listing request (ticket
+// #540): the property listing's filter vocabulary minus the status filter —
+// paid is the feed's only view status — plus the propertyIds multi-select.
+// The transport fills everything; PrepareGlobalOperationsQuery applies the
+// page-size default and the pagination bounds. There is no Today: paid rows
+// never split into planned/overdue, so no owner calendar is consulted.
+type GlobalOperationsListQuery struct {
+	// PropertyIDs narrows the feed to the listed properties (the «Объект»
+	// multi-select); the service resolves every entry through the view gate,
+	// an unknown or non-visible one being the privacy ErrNotFound.
+	PropertyIDs []uuid.UUID
+	DateFrom    *time.Time
+	DateTo      *time.Time
+	Limit       int
+	Offset      int
+	// Search is the listing's search predicate (OperationsListQuery.Search).
+	Search string
+	// Asc is false by default and by contract: sorting is newest-first unless
+	// explicitly requested otherwise.
+	Asc bool
+	// Type filters on the operation direction (nil = no filter).
+	Type *domain.PaymentType
+	// Categories filters on the operation's category snapshot (nil = no
+	// filter); a row without a category snapshot never matches.
+	Categories []string
+}
+
+// GlobalOperationsSummaryQuery is the global summary's request (ticket
+// #540): the property summary's vocabulary plus the propertyIds multi-select
+// and the category filter. The store applies propertyIds, the period and the
+// search to the whole scope — totals and the breakdown alike — and the type
+// and category filters to the category breakdown only: the totals always
+// report both directions.
+type GlobalOperationsSummaryQuery struct {
+	PropertyIDs []uuid.UUID
+	DateFrom    *time.Time
+	DateTo      *time.Time
+	Search      string
+	Type        *domain.PaymentType
+	Categories  []string
+}
+
+// PrepareGlobalOperationsQuery validates the global listing request in place
+// with the property listing's pagination contract: a zero limit becomes the
+// default page, anything out of range or a negative offset is ErrInvalidInput
+// mapped to the contract's 400.
+func PrepareGlobalOperationsQuery(q *GlobalOperationsListQuery) error {
+	if q.Limit == 0 {
+		q.Limit = DefaultOperationsPageSize
+	}
+	if q.Limit < 1 || q.Limit > MaxOperationsPageSize || q.Offset < 0 {
+		return ErrInvalidInput
+	}
+	return nil
+}
+
+// ListGlobalOperations returns one page of the actor's visible paid
+// operations — the global «Операции» screen's feed (ticket #540): the paid
+// facts of the actor's own properties plus the properties they can view
+// (ADR 0028), the archived ones excluded, cancelled rows never existing for
+// reads. The visibility predicate lives in the store's SQL — the
+// actor-scoped cross-property read (the tasks global feed precedent,
+// ticket #521); the propertyIds entries however are resolved through
+// the view gate first, an unknown or non-visible one being the privacy
+// ErrNotFound. A pure read: never ticks, and no owner calendar is consulted.
+func (s *OperationService) ListGlobalOperations(
+	ctx context.Context, actor uuid.UUID, q GlobalOperationsListQuery,
+) ([]OperationListItem, error) {
+	if err := PrepareGlobalOperationsQuery(&q); err != nil {
+		return nil, err
+	}
+	if err := resolveGlobalPropertyFilter(ctx, s.policy, s.properties, actor, q.PropertyIDs); err != nil {
+		return nil, err
+	}
+	rows, err := s.operations.ListGlobal(ctx, actor, q)
+	if err != nil {
+		return nil, fmt.Errorf("list global operations: %w", err)
+	}
+	items := make([]OperationListItem, len(rows))
+	for i, row := range rows {
+		items[i] = OperationListItem{
+			Operation: row.Operation,
+			// The store's contract: the feed carries paid rows only, so the
+			// view status is the stored one — no calendar in the equation.
+			ViewStatus:   domain.OperationViewStatus(row.Operation.Status),
+			PropertyName: row.PropertyName,
+		}
+	}
+	return items, nil
+}
+
+// SummarizeGlobalOperations returns the period aggregate of the actor's
+// visible paid operations (ticket #540) — the global twin of
+// SummarizePropertyOperations with the same summary shape. A pure read with
+// the feed's scope discipline: the propertyIds entries resolve through the
+// view gate, a stranger gets the privacy ErrNotFound.
+func (s *OperationService) SummarizeGlobalOperations(
+	ctx context.Context, actor uuid.UUID, q GlobalOperationsSummaryQuery,
+) (OperationsSummary, error) {
+	if err := resolveGlobalPropertyFilter(ctx, s.policy, s.properties, actor, q.PropertyIDs); err != nil {
+		return OperationsSummary{}, err
+	}
+	return s.operations.SummarizeGlobal(ctx, actor, q)
+}
+
+// resolveGlobalPropertyFilter runs every propertyIds entry through the read
+// gate (ADR 0028): a viewer reads a listed property's slice, an unknown or
+// non-visible id is the privacy ErrNotFound — the filter never widens the
+// feed beyond the unfiltered read's visibility.
+func resolveGlobalPropertyFilter(
+	ctx context.Context, policy sharedpolicy.Policy, properties PropertyStore,
+	actor uuid.UUID, propertyIDs []uuid.UUID,
+) error {
+	for _, propertyID := range propertyIDs {
+		if _, err := resolveReadScope(ctx, policy, properties, actor, propertyID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // listScoped prepares the query, resolves the owner's today once and maps

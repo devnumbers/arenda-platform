@@ -155,6 +155,110 @@ func (s *OperationStore) CountPaidOperationsByPayment(
 	return count, nil
 }
 
+// ListGlobal returns one page of the actor's visible paid operations — the
+// merged feed (ticket #540); the visibility predicate and the archive cut
+// are the query's. The bounds re-check the service applied
+// (PrepareGlobalOperationsQuery) guards the int→int32 narrowing.
+func (s *OperationStore) ListGlobal(
+	ctx context.Context, actor uuid.UUID, q application.GlobalOperationsListQuery,
+) ([]application.GlobalOperationRow, error) {
+	if q.Limit < 1 || q.Limit > application.MaxOperationsPageSize || q.Offset < 0 {
+		return nil, application.ErrInvalidInput
+	}
+	rows, err := s.q().ListPaidOperationsGlobal(ctx, postgres.ListPaidOperationsGlobalParams{
+		Actor:        pgconv.UUIDToPgtype(actor),
+		PropertyIds:  joinPropertyIDs(q.PropertyIDs),
+		DateFrom:     pgconv.DatePtrToPgtype(q.DateFrom),
+		DateTo:       pgconv.DatePtrToPgtype(q.DateTo),
+		Search:       escapeLikePattern(q.Search),
+		SearchDigits: searchAmountDigits(q.Search),
+		Type:         operationsTypeFilter(q.Type),
+		Categories:   joinCategorySlugs(q.Categories),
+		Order:        operationsOrder(q.Asc),
+		Offset:       paginationToInt32(q.Offset),
+		Limit:        paginationToInt32(q.Limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list global operations: %w", err)
+	}
+	out := make([]application.GlobalOperationRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, application.GlobalOperationRow{
+			Operation: mapOperationRow(operationRowFields{
+				ID: row.ID, OwnerID: row.OwnerID, PropertyID: row.PropertyID,
+				PaymentID: row.PaymentID, Origin: row.Origin, Date: row.Date,
+				PaidDate: row.PaidDate, Status: row.Status, Type: row.Type,
+				Title: row.Title, AmountKopecks: row.AmountKopecks,
+				PaymentForm: row.PaymentForm, CategoryLabel: row.CategoryLabel,
+				CategorySlug: row.CategorySlug,
+			}),
+			PropertyName: row.PropertyName,
+		})
+	}
+	return out, nil
+}
+
+// SummarizeGlobal runs the global summary's two aggregations (ticket #540)
+// over the actor's visible paid operations: the period totals by direction
+// and the per-category breakdown. The totals carry no direction or category
+// filter — the contract reports both directions whatever the breakdown is
+// narrowed to. The two reads run as plain statements, like every listing
+// read.
+func (s *OperationStore) SummarizeGlobal(
+	ctx context.Context, actor uuid.UUID, q application.GlobalOperationsSummaryQuery,
+) (application.OperationsSummary, error) {
+	search := escapeLikePattern(q.Search)
+	searchDigits := searchAmountDigits(q.Search)
+	propertyIDs := joinPropertyIDs(q.PropertyIDs)
+	totalsParams := postgres.SumPaidOperationTotalsGlobalParams{
+		Actor:        pgconv.UUIDToPgtype(actor),
+		PropertyIds:  propertyIDs,
+		DateFrom:     pgconv.DatePtrToPgtype(q.DateFrom),
+		DateTo:       pgconv.DatePtrToPgtype(q.DateTo),
+		Search:       search,
+		SearchDigits: searchDigits,
+	}
+	totals, err := s.q().SumPaidOperationTotalsGlobal(ctx, totalsParams)
+	if err != nil {
+		return application.OperationsSummary{}, fmt.Errorf("sum global operation totals: %w", err)
+	}
+
+	categories, err := s.q().SumPaidOperationsByCategoryGlobal(ctx, postgres.SumPaidOperationsByCategoryGlobalParams{
+		Actor:        totalsParams.Actor,
+		PropertyIds:  totalsParams.PropertyIds,
+		DateFrom:     totalsParams.DateFrom,
+		DateTo:       totalsParams.DateTo,
+		Search:       search,
+		SearchDigits: searchDigits,
+		Type:         operationsTypeFilter(q.Type),
+		Categories:   joinCategorySlugs(q.Categories),
+	})
+	if err != nil {
+		return application.OperationsSummary{}, fmt.Errorf("sum global operations by category: %w", err)
+	}
+
+	summary := application.OperationsSummary{
+		Categories: make([]application.CategorySummary, 0, len(categories)),
+	}
+	for _, row := range totals {
+		switch domain.PaymentType(row.Type) {
+		case domain.TypeIncome:
+			summary.IncomeTotalKopecks = row.TotalKopecks
+		case domain.TypeExpense:
+			summary.ExpenseTotalKopecks = row.TotalKopecks
+		}
+	}
+	for _, row := range categories {
+		summary.Categories = append(summary.Categories, application.CategorySummary{
+			Slug:         row.CategorySlug.String,
+			Label:        row.CategoryLabel,
+			Type:         domain.PaymentType(row.Type),
+			TotalKopecks: row.TotalKopecks,
+		})
+	}
+	return summary, nil
+}
+
 // listOperationsParams folds the normalized query into the merged SQL
 // parameters; the pagination width clamp and the direction/status encodings
 // are this adapter's business.
@@ -281,6 +385,21 @@ func operationsTypeFilter(typ *domain.PaymentType) string {
 // carry a NULL slug, which matches no filter value by design.
 func joinCategorySlugs(slugs []string) string {
 	return strings.Join(slugs, ",")
+}
+
+// joinPropertyIDs encodes the propertyIds multi-select for the SQL's
+// string_to_array→uuid[] cast: nil is any property — the merged feed. UUIDs
+// never carry commas, so the join round-trips; the view gate has already
+// vetted every entry before the store runs.
+func joinPropertyIDs(ids []uuid.UUID) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, id.String())
+	}
+	return strings.Join(parts, ",")
 }
 
 // operationsOrder encodes the sort direction ('asc' | 'desc'); false encodes

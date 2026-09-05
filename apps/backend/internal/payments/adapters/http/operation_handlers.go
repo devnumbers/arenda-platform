@@ -18,9 +18,9 @@ import (
 )
 
 // OperationsManager is the consumer-side port of the operation endpoints
-// (ADR 0035): the pay-now use case, the two listings and the period summary.
-// The concrete application service satisfies it; the handler tests run
-// against func-backed fakes.
+// (ADR 0035): the pay-now use case, the two listings, the period summary and
+// their global twins. The concrete application service satisfies it; the
+// handler tests run against func-backed fakes.
 type OperationsManager interface {
 	GetOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	DeleteOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) error
@@ -36,6 +36,14 @@ type OperationsManager interface {
 	SummarizePropertyOperations(
 		ctx context.Context, actor, propertyID uuid.UUID,
 		cmd application.OperationsSummaryQuery,
+	) (application.OperationsSummary, error)
+	ListGlobalOperations(
+		ctx context.Context, actor uuid.UUID,
+		cmd application.GlobalOperationsListQuery,
+	) ([]application.OperationListItem, error)
+	SummarizeGlobalOperations(
+		ctx context.Context, actor uuid.UUID,
+		cmd application.GlobalOperationsSummaryQuery,
 	) (application.OperationsSummary, error)
 }
 
@@ -125,6 +133,53 @@ func (h *OperationsHandlers) SummarizePropertyOperations(
 		return
 	}
 	summary, err := h.svc.SummarizePropertyOperations(r.Context(), actor, propertyID, cmd)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationsSummaryResponse(summary))
+}
+
+// ListOperations implements GET /operations — the global «Операции» screen's
+// feed (ticket #540): the actor's visible paid operations across properties.
+// The propertyIds multi-select is parsed here (a non-uuid entry is the
+// contract's 400) and resolved through the view gate in the use case — an
+// unknown or non-visible id is the privacy 404.
+func (h *OperationsHandlers) ListOperations(w http.ResponseWriter, r *http.Request, params openapi.ListOperationsParams) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	cmd, err := globalOperationsFromListParams(params)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+	items, err := h.svc.ListGlobalOperations(r.Context(), actor, cmd)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	writeOperations(w, r, items)
+}
+
+// SummarizeOperations implements GET /operations/summary — the global twin
+// of the property summary (ticket #540) over the same visible paid feed.
+func (h *OperationsHandlers) SummarizeOperations(w http.ResponseWriter, r *http.Request, params openapi.SummarizeOperationsParams) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	cmd, err := globalOperationsFromSummaryParams(params)
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+	summary, err := h.svc.SummarizeGlobalOperations(r.Context(), actor, cmd)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
@@ -330,6 +385,84 @@ func summarizeFromParams(
 	}, nil
 }
 
+// parsePropertyIDs decodes the propertyIds multi-select: whitespace around
+// ids is ignored, empty items are dropped; a non-uuid entry is the contract's
+// 400. A missing or empty value is nil — the merged feed.
+func parsePropertyIDs(raw *string) ([]uuid.UUID, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	var ids []uuid.UUID
+	for item := range strings.SplitSeq(*raw, ",") {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		id, err := uuid.Parse(value)
+		if err != nil {
+			return nil, application.ErrInvalidInput
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// globalOperationsFromListParams adapts the global feed's params onto the
+// listing request: the property listing's vocabulary minus the status filter
+// — paid is the feed's only view status.
+func globalOperationsFromListParams(
+	params openapi.ListOperationsParams,
+) (application.GlobalOperationsListQuery, error) {
+	asc, err := foldOrder(params.Order, openapi.ListOperationsParamsOrder.Valid)
+	if err != nil {
+		return application.GlobalOperationsListQuery{}, err
+	}
+	typ, err := foldType(params.Type, openapi.ListOperationsParamsType.Valid)
+	if err != nil {
+		return application.GlobalOperationsListQuery{}, err
+	}
+	propertyIDs, err := parsePropertyIDs(params.PropertyIds)
+	if err != nil {
+		return application.GlobalOperationsListQuery{}, err
+	}
+	query := newListOperationsQuery(nil, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, params.Search)
+	return application.GlobalOperationsListQuery{
+		PropertyIDs: propertyIDs,
+		DateFrom:    query.DateFrom,
+		DateTo:      query.DateTo,
+		Limit:       query.Limit,
+		Offset:      query.Offset,
+		Search:      query.Search,
+		Asc:         query.Asc,
+		Type:        typ,
+		Categories:  splitCategorySlugs(params.Category),
+	}, nil
+}
+
+// globalOperationsFromSummaryParams adapts the global summary's params: the
+// property summary's vocabulary plus the propertyIds multi-select and the
+// category filter (the breakdown-only narrowing lives in the store).
+func globalOperationsFromSummaryParams(
+	params openapi.SummarizeOperationsParams,
+) (application.GlobalOperationsSummaryQuery, error) {
+	typ, err := foldType(params.Type, openapi.SummarizeOperationsParamsType.Valid)
+	if err != nil {
+		return application.GlobalOperationsSummaryQuery{}, err
+	}
+	propertyIDs, err := parsePropertyIDs(params.PropertyIds)
+	if err != nil {
+		return application.GlobalOperationsSummaryQuery{}, err
+	}
+	return application.GlobalOperationsSummaryQuery{
+		PropertyIDs: propertyIDs,
+		DateFrom:    datePtrFromWire(params.DateFrom),
+		DateTo:      datePtrFromWire(params.DateTo),
+		Search:      derefString(params.Search),
+		Type:        typ,
+		Categories:  splitCategorySlugs(params.Category),
+	}, nil
+}
+
 // derefString lifts an optional string parameter onto its value form; a
 // missing parameter is the empty no-filter value.
 func derefString(s *string) string {
@@ -397,7 +530,8 @@ func writeOperations(w http.ResponseWriter, r *http.Request, items []application
 }
 
 // operationResponse maps one listed or just-paid operation onto the wire
-// response: status is always the server-computed view status.
+// response: status is always the server-computed view status; propertyName
+// travels only where the listing carried it (the global feed's row label).
 func operationResponse(item application.OperationListItem) openapi.OperationResponse {
 	op := item.Operation
 	var paymentForm *openapi.OperationResponsePaymentForm
@@ -405,9 +539,14 @@ func operationResponse(item application.OperationListItem) openapi.OperationResp
 		form := openapi.OperationResponsePaymentForm(*op.PaymentForm)
 		paymentForm = &form
 	}
+	var propertyName *string
+	if item.PropertyName != "" {
+		propertyName = &item.PropertyName
+	}
 	return openapi.OperationResponse{
 		Id:            op.ID,
 		PropertyId:    op.PropertyID,
+		PropertyName:  propertyName,
 		PaymentId:     openAPIUUIDPtr(op.PaymentID),
 		Date:          openapi_types.Date{Time: op.Date},
 		PaidDate:      httpsupport.DatePtrToOpenAPI(op.PaidDate),

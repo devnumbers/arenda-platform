@@ -136,7 +136,27 @@ type OperationStore interface {
 	// read the Rentals progress «N из M месяцев» consumes through the
 	// RentPaymentGateway (ADR 0053 §2). Cancelled tombstones never count.
 	CountPaidOperationsByPayment(ctx context.Context, scope, propertyID, paymentID uuid.UUID) (int64, error)
+	// ListGlobal returns one page of the actor's visible paid operations —
+	// the global «Операции» screen's merged feed (ticket #540): the paid
+	// facts of the actor's own properties plus the properties they can view,
+	// the archived ones excluded. The actor-scoped cross-property read: the
+	// visibility predicate lives in the store's SQL (the tasks global feed
+	// precedent), the propertyIds entries have already been resolved through
+	// the view gate by the service. Read-only — never ticks.
+	ListGlobal(ctx context.Context, actor uuid.UUID, q GlobalOperationsListQuery) ([]GlobalOperationRow, error)
+	// SummarizeGlobal returns the period aggregate of the actor's visible
+	// paid operations (ticket #540) over the same visibility as ListGlobal:
+	// the totals by direction and the per-category breakdown. Read-only.
+	SummarizeGlobal(ctx context.Context, actor uuid.UUID, q GlobalOperationsSummaryQuery) (OperationsSummary, error)
 	WithTx(tx transaction.Tx) (OperationStore, error)
+}
+
+// GlobalOperationRow is one row of the global feed's read projection (ticket
+// #540): the operation plus the bound property's display name — the global
+// screen's row label.
+type GlobalOperationRow struct {
+	Operation    domain.Operation
+	PropertyName string
 }
 
 // OwnerSnapshot is the tick's read side in one interface fact: the owner's
