@@ -65,6 +65,8 @@ export const ROUTES = {
     `/properties/${id}/contacts/${contactId}/edit`,
   /** Плоская книга контактов (глобальная страница, макеты 1726:65083/…). */
   contacts: '/contacts',
+  /** Поиск по книге — отдельная страница с поисковой шапкой (как #508). */
+  contactSearch: '/contacts/search',
   /** Создание контакта из книги (без фиксированной привязки). */
   contactNew: '/contacts/new',
   /** Карточка контакта из книги. */

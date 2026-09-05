@@ -4,14 +4,13 @@ import { useState, type ComponentProps, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Add,
-  Cancel,
   Search,
   SmallArrowDown,
   SortingBigSmall,
   SortingSmallBig,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import {
   useContactBook,
   type ContactBookOrder,
@@ -31,15 +30,7 @@ import {
   groupBookByProperty,
 } from '../lib/contact-book-model';
 import { ContactRowButton } from './contact-row-button';
-import {
-  ContactsEmptyState,
-  ContactsErrorCard,
-  ContactsNoResults,
-  ContactsSkeleton,
-} from './contacts-states';
-
-/** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
-const SEARCH_DEBOUNCE_MS = 300;
+import { ContactsEmptyState, ContactsErrorCard, ContactsSkeleton } from './contacts-states';
 
 /**
  * Экран «Контакты» — плоская книга владельца (глобальная страница контактов,
@@ -49,26 +40,23 @@ const SEARCH_DEBOUNCE_MS = 300;
  * Убывание» (меню/шит «Сортировать», 1726:65136); при сортировке по объекту
  * группы — «Общие контакты» (без объекта; сервер держит их первыми в обоих
  * направлениях) и имена объектов, при сортировке по имени — алфавитные.
- * Подзаголовок строки — «Роль (Объект)» (1726:85937). Список без пагинации:
- * поиск — серверный подстрочный фильтр (дебаунс), результаты — плоские
- * строки без групп (конвенция книги объекта #508); пустой результат —
- * «Такого контакта нет», пустая книга — EmptyState (служебный чип сортировки
- * прячется вместе со списком, DESIGN.md).
+ * Подзаголовок строки — «Роль (Объект)» (1726:85937).
+ *
+ * Поиск — не здесь: пилюля — кнопка, тап открывает отдельную поисковую
+ * страницу /contacts/search с поисковой шапкой 1:1 как у книги объекта
+ * (#508; решение владельца 2026-09-05). «+» в пилюле ведёт на создание.
+ * Пустая книга — EmptyState (служебный чип сортировки прячется вместе со
+ * списком, DESIGN.md).
  */
 export function ContactBookScreen(): JSX.Element {
   const router = useRouter();
 
-  const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<ContactBookSort>('name');
   const [sortOrder, setSortOrder] = useState<ContactBookOrder>('asc');
 
-  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
-  // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски.
-  const trimmedSearch = debouncedSearch.trim();
-  const contactsQuery = useContactBook(trimmedSearch, sortField, sortOrder);
+  const contactsQuery = useContactBook();
 
   const contacts = contactsQuery.data ?? [];
-  const searching = trimmedSearch.length > 0;
 
   const groups =
     sortField === 'property' ? groupBookByProperty(contacts) : groupBookByLetter(contacts);
@@ -86,17 +74,16 @@ export function ContactBookScreen(): JSX.Element {
           <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} className="mx-0" />
         ) : (
           <>
+            {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
+             * по макету 1726:65083 согласован владельцем). */}
             <div className="mb-6">
               <BookSearchPill
-                value={search}
-                onChange={setSearch}
+                onOpenSearch={() => router.push(ROUTES.contactSearch)}
                 onCreate={() => router.push(ROUTES.contactNew)}
               />
             </div>
 
-            {searching && contacts.length === 0 ? (
-              <ContactsNoResults />
-            ) : contacts.length === 0 ? (
+            {contacts.length === 0 ? (
               <ContactsEmptyState />
             ) : (
               <>
@@ -109,45 +96,28 @@ export function ContactBookScreen(): JSX.Element {
                   </PickerMenu>
                 </div>
 
-                {searching ? (
-                  /* Результаты поиска: белые строки на белом фоне, без
-                   * групп (конвенция результатов #508); края — как у
-                   * карточки книги. */
-                  <div className="flex flex-col">
-                    {contacts.map((contact) => (
-                      <ContactRowButton
-                        key={contact.id}
-                        contact={contact}
-                        surface="white"
-                        subtitle={contactBookRowSubtitle(contact)}
-                        onSelect={() => router.push(ROUTES.contact(contact.id))}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  /* Книга (1726:65083/85937): одна серая карточка, группы —
-                   * буквы или объекты над своими строками. */
-                  <section className="flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6">
-                    {groups.map((group) => (
-                      <div key={group.label} className="flex flex-col">
-                        <span aria-hidden className="pl-2 text-base font-medium text-content-tertiary">
-                          {group.label}
-                        </span>
-                        <div className="flex flex-col">
-                          {group.contacts.map((contact) => (
-                            <ContactRowButton
-                              key={contact.id}
-                              contact={contact}
-                              surface="muted"
-                              subtitle={contactBookRowSubtitle(contact)}
-                              onSelect={() => router.push(ROUTES.contact(contact.id))}
-                            />
-                          ))}
-                        </div>
+                {/* Книга (1726:65083/85937): одна серая карточка, группы —
+                 * буквы или объекты над своими строками. */}
+                <section className="flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6">
+                  {groups.map((group) => (
+                    <div key={group.label} className="flex flex-col">
+                      <span aria-hidden className="pl-2 text-base font-medium text-content-tertiary">
+                        {group.label}
+                      </span>
+                      <div className="flex flex-col">
+                        {group.contacts.map((contact) => (
+                          <ContactRowButton
+                            key={contact.id}
+                            contact={contact}
+                            surface="muted"
+                            subtitle={contactBookRowSubtitle(contact)}
+                            onSelect={() => router.push(ROUTES.contact(contact.id))}
+                          />
+                        ))}
                       </div>
-                    ))}
-                  </section>
-                )}
+                    </div>
+                  ))}
+                </section>
               </>
             )}
           </>
@@ -158,38 +128,37 @@ export function ContactBookScreen(): JSX.Element {
 }
 
 /**
- * Поисковая пилюля книги (макет 1726:65083, Search Button 1031:20955):
- * серая пилюля 56px, лупа слева, плейсхолдер «Найти контакт»; правый слот —
- * «+» (создание контакта книги), при непустом запросе — крестик (очистить
- * поиск).
+ * Поисковая пилюля книги (макет 1726:65083, Search Button 1031:20955): серая
+ * пилюля 56px, лупа слева, плейсхолдер «Найти контакт»; тап по пилюле
+ * открывает поисковую страницу, «+» справа — создание контакта (кнопка
+ * внутри строки-кнопки — паттерн useKeyboardActivation, DESIGN.md §6).
  */
 function BookSearchPill({
-  value,
-  onChange,
+  onOpenSearch,
   onCreate,
 }: {
-  readonly value: string;
-  readonly onChange: (value: string) => void;
+  readonly onOpenSearch: () => void;
   readonly onCreate: () => void;
 }): JSX.Element {
-  const hasValue = value.length > 0;
+  const activatorProps = useKeyboardActivation({ onSelect: onOpenSearch });
 
   return (
-    <div className="flex h-14 w-full items-center rounded-pill bg-surface-muted pl-[18px] pr-2">
+    <div
+      {...activatorProps}
+      className="flex h-14 w-full cursor-pointer items-center rounded-pill bg-surface-muted pl-[18px] pr-2 text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary active:opacity-90"
+    >
       <Search className="h-6 w-6 shrink-0 text-content" aria-hidden />
-      <input
-        type="search"
-        className="min-w-0 flex-1 border-none bg-transparent px-2 text-base font-medium text-content outline-none placeholder:text-content [&::-webkit-search-cancel-button]:hidden"
-        placeholder="Найти контакт"
-        aria-label="Поиск контактов"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+      <span className="min-w-0 flex-1 truncate px-2 text-base font-medium text-content">
+        Найти контакт
+      </span>
+      <IconButton
+        icon={<Add />}
+        label="Добавить контакт"
+        onClick={(event) => {
+          event.stopPropagation();
+          onCreate();
+        }}
       />
-      {hasValue ? (
-        <IconButton icon={<Cancel />} label="Очистить поиск" onClick={() => onChange('')} />
-      ) : (
-        <IconButton icon={<Add />} label="Добавить контакт" onClick={onCreate} />
-      )}
     </div>
   );
 }
