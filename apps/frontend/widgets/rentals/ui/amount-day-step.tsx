@@ -21,11 +21,14 @@ import { MoneyField, PickerTriggerBox, WizardBottomBar, WizardHeading } from './
 
 /**
  * Шаг 1 «Цена и число оплаты» (Figma 1270:46904/47385): денежный ввод с
- * живой группировкой «56 000 ₽» (паттерн компактного поля правки
+ * живой группировкой «56 000» (паттерн компактного поля правки
  * платежа #467) и поле дня оплаты с иконкой Calendar. Пикер дня (Figma
  * 1270:37490 — донор из платежей, выбор одиночный) — полноэкранный
- * оверлей поверх формы: грид чисел месяца и взаимоисключимая строка
- * «Последний день месяца», «Выбрать» коммитит.
+ * оверлей поверх формы: грид чисел 1–30 — 31-е закрывается строкой
+ * «Последний день месяца» (решение владельца 2026-09-05), строки
+ * взаимоисключимы, «Выбрать» коммитит. Кнопка «Выбрать» скрыта, пока
+ * не выбрано ничего (решение владельца 2026-09-05 — скрытие вместо
+ * дизейбла, как у канонных пикеров).
  */
 
 export type AmountDayStepProps = {
@@ -144,7 +147,7 @@ function PaymentDayPicker({
         <div className="flex-1 min-h-0 overflow-y-auto pb-6">
           <div className="pt-6">
             <MonthDaysGrid
-              days={31}
+              days={30}
               selectedDays={
                 draftDay === undefined || draftLast ? undefined : new Set([draftDay])
               }
@@ -169,13 +172,20 @@ function PaymentDayPicker({
             />
           </div>
         </div>
-        <StickyBottomBar>
-          <WizardBottomBar>
-            <Button className="w-full" disabled={!ready} onClick={() => onConfirm(paymentDayFromPicker({ day: draftDay, last: draftLast }))}>
-              Выбрать
-            </Button>
-          </WizardBottomBar>
-        </StickyBottomBar>
+        {/* Футер только с черновиком выбора (решение владельца 2026-09-05:
+            скрытие вместо дизейбла); на планшете тянется с шитом. */}
+        {ready && (
+          <StickyBottomBar fullWidthContent>
+            <WizardBottomBar>
+              <Button
+                className="w-full"
+                onClick={() => onConfirm(paymentDayFromPicker({ day: draftDay, last: draftLast }))}
+              >
+                Выбрать
+              </Button>
+            </WizardBottomBar>
+          </StickyBottomBar>
+        )}
       </PageContent>
     </div>
   );

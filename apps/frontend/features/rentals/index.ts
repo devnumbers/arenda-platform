@@ -1,6 +1,7 @@
 export { useCreateRental } from './api/hooks';
 export {
   buildRentalCreateCommand,
+  draftAfterStartChange,
   paymentDayFromPicker,
   paymentDayLabel,
   rentalPlannedEndDateError,

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { Calendar, SmallArrowDown } from '@/shared/assets/icons';
-import type { IsoDate } from '@/shared/lib/calendar';
+import { addDays, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { kopecksToAmountInputString, parseRublesToKopecks } from '@/shared/lib/format-money';
 import type { RentalUtilities } from '@/entities/rental';
@@ -17,9 +17,11 @@ import { CalendarDatePicker, PickerMenu, type PickerMenuGroup } from '@/shared/u
 import { FieldTitle, MoneyField, PickerTriggerBox, WizardHeading } from './wizard-chrome';
 
 /**
- * Шаг 3 «Условия аренды» (Figma 1270:46821/47960, шит даты 1270:37644):
+ * Шаг 2 «Условия аренды» (Figma 1270:46821/47960, шит даты 1270:37644):
  * начало* и опциональное окончание открывают канонический бесконечный
- * календарь CalendarDatePicker, коммунальные платежи — PickerMenu
+ * календарь CalendarDatePicker — окончание позже начала: дни ≤ начала в
+ * его пикере погашены (minDate, решение владельца 2026-09-05, ADR 0053),
+ * коммунальные платежи — PickerMenu
  * (радио-меню макета 1296:48965: «Включены в стоимость» / «Только
  * счетчики» / «Вся квитанция»), залог и комиссия — необязательные денежные
  * поля. Дата в поле — канонический формат «10 мая, 2027».
@@ -145,6 +147,7 @@ export function ConditionsStep({
           title="Окончание аренды"
           today={today}
           value={plannedEndDate ?? null}
+          minDate={startDate !== undefined ? addDays(startDate, 1) : undefined}
           onClose={() => setEndPickerOpen(false)}
           onConfirm={(date) => {
             onPlannedEndDateChange(date ?? undefined);

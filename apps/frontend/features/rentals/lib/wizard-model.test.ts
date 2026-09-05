@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildRentalCreateCommand,
+  draftAfterStartChange,
   paymentDayFromPicker,
   paymentDayLabel,
   paymentDayPhrase,
@@ -34,19 +35,52 @@ describe('wizardStepReady', () => {
     expect(wizardStepReady(1, { amountKopecks: 100, paymentDay: 'last' }, TODAY)).toBe(true);
   });
 
-  it('шаг 2 готов всегда — тумблер имеет дефолт', () => {
-    expect(wizardStepReady(2, {}, TODAY)).toBe(true);
+  it('шаг 2 готов, когда начало задано и не в прошлом (условия)', () => {
+    expect(wizardStepReady(2, {}, TODAY)).toBe(false);
+    expect(wizardStepReady(2, { startDate: '2026-09-04' }, TODAY)).toBe(false);
+    expect(wizardStepReady(2, { startDate: TODAY }, TODAY)).toBe(true);
+    expect(wizardStepReady(2, { startDate: '2026-10-01' }, TODAY)).toBe(true);
   });
 
-  it('шаг 3 готов, когда начало задано и не в прошлом', () => {
-    expect(wizardStepReady(3, {}, TODAY)).toBe(false);
-    expect(wizardStepReady(3, { startDate: '2026-09-04' }, TODAY)).toBe(false);
-    expect(wizardStepReady(3, { startDate: TODAY }, TODAY)).toBe(true);
-    expect(wizardStepReady(3, { startDate: '2026-10-01' }, TODAY)).toBe(true);
+  it('шаг 3 готов всегда — тумблер имеет дефолт (настройки)', () => {
+    expect(wizardStepReady(3, {}, TODAY)).toBe(true);
   });
 
   it('шаг 4 готов всегда — арендатор необязателен', () => {
     expect(wizardStepReady(4, {}, TODAY)).toBe(true);
+  });
+});
+
+describe('draftAfterStartChange', () => {
+  it('начало сохраняется; валидное окончание остаётся', () => {
+    expect(draftAfterStartChange({ plannedEndDate: '2027-09-09' }, '2026-09-10')).toStrictEqual({
+      startDate: '2026-09-10',
+      plannedEndDate: '2027-09-09',
+    });
+  });
+
+  it('окончание, переставшее быть позже начала, очищается', () => {
+    expect(draftAfterStartChange({ plannedEndDate: '2026-09-10' }, '2026-09-10')).toStrictEqual({
+      startDate: '2026-09-10',
+    });
+    expect(draftAfterStartChange({ plannedEndDate: '2026-09-09' }, '2026-09-10')).toStrictEqual({
+      startDate: '2026-09-10',
+    });
+  });
+
+  it('прочие поля переносятся', () => {
+    expect(
+      draftAfterStartChange(
+        { amountKopecks: 100, paymentDay: 5, plannedEndDate: '2026-09-10' },
+        '2026-09-11',
+      ),
+    ).toStrictEqual({ amountKopecks: 100, paymentDay: 5, startDate: '2026-09-11' });
+  });
+
+  it('без начала окончание не трогается', () => {
+    expect(draftAfterStartChange({ plannedEndDate: '2026-09-10' }, undefined)).toStrictEqual({
+      plannedEndDate: '2026-09-10',
+    });
   });
 });
 

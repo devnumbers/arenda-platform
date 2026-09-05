@@ -118,9 +118,9 @@ export function PickerTriggerBox({
   );
 }
 
-/** Компактное денежное поле (решение владельца 2026-09-05): бокс 56px
+/** Компактное денежное поле (решения владельца 2026-09-05): бокс 56px
  * без символа рубля — при вводе живая группировка разрядов «56 000»,
- * пустое поле — серый плейсхолдер «0»; очистка — круглая Cancel-иконка
+ * плейсхолдера нет (пустое поле пустое); очистка — круглая Cancel-иконка
  * справа. Паттерн поля правки платежа #467 (AmountBoxInput): «сырое»
  * значение + groupedAmount + syncAmountInputDom. */
 export function MoneyField({
@@ -152,13 +152,12 @@ export function MoneyField({
           spellCheck={false}
           aria-label={ariaLabel}
           value={groupedAmount(raw)}
-          placeholder="0"
           onChange={(event) => {
             const sanitized = sanitizeAmountInput(event.target.value);
             onRawChange(sanitized);
             syncAmountInputDom(event.target, sanitized);
           }}
-          className="h-full min-w-0 flex-1 border-none bg-transparent text-base leading-[18px] text-content outline-none placeholder:text-content-secondary"
+          className="h-full min-w-0 flex-1 border-none bg-transparent text-base leading-[18px] text-content outline-none"
         />
         {hasValue && (
           <IconButton

@@ -60,7 +60,7 @@ import {
     type PickerOption,
     type WheelPickerItem,
 } from '@/shared/ui/design';
-import { dateToIso } from '@/shared/lib/calendar';
+import { addDays, dateToIso } from '@/shared/lib/calendar';
 import {
     CategoryIcon,
     categoryStyle,
@@ -161,6 +161,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [datePickerValue, setDatePickerValue] = useState<string | null>(null);
     const [datePickerRequiredOpen, setDatePickerRequiredOpen] = useState(false);
     const [datePickerRequiredValue, setDatePickerRequiredValue] = useState<string | null>(null);
+    const [datePickerMinOpen, setDatePickerMinOpen] = useState(false);
+    const [datePickerMinValue, setDatePickerMinValue] = useState<string | null>(null);
     const [rangePickerOpen, setRangePickerOpen] = useState(false);
     const [rangePickerValue, setRangePickerValue] = useState<IsoRange | null>(null);
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
@@ -539,6 +541,8 @@ export function DesignLayerShowcase(): JSX.Element {
                     <p className={styles.groupTitle}>
                         Полноэкранный: чип месяца и дни недели закреплены над прокруткой, лента месяцев
                         бесконечно вперёд без подвисаний (общий компонент из пикера задач #500).
+                        «Выбрать» скрыта, пока нечего подтвердить, проп minDate гасит дни ≤ минимума —
+                        решение владельца 2026-09-05.
                     </p>
                     <div className={styles.column}>
                         <Button onClick={() => setDatePickerOpen(true)}>Открыть пикер даты</Button>
@@ -578,6 +582,28 @@ export function DesignLayerShowcase(): JSX.Element {
                             onConfirm={(date) => {
                                 setDatePickerRequiredValue(date);
                                 setDatePickerRequiredOpen(false);
+                            }}
+                        />
+                    )}
+                    <div className={styles.column}>
+                        <Button onClick={() => setDatePickerMinOpen(true)}>
+                            Открыть пикер (minDate: +10 дней)
+                        </Button>
+                        {datePickerMinValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: {datePickerMinValue}
+                            </p>
+                        )}
+                    </div>
+                    {datePickerMinOpen && (
+                        <CalendarDatePicker
+                            minDate={addDays(dateToIso(new Date()), 10)}
+                            today={dateToIso(new Date())}
+                            value={datePickerMinValue}
+                            onClose={() => setDatePickerMinOpen(false)}
+                            onConfirm={(date) => {
+                                setDatePickerMinValue(date);
+                                setDatePickerMinOpen(false);
                             }}
                         />
                     )}

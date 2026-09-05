@@ -13,6 +13,7 @@ import {
   useCreateRental,
   useRentalWizardDraft,
   wizardStepReady,
+  draftAfterStartChange,
   WIZARD_TOTAL_STEPS,
   buildRentalCreateCommand,
   type RentalWizardDraft,
@@ -107,39 +108,25 @@ export function RentalCreateWizardFlow({
               paymentDay={draft.paymentDay}
               onPaymentDayChange={(paymentDay) => setDraft((prev) => ({ ...prev, paymentDay }))}
             />
-            <StickyBottomBar>
-              <WizardBottomBar>
-                <Button
-                  className="w-full"
-                  disabled={!wizardStepReady(1, draft, today)}
-                  onClick={() => goToStep(2)}
-                >
-                  Продолжить
-                </Button>
-              </WizardBottomBar>
-            </StickyBottomBar>
+            {/* Кнопка продолжения скрыта, пока шаг не готов (решение
+                владельца 2026-09-05: скрытие вместо дизейбла); на планшете
+                тянется с шитом во всю ширину, как хедер. */}
+            {wizardStepReady(1, draft, today) && (
+              <StickyBottomBar fullWidthContent>
+                <WizardBottomBar>
+                  <Button className="w-full" onClick={() => goToStep(2)}>
+                    Продолжить
+                  </Button>
+                </WizardBottomBar>
+              </StickyBottomBar>
+            )}
           </>
         )}
         {step === 2 && (
           <>
-            <SettingsStep
-              autoPay={draft.autoPay ?? false}
-              onAutoPayChange={(autoPay) => setDraft((prev) => ({ ...prev, autoPay }))}
-            />
-            <StickyBottomBar>
-              <WizardBottomBar>
-                <Button className="w-full" onClick={() => goToStep(3)}>
-                  Продолжить
-                </Button>
-              </WizardBottomBar>
-            </StickyBottomBar>
-          </>
-        )}
-        {step === 3 && (
-          <>
             <ConditionsStep
               startDate={draft.startDate}
-              onStartDateChange={(startDate) => setDraft((prev) => ({ ...prev, startDate }))}
+              onStartDateChange={(startDate) => setDraft((prev) => draftAfterStartChange(prev, startDate))}
               plannedEndDate={draft.plannedEndDate}
               onPlannedEndDateChange={(plannedEndDate) =>
                 setDraft((prev) => ({ ...prev, plannedEndDate }))
@@ -156,14 +143,28 @@ export function RentalCreateWizardFlow({
               }
               today={today}
             />
-            <StickyBottomBar>
+            {wizardStepReady(2, draft, today) && (
+              <StickyBottomBar fullWidthContent>
+                <WizardBottomBar>
+                  <Button className="w-full" onClick={() => goToStep(3)}>
+                    Далее
+                  </Button>
+                </WizardBottomBar>
+              </StickyBottomBar>
+            )}
+          </>
+        )}
+        {step === 3 && (
+          <>
+            <SettingsStep
+              autoPay={draft.autoPay ?? false}
+              onAutoPayChange={(autoPay) => setDraft((prev) => ({ ...prev, autoPay }))}
+            />
+            {/* Шаг всегда готов (тумблер с дефолтом) — кнопка видна всегда. */}
+            <StickyBottomBar fullWidthContent>
               <WizardBottomBar>
-                <Button
-                  className="w-full"
-                  disabled={!wizardStepReady(3, draft, today)}
-                  onClick={() => goToStep(4)}
-                >
-                  Далее
+                <Button className="w-full" onClick={() => goToStep(4)}>
+                  Продолжить
                 </Button>
               </WizardBottomBar>
             </StickyBottomBar>
@@ -176,7 +177,9 @@ export function RentalCreateWizardFlow({
               contactId={draft.contactId}
               onContactChange={(contactId) => setDraft((prev) => ({ ...prev, contactId }))}
             />
-            <StickyBottomBar>
+            {/* Шаг всегда готов (арендатор необязателен) — кнопка видна
+                всегда; валидность целиком проверяет сабмит. */}
+            <StickyBottomBar fullWidthContent>
               <WizardBottomBar>
                 <Button
                   className="w-full"
@@ -228,10 +231,10 @@ export function RentalCreateWizardFlow({
   }
 }
 
-/** Первый незавершённый шаг при восстановлении черновика (2 и 4 всегда
- * готовы). */
+/** Первый незавершённый шаг при восстановлении черновика (после обмена
+ * шагов 3 — настройки и 4 — арендатор всегда готовы). */
 function initialStep(draft: RentalWizardDraft, today: IsoDate): RentalWizardStep {
   if (!wizardStepReady(1, draft, today)) return 1;
-  if (!wizardStepReady(3, draft, today)) return 3;
+  if (!wizardStepReady(2, draft, today)) return 2;
   return 4;
 }

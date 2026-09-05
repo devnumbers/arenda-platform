@@ -81,8 +81,11 @@ export function rentalPlannedEndDateError(
     : 'Окончание должно быть позже начала';
 }
 
-/** Готовность шага к продолжению (обязательные поля заполнены). Шаг 2 —
- * всегда (тумблер с дефолтом), шаг 4 — всегда (арендатор необязателен). */
+/** Готовность шага к продолжению (обязательные поля заполнены). После
+ * обмена шагов (решение владельца 2026-09-05): шаг 2 — условия, шаг 3 —
+ * настройки — всегда (тумблер с дефолтом); шаг 4 — всегда (арендатор
+ * необязателен). Кнопка продолжения на неготовом шаге не показывается
+ * (решение владельца 2026-09-05) — вместо погашенной. */
 export function wizardStepReady(
   step: RentalWizardStep,
   draft: RentalWizardDraft,
@@ -96,13 +99,31 @@ export function wizardStepReady(
         && draft.paymentDay !== undefined
       );
     case 2:
-      return true;
-    case 3:
       return rentalStartDateError(draft.startDate, today) === undefined
         && rentalPlannedEndDateError(draft.plannedEndDate, draft.startDate) === undefined;
+    case 3:
+      return true;
     case 4:
       return true;
   }
+}
+
+/** Черновик после смены начала аренды (решение владельца 2026-09-05):
+ * окончание, переставшее быть позже начала, очищается автоматически —
+ * погашенные дни в пикере не оставляют невалидного значения в поле. */
+export function draftAfterStartChange(
+  draft: RentalWizardDraft,
+  startDate: IsoDate | undefined,
+): RentalWizardDraft {
+  const { plannedEndDate, ...rest } = draft;
+  const keepEnd =
+    plannedEndDate !== undefined
+    && (startDate === undefined || cmp(plannedEndDate, startDate) > 0);
+  return {
+    ...rest,
+    ...(startDate !== undefined && { startDate }),
+    ...(keepEnd && { plannedEndDate }),
+  };
 }
 
 /** Черновик → команда создания; недостроенный или некорректный черновик
