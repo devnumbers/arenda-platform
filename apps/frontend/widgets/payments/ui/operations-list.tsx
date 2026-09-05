@@ -24,6 +24,7 @@ export function OperationsDateList({
   onSelectOperation,
   tail,
   renderSubtitle,
+  inset = true,
 }: {
   readonly groups: ReadonlyArray<PaymentHistoryGroup>;
   readonly onSelectOperation: (operation: PaymentOperation) => void;
@@ -32,6 +33,11 @@ export function OperationsDateList({
   /** Подзаголовок строки: глобальная лента (#541) пишет имя объекта
    * (макет 1733-26973), объектные списки подзаголовка не передают. */
   readonly renderSubtitle?: (operation: PaymentOperation) => ReactNode;
+  /** Собственные вставки заголовков и строк (px-6/px-3): объектные экраны
+   * (#474) держат их внутри PageContent; глобальная лента (#541) держит
+   * ритм 24px всей страницей — строки прижаты к её краю (решение
+   * владельца 2026-09-05). */
+  readonly inset?: boolean;
 }): JSX.Element {
   if (groups.length === 0) {
     return <OperationsEmptyPeriod />;
@@ -40,12 +46,13 @@ export function OperationsDateList({
     <div className="flex flex-col gap-2">
       {groups.map((group) => (
         <section key={group.date} className="flex flex-col">
-          <PaymentsHeading>{group.label}</PaymentsHeading>
+          <PaymentsHeading inset={inset}>{group.label}</PaymentsHeading>
           {group.operations.map((operation) => (
             <OperationRow
               key={operation.id}
               operation={operation}
               subtitle={renderSubtitle?.(operation)}
+              className={inset ? undefined : 'px-0'}
               onSelect={() => onSelectOperation(operation)}
             />
           ))}
@@ -105,15 +112,19 @@ export function OperationRow({
   operation,
   onSelect,
   subtitle,
+  className = 'px-3 py-3',
 }: {
   readonly operation: PaymentOperation;
   readonly onSelect: () => void;
   readonly subtitle?: ReactNode;
+  /** Дополнение/замена вставок кнопки: tailwind-merge в PaymentRowButton
+   * поглощает базовый px-3 (глобальная лента проходит классом px-0). */
+  readonly className?: string;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
   return (
     <PaymentRowButton
-      className="px-3 py-3"
+      className={className}
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
       title={operation.title}
       subtitle={subtitle}

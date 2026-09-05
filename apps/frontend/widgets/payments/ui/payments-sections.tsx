@@ -165,9 +165,18 @@ export function PaymentsStateCard({
   );
 }
 
-/** Заголовок над карточками просроченных (вне серой группы). */
-export function PaymentsHeading({ children }: { readonly children: ReactNode }): JSX.Element {
-  return <h2 className={`${headingClass} px-6`}>{children}</h2>;
+/** Заголовок над карточками просроченных (вне серой группы). inset=false —
+ * без своей вставки: глобальная лента (#541) держит ритм 24px на уровне
+ * всей страницы, заголовки дат прижаты к её краю (решение владельца
+ * 2026-09-05). */
+export function PaymentsHeading({
+  children,
+  inset = true,
+}: {
+  readonly children: ReactNode;
+  readonly inset?: boolean;
+}): JSX.Element {
+  return <h2 className={inset ? `${headingClass} px-6` : headingClass}>{children}</h2>;
 }
 
 /** Скелетон секции на время загрузки — серая карточка с пульсирующими

@@ -127,7 +127,11 @@ export function OperationsGlobalScreen(): JSX.Element {
         {neverHad ? (
           <OperationsNeverHad />
         ) : (
-          <div className="flex flex-col gap-6 pt-1">
+          <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
+            {/* Ритм страницы — ровно 24px по бокам (решение владельца
+             * 2026-09-05): контент кабинета даёт 20px до 1200px и 0 после,
+             * страница выравнивает себя до 24 сама и прижимает все элементы
+             * (пилюля, чипы, карточки, лента) к этому краю без своих вставок. */}
             {/* Пилюля поиска (#543) — кнопка на отдельную страницу; «+» скрыта
              * (решение владельца #539: создания разовой операции вне правила
              * нет). */}
@@ -217,6 +221,7 @@ export function OperationsGlobalScreen(): JSX.Element {
                     <OperationsDateList
                       groups={groups}
                       onSelectOperation={openOperation}
+                      inset={false}
                       renderSubtitle={(operation) => operation.propertyName}
                       tail={
                         <>
