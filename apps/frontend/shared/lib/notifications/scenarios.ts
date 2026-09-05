@@ -216,6 +216,14 @@ const payments = {
   favoriteError: errorScenario('Не удалось обновить избранное'),
 } as const;
 
+/** Контекст «Аренда» (#530): успех дублирует экран успеха визарда — как у
+ * платежей; ошибка создания (вторая незавершённая аренда — 409 с detail). */
+const rentals = {
+  created: ((options?) =>
+    notify.success('Аренда создана', options)) satisfies ScenarioFn,
+  createError: errorScenario('Не удалось создать аренду'),
+} as const;
+
 /** Контекст «Задачи» (#499): тосты ошибок мутаций; выполнение/снятие/
  * удаление проходят без уведомлений (решение владельца 2026-09-03: задача
  * просто переезжает между секциями). Исключение — сохранение правки
@@ -260,6 +268,7 @@ export type Scenarios = {
   readonly tariff: typeof tariff;
   readonly paymentMethods: typeof paymentMethods;
   readonly payments: typeof payments;
+  readonly rentals: typeof rentals;
   readonly tasks: typeof tasks;
   readonly demo: typeof demo;
 };
@@ -273,6 +282,7 @@ export const scenarios: Scenarios = {
   tariff,
   paymentMethods,
   payments,
+  rentals,
   tasks,
   demo,
 };

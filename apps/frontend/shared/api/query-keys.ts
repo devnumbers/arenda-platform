@@ -165,6 +165,11 @@ export const taskKeys = {
     [...taskKeys.all, 'rule', propertyId, ruleId] as const,
 };
 
+// features/rentals
+export const rentalKeys = {
+  all: ['rentals'] as const,
+};
+
 // features/subscription
 export const subscriptionKeys = {
   subscription: ['subscription'] as const,

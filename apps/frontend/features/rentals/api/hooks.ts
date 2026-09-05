@@ -1,0 +1,36 @@
+'use client';
+
+import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
+import { apiClient } from '@/shared/api/client';
+import type { ApiError } from '@/shared/api/errors';
+import { mapRental } from '@/entities/rental';
+import type { Rental, RentalCreateCommand } from '@/entities/rental';
+import { paymentKeys, rentalKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
+
+type RentalResponseDto = components['schemas']['RentalResponse'];
+
+/**
+ * Создание аренды (#530): POST /properties/{propertyId}/rentals — аренда и
+ * её Платёж арендной платы создаются атомарно (ADR 0053 §3). Вторая
+ * незавершённая аренда на объекте — 409 с апп-ошибкой. Инвалидация:
+ * платежи объекта (появляется платёж аренды) и весь срез rentals.
+ */
+export function useCreateRental(
+  propertyId: string,
+): UseMutationResult<Rental, ApiError, RentalCreateCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: RentalCreateCommand) => {
+      const response = await apiClient<RentalResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/rentals`,
+        { method: 'POST', body: JSON.stringify(command) },
+      );
+      return mapRental(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: rentalKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+    },
+  });
+}
