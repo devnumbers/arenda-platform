@@ -52,7 +52,7 @@ export function OperationsDateList({
               key={operation.id}
               operation={operation}
               subtitle={renderSubtitle?.(operation)}
-              className={inset ? undefined : 'px-0'}
+              className={inset ? undefined : '-mx-3 px-0 py-3'}
               onSelect={() => onSelectOperation(operation)}
             />
           ))}
@@ -118,7 +118,9 @@ export function OperationRow({
   readonly onSelect: () => void;
   readonly subtitle?: ReactNode;
   /** Дополнение/замена вставок кнопки: tailwind-merge в PaymentRowButton
-   * поглощает базовый px-3 (глобальная лента проходит классом px-0). */
+   * поглощает базовый px-3, а -mx-3 дополнительно гасит внутренний px-3
+   * контентного фрейма кнопки (глобальная лента: контент строки прижат
+   * к ритму страницы 24px). */
   readonly className?: string;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
