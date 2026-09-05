@@ -8,6 +8,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -204,6 +205,42 @@ func TestRuleHandlers_CreateTaskRuleWithoutProperty_MapsInvalidInput(t *testing.
 	rh.CreateTaskRuleWithoutProperty(w, userRequest(t, http.MethodPost, "/tasks/rules", `{"title":"","repeat":"once"}`))
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestTaskHandlers_DeleteCompletedTasksWithoutProperty(t *testing.T) {
+	t.Parallel()
+
+	var gotActor uuid.UUID
+	svc := &fakeTasksManager{
+		clearOwnerBook: func(_ context.Context, actor uuid.UUID) (int64, error) {
+			gotActor = actor
+			return 4, nil
+		},
+	}
+	th := NewTaskHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	th.DeleteCompletedTasksWithoutProperty(w, userRequest(t, http.MethodDelete, "/tasks/completed", ""))
+
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.NotEqual(t, uuid.Nil, gotActor, "the actor rides straight into the owner-scope use case")
+}
+
+func TestTaskHandlers_DeleteCompletedTasksWithoutProperty_MapsStoreFailure(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeTasksManager{
+		clearOwnerBook: func(context.Context, uuid.UUID) (int64, error) {
+			return 0, errors.New("boom")
+		},
+	}
+	th := NewTaskHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	th.DeleteCompletedTasksWithoutProperty(w, userRequest(t, http.MethodDelete, "/tasks/completed", ""))
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "Internal Server Error")
 }
 
 // openapiUUID mints a path-parameter id; openapi_types.UUID is an alias of

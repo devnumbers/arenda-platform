@@ -407,3 +407,14 @@ func (s *TaskStore) DeleteCompletedJournal(ctx context.Context, scope, propertyI
 	}
 	return cleared, nil
 }
+
+// DeleteCompletedJournalOwnerBook removes the owner book's completed tasks
+// of deleted rules across both slices in one query and reports the count
+// (ticket #536).
+func (s *TaskStore) DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) (int64, error) {
+	cleared, err := s.q().DeleteCompletedJournalOwnerBook(ctx, pgconv.UUIDToPgtype(scope))
+	if err != nil {
+		return 0, fmt.Errorf("delete completed journal of owner %s: %w", scope, err)
+	}
+	return cleared, nil
+}

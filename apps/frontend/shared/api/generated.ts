@@ -461,6 +461,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * «Удалить все выполненные» — clear the actor's book-wide completed journal
+         * @description The book-wide twin of the property journal clear (ticket #536): the completed tasks of the actor's deleted rules (rule_id IS NULL) are removed forever across their own book — the bound rows and the property-less ones (ADR 0052) in the same query. The completed tasks of live rules stay — they hold the materialization dedup keys, and clearing them would re-materialize the rule's whole past (ADR 0051). The archived properties' journals stay frozen (ADR 0025), and the shared-to properties' journals are other owners' books — the clear is owner-scope (ADR 0028). No rule data changes — the tick is a no-op.
+         */
+        delete: operations["deleteCompletedTasksWithoutProperty"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/rules": {
         parameters: {
             query?: never;
@@ -3587,6 +3607,25 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    deleteCompletedTasksWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Completed journal cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     createTaskRuleWithoutProperty: {

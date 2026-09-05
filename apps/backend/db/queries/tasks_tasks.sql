@@ -186,3 +186,19 @@ DELETE FROM tasks
 WHERE owner_id = $1 AND property_id = $2
   AND completed_date IS NOT NULL
   AND rule_id IS NULL;
+
+-- name: DeleteCompletedJournalOwnerBook :execrows
+-- «Удалить все выполненные» across the owner's whole book (ticket #536):
+-- the completed tasks of the deleted rules (rule_id IS NULL) in one query —
+-- the bound rows and the property-less ones (nullable property_id, ADR 0052).
+-- Archived properties stay frozen (ADR 0025) and the shared-to properties'
+-- journals are other owners' books (owner-scope, ADR 0028). The completed
+-- tasks of live rules stay — the tick's dedup keys (ADR 0051).
+DELETE FROM tasks t
+WHERE t.owner_id = $1
+  AND t.completed_date IS NOT NULL
+  AND t.rule_id IS NULL
+  AND (t.property_id IS NULL OR EXISTS (
+        SELECT 1 FROM properties p
+        WHERE p.id = t.property_id AND p.status != 'archived'
+      ));

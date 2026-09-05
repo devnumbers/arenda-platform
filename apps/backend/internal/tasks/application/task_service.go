@@ -187,6 +187,36 @@ func (s *TaskService) ClearCompletedJournal(
 	return cleared, err
 }
 
+// ClearCompletedJournalOwnerBook implements «Удалить все выполненные» on the
+// global «Задачи» screen (DELETE /tasks/completed, ticket #536): the
+// book-wide twin of ClearCompletedJournal. The completed tasks of the
+// actor's deleted rules are removed forever across their own book — the
+// bound rows and the property-less ones (ADR 0052) in the same store query;
+// the shared-to properties' journals are other owners' books (owner-scope,
+// ADR 0028) and the archived ones stay frozen (ADR 0025). The same live-rule
+// protection as the property-scoped clear (ADR 0051). Serialized on the
+// owner's users row — the book-level anchor (ADR 0052); the verdict states
+// Tick=false: no rule data changed, the tick is a no-op by construction.
+func (s *TaskService) ClearCompletedJournalOwnerBook(
+	ctx context.Context, actor uuid.UUID,
+) (int64, error) {
+	return runOwnerMutation(s.conveyor(), ctx, actor, uuid.Nil,
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.TaskRule, _ time.Time,
+		) (mutationOutcome[int64], error) {
+			cleared, err := stores.tasks.DeleteCompletedJournalOwnerBook(ctx, scope)
+			if err != nil {
+				return mutationOutcome[int64]{}, fmt.Errorf("clear completed journal of owner book: %w", err)
+			}
+			return mutationOutcome[int64]{
+				Response:    cleared,
+				Audit:       auditdomain.ActionTaskCompletedCleared,
+				AuditEntity: auditdomain.EntityTask,
+				AuditCtx:    map[string]any{"count": cleared},
+			}, nil
+		})
+}
+
 // ListGlobalTasks returns one page of the actor's visible tasks for the
 // global «Задачи» screen (ticket #521). Three filter states: one property —
 // resolved through its view gate (a stranger gets the privacy ErrNotFound)

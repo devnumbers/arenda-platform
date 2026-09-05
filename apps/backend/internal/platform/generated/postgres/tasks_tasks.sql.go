@@ -144,6 +144,31 @@ func (q *Queries) DeleteCompletedJournal(ctx context.Context, arg DeleteComplete
 	return result.RowsAffected(), nil
 }
 
+const deleteCompletedJournalOwnerBook = `-- name: DeleteCompletedJournalOwnerBook :execrows
+DELETE FROM tasks t
+WHERE t.owner_id = $1
+  AND t.completed_date IS NOT NULL
+  AND t.rule_id IS NULL
+  AND (t.property_id IS NULL OR EXISTS (
+        SELECT 1 FROM properties p
+        WHERE p.id = t.property_id AND p.status != 'archived'
+      ))
+`
+
+// «Удалить все выполненные» across the owner's whole book (ticket #536):
+// the completed tasks of the deleted rules (rule_id IS NULL) in one query —
+// the bound rows and the property-less ones (nullable property_id, ADR 0052).
+// Archived properties stay frozen (ADR 0025) and the shared-to properties'
+// journals are other owners' books (owner-scope, ADR 0028). The completed
+// tasks of live rules stay — the tick's dedup keys (ADR 0051).
+func (q *Queries) DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCompletedJournalOwnerBook, ownerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getTask = `-- name: GetTask :one
 
 SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,

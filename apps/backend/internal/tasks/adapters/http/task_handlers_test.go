@@ -119,6 +119,7 @@ type fakeTasksManager struct {
 
 	completeWithoutProperty   func(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
 	uncompleteWithoutProperty func(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
+	clearOwnerBook            func(ctx context.Context, actor uuid.UUID) (int64, error)
 }
 
 func (f *fakeTasksManager) ListTasks(
@@ -182,6 +183,15 @@ func (f *fakeTasksManager) ListGlobalTasks(
 		return application.TasksPage{}, errors.New("unexpected ListGlobalTasks call")
 	}
 	return f.listGlobal(ctx, actor, q)
+}
+
+func (f *fakeTasksManager) ClearCompletedJournalOwnerBook(
+	ctx context.Context, actor uuid.UUID,
+) (int64, error) {
+	if f.clearOwnerBook == nil {
+		return 0, errors.New("unexpected ClearCompletedJournalOwnerBook call")
+	}
+	return f.clearOwnerBook(ctx, actor)
 }
 
 // fixtureRule is the tests' fixture rule.

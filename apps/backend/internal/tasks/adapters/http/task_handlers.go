@@ -30,6 +30,7 @@ type TasksManager interface {
 	CompleteTaskWithoutProperty(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
 	UncompleteTaskWithoutProperty(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
 	ListGlobalTasks(ctx context.Context, actor uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error)
+	ClearCompletedJournalOwnerBook(ctx context.Context, actor uuid.UUID) (int64, error)
 }
 
 // TaskHandlers implements the generated task endpoints.
@@ -227,6 +228,25 @@ func (h *TaskHandlers) UncompleteTaskWithoutProperty(w http.ResponseWriter, r *h
 		Task:   task,
 		Status: domain.ViewActive,
 	}))
+}
+
+// DeleteCompletedTasksWithoutProperty implements DELETE /tasks/completed —
+// the global «Задачи» screen's kebab (ticket #536): the book-wide journal
+// clear of the actor's own book. The shared-to and archived journals are out
+// of its scope by the use case's contract; a book without clearable rows
+// still answers 204.
+func (h *TaskHandlers) DeleteCompletedTasksWithoutProperty(w http.ResponseWriter, r *http.Request) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.svc.ClearCompletedJournalOwnerBook(r.Context(), actor); err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // taskResponse maps one listed or just-mutated task onto the wire response:

@@ -113,6 +113,13 @@ type Querier interface {
 	// completed tasks of live rules stay — they hold the tick's dedup keys, and
 	// clearing them would re-materialize the rule's whole past (ADR 0051).
 	DeleteCompletedJournal(ctx context.Context, arg DeleteCompletedJournalParams) (int64, error)
+	// «Удалить все выполненные» across the owner's whole book (ticket #536):
+	// the completed tasks of the deleted rules (rule_id IS NULL) in one query —
+	// the bound rows and the property-less ones (nullable property_id, ADR 0052).
+	// Archived properties stay frozen (ADR 0025) and the shared-to properties'
+	// journals are other owners' books (owner-scope, ADR 0028). The completed
+	// tasks of live rules stay — the tick's dedup keys (ADR 0051).
+	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
 	// The hygiene batch (ticket #433): sessions past their lifetime, whatever
 	// their status — an expired session never produces a payment method, and the

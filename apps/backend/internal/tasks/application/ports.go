@@ -142,6 +142,14 @@ type TaskStore interface {
 	// keys, and clearing them would re-materialize the rule's whole past
 	// (ADR 0051).
 	DeleteCompletedJournal(ctx context.Context, scope, propertyID uuid.UUID) (int64, error)
+	// DeleteCompletedJournalOwnerBook is the book-wide twin (ticket #536):
+	// the completed tasks of the owner's deleted rules across both slices in
+	// one query — the bound rows on non-archived properties and the
+	// property-less ones (ADR 0052); the archived properties' journals stay
+	// frozen (ADR 0025) and other owners' books are untouched (owner-scope,
+	// ADR 0028). The same live-rule protection as the property-scoped
+	// variant. It returns the number of removed rows.
+	DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) (int64, error)
 	WithTx(tx transaction.Tx) (TaskStore, error)
 }
 
