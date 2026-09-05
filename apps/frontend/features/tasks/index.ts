@@ -38,6 +38,7 @@ export {
   EMPTY_TASK_CREATE_DRAFT,
   isTaskTitleFilled,
   TASK_REPEAT_OPTIONS,
+  taskRuleCreatePath,
   type TaskCreateDraft,
 } from './lib/task-create';
 export {

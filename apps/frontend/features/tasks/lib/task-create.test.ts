@@ -5,6 +5,7 @@ import {
   EMPTY_TASK_CREATE_DRAFT,
   isTaskTitleFilled,
   TASK_REPEAT_OPTIONS,
+  taskRuleCreatePath,
   type TaskCreateDraft,
 } from './task-create';
 
@@ -96,6 +97,28 @@ describe('buildTaskRuleCreateRequest — payload POST /tasks/rules', () => {
 
   it('нарушенный контракт (время без даты) не превращается в запрос', () => {
     expect(buildTaskRuleCreateRequest(draft({ title: 'Т', dueTime: '09:00' }))).toBeNull();
+  });
+});
+
+describe('черновик и объект (#525)', () => {
+  it('пустой черновик — без объекта', () => {
+    expect(EMPTY_TASK_CREATE_DRAFT.propertyId).toBeNull();
+  });
+
+  it('объект не влияет на валидацию: создание без объекта и с объектом равнозначно', () => {
+    expect(canCreateTask(draft({ title: 'Т' }))).toBe(true);
+    expect(canCreateTask(draft({ title: 'Т', propertyId: 'p1' }))).toBe(true);
+  });
+});
+
+describe('taskRuleCreatePath — выбор эндпоинта по объекту (#525)', () => {
+  it('без объекта — глобальный POST /tasks/rules (#520)', () => {
+    expect(taskRuleCreatePath(null)).toBe('/tasks/rules');
+  });
+
+  it('с объектом — объектный POST /properties/{id}/tasks/rules', () => {
+    expect(taskRuleCreatePath('p1')).toBe('/properties/p1/tasks/rules');
+    expect(taskRuleCreatePath('a/b')).toBe('/properties/a%2Fb/tasks/rules');
   });
 });
 

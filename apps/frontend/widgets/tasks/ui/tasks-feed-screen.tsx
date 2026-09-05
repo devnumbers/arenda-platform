@@ -75,7 +75,8 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  * фильтр сбрасывается сам (решение 8 #522). Подпись чипа всегда «Объект»,
  * активное состояние — признак включённого фильтра (решение владельца
  * 2026-09-05, перекрывает «чип = имя объекта» из решения 7 #522).
- * «+» нарисовано по макету, но пока без действия — создание, тикет #525.
+ * «+» — создание задачи (#525): та же форма, что на объекте, вход без
+ * предвыбранного объекта — маршрут /tasks/new.
  */
 export function TasksFeedScreen(): JSX.Element {
   const router = useRouter();
@@ -178,7 +179,11 @@ export function TasksFeedScreen(): JSX.Element {
   };
 
   const createButton = (
-    <IconButton icon={<Add />} label="Создать задачу" disabled aria-disabled />
+    <IconButton
+      icon={<Add />}
+      label="Создать задачу"
+      onClick={() => router.push(ROUTES.taskCreate)}
+    />
   );
 
   // Выбор объекта фильтра (#524): URL не меняется, черновик применяется

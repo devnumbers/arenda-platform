@@ -13,7 +13,7 @@ import { mapTask, mapTaskRule, mapTasksPage } from '@/entities/task';
 import type { Task, TaskRule, TasksPage } from '@/entities/task';
 import { taskKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
-import { buildTaskRuleCreateRequest, type TaskCreateDraft } from '../lib/task-create';
+import { buildTaskRuleCreateRequest, taskRuleCreatePath, type TaskCreateDraft } from '../lib/task-create';
 import { taskCompletionPath } from '../lib/global-tasks';
 import type { TaskRuleUpdateCommand } from '../lib/task-edit';
 
@@ -168,16 +168,16 @@ export function useDeleteCompletedTasks(
 }
 
 /**
- * Создание задачи = создание правила (словарь #494, #500): POST /tasks/rules
+ * Создание задачи = создание правила (словарь #494, #500): POST правил
  * сразу материализует вхождения. Дата опциональна — без неё задача попадает
  * в «Без срока»; repeat в контракте обязателен, «без повтора» уходит как
- * once (черновик собирает lib/task-create). Тело ответа экрану не нужно —
+ * once (черновик собирает lib/task-create). Эндпоинт выбирает объект
+ * черновика (#525): с объектом — объектный путь, «Общая задача» —
+ * глобальный /tasks/rules (#520). Тело ответа экрану не нужно —
  * результат виден по перечитанному списку (инвалидация всего taskKeys,
  * как у остальных мутаций контекста).
  */
-export function useCreateTaskRule(
-  propertyId: string,
-): UseMutationResult<void, ApiError, TaskCreateDraft> {
+export function useCreateTaskRule(): UseMutationResult<void, ApiError, TaskCreateDraft> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (draft: TaskCreateDraft) => {
@@ -186,10 +186,10 @@ export function useCreateTaskRule(
         // Недостижимо через UI: кнопка «Создать» задизейблена canCreateTask.
         throw new Error('Черновик задачи не прошёл валидацию');
       }
-      await apiClient<unknown>(
-        `/properties/${encodeURIComponent(propertyId)}/tasks/rules`,
-        { method: 'POST', body: JSON.stringify(request) },
-      );
+      await apiClient<unknown>(taskRuleCreatePath(draft.propertyId), {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.all });
@@ -239,9 +239,12 @@ export function usePropertylessTaskRule(
  * «Сегодня» владельца для плоской формы правки (ADR 0048) — страница
  * глобального листинга GET /tasks?withoutProperty=true (#521); лимит 1:
  * форме нужна только дата, ленту безобъектного среза строит экран #523.
- * Владелец — сам читатель, today его календаря (контракт #521).
+ * Владелец — сам читатель, today его календаря (контракт #521). enabled —
+ * для форм, где срез входа другой (создание с объекта, #525).
  */
-export function usePropertylessTasks(): UseQueryResult<TasksPage, ApiError> {
+export function usePropertylessTasks(
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
     queryKey: taskKeys.propertylessTasks(),
     queryFn: async () => {
@@ -250,6 +253,7 @@ export function usePropertylessTasks(): UseQueryResult<TasksPage, ApiError> {
       );
       return mapTasksPage(response);
     },
+    enabled: options.enabled ?? true,
   });
 }
 

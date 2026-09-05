@@ -160,8 +160,9 @@ function ObjectRowButton({
   );
 }
 
-/** Скелет строк объектов на время загрузки списка. */
-function ObjectRowsSkeleton(): JSX.Element {
+/** Скелет строк объектов на время загрузки списка. Общий со страницей
+ * выбора объекта формы создания (#525) — тот же каркас строк. */
+export function ObjectRowsSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-6 py-6">
       {[0, 1, 2, 3].map((row) => (

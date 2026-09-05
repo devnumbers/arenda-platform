@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Cancel } from '@/shared/assets/icons';
+import { Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { formatDayMonth } from '@/entities/task';
-import { useProperty } from '@/features/properties';
+import { useProperties, useProperty } from '@/features/properties';
 import {
   canCreateTask,
   EMPTY_TASK_CREATE_DRAFT,
@@ -15,6 +15,7 @@ import {
   TASK_REPEAT_OPTIONS,
   useActiveTasks,
   useCreateTaskRule,
+  usePropertylessTasks,
   type TaskCreateDraft,
 } from '@/features/tasks';
 import {
@@ -29,6 +30,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { TaskTimePicker } from './task-time-picker';
+import { TaskPropertySelectPage } from './task-property-select';
 
 /** Лимиты контракта POST /tasks/rules (#498): название 1..255, комментарий
  * до 1000. Ввод обрезается молча — счётчиков на макете нет (макет прячет
@@ -40,50 +42,79 @@ const COMMENT_MAX_LENGTH = 1000;
  * Экран «Создать задачу» (#500, Figma 1539-77823/1539-78288/1539-82273):
  * полноэкранная форма поверх списка — страница-маршрут (конвенция
  * полноэкранных поверхностей, фидбек #477) в два шага. Шаг 1 — название
- * (обязательно, «Далее» без него недоступен); шаг 2 — комментарий,
- * дата/время («Выбрать» → пикеры) и чипы «Повторять каждый» + «Создать» —
- * страница шага необязательна для заполнения, кнопка активна сразу
- * (подсказка владельца). Закрытие — ✕ в шапке (галочки в шапке нет —
- * решение #497); кнопка шага — справа в нижней панели. Дата без срока не
- * нужна — «Без срока» остаётся; время и повтор требуют дату (контракт:
- * дизейбл без даты). «Сегодня» пикеров — серверное today собственника из
- * кэша листинга (ADR 0048). После создания — возврат в список: инвалидация
- * taskKeys перечитывает обе выборки. Смотрящий и архив глушат мутации
- * (#446, ADR 0028) — форма сразу возвращает на список.
+ * (обязательно, «Далее» без него недоступен) и объект (опционален, #525,
+ * макет 1726-88078/88088/87754/89456); шаг 2 — комментарий, дата/время
+ * («Выбрать» → пикеры) и чипы «Повторять каждый» + «Создать» — страница
+ * шага необязательна для заполнения, кнопка активна сразу (подсказка
+ * владельца). Закрытие — ✕ в шапке (галочки в шапке нет — решение #497);
+ * кнопка шага — справа в нижней панели. Дата без срока не нужна — «Без
+ * срока» остаётся; время и повтор требуют дату (контракт: дизейбл без
+ * даты). «Сегодня» пикеров — серверное today из среза входа (ADR 0048):
+ * объектного листинга или, без объекта, глобального (#521). После создания
+ * — возврат в список: инвалидация taskKeys перечитывает обе выборки.
+ *
+ * Объект (#525): вход с объекта предвыбран (initialPropertyId, как сегодня),
+ * с глобальной ленты — пустой; поле открывает страницу «Выбрать объект» —
+ * «Общая задача» или объект, строгий черновик. Эндпоинт выбирается по
+ * объекту черновика: /properties/{id}/tasks/rules или /tasks/rules.
+ * Смотрящий и архив глушат мутации (#446, ADR 0028) — на объектном входе
+ * форма сразу возвращает на список; глобальное создание всегда в своей
+ * книге, гейта нет.
  */
 export function TaskCreateScreen({
-  propertyId,
+  initialPropertyId,
 }: {
-  readonly propertyId: string;
+  readonly initialPropertyId: string | null;
 }): JSX.Element {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
-  const [draft, setDraft] = useState<TaskCreateDraft>(EMPTY_TASK_CREATE_DRAFT);
+  const [draft, setDraft] = useState<TaskCreateDraft>(() => ({
+    ...EMPTY_TASK_CREATE_DRAFT,
+    propertyId: initialPropertyId,
+  }));
   const [dateOpen, setDateOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
+  const [objectSelectOpen, setObjectSelectOpen] = useState(false);
+  const [propertyDraft, setPropertyDraft] = useState<string | null>(null);
 
-  const propertyQuery = useProperty(propertyId);
+  const propertyQuery = useProperty(initialPropertyId ?? '');
   // «Сегодня» собственника — границы пикера и дефолт выбора; клиент зоны
-  // не знает (ADR 0048), источника кроме листинга у формы нет.
-  const activeTasksQuery = useActiveTasks(propertyId);
-  const today = activeTasksQuery.data?.today;
+  // не знает (ADR 0048). Срез — по входу: на объекте листинг объекта,
+  // без объекта — глобальный безобъектный (читатель = владелец книги).
+  const activeTasksQuery = useActiveTasks(initialPropertyId ?? '');
+  const propertylessQuery = usePropertylessTasks({
+    enabled: initialPropertyId === null,
+  });
+  const today =
+    initialPropertyId !== null
+      ? activeTasksQuery.data?.today
+      : propertylessQuery.data?.today;
 
-  const create = useCreateTaskRule(propertyId);
+  const create = useCreateTaskRule();
 
+  const propertiesQuery = useProperties();
   const property = propertyQuery.data;
   const role = property?.access?.role;
   const canMutate =
     property !== undefined && role !== undefined && role !== 'viewer' && property.status !== 'archived';
 
   useEffect(() => {
+    // Гейт только объектного входа: глобальное создание — в своей книге.
+    if (initialPropertyId === null) {
+      return;
+    }
     if (propertyQuery.isSuccess && !canMutate) {
       // Отмена потока, не замена URL: replace оставил бы «мёртвый» Back
       // (стандарт навигации CODING_STANDARDS).
-      goBack(router, ROUTES.propertyTasks(propertyId));
+      goBack(router, ROUTES.propertyTasks(initialPropertyId));
     }
-  }, [propertyQuery.isSuccess, canMutate, router, propertyId]);
+  }, [initialPropertyId, propertyQuery.isSuccess, canMutate, router]);
 
-  const close = (): void => goBack(router, ROUTES.propertyTasks(propertyId));
+  const close = (): void =>
+    goBack(
+      router,
+      initialPropertyId === null ? ROUTES.tasks : ROUTES.propertyTasks(initialPropertyId),
+    );
 
   const patch = (changes: Partial<TaskCreateDraft>): void =>
     setDraft((prev) => ({ ...prev, ...changes }));
@@ -95,6 +126,29 @@ export function TaskCreateScreen({
     });
   };
 
+  // Подпись поля «Объект»: имя из книги (источник страницы выбора); пока
+  // книга не пришла — имя входного объекта из его листинга.
+  const selectedProperty = propertiesQuery.data?.find(
+    (item) => item.id === draft.propertyId,
+  );
+  const selectedPropertyName =
+    selectedProperty?.name ??
+    (draft.propertyId === initialPropertyId ? property?.name : undefined);
+
+  if (objectSelectOpen) {
+    return (
+      <TaskPropertySelectPage
+        draft={propertyDraft}
+        onDraftChange={setPropertyDraft}
+        onApply={() => {
+          patch({ propertyId: propertyDraft });
+          setObjectSelectOpen(false);
+        }}
+        onDismiss={() => setObjectSelectOpen(false)}
+      />
+    );
+  }
+
   return (
     <>
       <TopNav
@@ -105,7 +159,7 @@ export function TaskCreateScreen({
 
       <PageContent>
         {step === 1 ? (
-          <div className="px-6">
+          <div className="flex flex-col gap-8 px-6">
             <TextField
               title="Задача"
               value={draft.title}
@@ -113,6 +167,16 @@ export function TaskCreateScreen({
                 patch({ title: event.target.value.slice(0, TITLE_MAX_LENGTH) })
               }
               onClear={() => patch({ title: '' })}
+            />
+            <TaskFieldButton
+              title="Объект"
+              label={selectedPropertyName ?? 'Выбрать объект'}
+              description="Необязательно"
+              trailingIcon={<SmallArrowDown />}
+              onClick={() => {
+                setPropertyDraft(draft.propertyId);
+                setObjectSelectOpen(true);
+              }}
             />
           </div>
         ) : (
@@ -215,15 +279,21 @@ export function TaskCreateScreen({
 
 /** Поле-кнопка «Дата»/«Время» (макет 1539-82273): бокс TextField (h-14,
  * radius 16, серый) с меткой Title Out, открывает пикер. Общая с экраном
- * правки (#502). */
+ * правки (#502). У поля «Объект» (#525, макет 1726-88078) — описание под
+ * боксом и декоративная стрелка справа (стили нижней строки и «хвоста» —
+ * как у TextField). */
 export function TaskFieldButton({
   title,
   label,
+  description,
+  trailingIcon,
   disabled = false,
   onClick,
 }: {
   readonly title: string;
   readonly label: string;
+  readonly description?: string;
+  readonly trailingIcon?: ReactNode;
   readonly disabled?: boolean;
   readonly onClick: () => void;
 }): JSX.Element {
@@ -236,8 +306,16 @@ export function TaskFieldButton({
         onClick={onClick}
         className="flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted pl-[18px] pr-2 text-left text-base leading-[18px] text-content outline-none transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)] focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none"
       >
-        {label}
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {trailingIcon !== undefined && (
+          <span aria-hidden className="pl-1">
+            {trailingIcon}
+          </span>
+        )}
       </button>
+      {description !== undefined && (
+        <span className="text-[13px] leading-[15px] text-content-tertiary">{description}</span>
+      )}
     </div>
   );
 }

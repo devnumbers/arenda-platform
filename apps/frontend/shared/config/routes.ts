@@ -23,6 +23,9 @@ export const ROUTES = {
   tasks: '/tasks',
   /** Экран «Создать задачу» (#500): полноэкранная форма в два шага. */
   propertyTaskCreate: (id: string) => `/properties/${id}/tasks/new`,
+  /** Тот же экран с глобальной ленты «Задачи» (#525): вход без
+   * предвыбранного объекта. */
+  taskCreate: '/tasks/new',
   /** Экран «Изменить задачу» (#502): правка правила, тапом по строке списка. */
   propertyTaskEdit: (id: string, ruleId: string) => `/properties/${id}/tasks/${ruleId}/edit`,
   /** Плоский маршрут правки безобъектного правила (#537): та же форма
