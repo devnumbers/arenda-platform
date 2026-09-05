@@ -166,9 +166,12 @@ export const taskKeys = {
   /** Правило без объекта — плоская форма «Изменить задачу» (#537). */
   propertylessRule: (ruleId: string) =>
     [...taskKeys.all, 'rule', 'without-property', ruleId] as const,
-  /** Страница безобъектного среза GET /tasks (сейчас — источник «сегодня»
-   * для плоской формы; параметризуется лентой #523). */
+  /** Страница безобъектного среза GET /tasks — источник «сегодня» для
+   * плоской формы правки (#537); лента #523 читает свой ключ global. */
   propertylessTasks: () => [...taskKeys.all, 'without-property'] as const,
+  /** Глобальная лента GET /tasks (#521, экран #523): бакет completed —
+   * часть ключа; фильтр объекта (#524) добавит свой сегмент рядом. */
+  global: (completed: boolean) => [...taskKeys.all, 'global', completed] as const,
 };
 
 // features/subscription

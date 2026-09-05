@@ -14,6 +14,7 @@ import type { Task, TaskRule, TasksPage } from '@/entities/task';
 import { taskKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 import { buildTaskRuleCreateRequest, type TaskCreateDraft } from '../lib/task-create';
+import { taskCompletionPath } from '../lib/global-tasks';
 import type { TaskRuleUpdateCommand } from '../lib/task-edit';
 
 type TaskResponseDto = components['schemas']['TaskResponse'];
@@ -248,6 +249,115 @@ export function usePropertylessTasks(): UseQueryResult<TasksPage, ApiError> {
         '/tasks?withoutProperty=true&completed=false&limit=1',
       );
       return mapTasksPage(response);
+    },
+  });
+}
+
+/**
+ * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
+ * merged-фид читателя (свои задачи + задачи видимых объектов, архивы мимо —
+ * решения #522) без фильтра объекта; фильтр добавит #524. Лимит — максимум
+ * контракта: лента группируется целиком, как на объекте. today — календарь
+ * читателя. Сестринский хук журнала — useGlobalCompletedTasks.
+ */
+export function useGlobalActiveTasks(): UseQueryResult<TasksPage, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.global(false),
+    queryFn: async () => {
+      const response = await apiClient<TasksPageDto>(
+        `/tasks?completed=false&limit=${TASKS_PAGE_LIMIT}`,
+      );
+      return mapTasksPage(response);
+    },
+  });
+}
+
+/** Журнал глобальной ленты — сворачиваемая секция «Выполненные N». */
+export function useGlobalCompletedTasks(): UseQueryResult<TasksPage, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.global(true),
+    queryFn: async () => {
+      const response = await apiClient<TasksPageDto>(
+        `/tasks?completed=true&limit=${TASKS_PAGE_LIMIT}`,
+      );
+      return mapTasksPage(response);
+    },
+  });
+}
+
+/**
+ * Выполнить/снять в ленте: срез маршрутизирует lib/global-tasks (ADR 0052)
+ * — безобъектная задача в глобальный путь, объектная в путь своего объекта.
+ * Инвалидация taskKeys.all перечитывает и ленту, и все объектные экраны.
+ */
+export function useCompleteGlobalTask(
+  action: 'complete' | 'uncomplete',
+): UseMutationResult<Task, ApiError, Task> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (task: Task) => {
+      const response = await apiClient<TaskResponseDto>(
+        taskCompletionPath(task, action),
+        { method: 'POST' },
+      );
+      return mapTask(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
+ * «Отметить все» в ленте: по одному POST на задачу (bulk-эндпоинта нет),
+ * маршрут — по срезу каждой строки. Цикл последовательный: параллельные
+ * POST complete ловят серверный дедлок на блокировке строк свойств
+ * владельца (SQLSTATE 40P01 — дефект сериализации, отдельный тикет бэка).
+ * Сбои отдельных запросов глотаются осознанно, как на объекте (решение
+ * владельца 2026-09-03) — список перечитается и покажет факт. Выбор
+ * мутабельных строк — lib/global-tasks.
+ */
+export function useCompleteAllGlobalTasks(): UseMutationResult<
+  void,
+  ApiError,
+  readonly Task[]
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (tasks: readonly Task[]) => {
+      for (const task of tasks) {
+        try {
+          await apiClient<TaskResponseDto>(taskCompletionPath(task, 'complete'), {
+            method: 'POST',
+          });
+        } catch {
+          // Проглатываем: факт покажет перечитанный список.
+        }
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
+ * «Удалить выполненные» ленты: глобальный DELETE /tasks/completed (#536) —
+ * журнал удалённых правил всей книги читателя (owner-scope ADR 0028):
+ * журналы общих объектов чужие, их сносит владелец на своём экране.
+ */
+export function useDeleteCompletedGlobalTasks(): UseMutationResult<
+  void,
+  ApiError,
+  void
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient<void>('/tasks/completed', { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
     },
   });
 }

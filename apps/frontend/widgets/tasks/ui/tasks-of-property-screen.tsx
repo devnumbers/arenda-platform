@@ -1,15 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import type { ComponentProps, JSX } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Add,
   ArrowLeft,
   Checkmark,
-  SortingBigSmall,
-  SortingSmallBig,
-  SmallArrowDown,
   TrashBin,
   VerticalMenu,
 } from '@/shared/assets/icons';
@@ -27,15 +24,12 @@ import {
   useDeleteCompletedTasks,
   useUncompleteTask,
   type TaskSection,
-  type TaskSectionKind,
   type TasksSort,
 } from '@/features/tasks';
 import type { Task } from '@/entities/task';
 import {
   Button,
-  ChipButton,
   CollapsibleSection,
-  ConfirmDialog,
   EmptyState,
   IconButton,
   Menu,
@@ -48,10 +42,12 @@ import {
   StickyBottomBar,
   TopNav,
   TopNavTitle,
-  type PickerMenuGroup,
 } from '@/shared/ui/design';
-import { TaskRow, type TaskRowTone } from './task-row';
+import { TaskRow } from './task-row';
 import { TaskSectionCard } from './task-section-card';
+import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
+import { sectionKey, sectionTone } from './tasks-section-utils';
+import { SortChip, sortPickerGroups } from './tasks-sort';
 
 /**
  * Экран «Задачи объекта» (#499, Figma 1535-75363/1535-75894/1531-12784):
@@ -240,14 +236,9 @@ export function TasksOfPropertyScreen({
         </StickyBottomBar>
       )}
 
-      <ConfirmDialog
+      <TasksDeleteCompletedDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        title="Удалить все выполненные задачи?"
-        description="Все выполненные задачи будут навсегда удалены"
-        cancelLabel="Отменить"
-        confirmLabel="Удалить"
-        confirmVariant="danger"
         pending={deleteCompleted.isPending}
         onConfirm={() =>
           deleteCompleted.mutate(undefined, {
@@ -258,69 +249,6 @@ export function TasksOfPropertyScreen({
       />
     </>
   );
-}
-
-/** Чип сортировки (Figma 1535-76222): «Дата»/«Название»; ведущая иконка —
- * направление (возрастание — SortingSmallBig 418:4608, от меньшего к
- * большему; убывание — SortingBigSmall 418:4607, от большего к меньшему —
- * решение владельца 2026-09-03), хвостовая стрелка всегда вниз (671:7320).
- * Прокидывает все пропсы кнопки: триггер PickerMenu через asChild передаёт
- * ему свои обработчики и aria. */
-function SortChip({
-  sort,
-  ...props
-}: {
-  readonly sort: TasksSort;
-} & ComponentProps<'button'>): JSX.Element {
-  return (
-    <ChipButton
-      leadingIcon={
-        sort.direction === 'asc' ? <SortingSmallBig /> : <SortingBigSmall />
-      }
-      trailingIcon={<SmallArrowDown />}
-      {...props}
-    >
-      {sort.field === 'date' ? 'Дата' : 'Название'}
-    </ChipButton>
-  );
-}
-
-/** Группы опций пикера сортировки (Figma 1603-94487/1535-76225): поле и
- * направление — два независимых «радио»; выбор применяет sort сразу. */
-function sortPickerGroups(
-  sort: TasksSort,
-  onSortChange: (sort: TasksSort) => void,
-): ReadonlyArray<PickerMenuGroup> {
-  return [
-    {
-      options: [
-        {
-          label: 'По дате создания',
-          selected: sort.field === 'date',
-          onSelect: () => onSortChange({ ...sort, field: 'date' }),
-        },
-        {
-          label: 'По названию',
-          selected: sort.field === 'title',
-          onSelect: () => onSortChange({ ...sort, field: 'title' }),
-        },
-      ],
-    },
-    {
-      options: [
-        {
-          label: 'Возрастание',
-          selected: sort.direction === 'asc',
-          onSelect: () => onSortChange({ ...sort, direction: 'asc' }),
-        },
-        {
-          label: 'Убывание',
-          selected: sort.direction === 'desc',
-          onSelect: () => onSortChange({ ...sort, direction: 'desc' }),
-        },
-      ],
-    },
-  ];
 }
 
 /** Секция экрана: обычные группы — карточкой, «Выполненные» — сворачиваемой
@@ -369,20 +297,6 @@ function TaskSection({
       {rows}
     </TaskSectionCard>
   );
-}
-
-function sectionTone(kind: TaskSectionKind): TaskRowTone {
-  if (kind === 'overdue') {
-    return 'danger';
-  }
-  if (kind === 'today' || kind === 'tomorrow') {
-    return 'primary';
-  }
-  return 'muted';
-}
-
-function sectionKey(section: TaskSection): string {
-  return section.kind === 'dated' ? `dated-${section.date}` : section.kind;
 }
 
 /** Карточка состояния с действием — ошибка загрузки с кнопкой «Повторить».

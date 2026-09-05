@@ -1,7 +1,7 @@
 'use client';
 
-import type { JSX, KeyboardEvent } from 'react';
-import { Check, ClockSmall, Repeat } from '@/shared/assets/icons';
+import type { JSX, KeyboardEvent, ReactNode } from 'react';
+import { Check, ClockSmall, HomeMain, Repeat } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
   daysOverdue,
@@ -39,6 +39,10 @@ export type TaskRowProps = {
   /** Тап по строке — правка правила (#502); не передан — строка только
    * для чтения (выполненные — история со снимком, зритель/архив). */
   readonly onOpen?: () => void;
+  /** Строка объекта глобальной ленты (#523, Figma 1733-27411): иконка дома
+   * + имя объекта; на объектном экране не передаётся — объект и так заголовок
+   * страницы. */
+  readonly propertyLine?: ReactNode;
 };
 
 export function TaskRow({
@@ -49,6 +53,7 @@ export function TaskRow({
   toggling = false,
   onToggle,
   onOpen,
+  propertyLine,
 }: TaskRowProps): JSX.Element {
   const completed = task.status === 'completed';
   const openable = onOpen !== undefined;
@@ -117,6 +122,12 @@ export function TaskRow({
         {completed && task.completedDate !== null && (
           <span className="text-sm leading-4 text-content">
             {formatCompletedLabel(task.completedDate, today)}
+          </span>
+        )}
+        {propertyLine !== undefined && (
+          <span className="flex items-center gap-1.5 text-sm leading-4 text-content-secondary">
+            <HomeMain className="h-4 w-4 shrink-0" aria-hidden />
+            {propertyLine}
           </span>
         )}
         {(timeLabel !== null || isRecurring(task)) && (

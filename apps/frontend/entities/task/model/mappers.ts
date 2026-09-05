@@ -15,6 +15,7 @@ export function mapTask(dto: TaskDto): Task {
   return {
     id: dto.id,
     propertyId: dto.propertyId,
+    propertyName: dto.propertyName,
     ruleId: dto.ruleId,
     dueDate: dto.dueDate,
     dueTime: dto.dueTime,
