@@ -62,25 +62,7 @@ export function TasksPropertySelectPage({
             onCheck={() => onDraftChange([])}
           />
           {propertiesQuery.isPending && <ObjectRowsSkeleton />}
-          {propertiesQuery.isError && (
-            <section className="rounded-card bg-surface-muted px-6 py-6">
-              <h2 className="text-base font-medium leading-[18px] text-content">
-                Не удалось загрузить объекты
-              </h2>
-              <p className="mt-2 text-sm leading-4 text-content-secondary">
-                Проверьте подключение и попробуйте еще раз
-              </p>
-              <div className="mt-4">
-                <Button
-                  size="small"
-                  variant="secondary"
-                  onClick={() => void propertiesQuery.refetch()}
-                >
-                  Повторить
-                </Button>
-              </div>
-            </section>
-          )}
+          {propertiesQuery.isError && <ObjectLoadErrorCard onRetry={() => void propertiesQuery.refetch()} />}
           {properties.length > 0 && <div aria-hidden className="h-px bg-surface-muted" />}
           {properties.map((property) => (
             <ObjectRowButton
@@ -157,6 +139,27 @@ function ObjectRowButton({
         <CheckBoxFalse className="h-6 w-6 shrink-0" aria-hidden />
       )}
     </button>
+  );
+}
+
+/** Карточка ошибки загрузки объектов (состояние списков, DESIGN.md §7):
+ * заголовок, серое пояснение и «Повторить». Общая со страницей выбора
+ * объекта формы создания (#525). */
+export function ObjectLoadErrorCard({ onRetry }: { readonly onRetry: () => void }): JSX.Element {
+  return (
+    <section className="rounded-card bg-surface-muted px-6 py-6">
+      <h2 className="text-base font-medium leading-[18px] text-content">
+        Не удалось загрузить объекты
+      </h2>
+      <p className="mt-2 text-sm leading-4 text-content-secondary">
+        Проверьте подключение и попробуйте еще раз
+      </p>
+      <div className="mt-4">
+        <Button size="small" variant="secondary" onClick={onRetry}>
+          Повторить
+        </Button>
+      </div>
+    </section>
   );
 }
 

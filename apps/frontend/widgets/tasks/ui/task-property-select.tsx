@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { BoldHome, BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, IconButton, PageContent, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { ObjectRowsSkeleton } from './tasks-property-select';
+import { ObjectLoadErrorCard, ObjectRowsSkeleton } from './tasks-property-select';
 
 /**
  * Страница «Выбрать объект» формы создания задачи (карта #518, тикет #525,
@@ -53,25 +53,7 @@ export function TaskPropertySelectPage({
             onCheck={() => onDraftChange(null)}
           />
           {propertiesQuery.isPending && <ObjectRowsSkeleton />}
-          {propertiesQuery.isError && (
-            <section className="rounded-card bg-surface-muted px-6 py-6">
-              <h2 className="text-base font-medium leading-[18px] text-content">
-                Не удалось загрузить объекты
-              </h2>
-              <p className="mt-2 text-sm leading-4 text-content-secondary">
-                Проверьте подключение и попробуйте еще раз
-              </p>
-              <div className="mt-4">
-                <Button
-                  size="small"
-                  variant="secondary"
-                  onClick={() => void propertiesQuery.refetch()}
-                >
-                  Повторить
-                </Button>
-              </div>
-            </section>
-          )}
+          {propertiesQuery.isError && <ObjectLoadErrorCard onRetry={() => void propertiesQuery.refetch()} />}
           {properties.length > 0 && <div aria-hidden className="h-px bg-surface-muted" />}
           {properties.map((property) => (
             <ObjectRowButton
