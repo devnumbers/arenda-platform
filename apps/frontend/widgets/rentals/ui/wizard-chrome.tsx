@@ -118,15 +118,11 @@ export function PickerTriggerBox({
   );
 }
 
-/** Компактное денежное поле (макет 1270:46905/47386, решение владельца
- * 2026-09-05): бокс 56px с живой группировкой разрядов, «₽» прижата к
- * сумме с небольшим зазором и едет вместе с вводом (пустое поле —
- * одинокий серый «₽», заполненное — «56 000 ₽» тёмным); очистка —
- * круглая Cancel-иконка. Техника канонного AmountField: невидимый
- * измеритель задаёт ширину инпута по набранному тексту, «₽» — соседний
- * элемент (внутри value ей не место — уводит каретку и ломает
- * Backspace); «сырое» значение + syncAmountInputDom — паттерн поля
- * правки платежа (#467). */
+/** Компактное денежное поле (решение владельца 2026-09-05): бокс 56px
+ * без символа рубля — при вводе живая группировка разрядов «56 000»,
+ * пустое поле — серый плейсхолдер «0»; очистка — круглая Cancel-иконка
+ * справа. Паттерн поля правки платежа #467 (AmountBoxInput): «сырое»
+ * значение + groupedAmount + syncAmountInputDom. */
 export function MoneyField({
   title,
   required = false,
@@ -144,52 +140,32 @@ export function MoneyField({
   readonly ariaLabel: string;
 }): JSX.Element {
   const hasValue = raw.length > 0;
-  const grouped = groupedAmount(raw);
 
   return (
     <div className="flex w-full flex-col gap-2 font-sans">
       <FieldTitle title={title} required={required} />
       <div className="flex h-14 w-full items-center rounded-button bg-surface-muted pl-[18px] pr-2 transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]">
-        {/* обёртка инпута — ширины набранного текста (без flex-1): «₽»
-            прижимается к сумме, а не к правому краю бокса */}
-        <span className="relative inline-flex h-full items-center">
-          {/* измеритель: ширина инпута = ширине набранного текста (пустой
-              — незаметная «0», чтобы поле оставалось кликабельным) */}
-          <span aria-hidden className={cn('invisible whitespace-pre px-0.5 text-base leading-[18px]', hasValue ? 'text-content' : 'text-content-tertiary')}>
-            {grouped === '' ? '0' : grouped}
-          </span>
-          <input
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            spellCheck={false}
-            pattern="[0-9]*"
-            aria-label={ariaLabel}
-            value={grouped}
-            onChange={(event) => {
-              const sanitized = sanitizeAmountInput(event.target.value);
-              onRawChange(sanitized);
-              syncAmountInputDom(event.target, sanitized);
-            }}
-            className="absolute inset-0 h-full w-full bg-transparent text-base leading-[18px] text-content outline-none"
-          />
-        </span>
-        <span
-          aria-hidden
-          className={cn(
-            'ml-2 text-base leading-[18px]',
-            hasValue ? 'text-content' : 'text-content-tertiary',
-          )}
-        >
-          ₽
-        </span>
+        <input
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label={ariaLabel}
+          value={groupedAmount(raw)}
+          placeholder="0"
+          onChange={(event) => {
+            const sanitized = sanitizeAmountInput(event.target.value);
+            onRawChange(sanitized);
+            syncAmountInputDom(event.target, sanitized);
+          }}
+          className="h-full min-w-0 flex-1 border-none bg-transparent text-base leading-[18px] text-content outline-none placeholder:text-content-secondary"
+        />
         {hasValue && (
           <IconButton
             icon={<Cancel />}
             label={`Очистить «${title}»`}
             variant="secondary"
             onClick={onClear}
-            className="ml-1"
           />
         )}
       </div>
