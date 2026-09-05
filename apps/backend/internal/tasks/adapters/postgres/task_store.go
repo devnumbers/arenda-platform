@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -245,6 +246,51 @@ func (s *TaskStore) ListGlobalWithoutProperty(
 	)
 }
 
+// ListGlobalOfProperties returns one page of the listed properties' tasks
+// with the total count of the same filter (ticket #547): the merged feed's
+// SQL cut to property_id IN the list; the use case has already proven every
+// id's visibility, archived properties contribute nothing (решение 9).
+func (s *TaskStore) ListGlobalOfProperties(
+	ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID, q application.TasksListQuery,
+) (rows []application.GlobalTaskRow, total int, err error) {
+	ids := make([]string, len(propertyIDs))
+	for i, id := range propertyIDs {
+		ids[i] = id.String()
+	}
+	joined := strings.Join(ids, ",")
+	return listGlobalPage(s.db, actor, q,
+		func(queries *postgres.Queries) (int64, error) {
+			return queries.CountTasksGlobalOfProperties(ctx, postgres.CountTasksGlobalOfPropertiesParams{
+				OwnerID:     pgconv.UUIDToPgtype(actor),
+				Column2:     q.Completed,
+				PropertyIds: joined,
+			})
+		},
+		func(queries *postgres.Queries, page postgres.ListActiveTasksGlobalParams) ([]postgres.ListActiveTasksGlobalOfPropertiesRow, error) {
+			return queries.ListActiveTasksGlobalOfProperties(
+				ctx, postgres.ListActiveTasksGlobalOfPropertiesParams{
+					OwnerID:     page.OwnerID,
+					Limit:       page.Limit,
+					Offset:      page.Offset,
+					PropertyIds: joined,
+				})
+		},
+		func(queries *postgres.Queries, page postgres.ListCompletedTasksGlobalParams) (
+			[]postgres.ListCompletedTasksGlobalOfPropertiesRow, error,
+		) {
+			return queries.ListCompletedTasksGlobalOfProperties(
+				ctx, postgres.ListCompletedTasksGlobalOfPropertiesParams{
+					OwnerID:     page.OwnerID,
+					Limit:       page.Limit,
+					Offset:      page.Offset,
+					PropertyIds: joined,
+				})
+		},
+		ofPropertiesRowFields,
+		ofPropertiesCompletedRowFields,
+	)
+}
+
 // listGlobalPage runs the global listings' shared shape: the bucket's total
 // count, then one page of the requested bucket, mapped onto the application
 // rows. The two cut queries differ only in their sqlc calls and the row
@@ -314,6 +360,22 @@ func globalRowFields(row postgres.ListActiveTasksGlobalRow) (fields taskFields, 
 // globalCompletedRowFields is globalRowFields for the completed journal's
 // row type — the shapes are column-identical.
 func globalCompletedRowFields(row postgres.ListCompletedTasksGlobalRow) (fields taskFields, propertyName string) {
+	return globalRowFields(postgres.ListActiveTasksGlobalRow(row))
+}
+
+// ofPropertiesRowFields reads the listed-properties cut's row shape —
+// column-identical to the merged feed's (ticket #547).
+func ofPropertiesRowFields(
+	row postgres.ListActiveTasksGlobalOfPropertiesRow,
+) (fields taskFields, propertyName string) {
+	return globalRowFields(postgres.ListActiveTasksGlobalRow(row))
+}
+
+// ofPropertiesCompletedRowFields is ofPropertiesRowFields for the completed
+// journal's row type.
+func ofPropertiesCompletedRowFields(
+	row postgres.ListCompletedTasksGlobalOfPropertiesRow,
+) (fields taskFields, propertyName string) {
 	return globalRowFields(postgres.ListActiveTasksGlobalRow(row))
 }
 

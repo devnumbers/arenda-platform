@@ -80,6 +80,7 @@ type globalTaskStoreDouble struct {
 	TaskStore
 	listGlobal                func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
 	listGlobalWithoutProperty func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
+	listGlobalOfProperties    func(ctx context.Context, actor uuid.UUID, ids []uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
 	listByProperty            func(ctx context.Context, scope, propertyID uuid.UUID, q TasksListQuery) ([]domain.Task, int, error)
 }
 
@@ -99,6 +100,15 @@ func (s *globalTaskStoreDouble) ListGlobalWithoutProperty(
 		return nil, 0, errors.New("unexpected ListGlobalWithoutProperty call")
 	}
 	return s.listGlobalWithoutProperty(ctx, actor, q)
+}
+
+func (s *globalTaskStoreDouble) ListGlobalOfProperties(
+	ctx context.Context, actor uuid.UUID, ids []uuid.UUID, q TasksListQuery,
+) ([]GlobalTaskRow, int, error) {
+	if s.listGlobalOfProperties == nil {
+		return nil, 0, errors.New("unexpected ListGlobalOfProperties call")
+	}
+	return s.listGlobalOfProperties(ctx, actor, ids, q)
 }
 
 func (s *globalTaskStoreDouble) ListByProperty(
@@ -185,7 +195,7 @@ func TestPrepareGlobalTasksQuery(t *testing.T) {
 		prop := uuid.Must(uuid.NewV7())
 		q := GlobalTasksListQuery{
 			TasksListQuery:  TasksListQuery{Limit: 10},
-			PropertyID:      &prop,
+			PropertyIDs:     []uuid.UUID{prop},
 			WithoutProperty: true,
 		}
 		assert.ErrorIs(t, PrepareGlobalTasksQuery(&q), ErrInvalidInput)
@@ -298,7 +308,9 @@ func TestListGlobalTasks_PropertyBranch(t *testing.T) {
 	properties := &globalPropertyStoreDouble{ref: PropertyRef{OwnerID: globalOther, Name: "Дача"}}
 	svc := newGlobalTaskService(store, properties, clock, globalPolicyDouble{role: sharedpolicy.RoleFullAccess})
 
-	page, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{PropertyID: &globalProperty})
+	page, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{
+		PropertyIDs: []uuid.UUID{globalProperty},
+	})
 	require.NoError(t, err)
 
 	require.Len(t, page.Items, 1)
@@ -322,7 +334,9 @@ func TestListGlobalTasks_PropertyBranchPrivacy(t *testing.T) {
 		globalPolicyDouble{role: sharedpolicy.RoleNone},
 	)
 
-	_, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{PropertyID: &globalProperty})
+	_, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{
+		PropertyIDs: []uuid.UUID{globalProperty},
+	})
 	require.ErrorIs(t, err, ErrNotFound, "a stranger gets the privacy 404")
 	assert.False(t, listed, "the store is never touched without the view capability")
 }
@@ -341,7 +355,7 @@ func TestListGlobalTasks_BothFiltersRejected(t *testing.T) {
 	prop := globalProperty
 	_, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{
 		TasksListQuery:  TasksListQuery{Limit: 10},
-		PropertyID:      &prop,
+		PropertyIDs:     []uuid.UUID{prop},
 		WithoutProperty: true,
 	})
 	assert.ErrorIs(t, err, ErrInvalidInput)
@@ -361,4 +375,64 @@ func TestListGlobalTasks_StoreErrorPasses(t *testing.T) {
 
 	_, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{})
 	assert.ErrorContains(t, err, "boom")
+}
+
+func TestListGlobalTasks_OfPropertiesBranch(t *testing.T) {
+	t.Parallel()
+
+	secondProperty := uuid.Must(uuid.NewV7())
+	due := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	var listedIDs []uuid.UUID
+	store := &globalTaskStoreDouble{
+		listGlobalOfProperties: func(_ context.Context, actor uuid.UUID, ids []uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error) {
+			assert.Equal(t, globalActor, actor)
+			assert.False(t, q.Completed)
+			listedIDs = ids
+			return []GlobalTaskRow{
+				globalRow(globalActor, &globalProperty, &due, "Квартира"),
+				globalRow(globalOther, &secondProperty, &due, "Дача"),
+			}, 2, nil
+		},
+	}
+	clock := &globalClockDouble{moments: map[uuid.UUID]OwnerMoment{
+		globalActor: actorMoment,
+		globalOther: otherMoment,
+	}}
+	svc := newGlobalTaskService(store, &globalPropertyStoreDouble{}, clock, globalPolicyDouble{role: sharedpolicy.RoleOwner})
+
+	page, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{
+		PropertyIDs: []uuid.UUID{globalProperty, secondProperty},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []uuid.UUID{globalProperty, secondProperty}, listedIDs, "the store gets the picker's list")
+	require.Len(t, page.Items, 2)
+	assert.Equal(t, domain.ViewActive, page.Items[0].Status)
+	assert.Equal(t, "Квартира", page.Items[0].PropertyName, "each row carries its own property's name")
+	assert.Equal(t, domain.ViewOverdue, page.Items[1].Status)
+	assert.Equal(t, "Дача", page.Items[1].PropertyName)
+	assert.Equal(t, actorMoment.Today, page.Today, "today is the reader's calendar date on the multi branch")
+	assert.Equal(t, []uuid.UUID{globalActor, globalOther}, clock.calls, "one moment per distinct data owner")
+}
+
+func TestListGlobalTasks_OfPropertiesPrivacy(t *testing.T) {
+	t.Parallel()
+
+	var listed bool
+	store := &globalTaskStoreDouble{
+		listGlobalOfProperties: func(context.Context, uuid.UUID, []uuid.UUID, TasksListQuery) ([]GlobalTaskRow, int, error) {
+			listed = true
+			return nil, 0, nil
+		},
+	}
+	svc := newGlobalTaskService(
+		store, &globalPropertyStoreDouble{}, &globalClockDouble{},
+		globalPolicyDouble{role: sharedpolicy.RoleNone},
+	)
+
+	_, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{
+		PropertyIDs: []uuid.UUID{globalProperty, uuid.Must(uuid.NewV7())},
+	})
+	require.ErrorIs(t, err, ErrNotFound, "one invisible id is the privacy 404 of the whole request")
+	assert.False(t, listed, "the store is never touched without the view capability")
 }

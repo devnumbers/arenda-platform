@@ -129,6 +129,15 @@ type TaskStore interface {
 	// filter. The same row contract as ListGlobal; PropertyName is always
 	// empty there.
 	ListGlobalWithoutProperty(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
+	// ListGlobalOfProperties returns one page of the listed properties'
+	// tasks in the merged-feed visibility (ticket #547): the SQL cuts the
+	// feed to t.property_id in the list; archived properties contribute
+	// nothing (ADR 0025/решение 9). The same row contract as ListGlobal;
+	// the use case has already proven every listed property's visibility
+	// (the privacy 404 lives there).
+	ListGlobalOfProperties(
+		ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID, q TasksListQuery,
+	) ([]GlobalTaskRow, int, error)
 	// Complete stamps the completion fact (completed_date = day) on the
 	// still-active task; rows affected = 0 surfaces as ErrAlreadyCompleted.
 	Complete(ctx context.Context, id, scope uuid.UUID, day time.Time) error
@@ -208,20 +217,21 @@ type GlobalTaskRow struct {
 
 // GlobalTasksListQuery is the global listing request (ticket #521): the
 // TasksListQuery pagination and bucket fields plus the property filter —
-// exactly one of PropertyID (the tasks of one property, resolved through its
-// view gate) or WithoutProperty (the property-less slice of the actor's own
-// book); both set is ErrInvalidInput. Neither set lists the actor's visible
-// merged feed.
+// either PropertyIDs (one id — the tasks of that one property resolved
+// through its view gate, ticket #521; several — the picker's multi-select
+// over the merged feed, ticket #547) or WithoutProperty (the property-less
+// slice of the actor's own book); both set is ErrInvalidInput. Neither set
+// lists the actor's visible merged feed.
 type GlobalTasksListQuery struct {
 	TasksListQuery
-	PropertyID      *uuid.UUID
+	PropertyIDs     []uuid.UUID
 	WithoutProperty bool
 }
 
 // PrepareGlobalTasksQuery validates the global listing request in place: the
 // pagination rules of PrepareTasksQuery plus the one-filter-only rule.
 func PrepareGlobalTasksQuery(q *GlobalTasksListQuery) error {
-	if q.PropertyID != nil && q.WithoutProperty {
+	if len(q.PropertyIDs) > 0 && q.WithoutProperty {
 		return ErrInvalidInput
 	}
 	return PrepareTasksQuery(&q.TasksListQuery)

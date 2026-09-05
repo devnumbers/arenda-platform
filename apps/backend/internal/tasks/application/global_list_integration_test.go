@@ -194,7 +194,7 @@ func TestGlobalList_ParticipantPropertyFilter(t *testing.T) {
 	// The shared property reads through the real policy's view gate and
 	// labels every row.
 	propPage, err := participantH.tasks.ListGlobalTasks(participantH.ctx(), participantH.owner,
-		tasksapp.GlobalTasksListQuery{PropertyID: &ownerPropID})
+		tasksapp.GlobalTasksListQuery{PropertyIDs: []uuid.UUID{ownerPropID}})
 	if err != nil {
 		t.Fatalf("participant property-filtered list: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestGlobalList_SuspendedMemberLosesSharedVisibility(t *testing.T) {
 		t.Fatalf("suspended participant sees %d shared tasks, want none", len(page.Items))
 	}
 	_, err = participantH.tasks.ListGlobalTasks(participantH.ctx(), participant,
-		tasksapp.GlobalTasksListQuery{PropertyID: &h.propID})
+		tasksapp.GlobalTasksListQuery{PropertyIDs: []uuid.UUID{h.propID}})
 	if !errors.Is(err, tasksapp.ErrNotFound) {
 		t.Fatalf("suspended participant property branch = %v, want ErrNotFound", err)
 	}
@@ -271,7 +271,7 @@ func TestGlobalList_ForeignPropertyIsPrivacy404(t *testing.T) {
 	}
 
 	_, err := strangerH.tasks.ListGlobalTasks(strangerH.ctx(), stranger,
-		tasksapp.GlobalTasksListQuery{PropertyID: &h.propID})
+		tasksapp.GlobalTasksListQuery{PropertyIDs: []uuid.UUID{h.propID}})
 	if !errors.Is(err, tasksapp.ErrNotFound) {
 		t.Fatalf("foreign property branch = %v, want ErrNotFound", err)
 	}
@@ -523,4 +523,137 @@ func titlesOf(items []tasksapp.TaskListItem) []string {
 		out = append(out, item.Task.Title)
 	}
 	return out
+}
+
+// multiSelectScenario seeds the picker's multi-select fixture (ticket #547):
+// the owner with two bound rules (one per property) plus one property-less,
+// and a viewer-participant sharing the first property with their own bound
+// rule on their own property. Returns the owner's harness, the participant
+// re-scope, and both properties' ids.
+func multiSelectScenario(t *testing.T) (ownerH, participantH *tasksHarness, ownerPropID, secondPropID uuid.UUID) {
+	t.Helper()
+	h := newTasksHarnessWithRealPolicy(t).withOwner(taskMoscowTZ)
+
+	if _, err := h.rules.CreateRule(h.ctx(), h.owner, h.propID, h.createCmd()); err != nil {
+		t.Fatalf("create rule on the first property: %v", err)
+	}
+	secondPropID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new second property id: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO properties (id, owner_id, name, type, address, status)
+		 VALUES ($1, $2, 'Дача', 'house', 'Москва, Тверская 4', 'active')`,
+		secondPropID, h.owner,
+	); err != nil {
+		t.Fatalf("seed second property: %v", err)
+	}
+	if _, err := h.rules.CreateRule(h.ctx(), h.owner, secondPropID, h.createCmd()); err != nil {
+		t.Fatalf("create rule on the second property: %v", err)
+	}
+	if _, err := h.rules.CreateRuleWithoutProperty(h.ctx(), h.owner, withoutPropertyCreateCmd()); err != nil {
+		t.Fatalf("create property-less rule: %v", err)
+	}
+
+	participant, participantProp := h.seedSecondOwner(t, taskMoscowTZ, "Участник")
+	h.seedMembership(t, h.propID, participant)
+	participantH2 := *h
+	participantH2.owner = participant
+	participantH2.propID = participantProp
+	if _, err := participantH2.rules.CreateRule(participantH2.ctx(), participant, participantProp, participantH2.createCmd()); err != nil {
+		t.Fatalf("create participant bound rule: %v", err)
+	}
+	return h, &participantH2, h.propID, secondPropID
+}
+
+func TestGlobalList_OfPropertiesSelectsBothAndSkipsPropertyLess(t *testing.T) {
+	t.Parallel()
+	ownerH, participantH, ownerPropID, secondPropID := multiSelectScenario(t)
+
+	// The owner picks both of their properties: bound tasks of both arrive
+	// with their own labels; the property-less rule stays out of the slice.
+	page, err := ownerH.tasks.ListGlobalTasks(ownerH.ctx(), ownerH.owner, tasksapp.GlobalTasksListQuery{
+		PropertyIDs: []uuid.UUID{ownerPropID, secondPropID},
+	})
+	if err != nil {
+		t.Fatalf("owner multi-property list: %v", err)
+	}
+	if page.Total != 4 || len(page.Items) != 4 {
+		t.Fatalf("multi-property feed = %d items / total %d, want 4/4 (createCmd seeds 2 tasks per rule)", len(page.Items), page.Total)
+	}
+	for _, item := range page.Items {
+		if item.Task.PropertyID == nil {
+			t.Fatalf("property-less task leaked into the multi-property slice: %+v", item.Task)
+		}
+		if item.PropertyName != "Квартира" && item.PropertyName != "Дача" {
+			t.Fatalf("row label = %q, want the row's own property name", item.PropertyName)
+		}
+	}
+
+	// The participant picks the shared property plus their own: the merged
+	// page spans both books, today is the reader's.
+	page, err = participantH.tasks.ListGlobalTasks(participantH.ctx(), participantH.owner, tasksapp.GlobalTasksListQuery{
+		PropertyIDs: []uuid.UUID{ownerPropID, participantH.propID},
+	})
+	if err != nil {
+		t.Fatalf("participant multi-property list: %v", err)
+	}
+	if page.Total != 4 {
+		t.Fatalf("participant multi-property total = %d, want 4 (2 shared + 2 own)", page.Total)
+	}
+	seenForeign := false
+	for _, item := range page.Items {
+		if item.Task.OwnerID != participantH.owner {
+			seenForeign = true
+		}
+	}
+	if !seenForeign {
+		t.Fatal("the participant's own book is missing from the multi-property page")
+	}
+}
+
+func TestGlobalList_OfPropertiesOneInvisibleIsPrivacy404(t *testing.T) {
+	t.Parallel()
+	_, strangerH0, _, ownerPropID := multiSelectScenario(t)
+
+	h := strangerH0
+	stranger, strangerProp := h.seedSecondOwner(t, taskMoscowTZ, "Чужак")
+	strangerH := *h
+	strangerH.owner = stranger
+	strangerH.propID = strangerProp
+
+	// The stranger's own property is visible to them; the owner's is not —
+	// the whole request is the privacy 404, the valid id is not answered.
+	_, err := strangerH.tasks.ListGlobalTasks(strangerH.ctx(), stranger, tasksapp.GlobalTasksListQuery{
+		PropertyIDs: []uuid.UUID{strangerProp, ownerPropID},
+	})
+	if !errors.Is(err, tasksapp.ErrNotFound) {
+		t.Fatalf("mixed-visibility list = %v, want ErrNotFound", err)
+	}
+}
+
+func TestGlobalList_OfPropertiesSkipsArchived(t *testing.T) {
+	t.Parallel()
+	ownerH, _, ownerPropID, secondPropID := multiSelectScenario(t)
+
+	if _, err := ownerH.pool.Exec(ownerH.ctx(),
+		`UPDATE properties SET status = 'archived' WHERE id = $1`, secondPropID,
+	); err != nil {
+		t.Fatalf("archive second property: %v", err)
+	}
+
+	page, err := ownerH.tasks.ListGlobalTasks(ownerH.ctx(), ownerH.owner, tasksapp.GlobalTasksListQuery{
+		PropertyIDs: []uuid.UUID{ownerPropID, secondPropID},
+	})
+	if err != nil {
+		t.Fatalf("archived multi-property list: %v", err)
+	}
+	for _, item := range page.Items {
+		if item.Task.PropertyID != nil && *item.Task.PropertyID == secondPropID {
+			t.Fatalf("archived property's task leaked: %+v", item.Task)
+		}
+	}
+	if page.Total != 2 {
+		t.Fatalf("total = %d, want 2 (the active property's tasks only)", page.Total)
+	}
 }

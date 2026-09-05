@@ -82,6 +82,12 @@ type Querier interface {
 	// archived properties are not in the global feed (карта #518 решение 9,
 	// тикет #522): non-archived properties plus the property-less cut.
 	CountTasksGlobal(ctx context.Context, arg CountTasksGlobalParams) (int64, error)
+	// The listed-properties cut of the global listing (ticket #547): the merged
+	// feed restricted to the picker's selection — the visibility predicate is
+	// the feed's, the list arrives comma-separated (uuids hold no commas).
+	// Archived properties contribute nothing (карта #518, решение 9); the
+	// property-less slice is not reachable through this filter.
+	CountTasksGlobalOfProperties(ctx context.Context, arg CountTasksGlobalOfPropertiesParams) (int64, error)
 	// The property-less cut of the global listing (ADR 0052: the actor's own
 	// book only). No property join — the label is always absent there.
 	CountTasksGlobalWithoutProperty(ctx context.Context, arg CountTasksGlobalWithoutPropertyParams) (int64, error)
@@ -405,6 +411,9 @@ type Querier interface {
 	// Archived properties are out of the feed (карта #518 решение 9): the
 	// sections stay contiguous for the client's pagination and bucketing.
 	ListActiveTasksGlobal(ctx context.Context, arg ListActiveTasksGlobalParams) ([]ListActiveTasksGlobalRow, error)
+	// The active tasks of the listed properties, the merged feed's visibility
+	// and due order (ticket #547).
+	ListActiveTasksGlobalOfProperties(ctx context.Context, arg ListActiveTasksGlobalOfPropertiesParams) ([]ListActiveTasksGlobalOfPropertiesRow, error)
 	// The active property-less tasks of the actor's book, the same due order as
 	// the property listings (ticket #521).
 	ListActiveTasksGlobalWithoutProperty(ctx context.Context, arg ListActiveTasksGlobalWithoutPropertyParams) ([]ListActiveTasksGlobalWithoutPropertyRow, error)
@@ -417,6 +426,9 @@ type Querier interface {
 	// The completed journal of the actor's visible merged feed, newest
 	// completions first (ticket #521); archived properties are out (решение 9).
 	ListCompletedTasksGlobal(ctx context.Context, arg ListCompletedTasksGlobalParams) ([]ListCompletedTasksGlobalRow, error)
+	// The completed journal of the listed properties, newest completions first
+	// (ticket #547).
+	ListCompletedTasksGlobalOfProperties(ctx context.Context, arg ListCompletedTasksGlobalOfPropertiesParams) ([]ListCompletedTasksGlobalOfPropertiesRow, error)
 	// The completed journal of the actor's property-less tasks, newest
 	// completions first (ticket #521).
 	ListCompletedTasksGlobalWithoutProperty(ctx context.Context, arg ListCompletedTasksGlobalWithoutPropertyParams) ([]ListCompletedTasksGlobalWithoutPropertyRow, error)

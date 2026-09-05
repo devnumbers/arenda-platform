@@ -132,6 +132,76 @@ WHERE (
 ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
 LIMIT $2 OFFSET $3;
 
+-- The listed-properties cut of the global listing (ticket #547): the merged
+-- feed restricted to the picker's selection — the visibility predicate is
+-- the feed's, the list arrives comma-separated (uuids hold no commas).
+-- Archived properties contribute nothing (карта #518, решение 9); the
+-- property-less slice is not reachable through this filter.
+
+-- name: CountTasksGlobalOfProperties :one
+SELECT count(*) FROM tasks t
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+  AND p.status != 'archived'
+  AND (t.completed_date IS NOT NULL) = $2::boolean;
+
+-- name: ListActiveTasksGlobalOfProperties :many
+-- The active tasks of the listed properties, the merged feed's visibility
+-- and due order (ticket #547).
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat,
+       p.name AS property_name
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+  AND p.status != 'archived'
+  AND t.completed_date IS NULL
+ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
+LIMIT $2 OFFSET $3;
+
+-- name: ListCompletedTasksGlobalOfProperties :many
+-- The completed journal of the listed properties, newest completions first
+-- (ticket #547).
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat,
+       p.name AS property_name
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+  AND p.status != 'archived'
+  AND t.completed_date IS NOT NULL
+ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
+LIMIT $2 OFFSET $3;
+
 -- The property-less cut of the global listing (ADR 0052: the actor's own
 -- book only). No property join — the label is always absent there.
 

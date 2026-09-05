@@ -2822,8 +2822,8 @@ type ListPropertyTasksParams struct {
 
 // ListTasksParams defines parameters for ListTasks.
 type ListTasksParams struct {
-	// PropertyId Filter by one bound property; resolved through the property's view gate (ADR 0028). Combining it with withoutProperty is a 400.
-	PropertyId *openapi_types.UUID `form:"propertyId,omitempty" json:"propertyId,omitempty"`
+	// PropertyId Filter by bound properties — a comma-separated list of one or more property UUIDs (the picker's multi-select, ticket #547). A single id keeps the one-property slice of ticket #521: resolved through the property's view gate (a stranger gets the privacy 404), today is the data owner's. Several ids select the tasks of those properties in one merged page — every listed id must be visible to the reader (one invisible id is a privacy 404 of the whole request), today is the reader's, and archived properties contribute nothing (карта #518, решение 9). Combining it with withoutProperty is a 400; a malformed UUID in the list is a 400.
+	PropertyId *string `form:"propertyId,omitempty" json:"propertyId,omitempty"`
 
 	// WithoutProperty The property-less slice of the actor's own book («без объекта», ADR 0052). Combining it with propertyId is a 400.
 	WithoutProperty *bool `form:"withoutProperty,omitempty" json:"withoutProperty,omitempty"`
@@ -8256,7 +8256,7 @@ func (siw *ServerInterfaceWrapper) ListTasks(w http.ResponseWriter, r *http.Requ
 
 	// ------------- Optional query parameter "propertyId" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "propertyId", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "propertyId", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
@@ -9342,27 +9342,30 @@ var swaggerSpec = []string{
 	"0bwGAC0nsk16JnuR7NAIu1VqHjIfSIqBQgDOu3nKw4U2RCUxQ/7m0oXzy6vkV9z0ZWIIzcMJXEtLzBfE",
 	"XfjrLRoYqc5pss/x0nLAVI+FpMtYuOHikeSBcHNDZLllAXBf6odfiZjWLsLVNfDEl6qSTziGZQ1JQAXm",
 	"MbmNXPjZpmv/z0XPdbh2eUqauVguu6osNqI8Pczl4sCyeakK+nyfhcXJfT9EF3IBQ9q1CylWqt7Pm5KW",
-	"5gsSgxe8S+l36aPRZ6OH6SPyN5fO/6xNRp+lT0a/8zdh5B23qrHT0C43kEjBiI54wDZIfkmbR5zlMKT4",
-	"rn+pbc9SRna5pq9k0sOoX4BpDyLkKNFGWfte5c0wY8X3aTAkF9cvLm+CCieTLHUym7W8V1idP0ePMBYr",
-	"OlLuOZAfyGxfFsKDxCQQsszuunziVYJh0tywwTldSHDLblYhfE4b2EVlxtlAYlsS6rE0pj1GBnRIdEwF",
-	"vq6Xx3LXLBlB5Ldbdyl9ze/Xvg84S9XwUDltGEhYWrUsx/RcDUlHURH0HTp0I3ueKmTKrrQzzAP7xg8h",
-	"Twh1s61YHsB7iUw0JHp0Cv3P7JtES2U0gfa1XAALwZtst1ZMAlyBB0vpD+kLlzGaPiGjB+mL9FvI0nme",
-	"Ph19SdYIvvA8fZR+mz52v/9rm0R8j1Utc3mV3GA01I52LW+qCmFAuVGZiFXmiFjG2gLIIj8yFj/l5iQJ",
-	"jOW5FajBs5nlVXJZDjpcWKzgBs2YcUJw0Rfr9emrpYCKIyYLz0FuZOnlV+nXmOb7Iv169J/TJ+l3lvm8",
-	"fNYmXiRUbrGAiLN3NwaPuVN0X/eE6LPc5tcmt3kzw+zr9mh4UQMpZrxyHUd0SOwJZSzeq1ryAHWAJIrG",
-	"+XaBJt/MxOVxDbBAeA48TupBElD61Eo95PStXKFtlqMMfEDKvZUDkEkHXIynJpeTX8lSptq+9fbyxrTc",
-	"Zr+LcmIzJD7d4SG5epNcv/Xhh8suERLSqHzaM6GBkloXtF1gtJ43ICaBMC301y7gBiR4Z+r4cillFPjC",
-	"Kc+YhtVVqL7n/GG41bm8BC9ILy0XUln7VLFwxcjqzy3QoSiM09HOAYR1oSqBPWyu8fEKts0vCuzr0qVW",
-	"WQUL76x0OSkDRJqQKzJumgH+qwkRd/JJ2iebQe1pJCfBmpzqxrnTUxSXGmvVUXEhGNaRy4Si4443S1HM",
-	"WISRXu0jlCgJkbbtfIzJohUZmoLBhi8d9CWYoJh0S+w8Ti8/NengCIFpFZTmShhfQJ54FQmdpXLnqdxk",
-	"qax0Q+LtqYrpm5FLfTDpS1oq4pIn1uUJvnFcidOLTID+CKQNenFy02lmTvMk1s++FXgds5BPIKeYVnjx",
-	"CvnFxSzisTzSqqPbIBR0Ot4TjstDCr0IogRdQN6tCCx66LSWHLXt21WOslWyhYtybk1ZpAduhYLXncF2",
-	"sChLTR9FA8hE7wwZ8LtV6FVIiT41uPWq0hnrOebps6AkDUvccsyWKSpFwDUhPzmznWpzpHe8grG9tXP5",
-	"faLZgArDA+jjXLKVEMvkKUupfn1ypWvVqpk51K+STM+ynl9V1vNrkcM8xX9VVNIWmca8kOzlam1t0zPg",
-	"uUTzrFTow5D3WfLy60pJNanIVbppJQW92enHi6a7ci7zT5XyTir7+DXNJa6nxQPW6Uu5p32IGBQKgGjU",
-	"+/XRfe9TEUY+tu9XOELTLHqMdJ2GbMeotdEw5PYRjbYL3RJxwkN0PFxf2OTtlmF3zVocUT42yjg0JvDf",
-	"wd+ecMC0tjZLFqTUkSGwEw/3FR2zgHd5YAdCdLP0geeVqKi10eobE2+srUUyoFFfarPxs/Wfrbfu377/",
-	"/wcAAP//",
+	"5gsSgxe8S+l36aPRZ6OH6SPyN5fO/6xNRp+lT0a/8zdh5B23qrHT0C43kEjBiI54wDZIfkmbR5wVYWhR",
+	"u7y6Jfs1D12zSUjlEmwlmwrGJZoNqDA80G2iLUBplA0fW9Sx0IRyfSu4pAJGXfz7ZZ/M4CbnocUhGVkw",
+	"mb6SSQ+jjeEsexCZB2sSHqN46HEtVnyfBkNycf2i3xHm8DgTbXkTdEqZZLmc+TpLwMdtuSE8Bls07Ui5",
+	"53DgQGaAtkc+SEwCMdTsrktwXiUYt80NG5zThYy77KoX4vm0ge1VpsANJPZJoZ5sYtpjZECHRMdU4Ot6",
+	"eSyZztI1hKK7dZfy6fx+7ftARFQND5Vkh5GNpVVLUYhZXOEh6Sgqgr5Dz25EDXaktQvtDPNAw/EzyBNU",
+	"3WQrlifxXiITDYknnUI/Nvsm0VIZTaCdLhfA0vBm3S0VkxJX4MFS+kP6wmWwpk/I6EH6Iv0Wsoaep09H",
+	"X5I1gi88Tx+l36aP3e//2iYR32NVy1xeJTcYDbXjJRazq0IqUI5VJoaVOTSW1bYAQiZXIEYM6wjkYEBX",
+	"NLOjWCyCAm+yC3QuFRlIVVjjrVtX33Vn1YAUV8mWDzmdRfOWOHKxsDFJs2MJgQXypUQbRUWPqbyHboF0",
+	"l9v1yaGr5KZjMDzMGNwYG5O6JAy4AMgUCcjCcZzn+GhXz1VcbI4lJqaqWQ6dzXDak6Rpt4E5WlXSwGK6",
+	"4p3EgBDpWzpuJAAuy0GHC/s6N2g4j3M6F++zbqXggEbWTmAh4IcXVYBI/rX6vOpSpE+uXTXKWp+DzZKl",
+	"l1+lX2O++Yv069F/Tp+k31kgvHzWJl43qdx5QcrN3s0YmObOFX/dM/PPkuxfmyT7zQyzr9uj4UVVuJh6",
+	"zXUc0SGxJ5SJdq/zywNURpMo8vK6gibfzAz6cVOkQHgOPE7bgWy09KnVdlDEt3LLqlmyPPABKfdWDkAZ",
+	"ObBCqJwjX87CJkuZMH3r7eWNaUn2fhflDHvIwLvDQ3L1Jrl+68MPl11GLuTz+fx7QgMltS6YXcBoPW9A",
+	"TAItqtDovYAbUGkgswuXS7nLwBdOeeo+rK5C6p7zh+FW5xJkvOF4abmQU92nioUrRlZ/boEO1Ymcbn4O",
+	"IKwL5THsYXONj1d0IGOWG6jLq+S6dDl+VunBy1Ndzg4CkSbkioybliL41YSIO/lqASebyu9pJCfBmuT+",
+	"xkn8UxSXGreJo+JCVLYjlwlFxx1vliubsQgjvVpNKFESQr7b+RiTCnKGpuA5wJcO+hJ8IZj9Tew8ziA7",
+	"NXUJEALTSnnNVblgAQULqkjorKZAXlOALJWVbsgAP1XBpTOS+g8mnZpLRVzyxLo8wTeOK4N/kZn4H4G0",
+	"QXdibjrNTK6fxPrZ11OvYzr8CSS30wp3ciHRvZjOPpbQXHV0G4SCTsd7wnF5qOUggihB15/3bwOLHjqt",
+	"JUdt+3aV62WVbOGinH9dFumB64IHBGwHi7LU9FE0gEz0XrABv1uFXoXc/FODW68qr7aeY54+C0rSsMQt",
+	"x2yZolIEXBMS5TPbqTZZf8crGNtbO5ffz68RCC3fiDgsk6cst//1SdqvVatmJvO/SjI9S79/Ven3r0Uy",
+	"/RT/VVFJW2Q+/ULS6Ku1tU3PgOcSzbNy8g9D3mdZ9K8rJdXkxFfpppUU9GbnwS+a7spJ9T9VyjupNPjX",
+	"NKm9nhYPWKcv5Z72sYpQsQLCou/Xh5m+T0UY+SDTX+EITcs5YMj1NGQ7Rq2NhiG3j2i0XWjbiRMeovXm",
+	"+sImb7cMu2vW4ojysVHGoTGB/w7+9oQDprW1WbJouY4MgZ14uK/omAW8ywM7EKKbpQ88r0RFrY1W35h4",
+	"Y20tkgGN+lKbjZ+t/2y9df/2/f8/AAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -502,6 +502,7 @@ func TestTaskHandlers_ListTasks_FoldsParamsAndProjectsName(t *testing.T) {
 	h := NewTaskHandlers(svc, nil)
 
 	propertyID := uuid.Must(uuid.NewV7())
+	propertyIDParam := propertyID.String()
 	completed := true
 	limit := openapi.TasksLimit(10)
 	offset := openapi.TasksOffset(5)
@@ -511,7 +512,7 @@ func TestTaskHandlers_ListTasks_FoldsParamsAndProjectsName(t *testing.T) {
 	)
 	w := httptest.NewRecorder()
 	h.ListTasks(w, req, openapi.ListTasksParams{
-		PropertyId: &propertyID,
+		PropertyId: &propertyIDParam,
 		Completed:  &completed,
 		Limit:      &limit,
 		Offset:     &offset,
@@ -523,8 +524,8 @@ func TestTaskHandlers_ListTasks_FoldsParamsAndProjectsName(t *testing.T) {
 	if gotActor != actor {
 		t.Fatalf("actor = %s, want %s", gotActor, actor)
 	}
-	if gotQ.PropertyID == nil || *gotQ.PropertyID != propertyID {
-		t.Fatalf("property filter = %v", gotQ.PropertyID)
+	if len(gotQ.PropertyIDs) != 1 || gotQ.PropertyIDs[0] != propertyID {
+		t.Fatalf("property filter = %v", gotQ.PropertyIDs)
 	}
 	if gotQ.WithoutProperty {
 		t.Fatalf("withoutProperty leaked: %+v", gotQ)
@@ -568,8 +569,60 @@ func TestTaskHandlers_ListTasks_FoldsWithoutProperty(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
-	if !gotQ.WithoutProperty || gotQ.PropertyID != nil {
+	if !gotQ.WithoutProperty || len(gotQ.PropertyIDs) != 0 {
 		t.Fatalf("query = %+v", gotQ)
+	}
+}
+
+func TestTaskHandlers_ListTasks_MultiPropertyIDs(t *testing.T) {
+	t.Parallel()
+
+	first := uuid.Must(uuid.NewV7())
+	second := uuid.Must(uuid.NewV7())
+	var gotQ application.GlobalTasksListQuery
+	svc := &fakeTasksManager{
+		listGlobal: func(_ context.Context, _ uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error) {
+			gotQ = q
+			return application.TasksPage{Items: []application.TaskListItem{}, Total: 0, Today: time.Time{}}, nil
+		},
+	}
+	h := NewTaskHandlers(svc, nil)
+
+	list := first.String() + ", " + second.String() + ","
+	req := userRequest(t, http.MethodGet, "/tasks", "")
+	w := httptest.NewRecorder()
+	h.ListTasks(w, req, openapi.ListTasksParams{PropertyId: &list})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if len(gotQ.PropertyIDs) != 2 || gotQ.PropertyIDs[0] != first || gotQ.PropertyIDs[1] != second {
+		t.Fatalf("property filter = %v, want both ids", gotQ.PropertyIDs)
+	}
+}
+
+func TestTaskHandlers_ListTasks_MalformedPropertyID400(t *testing.T) {
+	t.Parallel()
+
+	var listed bool
+	svc := &fakeTasksManager{
+		listGlobal: func(context.Context, uuid.UUID, application.GlobalTasksListQuery) (application.TasksPage, error) {
+			listed = true
+			return application.TasksPage{}, nil
+		},
+	}
+	h := NewTaskHandlers(svc, nil)
+
+	garbage := "квартира"
+	req := userRequest(t, http.MethodGet, "/tasks", "")
+	w := httptest.NewRecorder()
+	h.ListTasks(w, req, openapi.ListTasksParams{PropertyId: &garbage})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	if listed {
+		t.Fatal("the use case must not be reached with a malformed uuid")
 	}
 }
 

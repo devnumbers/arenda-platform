@@ -99,6 +99,42 @@ func (q *Queries) CountTasksGlobal(ctx context.Context, arg CountTasksGlobalPara
 	return count, err
 }
 
+const countTasksGlobalOfProperties = `-- name: CountTasksGlobalOfProperties :one
+
+SELECT count(*) FROM tasks t
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND t.property_id = ANY(string_to_array($3::text, ',')::uuid[])
+  AND p.status != 'archived'
+  AND (t.completed_date IS NOT NULL) = $2::boolean
+`
+
+type CountTasksGlobalOfPropertiesParams struct {
+	OwnerID     pgtype.UUID `json:"owner_id"`
+	Column2     bool        `json:"column_2"`
+	PropertyIds string      `json:"property_ids"`
+}
+
+// The listed-properties cut of the global listing (ticket #547): the merged
+// feed restricted to the picker's selection — the visibility predicate is
+// the feed's, the list arrives comma-separated (uuids hold no commas).
+// Archived properties contribute nothing (карта #518, решение 9); the
+// property-less slice is not reachable through this filter.
+func (q *Queries) CountTasksGlobalOfProperties(ctx context.Context, arg CountTasksGlobalOfPropertiesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countTasksGlobalOfProperties, arg.OwnerID, arg.Column2, arg.PropertyIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTasksGlobalWithoutProperty = `-- name: CountTasksGlobalWithoutProperty :one
 
 SELECT count(*) FROM tasks
@@ -433,6 +469,93 @@ func (q *Queries) ListActiveTasksGlobal(ctx context.Context, arg ListActiveTasks
 	return items, nil
 }
 
+const listActiveTasksGlobalOfProperties = `-- name: ListActiveTasksGlobalOfProperties :many
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat,
+       p.name AS property_name
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND t.property_id = ANY(string_to_array($4::text, ',')::uuid[])
+  AND p.status != 'archived'
+  AND t.completed_date IS NULL
+ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
+LIMIT $2 OFFSET $3
+`
+
+type ListActiveTasksGlobalOfPropertiesParams struct {
+	OwnerID     pgtype.UUID `json:"owner_id"`
+	Limit       int32       `json:"limit"`
+	Offset      int32       `json:"offset"`
+	PropertyIds string      `json:"property_ids"`
+}
+
+type ListActiveTasksGlobalOfPropertiesRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+	PropertyName  pgtype.Text        `json:"property_name"`
+}
+
+// The active tasks of the listed properties, the merged feed's visibility
+// and due order (ticket #547).
+func (q *Queries) ListActiveTasksGlobalOfProperties(ctx context.Context, arg ListActiveTasksGlobalOfPropertiesParams) ([]ListActiveTasksGlobalOfPropertiesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveTasksGlobalOfProperties,
+		arg.OwnerID,
+		arg.Limit,
+		arg.Offset,
+		arg.PropertyIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveTasksGlobalOfPropertiesRow{}
+	for rows.Next() {
+		var i ListActiveTasksGlobalOfPropertiesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.RuleID,
+			&i.DueDate,
+			&i.DueTime,
+			&i.Title,
+			&i.Comment,
+			&i.CompletedDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuleRepeat,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveTasksGlobalWithoutProperty = `-- name: ListActiveTasksGlobalWithoutProperty :many
 SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
        r.repeat AS rule_repeat
@@ -625,6 +748,93 @@ func (q *Queries) ListCompletedTasksGlobal(ctx context.Context, arg ListComplete
 	items := []ListCompletedTasksGlobalRow{}
 	for rows.Next() {
 		var i ListCompletedTasksGlobalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.PropertyID,
+			&i.RuleID,
+			&i.DueDate,
+			&i.DueTime,
+			&i.Title,
+			&i.Comment,
+			&i.CompletedDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuleRepeat,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCompletedTasksGlobalOfProperties = `-- name: ListCompletedTasksGlobalOfProperties :many
+SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
+       r.repeat AS rule_repeat,
+       p.name AS property_name
+FROM tasks t
+LEFT JOIN task_rules r ON r.id = t.rule_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE (
+       t.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = t.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND t.property_id = ANY(string_to_array($4::text, ',')::uuid[])
+  AND p.status != 'archived'
+  AND t.completed_date IS NOT NULL
+ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
+LIMIT $2 OFFSET $3
+`
+
+type ListCompletedTasksGlobalOfPropertiesParams struct {
+	OwnerID     pgtype.UUID `json:"owner_id"`
+	Limit       int32       `json:"limit"`
+	Offset      int32       `json:"offset"`
+	PropertyIds string      `json:"property_ids"`
+}
+
+type ListCompletedTasksGlobalOfPropertiesRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	RuleRepeat    pgtype.Text        `json:"rule_repeat"`
+	PropertyName  pgtype.Text        `json:"property_name"`
+}
+
+// The completed journal of the listed properties, newest completions first
+// (ticket #547).
+func (q *Queries) ListCompletedTasksGlobalOfProperties(ctx context.Context, arg ListCompletedTasksGlobalOfPropertiesParams) ([]ListCompletedTasksGlobalOfPropertiesRow, error) {
+	rows, err := q.db.Query(ctx, listCompletedTasksGlobalOfProperties,
+		arg.OwnerID,
+		arg.Limit,
+		arg.Offset,
+		arg.PropertyIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletedTasksGlobalOfPropertiesRow{}
+	for rows.Next() {
+		var i ListCompletedTasksGlobalOfPropertiesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,

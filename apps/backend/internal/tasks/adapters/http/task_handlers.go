@@ -7,8 +7,10 @@ package http
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
@@ -91,21 +93,27 @@ func writeTasksPage(r *http.Request, w http.ResponseWriter, page application.Tas
 }
 
 // ListTasks implements GET /tasks — the global «Задачи» screen (ticket
-// #521). The property filters are mutually exclusive; both set is the
-// contract's 400 via the use case's ErrInvalidInput. The buckets are
-// computed server-side against each item's data owner's moment; the page
-// carries the reading actor's today for the section bucketing.
+// #521). The propertyId filter is a comma-separated uuid list (ticket
+// #547); the property filters are mutually exclusive, and a malformed uuid
+// in the list is the contract's 400 via the use case's ErrInvalidInput. The
+// buckets are computed server-side against each item's data owner's moment;
+// the page carries the reading actor's today for the section bucketing.
 func (h *TaskHandlers) ListTasks(w http.ResponseWriter, r *http.Request, params openapi.ListTasksParams) {
 	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
 		return
 	}
 
+	propertyIDs, err := parsePropertyIDsFilter(params.PropertyId)
+	if err != nil {
+		handleTaskError(h.logger, w, r, err)
+		return
+	}
 	q := application.GlobalTasksListQuery{
 		TasksListQuery: application.TasksListQuery{
 			Completed: params.Completed != nil && *params.Completed,
 		},
-		PropertyID:      params.PropertyId,
+		PropertyIDs:     propertyIDs,
 		WithoutProperty: params.WithoutProperty != nil && *params.WithoutProperty,
 	}
 	if params.Limit != nil {
@@ -114,12 +122,35 @@ func (h *TaskHandlers) ListTasks(w http.ResponseWriter, r *http.Request, params 
 	if params.Offset != nil {
 		q.Offset = *params.Offset
 	}
-	page, err := h.svc.ListGlobalTasks(r.Context(), actor, q)
-	if err != nil {
-		handleTaskError(h.logger, w, r, err)
+	page, listErr := h.svc.ListGlobalTasks(r.Context(), actor, q)
+	if listErr != nil {
+		handleTaskError(h.logger, w, r, listErr)
 		return
 	}
 	writeTasksPage(r, w, page)
+}
+
+// parsePropertyIDsFilter decodes the comma-separated propertyId list
+// (ticket #547, the splitCategorySlugs shape of operations): absent or
+// blank — no filter; whitespace around ids is ignored; a malformed uuid is
+// the use case's ErrInvalidInput (the contract's 400).
+func parsePropertyIDsFilter(raw *string) ([]uuid.UUID, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil, nil
+	}
+	ids := make([]uuid.UUID, 0, 4)
+	for part := range strings.SplitSeq(*raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, parseErr := uuid.Parse(part)
+		if parseErr != nil {
+			return nil, fmt.Errorf("%w: propertyId %q is not a uuid", application.ErrInvalidInput, part)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 // CompleteTask implements POST /properties/{propertyId}/tasks/{taskId}/complete:
