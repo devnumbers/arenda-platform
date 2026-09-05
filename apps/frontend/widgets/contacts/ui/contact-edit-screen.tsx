@@ -68,16 +68,25 @@ export function ContactEditScreen({
 
   const contextProperty = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   const boundProperty = boundPropertyQuery.isSuccess ? boundPropertyQuery.data : undefined;
+  // В книжном режиме объект-привязка есть не у всякой карточки: ждать её
+  // загрузки (и её архива в гейте) нужно только когда привязка есть — иначе
+  // выключенный запрос навсегда pending и форма не открывается.
+  const needBoundProperty =
+    propertyId === undefined && contact !== undefined && contact.propertyId !== undefined;
   const archivedStatus =
     propertyId !== undefined
       ? (contextProperty?.status === 'archived' ? contextProperty.status : undefined)
       : (boundProperty?.status === 'archived' ? boundProperty.status : undefined);
   const loading =
     contactQuery.isPending ||
-    (propertyId !== undefined ? propertyQuery.isPending : boundPropertyQuery.isPending);
+    (propertyId !== undefined
+      ? propertyQuery.isPending
+      : (needBoundProperty && boundPropertyQuery.isPending));
   const failed =
     contactQuery.isError ||
-    (propertyId !== undefined ? propertyQuery.isError : boundPropertyQuery.isError);
+    (propertyId !== undefined
+      ? propertyQuery.isError
+      : (needBoundProperty && boundPropertyQuery.isError));
   // Правка — по мутационному доступу на объекте (ADR 0028); в режиме книги —
   // по привязке самой карточки (без объекта — своя книга). Сервер —
   // последняя инстанция, как на правке платежей.
