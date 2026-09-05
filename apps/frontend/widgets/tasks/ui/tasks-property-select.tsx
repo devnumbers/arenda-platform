@@ -7,14 +7,14 @@ import { useProperties } from '@/features/properties';
 
 /**
  * Страница «Выбрать объект» — фильтр глобальной ленты «Задачи» (карта
- * #518, тикет #524, Figma 1726-88880): тот же каркас, что у выбора объекта
- * контакта (#509/#510) — URL не меняется, черновик живёт в состоянии.
- * Строгий черновик: тап по строке меняет только подсветку, применяются
- * «Выбрать»/✓, ✕ отбрасывает. Первая строка — «Все объекты» (весь
- * merged-фид, без опции «Без объекта» — решение 7 #522), объекты — имя и
- * адрес, с фото-аватаром или серым домом; архивы мимо (решение 9 #522 —
- * их нет и в ленте). Выбор отмечается чекбоксом Selection Button
- * (Figma 1031:21053, Variant=Checkbox), семантика — радио.
+ * #518, тикеты #524/#547, Figma 1726-88880): тот же каркас, что у выбора
+ * объекта контакта (#509/#510) — URL не меняется, черновик живёт в
+ * состоянии. Мультивыбор (решение владельца 2026-09-05): тап по объекту
+ * переключает его чекбокс, выбор применяется «Выбрать»/✓, ✕ отбрасывает.
+ * «Все объекты» — пустой список (весь merged-фид, без опции «Без объекта»
+ * — решение 7 #522); объекты — имя и адрес, с фото-аватаром или серым
+ * домом, архивов в списке нет (решение 9 #522). Выбор отмечается
+ * чекбоксом Selection Button (Figma 1031:21053, Variant=Checkbox).
  */
 export function TasksPropertySelectPage({
   draft,
@@ -22,8 +22,8 @@ export function TasksPropertySelectPage({
   onApply,
   onDismiss,
 }: {
-  readonly draft: string | null;
-  readonly onDraftChange: (propertyId: string | null) => void;
+  readonly draft: ReadonlyArray<string>;
+  readonly onDraftChange: (propertyIds: ReadonlyArray<string>) => void;
   readonly onApply: () => void;
   readonly onDismiss: () => void;
 }): JSX.Element {
@@ -31,6 +31,14 @@ export function TasksPropertySelectPage({
   const properties = (propertiesQuery.data ?? []).filter(
     (property) => property.status !== 'archived',
   );
+
+  const toggle = (propertyId: string): void => {
+    onDraftChange(
+      draft.includes(propertyId)
+        ? draft.filter((id) => id !== propertyId)
+        : [...draft, propertyId],
+    );
+  };
 
   return (
     <>
@@ -46,12 +54,12 @@ export function TasksPropertySelectPage({
       </TopNav>
 
       <PageContent>
-        <div role="radiogroup" aria-label="Фильтр задач по объекту" className="px-6">
+        <div role="group" aria-label="Фильтр задач по объектам" className="px-6">
           <ObjectRowButton
             title="Все объекты"
             isAll
-            checked={draft === null}
-            onCheck={() => onDraftChange(null)}
+            checked={draft.length === 0}
+            onCheck={() => onDraftChange([])}
           />
           {propertiesQuery.isPending && <ObjectRowsSkeleton />}
           {propertiesQuery.isError && (
@@ -80,8 +88,8 @@ export function TasksPropertySelectPage({
               title={property.name}
               subtitle={property.address}
               photoUrl={property.photos?.[0]?.url}
-              checked={draft === property.id}
-              onCheck={() => onDraftChange(property.id)}
+              checked={draft.includes(property.id)}
+              onCheck={() => toggle(property.id)}
             />
           ))}
         </div>
@@ -96,7 +104,7 @@ export function TasksPropertySelectPage({
   );
 }
 
-/** Строка-радио страницы «Выбрать объект» (компонент Figma «Row Button»,
+/** Строка-чекбокс страницы «Выбрать объект» (компонент Figma «Row Button»,
  * 936:39347): аватар Category Icon 44px (#F3F4F6 + белое кольцо 2.5px) с
  * иконкой 24 — Icon/Bold/Objects у «Все объекты», Icon/Bold/Home
  * (BoldHome) у объектов, или фото; заголовок 16/500, подпись 14 #6F787C,
@@ -120,7 +128,7 @@ function ObjectRowButton({
   return (
     <button
       type="button"
-      role="radio"
+      role="checkbox"
       aria-checked={checked}
       onClick={onCheck}
       className="flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"

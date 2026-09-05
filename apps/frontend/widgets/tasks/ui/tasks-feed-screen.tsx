@@ -68,41 +68,42 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  *
  * Шапка — стандартный TopNav хаба с «крыльями» и на мобайле (`mobileWings`,
  * Figma 1733-27411); смена на компактный заголовок по прокрутке (1733-92349)
- * отложена — решение владельца 2026-09-05. Чип «Объект» — фильтр по объекту
- * (#524, Figma 1726-88880/1726-86913): выбранное значение живёт в адресе
- * (?property=), страница выбора — строгий черновик без истории, при 404
- * объекта фильтр сбрасывается сам (решение 8 #522). Подпись чипа всегда
- * «Объект», активное состояние — признак включённого фильтра (правка
- * владельца 2026-09-05, перекрывает «чип = имя объекта» из решения 7 #522).
+ * отложена — решение владельца 2026-09-05. Чип «Объект» — фильтр по
+ * объектам (#524/#547, Figma 1726-88880/1726-86913): выбранные объекты
+ * живут в адресе (?property=<id>[,<id>…], мультивыбор — решение владельца
+ * 2026-09-05), страница выбора — строгий черновик без истории, при 404
+ * фильтр сбрасывается сам (решение 8 #522). Подпись чипа всегда «Объект»,
+ * активное состояние — признак включённого фильтра (решение владельца
+ * 2026-09-05, перекрывает «чип = имя объекта» из решения 7 #522).
  * «+» нарисовано по макету, но пока без действия — создание, тикет #525.
  */
 export function TasksFeedScreen(): JSX.Element {
   const router = useRouter();
 
   const { filter, applyPropertyFilter } = useTasksFeedFilter();
-  const activeQuery = useGlobalActiveTasks(filter.propertyId);
-  const completedQuery = useGlobalCompletedTasks(filter.propertyId);
+  const activeQuery = useGlobalActiveTasks(filter.propertyIds);
+  const completedQuery = useGlobalCompletedTasks(filter.propertyIds);
   const propertiesQuery = useProperties();
 
   const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  // Страница выбора объекта — строгий черновик (#524): черновик живёт,
+  // Страница выбора объектов — строгий черновик (#524): черновик живёт,
   // пока страница смонтирована, история не пишется.
   const [selectOpen, setSelectOpen] = useState(false);
-  const [propertyDraft, setPropertyDraft] = useState<string | null>(null);
+  const [propertyDraft, setPropertyDraft] = useState<ReadonlyArray<string>>([]);
 
   // Авто-сброс фильтра при 404 (решение 8 #522): объект удалён или доступ
   // отозван — privacy 404, мёртвый фильтр из адреса убирает replace, чтобы
   // «назад» не возвращало на ту же ошибку.
   useEffect(() => {
-    if (filter.propertyId === null) {
+    if (filter.propertyIds.length === 0) {
       return;
     }
     const error = activeQuery.error ?? completedQuery.error;
     if (error instanceof ApiError && error.status === 404) {
-      applyPropertyFilter(null, { replace: true });
+      applyPropertyFilter([], { replace: true });
     }
-  }, [filter.propertyId, activeQuery.error, completedQuery.error, applyPropertyFilter]);
+  }, [filter.propertyIds, activeQuery.error, completedQuery.error, applyPropertyFilter]);
 
   // Ручная мемоизация активных — требование react-hooks/exhaustive-deps:
   // массив входит в зависимости производных ниже (React Compiler прогоняет
@@ -214,15 +215,15 @@ export function TasksFeedScreen(): JSX.Element {
               <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
                 <SortChip sort={sort} />
               </PickerMenu>
-              {/* Фильтр по объекту (#524): при выбранном фильтре чип просто
+              {/* Фильтр по объектам (#524/#547): при выбранном фильтре чип просто
                * активный (синий, макет 1726-86913), подпись всегда «Объект» —
-               * название объекта чип не показывает (правка владельца
+               * названия объектов чип не показывает (правка владельца
                * 2026-09-05). */}
               <ChipButton
-                selected={filter.propertyId !== null}
+                selected={filter.propertyIds.length > 0}
                 trailingIcon={<SmallArrowDown />}
                 onClick={() => {
-                  setPropertyDraft(filter.propertyId);
+                  setPropertyDraft(filter.propertyIds);
                   setSelectOpen(true);
                 }}
               >
