@@ -1,8 +1,9 @@
-'use client';
+"use client";
 
-import type { JSX } from 'react';
-import { ChevronDown } from '@/shared/assets/icons';
-import { ChipButton } from '@/shared/ui/design';
+import type { JSX } from "react";
+import clsx from "clsx";
+import { ChevronDown } from "@/shared/assets/icons";
+import { ChipButton } from "@/shared/ui/design";
 
 export type OperationsFilterChipsProps = {
   /** Лейбл чипа периода: дефолт — «Сентябрь 2026», выбор — «1 — 30 ноя». */
@@ -20,6 +21,12 @@ export type OperationsFilterChipsProps = {
   /** Активный мультивыбор подсвечивает чип синим (макет 1733-26973). */
   readonly propertyActive?: boolean;
   readonly onOpenProperties?: () => void;
+  /** Боковые вставки контейнера: объектные экраны (#474, PageContent без
+   * горизонтального паддинга) передают px-6; глобальная лента (#541) живёт
+   * в контенте кабинета с его собственным паддингом — ей вставка не нужна
+   * (правило владельца: сервисные элементы по краю контента страницы,
+   * без своей вставки). */
+  readonly className?: string;
 };
 
 /**
@@ -38,10 +45,15 @@ export function OperationsFilterChips({
   propertyLabel,
   propertyActive = false,
   onOpenProperties,
+  className,
 }: OperationsFilterChipsProps): JSX.Element {
   return (
-    <div className="flex gap-1.5 overflow-x-auto px-6">
-      <ChipButton selected trailingIcon={<ChevronDown />} onClick={onOpenPeriod}>
+    <div className={clsx("flex gap-1.5 overflow-x-auto", className)}>
+      <ChipButton
+        selected
+        trailingIcon={<ChevronDown />}
+        onClick={onOpenPeriod}
+      >
         {periodLabel}
       </ChipButton>
       {propertyLabel !== undefined && onOpenProperties !== undefined && (

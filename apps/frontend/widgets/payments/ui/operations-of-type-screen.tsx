@@ -1,22 +1,24 @@
-'use client';
+"use client";
 
-import { useState, type JSX } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowSLeft, ArrowSRight, Search } from '@/shared/assets/icons';
-import { ROUTES } from '@/shared/config/routes';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
-import type { PaymentOperationScope } from '@/shared/api/query-keys';
+import { useState, type JSX } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  ArrowSLeft,
+  ArrowSRight,
+  Search,
+} from "@/shared/assets/icons";
+import { ROUTES } from "@/shared/config/routes";
+import { useInfiniteScroll } from "@/shared/lib/hooks/useInfiniteScroll";
+import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
   Button,
   IconButton,
   PageContent,
   TopNav,
   TopNavTitle,
-} from '@/shared/ui/design';
-import {
-  clientTodayIso,
-  type PaymentOperation,
-} from '@/entities/payment';
+} from "@/shared/ui/design";
+import { clientTodayIso, type PaymentOperation } from "@/entities/payment";
 import {
   defaultOperationsPeriod,
   groupOperationsByDate,
@@ -29,17 +31,17 @@ import {
   useOperationsFilters,
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
-} from '@/features/payments';
-import { operationsTypeHeadline } from '../lib/operations-empty-states';
-import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
-import { LoadingMoreIndicator, OperationsDateList } from './operations-list';
-import { OperationsFilterChips } from './operations-filter-chips';
-import { OperationsPeriodPickerDialog } from './operations-period-picker';
+} from "@/features/payments";
+import { operationsTypeHeadline } from "../lib/operations-empty-states";
+import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
+import { LoadingMoreIndicator, OperationsDateList } from "./operations-list";
+import { OperationsFilterChips } from "./operations-filter-chips";
+import { OperationsPeriodPickerDialog } from "./operations-period-picker";
 
 /** Копия экрана по направлению (Figma 1494-61191 / 1492-59865). */
 const SCREEN_COPY = {
-  income: { title: 'Доходы объекта' },
-  expense: { title: 'Расходы объекта' },
+  income: { title: "Доходы объекта" },
+  expense: { title: "Расходы объекта" },
 } as const;
 
 /**
@@ -77,8 +79,8 @@ export function OperationsOfTypeScreen({
   const nextIsFuture = shiftOperationsPeriod(period, 1).from > today;
 
   const periodScope: PaymentOperationScope = {
-    status: 'paid',
-    order: 'desc',
+    status: "paid",
+    order: "desc",
     type,
     dateFrom: period.from,
     dateTo: period.to,
@@ -91,30 +93,29 @@ export function OperationsOfTypeScreen({
   const listQuery = usePropertyOperationsScopedPaged(propertyId, listScope);
   const summaryQuery = usePropertyOperationsSummary(propertyId, periodScope);
 
-  const sentinelRef = useInfiniteScroll(
-    () => {
-      if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-        void listQuery.fetchNextPage();
-      }
-    },
-    listQuery.hasNextPage === true,
-  );
+  const sentinelRef = useInfiniteScroll(() => {
+    if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
+      void listQuery.fetchNextPage();
+    }
+  }, listQuery.hasNextPage === true);
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   const totalKopecks =
     summaryQuery.data === undefined
       ? undefined
-      : type === 'expense'
+      : type === "expense"
         ? summaryQuery.data.expenseTotalKopecks
         : summaryQuery.data.incomeTotalKopecks;
   // Скелетон — только пока данных нет вовсе (первая загрузка): смена
   // периода держит прежние данные (keepPreviousData) и не дёргает
   // страницу; ошибка без данных показывает карточку повтора, не скелетон.
   const pending =
-    (listQuery.data === undefined || summaryQuery.data === undefined)
-    && !listQuery.isError
-    && !summaryQuery.isError;
-  const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
+    (listQuery.data === undefined || summaryQuery.data === undefined) &&
+    !listQuery.isError &&
+    !summaryQuery.isError;
+  const categoryRows = operationsCategoryRows(
+    summaryQuery.data?.categories ?? [],
+  );
 
   const openOperation = (operation: PaymentOperation): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
@@ -122,14 +123,16 @@ export function OperationsOfTypeScreen({
   const openCategories = (): void => {
     const params = new URLSearchParams();
     if (filters.period !== null) {
-      params.set('from', filters.period.from);
-      params.set('to', filters.period.to);
+      params.set("from", filters.period.from);
+      params.set("to", filters.period.to);
     }
     if (filters.categories.length > 0) {
-      params.set('category', filters.categories.join(','));
+      params.set("category", filters.categories.join(","));
     }
-    params.set('return', pathname);
-    router.push(`${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`);
+    params.set("return", pathname);
+    router.push(
+      `${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`,
+    );
   };
 
   return (
@@ -143,7 +146,12 @@ export function OperationsOfTypeScreen({
             // (период и категории переживают переход — решение владельца,
             // #472), а не по истории браузера.
             onClick={() =>
-              router.push(operationsFiltersHref(ROUTES.propertyOperations(propertyId), filters))
+              router.push(
+                operationsFiltersHref(
+                  ROUTES.propertyOperations(propertyId),
+                  filters,
+                ),
+              )
             }
           />
         }
@@ -151,7 +159,9 @@ export function OperationsOfTypeScreen({
           <IconButton
             icon={<Search />}
             label="Поиск операций"
-            onClick={() => router.push(ROUTES.propertyOperationsSearch(propertyId))}
+            onClick={() =>
+              router.push(ROUTES.propertyOperationsSearch(propertyId))
+            }
           />
         }
       >
@@ -163,12 +173,16 @@ export function OperationsOfTypeScreen({
           {/* Чипы фильтров — как на главном (Figma 1502:65149): период
            * следует за листанием; выбор — отдельные страницы (#477). */}
           <OperationsFilterChips
+            className="px-6"
             periodLabel={
               filters.period !== null
                 ? operationsPeriodRangeChipLabel(period)
                 : operationsPeriodDefaultChipLabel(period)
             }
-            categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
+            categoriesLabel={operationsCategoryChipLabel(
+              filters.categories,
+              categoryRows,
+            )}
             categoriesActive={filters.categories.length > 0}
             onOpenPeriod={() => setPeriodOpen(true)}
             onOpenCategories={openCategories}
@@ -206,7 +220,9 @@ export function OperationsOfTypeScreen({
                     <IconButton
                       icon={<ArrowSLeft />}
                       label="Предыдущий месяц"
-                      onClick={() => applyPeriod(shiftOperationsPeriod(period, -1))}
+                      onClick={() =>
+                        applyPeriod(shiftOperationsPeriod(period, -1))
+                      }
                     />
                     <div className="flex min-w-0 flex-1 items-center justify-center">
                       <span className="truncate text-[28px] font-semibold leading-8 text-content">
@@ -219,7 +235,9 @@ export function OperationsOfTypeScreen({
                       icon={<ArrowSRight />}
                       label="Следующий месяц"
                       disabled={nextIsFuture}
-                      onClick={() => applyPeriod(shiftOperationsPeriod(period, 1))}
+                      onClick={() =>
+                        applyPeriod(shiftOperationsPeriod(period, 1))
+                      }
                     />
                   </div>
 
@@ -228,8 +246,12 @@ export function OperationsOfTypeScreen({
                     onSelectOperation={openOperation}
                     tail={
                       <>
-                        {listQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                        {listQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                        {listQuery.hasNextPage === true && (
+                          <div ref={sentinelRef} aria-hidden />
+                        )}
+                        {listQuery.isFetchingNextPage && (
+                          <LoadingMoreIndicator />
+                        )}
                       </>
                     }
                   />
@@ -242,7 +264,9 @@ export function OperationsOfTypeScreen({
 
       {/* Пикер периода — рендер только в открытом состоянии: лента и
           черновик живут, пока смонтирован. */}
-      {periodOpen && <OperationsPeriodPickerDialog onClose={() => setPeriodOpen(false)} />}
+      {periodOpen && (
+        <OperationsPeriodPickerDialog onClose={() => setPeriodOpen(false)} />
+      )}
     </>
   );
 }

@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { useState, type JSX } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search } from '@/shared/assets/icons';
-import { ROUTES } from '@/shared/config/routes';
-import { clientTodayIso } from '@/entities/payment';
-import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
+import { useState, type JSX } from "react";
+import { useRouter } from "next/navigation";
+import { Search } from "@/shared/assets/icons";
+import { ROUTES } from "@/shared/config/routes";
+import { clientTodayIso } from "@/entities/payment";
+import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
+import { useInfiniteScroll } from "@/shared/lib/hooks/useInfiniteScroll";
 import {
   defaultOperationsPeriod,
   globalOperationsFiltersParams,
@@ -19,23 +19,20 @@ import {
   useGlobalOperationsFilters,
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
-} from '@/features/payments';
-import { Button, PageContent } from '@/shared/ui/design';
-import { PageHeader } from '@/shared/ui/page-header';
-import {
-  PaymentsSkeleton,
-  PaymentsStateCard,
-} from './payments-sections';
+} from "@/features/payments";
+import { Button, PageContent } from "@/shared/ui/design";
+import { PageHeader } from "@/shared/ui/page-header";
+import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
 import {
   LoadingMoreIndicator,
   OperationsDateList,
   OperationsNeverHad,
-} from './operations-list';
-import { OperationsFilterChips } from './operations-filter-chips';
-import { OperationsGlobalPeriodPickerDialog } from './operations-period-picker';
-import { OperationsSummaryCard } from './operations-summary-card';
-import { hasNoPaidOperationsEver } from '../lib/operations-empty-states';
-import { summaryBarSegments } from '../lib/summary-bar';
+} from "./operations-list";
+import { OperationsFilterChips } from "./operations-filter-chips";
+import { OperationsGlobalPeriodPickerDialog } from "./operations-period-picker";
+import { OperationsSummaryCard } from "./operations-summary-card";
+import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
+import { summaryBarSegments } from "../lib/summary-bar";
 
 /**
  * Экран «Операции» — глобальная лента по всем объектам (#541, макеты
@@ -66,7 +63,7 @@ export function OperationsGlobalScreen(): JSX.Element {
   // Список сужается выбранными категориями; сводка (#540) категорийный
   // фильтр не принимает — карточки показывают объекты и период целиком.
   const periodScope = {
-    order: 'desc' as const,
+    order: "desc" as const,
     propertyIds: filters.propertyIds,
     dateFrom: period.from,
     dateTo: period.to,
@@ -81,33 +78,36 @@ export function OperationsGlobalScreen(): JSX.Element {
   // All-time сводка выбранного скоупа объектов (без периода/категорий):
   // отличает «операций не было никогда» (#478) от пустого периода/фильтра.
   const everQuery = useGlobalOperationsSummary({
-    order: 'desc',
+    order: "desc",
     propertyIds: filters.propertyIds,
   });
 
-  const sentinelRef = useInfiniteScroll(
-    () => {
-      if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-        void listQuery.fetchNextPage();
-      }
-    },
-    listQuery.hasNextPage === true,
-  );
+  const sentinelRef = useInfiniteScroll(() => {
+    if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
+      void listQuery.fetchNextPage();
+    }
+  }, listQuery.hasNextPage === true);
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   // Скелетон — только пока данных нет вовсе (первая загрузка); ошибка без
   // данных показывает карточку повтора, не скелетон.
   const pending =
-    (listQuery.data === undefined
-      || summaryQuery.data === undefined
-      || everQuery.data === undefined)
-    && !listQuery.isError
-    && !summaryQuery.isError
-    && !everQuery.isError;
-  const neverHad = !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
-  const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
+    (listQuery.data === undefined ||
+      summaryQuery.data === undefined ||
+      everQuery.data === undefined) &&
+    !listQuery.isError &&
+    !summaryQuery.isError &&
+    !everQuery.isError;
+  const neverHad =
+    !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
+  const categoryRows = operationsCategoryRows(
+    summaryQuery.data?.categories ?? [],
+  );
 
-  const openOperation = (operation: { readonly propertyId: string; readonly id: string }): void =>
+  const openOperation = (operation: {
+    readonly propertyId: string;
+    readonly id: string;
+  }): void =>
     router.push(ROUTES.propertyOperation(operation.propertyId, operation.id));
 
   const filterHref = (base: string, extra?: Record<string, string>): string => {
@@ -131,7 +131,11 @@ export function OperationsGlobalScreen(): JSX.Element {
             {/* Пилюля поиска (#543) — кнопка на отдельную страницу; «+» скрыта
              * (решение владельца #539: создания разовой операции вне правила
              * нет). */}
-            <OperationsSearchPill onOpenSearch={() => router.push(filterHref(ROUTES.operationsSearch))} />
+            <OperationsSearchPill
+              onOpenSearch={() =>
+                router.push(filterHref(ROUTES.operationsSearch))
+              }
+            />
 
             <OperationsFilterChips
               periodLabel={
@@ -141,17 +145,24 @@ export function OperationsGlobalScreen(): JSX.Element {
               }
               propertyLabel={operationsPropertyChipLabel(filters.propertyIds)}
               propertyActive={filters.propertyIds.length > 0}
-              categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
+              categoriesLabel={operationsCategoryChipLabel(
+                filters.categories,
+                categoryRows,
+              )}
               categoriesActive={filters.categories.length > 0}
               onOpenPeriod={() => setPeriodOpen(true)}
               onOpenProperties={() =>
                 router.push(
-                  filterHref(ROUTES.operationsObjects, { return: ROUTES.operations }),
+                  filterHref(ROUTES.operationsObjects, {
+                    return: ROUTES.operations,
+                  }),
                 )
               }
               onOpenCategories={() =>
                 router.push(
-                  filterHref(ROUTES.operationsCategories, { return: ROUTES.operations }),
+                  filterHref(ROUTES.operationsCategories, {
+                    return: ROUTES.operations,
+                  }),
                 )
               }
             />
@@ -184,16 +195,22 @@ export function OperationsGlobalScreen(): JSX.Element {
                     {/* Карточки сводки (Figma 1510-77101): сумма за период +
                      * полоса-разбивка пилюлями категорий. Некликабельны —
                      * глобальные экраны направления вне скоупа (#539). */}
-                    <div className="flex gap-2 px-6">
+                    <div className="flex gap-2">
                       <OperationsSummaryCard
                         label="Расходы"
                         totalKopecks={summaryQuery.data?.expenseTotalKopecks}
-                        segments={summaryBarSegments(summaryQuery.data, 'expense')}
+                        segments={summaryBarSegments(
+                          summaryQuery.data,
+                          "expense",
+                        )}
                       />
                       <OperationsSummaryCard
                         label="Доходы"
                         totalKopecks={summaryQuery.data?.incomeTotalKopecks}
-                        segments={summaryBarSegments(summaryQuery.data, 'income')}
+                        segments={summaryBarSegments(
+                          summaryQuery.data,
+                          "income",
+                        )}
                       />
                     </div>
 
@@ -203,8 +220,12 @@ export function OperationsGlobalScreen(): JSX.Element {
                       renderSubtitle={(operation) => operation.propertyName}
                       tail={
                         <>
-                          {listQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                          {listQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                          {listQuery.hasNextPage === true && (
+                            <div ref={sentinelRef} aria-hidden />
+                          )}
+                          {listQuery.isFetchingNextPage && (
+                            <LoadingMoreIndicator />
+                          )}
                         </>
                       }
                     />
@@ -218,7 +239,11 @@ export function OperationsGlobalScreen(): JSX.Element {
 
       {/* Пикер периода — рендер только в открытом состоянии: лента и
           черновик живут, пока смонтирован. */}
-      {periodOpen && <OperationsGlobalPeriodPickerDialog onClose={() => setPeriodOpen(false)} />}
+      {periodOpen && (
+        <OperationsGlobalPeriodPickerDialog
+          onClose={() => setPeriodOpen(false)}
+        />
+      )}
     </>
   );
 }
