@@ -72,8 +72,12 @@ type RentPaymentChange struct {
 
 // RentPaymentState is the payment's render state (ADR 0053 §2): the day of
 // payment lives in the payment's recurrence (решение №5) — the rental
-// response reads it from here, never from a rental copy.
+// response reads it from here, never from a rental copy. PaymentID names the
+// managed payment for the client's navigation to the payment screen (#531):
+// payments are never matched by the rent category slug — properties may hold
+// unrelated rent payments.
 type RentPaymentState struct {
+	PaymentID     uuid.UUID
 	AmountKopecks int64
 	PaymentDay    domain.PaymentDay
 	AutoPay       bool

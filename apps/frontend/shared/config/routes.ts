@@ -54,6 +54,10 @@ export const ROUTES = {
     `/properties/${id}/payments/new?type=${type}`,
   /** Визард создания аренды (#530): 4 шага на одном маршруте. */
   propertyRentalNew: (id: string) => `/properties/${id}/rentals/new`,
+  /** Экран «Аренда» (#531): пустое состояние или детализация текущей аренды. */
+  propertyRental: (id: string) => `/properties/${id}/rentals`,
+  /** «Условия аренды» read-only (#531) — полный просмотр условий текущей аренды. */
+  propertyRentalTerms: (id: string) => `/properties/${id}/rentals/terms`,
   /** Экран «Контакты объекта» (#508) — новый хром, книга контактов (ADR 0051). */
   propertyContacts: (id: string) => `/properties/${id}/contacts`,
   /** Создание контакта (#509); до тикета путь ведёт на 404. */

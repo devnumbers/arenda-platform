@@ -581,6 +581,7 @@ func rentalResponse(view rentalsapp.RentalView) (openapi.RentalResponse, error) 
 		return openapi.RentalResponse{}, err
 	}
 	response.RentPayment = openapi.RentalPaymentView{
+		PaymentId:     view.Payment.PaymentID,
 		AmountKopecks: view.Payment.AmountKopecks,
 		PaymentDay:    paymentDay,
 		AutoPay:       view.Payment.AutoPay,

@@ -514,6 +514,9 @@ func (s *RentalService) assembleView(
 	if err != nil {
 		return RentalView{}, fmt.Errorf("rent payment state: %w", err)
 	}
+	// Идентификатор управляемого платежа знает аренда (связь 1:1) —
+	// состояние рендера его только носит.
+	state.PaymentID = rental.PaymentID
 	next, err := s.gateway.NextPlannedOccurrence(ctx, scope, propertyID, rental.PaymentID, today)
 	if err != nil {
 		return RentalView{}, fmt.Errorf("next planned occurrence: %w", err)

@@ -51,6 +51,7 @@ function mapTenant(dto: TenantViewDto | undefined): RentalTenant | null {
 
 function mapRentPayment(dto: components['schemas']['RentalPaymentView']): RentalPaymentView {
   return {
+    paymentId: dto.paymentId,
     amountKopecks: dto.amountKopecks,
     paymentDay: dto.paymentDay,
     autoPay: dto.autoPay,

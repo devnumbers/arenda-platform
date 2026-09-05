@@ -1,7 +1,9 @@
 'use client';
 
 import type { JSX } from 'react';
+import { useRouter } from 'next/navigation';
 import { BoldKey } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
 import type { Rental } from '@/entities/rental';
 import { rentalSuccessCopy } from '@/features/rentals';
 import { Button, StatusIcon, StickyBottomBar } from '@/shared/ui/design';
@@ -11,8 +13,7 @@ import { WizardBottomBar } from './wizard-chrome';
  * Экран успеха визарда аренды (Figma 1371:63753): синий круг 96 с ключом и
  * галочкой «выполнено», заголовок «Вы создали аренду» и описание условий
  * (день оплаты + сумма + способ отметки). Кнопка «Открыть аренду» макета
- * ведёт на детализацию аренды (#531) — появится вместе с ней, как у
- * платежей до #449.
+ * ведёт на детализацию аренды — экран появился в #531.
  */
 
 export type RentalWizardSuccessProps = {
@@ -24,6 +25,7 @@ export function RentalWizardSuccess({
   created,
   onClose,
 }: RentalWizardSuccessProps): JSX.Element {
+  const router = useRouter();
   const copy = rentalSuccessCopy({
     paymentDay: created.rentPayment.paymentDay,
     amountKopecks: created.rentPayment.amountKopecks,
@@ -55,11 +57,17 @@ export function RentalWizardSuccess({
       </div>
       <StickyBottomBar>
         <WizardBottomBar>
-          <Button className="w-full" onClick={onClose}>
+          {/* Завершение потока созданием → новая страница заменяет
+              переходную запись истории (CODING_STANDARDS, Navigation). */}
+          <Button
+            className="w-full"
+            onClick={() => router.replace(ROUTES.propertyRental(created.propertyId))}
+          >
+            Открыть аренду
+          </Button>
+          <Button variant="secondary" className="w-full" onClick={onClose}>
             Хорошо
           </Button>
-          {/* Кнопка «Открыть аренду» (Figma 1371:63767) — детализация
-              аренды ещё не реализована (#531); появится вместе с ней. */}
         </WizardBottomBar>
       </StickyBottomBar>
     </div>

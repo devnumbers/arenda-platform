@@ -22,6 +22,7 @@ import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyInfoCard} from './PropertyInfoCard';
 import {PropertyAttributesSection} from './PropertyAttributesSection';
 import {PropertyPaymentsSection} from './PropertyPaymentsSection';
+import {PropertyRentalsSection} from './PropertyRentalsSection';
 import {PropertyContactsSection} from './PropertyContactsSection';
 import {PropertyActionMenu} from './PropertyActionMenu';
 import {PropertyArchiveModal} from './PropertyArchiveModal';
@@ -191,6 +192,8 @@ export function PropertyDetailPage(): JSX.Element {
                         propertyId={id}
                         isArchived={property.status === 'archived'}
                     />
+
+                    <PropertyRentalsSection propertyId={id}/>
 
                     <PropertyPaymentsSection propertyId={id}/>
 

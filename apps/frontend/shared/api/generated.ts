@@ -2421,8 +2421,13 @@ export interface components {
             totalMonths: number | null;
             monthsRemaining: number | null;
         };
-        /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). */
+        /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. */
         RentalPaymentView: {
+            /**
+             * Format: uuid
+             * @description Управляемый арендой Платёж — связь 1:1 (ADR 0053 §1).
+             */
+            paymentId: string;
             /** Format: int64 */
             amountKopecks: number;
             paymentDay: components["schemas"]["RentalPaymentDay"];

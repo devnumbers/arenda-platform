@@ -35,8 +35,10 @@ export type RentalNextPayment = {
   readonly daysUntil: number;
 };
 
-/** Состояние Платежа арендной платы в ответе аренды. */
+/** Состояние Платежа арендной платы в ответе аренды: paymentId — переход на
+ * экран платежа (#531); платеж не ищется слагом категории (ADR 0053 §4). */
 export type RentalPaymentView = {
+  readonly paymentId: string;
   readonly amountKopecks: number;
   readonly paymentDay: RentalPaymentDay;
   readonly autoPay: boolean;

@@ -24,6 +24,7 @@ const DTO: RentalResponseDto = {
   },
   comment: '',
   rentPayment: {
+    paymentId: '0198c7a2-0000-7000-8000-000000000005',
     amountKopecks: 5600000,
     paymentDay: 10,
     autoPay: false,
@@ -61,6 +62,7 @@ describe('mapRental', () => {
       },
       comment: '',
       rentPayment: {
+        paymentId: '0198c7a2-0000-7000-8000-000000000005',
         amountKopecks: 5600000,
         paymentDay: 10,
         autoPay: false,

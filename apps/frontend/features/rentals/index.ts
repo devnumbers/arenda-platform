@@ -1,4 +1,4 @@
-export { useCreateRental } from './api/hooks';
+export { useCreateRental, usePayRentOperation, useRentals } from './api/hooks';
 export {
   buildRentalCreateCommand,
   draftAfterStartChange,
@@ -15,3 +15,16 @@ export type { RentalWizardStep } from './lib/wizard-model';
 export { useRentalWizardDraft } from './lib/use-rental-wizard-draft';
 export type { RentalWizardDraft } from './lib/use-rental-wizard-draft';
 export { rentalSuccessCopy } from './lib/success-copy';
+export {
+  currentRentalOf,
+  rentalCommentText,
+  rentalNextPaymentLine,
+  rentalPaidTitle,
+  rentalProgressPercent,
+  rentalRemainingLine,
+  rentalTeaserRows,
+  rentalTermsRows,
+  rentalTenantTitle,
+  rentAmountPerMonth,
+} from './lib/rental-view';
+export type { RentalTermsRow } from './lib/rental-view';

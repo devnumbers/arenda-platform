@@ -168,6 +168,8 @@ export const taskKeys = {
 // features/rentals
 export const rentalKeys = {
   all: ['rentals'] as const,
+  /** Список аренд объекта: незавершённая первая, далее завершённые (#531). */
+  list: (propertyId: string) => [...rentalKeys.all, 'list', propertyId] as const,
 };
 
 // features/subscription
