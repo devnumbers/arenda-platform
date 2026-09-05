@@ -140,11 +140,16 @@ export type IsoRangeDraft = {
   readonly end: IsoDate | null;
 };
 
-/** Тап по дню в календаре диапазона: до границы — новый старт; правее —
- * завершение диапазона; по завершённому — перезапуск с новой границы. */
+/** Тап по дню в календаре диапазона: первый тап задаёт границу; второй
+ * завершает диапазон в любую сторону — раньше или позже первой границы
+ * (решение владельца 2026-09-05: 5→1 = период 1–5); тап по тому же числу —
+ * период одного дня; по завершённому — перезапуск с новой границы. */
 export function pickIsoRange(draft: IsoRangeDraft, day: IsoDate): IsoRangeDraft {
-  if (draft.end !== null || day < draft.start) {
+  if (draft.end !== null) {
     return { start: day, end: null };
+  }
+  if (day < draft.start) {
+    return { start: day, end: draft.start };
   }
   return { start: draft.start, end: day };
 }
