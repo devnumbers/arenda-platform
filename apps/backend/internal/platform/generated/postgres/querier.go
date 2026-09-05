@@ -24,6 +24,10 @@ type Querier interface {
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)).
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
+	// Завершение: the completion date and the optional deposit return land in
+	// one UPDATE. The one-unfinished-per-property index releases here; the
+	// caller has proven the rental unfinished inside the same transaction.
+	CompleteRental(ctx context.Context, arg CompleteRentalParams) (int64, error)
 	// «Выполнить»: the completion fact stamped on the still-active task; rows
 	// affected = 0 surfaces as ErrAlreadyCompleted (the use case has already
 	// proven existence under the property lock).
@@ -42,6 +46,11 @@ type Querier interface {
 	CountCardBindingSessionsByUserSince(ctx context.Context, arg CountCardBindingSessionsByUserSinceParams) (int64, error)
 	CountContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
+	// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
+	// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
+	// Cancelled tombstones never count; the nested payment→property path is
+	// enforced in the WHERE clause.
+	CountPaidOperationsByPayment(ctx context.Context, arg CountPaidOperationsByPaymentParams) (int64, error)
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
@@ -169,6 +178,9 @@ type Querier interface {
 	// Delete a push subscription by endpoint scoped to a user. Returns 0 rows when
 	// the subscription does not exist or belongs to another user (404 in the API).
 	DeletePushSubscriptionByEndpointAndUser(ctx context.Context, arg DeletePushSubscriptionByEndpointAndUserParams) (int64, error)
+	// Hard delete of the rental row; it must run before the payment's own delete
+	// (the RESTRICT FK releases only after the rental row is gone, ADR 0053 §3).
+	DeleteRental(ctx context.Context, arg DeleteRentalParams) (int64, error)
 	// The edit invalidation (resolution #496): the rule's uncompleted tasks that
 	// have not fallen due yet — the undated one and the strictly future ones —
 	// are removed; the in-transaction tick stands the single future again with
@@ -188,6 +200,10 @@ type Querier interface {
 	// physically removed by DeleteRuleUncompleted before this runs.
 	DeleteTaskRule(ctx context.Context, arg DeleteTaskRuleParams) error
 	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
+	// The create-time app check for invariant №12 (одна незавершённая на
+	// объекте): run inside the transaction under the property lock; the partial
+	// unique index backstops the race.
+	ExistsUnfinishedRental(ctx context.Context, arg ExistsUnfinishedRentalParams) (bool, error)
 	GetAuditLogByIDAdmin(ctx context.Context, id pgtype.UUID) (AuditLog, error)
 	GetCardBindingSessionByRequestKeyForUpdate(ctx context.Context, arg GetCardBindingSessionByRequestKeyForUpdateParams) (CardBindingSession, error)
 	// Contacts context queries: CRUD and search over the owner's contact book
@@ -285,6 +301,15 @@ type Querier interface {
 	GetPropertyPhotoByID(ctx context.Context, id pgtype.UUID) (PropertyPhoto, error)
 	GetPropertyPhotoByIDAndPropertyID(ctx context.Context, arg GetPropertyPhotoByIDAndPropertyIDParams) (PropertyPhoto, error)
 	GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyStatusByOwnerParams) (string, error)
+	// Rentals context queries: the rental CRUD and the list ordering (ADR 0053
+	// §4, ticket #529). Reads and writes are scoped by the data owner (ADR 0028:
+	// SQL filters by scope, the policy port has already resolved the actor's
+	// role); the nested path rental→property is enforced in the WHERE clause.
+	// The tenant is embedded by a LEFT JOIN: after the contact's deletion the
+	// link is NULL and the tenant is simply absent (решение #528).
+	// One rental by id within the owner's scope on the given property, with the
+	// tenant's contact fields resolved for the embedded tenant view.
+	GetRentalByID(ctx context.Context, arg GetRentalByIDParams) (GetRentalByIDRow, error)
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
@@ -360,6 +385,9 @@ type Querier interface {
 	// partial unique index (to_date IS NULL) makes a double pause a constraint
 	// violation even past the application check.
 	InsertPaymentPause(ctx context.Context, arg InsertPaymentPauseParams) error
+	// The id, owner and payment link are app-side (UUIDv7, the denormalized
+	// scope owner, the gateway-minted rent payment).
+	InsertRental(ctx context.Context, arg InsertRentalParams) error
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
@@ -437,6 +465,9 @@ type Querier interface {
 	ListPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]PushSubscription, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)
 	ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error)
+	// The property's rentals: unfinished first (newest start on top), then the
+	// completed ones by completion date, fresh on top (ADR 0053 §4).
+	ListRentalsByProperty(ctx context.Context, arg ListRentalsByPropertyParams) ([]ListRentalsByPropertyRow, error)
 	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
 	// Admin payment views (issue #254). The phone filter matches the stored
 	// ciphertext (deterministic encryption) or the plaintext of a not-yet-
@@ -609,6 +640,10 @@ type Querier interface {
 	UpdatePropertyMemberInvitationLastSentAt(ctx context.Context, arg UpdatePropertyMemberInvitationLastSentAtParams) error
 	UpdatePropertyMemberInvitationRole(ctx context.Context, arg UpdatePropertyMemberInvitationRoleParams) (PropertyMemberInvitation, error)
 	UpdatePropertyMemberRole(ctx context.Context, arg UpdatePropertyMemberRoleParams) (PropertyMember, error)
+	// Partial PATCH is resolved by the application layer; the statement always
+	// writes the full editable set. The start date is not editable (ADR 0053
+	// §3); completion and the deposit return belong to CompleteRental.
+	UpdateRental(ctx context.Context, arg UpdateRentalParams) error
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) error
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error)
 	UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubscriptionPaymentParams) (SubscriptionPayment, error)

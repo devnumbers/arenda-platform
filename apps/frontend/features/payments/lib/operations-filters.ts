@@ -1,6 +1,7 @@
 import type { IsoDate, OperationsCategorySummary } from '@/entities/payment';
-import { addDays, formatDayMonth, inclusiveDays } from '@/entities/payment';
+import { addDays, inclusiveDays } from '@/entities/payment';
 import { lastDayOfMonth } from '@/shared/lib/calendar';
+import { formatDottedDate } from '@/shared/lib/date-format';
 import { pluralize } from '@/shared/lib/pluralize';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
 import {
@@ -177,11 +178,6 @@ const MONTH_SHORT: ReadonlyArray<string> = [
   'дек',
 ];
 
-const dottedDate = (iso: IsoDate): string => {
-  const { year, month, day } = isoParts(iso);
-  return `${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
-};
-
 /** Лейбл чипа дефолтного периода — «Сентябрь 2026». */
 export function operationsPeriodDefaultChipLabel(period: OperationsPeriod): string {
   return operationsMonthRange(operationsMonthOf(period.from)).label;
@@ -197,7 +193,7 @@ export function operationsPeriodRangeChipLabel(period: OperationsPeriod): string
   const from = isoParts(period.from);
   const to = isoParts(period.to);
   if (from.year !== to.year) {
-    return `${dottedDate(period.from)} — ${dottedDate(period.to)}`;
+    return `${formatDottedDate(period.from)} — ${formatDottedDate(period.to)}`;
   }
   const fromLabel = `${from.day} ${MONTH_SHORT[from.month - 1] ?? ''}`.trim();
   if (period.from === period.to) {
@@ -211,42 +207,12 @@ export function operationsPeriodRangeChipLabel(period: OperationsPeriod): string
 }
 
 /**
- * Подпись границы периода в шите: текущий год — «1 ноября» (склонённый
- * месяц, как в строках списков), другой год — «01.01.2025».
+ * Черновик выбора и логика тапов диапазона переехали в общий канон пикера
+ * (shared/lib/calendar: pickIsoRange/settleIsoRange/booleanRunSegments,
+ * подписи границ — formatRangeBound в shared/lib/date-format) вместе с
+ * переводом фильтра периода на CalendarRangePicker (решение владельца
+ * 2026-09-04).
  */
-export function operationsPeriodBoundLabel(bound: IsoDate, today: IsoDate): string {
-  return bound.slice(0, 4) === today.slice(0, 4) ? formatDayMonth(bound) : dottedDate(bound);
-}
-
-/** Черновик выбора в шите периода: граница без конца — диапазон не завершён. */
-export type OperationsPeriodDraft = {
-  readonly start: IsoDate;
-  readonly end: IsoDate | null;
-};
-
-/** Черновик по применённому периоду — исходное состояние открытого шита. */
-export function operationsPeriodDraftOf(period: OperationsPeriod): OperationsPeriodDraft {
-  return { start: period.from, end: period.to };
-}
-
-/**
- * Тап по дню в календаре шита: до границы — новый старт; правее —
- * завершение диапазона; по завершённому — перезапуск с новой границы.
- */
-export function pickOperationsPeriodDay(
-  draft: OperationsPeriodDraft,
-  day: IsoDate,
-): OperationsPeriodDraft {
-  if (draft.end !== null || day < draft.start) {
-    return { start: day, end: null };
-  }
-  return { start: draft.start, end: day };
-}
-
-/** Завершённый период черновика: без конца — один день старта. */
-export function settledOperationsPeriod(draft: OperationsPeriodDraft): OperationsPeriod {
-  return { from: draft.start, to: draft.end ?? draft.start };
-}
 
 /** Строка шита категорий: слаг собирает оба направления в одну сумму. */
 export type OperationsCategoryRow = {
@@ -299,28 +265,4 @@ export function operationsCategoryChipLabel(
     return row?.label ?? `1 ${categoriesPlural(1)}`;
   }
   return `${selected.length} ${categoriesPlural(selected.length)}`;
-}
-
-/**
- * Непрерывные отрезки подложки диапазона внутри одной недели календаря
- * шита периода: серые «пилюли» от границы до границы (Figma 1495-64015 —
- * ряды целиком в диапазоне и частичные ряды краёв). Индексы 0-based
- * включительно по колонкам недели.
- */
-export function booleanRunSegments(
-  flags: ReadonlyArray<boolean>,
-): ReadonlyArray<readonly [number, number]> {
-  const segments: Array<readonly [number, number]> = [];
-  let runStart: number | null = null;
-  for (const [index, flag] of flags.entries()) {
-    if (flag && runStart === null) {
-      runStart = index;
-    }
-    if ((!flag || index === flags.length - 1) && runStart !== null) {
-      const runEnd = flag && index === flags.length - 1 ? index : index - 1;
-      segments.push([runStart, runEnd]);
-      runStart = null;
-    }
-  }
-  return segments;
 }

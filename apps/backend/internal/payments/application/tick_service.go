@@ -111,10 +111,20 @@ func zoneToday(now time.Time, timezone string) (time.Time, error) {
 // today — computed once per request by the owner calendar, so a mutation and
 // the tick it triggers always agree on the day boundary.
 func (s *txStores) tickOwner(ctx context.Context, ownerID uuid.UUID, today time.Time) error {
-	if err := s.tick.LockOwnerProperties(ctx, ownerID); err != nil {
+	return RunOwnerTickInTx(ctx, s.tick, ownerID, today)
+}
+
+// RunOwnerTickInTx is the tick body of tickOwner over a bare TickStore: the
+// single home of the lock → snapshot → plan → apply sequence, shared with the
+// rentals context's in-mutation tick (ADR 0053 §3) — its wiring-bound
+// RentPaymentGateway calls this with the payments TickStore bound to the
+// rentals transaction, so the sync of the managed payment ticks exactly like
+// a payments mutation, with no second conveyor.
+func RunOwnerTickInTx(ctx context.Context, tick TickStore, ownerID uuid.UUID, today time.Time) error {
+	if err := tick.LockOwnerProperties(ctx, ownerID); err != nil {
 		return fmt.Errorf("lock owner properties: %w", err)
 	}
-	snapshot, err := s.tick.LoadOwnerSnapshot(ctx, ownerID)
+	snapshot, err := tick.LoadOwnerSnapshot(ctx, ownerID)
 	if err != nil {
 		return fmt.Errorf("load owner snapshot: %w", err)
 	}
@@ -123,7 +133,7 @@ func (s *txStores) tickOwner(ctx context.Context, ownerID uuid.UUID, today time.
 	}
 	for _, p := range snapshot.Payments {
 		plan := domain.PlanPaymentTick(p, today, snapshot.Statuses[p.ID])
-		if err := s.tick.ApplyTickPlan(ctx, p, today, plan); err != nil {
+		if err := tick.ApplyTickPlan(ctx, p, today, plan); err != nil {
 			return fmt.Errorf("apply tick plan of payment %s: %w", p.ID, err)
 		}
 	}

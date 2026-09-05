@@ -1,9 +1,11 @@
 import type {
+  IsoDate,
   PaymentCreateCommand,
   PaymentForm,
   PaymentType,
   Recurrence,
 } from '@/entities/payment';
+import { dateInMonth, isoYear } from '@/shared/lib/calendar';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
 /**
@@ -57,6 +59,21 @@ export function branchKind(recurrence: Recurrence | undefined): PeriodicityBranc
     case 'yearly':
       return 'yearly';
   }
+}
+
+/** Ближайшее будущее вхождение годового правила — предвыбор бесконечного
+ * календаря в ветке «Каждый год»: кандидат в текущем году (несуществующий
+ * день прижимается к концу месяца, как на сервере), в прошлом — тот же
+ * день следующего года. Год в правиле не хранится (yearly = месяц и день). */
+export function yearlyAnchorDate(
+  recurrence: { readonly month: number; readonly day: number },
+  today: IsoDate,
+): IsoDate {
+  const month0 = recurrence.month - 1;
+  const candidate = dateInMonth(isoYear(today), month0, recurrence.day);
+  return candidate < today
+    ? dateInMonth(isoYear(today) + 1, month0, recurrence.day)
+    : candidate;
 }
 
 /** Регулярность считается выбранной, когда её ветка дат завершена. */

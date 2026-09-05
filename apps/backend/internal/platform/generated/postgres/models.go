@@ -377,6 +377,25 @@ type PushSubscription struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Rental struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	PaymentID            pgtype.UUID        `json:"payment_id"`
+	ContactID            pgtype.UUID        `json:"contact_id"`
+	StartDate            pgtype.Date        `json:"start_date"`
+	PlannedEndDate       pgtype.Date        `json:"planned_end_date"`
+	CompletedDate        pgtype.Date        `json:"completed_date"`
+	Utilities            string             `json:"utilities"`
+	DepositKopecks       pgtype.Int8        `json:"deposit_kopecks"`
+	CommissionKopecks    pgtype.Int8        `json:"commission_kopecks"`
+	DepositReturnKopecks pgtype.Int8        `json:"deposit_return_kopecks"`
+	DepositReturnComment pgtype.Text        `json:"deposit_return_comment"`
+	Comment              pgtype.Text        `json:"comment"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Session struct {
 	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`

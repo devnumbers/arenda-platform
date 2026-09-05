@@ -31,7 +31,12 @@ export {
   type WheelPickerSheetProps,
   type WheelPickerSheetAction,
 } from './wheel-picker-sheet';
-export { CalendarDatePicker, type CalendarDatePickerProps } from './calendar-date-picker';
+export {
+  CalendarDatePicker,
+  CalendarRangePicker,
+  type CalendarDatePickerProps,
+  type CalendarRangePickerProps,
+} from './calendar-date-picker';
 export { ListRow, type ListRowProps } from './list-row';
 export { RoundActionButton, type RoundActionButtonProps } from './round-action-button';
 export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar';

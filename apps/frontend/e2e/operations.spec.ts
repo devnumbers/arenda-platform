@@ -26,6 +26,12 @@ const EMPTY_PERIOD_CAPTION = 'Операции не найдены. Попроб
 const CATEGORIES_EMPTY_CAPTION = 'Категорий, по которым были операции в этот период не было. '
   + 'Попробуйте выбрать другой период';
 
+// Названия месяцев в заголовках секций пикера периода («Сентябрь, 2026»).
+const PICKER_MONTH_NAMES = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+] as const;
+
 test.describe('экраны операций — пустые состояния', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -191,11 +197,11 @@ test.describe('экраны операций — сквозной флоу', () 
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(new RegExp('/operations$'));
 
-    // Чип периода открывает страницу периода, крестик возвращает без изменений.
+    // Чип периода открывает канонический пикер поверх списка; «Назад»
+    // пикера закрывает его, адрес списка не меняется.
     await page.getByRole('button', { name: /\d{4}/ }).click();
-    await expect(page).toHaveURL(new RegExp('/operations/period'));
     await expect(page.getByText('Выберите период')).toBeVisible();
-    await page.getByRole('button', { name: 'Закрыть' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(new RegExp('/operations$'));
 
     // Чип категорий → выбор строки → «Выбрать» возвращает список с фильтром.
@@ -228,13 +234,15 @@ test.describe('экраны операций — сквозной флоу', () 
       const previousMonth = new Date();
       previousMonth.setDate(1);
       previousMonth.setMonth(previousMonth.getMonth() - 1);
-      const monthId = `operations-period-month-${previousMonth.getFullYear()}-`
-        + `${String(previousMonth.getMonth() + 1).padStart(2, '0')}`;
-      const monthBlock = page.locator(`#${monthId}`);
+      const monthBlock = page.locator('section').filter({
+        has: page.getByRole('heading', {
+          name: `${PICKER_MONTH_NAMES[previousMonth.getMonth()]}, ${previousMonth.getFullYear()}`,
+        }),
+      });
       for (const day of days) {
         await monthBlock.getByRole('button', { name: day, exact: true }).click();
       }
-      await page.getByRole('button', { name: 'Выбрать период' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Выбрать', exact: true }).click();
       await expect(page).toHaveURL(/\?from=/);
     };
 

@@ -121,3 +121,80 @@ export function calendarFeedStart(today: IsoDate, value: IsoDate | null): Calend
 export function clampMonthToMin(min: CalendarMonthRef, year: number, month0: number): number {
   return year === min.year ? Math.max(month0, min.month0) : month0;
 }
+
+/** Месяц колеса с учётом верхней границы: в максимальном году месяцы позже
+ * max.month0 не существуют (будущее закрыто), в остальных — любой. */
+export function clampMonthToMax(max: CalendarMonthRef, year: number, month0: number): number {
+  return year === max.year ? Math.min(month0, max.month0) : month0;
+}
+
+/** Диапазон дат с включительными границами (пикер периода операций). */
+export type IsoRange = {
+  readonly from: IsoDate;
+  readonly to: IsoDate;
+};
+
+/** Черновик выбора диапазона: граница без конца — диапазон не завершён. */
+export type IsoRangeDraft = {
+  readonly start: IsoDate;
+  readonly end: IsoDate | null;
+};
+
+/** Тап по дню в календаре диапазона: первый тап задаёт границу; второй
+ * завершает диапазон в любую сторону — раньше или позже первой границы
+ * (решение владельца 2026-09-05: 5→1 = период 1–5); тап по тому же числу —
+ * период одного дня; по завершённому — перезапуск с новой границы. */
+export function pickIsoRange(draft: IsoRangeDraft, day: IsoDate): IsoRangeDraft {
+  if (draft.end !== null) {
+    return { start: day, end: null };
+  }
+  if (day < draft.start) {
+    return { start: day, end: draft.start };
+  }
+  return { start: draft.start, end: day };
+}
+
+/** Завершённый диапазон черновика: без конца — один день старта. */
+export function settleIsoRange(draft: IsoRangeDraft): IsoRange {
+  return { from: draft.start, to: draft.end ?? draft.start };
+}
+
+/** Окно ленты пикера диапазона: старт — месяц начала диапазона минус месяц,
+ * но не глубже пяти месяцев до текущего (свежий выбор открывается с
+ * контекстом, глубокий — у своего начала); конец — текущий месяц плюс два
+ * приглушённых будущих. Глубже окно расширяется дорисовкой при прокрутке. */
+export function rangeFeedWindow(
+  value: IsoRange,
+  today: IsoDate,
+): { first: CalendarMonthRef; last: CalendarMonthRef } {
+  const currentIdx = calendarMonthIndex(calendarMonthOf(today));
+  const firstIdx = Math.min(
+    calendarMonthIndex(calendarMonthOf(value.from)) - 1,
+    currentIdx - 5,
+  );
+  return {
+    first: calendarMonthOfIndex(firstIdx),
+    last: calendarMonthOfIndex(currentIdx + 2),
+  };
+}
+
+/** Непрерывные отрезки подложки диапазона внутри одной недели календаря:
+ * серые «пилюли» от границы до границы — ряды целиком в диапазоне и
+ * частичные ряды краёв. Индексы 0-based включительно по колонкам недели. */
+export function booleanRunSegments(
+  flags: ReadonlyArray<boolean>,
+): ReadonlyArray<readonly [number, number]> {
+  const segments: Array<readonly [number, number]> = [];
+  let runStart: number | null = null;
+  for (const [index, flag] of flags.entries()) {
+    if (flag && runStart === null) {
+      runStart = index;
+    }
+    if ((!flag || index === flags.length - 1) && runStart !== null) {
+      const runEnd = flag && index === flags.length - 1 ? index : index - 1;
+      segments.push([runStart, runEnd]);
+      runStart = null;
+    }
+  }
+  return segments;
+}

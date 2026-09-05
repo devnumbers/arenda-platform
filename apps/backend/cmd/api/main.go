@@ -126,6 +126,16 @@ func run() error {
 		return err
 	}
 
+	// 7.8 Rentals (ADR 0053): the rental use cases with the composite
+	//     transaction factory over the payments stores and the wiring-bound
+	//     RentPaymentGateway; wired after access and payments — the policy
+	//     resolves the actor/scope matrix, and the seam joins the payments
+	//     stores inside the rentals transactions.
+	rentalsMod, err := wire.WireRentals(p)
+	if err != nil {
+		return err
+	}
+
 	// 8. Cross-module user_registered subscribers.
 	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
 
@@ -191,6 +201,7 @@ func run() error {
 		AddressSuggester:         propertiesMod.DadataClient,
 		PropertyPayments:         paymentsMod.PaymentService,
 		PropertyOperations:       paymentsMod.OperationService,
+		PropertyRentals:          rentalsMod.RentalService,
 		PropertyTaskRules:        tasksMod.RuleService,
 		PropertyTasks:            tasksMod.TaskService,
 		Access:                   accessMod.AccessService,

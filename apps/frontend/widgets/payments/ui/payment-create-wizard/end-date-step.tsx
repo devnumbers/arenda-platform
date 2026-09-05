@@ -5,16 +5,16 @@ import type { JSX } from 'react';
 import { ArrowRight } from '@/shared/assets/icons';
 import type { IsoDate } from '@/entities/payment';
 import { formatDayMonthWithYear } from '@/entities/payment';
-import { ListRow, Modal, ModalContent } from '@/shared/ui/design';
+import { CalendarDatePicker, ListRow } from '@/shared/ui/design';
 import { WizardHeading } from './wizard-chrome';
-import { YearMonthCalendar } from './periodicity-step';
 
 /**
  * Шаг 4 визарда — «Окончание платежа» (Figma 843:8345/843-8358): строка
- * «Выбрать дату» (с датой — она сама) открывает модалку с годовым
- * календарём — чип «Месяц Год» с колесами (годы не раньше текущего) и
- * календарем одного месяца; выбор дня закрывает модалку и возвращает дату.
- * Пусто — бессрочный. Напоминания и email-уведомления макета — вне среза
+ * «Выбрать дату» (с датой — она сама) открывает канонический бесконечный
+ * календарь CalendarDatePicker (как выбор даты в задачах; решение
+ * владельца 2026-09-04 вместо модалки с календарём одного месяца):
+ * лента месяцев вперёд, прошлого нет, «Выбрать» коммитит дату, снятая
+ * (null) — бессрочно. Напоминания и email-уведомления макета — вне среза
  * (в контракте платежа их нет).
  */
 
@@ -51,30 +51,19 @@ export function EndDateStep({
         />
       </div>
 
-      <Modal open={pickerOpen} onOpenChange={setPickerOpen}>
-        <ModalContent title="Выбрать дату" titleSrOnly>
-          <YearMonthCalendar
-            padded={false}
-            value={
-              endDate === undefined
-                ? undefined
-                : {
-                    year: Number(endDate.slice(0, 4)),
-                    month0: Number(endDate.slice(5, 7)) - 1,
-                    day: Number(endDate.slice(8)),
-                  }
-            }
-            today={today}
-            minDate={today}
-            onPick={(picked) => {
-              const mm = String(picked.month0 + 1).padStart(2, '0');
-              const dd = String(picked.day).padStart(2, '0');
-              onEndDateChange(`${picked.year}-${mm}-${dd}`);
-              setPickerOpen(false);
-            }}
-          />
-        </ModalContent>
-      </Modal>
+      {/* Рендер только в открытом состоянии — состояние ленты и черновик
+          живут, пока пикер смонтирован (конвенция канона). */}
+      {pickerOpen && (
+        <CalendarDatePicker
+          today={today}
+          value={endDate ?? null}
+          onClose={() => setPickerOpen(false)}
+          onConfirm={(date) => {
+            onEndDateChange(date ?? undefined);
+            setPickerOpen(false);
+          }}
+        />
+      )}
     </>
   );
 }

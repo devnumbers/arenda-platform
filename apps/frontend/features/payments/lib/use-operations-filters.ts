@@ -19,7 +19,15 @@ import {
  */
 export function useOperationsFilters(): {
   readonly filters: OperationsFilters;
-  readonly applyPeriod: (period: OperationsPeriod) => void;
+  /**
+   * Запись периода в адрес; `replace` — заменить запись истории вместо
+   * новой (пикер периода: применений в истории не остаётся, как на
+   * прежней странице периода).
+   */
+  readonly applyPeriod: (
+    period: OperationsPeriod,
+    options?: { readonly replace?: boolean },
+  ) => void;
   readonly applyCategories: (categories: ReadonlyArray<string>) => void;
 } {
   const router = useRouter();
@@ -28,7 +36,7 @@ export function useOperationsFilters(): {
 
   const filters = readOperationsFilters(searchParams, clientTodayIso());
 
-  const apply = (next: OperationsFilters): void => {
+  const apply = (next: OperationsFilters, replace: boolean): void => {
     const params = new URLSearchParams(searchParams);
     params.delete('from');
     params.delete('to');
@@ -37,14 +45,18 @@ export function useOperationsFilters(): {
       params.set(name, value);
     }
     const queryString = params.toString();
-    router.push(queryString.length > 0 ? `${pathname}?${queryString}` : pathname, {
-      scroll: false,
-    });
+    const url = queryString.length > 0 ? `${pathname}?${queryString}` : pathname;
+    if (replace) {
+      router.replace(url, { scroll: false });
+    } else {
+      router.push(url, { scroll: false });
+    }
   };
 
   return {
     filters,
-    applyPeriod: (period) => apply({ period, categories: filters.categories }),
-    applyCategories: (categories) => apply({ period: filters.period, categories }),
+    applyPeriod: (period, options) =>
+      apply({ period, categories: filters.categories }, options?.replace === true),
+    applyCategories: (categories) => apply({ period: filters.period, categories }, false),
   };
 }

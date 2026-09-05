@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { clampMonthToMin, type CalendarMonthRef } from '@/shared/lib/calendar';
+import {
+  clampMonthToMax,
+  clampMonthToMin,
+  type CalendarMonthRef,
+} from '@/shared/lib/calendar';
 import { MONTH_LABELS } from './month-grid';
 import {
   WheelPicker,
@@ -17,12 +21,11 @@ import {
  * черновик, кнопки коммитят/закрывают разом: экран перелистывается на блок
  * с выбранным месяцем только по «Выбрать», «Отменить» закрывает без
  * изменений (пара кнопок — по макету 1539-82659, решение владельца).
- * Без min — годы ±3 вокруг выбранного. С min — нижняя граница (пикер даты
- * задач: будущее без прошлого): годы раньше min.year отсутствуют, в году
- * min — месяцы раньше min.month0; список годов расширяется вперёд
- * бесконечно — колесо удлиняется на 10 лет, когда прокрутка доезжает до
- * края (onNearEnd WheelPicker). Черновик живёт, пока шит смонтирован:
- * при open=false шит не рендерится. */
+ * Границы независимы: min закрывает прошлое (пикер даты задач), max —
+ * будущее (пикер периода операций, решение владельца 2026-09-04); без
+ * границ — годы ±3 вокруг выбранного. У края без границы колесо годов
+ * удлиняется на 10 лет (onNearEnd вперёд, onNearStart назад). Черновик
+ * живёт, пока шит смонтирован: при open=false шит не рендерится. */
 export type MonthYearPickerProps = {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
@@ -31,6 +34,8 @@ export type MonthYearPickerProps = {
   readonly year: number;
   /** Нижняя граница выбора: ничего раньше этого месяца. */
   readonly min?: CalendarMonthRef;
+  /** Верхняя граница выбора: ничего позже этого месяца. */
+  readonly max?: CalendarMonthRef;
   readonly onConfirm: (month: number, year: number) => void;
   readonly className?: string;
 };
@@ -43,6 +48,7 @@ export function MonthYearPicker({
   month,
   year,
   min,
+  max,
   onConfirm,
   className,
 }: MonthYearPickerProps): JSX.Element | null {
@@ -56,6 +62,7 @@ export function MonthYearPicker({
       month={month}
       year={year}
       min={min}
+      max={max}
       onConfirm={onConfirm}
       onClose={() => onOpenChange(false)}
       className={className}
@@ -68,6 +75,7 @@ function MonthYearSheet({
   month,
   year,
   min,
+  max,
   onConfirm,
   onClose,
   className,
@@ -75,41 +83,53 @@ function MonthYearSheet({
   readonly month: number;
   readonly year: number;
   readonly min?: CalendarMonthRef;
+  readonly max?: CalendarMonthRef;
   readonly onConfirm: (month: number, year: number) => void;
   readonly onClose: () => void;
   readonly className?: string;
 }): JSX.Element {
   const [draftMonth, setDraftMonth] = useState(month);
   const [draftYear, setDraftYear] = useState(year);
-  // Лента годов вперёд без конца: от нижней границы (min.year либо
-  // год-3) до расширяемого края — onNearEnd колеса удлиняет её на 10.
+  // Лента годов тянется за края без границы: у края с min — от min.year
+  // с удлинением вперёд (onNearEnd), у края с max — до max.year
+  // с удлинением назад (onNearStart); без границ — ±3 вокруг выбранного.
+  const [yearsStart, setYearsStart] = useState(() => year - 3);
   const [yearsEnd, setYearsEnd] = useState(() => year + 3);
-  const yearStart = min?.year ?? year - 3;
+  const startYear = min?.year ?? yearsStart;
+  const endYear = max?.year ?? yearsEnd;
   const yearItems: ReadonlyArray<WheelPickerItem> = Array.from(
-    { length: Math.max(yearsEnd - yearStart + 1, 1) },
+    { length: Math.max(endYear - startYear + 1, 1) },
     (_, index) => {
-      const value = yearStart + index;
+      const value = startYear + index;
       return { value: String(value), label: String(value) };
     },
   );
-  // В минимальном году месяцы раньше границы не существуют — колесо
-  // начинается с min.month0; значения — абсолютные 0..11.
+  // В граничном году месяцы за границей не существуют: колесо обрезается
+  // с обеих сторон; значения — абсолютные 0..11.
   const minMonth0 = min !== undefined && draftYear === min.year ? min.month0 : 0;
+  const maxMonth0 = max !== undefined && draftYear === max.year ? max.month0 : 11;
   const monthItems: ReadonlyArray<WheelPickerItem> = MONTH_LABELS.map((label, index) => ({
     value: String(index),
     label,
-  })).slice(minMonth0);
-  const draftDisplayMonth =
-    min !== undefined ? clampMonthToMin(min, draftYear, draftMonth) : draftMonth;
+  })).slice(minMonth0, maxMonth0 + 1);
+  // Прижатие черновика к обеим границам (какая задана): перескок года в
+  // граничный поджимает месяц — черновик не остаётся в недоступном.
+  const clampDraftMonth = (yearValue: number, monthValue: number): number => {
+    let bounded = monthValue;
+    if (min !== undefined) {
+      bounded = clampMonthToMin(min, yearValue, bounded);
+    }
+    if (max !== undefined) {
+      bounded = clampMonthToMax(max, yearValue, bounded);
+    }
+    return bounded;
+  };
+  const draftDisplayMonth = clampDraftMonth(draftYear, draftMonth);
 
   const handleYearChange = (value: string): void => {
     const nextYear = Number(value);
     setDraftYear(nextYear);
-    // Перескок в минимальный год прижимает месяц к границе — колесо
-    // месяцев перестраивается, черновик не остаётся в недоступном.
-    if (min !== undefined) {
-      setDraftMonth((current) => clampMonthToMin(min, nextYear, current));
-    }
+    setDraftMonth((current) => clampDraftMonth(nextYear, current));
   };
 
   const actions: ReadonlyArray<WheelPickerSheetAction> = [
@@ -145,6 +165,7 @@ function MonthYearSheet({
           value={String(draftYear)}
           onValueChange={handleYearChange}
           onNearEnd={() => setYearsEnd((end) => end + YEARS_EXTENSION)}
+          onNearStart={() => setYearsStart((start) => start - YEARS_EXTENSION)}
         />,
       ]}
     />

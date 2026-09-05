@@ -36,3 +36,14 @@ export function formatDayMonthWithYear(iso: IsoDate, today: IsoDate): string {
 export function formatOverdueDays(days: number): string {
   return `${days} ${pluralize(Math.abs(days), 'день', 'дня', 'дней')}`;
 }
+
+/** Полноширинная дата «01.01.2025» — границы диапазона другого года. */
+export function formatDottedDate(iso: IsoDate): string {
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+}
+
+/** Подпись границы диапазона в пикере периода: текущий год — «1 ноября»
+ * (склонённый месяц, как в строках списков), другой год — «01.01.2025». */
+export function formatRangeBound(bound: IsoDate, today: IsoDate): string {
+  return isoYear(bound) === isoYear(today) ? formatDayMonth(bound) : formatDottedDate(bound);
+}

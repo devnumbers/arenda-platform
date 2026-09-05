@@ -1448,6 +1448,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/rentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRentals"];
+        put?: never;
+        post: operations["createRental"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/rentals/{rentalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getRental"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteRental"];
+        options?: never;
+        head?: never;
+        patch: operations["updateRental"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/rentals/{rentalId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeRental"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/rentals/{rentalId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getRentalSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2398,6 +2462,157 @@ export interface components {
             stack?: string;
             /** @description Page URL where the error occurred */
             url?: string;
+        };
+        /** @description День оплаты аренды: число месяца 1–31 или строка "last" — «последний день месяца». «31-е число» и "last" — одно поведение: в коротком месяце прижимается к последнему дню (ADR 0053 §4). */
+        RentalPaymentDay: number | "last";
+        /** @description Создание аренды (= атомарное создание её Платежа арендной платы). Начало — сегодня или позже по TZ собственника (задним числом аренда не создаётся); плановое окончание — строго позже начала. */
+        RentalCreateRequest: {
+            /** Format: int64 */
+            amountKopecks: number;
+            paymentDay: components["schemas"]["RentalPaymentDay"];
+            /** Format: date */
+            startDate: string;
+            /**
+             * Format: date
+             * @description Null/omitted — бессрочная аренда.
+             */
+            plannedEndDate?: string | null;
+            /** @enum {string} */
+            utilities: "included" | "meters_only" | "full_receipt";
+            /** Format: int64 */
+            depositKopecks?: number | null;
+            /** Format: int64 */
+            commissionKopecks?: number | null;
+            /**
+             * Format: uuid
+             * @description Арендатор — контакт из книги владельца скоупа.
+             */
+            contactId?: string | null;
+            comment?: string;
+            autoPay: boolean;
+        };
+        /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
+        RentalUpdateRequest: {
+            /** Format: int64 */
+            amountKopecks?: number;
+            paymentDay?: components["schemas"]["RentalPaymentDay"];
+            autoPay?: boolean;
+            /**
+             * Format: date
+             * @description Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала).
+             */
+            plannedEndDate?: string | null;
+            /** @enum {string} */
+            utilities?: "included" | "meters_only" | "full_receipt";
+            /** Format: int64 */
+            depositKopecks?: number | null;
+            /** Format: int64 */
+            commissionKopecks?: number | null;
+            /**
+             * Format: uuid
+             * @description Явный null — «Контакта нет».
+             */
+            contactId?: string | null;
+            comment?: string | null;
+        };
+        /** @description Завершение аренды: фактическая дата (начало ≤ дата ≤ сегодня; «По плану» подставляет клиент) и опциональный возврат залога. */
+        RentalCompleteRequest: {
+            /** Format: date */
+            completedDate: string;
+            depositReturn?: {
+                /**
+                 * Format: int64
+                 * @description 0 валиден — «не вернул».
+                 */
+                amountKopecks: number;
+                /** @description Только при сумме. */
+                comment?: string;
+            };
+        };
+        /** @description Встроенный арендатор — поля карточки контакта. После удаления контакта — null без пометки: UI пишет «Контакта нет» (решение #528). */
+        TenantView: {
+            /** Format: uuid */
+            contactId: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+        };
+        /** @description Единственное будущее planned-вхождение Платежа арендной платы. */
+        RentalNextPayment: {
+            /**
+             * Format: uuid
+             * @description Цель существующего «Оплатить платёж» — POST /properties/{propertyId}/operations/{operationId}/pay.
+             */
+            operationId: string;
+            /** Format: date */
+            date: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /** @description date − today по TZ собственника. */
+            daysUntil: number;
+        };
+        /** @description Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). */
+        RentalProgress: {
+            paidMonths: number;
+            totalMonths: number | null;
+            monthsRemaining: number | null;
+        };
+        /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). */
+        RentalPaymentView: {
+            /** Format: int64 */
+            amountKopecks: number;
+            paymentDay: components["schemas"]["RentalPaymentDay"];
+            autoPay: boolean;
+            /** @description Null, когда будущего вхождения нет (после планового окончания, у завершённой). */
+            nextPayment?: components["schemas"]["RentalNextPayment"];
+        };
+        /** @description Аренда с вычисляемым сервером состоянием: статус, прогресс, будущее плановое вхождение и today — клиент пояса не знает (ADR 0053 §2). */
+        RentalResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** @enum {string} */
+            status: "upcoming" | "active" | "needs_attention" | "completed";
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            plannedEndDate?: string | null;
+            /** Format: date */
+            completedDate: string | null;
+            /** @enum {string} */
+            utilities: "included" | "meters_only" | "full_receipt";
+            /** Format: int64 */
+            depositKopecks: number | null;
+            /** Format: int64 */
+            commissionKopecks: number | null;
+            /** Format: int64 */
+            depositReturnKopecks: number | null;
+            depositReturnComment: string | null;
+            tenant?: components["schemas"]["TenantView"];
+            comment: string;
+            rentPayment: components["schemas"]["RentalPaymentView"];
+            progress: components["schemas"]["RentalProgress"];
+            /** Format: date */
+            today: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RentalsResponse: {
+            items: components["schemas"]["RentalResponse"][];
+        };
+        /** @description Итоги аренды (решение №13): все paid-операции объекта — любого платежа и ручные — с датой вхождения в периоде [startDate, until]; период — по дате вхождения. Прибыль = доходы − расходы, может быть отрицательной. */
+        RentalSummaryResponse: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            until: string;
+            /** Format: int64 */
+            incomeKopecks: number;
+            /** Format: int64 */
+            expenseKopecks: number;
+            /** Format: int64 */
+            profitKopecks: number;
         };
     };
     responses: {
@@ -5397,6 +5612,204 @@ export interface operations {
                     "text/plain": string;
                 };
             };
+        };
+    };
+    listRentals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rentals list (unfinished first, then completed by completion date) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Rental created (with its managed rent payment) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rental */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rental deleted (with its managed rent payment) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Rental updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    completeRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Rental completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getRentalSummary: {
+        parameters: {
+            query?: {
+                /** @description Period end (inclusive). Defaults to the completion date for a completed rental, otherwise today in the owner's timezone; the completion master previews with the chosen date before completing. */
+                until?: string;
+            };
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The property's paid-operations totals over the rental period */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalSummaryResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

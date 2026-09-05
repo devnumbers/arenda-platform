@@ -1,12 +1,18 @@
 'use client';
 
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowSLeft, ArrowSRight, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import type { PaymentOperationScope } from '@/shared/api/query-keys';
-import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import {
+  Button,
+  IconButton,
+  PageContent,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
 import {
   clientTodayIso,
   type PaymentOperation,
@@ -28,6 +34,7 @@ import { operationsTypeHeadline } from '../lib/operations-empty-states';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import { LoadingMoreIndicator, OperationsDateList } from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
+import { OperationsPeriodPickerDialog } from './operations-period-picker';
 
 /** Копия экрана по направлению (Figma 1494-61191 / 1492-59865). */
 const SCREEN_COPY = {
@@ -61,6 +68,9 @@ export function OperationsOfTypeScreen({
 
   const today = clientTodayIso();
   const period = filters.period ?? defaultOperationsPeriod(today);
+  // Пикер периода — канонический оверлей поверх списка (решение владельца
+  // 2026-09-04, раньше — отдельный маршрут /operations/period).
+  const [periodOpen, setPeriodOpen] = useState(false);
   // Правая стрелка гасится, когда следующее окно уходит в будущее (экраны
   // операций — только paid, резолюция #474): период листается на свою же
   // длину (решение владельца, #472).
@@ -109,7 +119,7 @@ export function OperationsOfTypeScreen({
   const openOperation = (operation: PaymentOperation): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
 
-  const openFilters = (which: 'period' | 'categories'): void => {
+  const openCategories = (): void => {
     const params = new URLSearchParams();
     if (filters.period !== null) {
       params.set('from', filters.period.from);
@@ -119,11 +129,7 @@ export function OperationsOfTypeScreen({
       params.set('category', filters.categories.join(','));
     }
     params.set('return', pathname);
-    const base =
-      which === 'period'
-        ? ROUTES.propertyOperationsPeriod(propertyId)
-        : ROUTES.propertyOperationsCategories(propertyId);
-    router.push(`${base}?${params.toString()}`);
+    router.push(`${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`);
   };
 
   return (
@@ -164,8 +170,8 @@ export function OperationsOfTypeScreen({
             }
             categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
             categoriesActive={filters.categories.length > 0}
-            onOpenPeriod={() => openFilters('period')}
-            onOpenCategories={() => openFilters('categories')}
+            onOpenPeriod={() => setPeriodOpen(true)}
+            onOpenCategories={openCategories}
           />
 
           {pending && (
@@ -233,6 +239,10 @@ export function OperationsOfTypeScreen({
           )}
         </div>
       </PageContent>
+
+      {/* Пикер периода — рендер только в открытом состоянии: лента и
+          черновик живут, пока смонтирован. */}
+      {periodOpen && <OperationsPeriodPickerDialog onClose={() => setPeriodOpen(false)} />}
     </>
   );
 }

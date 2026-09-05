@@ -16,6 +16,7 @@ import (
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	rentalsapp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
 	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
 )
@@ -141,6 +142,9 @@ var userFacingDetails = []struct {
 
 	// Contacts (the contact book, ADR 0051).
 	{contactsapp.ErrInvalidInput, "Некорректные данные контакта"},
+
+	// Rentals (ADR 0053).
+	{rentalsapp.ErrInvalidInput, "Некорректные данные аренды"},
 }
 
 // UserFacingDetail maps known domain errors to fixed, non-sensitive messages

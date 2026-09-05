@@ -175,3 +175,15 @@ WHERE op.owner_id = sqlc.arg('owner')
   AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
 GROUP BY op.category_slug, op.category_label, op.type
 ORDER BY total_kopecks DESC, op.category_slug;
+
+-- name: CountPaidOperationsByPayment :one
+-- The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
+-- paidMonths — «N из M месяцев» counts the managed payment's paid facts).
+-- Cancelled tombstones never count; the nested payment→property path is
+-- enforced in the WHERE clause.
+SELECT COUNT(*)::bigint
+FROM operations
+WHERE owner_id = sqlc.arg('owner')
+  AND property_id = sqlc.arg('property')
+  AND payment_id = sqlc.arg('payment')
+  AND status = 'paid';

@@ -258,7 +258,7 @@ func TestWithoutPropertySliceIsolation(t *testing.T) {
 	}
 
 	// The property deletion cascade takes the bound rows; the property-less
-	// slice of the same owner is untouched (migration 000120 keeps the FK).
+	// slice of the same owner is untouched (migration 000121 keeps the FK).
 	withoutPropertyRule, err := h.rules.CreateRuleWithoutProperty(h.ctx(), h.owner, withoutPropertyCreateCmd())
 	if err != nil {
 		t.Fatalf("create property-less rule: %v", err)

@@ -126,6 +126,12 @@ func (noopOperationStore) SummarizeByProperty(
 	panic("unused")
 }
 
+func (noopOperationStore) CountPaidOperationsByPayment(
+	context.Context, uuid.UUID, uuid.UUID, uuid.UUID,
+) (int64, error) {
+	panic("unused")
+}
+
 func (noopOperationStore) WithTx(tx transaction.Tx) (OperationStore, error) {
 	return noopOperationStore{}, nil
 }

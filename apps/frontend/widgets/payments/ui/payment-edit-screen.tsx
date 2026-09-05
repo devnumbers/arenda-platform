@@ -48,6 +48,7 @@ import {
 } from '@/features/payments';
 import {
   Button,
+  CalendarDatePicker,
   Checkbox,
   groupedAmount,
   IconButton,
@@ -71,7 +72,6 @@ import { CategoryStep } from './payment-create-wizard/category-step';
 import {
   BRANCH_PERIOD_LABELS,
   PeriodicityStep,
-  YearMonthCalendar,
 } from './payment-create-wizard/periodicity-step';
 import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
 
@@ -92,8 +92,9 @@ import { CategorySearchHint } from './payment-create-wizard/wizard-chrome';
  * (решение владельца 2026-08-31); правка живёт в черновике страницы и
  * применяется только кнопкой «Выбрать» — «Назад» её отбрасывает
  * (багфикс: незавершённый период не оставался в форме). Окончание —
- * страница с календарём, открытым сразу (решение владельца 2026-08-31).
- * Регулярность —
+ * канонический бесконечный календарь поверх формы (решение владельца
+ * 2026-09-04; раньше — страница с календарём, открытым сразу,
+ * решение 2026-08-31). Регулярность —
  * без «Один раз» (решение #449) с ветками дат; `since` и напоминания
  * отсутствуют (не редактируются, истории 31 спеки #453).
  * Сохранение — частичный PATCH: команда — дифф формы (update-model),
@@ -362,46 +363,11 @@ function PaymentEditForm({
     closePeriodicityPage();
   };
 
-  // Окончание платежа — страница с календарём (как шаг 4 визарда,
-  // Figma 843:8345): календарь открыт сразу, выбор дня применяется и
-  // возвращает на форму. Снятую дату UI не меняет — только раньше срока
-  // (ограничение прежнее, minDate = сегодня).
-  if (endDateOpen) {
-    return (
-      <>
-        <TopNav
-          leading={
-            <IconButton
-              icon={<ArrowLeft />}
-              label="Назад"
-              onClick={() => setEndDateOpen(false)}
-            />
-          }
-        >
-          <TopNavTitle title="Выбор даты" />
-        </TopNav>
-        <YearMonthCalendar
-          value={
-            form.endDate === undefined
-              ? undefined
-              : {
-                  year: Number(form.endDate.slice(0, 4)),
-                  month0: Number(form.endDate.slice(5, 7)) - 1,
-                  day: Number(form.endDate.slice(8)),
-                }
-          }
-          today={today}
-          minDate={today}
-          onPick={(picked) => {
-            const mm = String(picked.month0 + 1).padStart(2, '0');
-            const dd = String(picked.day).padStart(2, '0');
-            update('endDate', `${picked.year}-${mm}-${dd}`);
-            setEndDateOpen(false);
-          }}
-        />
-      </>
-    );
-  }
+  // Окончание платежа — канонический бесконечный календарь поверх формы
+  // (как выбор даты в задачах; решение владельца 2026-09-04, раньше была
+  // страница с календарём, открытым сразу): «Выбрать» применяет дату,
+  // снятая (null) — бессрочно (в команде PATCH — tri-state endDate: null).
+  // Прошлое закрыто, задним числом дата не назначается.
 
   const closeCategoryPage = (): void => {
     setCategoryOpen(false);
@@ -670,6 +636,20 @@ function PaymentEditForm({
             </div>
           </ModalContent>
         </Modal>
+      )}
+
+      {/* Рендер только в открытом состоянии — состояние ленты и черновик
+          живут, пока пикер смонтирован (конвенция канона). */}
+      {endDateOpen && (
+        <CalendarDatePicker
+          today={today}
+          value={form.endDate ?? null}
+          onClose={() => setEndDateOpen(false)}
+          onConfirm={(date) => {
+            update('endDate', date ?? undefined);
+            setEndDateOpen(false);
+          }}
+        />
       )}
     </>
   );

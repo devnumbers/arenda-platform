@@ -132,6 +132,10 @@ type OperationStore interface {
 	SummarizeByProperty(
 		ctx context.Context, scope, propertyID uuid.UUID, q OperationsSummaryQuery,
 	) (OperationsSummary, error)
+	// CountPaidOperationsByPayment counts one rule's paid operations — the
+	// read the Rentals progress «N из M месяцев» consumes through the
+	// RentPaymentGateway (ADR 0053 §2). Cancelled tombstones never count.
+	CountPaidOperationsByPayment(ctx context.Context, scope, propertyID, paymentID uuid.UUID) (int64, error)
 	WithTx(tx transaction.Tx) (OperationStore, error)
 }
 

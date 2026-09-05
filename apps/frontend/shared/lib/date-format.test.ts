@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from './date-format';
+import { formatDayMonth, formatDayMonthWithYear, formatOverdueDays, formatRangeBound } from './date-format';
 
 describe('date-format', () => {
   it('день и склонённый месяц без года: «11 августа»', () => {
@@ -11,6 +11,12 @@ describe('date-format', () => {
     const today = '2026-09-04';
     expect(formatDayMonthWithYear('2026-05-13', today)).toBe('13 мая');
     expect(formatDayMonthWithYear('2027-05-13', today)).toBe('13 мая, 2027');
+  });
+
+  it('формат границы диапазона: текущий год — «1 ноября», другой — «01.01.2025»', () => {
+    expect(formatRangeBound('2026-11-01', '2026-09-19')).toBe('1 ноября');
+    expect(formatRangeBound('2026-09-19', '2026-09-19')).toBe('19 сентября');
+    expect(formatRangeBound('2025-01-01', '2026-09-19')).toBe('01.01.2025');
   });
 
   it('склонение срока просрочки: 1 день, 3 дня, 5 дней, 21 день, 11–14 дней', () => {

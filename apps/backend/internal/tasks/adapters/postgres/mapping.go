@@ -12,7 +12,7 @@ import (
 )
 
 // taskRuleFields is the projection-free row of every rule reader: everything
-// any caller needs, read once. PropertyID is nullable since 000120 (ADR 0052
+// any caller needs, read once. PropertyID is nullable since 000121 (ADR 0052
 // — the property-less slice).
 type taskRuleFields struct {
 	ID         uuid.UUID
