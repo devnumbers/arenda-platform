@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  globalSearchListScope,
+  globalSearchSummaryScope,
   searchCategoryChips,
   searchListScope,
   searchSummaryScope,
@@ -62,6 +64,43 @@ describe('searchSummaryScope', () => {
     expect(searchSummaryScope('охра')).toEqual({
       status: 'paid',
       order: 'desc',
+      search: 'охра',
+    });
+  });
+});
+
+describe('globalSearchListScope', () => {
+  const period = { from: '2026-09-01', to: '2026-09-30' } as const;
+
+  it('несёт фильтры ленты из адреса (объекты + период) и запрос серверу', () => {
+    expect(globalSearchListScope(period, ['p1', 'p2'], 'охра', null)).toEqual({
+      order: 'desc',
+      propertyIds: ['p1', 'p2'],
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+      search: 'охра',
+    });
+  });
+
+  it('выбранный чип сужает список одной категорией', () => {
+    expect(globalSearchListScope(period, [], 'охра', 'security')).toEqual({
+      order: 'desc',
+      propertyIds: [],
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+      search: 'охра',
+      categories: ['security'],
+    });
+  });
+});
+
+describe('globalSearchSummaryScope', () => {
+  it('тот же запрос ленты без сужения по чипу', () => {
+    expect(globalSearchSummaryScope({ from: '2026-09-01', to: '2026-09-30' }, ['p1'], 'охра')).toEqual({
+      order: 'desc',
+      propertyIds: ['p1'],
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
       search: 'охра',
     });
   });

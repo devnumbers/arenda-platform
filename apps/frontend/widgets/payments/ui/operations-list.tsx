@@ -107,16 +107,20 @@ export function OperationsNeverHad(): JSX.Element {
 /** Строка операции (1332:61665, Row Button White): иконка категории с белым
  * кантом, название, знаковая сумма — доход зелёным с плюсом, расход тёмным
  * с минусом (Figma 1492:42480). Опциональный подзаголовок — дата в строках
- * результатов поиска (Figma 1494-61679), списки по датам его не передают. */
+ * результатов объектного поиска (Figma 1494-61679), списки по датам его не
+ * передают; опциональное правое нижнее поле — дата под суммой в строках
+ * глобального поиска (макет 1726-90433, #543). */
 export function OperationRow({
   operation,
   onSelect,
   subtitle,
+  description,
   className = 'px-3 py-3',
 }: {
   readonly operation: PaymentOperation;
   readonly onSelect: () => void;
   readonly subtitle?: ReactNode;
+  readonly description?: ReactNode;
   /** Дополнение/замена вставок кнопки: tailwind-merge в PaymentRowButton
    * поглощает базовый px-3, а -mx-3 дополнительно гасит внутренний px-3
    * контентного фрейма кнопки (глобальная лента: контент строки прижат
@@ -130,6 +134,7 @@ export function OperationRow({
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
       title={operation.title}
       subtitle={subtitle}
+      description={description}
       amountKopecks={
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }
