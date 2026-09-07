@@ -24,11 +24,11 @@ export const EMPTY_TASKS_FILTER_DRAFT: TasksFilterDraft = {
  * объекта контакта (#509/#510) — URL не меняется, черновик живёт в
  * состоянии. Мультивыбор чекбоксами (решение владельца 2026-09-05), выбор
  * применяется «Выбрать»/✓, ✕ отбрасывает. Первая строка — «Все задачи»
- * (без подписи, отмечена, когда черновик пуст; тап очищает черновик),
- * под ней «Общие задачи / Не привязана к объекту» — безобъектная книга
- * читателя, свободно совмещается с объектами — union-фид (решение
- * владельца 2026-09-07). Объекты — имя и адрес, с фото-аватаром или серым
- * домом, архивов в списке нет (решение 9 #522).
+ * (без подписи, отмечена, когда черновик пуст; тап очищает черновик), под
+ * разделителем — список: «Общие задачи / Не привязана к объекту» —
+ * безобъектная книга читателя, свободно совмещается с объектами — union-фид
+ * (решение владельца 2026-09-07) — и объекты. У объектов имя и адрес, с
+ * фото-аватаром или серым домом, архивов в списке нет (решение 9 #522).
  */
 export function TasksPropertySelectPage({
   draft,
@@ -75,6 +75,9 @@ export function TasksPropertySelectPage({
             checked={draft.propertyIds.length === 0 && !draft.withoutProperty}
             onCheck={() => onDraftChange(EMPTY_TASKS_FILTER_DRAFT)}
           />
+          {/* Разделитель — сразу под «Все задачи» (макет 1726:88888);
+              «Общие задачи» идут в списке вместе с объектами. */}
+          <div aria-hidden className="h-px bg-surface-muted" />
           {propertiesQuery.isPending && <ObjectRowsSkeleton />}
           {propertiesQuery.isError && <ObjectLoadErrorCard onRetry={() => void propertiesQuery.refetch()} />}
           <ObjectRowButton
@@ -84,7 +87,6 @@ export function TasksPropertySelectPage({
             checked={draft.withoutProperty}
             onCheck={() => onDraftChange({ ...draft, withoutProperty: !draft.withoutProperty })}
           />
-          {properties.length > 0 && <div aria-hidden className="h-px bg-surface-muted" />}
           {properties.map((property) => (
             <ObjectRowButton
               key={property.id}
