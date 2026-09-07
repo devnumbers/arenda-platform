@@ -93,7 +93,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
       <PageContent>
         <div className="-mx-5 min-[1200px]:mx-0">
           <ListRow
-            leading={<SelectAvatar fallback={<BoldObjects className="h-6 w-6 text-content-tertiary" />} />}
+            leading={<SelectAvatar fallback={<BoldObjects className="h-6 w-6 text-[#D3D7D9]" />} />}
             title="Все объекты"
             trailing={
               <Checkbox
@@ -132,7 +132,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
               leading={
                 <SelectAvatar
                   photoUrl={property.photos?.[0]?.url}
-                  fallback={<BoldHome className="h-6 w-6 text-content-tertiary" />}
+                  fallback={<BoldHome className="h-6 w-6 text-[#D3D7D9]" />}
                 />
               }
               title={property.name}
@@ -154,7 +154,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
           <ListRow
             leading={
               <SelectAvatar
-                fallback={<ArchiveBold className="h-6 w-6 text-content-tertiary" />}
+                fallback={<ArchiveBold className="h-6 w-6 text-[#D3D7D9]" />}
               />
             }
             title="Объекты в архиве"
@@ -184,8 +184,9 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
 
 /** Аватар строки выбора (паттерн contact-object-select): круг 44px
  * #F3F4F6 с белым кольцом 2.5px; фото объекта или иконка-плейсхолдер —
- * серый дом (BoldHome) у объектов, BoldObjects (Figma 208:2994) у
- * «Все объекты». */
+ * дом (BoldHome) у объектов, BoldObjects (Figma 208:2994) у «Все объекты»,
+ * ArchiveBold у опции архива (#549). Цвет плейсхолдеров — #D3D7D9 по макету
+ * (1733-26805/26831, пиксельная сверка 07.09), не text-content-tertiary. */
 function SelectAvatar({ photoUrl, fallback }: {
   readonly photoUrl?: string;
   readonly fallback: JSX.Element;
