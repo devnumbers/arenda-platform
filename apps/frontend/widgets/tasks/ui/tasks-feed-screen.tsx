@@ -46,7 +46,11 @@ import {
 import { TaskRow } from './task-row';
 import { TaskSectionCard } from './task-section-card';
 import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
-import { TasksPropertySelectPage } from './tasks-property-select';
+import {
+  EMPTY_TASKS_FILTER_DRAFT,
+  TasksPropertySelectPage,
+  type TasksFilterDraft,
+} from './tasks-property-select';
 import { TasksSkeleton, TasksStateCard } from './tasks-of-property-screen';
 import { sectionKey, sectionTone } from './tasks-section-utils';
 import { SortChip, sortPickerGroups } from './tasks-sort';
@@ -68,22 +72,22 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  *
  * Шапка — стандартный TopNav хаба с «крыльями» и на мобайле (`mobileWings`,
  * Figma 1733-27411); смена на компактный заголовок по прокрутке (1733-92349)
- * отложена — решение владельца 2026-09-05. Чип «Объект» — фильтр по
- * объектам (#524/#547, Figma 1726-88880/1726-86913): выбранные объекты
- * живут в адресе (?property=<id>[,<id>…], мультивыбор — решение владельца
- * 2026-09-05), страница выбора — строгий черновик без истории, при 404
- * фильтр сбрасывается сам (решение 8 #522). Подпись чипа всегда «Объект»,
- * активное состояние — признак включённого фильтра (решение владельца
- * 2026-09-05, перекрывает «чип = имя объекта» из решения 7 #522).
- * «+» — создание задачи (#525): та же форма, что на объекте, вход без
- * предвыбранного объекта — маршрут /tasks/new.
+ * отложена — решение владельца 2026-09-05. Чип «Объект» — фильтр ленты
+ * (#524/#547, Figma 1726-88880/1726-86913): выбранные объекты и «Общие
+ * задачи» живут в адресе (?property=<id>[,<id>…], ?withoutProperty=1 —
+ * union, решение владельца 2026-09-07), страница выбора — строгий черновик
+ * без истории, при 404 фильтр сбрасывается сам (решение 8 #522). Подпись
+ * чипа всегда «Объект», активное состояние — признак включённого фильтра
+ * (решение владельца 2026-09-05, перекрывает «чип = имя объекта» из
+ * решения 7 #522). «+» — создание задачи (#525): та же форма, что на
+ * объекте, вход без предвыбранного объекта — маршрут /tasks/new.
  */
 export function TasksFeedScreen(): JSX.Element {
   const router = useRouter();
 
-  const { filter, applyPropertyFilter } = useTasksFeedFilter();
-  const activeQuery = useGlobalActiveTasks(filter.propertyIds);
-  const completedQuery = useGlobalCompletedTasks(filter.propertyIds);
+  const { filter, applyFeedFilter } = useTasksFeedFilter();
+  const activeQuery = useGlobalActiveTasks(filter.propertyIds, filter.withoutProperty);
+  const completedQuery = useGlobalCompletedTasks(filter.propertyIds, filter.withoutProperty);
   const propertiesQuery = useProperties();
 
   const [sort, setSort] = useState<TasksSort>(DEFAULT_TASKS_SORT);
@@ -91,20 +95,20 @@ export function TasksFeedScreen(): JSX.Element {
   // Страница выбора объектов — строгий черновик (#524): черновик живёт,
   // пока страница смонтирована, история не пишется.
   const [selectOpen, setSelectOpen] = useState(false);
-  const [propertyDraft, setPropertyDraft] = useState<ReadonlyArray<string>>([]);
+  const [filterDraft, setFilterDraft] = useState<TasksFilterDraft>(EMPTY_TASKS_FILTER_DRAFT);
 
   // Авто-сброс фильтра при 404 (решение 8 #522): объект удалён или доступ
   // отозван — privacy 404, мёртвый фильтр из адреса убирает replace, чтобы
   // «назад» не возвращало на ту же ошибку.
   useEffect(() => {
-    if (filter.propertyIds.length === 0) {
+    if (filter.propertyIds.length === 0 && !filter.withoutProperty) {
       return;
     }
     const error = activeQuery.error ?? completedQuery.error;
     if (error instanceof ApiError && error.status === 404) {
-      applyPropertyFilter([], { replace: true });
+      applyFeedFilter(EMPTY_TASKS_FILTER_DRAFT, { replace: true });
     }
-  }, [filter.propertyIds, activeQuery.error, completedQuery.error, applyPropertyFilter]);
+  }, [filter, activeQuery.error, completedQuery.error, applyFeedFilter]);
 
   // Ручная мемоизация активных — требование react-hooks/exhaustive-deps:
   // массив входит в зависимости производных ниже (React Compiler прогоняет
@@ -186,15 +190,16 @@ export function TasksFeedScreen(): JSX.Element {
     />
   );
 
-  // Выбор объекта фильтра (#524): URL не меняется, черновик применяется
-  // кнопкой (как выбор объекта контакта #509/#510).
+  // Выбор фильтра (#524, «Общие задачи» — решение владельца 2026-09-07):
+  // URL не меняется, пока страница открыта, черновик применяется кнопкой
+  // (как выбор объекта контакта #509/#510).
   if (selectOpen) {
     return (
       <TasksPropertySelectPage
-        draft={propertyDraft}
-        onDraftChange={setPropertyDraft}
+        draft={filterDraft}
+        onDraftChange={setFilterDraft}
         onApply={() => {
-          applyPropertyFilter(propertyDraft);
+          applyFeedFilter(filterDraft);
           setSelectOpen(false);
         }}
         onDismiss={() => setSelectOpen(false)}
@@ -220,15 +225,15 @@ export function TasksFeedScreen(): JSX.Element {
               <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
                 <SortChip sort={sort} />
               </PickerMenu>
-              {/* Фильтр по объектам (#524/#547): при выбранном фильтре чип просто
-               * активный (синий, макет 1726-86913), подпись всегда «Объект» —
-               * названия объектов чип не показывает (правка владельца
-               * 2026-09-05). */}
+              {/* Фильтр (#524/#547, «Общие задачи» — решение владельца
+               * 2026-09-07): при любом непустом фильтре чип активный
+               * (синий, макет 1726-86913), подпись всегда «Объект» —
+               * названия чип не показывает (правка владельца 2026-09-05). */}
               <ChipButton
-                selected={filter.propertyIds.length > 0}
+                selected={filter.propertyIds.length > 0 || filter.withoutProperty}
                 trailingIcon={<SmallArrowDown />}
                 onClick={() => {
-                  setPropertyDraft(filter.propertyIds);
+                  setFilterDraft(filter);
                   setSelectOpen(true);
                 }}
               >

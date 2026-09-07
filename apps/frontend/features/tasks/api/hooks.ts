@@ -258,41 +258,55 @@ export function usePropertylessTasks(
 }
 
 /** Путь активного/выполненного бакета глобального листинга GET /tasks:
- * фильтр объектов (#524/#547) — необязательный comma-separated сегмент
- * перед бакетом (контракт propertyId, мультивыбор — #547). */
-const globalTasksPath = (completed: boolean, propertyIds: ReadonlyArray<string>): string => {
-  const scope =
-    propertyIds.length === 0 ? '' : `propertyId=${encodeURIComponent(propertyIds.join(','))}&`;
-  return `/tasks?${scope}completed=${completed}&limit=${TASKS_PAGE_LIMIT}`;
+ * фильтр (#524/#547) — необязательный comma-separated сегмент propertyId и
+ * флаг withoutProperty («Общие задачи», union с объектами — решение
+ * владельца 2026-09-07) перед бакетом. */
+const globalTasksPath = (
+  completed: boolean,
+  propertyIds: ReadonlyArray<string>,
+  withoutProperty: boolean,
+): string => {
+  const parts: string[] = [];
+  if (propertyIds.length > 0) {
+    parts.push(`propertyId=${encodeURIComponent(propertyIds.join(','))}`);
+  }
+  if (withoutProperty) {
+    parts.push('withoutProperty=true');
+  }
+  parts.push(`completed=${completed}`, `limit=${TASKS_PAGE_LIMIT}`);
+  return `/tasks?${parts.join('&')}`;
 };
 
 /**
  * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
  * merged-фид читателя (свои задачи + задачи видимых объектов, архивы мимо —
- * решения #522); фильтр объектов (#524/#547) — срез перечисленных
- * объектов, смена фильтра меняет ключ и перечитывает. Лимит — максимум
- * контракта: лента группируется целиком, как на объекте. today — календарь
- * читателя (на срезе одного объекта — владельца данных). Сестринский хук
- * журнала — useGlobalCompletedTasks.
+ * решения #522); фильтр (#524/#547) — срез перечисленных объектов,
+ * «Общие задачи» — безобъектная книга читателя, вместе — union (решение
+ * владельца 2026-09-07); смена фильтра меняет ключ и перечитывает. Лимит —
+ * максимум контракта: лента группируется целиком, как на объекте. today —
+ * календарь читателя (на срезе одного объекта — владельца данных).
+ * Сестринский хук журнала — useGlobalCompletedTasks.
  */
 export function useGlobalActiveTasks(
   propertyIds: ReadonlyArray<string>,
+  withoutProperty = false,
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
-    queryKey: taskKeys.global(false, propertyIds),
+    queryKey: taskKeys.global(false, propertyIds, withoutProperty),
     queryFn: async () =>
-      mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(false, propertyIds))),
+      mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(false, propertyIds, withoutProperty))),
   });
 }
 
 /** Журнал глобальной ленты — сворачиваемая секция «Выполненные N». */
 export function useGlobalCompletedTasks(
   propertyIds: ReadonlyArray<string>,
+  withoutProperty = false,
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
-    queryKey: taskKeys.global(true, propertyIds),
+    queryKey: taskKeys.global(true, propertyIds, withoutProperty),
     queryFn: async () =>
-      mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(true, propertyIds))),
+      mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(true, propertyIds, withoutProperty))),
   });
 }
 

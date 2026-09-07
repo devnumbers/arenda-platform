@@ -1,16 +1,17 @@
 /**
- * Фильтр по объектам глобальной ленты «Задачи» (карта #518, тикеты #524 и
- * #547, Figma 1726-88880/1726-86913): выбранные опции шита «Выбрать объект»
- * применяются в адрес страницы (?property=<uuid>[,<uuid>…]) — ссылка
+ * Фильтр глобальной ленты «Задачи» (карта #518, тикеты #524/#547, Figma
+ * 1726-88880): выбранные опции страницы «Выбрать объект» применяются в адрес
+ * страницы (?property=<uuid>[,<uuid>…] и ?withoutProperty=1) — ссылка
  * шарится, «назад» по истории возвращает к ленте без фильтра. Мультивыбор —
- * накопление чекбоксов (решение владельца 2026-09-05), «Все объекты» —
- * пустой список, весь merged-фид вместе с безобъектными. Опции «Без
- * объекта» в фильтре нет (решение 7 #522).
+ * накопление чекбоксов (решение владельца 2026-09-05); «Общие задачи» —
+ * отдельный чекбокс, свободно совмещается с объектами — union-фид (решение
+ * владельца 2026-09-07); «Все задачи» — оба пустые, весь merged-фид.
  */
 
-/** Разобранный фильтр ленты: пустой список — «Все объекты». */
+/** Разобранный фильтр ленты: пустые оба поля — «Все задачи». */
 export type TasksFeedFilter = {
   readonly propertyIds: ReadonlyArray<string>;
+  readonly withoutProperty: boolean;
 };
 
 /** Минимальный источник параметров — ReadonlyURLSearchParams Next ему
@@ -20,33 +21,43 @@ export type TasksFeedFilterParamsSource = {
 };
 
 const PROPERTY_PARAM = 'property';
+const WITHOUT_PROPERTY_PARAM = 'withoutProperty';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Имя параметра адреса — единый источник для чтения и записи. */
+/** Имена параметров адреса — единый источник для чтения и записи. */
 export const tasksFeedPropertyParam = PROPERTY_PARAM;
+export const tasksFeedWithoutPropertyParam = WITHOUT_PROPERTY_PARAM;
 
 /** Чтение фильтра из URL: битые элементы отбрасываются по одному, дубли
  * схлопываются — ссылка с одним мусорным id открывает срез остальных, а не
- * весь фид; одни битые — ленту без фильтра. */
+ * весь фид; одни битые — ленту без фильтра. withoutProperty читают только
+ * «1»/«true», прочие значения молча выключают флаг. */
 export function readTasksFeedFilter(params: TasksFeedFilterParamsSource): TasksFeedFilter {
   const raw = params.get(PROPERTY_PARAM);
-  if (raw === null) {
-    return { propertyIds: [] };
-  }
   const seen = new Set<string>();
-  for (const part of raw.split(',')) {
-    const id = part.trim();
-    if (UUID_RE.test(id)) {
-      seen.add(id);
+  if (raw !== null) {
+    for (const part of raw.split(',')) {
+      const id = part.trim();
+      if (UUID_RE.test(id)) {
+        seen.add(id);
+      }
     }
   }
-  return { propertyIds: [...seen] };
+  const withoutRaw = params.get(WITHOUT_PROPERTY_PARAM);
+  return {
+    propertyIds: [...seen],
+    withoutProperty: withoutRaw === '1' || withoutRaw === 'true',
+  };
 }
 
 /** Параметры адреса для фильтра — запись через useTasksFeedFilter. */
 export function tasksFeedFilterParams(filter: TasksFeedFilter): Record<string, string> {
-  if (filter.propertyIds.length === 0) {
-    return {};
+  const params: Record<string, string> = {};
+  if (filter.propertyIds.length > 0) {
+    params[PROPERTY_PARAM] = filter.propertyIds.join(',');
   }
-  return { [PROPERTY_PARAM]: filter.propertyIds.join(',') };
+  if (filter.withoutProperty) {
+    params[WITHOUT_PROPERTY_PARAM] = '1';
+  }
+  return params;
 }

@@ -5,22 +5,23 @@ import {
   readTasksFeedFilter,
   tasksFeedFilterParams,
   tasksFeedPropertyParam,
+  tasksFeedWithoutPropertyParam,
   type TasksFeedFilter,
 } from './tasks-feed-filter';
 
 /**
- * Состояние фильтра по объектам в адресе ленты «Задачи» (#524): чтение —
- * readTasksFeedFilter (битые значения отбрасываются), запись — router.push,
- * поэтому «назад» по истории возвращает к ленте без фильтра. Открытие
- * страницы выбора объекта историю не трогает — черновик выбора живёт в
- * её состоянии (как у шитов операций, #477). `replace` — для авто-сброса
- * фильтра при 404 (решение 8 #522): мёртвой ссылки в истории оставаться
- * не должно.
+ * Состояние фильтра ленты «Задачи» в адресе (#524, «Общие задачи» —
+ * решение владельца 2026-09-07): чтение — readTasksFeedFilter (битые
+ * значения отбрасываются), запись — router.push, поэтому «назад» по истории
+ * возвращает к ленте без фильтра. Открытие страницы выбора объекта историю
+ * не трогает — черновик выбора живёт в её состоянии (как у шитов операций,
+ * #477). `replace` — для авто-сброса фильтра при 404 (решение 8 #522):
+ * мёртвой ссылки в истории оставаться не должно.
  */
 export function useTasksFeedFilter(): {
   readonly filter: TasksFeedFilter;
-  readonly applyPropertyFilter: (
-    propertyIds: ReadonlyArray<string>,
+  readonly applyFeedFilter: (
+    filter: TasksFeedFilter,
     options?: { readonly replace?: boolean },
   ) => void;
 } {
@@ -30,13 +31,14 @@ export function useTasksFeedFilter(): {
 
   const filter = readTasksFeedFilter(searchParams);
 
-  const applyPropertyFilter = (
-    propertyIds: ReadonlyArray<string>,
+  const applyFeedFilter = (
+    next: TasksFeedFilter,
     options?: { readonly replace?: boolean },
   ): void => {
     const params = new URLSearchParams(searchParams);
     params.delete(tasksFeedPropertyParam);
-    for (const [name, value] of Object.entries(tasksFeedFilterParams({ propertyIds }))) {
+    params.delete(tasksFeedWithoutPropertyParam);
+    for (const [name, value] of Object.entries(tasksFeedFilterParams(next))) {
       params.set(name, value);
     }
     const queryString = params.toString();
@@ -48,5 +50,5 @@ export function useTasksFeedFilter(): {
     }
   };
 
-  return { filter, applyPropertyFilter };
+  return { filter, applyFeedFilter };
 }

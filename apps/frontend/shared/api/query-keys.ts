@@ -170,10 +170,13 @@ export const taskKeys = {
    * плоской формы правки (#537); лента #523 читает свой ключ global. */
   propertylessTasks: () => [...taskKeys.all, 'without-property'] as const,
   /** Глобальная лента GET /tasks (#521, экран #523): бакет completed и
-   * фильтр объектов (#524/#547, пустой список — «Все объекты») — сегменты
-   * ключа, смена фильтра перечитывает ленту. */
-  global: (completed: boolean, propertyIds: ReadonlyArray<string>) =>
-    [...taskKeys.all, 'global', completed, propertyIds] as const,
+   * фильтр (#524/#547; «Общие задачи» + union — решение владельца
+   * 2026-09-07) — сегменты ключа, смена фильтра перечитывает ленту. */
+  global: (
+    completed: boolean,
+    propertyIds: ReadonlyArray<string>,
+    withoutProperty: boolean,
+  ) => [...taskKeys.all, 'global', completed, propertyIds, withoutProperty] as const,
 };
 
 // features/subscription
