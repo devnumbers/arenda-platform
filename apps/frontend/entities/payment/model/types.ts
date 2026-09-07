@@ -86,6 +86,9 @@ export type PaymentOperation = {
   readonly categoryLabel: string;
   /** Слаг дефолтного каталога для иконки; может отсутствовать. */
   readonly categorySlug?: string;
+  /** Имя объекта — подпись строки глобальной ленты (#541); объектные
+   * списки его не несут — объект известен из маршрута. */
+  readonly propertyName?: string;
 };
 
 /**

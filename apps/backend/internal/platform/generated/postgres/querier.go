@@ -464,6 +464,24 @@ type Querier interface {
 	// response items report, in exactly one place (domain.OperationView mirrors
 	// this predicate for already-loaded rows; ticket #461).
 	ListOperations(ctx context.Context, arg ListOperationsParams) ([]ListOperationsRow, error)
+	// The global read side (ticket #540): the actor-scoped cross-property read
+	// over the paid facts of their own book plus the properties they can view.
+	// The visibility predicate is this SQL's (the tasks global feed precedent,
+	// ticket #521): no single scope exists to resolve through the
+	// policy port, and an active membership grants the read right here; a
+	// suspended one does not. The feed is paid-only — planned/overdue are the
+	// property screens' vocabulary — and the archived properties are out of it
+	// by default: the property join doubles as the archive cut, lifted only by
+	// the include_archived opt-in (ticket #549) under the same visibility
+	// predicate.
+	// The propertyIds filter ('' is any) is validated through the view gate by
+	// the application layer before this SQL runs — the uuid[] cast never sees a
+	// foreign id (its row would be invisible anyway) or a non-uuid.
+	// One page of the actor's visible merged feed, the property listing's
+	// ordering (op.date, id tiebreak) and filter vocabulary minus the status
+	// filter: paid is the feed's only stored status. property_name is the row's
+	// property label — the global screen's row label.
+	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
 	// The property's rules in creation order (stable for the list response).
 	// search ('' = no filter) is a case-insensitive substring match on the title;
@@ -639,6 +657,17 @@ type Querier interface {
 	// filter (ticket #476) is the listing's predicate: the breakdown over the
 	// searched scope is the search screen's matched-category chips.
 	SumOperationsByCategory(ctx context.Context, arg SumOperationsByCategoryParams) ([]SumOperationsByCategoryRow, error)
+	// The period totals by direction of the actor's visible merged feed (ticket
+	// #540): the propertyIds filter and the period narrow the totals, the type
+	// and category filters deliberately do not — the totals always report both
+	// directions whatever the breakdown is narrowed to. Types absent from the
+	// scope miss from the result — the adapter reports them as zero.
+	SumPaidOperationTotalsGlobal(ctx context.Context, arg SumPaidOperationTotalsGlobalParams) ([]SumPaidOperationTotalsGlobalRow, error)
+	// The per-category breakdown of the actor's visible merged feed (ticket
+	// #540), largest total first; rows without a category snapshot are skipped
+	// (no chip identity — their amounts still count in the totals). Both the
+	// type and the category filters narrow this read only.
+	SumPaidOperationsByCategoryGlobal(ctx context.Context, arg SumPaidOperationsByCategoryGlobalParams) ([]SumPaidOperationsByCategoryGlobalRow, error)
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
 	// «Отменить выполнение»: the completion fact cleared; rows affected = 0

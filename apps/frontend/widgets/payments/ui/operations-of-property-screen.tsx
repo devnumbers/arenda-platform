@@ -1,13 +1,12 @@
-'use client';
+"use client";
 
-import { useState, type JSX } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, Search } from '@/shared/assets/icons';
-import { ROUTES } from '@/shared/config/routes';
-import { clientTodayIso } from '@/entities/payment';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
-import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import type { PaymentOperationScope } from '@/shared/api/query-keys';
+import { useState, type JSX } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, Search } from "@/shared/assets/icons";
+import { ROUTES } from "@/shared/config/routes";
+import { clientTodayIso } from "@/entities/payment";
+import { useInfiniteScroll } from "@/shared/lib/hooks/useInfiniteScroll";
+import type { PaymentOperationScope } from "@/shared/api/query-keys";
 import {
   defaultOperationsPeriod,
   groupOperationsByDate,
@@ -19,30 +18,25 @@ import {
   useOperationsFilters,
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
-} from '@/features/payments';
+} from "@/features/payments";
 import {
   Button,
   IconButton,
   PageContent,
   TopNav,
   TopNavTitle,
-} from '@/shared/ui/design';
-import {
-  PaymentsSkeleton,
-  PaymentsStateCard,
-} from './payments-sections';
+} from "@/shared/ui/design";
+import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
 import {
   LoadingMoreIndicator,
   OperationsDateList,
   OperationsNeverHad,
-} from './operations-list';
-import { OperationsFilterChips } from './operations-filter-chips';
-import { OperationsPeriodPickerDialog } from './operations-period-picker';
-import { hasNoPaidOperationsEver } from '../lib/operations-empty-states';
-import { summaryBarSegments, type SummaryBarSegment } from '../lib/summary-bar';
-
-/** Пилюля полосы без операций в периоде (Figma 1510-77101): серая #D3D7D9. */
-const EMPTY_BAR_COLOR = '#D3D7D9';
+} from "./operations-list";
+import { OperationsFilterChips } from "./operations-filter-chips";
+import { OperationsPeriodPickerDialog } from "./operations-period-picker";
+import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
+import { summaryBarSegments } from "../lib/summary-bar";
+import { OperationsSummaryCard } from "./operations-summary-card";
 
 /**
  * Экран «Операции объекта» (#474, Figma 1492-41825): оплаченные операции
@@ -81,8 +75,8 @@ export function OperationsOfPropertyScreen({
   // Список сужается выбранными категориями; сводка (#473) категорийный
   // фильтр не принимает — карточки всегда показывают весь период.
   const periodScope: PaymentOperationScope = {
-    status: 'paid',
-    order: 'desc',
+    status: "paid",
+    order: "desc",
     dateFrom: period.from,
     dateTo: period.to,
   };
@@ -96,32 +90,32 @@ export function OperationsOfPropertyScreen({
   // All-time сводка (тот же контракт #473 без периода): отличает «операций
   // не было никогда» (#478, Figma 1518-92899) от пустого периода.
   const everQuery = usePropertyOperationsSummary(propertyId, {
-    status: 'paid',
-    order: 'desc',
+    status: "paid",
+    order: "desc",
   });
 
-  const sentinelRef = useInfiniteScroll(
-    () => {
-      if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-        void listQuery.fetchNextPage();
-      }
-    },
-    listQuery.hasNextPage === true,
-  );
+  const sentinelRef = useInfiniteScroll(() => {
+    if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
+      void listQuery.fetchNextPage();
+    }
+  }, listQuery.hasNextPage === true);
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   // Скелетон — только пока данных нет вовсе (первая загрузка): смена
   // фильтров держит прежние данные (keepPreviousData) и не дёргает
   // страницу; ошибка без данных показывает карточку повтора, не скелетон.
   const pending =
-    (listQuery.data === undefined
-      || summaryQuery.data === undefined
-      || everQuery.data === undefined)
-    && !listQuery.isError
-    && !summaryQuery.isError
-    && !everQuery.isError;
-  const neverHad = !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
-  const categoryRows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
+    (listQuery.data === undefined ||
+      summaryQuery.data === undefined ||
+      everQuery.data === undefined) &&
+    !listQuery.isError &&
+    !summaryQuery.isError &&
+    !everQuery.isError;
+  const neverHad =
+    !listQuery.isError && hasNoPaidOperationsEver(everQuery.data);
+  const categoryRows = operationsCategoryRows(
+    summaryQuery.data?.categories ?? [],
+  );
 
   const openOperation = (operation: { readonly id: string }): void =>
     router.push(ROUTES.propertyOperation(propertyId, operation.id));
@@ -129,14 +123,16 @@ export function OperationsOfPropertyScreen({
   const openCategories = (): void => {
     const params = new URLSearchParams();
     if (filters.period !== null) {
-      params.set('from', filters.period.from);
-      params.set('to', filters.period.to);
+      params.set("from", filters.period.from);
+      params.set("to", filters.period.to);
     }
     if (filters.categories.length > 0) {
-      params.set('category', filters.categories.join(','));
+      params.set("category", filters.categories.join(","));
     }
-    params.set('return', pathname);
-    router.push(`${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`);
+    params.set("return", pathname);
+    router.push(
+      `${ROUTES.propertyOperationsCategories(propertyId)}?${params.toString()}`,
+    );
   };
 
   return (
@@ -158,7 +154,9 @@ export function OperationsOfPropertyScreen({
             <IconButton
               icon={<Search />}
               label="Поиск операций"
-              onClick={() => router.push(ROUTES.propertyOperationsSearch(propertyId))}
+              onClick={() =>
+                router.push(ROUTES.propertyOperationsSearch(propertyId))
+              }
             />
           )
         }
@@ -175,12 +173,16 @@ export function OperationsOfPropertyScreen({
              * подсвечиваются при активном фильтре. Выбор — отдельные страницы
              * (#477), состояние живёт в адресе. */}
             <OperationsFilterChips
+              className="px-6"
               periodLabel={
                 filters.period !== null
                   ? operationsPeriodRangeChipLabel(period)
                   : operationsPeriodDefaultChipLabel(period)
               }
-              categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
+              categoriesLabel={operationsCategoryChipLabel(
+                filters.categories,
+                categoryRows,
+              )}
               categoriesActive={filters.categories.length > 0}
               onOpenPeriod={() => setPeriodOpen(true)}
               onOpenCategories={openCategories}
@@ -215,10 +217,13 @@ export function OperationsOfPropertyScreen({
                      * полоса-разбивка пилюлями категорий у обоих направлений.
                      * Клик — вход на экран направления (#475). */}
                     <div className="flex gap-2 px-6">
-                      <SummaryCard
+                      <OperationsSummaryCard
                         label="Расходы"
                         totalKopecks={summaryQuery.data?.expenseTotalKopecks}
-                        segments={summaryBarSegments(summaryQuery.data, 'expense')}
+                        segments={summaryBarSegments(
+                          summaryQuery.data,
+                          "expense",
+                        )}
                         openLabel="Открыть расходы объекта"
                         // Период и категории переживают переход на
                         // направление (решение владельца, #472).
@@ -231,10 +236,13 @@ export function OperationsOfPropertyScreen({
                           )
                         }
                       />
-                      <SummaryCard
+                      <OperationsSummaryCard
                         label="Доходы"
                         totalKopecks={summaryQuery.data?.incomeTotalKopecks}
-                        segments={summaryBarSegments(summaryQuery.data, 'income')}
+                        segments={summaryBarSegments(
+                          summaryQuery.data,
+                          "income",
+                        )}
                         openLabel="Открыть доходы объекта"
                         onOpen={() =>
                           router.push(
@@ -252,8 +260,12 @@ export function OperationsOfPropertyScreen({
                       onSelectOperation={openOperation}
                       tail={
                         <>
-                          {listQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                          {listQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                          {listQuery.hasNextPage === true && (
+                            <div ref={sentinelRef} aria-hidden />
+                          )}
+                          {listQuery.isFetchingNextPage && (
+                            <LoadingMoreIndicator />
+                          )}
                         </>
                       }
                     />
@@ -267,54 +279,9 @@ export function OperationsOfPropertyScreen({
 
       {/* Пикер периода — рендер только в открытом состоянии: лента и
           черновик живут, пока смонтирован. */}
-      {periodOpen && <OperationsPeriodPickerDialog onClose={() => setPeriodOpen(false)} />}
+      {periodOpen && (
+        <OperationsPeriodPickerDialog onClose={() => setPeriodOpen(false)} />
+      )}
     </>
-  );
-}
-
-/** Карточка сводки (Figma 1510-77101, EL-3091ce92): серая карточка radius 24,
- * сумма 16/500, подпись 14/400, полоса 6px из «пилюль» категорий — по одной
- * на категорию, зазор 2px держит раздельно даже совпадающие цвета каталога,
- * ширина пропорциональна сумме (flex-grow по весам). Без операций в периоде —
- * единственная серая пилюля #D3D7D9. Вся карточка — кнопка на экран
- * направления (#475), как заголовки секций «Платежей объекта». */
-function SummaryCard({
-  label,
-  totalKopecks,
-  segments,
-  openLabel,
-  onOpen,
-}: {
-  readonly label: string;
-  readonly totalKopecks: number | undefined;
-  readonly segments: ReadonlyArray<SummaryBarSegment>;
-  readonly openLabel: string;
-  readonly onOpen: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={openLabel}
-      className="min-w-0 flex-1 cursor-pointer rounded-card bg-surface-muted px-6 pb-6 pt-5 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
-    >
-      <div className="flex flex-col gap-0.5">
-        <span className="text-base font-medium text-content">
-          {totalKopecks === undefined ? '—' : formatMoneyKopecks(totalKopecks)}
-        </span>
-        <span className="text-sm text-content">{label}</span>
-      </div>
-      <div className="mt-4 flex h-1.5 w-full gap-[2px]">
-        {(segments.length > 0 ? segments : [{ color: EMPTY_BAR_COLOR, weight: 1 }]).map(
-          (segment, index) => (
-            <span
-              key={`${segment.color}-${index}`}
-              className="h-full rounded-pill"
-              style={{ backgroundColor: segment.color, flexGrow: segment.weight, flexBasis: 0 }}
-            />
-          ),
-        )}
-      </div>
-    </button>
   );
 }

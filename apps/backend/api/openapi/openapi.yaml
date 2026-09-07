@@ -1384,6 +1384,96 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /operations:
+    get:
+      operationId: listOperations
+      summary: List the actor's visible paid operations (the global «Операции» screen)
+      description: >
+        The global read side of the operations context (ticket #540). The
+        response is the actor's visible merged feed: the paid operations of
+        their own properties plus those of the properties they can view
+        (ADR 0028; an actor-scoped cross-property read — the visibility
+        predicate lives in the store's SQL, the tasks global feed's rule).
+        The feed is paid-only: planned and overdue occurrences are the
+        property screens' vocabulary, cancelled operations do not exist for
+        reads. The operations of archived properties are not in the feed
+        unless includeArchived lifts the cut (#549).
+        The propertyIds filter narrows the feed to the listed properties,
+        each resolved through its view gate — an unknown or non-visible id
+        is the privacy 404. Every row carries propertyName, the bound
+        property's display name — the global screen's row label. The period,
+        search, type, category, order and pagination vocabulary is the
+        property listing's. Reads never tick.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/OperationsPropertyIdsFilter'
+        - $ref: '#/components/parameters/OperationsDateFrom'
+        - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsSearch'
+        - $ref: '#/components/parameters/OperationsTypeFilter'
+        - $ref: '#/components/parameters/OperationsIncludeArchived'
+        - $ref: '#/components/parameters/OperationsCategoriesFilter'
+        - $ref: '#/components/parameters/OperationsOrder'
+        - $ref: '#/components/parameters/OperationsLimit'
+        - $ref: '#/components/parameters/OperationsOffset'
+      responses:
+        '200':
+          description: >
+            Paid operations page. status is always paid (the feed's only
+            view status); propertyName is the bound property's display name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /operations/summary:
+    get:
+      operationId: summarizeOperations
+      summary: Summarize the actor's visible paid operations (the global «Операции» screen)
+      description: >
+        The global twin of the property operations summary (ticket #540) over
+        the same visible merged feed as GET /operations: paid operations of
+        the actor's own properties plus the properties they can view, the
+        archived ones excluded. The propertyIds filter and the period narrow
+        the whole scope — totals and the category breakdown alike; the type
+        and category filters narrow only the categories array, the totals
+        always report both directions. Search is the listing's predicate —
+        the summary of the searched scope stays consistent with its list.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/OperationsPropertyIdsFilter'
+        - $ref: '#/components/parameters/OperationsDateFrom'
+        - $ref: '#/components/parameters/OperationsDateTo'
+        - $ref: '#/components/parameters/OperationsSearch'
+        - $ref: '#/components/parameters/OperationsTypeFilter'
+        - $ref: '#/components/parameters/OperationsIncludeArchived'
+        - $ref: '#/components/parameters/OperationsCategoriesFilter'
+      responses:
+        '200':
+          description: >-
+            Period totals of the visible paid operations by direction plus the
+            per-category breakdown. The totals always report both directions —
+            the summary cards read them together — while the type and category
+            filters narrow only the categories array. Categories with no
+            operations in scope are absent; the array is ordered by total,
+            largest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsSummaryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/tasks:
     get:
       operationId: listPropertyTasks
@@ -3616,6 +3706,16 @@ components:
       schema:
         type: string
         enum: [income, expense]
+    OperationsIncludeArchived:
+      name: includeArchived
+      in: query
+      required: false
+      description: >-
+        Lift the archive cut (#549): operations of archived properties rejoin
+        the feed or the summary under the same visibility predicate. A missing
+        value or false keeps the archive excluded (the #540 contract default).
+      schema:
+        type: boolean
     OperationsCategoriesFilter:
       name: category
       in: query
@@ -3624,6 +3724,19 @@ components:
         Comma-separated category slugs (the chips multi-select); operations of
         any other category are filtered out. A missing or empty value disables
         the filter; whitespace around slugs is ignored.
+      schema:
+        type: string
+    OperationsPropertyIdsFilter:
+      name: propertyIds
+      in: query
+      required: false
+      description: >-
+        Comma-separated property ids (the global «Объект» multi-select);
+        operations of any other property are filtered out. Each id is resolved
+        through its view gate (ADR 0028) — an unknown or non-visible id is the
+        privacy 404; an archived property narrows the feed to an empty page
+        (the feed never carries archived rows). A missing or empty value
+        disables the filter — the merged feed.
       schema:
         type: string
 
@@ -5009,6 +5122,13 @@ components:
         propertyId:
           type: string
           format: uuid
+        propertyName:
+          type: string
+          nullable: true
+          description: >
+            The display name of the bound property — the global screen's row
+            label (list projection only, filled on the global listing; null
+            elsewhere — the property screen resolves the property by its id).
         paymentId:
           type: string
           format: uuid

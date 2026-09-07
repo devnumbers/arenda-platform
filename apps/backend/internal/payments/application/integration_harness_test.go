@@ -18,6 +18,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
+	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
@@ -110,6 +112,35 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 		svc:   paymentsapp.NewPaymentService(factory, calendar, policy),
 		ops:   paymentsapp.NewOperationService(factory, calendar, policy),
 	}
+}
+
+// newPaymentsHarnessWithRealPolicy is the harness for the global feed's
+// member scenarios (ticket #540): the production membership policy over the
+// harness pool, so the propertyIds view gate exercises the same authorization
+// the wire runs. The services are rebuilt over the same store wiring as the
+// harness's own — only the policy changes.
+func newPaymentsHarnessWithRealPolicy(t *testing.T) *paymentsHarness {
+	t.Helper()
+	h := newPaymentsHarness(t)
+	policy := accessapp.NewMembershipPolicy(
+		accesspg.NewOwnerResolver(h.pool),
+		accesspg.NewMembershipRepository(h.pool),
+	)
+	clk := h.clock
+	logger := slog.New(slog.DiscardHandler)
+	factory := paymentsapp.NewTxStoreFactory(
+		paymentspg.NewTickStore(h.pool),
+		paymentspg.NewPaymentStore(h.pool),
+		paymentspg.NewOperationStore(h.pool),
+		paymentspg.NewPropertyStore(h.pool),
+		auditapp.NewService(auditpg.NewWriter(h.pool), clk),
+		pgdb.NewUoW(h.pool, logger),
+	)
+	calendar := paymentspg.NewOwnerCalendar(h.pool, clk)
+	h.tick = paymentsapp.NewTickService(factory, paymentspg.NewTickZoneDirectory(h.pool), calendar, nil)
+	h.svc = paymentsapp.NewPaymentService(factory, calendar, policy)
+	h.ops = paymentsapp.NewOperationService(factory, calendar, policy)
+	return h
 }
 
 // withOwner seeds a user (the data owner) with the given timezone and one

@@ -569,6 +569,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible paid operations (the global «Операции» screen)
+         * @description The global read side of the operations context (ticket #540). The response is the actor's visible merged feed: the paid operations of their own properties plus those of the properties they can view (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule). The feed is paid-only: planned and overdue occurrences are the property screens' vocabulary, cancelled operations do not exist for reads. The operations of archived properties are not in the feed unless includeArchived lifts the cut (#549). The propertyIds filter narrows the feed to the listed properties, each resolved through its view gate — an unknown or non-visible id is the privacy 404. Every row carries propertyName, the bound property's display name — the global screen's row label. The period, search, type, category, order and pagination vocabulary is the property listing's. Reads never tick.
+         */
+        get: operations["listOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarize the actor's visible paid operations (the global «Операции» screen)
+         * @description The global twin of the property operations summary (ticket #540) over the same visible merged feed as GET /operations: paid operations of the actor's own properties plus the properties they can view, the archived ones excluded. The propertyIds filter and the period narrow the whole scope — totals and the category breakdown alike; the type and category filters narrow only the categories array, the totals always report both directions. Search is the listing's predicate — the summary of the searched scope stays consistent with its list.
+         */
+        get: operations["summarizeOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/tasks": {
         parameters: {
             query?: never;
@@ -2174,6 +2214,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             propertyId: string;
+            /** @description The display name of the bound property — the global screen's row label (list projection only, filled on the global listing; null elsewhere — the property screen resolves the property by its id). */
+            propertyName?: string | null;
             /**
              * Format: uuid
              * @description The originating rule; null marks it deleted or the fact manual.
@@ -2738,8 +2780,12 @@ export interface components {
         OperationsSearch: string;
         /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
         OperationsTypeFilter: "income" | "expense";
+        /** @description Lift the archive cut (#549): operations of archived properties rejoin the feed or the summary under the same visibility predicate. A missing value or false keeps the archive excluded (the #540 contract default). */
+        OperationsIncludeArchived: boolean;
         /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
         OperationsCategoriesFilter: string;
+        /** @description Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed. */
+        OperationsPropertyIdsFilter: string;
     };
     requestBodies: never;
     headers: never;
@@ -3993,6 +4039,86 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listOperations: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed. */
+                propertyIds?: components["parameters"]["OperationsPropertyIdsFilter"];
+                /** @description Inclusive lower bound of the period on the operation date. */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the operation date. */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
+                /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+                type?: components["parameters"]["OperationsTypeFilter"];
+                /** @description Lift the archive cut (#549): operations of archived properties rejoin the feed or the summary under the same visibility predicate. A missing value or false keeps the archive excluded (the #540 contract default). */
+                includeArchived?: components["parameters"]["OperationsIncludeArchived"];
+                /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+                category?: components["parameters"]["OperationsCategoriesFilter"];
+                /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
+                order?: components["parameters"]["OperationsOrder"];
+                limit?: components["parameters"]["OperationsLimit"];
+                offset?: components["parameters"]["OperationsOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paid operations page. status is always paid (the feed's only view status); propertyName is the bound property's display name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    summarizeOperations: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed. */
+                propertyIds?: components["parameters"]["OperationsPropertyIdsFilter"];
+                /** @description Inclusive lower bound of the period on the operation date. */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the operation date. */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
+                /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+                type?: components["parameters"]["OperationsTypeFilter"];
+                /** @description Lift the archive cut (#549): operations of archived properties rejoin the feed or the summary under the same visibility predicate. A missing value or false keeps the archive excluded (the #540 contract default). */
+                includeArchived?: components["parameters"]["OperationsIncludeArchived"];
+                /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+                category?: components["parameters"]["OperationsCategoriesFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Period totals of the visible paid operations by direction plus the per-category breakdown. The totals always report both directions — the summary cards read them together — while the type and category filters narrow only the categories array. Categories with no operations in scope are absent; the array is ordered by total, largest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSummaryResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listPropertyTasks: {

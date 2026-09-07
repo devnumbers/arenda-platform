@@ -1,12 +1,15 @@
-import type { PaymentOperationScope } from '@/shared/api/query-keys';
+import type { GlobalOperationScope, PaymentOperationScope } from '@/shared/api/query-keys';
 import type { OperationsCategorySummary } from '@/entities/payment';
+import type { OperationsPeriod } from '@/features/payments';
 
 /**
  * Модель экрана поиска операций (#476, Figma 1494-61633/61657/61679/63035):
  * серверная область запроса решена контрактом `search` списка операций —
  * подстрока по названию ИЛИ категории, а числовой запрос — ещё и по сумме;
  * скоуп поиска — только оплаченные операции без ограничения периода
- * (решение карты #472: экраны операций показывают только paid).
+ * (решение карты #472). Глобальный поиск (#543) ищет тем же контрактом
+ * `search`, но по всем видимым объектам и с фильтрами ленты из адреса
+ * (#541): объекты (#542) и период.
  */
 
 /** Чип секции «Категории» (Figma 1494-61657): подпись-снапшот и флаг
@@ -49,4 +52,42 @@ export function searchListScope(
  * показывают все совпавшие категории запроса. */
 export function searchSummaryScope(query: string): PaymentOperationScope {
   return { status: 'paid', order: 'desc', search: query };
+}
+
+/** Скоуп списка глобального поиска (#543): фильтры ленты из адреса —
+ * объекты (#542) и период, дефолт периода решает экран — плюс поисковый
+ * запрос серверу и выбранный чип-категория (сужение тем же контрактом
+ * `category`, что у объектного поиска). Пустой выбор объектов проходит
+ * как есть — хук сам опускает пустой параметр (#541). */
+export function globalSearchListScope(
+  period: OperationsPeriod,
+  propertyIds: ReadonlyArray<string>,
+  query: string,
+  selectedSlug: string | null,
+): GlobalOperationScope {
+  return {
+    order: 'desc',
+    propertyIds,
+    dateFrom: period.from,
+    dateTo: period.to,
+    search: query,
+    ...(selectedSlug !== null ? { categories: [selectedSlug] } : {}),
+  };
+}
+
+/** Скоуп сводки глобального поиска: тот же запрос ленты без сужения по
+ * чипу — чипы всегда показывают все совпавшие категории запроса (сводка
+ * категорийный фильтр не принимает — контракт #540). */
+export function globalSearchSummaryScope(
+  period: OperationsPeriod,
+  propertyIds: ReadonlyArray<string>,
+  query: string,
+): GlobalOperationScope {
+  return {
+    order: 'desc',
+    propertyIds,
+    dateFrom: period.from,
+    dateTo: period.to,
+    search: query,
+  };
 }

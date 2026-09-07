@@ -23,11 +23,21 @@ export function OperationsDateList({
   groups,
   onSelectOperation,
   tail,
+  renderSubtitle,
+  inset = true,
 }: {
   readonly groups: ReadonlyArray<PaymentHistoryGroup>;
   readonly onSelectOperation: (operation: PaymentOperation) => void;
   /** Sentinel бесконечного скролла и индикатор подгрузки следующей порции. */
   readonly tail?: ReactNode;
+  /** Подзаголовок строки: глобальная лента (#541) пишет имя объекта
+   * (макет 1733-26973), объектные списки подзаголовка не передают. */
+  readonly renderSubtitle?: (operation: PaymentOperation) => ReactNode;
+  /** Собственные вставки заголовков и строк (px-6/px-3): объектные экраны
+   * (#474) держат их внутри PageContent; глобальная лента (#541) держит
+   * ритм 24px всей страницей — строки прижаты к её краю (решение
+   * владельца 2026-09-05). */
+  readonly inset?: boolean;
 }): JSX.Element {
   if (groups.length === 0) {
     return <OperationsEmptyPeriod />;
@@ -36,11 +46,13 @@ export function OperationsDateList({
     <div className="flex flex-col gap-2">
       {groups.map((group) => (
         <section key={group.date} className="flex flex-col">
-          <PaymentsHeading>{group.label}</PaymentsHeading>
+          <PaymentsHeading inset={inset}>{group.label}</PaymentsHeading>
           {group.operations.map((operation) => (
             <OperationRow
               key={operation.id}
               operation={operation}
+              subtitle={renderSubtitle?.(operation)}
+              className={inset ? undefined : '-mx-3 px-0 py-3'}
               onSelect={() => onSelectOperation(operation)}
             />
           ))}
@@ -95,23 +107,34 @@ export function OperationsNeverHad(): JSX.Element {
 /** Строка операции (1332:61665, Row Button White): иконка категории с белым
  * кантом, название, знаковая сумма — доход зелёным с плюсом, расход тёмным
  * с минусом (Figma 1492:42480). Опциональный подзаголовок — дата в строках
- * результатов поиска (Figma 1494-61679), списки по датам его не передают. */
+ * результатов объектного поиска (Figma 1494-61679), списки по датам его не
+ * передают; опциональное правое нижнее поле — дата под суммой в строках
+ * глобального поиска (макет 1726-90433, #543). */
 export function OperationRow({
   operation,
   onSelect,
   subtitle,
+  description,
+  className = 'px-3 py-3',
 }: {
   readonly operation: PaymentOperation;
   readonly onSelect: () => void;
   readonly subtitle?: ReactNode;
+  readonly description?: ReactNode;
+  /** Дополнение/замена вставок кнопки: tailwind-merge в PaymentRowButton
+   * поглощает базовый px-3, а -mx-3 дополнительно гасит внутренний px-3
+   * контентного фрейма кнопки (глобальная лента: контент строки прижат
+   * к ритму страницы 24px). */
+  readonly className?: string;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
   return (
     <PaymentRowButton
-      className="px-3 py-3"
+      className={className}
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="white" />}
       title={operation.title}
       subtitle={subtitle}
+      description={description}
       amountKopecks={
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }
