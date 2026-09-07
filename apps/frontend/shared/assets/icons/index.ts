@@ -78,9 +78,9 @@ export { default as BoldWrench } from './bold-wrench.svg';
 // градиентных статус-бейджей 24×24 (цвета запечены в SVG).
 export { default as Check } from './check.svg';
 export { default as Edit } from './edit.svg';
-// Строчный ключ секции «Управление» аренды (#534, макет 1232:62297):
-// в выгрузке Figma компонент Icon/R/Key недоступен — контур в стилистике
-// набора (stroke 1.5), сверить с макетом на приёмке.
+// Строчный ключ секций аренды (круглая кнопка «Посмотреть итоги» #535,
+// строка «Завершить аренду»): канонный Icon/R/Key 119:1104 из выгрузки
+// Figma — контур подменил собою стилистическую заглушку (currentColor).
 export { default as Key } from './key.svg';
 export { default as ArrowDown } from './arrow-down.svg';
 export { default as SortingDown } from './sorting-down.svg';
@@ -111,6 +111,16 @@ export { default as StatusIconInfo } from './status-icon-info.svg';
 // Дизайн-слой платежей, тикет #459: «смена направления» 24×24 чипов суммы
 // (currentColor) — Figma 835:19789.
 export { default as ChangeHorizontal } from './change-horizontal.svg';
+
+// «История операций» аренды (#535): вертикальная «смена направления»
+// чипа сортировки «Сначала новые» — Icon/R/ChangeVertical 858:20998
+// (currentColor).
+export { default as ChangeVertical } from './change-vertical.svg';
+
+// Строка «Удалить аренду» (#535, макет 1232:61686): канонный Icon/R/TrashBin
+// 24×24 (currentColor, файл trashbin.svg). Экспорт TrashBin выше — прежняя
+// строчная иконка 19×20 из меню задач/контактов, её замена — вне этого тикета.
+export { default as TrashBinOutline } from './trashbin.svg';
 
 // Экран «Платежи объекта» (#463): «создать новый» в шите выбора — Figma 189:2436.
 export { default as Add } from './add.svg';

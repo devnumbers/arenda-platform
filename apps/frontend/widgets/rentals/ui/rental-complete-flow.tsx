@@ -464,9 +464,9 @@ export function RentalCompleteFlow({
   }
 
   function openRental(): void {
-    // Поток завершён — маршрут мастера заменяется экраном «Аренда»
-    // (CODING_STANDARDS, Navigation); завершённая аренда — материал #535.
-    router.replace(ROUTES.propertyRental(rental.propertyId));
+    // Поток завершён — маршрут мастера заменяется завершённой детализацией
+    // (#535; CODING_STANDARDS, Navigation).
+    router.replace(ROUTES.propertyRentalCompleted(rental.propertyId, rental.id));
   }
 }
 

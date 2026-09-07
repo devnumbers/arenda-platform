@@ -23,8 +23,9 @@ import { RentalDetailBody } from './rental-detail-body';
  * Экран «Аренда» (#531, Figma 1425:55656/1232:61259): маршрут
  * /properties/[id]/rentals. Без незавершённой аренды — пустое состояние
  * с кнопкой «Добавить аренду» в нижней панели (кнопка скрыта у смотрящего —
- * создание только Full Access, ADR 0053 §3); с ней — детализация первой
- * (незавершённой) аренды списка. Хвостовая правка шапки приедет с #532.
+ * создание только Full Access, ADR 0053 §3) и, если завершённые есть,
+ * входом в «Прошлые аренды» (#535); с незавершённой — детализация первой
+ * аренды списка.
  */
 export function RentalScreen({ propertyId }: { readonly propertyId: string }): JSX.Element {
   const router = useRouter();
@@ -38,7 +39,9 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
 
   // Незавершённая аренда всегда первая (ADR 0053 §4); завершённые —
   // материал «Прошлых аренд» (#535), экраном текущей не являются.
-  const currentRental = currentRentalOf(rentalsQuery.data ?? []);
+  const rentals = rentalsQuery.data ?? [];
+  const currentRental = currentRentalOf(rentals);
+  const hasCompletedRentals = rentals.some((rental) => rental.status === 'completed');
 
   return (
     <>
@@ -93,14 +96,25 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
               description="Добавьте аренду и отслеживайте оплату"
             />
           </PageContent>
-          {canMutate && (
+          {(canMutate || hasCompletedRentals) && (
             <StickyBottomBar>
-              <Button
-                className="w-full"
-                onClick={() => router.push(ROUTES.propertyRentalNew(propertyId))}
-              >
-                Добавить аренду
-              </Button>
+              {canMutate && (
+                <Button
+                  className="w-full"
+                  onClick={() => router.push(ROUTES.propertyRentalNew(propertyId))}
+                >
+                  Добавить аренду
+                </Button>
+              )}
+              {hasCompletedRentals && (
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => router.push(ROUTES.propertyRentalPast(propertyId))}
+                >
+                  Прошлые аренды
+                </Button>
+              )}
             </StickyBottomBar>
           )}
         </>
@@ -112,6 +126,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
           propertyId={propertyId}
           rental={currentRental}
           canMutate={canMutate}
+          hasCompletedRentals={hasCompletedRentals}
         />
       )}
     </>

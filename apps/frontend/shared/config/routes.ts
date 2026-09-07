@@ -64,6 +64,20 @@ export const ROUTES = {
   propertyRentalExtend: (id: string) => `/properties/${id}/rentals/extend`,
   /** Завершение аренды (#534): мастер из подтверждения, даты, залога и итогов. */
   propertyRentalComplete: (id: string) => `/properties/${id}/rentals/complete`,
+  /** «Прошлые аренды» (#535): список завершённых аренд объекта. */
+  propertyRentalPast: (id: string) => `/properties/${id}/rentals/past`,
+  /** Завершённая детализация (#535): карточка прошлой аренды по id. */
+  propertyRentalCompleted: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}`,
+  /** «История операций» завершённой аренды (#535): paid-вхождения платежа. */
+  propertyRentalCompletedHistory: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}/history`,
+  /** «Итоги аренды» завершённой (#535): read-only повтор шага итогов мастера. */
+  propertyRentalCompletedSummary: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}/summary`,
+  /** «Условия аренды» завершённой (#535): тот же экран условий с ?rental=. */
+  propertyRentalCompletedTerms: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/terms?rental=${rentalId}`,
   /** Экран «Контакты объекта» (#508) — новый хром, книга контактов (ADR 0051). */
   propertyContacts: (id: string) => `/properties/${id}/contacts`,
   /** Создание контакта (#509); до тикета путь ведёт на 404. */

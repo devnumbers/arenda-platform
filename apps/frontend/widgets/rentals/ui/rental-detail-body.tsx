@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import type { JSX, ReactNode } from 'react';
-import { BoldUser, Calendar, Check, Edit, Key } from '@/shared/assets/icons';
+import { Calendar, Check, Edit, Key, TimeHistory } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonth } from '@/shared/lib/date-format';
 import {
@@ -20,6 +20,8 @@ import type { Rental } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
 import { ListRow, PageContent, RoundActionButton } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
+import { TermRows } from './term-row';
+import { TenantRow } from './tenant-row';
 
 /**
  * Тело экрана «Аренда» (#531, Figma 1232:61291/1550:93664): единая для всех
@@ -28,11 +30,12 @@ import { RentalGroup } from './rental-group';
  * Условия аренды / Арендатор. «Оплатить платеж» ведёт на страницу
  * операции (решение владельца 2026-09-07) — оплата каноническим «Отметить
  * оплаченной» там же, как со страницы платежа. Секция «Арендатор» выводится
- * только с арендатором. Действия «Редактировать» (#532) и «Продлить»
- * (#533) живут своими экранами; «Завершить» (#534), кнопка «Прошлые
- * аренды» (#535) и хвостовая правка в шапке скрыты до готовности своих
- * экранов (решение владельца 2026-09-07). «Продлить аренду» — только у
- * срочной аренды: бессрочной продлевать нечего.
+ * только с арендатором. Действия «Редактировать» (#532), «Продлить»
+ * (#533) и «Завершить» (#534) живут своими экранами; строка «Прошлые
+ * аренды» (#535) — вход в список завершённых, видна, когда завершённые
+ * есть (в том числе смотрящему — это чтение). Хвостовая правка шапки —
+ * не в этой карте. «Продлить аренду» — только у срочной аренды:
+ * бессрочной продлевать нечего.
  *
  * Статусы «ожидает начала»/«ожидает действия» макетом не нарисованы — тот
  * же рендер деградирует честно: без будущего платежа нет строки дней и
@@ -45,10 +48,12 @@ export function RentalDetailBody({
   propertyId,
   rental,
   canMutate,
+  hasCompletedRentals,
 }: {
   readonly propertyId: string;
   readonly rental: Rental;
   readonly canMutate: boolean;
+  readonly hasCompletedRentals: boolean;
 }): JSX.Element {
   const router = useRouter();
 
@@ -170,11 +175,7 @@ export function RentalDetailBody({
             onOpen={() => router.push(ROUTES.propertyRentalTerms(propertyId))}
             openLabel="Открыть условия аренды"
           >
-            <div className="flex flex-col gap-2 px-6">
-              {rentalTeaserRows(rental).map((row) => (
-                <TermRow key={row.label} label={row.label} value={row.value} />
-              ))}
-            </div>
+            <TermRows rows={rentalTeaserRows(rental)} />
           </RentalGroup>
 
           {tenant !== null && (
@@ -193,29 +194,43 @@ export function RentalDetailBody({
           )}
 
           {/* Секция «Управление» (Figma 1232:62297): строки ведут на экраны
-              #532/#534/#533. «Завершить» — только у начавшейся аренды (дата
-              завершения не бывает раньше начала, ADR 0053 §3), «Продлить» —
-              только у срочной (как круглая кнопка #533). */}
-          {canMutate && (
+              #532/#534/#533 и в «Прошлые аренды» (#535). «Завершить» — только
+              у начавшейся аренды (дата завершения не бывает раньше начала,
+              ADR 0053 §3), «Продлить» — только у срочной (как круглая кнопка
+              #533), «Прошлые аренды» — когда завершённые есть (чтение —
+              и смотрящему). */}
+          {(canMutate || hasCompletedRentals) && (
             <RentalGroup title="Управление" className="pb-3">
               <div className="flex flex-col">
-                <ManageRow
-                  icon={<Edit className="h-6 w-6 text-content" />}
-                  label="Редактировать аренду"
-                  onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
-                />
-                {rental.status !== 'upcoming' && (
+                {canMutate && (
+                  <ManageRow
+                    icon={<Edit className="h-6 w-6 text-content" />}
+                    label="Редактировать аренду"
+                    onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
+                  />
+                )}
+                {canMutate && rental.status !== 'upcoming' && (
                   <ManageRow
                     icon={<Key className="h-6 w-6 text-content" />}
                     label="Завершить аренду"
                     onClick={() => router.push(ROUTES.propertyRentalComplete(propertyId))}
                   />
                 )}
-                {rental.plannedEndDate !== null && (
+                {canMutate && rental.plannedEndDate !== null && (
                   <ManageRow
                     icon={<Calendar className="h-6 w-6 text-content" />}
                     label="Продлить аренду"
                     onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
+                  />
+                )}
+                {/* «Прошлые аренды» — всегда у владельца (пустой список —
+                    честный ответ), смотрящему — только когда завершённые
+                    есть. */}
+                {(canMutate || hasCompletedRentals) && (
+                  <ManageRow
+                    icon={<TimeHistory className="h-6 w-6 text-content" />}
+                    label="Прошлые аренды"
+                    onClick={() => router.push(ROUTES.propertyRentalPast(propertyId))}
                   />
                 )}
               </div>
@@ -224,15 +239,6 @@ export function RentalDetailBody({
         </div>
       </div>
     </PageContent>
-  );
-}
-
-function TermRow({ label, value }: { readonly label: string; readonly value: string }): JSX.Element {
-  return (
-    <div className="flex gap-3">
-      <span className="shrink-0 text-sm leading-4 text-content-secondary">{label}</span>
-      <span className="min-w-0 text-sm leading-4 text-content">{value}</span>
-    </div>
   );
 }
 
@@ -273,36 +279,6 @@ function PaymentRow({
           : undefined
       }
       amountKopecks={rental.rentPayment.amountKopecks}
-      onSelect={onSelect}
-    />
-  );
-}
-
-/** Строка арендатора (Figma 1232:62429): белый круг с BoldUser на серой
- * карточке, имя и телефон; «Контакта нет» — строка без действия. */
-function TenantRow({
-  tenantName,
-  phone,
-  onSelect,
-}: {
-  readonly tenantName: string;
-  readonly phone?: string;
-  readonly onSelect?: () => void;
-}): JSX.Element {
-  return (
-    <PaymentRowButton
-      variant="gray"
-      className="px-3 py-2"
-      categoryIcon={
-        <span
-          aria-hidden
-          className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
-        >
-          <BoldUser className="h-6 w-6 text-content" />
-        </span>
-      }
-      title={tenantName}
-      subtitle={phone}
       onSelect={onSelect}
     />
   );

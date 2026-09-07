@@ -1,6 +1,7 @@
 export {
   useCompleteRental,
   useCreateRental,
+  useDeleteRental,
   useRentalSummary,
   useRentals,
   useUpdateRental,
@@ -52,3 +53,12 @@ export {
   rentAmountPerMonth,
 } from './lib/rental-view';
 export type { RentalTermsRow } from './lib/rental-view';
+export {
+  completedRentalMonths,
+  completedRentalsOf,
+  paidPaymentNumber,
+  pastRentalCardTitle,
+  pastRentalRows,
+  pastRentalTitle,
+  paymentOrdinalLabel,
+} from './lib/past-model';

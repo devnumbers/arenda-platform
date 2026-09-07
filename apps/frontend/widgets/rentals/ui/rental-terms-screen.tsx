@@ -6,18 +6,30 @@ import { ArrowLeft, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { currentRentalOf, rentalCommentText, rentalTermsRows, useRentals } from '@/features/rentals';
-import { Button, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { Button, EmptyState, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { TermRow } from './term-row';
 
 /**
  * «Условия аренды» read-only (#531, Figma 1302:53783/1550:94419): полный
- * просмотр условий текущей аренды — восемь строк, пустые значения «Не
- * указано», комментарий под ними. Карандаш в шапке ведёт на правку
- * условий (#532); завершённая карточка (#535) переиспользует экран.
+ * просмотр условий — восемь строк, пустые значения «Не указано»,
+ * комментарий под ними. Без rentalId — условия текущей аренды, карандаш
+ * в шапке ведёт на правку (#532). С rentalId — условия завершённой аренды
+ * (#535, 1550:94804): подзаголовок «В архиве», правки нет.
  */
-export function RentalTermsScreen({ propertyId }: { readonly propertyId: string }): JSX.Element {
+export function RentalTermsScreen({
+  propertyId,
+  rentalId,
+}: {
+  readonly propertyId: string;
+  readonly rentalId?: string;
+}): JSX.Element {
   const router = useRouter();
   const rentalsQuery = useRentals(propertyId);
-  const rental = currentRentalOf(rentalsQuery.data ?? []);
+  const rental =
+    rentalId === undefined
+      ? currentRentalOf(rentalsQuery.data ?? [])
+      : rentalsQuery.data?.find((item) => item.id === rentalId);
+  const archived = rentalId !== undefined;
 
   return (
     <>
@@ -26,11 +38,18 @@ export function RentalTermsScreen({ propertyId }: { readonly propertyId: string 
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            onClick={() => goBack(router, ROUTES.propertyRental(propertyId))}
+            onClick={() =>
+              goBack(
+                router,
+                archived
+                  ? ROUTES.propertyRentalCompleted(propertyId, rentalId)
+                  : ROUTES.propertyRental(propertyId),
+              )
+            }
           />
         }
         trailing={
-          rental === undefined ? undefined : (
+          archived || rental === undefined ? undefined : (
             <IconButton
               icon={<Edit />}
               label="Изменить условия"
@@ -39,7 +58,10 @@ export function RentalTermsScreen({ propertyId }: { readonly propertyId: string 
           )
         }
       >
-        <TopNavTitle title="Условия аренды" />
+        <TopNavTitle
+          title="Условия аренды"
+          subtitle={archived ? 'В архиве' : undefined}
+        />
       </TopNav>
 
       <PageContent>
@@ -67,12 +89,7 @@ export function RentalTermsScreen({ propertyId }: { readonly propertyId: string 
             <section className="flex flex-col gap-6 rounded-card bg-surface-muted p-6">
               <div className="flex flex-col gap-2">
                 {rentalTermsRows(rental, rental.today).map((row) => (
-                  <div key={row.label} className="flex gap-3">
-                    <span className="shrink-0 text-sm leading-4 text-content-secondary">
-                      {row.label}
-                    </span>
-                    <span className="min-w-0 text-sm leading-4 text-content">{row.value}</span>
-                  </div>
+                  <TermRow key={row.label} label={row.label} value={row.value} />
                 ))}
               </div>
               <div className="flex flex-col gap-1">
@@ -83,6 +100,14 @@ export function RentalTermsScreen({ propertyId }: { readonly propertyId: string 
               </div>
             </section>
           </div>
+        )}
+        {!rentalsQuery.isPending && !rentalsQuery.isError && rental === undefined && archived && (
+          // Ссылка на условия несуществующей/незавершённой аренды — без контента.
+          <EmptyState
+            imageSrc="/images/rentals/rental-hero.png"
+            title="Аренда не найдена"
+            description="Возможно, она была удалена"
+          />
         )}
       </PageContent>
     </>

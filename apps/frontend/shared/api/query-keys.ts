@@ -94,6 +94,10 @@ export const paymentOperationKeys = {
     paymentId: string,
     status: PaymentOperationStatusFilter,
   ) => [...paymentOperationKeys.all, 'by-payment', propertyId, paymentId, status] as const,
+  /** Префикс всех статусных списков операций платежа — снять кэш удалённого
+   * платежа (#535). */
+  byPaymentPrefix: (propertyId: string, paymentId: string) =>
+    [...paymentOperationKeys.all, 'by-payment', propertyId, paymentId] as const,
   /** Порции операций платежа (подэкраны #466): статус и направление — часть ключа. */
   byPaymentPaged: (
     propertyId: string,
@@ -109,6 +113,9 @@ export const paymentOperationKeys = {
       status,
       order,
     ] as const,
+  /** Префикс всех порций операций платежа — снять кэш удалённого платежа (#535). */
+  byPaymentPagedPrefix: (propertyId: string, paymentId: string) =>
+    [...paymentOperationKeys.all, 'by-payment-paged', propertyId, paymentId] as const,
   /** Порции операций объекта: статус, направление и поиск — часть ключа. */
   byPropertyPaged: (
     propertyId: string,
