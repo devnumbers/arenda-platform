@@ -1,8 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import type { JSX } from 'react';
-import { BoldUser, Calendar, Check, Home } from '@/shared/assets/icons';
+import { BoldUser, Calendar, Check } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonth } from '@/shared/lib/date-format';
 import {
@@ -21,14 +22,16 @@ import { PageContent, RoundActionButton } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
 
 /**
- * Тело экрана «Аренда» (#531, Figma 1232:61291/1550:93664): фото объекта
- * 96, «Оплачено N из M месяцев», круглые действия, секции Платеж / прогресс
- * / Условия аренды / Арендатор. «Оплатить платеж» ведёт на страницу
+ * Тело экрана «Аренда» (#531, Figma 1232:61291/1550:93664): единая для всех
+ * аренд картинка-ключ 96 (решение владельца 2026-09-07, 1232:61491),
+ * «Оплачено N из M месяцев», круглые действия, секции Платеж / прогресс /
+ * Условия аренды / Арендатор. «Оплатить платеж» ведёт на страницу
  * операции (решение владельца 2026-09-07) — оплата каноническим «Отметить
- * оплаченной» там же, как со страницы платежа. Действия «Редактировать»
- * (#532), «Продлить» (#533), «Завершить» (#534), кнопка «Прошлые аренды»
- * (#535) и хвостовая правка в шапке скрыты до готовности своих экранов
- * (решение владельца 2026-09-07).
+ * оплаченной» там же, как со страницы платежа. Секция «Арендатор» выводится
+ * только с арендатором. Действия «Редактировать» (#532), «Продлить»
+ * (#533), «Завершить» (#534), кнопка «Прошлые аренды» (#535) и хвостовая
+ * правка в шапке скрыты до готовности своих экранов (решение владельца
+ * 2026-09-07).
  *
  * Статусы «ожидает начала»/«ожидает действия» макетом не нарисованы — тот
  * же рендер деградирует честно: без будущего платежа нет строки дней и
@@ -64,23 +67,20 @@ export function RentalDetailBody({
       );
   const tenant = rental.tenant;
   const openPayment = () => router.push(ROUTES.propertyPayment(propertyId, rentPaymentId));
-  const openTenant =
-    tenant !== null
-      ? () => router.push(ROUTES.propertyContact(propertyId, tenant.contactId))
-      : undefined;
 
   return (
     <PageContent>
       <div className="flex flex-col gap-12">
         <div className="flex flex-col items-center gap-4">
-          {/* Фото объекта 96 (1232:61491): фотографий у объектов пока нет —
-              канон-заглушка в палитре PropertyThumbnail. */}
-          <span
+          {/* Ключ аренды 96 (1232:61491) — одна картинка для всех аренд. */}
+          <Image
+            src="/images/rentals/rental-hero.png"
+            alt=""
+            width={96}
+            height={96}
+            className="h-24 w-24"
             aria-hidden
-            className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[#E7E9EC] text-[#A1A3A6]"
-          >
-            <Home className="h-6 w-6" />
-          </span>
+          />
           <div className="flex flex-col items-center gap-2">
             <p className="text-base leading-[18px] text-content-secondary">Оплачено</p>
             <h1 className="text-center text-[28px] font-semibold leading-8 text-content">
@@ -159,18 +159,20 @@ export function RentalDetailBody({
             </div>
           </RentalGroup>
 
-          <RentalGroup
-            title="Арендатор"
-            className="pb-4"
-            onOpen={openTenant}
-            openLabel="Открыть карточку арендатора"
-          >
-            <TenantRow
-              tenantName={rentalTenantTitle(tenant)}
-              phone={tenant?.phone}
-              onSelect={openTenant}
-            />
-          </RentalGroup>
+          {tenant !== null && (
+            <RentalGroup
+              title="Арендатор"
+              className="pb-4"
+              onOpen={() => router.push(ROUTES.propertyContact(propertyId, tenant.contactId))}
+              openLabel="Открыть карточку арендатора"
+            >
+              <TenantRow
+                tenantName={rentalTenantTitle(tenant)}
+                phone={tenant.phone}
+                onSelect={() => router.push(ROUTES.propertyContact(propertyId, tenant.contactId))}
+              />
+            </RentalGroup>
+          )}
 
           {/* Секция «Управление» (Figma 1232:62297: Редактировать аренду /
               Завершить аренду / Продлить аренду) — строки ведут на экраны

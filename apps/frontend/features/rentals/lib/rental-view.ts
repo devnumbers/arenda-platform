@@ -141,12 +141,10 @@ export function rentalCommentText(comment: string): string {
   return trimmed.length > 0 ? comment : 'Не указано';
 }
 
-/** Имя арендатора в строке секции; после удаления контакта — «Контакта
- * нет» без пометки (решение #528). */
-export function rentalTenantTitle(tenant: RentalTenant | null): string {
-  if (tenant === null) {
-    return 'Контакта нет';
-  }
+/** Имя арендатора в строке секции (решение владельца 2026-09-07: без
+ * арендатора секция «Арендатор» не выводится вовсе — прежнее «Контакта
+ * нет» из #528 переиграно). */
+export function rentalTenantTitle(tenant: RentalTenant): string {
   return [tenant.firstName, tenant.lastName].filter((part) => part.length > 0).join(' ');
 }
 

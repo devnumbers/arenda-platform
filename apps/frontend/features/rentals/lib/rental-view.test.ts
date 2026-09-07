@@ -276,8 +276,4 @@ describe('rentalTenantTitle', () => {
       }),
     ).toBe('Александр Петров');
   });
-
-  it('после удаления контакта — «Контакта нет» (решение #528)', () => {
-    expect(rentalTenantTitle(null)).toBe('Контакта нет');
-  });
 });
