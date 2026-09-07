@@ -15,7 +15,7 @@ COPY --from=deps /app/apps/landing/node_modules ./node_modules
 COPY apps/landing ./
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.29.4-alpine@sha256:a6c4f61f456b85b8fdf7ec7ab28cc3e299440e6fb4a9dea520e5fd8fd440025e AS runtime
+FROM nginxinc/nginx-unprivileged:1.31.5-alpine@sha256:2ddec616f1cb58bcac057aa388f28cb81e35137641ef4226d321714499329bd1 AS runtime
 
 USER root
 
