@@ -4,14 +4,28 @@ import type {
   RentalNextPayment,
   RentalPaymentView,
   RentalProgress,
+  RentalSummary,
   RentalTenant,
 } from './types';
 
 type RentalResponseDto = components['schemas']['RentalResponse'];
+type RentalSummaryDto = components['schemas']['RentalSummaryResponse'];
 type TenantViewDto = components['schemas']['TenantView'];
 type NextPaymentDto = NonNullable<
   components['schemas']['RentalPaymentView']['nextPayment']
 >;
+
+/** Итоги аренды (решение №13): сервер отдаёт период и суммы каноническими —
+ * переносится как есть. */
+export function mapRentalSummary(dto: RentalSummaryDto): RentalSummary {
+  return {
+    from: dto.from,
+    until: dto.until,
+    incomeKopecks: dto.incomeKopecks,
+    expenseKopecks: dto.expenseKopecks,
+    profitKopecks: dto.profitKopecks,
+  };
+}
 
 /** DTO → сущность: отсутствующие в проводе необязательные поля нормализуются
  * в null (tenant, plannedEndDate, nextPayment), остальное переносится как

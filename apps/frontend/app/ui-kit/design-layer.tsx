@@ -163,6 +163,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [datePickerRequiredValue, setDatePickerRequiredValue] = useState<string | null>(null);
     const [datePickerMinOpen, setDatePickerMinOpen] = useState(false);
     const [datePickerMinValue, setDatePickerMinValue] = useState<string | null>(null);
+    const [datePickerMaxOpen, setDatePickerMaxOpen] = useState(false);
+    const [datePickerMaxValue, setDatePickerMaxValue] = useState<string | null>(null);
     const [rangePickerOpen, setRangePickerOpen] = useState(false);
     const [rangePickerValue, setRangePickerValue] = useState<IsoRange | null>(null);
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
@@ -604,6 +606,28 @@ export function DesignLayerShowcase(): JSX.Element {
                             onConfirm={(date) => {
                                 setDatePickerMinValue(date);
                                 setDatePickerMinOpen(false);
+                            }}
+                        />
+                    )}
+                    <div className={styles.column}>
+                        <Button onClick={() => setDatePickerMaxOpen(true)}>
+                            Открыть пикер (maxDate: −10 дней)
+                        </Button>
+                        {datePickerMaxValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: {datePickerMaxValue}
+                            </p>
+                        )}
+                    </div>
+                    {datePickerMaxOpen && (
+                        <CalendarDatePicker
+                            maxDate={addDays(dateToIso(new Date()), -10)}
+                            today={dateToIso(new Date())}
+                            value={datePickerMaxValue}
+                            onClose={() => setDatePickerMaxOpen(false)}
+                            onConfirm={(date) => {
+                                setDatePickerMaxValue(date);
+                                setDatePickerMaxOpen(false);
                             }}
                         />
                     )}

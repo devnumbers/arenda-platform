@@ -112,3 +112,31 @@ export type RentalUpdateCommand = {
   readonly commissionKopecks?: number | null;
   readonly comment?: string | null;
 };
+
+/**
+ * Команда завершения аренды (POST …/complete, #534): дата завершения в
+ * границах [начало, сегодня] — «По плану» подставляет клиент (ADR 0053 §3).
+ * Возврат залога — запись при завершении: 0 валиден («не вернул»),
+ * комментарий только при сумме.
+ */
+export type RentalCompleteCommand = {
+  readonly completedDate: IsoDate;
+  readonly depositReturn?: {
+    readonly amountKopecks: number;
+    readonly comment?: string;
+  };
+};
+
+/**
+ * Итоги аренды (GET …/summary, решение №13): все paid-операции объекта —
+ * любого платежа и ручные — с датой вхождения в периоде [from, until].
+ * Прибыль = доходы − расходы, может быть отрицательной; вычисляется на
+ * чтении, снапшота нет.
+ */
+export type RentalSummary = {
+  readonly from: IsoDate;
+  readonly until: IsoDate;
+  readonly incomeKopecks: number;
+  readonly expenseKopecks: number;
+  readonly profitKopecks: number;
+};

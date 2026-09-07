@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import type { JSX } from 'react';
-import { BoldUser, Calendar, Check } from '@/shared/assets/icons';
+import type { JSX, ReactNode } from 'react';
+import { BoldUser, Calendar, Check, Edit, Key } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonth } from '@/shared/lib/date-format';
 import {
@@ -18,7 +18,7 @@ import {
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
-import { PageContent, RoundActionButton } from '@/shared/ui/design';
+import { ListRow, PageContent, RoundActionButton } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
 
 /**
@@ -192,9 +192,35 @@ export function RentalDetailBody({
             </RentalGroup>
           )}
 
-          {/* Секция «Управление» (Figma 1232:62297: Редактировать аренду /
-              Завершить аренду / Продлить аренду) — строки ведут на экраны
-              #532/#534/#533; секция появится вместе с первым из них. */}
+          {/* Секция «Управление» (Figma 1232:62297): строки ведут на экраны
+              #532/#534/#533. «Завершить» — только у начавшейся аренды (дата
+              завершения не бывает раньше начала, ADR 0053 §3), «Продлить» —
+              только у срочной (как круглая кнопка #533). */}
+          {canMutate && (
+            <RentalGroup title="Управление" className="pb-3">
+              <div className="flex flex-col">
+                <ManageRow
+                  icon={<Edit className="h-6 w-6 text-content" />}
+                  label="Редактировать аренду"
+                  onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
+                />
+                {rental.status !== 'upcoming' && (
+                  <ManageRow
+                    icon={<Key className="h-6 w-6 text-content" />}
+                    label="Завершить аренду"
+                    onClick={() => router.push(ROUTES.propertyRentalComplete(propertyId))}
+                  />
+                )}
+                {rental.plannedEndDate !== null && (
+                  <ManageRow
+                    icon={<Calendar className="h-6 w-6 text-content" />}
+                    label="Продлить аренду"
+                    onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
+                  />
+                )}
+              </div>
+            </RentalGroup>
+          )}
         </div>
       </div>
     </PageContent>
@@ -208,6 +234,20 @@ function TermRow({ label, value }: { readonly label: string; readonly value: str
       <span className="min-w-0 text-sm leading-4 text-content">{value}</span>
     </div>
   );
+}
+
+/** Строка секции «Управление» (Figma 1232:62297): строчная иконка 24 и
+ * подпись; канонный ListRow без хвостовых слотов. */
+function ManageRow({
+  icon,
+  label,
+  onClick,
+}: {
+  readonly icon: ReactNode;
+  readonly label: string;
+  readonly onClick: () => void;
+}): JSX.Element {
+  return <ListRow leading={icon} title={label} onSelect={onClick} />;
 }
 
 /** Строка платежа секции (Figma 1323:61126): иконка категории 44 с синим

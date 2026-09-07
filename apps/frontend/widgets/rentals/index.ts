@@ -1,3 +1,4 @@
+export { RentalCompleteScreen } from './ui/rental-complete-screen';
 export { RentalCreateWizardScreen } from './ui/rental-create-wizard-screen';
 export { RentalExtendScreen } from './ui/rental-extend-screen';
 export { RentalScreen } from './ui/rental-screen';

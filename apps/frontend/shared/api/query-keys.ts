@@ -170,6 +170,10 @@ export const rentalKeys = {
   all: ['rentals'] as const,
   /** Список аренд объекта: незавершённая первая, далее завершённые (#531). */
   list: (propertyId: string) => [...rentalKeys.all, 'list', propertyId] as const,
+  /** Итоги аренды за [начало, until] — превью мастера завершения (#534);
+   * until в ключе: выбранная дата меняет расчёт. */
+  summary: (propertyId: string, rentalId: string, until: string) =>
+    [...rentalKeys.all, 'summary', propertyId, rentalId, until] as const,
 };
 
 // features/subscription

@@ -78,6 +78,10 @@ export { default as BoldWrench } from './bold-wrench.svg';
 // градиентных статус-бейджей 24×24 (цвета запечены в SVG).
 export { default as Check } from './check.svg';
 export { default as Edit } from './edit.svg';
+// Строчный ключ секции «Управление» аренды (#534, макет 1232:62297):
+// в выгрузке Figma компонент Icon/R/Key недоступен — контур в стилистике
+// набора (stroke 1.5), сверить с макетом на приёмке.
+export { default as Key } from './key.svg';
 export { default as ArrowDown } from './arrow-down.svg';
 export { default as SortingDown } from './sorting-down.svg';
 // Направление сортировки: SortingSmallBig 418:4608 — возрастание (от

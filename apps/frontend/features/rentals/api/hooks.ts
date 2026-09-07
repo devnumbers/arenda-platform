@@ -3,12 +3,20 @@
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapRental } from '@/entities/rental';
-import type { Rental, RentalCreateCommand, RentalUpdateCommand } from '@/entities/rental';
+import { mapRental, mapRentalSummary } from '@/entities/rental';
+import type {
+  Rental,
+  RentalCompleteCommand,
+  RentalCreateCommand,
+  RentalSummary,
+  RentalUpdateCommand,
+} from '@/entities/rental';
+import type { IsoDate } from '@/shared/lib/calendar';
 import { paymentKeys, paymentOperationKeys, rentalKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 
 type RentalResponseDto = components['schemas']['RentalResponse'];
+type RentalSummaryDto = components['schemas']['RentalSummaryResponse'];
 type RentalsResponseDto = components['schemas']['RentalsResponse'];
 
 /**
@@ -81,5 +89,55 @@ export function useUpdateRental(
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
     },
+  });
+}
+
+/**
+ * Завершение аренды (#534): POST …/complete с фактической датой и записью
+ * возврата залога (ADR 0053 §3). Сервер останавливает Платёж на дате
+ * завершения — будущие плановые операции сносятся: инвалидируются аренды,
+ * платежи и операции. Повторное завершение — 409.
+ */
+export function useCompleteRental(
+  propertyId: string,
+  rentalId: string,
+): UseMutationResult<Rental, ApiError, RentalCompleteCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: RentalCompleteCommand) => {
+      const response = await apiClient<RentalResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/rentals/${encodeURIComponent(rentalId)}/complete`,
+        { method: 'POST', body: JSON.stringify(command) },
+      );
+      return mapRental(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: rentalKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
+  });
+}
+
+/**
+ * Итоги аренды (#534, решение №13): все paid-операции объекта за
+ * [начало, until] по дате вхождения — как период на странице операций,
+ * суженный объектом. Мастер завершения превьюит с выбранной датой до
+ * фактического завершения; `until` в ключе — расчёт меняется с датой.
+ */
+export function useRentalSummary(
+  propertyId: string,
+  rentalId: string,
+  until: IsoDate,
+): UseQueryResult<RentalSummary, ApiError> {
+  return useQuery({
+    queryKey: rentalKeys.summary(propertyId, rentalId, until),
+    queryFn: async () => {
+      const response = await apiClient<RentalSummaryDto>(
+        `/properties/${encodeURIComponent(propertyId)}/rentals/${encodeURIComponent(rentalId)}/summary?until=${until}`,
+      );
+      return mapRentalSummary(response);
+    },
+    enabled: Boolean(propertyId && rentalId && until),
   });
 }

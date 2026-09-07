@@ -227,6 +227,9 @@ const rentals = {
   updated: ((options?) =>
     notify.success('Изменения сохранены', options)) satisfies ScenarioFn,
   updateError: errorScenario('Не удалось сохранить изменения'),
+  /** Завершение (#534): успех — полноэкранный финал мастера, тост только
+   * на ошибку мутации. */
+  completeError: errorScenario('Не удалось завершить аренду'),
 } as const;
 
 /** Контекст «Задачи» (#499): тосты ошибок мутаций; выполнение/снятие/

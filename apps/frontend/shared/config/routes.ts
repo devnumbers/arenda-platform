@@ -62,6 +62,8 @@ export const ROUTES = {
   propertyRentalTermsEdit: (id: string) => `/properties/${id}/rentals/terms/edit`,
   /** Продление аренды (#533): новая дата окончания поверх PATCH plannedEndDate. */
   propertyRentalExtend: (id: string) => `/properties/${id}/rentals/extend`,
+  /** Завершение аренды (#534): мастер из подтверждения, даты, залога и итогов. */
+  propertyRentalComplete: (id: string) => `/properties/${id}/rentals/complete`,
   /** Экран «Контакты объекта» (#508) — новый хром, книга контактов (ADR 0051). */
   propertyContacts: (id: string) => `/properties/${id}/contacts`,
   /** Создание контакта (#509); до тикета путь ведёт на 404. */

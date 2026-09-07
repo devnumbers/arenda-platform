@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapRental } from './mappers';
+import { mapRental, mapRentalSummary } from './mappers';
 import type { components } from '@/shared/api/dto';
 
 type RentalResponseDto = components['schemas']['RentalResponse'];
@@ -101,5 +101,37 @@ describe('mapRental', () => {
 
     expect(rental.rentPayment.paymentDay).toBe('last');
     expect(rental.plannedEndDate).toBeNull();
+  });
+});
+
+describe('mapRentalSummary', () => {
+  it('переносит период и суммы итогов как есть', () => {
+    expect(
+      mapRentalSummary({
+        from: '2026-05-10',
+        until: '2029-01-10',
+        incomeKopecks: 50_000_000_00,
+        expenseKopecks: 5_342_068,
+        profitKopecks: 55_342_032,
+      }),
+    ).toEqual({
+      from: '2026-05-10',
+      until: '2029-01-10',
+      incomeKopecks: 50_000_000_00,
+      expenseKopecks: 5_342_068,
+      profitKopecks: 55_342_032,
+    });
+  });
+
+  it('отрицательная прибыль проходит без изменений (решение №13)', () => {
+    expect(
+      mapRentalSummary({
+        from: '2026-05-10',
+        until: '2026-06-10',
+        incomeKopecks: 100_00,
+        expenseKopecks: 900_00,
+        profitKopecks: -800_00,
+      }).profitKopecks,
+    ).toBe(-800_00);
   });
 });

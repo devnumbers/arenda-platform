@@ -1,4 +1,10 @@
-export { useCreateRental, useRentals, useUpdateRental } from './api/hooks';
+export {
+  useCompleteRental,
+  useCreateRental,
+  useRentalSummary,
+  useRentals,
+  useUpdateRental,
+} from './api/hooks';
 export {
   buildRentalCreateCommand,
   draftAfterStartChange,
@@ -19,9 +25,19 @@ export {
   RENTAL_COMMENT_MAX,
 } from './lib/edit-model';
 export type { RentalEditForm } from './lib/edit-model';
+export {
+  buildRentalCompleteCommand,
+  completePlannedEndDate,
+  rentalDurationLine,
+} from './lib/complete-model';
+export type { RentalCompleteDraft } from './lib/complete-model';
 export { useRentalWizardDraft } from './lib/use-rental-wizard-draft';
 export type { RentalWizardDraft } from './lib/use-rental-wizard-draft';
-export { rentalExtendSuccessCopy, rentalSuccessCopy } from './lib/success-copy';
+export {
+  rentalCompletedTitle,
+  rentalExtendSuccessCopy,
+  rentalSuccessCopy,
+} from './lib/success-copy';
 export {
   currentRentalOf,
   rentalCommentText,

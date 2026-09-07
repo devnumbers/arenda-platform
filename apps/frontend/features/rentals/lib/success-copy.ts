@@ -54,3 +54,9 @@ export function rentalExtendSuccessCopy(input: RentalExtendSuccessCopyInput): st
     'месяцев',
   )} до ${formatDottedDate(input.newEnd)}`;
 }
+
+/** Заголовок финального экрана завершения аренды (#534, Figma 1433:60975):
+ * «Аренда объекта «Моя квартира» завершена». */
+export function rentalCompletedTitle(propertyName: string): string {
+  return `Аренда объекта «${propertyName}» завершена`;
+}

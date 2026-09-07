@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rentalExtendSuccessCopy, rentalSuccessCopy } from './success-copy';
+import { rentalCompletedTitle, rentalExtendSuccessCopy, rentalSuccessCopy } from './success-copy';
 
 describe('rentalSuccessCopy', () => {
   it('заголовок канонический, описание собирается из условий', () => {
@@ -46,5 +46,11 @@ describe('rentalExtendSuccessCopy', () => {
     expect(rentalExtendSuccessCopy({ previousEnd: '2026-02-10', newEnd: '2026-03-05' })).toBe(
       'Аренда продлена до 05.03.2026',
     );
+  });
+});
+
+describe('rentalCompletedTitle', () => {
+  it('подставляет имя объекта в кавычки-ёлочки', () => {
+    expect(rentalCompletedTitle('Моя квартира')).toBe('Аренда объекта «Моя квартира» завершена');
   });
 });

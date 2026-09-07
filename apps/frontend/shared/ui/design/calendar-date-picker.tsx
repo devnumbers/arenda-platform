@@ -74,6 +74,11 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * чистит его при смене начала. Пустой черновик стартует с первого
  * доступного дня (сегодня либо minDate, если он позже).
  *
+ * Максимальная дата (проп maxDate, #534): дни позже недоступны — дата
+ * завершения аренды не бывает будущей (ADR 0053 §3, потребитель передаёт
+ * «сегодня» собственника). Симметрично минимуму: пустой черновик
+ * прижимается к границе, если «сегодня» за ней.
+ *
  * Планшет (561–768, решение владельца 2026-09-04): TopNav и белый шит
  * футера тянутся во всю ширину — кнопка «Выбрать» тоже (StickyBottomBar
  * fullWidthContent); на десктопе ≥769 футер возвращается в колонку 560. */
@@ -99,15 +104,29 @@ export type CalendarDatePickerProps = {
   /** Первый доступный день; дни раньше недоступны (окончание аренды —
    * строго позже начала). */
   readonly minDate?: IsoDate;
+  /** Последний доступный день; дни позже недоступны (дата завершения
+   * аренды — не будущее, ADR 0053 §3). */
+  readonly maxDate?: IsoDate;
   readonly onClose: () => void;
   /** «Выбрать»: коммитит черновик; null — дата снята («без срока»). */
   readonly onConfirm: (date: IsoDate | null) => void;
 };
 
-/** Пустой черновик стартует с первого доступного дня: сегодня, либо минимум,
- * если он позже сегодня. */
-function initialDraft(today: IsoDate, minDate: IsoDate | undefined): IsoDate {
-  return minDate !== undefined && minDate > today ? minDate : today;
+/** Пустой черновик стартует с первого доступного дня: сегодня, прижатое в
+ * границы [minDate, maxDate], если «сегодня» за ними. */
+function initialDraft(
+  today: IsoDate,
+  minDate: IsoDate | undefined,
+  maxDate: IsoDate | undefined,
+): IsoDate {
+  let draft = today;
+  if (maxDate !== undefined && draft > maxDate) {
+    draft = maxDate;
+  }
+  if (minDate !== undefined && draft < minDate) {
+    draft = minDate;
+  }
+  return draft;
 }
 
 export function CalendarDatePicker({
@@ -117,6 +136,7 @@ export function CalendarDatePicker({
   value,
   required,
   minDate,
+  maxDate,
   onClose,
   onConfirm,
 }: CalendarDatePickerProps): JSX.Element {
@@ -128,7 +148,9 @@ export function CalendarDatePicker({
   const valueIndex =
     value !== null ? calendarMonthIndex(calendarMonthOf(value)) - startIndex : -1;
   const [monthsCount, setMonthsCount] = useState(() => Math.max(FEED_MONTHS, valueIndex + 1));
-  const [draft, setDraft] = useState<IsoDate | null>(value ?? initialDraft(today, minDate));
+  const [draft, setDraft] = useState<IsoDate | null>(
+    value ?? initialDraft(today, minDate, maxDate),
+  );
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const months = listCalendarMonths(feedStart, monthsCount);
   const monthRefs = useRef(new Map<string, HTMLElement>());
@@ -292,10 +314,12 @@ export function CalendarDatePicker({
                         // тапабельным, повторный тап снимает дату. Дни раньше
                         // minDate недоступны без исключений (minDate — первый
                         // доступный: окончание аренды строго позже начала,
-                        // ADR 0053).
+                        // ADR 0053); дни позже maxDate — тоже (дата
+                        // завершения не бывает будущей, #534).
                         disabled={
                           (iso < today && iso !== value)
                           || (minDate !== undefined && iso < minDate)
+                          || (maxDate !== undefined && iso > maxDate)
                         }
                         // Повторный тап по выбранному дню снимает выбор
                         // (решение владельца 2026-09-03); с required дата
