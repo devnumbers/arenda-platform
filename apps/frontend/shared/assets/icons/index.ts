@@ -17,6 +17,7 @@ export { default as Trash } from './trash.svg';
 export { default as NavObjects } from './nav-objects.svg';
 export { default as NavProfile } from './nav-profile.svg';
 export { default as NavSupport } from './nav-support.svg';
+export { default as NavContacts } from './bold-users.svg';
 export { default as BottomObjects } from './bottom-objects.svg';
 export { default as BottomProfile } from './bottom-profile.svg';
 export { default as Filter } from './filter.svg';

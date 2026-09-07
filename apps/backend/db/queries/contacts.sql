@@ -10,26 +10,72 @@ SELECT * FROM contacts
 WHERE id = $1;
 
 -- name: ListContacts :many
--- The owner's slice per the query scope: 'all' — the whole book,
--- 'without_property' — the unbound cards, 'property' — one property's cards
--- (property_id must be set for it). search ('' = no filter) is a
--- case-insensitive substring match over the name fields, role, phone, email
--- and messenger username; the application layer escapes the ILIKE
--- metacharacters (ESCAPE '\').
-SELECT *
-FROM contacts
-WHERE owner_id = $1
-  AND (
-        sqlc.arg('scope')::text = 'all'
-        OR (sqlc.arg('scope')::text = 'without_property' AND property_id IS NULL)
-        OR (sqlc.arg('scope')::text = 'property' AND property_id = sqlc.arg('property_id')::uuid)
+-- The actor's visible slice per the query scope (ADR 0051, ADR 0028):
+-- 'all' — the flat book: the actor's own cards plus the cards bound to
+-- properties the actor owns or shares with an active membership (the merged
+-- visibility the global book page reads);
+-- 'without_property' — the actor's own unbound cards;
+-- 'property' — the cards bound to one property whatever book they live in:
+-- visibility is driven by the binding (the book owner never changes on a
+-- move), and the service has already gated the actor's view capability on
+-- the property. property_id must be set for the property scope.
+-- search ('' = no filter) is a case-insensitive substring match over the
+-- name fields, role, phone, email and messenger username; the application
+-- layer escapes the ILIKE metacharacters (ESCAPE '\').
+-- sort 'name' orders by the display name; 'property' — by the bound
+-- property's name, unbound cards first in both directions («Общие
+-- контакты»), contact name ordering inside the groups. Both keys use the
+-- Russian ICU collation to match the client's letter grouping; id ties off.
+SELECT c.*, p.name AS property_name
+FROM contacts c
+LEFT JOIN properties p ON p.id = c.property_id
+WHERE (
+       (sqlc.arg('scope')::text = 'all' AND (
+          c.owner_id = sqlc.arg('actor_id')::uuid
+          OR (
+            c.property_id IS NOT NULL
+            AND (
+                  EXISTS (
+                    SELECT 1 FROM properties op
+                    WHERE op.id = c.property_id
+                      AND op.owner_id = sqlc.arg('actor_id')::uuid
+                  )
+               OR EXISTS (
+                    SELECT 1 FROM property_members pm
+                    WHERE pm.property_id = c.property_id
+                      AND pm.user_id = sqlc.arg('actor_id')::uuid
+                      AND pm.status = 'active'
+                  )
+            )
+          )
+       ))
+    OR (sqlc.arg('scope')::text = 'without_property'
+        AND c.owner_id = sqlc.arg('actor_id')::uuid
+        AND c.property_id IS NULL)
+    OR (sqlc.arg('scope')::text = 'property'
+        AND c.property_id = sqlc.arg('property_id')::uuid)
       )
   AND (
         sqlc.arg('search')::text = ''
-        OR concat_ws(' ', first_name, last_name, patronymic, role, phone, email, messenger_username)
+        OR concat_ws(' ', c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_username)
            ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
       )
-ORDER BY created_at ASC, id ASC;
+ORDER BY
+  CASE WHEN sqlc.arg('sort')::text = 'property'
+       THEN (c.property_id IS NULL) END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'name' AND sqlc.arg('order')::text = 'asc'
+       THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'name' AND sqlc.arg('order')::text = 'desc'
+       THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'property' AND sqlc.arg('order')::text = 'asc'
+       THEN p.name COLLATE "ru-RU-x-icu" END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'property' AND sqlc.arg('order')::text = 'asc'
+       THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'property' AND sqlc.arg('order')::text = 'desc'
+       THEN p.name COLLATE "ru-RU-x-icu" END DESC,
+  CASE WHEN sqlc.arg('sort')::text = 'property' AND sqlc.arg('order')::text = 'desc'
+       THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
+  c.id ASC;
 
 -- name: InsertContact :one
 INSERT INTO contacts (id, owner_id, property_id, first_name, last_name, patronymic,

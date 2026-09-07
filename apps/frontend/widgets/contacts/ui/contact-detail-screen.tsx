@@ -34,27 +34,42 @@ const COPIED_RESET_MS = 2000;
  * тому, кому можно мутировать (как на списке: не смотрящий и не архив);
  * удаление — через confirm дизайн-слоя (#505), после — возврат на список
  * с инвалидацией.
+ *
+ * Режим книги (глобальная страница контактов, propertyId не задан):
+ * мутационный вход определяется привязкой самой карточки — без объекта
+ * карточка лежит в книге самого актёра (править можно всегда), привязанная
+ * правится по доступу её объекта; выход — в корень книги.
  */
 export function ContactDetailScreen({
   propertyId,
   contactId,
 }: {
-  readonly propertyId: string;
+  readonly propertyId?: string;
   readonly contactId: string;
 }): JSX.Element {
   const router = useRouter();
   const contactQuery = useContact(contactId);
-  const propertyQuery = useProperty(propertyId);
+  const propertyQuery = useProperty(propertyId ?? '');
   const deleteContact = useDeleteContact(contactId);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const contact = contactQuery.isSuccess ? contactQuery.data : undefined;
   const boundPropertyQuery = useProperty(contact?.propertyId ?? '');
   const boundProperty = boundPropertyQuery.isSuccess ? boundPropertyQuery.data : undefined;
+  const backHref = propertyId !== undefined ? ROUTES.propertyContacts(propertyId) : ROUTES.contacts;
+  const editHref =
+    propertyId !== undefined
+      ? ROUTES.propertyContactEdit(propertyId, contactId)
+      : ROUTES.contactEdit(contactId);
   // Мутационный вход — как на списке (#508): смотрящий и архив читают.
-  const canMutate = canMutateProperty(
-    propertyQuery.isSuccess ? propertyQuery.data : undefined,
-  );
+  // В режиме книги привязка самой карточки: без объекта — своя книга,
+  // с объектом — доступ этого объекта.
+  const canMutate =
+    propertyId !== undefined
+      ? canMutateProperty(propertyQuery.isSuccess ? propertyQuery.data : undefined)
+      : contact?.propertyId !== undefined
+        ? canMutateProperty(boundProperty)
+        : contact !== undefined;
 
   const handleDelete = (): void => {
     setDeleteConfirmOpen(false);
@@ -65,7 +80,7 @@ export function ContactDetailScreen({
         // Стандарт навигации (удаление сущности): goBack — из истории
         // [список, карточка] назад ведёт на список, не на удалённый
         // контакт; router.replace создал бы «мёртвый» Back.
-        goBack(router, ROUTES.propertyContacts(propertyId));
+        goBack(router, backHref);
       })
       .catch((error: unknown) => {
         notify.scenarios.propertyContacts.deleteError(error);
@@ -79,13 +94,13 @@ export function ContactDetailScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            onClick={() => goBack(router, ROUTES.propertyContacts(propertyId))}
+            onClick={() => goBack(router, backHref)}
           />
         }
         trailing={
           canMutate ? (
             <ContactKebabMenu
-              onEdit={() => router.push(ROUTES.propertyContactEdit(propertyId, contactId))}
+              onEdit={() => router.push(editHref)}
               onDelete={() => setDeleteConfirmOpen(true)}
             />
           ) : undefined
@@ -101,7 +116,7 @@ export function ContactDetailScreen({
           <ContactsErrorCard onRetry={() => void contactQuery.refetch()} />
         ) : (
           <ContactCardBody
-            propertyId={propertyId}
+            editHref={editHref}
             contact={contact}
             boundProperty={boundProperty}
             canEdit={canMutate}
@@ -125,12 +140,12 @@ export function ContactDetailScreen({
 /** Тело карточки (1285:55112): аватар, карточка «имя+роль» со строками
  * значений, «Объект» (только при привязке), «Заметка». */
 function ContactCardBody({
-  propertyId,
+  editHref,
   contact,
   boundProperty,
   canEdit,
 }: {
-  readonly propertyId: string;
+  readonly editHref: string;
   readonly contact: Contact;
   readonly boundProperty: Property | undefined;
   readonly canEdit: boolean;
@@ -153,7 +168,7 @@ function ContactCardBody({
         {canEdit ? (
           <button
             type="button"
-            onClick={() => router.push(ROUTES.propertyContactEdit(propertyId, contact.id))}
+            onClick={() => router.push(editHref)}
             className="flex w-full cursor-pointer items-center gap-2 pb-6 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={`Изменить контакт ${contactFullName(contact)}`}
           >

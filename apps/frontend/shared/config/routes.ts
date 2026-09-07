@@ -85,6 +85,16 @@ export const ROUTES = {
   /** Экран правки контакта (#510): форма создания в режиме правки. */
   propertyContactEdit: (id: string, contactId: string) =>
     `/properties/${id}/contacts/${contactId}/edit`,
+  /** Плоская книга контактов (глобальная страница, макеты 1726:65083/…). */
+  contacts: '/contacts',
+  /** Поиск по книге — отдельная страница с поисковой шапкой (как #508). */
+  contactSearch: '/contacts/search',
+  /** Создание контакта из книги (без фиксированной привязки). */
+  contactNew: '/contacts/new',
+  /** Карточка контакта из книги. */
+  contact: (contactId: string) => `/contacts/${contactId}`,
+  /** Правка контакта из книги. */
+  contactEdit: (contactId: string) => `/contacts/${contactId}/edit`,
   profile: '/profile',
   profilePersonal: '/profile/personal',
   profileNotifications: '/profile/notifications',

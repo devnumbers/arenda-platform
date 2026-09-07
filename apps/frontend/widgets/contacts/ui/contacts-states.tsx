@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { cn } from '@/shared/lib/cn';
 import { Button, EmptyState, Skeleton } from '@/shared/ui/design';
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
@@ -13,9 +14,9 @@ const searchNoteClass = 'text-base leading-[18px] text-content-secondary';
  * подсказки (1527:74813/74825).
  */
 
-export function ContactsSkeleton(): JSX.Element {
+export function ContactsSkeleton({ className }: { readonly className?: string }): JSX.Element {
   return (
-    <section className="mx-6 rounded-card bg-surface-muted px-6 py-6" aria-hidden>
+    <section className={cn('mx-6 rounded-card bg-surface-muted px-6 py-6', className)} aria-hidden>
       <div className="flex flex-col gap-4">
         <Skeleton className="h-11 bg-surface-muted-hover" />
         <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
@@ -26,9 +27,15 @@ export function ContactsSkeleton(): JSX.Element {
 }
 
 /** Карточка ошибки загрузки с повтором. */
-export function ContactsErrorCard({ onRetry }: { readonly onRetry: () => void }): JSX.Element {
+export function ContactsErrorCard({
+  onRetry,
+  className,
+}: {
+  readonly onRetry: () => void;
+  readonly className?: string;
+}): JSX.Element {
   return (
-    <section className="mx-6 rounded-card bg-surface-muted px-6 py-6">
+    <section className={cn('mx-6 rounded-card bg-surface-muted px-6 py-6', className)}>
       <h2 className={headingClass}>Не удалось загрузить контакты</h2>
       <p className="mt-2 text-sm leading-4 text-content-secondary">
         Проверьте подключение и попробуйте еще раз

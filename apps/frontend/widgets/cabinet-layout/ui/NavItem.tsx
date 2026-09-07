@@ -8,6 +8,7 @@ import {
   NavObjects,
   NavProfile,
   NavSupport,
+  NavContacts,
   BottomObjects,
   BottomProfile,
 } from '@/shared/assets/icons';
@@ -29,6 +30,7 @@ const iconMap: Record<string, IconComponent> = {
   NavProfile,
   NavSupport,
   NavOperations: BoldBill,
+  NavContacts,
   BottomObjects,
   BottomProfile,
 };

@@ -27,11 +27,14 @@ var (
 	ErrInvalidInput = domain.ErrInvalidInput
 )
 
-// ListScope selects which slice of the book a listing reads: the owner's
-// whole book, only the unbound contacts («без объекта»), or one property's
-// contacts. The property scope is the shared-members surface — it resolves
-// the data owner through the policy; the book scopes are always the actor's
-// own book.
+// ListScope selects which slice of the book a listing reads: the flat book
+// (the actor's own cards plus the property-bound cards of the properties the
+// actor can view — the merged visibility of the global book page), only the
+// actor's own unbound contacts («без объекта»), or one property's contacts.
+// The property scope is the shared-members surface — the service gates the
+// actor's view capability on the property; visibility itself is driven by
+// the binding, whatever book the card lives in (the book owner never changes
+// on a move).
 type ListScope string
 
 const (
@@ -42,11 +45,41 @@ const (
 
 // ListQuery is the listing filter. Search is a case-insensitive substring
 // match over the name fields, phone, email, messenger username and role
-// (” = no filter); the store escapes the LIKE metacharacters.
+// (” = no filter); the store escapes the LIKE metacharacters. Sort/Order
+// order the flat listing; the empty values mean the defaults (name/asc).
 type ListQuery struct {
 	Scope      ListScope
 	PropertyID uuid.UUID // ListScopeProperty only.
 	Search     string
+	Sort       ListSort
+	Order      ListOrder
+}
+
+// ListSort selects the sort key of a book listing: the contact's display
+// name, or the bound property's name (the unbound cards lead both ways —
+// the «Общие контакты» group) with contact-name order inside.
+type ListSort string
+
+const (
+	ListSortName     ListSort = "name"
+	ListSortProperty ListSort = "property"
+)
+
+// ListOrder is the sort direction of a book listing.
+type ListOrder string
+
+const (
+	ListOrderAsc  ListOrder = "asc"
+	ListOrderDesc ListOrder = "desc"
+)
+
+// ListedContact is the list projection of a card: the card itself plus the
+// display name of its bound property ("" when unbound) — the wire response
+// carries it so the client labels and groups rows without re-reading
+// properties.
+type ListedContact struct {
+	Contact      domain.Contact
+	PropertyName string
 }
 
 // ContactStore is the persistence port of the contact book. Every method is
@@ -57,8 +90,13 @@ type ContactStore interface {
 	// GetByID loads one card by id alone; ErrNotFound when unknown. The
 	// service gates the result before it travels anywhere.
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Contact, error)
-	// List returns the owner's contacts per the query's scope and search.
-	List(ctx context.Context, ownerID uuid.UUID, q ListQuery) ([]domain.Contact, error)
+	// List returns the actor's visible contacts per the query's scope,
+	// search and sort (ADR 0051): the flat book scope reads the merged
+	// visibility — the actor's own cards plus the cards bound to properties
+	// the actor can view; the property scope reads the cards bound to that
+	// property whatever book they live in; the unbound scope reads the
+	// actor's own cards alone.
+	List(ctx context.Context, actorID uuid.UUID, q ListQuery) ([]ListedContact, error)
 	// Create inserts a new card (the id and owner are app-side) and returns
 	// the stored row with its timestamps.
 	Create(ctx context.Context, c domain.Contact) (domain.Contact, error)

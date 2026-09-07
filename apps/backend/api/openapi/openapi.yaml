@@ -504,9 +504,11 @@ paths:
           required: false
           description: >-
             Filter by the bound property. A missing value lists the actor's
-            whole book; a property-bound listing resolves through the view
-            gate of that property (ADR 0028) and reads the data owner's
-            slice.
+            visible book: their own cards plus the property-bound cards of
+            the properties they can view (ADR 0028 — for a shared member that
+            is the bound cards of the shared properties plus their own unbound
+            ones); a property-bound listing resolves through the view gate of
+            that property (ADR 0028) and reads the cards bound to it.
           schema:
             type: string
             format: uuid
@@ -520,6 +522,28 @@ paths:
             literals.
           schema:
             type: string
+        - name: sort
+          in: query
+          required: false
+          description: >-
+            The sort key: `name` — the contact's display name (default);
+            `property` — the bound property's name with the unbound cards
+            first in both directions («Общие контакты»), contact name order
+            inside. The Russian collation matches the client's letter
+            grouping.
+          schema:
+            type: string
+            enum: [name, property]
+            default: name
+        - name: order
+          in: query
+          required: false
+          description: >-
+            The sort direction: ascending (default) or descending.
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
       responses:
         '200':
           description: Contacts list
@@ -4810,6 +4834,13 @@ components:
           type: string
           format: uuid
           nullable: true
+        propertyName:
+          type: string
+          nullable: true
+          description: >-
+            The display name of the bound property; null for an unbound card.
+            A list projection only — the card read resolves the property by
+            its id.
         firstName:
           type: string
         lastName:
