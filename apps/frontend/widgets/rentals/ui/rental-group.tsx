@@ -7,7 +7,9 @@ import { cn } from '@/shared/lib/cn';
  * (Figma 699:8717) — H3 20/24 и SmallArrowRight сразу за текстом
  * (1232:61282 — стрелка навигации при тексте, не у края карточки, как
  * шеврон секций платежей). Карточка — mx-6 (боковые поля экрана), строки
- * и содержимое приносят свои отступы.
+ * и содержимое приносят свои отступы. Хвостовой паддинг карточки и зазор
+ * заголовок → содержимое — по макету: «Платеж» 12/8, «Условия аренды»
+ * 24/16 (1232:61281), «Арендатор» 16/8 (1232:61565).
  */
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
@@ -18,17 +20,20 @@ export function RentalGroup({
   openLabel,
   children,
   className,
+  contentGap = 'gap-2',
 }: {
   readonly title: string;
   /** Навигация по заголовку; без него заголовок статичен. */
   readonly onOpen?: () => void;
   readonly openLabel?: string;
   readonly children?: ReactNode;
+  /** Хвостовой паддинг карточки; дефолт 24 («Условия аренды»). */
   readonly className?: string;
+  readonly contentGap?: 'gap-2' | 'gap-4';
 }): JSX.Element {
   return (
-    <section className={cn('mx-6 rounded-card bg-surface-muted pb-6', className)}>
-      <div className="px-6 pb-3 pt-6">
+    <section className={cn('mx-6 flex flex-col rounded-card bg-surface-muted pb-6', contentGap, className)}>
+      <div className="px-6 pt-6">
         {onOpen !== undefined ? (
           <button
             type="button"

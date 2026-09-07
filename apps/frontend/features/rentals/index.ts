@@ -1,4 +1,4 @@
-export { useCreateRental, usePayRentOperation, useRentals } from './api/hooks';
+export { useCreateRental, useRentals } from './api/hooks';
 export {
   buildRentalCreateCommand,
   draftAfterStartChange,
@@ -18,6 +18,7 @@ export { rentalSuccessCopy } from './lib/success-copy';
 export {
   currentRentalOf,
   rentalCommentText,
+  rentalElapsedLine,
   rentalNextPaymentLine,
   rentalPaidTitle,
   rentalProgressPercent,

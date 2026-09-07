@@ -54,7 +54,7 @@ export function RentalTermsScreen({ propertyId }: { readonly propertyId: string 
         )}
 
         {!rentalsQuery.isPending && !rentalsQuery.isError && rental !== undefined && (
-          <div className="px-6 pt-6">
+          <div className="px-6">
             <section className="flex flex-col gap-6 rounded-card bg-surface-muted p-6">
               <div className="flex flex-col gap-2">
                 {rentalTermsRows(rental, rental.today).map((row) => (

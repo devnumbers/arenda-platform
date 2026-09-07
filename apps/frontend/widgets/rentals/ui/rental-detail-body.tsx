@@ -5,15 +5,14 @@ import type { JSX } from 'react';
 import { BoldUser, Calendar, Check, Home } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonth } from '@/shared/lib/date-format';
-import { notify } from '@/shared/lib/notifications';
 import {
+  rentalElapsedLine,
   rentalNextPaymentLine,
   rentalPaidTitle,
   rentalProgressPercent,
   rentalRemainingLine,
   rentalTeaserRows,
   rentalTenantTitle,
-  usePayRentOperation,
 } from '@/features/rentals';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import type { Rental } from '@/entities/rental';
@@ -23,19 +22,21 @@ import { RentalGroup } from './rental-group';
 
 /**
  * Тело экрана «Аренда» (#531, Figma 1232:61291/1550:93664): фото объекта
- * 96, «Оплачено N из M месяцев», круглые действия (оплата — ADR 0053 §3,
- * прямой POST pay по nextPayment.operationId), секции Платеж / прогресс /
- * Условия аренды / Арендатор. Действия «Редактировать» (#532), «Продлить»
- * (#533), «Завершить» (#534), кнопка «Прошлые аренды» (#535) и хвостовая
- * правка в шапке скрыты до готовности своих экранов (канон «кнопки скрыты,
- * пока действия нет»).
+ * 96, «Оплачено N из M месяцев», круглые действия, секции Платеж / прогресс
+ * / Условия аренды / Арендатор. «Оплатить платеж» ведёт на страницу
+ * операции (решение владельца 2026-09-07) — оплата каноническим «Отметить
+ * оплаченной» там же, как со страницы платежа. Действия «Редактировать»
+ * (#532), «Продлить» (#533), «Завершить» (#534), кнопка «Прошлые аренды»
+ * (#535) и хвостовая правка в шапке скрыты до готовности своих экранов
+ * (решение владельца 2026-09-07).
  *
  * Статусы «ожидает начала»/«ожидает действия» макетом не нарисованы — тот
  * же рендер деградирует честно: без будущего платежа нет строки дней и
- * «Оплатить», у бессрочной нет бара и строки остатка (фог карты #526 —
- * сверить с владельцем на приёмке).
+ * «Оплатить», у бессрочной нет бара — вместо остатка «Прошло N месяцев»
+ * (решение владельца 2026-09-07), у срочной после планового окончания нет
+ * ни бара, ни строки остатка (фог карты #526 — сверить с владельцем на
+ * приёмке).
  */
-
 export function RentalDetailBody({
   propertyId,
   rental,
@@ -46,37 +47,27 @@ export function RentalDetailBody({
   readonly canMutate: boolean;
 }): JSX.Element {
   const router = useRouter();
-  const payRent = usePayRentOperation(propertyId);
 
   // Платёж арендной платы называется самим ответом аренды (связь 1:1,
   // ADR 0053 §4) — переход на экран платежа без поиска по категориям.
   const rentPaymentId = rental.rentPayment.paymentId;
 
   const nextPayment = rental.rentPayment.nextPayment;
+  const indefinite = rental.progress.totalMonths === null;
   const percent = rentalProgressPercent(rental.progress);
-  const remaining = rentalRemainingLine(
-    rental.progress.monthsRemaining !== null && rental.progress.monthsRemaining > 0
-      ? rental.progress.monthsRemaining
-      : null,
-  );
+  const progressLine = indefinite
+    ? rentalElapsedLine(rental.startDate, rental.today)
+    : rentalRemainingLine(
+        rental.progress.monthsRemaining !== null && rental.progress.monthsRemaining > 0
+          ? rental.progress.monthsRemaining
+          : null,
+      );
   const tenant = rental.tenant;
   const openPayment = () => router.push(ROUTES.propertyPayment(propertyId, rentPaymentId));
   const openTenant =
     tenant !== null
       ? () => router.push(ROUTES.propertyContact(propertyId, tenant.contactId))
       : undefined;
-
-  const pay = async (): Promise<void> => {
-    if (nextPayment === null) {
-      return;
-    }
-    try {
-      await payRent.mutateAsync(nextPayment.operationId);
-      notify.scenarios.rentals.paid();
-    } catch (error) {
-      notify.scenarios.rentals.payError(error);
-    }
-  };
 
   return (
     <PageContent>
@@ -106,8 +97,9 @@ export function RentalDetailBody({
               variant="primary"
               icon={<Check />}
               caption="Оплатить платеж"
-              loading={payRent.isPending}
-              onClick={() => void pay()}
+              onClick={() =>
+                router.push(ROUTES.propertyOperation(propertyId, nextPayment.operationId))
+              }
             />
           </div>
         )}
@@ -115,6 +107,7 @@ export function RentalDetailBody({
         <div className="flex flex-col gap-4">
           <RentalGroup
             title="Платеж"
+            className="pb-3"
             onOpen={openPayment}
             openLabel="Открыть платеж арендной платы"
           >
@@ -147,14 +140,15 @@ export function RentalDetailBody({
                   )}
                 </div>
               )}
-              {remaining !== undefined && (
-                <p className="text-sm leading-4 text-content-secondary">{remaining}</p>
+              {progressLine !== undefined && (
+                <p className="text-sm leading-4 text-content-secondary">{progressLine}</p>
               )}
             </div>
           </section>
 
           <RentalGroup
             title="Условия аренды"
+            contentGap="gap-4"
             onOpen={() => router.push(ROUTES.propertyRentalTerms(propertyId))}
             openLabel="Открыть условия аренды"
           >
@@ -165,7 +159,12 @@ export function RentalDetailBody({
             </div>
           </RentalGroup>
 
-          <RentalGroup title="Арендатор" onOpen={openTenant} openLabel="Открыть карточку арендатора">
+          <RentalGroup
+            title="Арендатор"
+            className="pb-4"
+            onOpen={openTenant}
+            openLabel="Открыть карточку арендатора"
+          >
             <TenantRow
               tenantName={rentalTenantTitle(tenant)}
               phone={tenant?.phone}
@@ -205,7 +204,7 @@ function PaymentRow({
   return (
     <PaymentRowButton
       variant="gray"
-      className="px-3 pb-2"
+      className="p-3"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
       title="Арендная плата"
       subtitle={
@@ -233,7 +232,7 @@ function TenantRow({
   return (
     <PaymentRowButton
       variant="gray"
-      className="px-3 pb-2"
+      className="px-3 py-2"
       categoryIcon={
         <span
           aria-hidden

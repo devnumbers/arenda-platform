@@ -1,4 +1,5 @@
 import type { IsoDate } from '@/shared/lib/calendar';
+import { fullMonthsBetween } from '@/shared/lib/calendar';
 import { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
 import { formatMoneyKopecks, ratioToPercent } from '@/shared/lib/format-money';
 import { pluralize } from '@/shared/lib/pluralize';
@@ -75,14 +76,27 @@ export function rentalRemainingLine(monthsRemaining: number | null): string | un
   return `${remained} ${monthsRemaining} ${monthsWord(monthsRemaining)} аренды`;
 }
 
+/** Строка бессрочной аренды (решение владельца 2026-09-07): полных месяцев
+ * с начала — «Прошло 12 месяцев», глагол как у остатка («Прошёл 21 месяц»);
+ * пока не прошёл полный месяц — «Идёт 1 месяц». */
+export function rentalElapsedLine(startDate: IsoDate, today: IsoDate): string {
+  const elapsed = fullMonthsBetween(startDate, today);
+  if (elapsed === 0) {
+    return 'Идёт 1 месяц';
+  }
+  const singular = elapsed % 10 === 1 && elapsed % 100 !== 11;
+  return `${singular ? 'Прошёл' : 'Прошло'} ${elapsed} ${monthsWord(elapsed)}`;
+}
+
 /** Плата условиями аренды: «56 000 ₽ в месяц» (Figma 1232:61525). */
 export function rentAmountPerMonth(amountKopecks: number): string {
   return `${formatMoneyKopecks(amountKopecks)} в месяц`;
 }
 
-/** Деньги условий: сумма или «Не указано» (null — не задана; 0 валиден). */
+/** Деньги условий: сумма; не задана — «0 ₽» (макет 1550:94419: залог и
+ * комиссия без значения показываются нулём, «Не указано» — только строки). */
 function optionalMoney(kopecks: number | null): string {
-  return kopecks === null ? 'Не указано' : formatMoneyKopecks(kopecks);
+  return kopecks === null ? formatMoneyKopecks(0) : formatMoneyKopecks(kopecks);
 }
 
 /** Три строки карточки «Условия аренды» на детализации (Figma 1232:61522):

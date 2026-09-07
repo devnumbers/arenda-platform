@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Rental } from '@/entities/rental';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import {
+  rentalElapsedLine,
   rentalNextPaymentLine,
   rentalPaidTitle,
   rentalProgressPercent,
@@ -202,7 +203,7 @@ describe('rentalTermsRows', () => {
     ]);
   });
 
-  it('пустые значения — «Не указано» (1550:94419), бессрочная без залога и комиссии', () => {
+  it('пустые значения (1550:94419): деньги — «0 ₽», строки — «Не указано»', () => {
     const rows = rentalTermsRows(
       rentalFixture({
         plannedEndDate: null,
@@ -215,8 +216,8 @@ describe('rentalTermsRows', () => {
     );
     expect(rows).toEqual([
       { label: 'Арендная плата', value: `${formatMoneyKopecks(5_600_000)} в месяц` },
-      { label: 'Залог', value: 'Не указано' },
-      { label: 'Комиссия', value: 'Не указано' },
+      { label: 'Залог', value: formatMoneyKopecks(0) },
+      { label: 'Комиссия', value: formatMoneyKopecks(0) },
       { label: 'День оплаты', value: '10 число' },
       { label: 'Срок аренды', value: 'Не указано' },
       { label: 'Коммунальные платежи', value: 'Только счетчики' },
@@ -244,6 +245,23 @@ describe('rentalCommentText', () => {
     const { rentalCommentText } = await import('./rental-view');
     expect(rentalCommentText('Дом — панельный')).toBe('Дом — панельный');
     expect(rentalCommentText('   ')).toBe('Не указано');
+  });
+});
+
+describe('rentalElapsedLine', () => {
+  it('бессрочная: первый месяц идёт, полных месяцев нет', () => {
+    expect(rentalElapsedLine('2026-09-05', '2026-09-07')).toBe('Идёт 1 месяц');
+    expect(rentalElapsedLine('2026-09-07', '2026-09-07')).toBe('Идёт 1 месяц');
+  });
+
+  it('бессрочная: прошедшие месяцы со склонением (решение владельца 2026-09-07)', () => {
+    expect(rentalElapsedLine('2025-09-07', '2026-09-07')).toBe('Прошло 12 месяцев');
+    expect(rentalElapsedLine('2026-08-07', '2026-09-07')).toBe('Прошёл 1 месяц');
+    expect(rentalElapsedLine('2026-07-07', '2026-09-07')).toBe('Прошло 2 месяца');
+    expect(rentalElapsedLine('2026-04-10', '2026-09-07')).toBe('Прошло 4 месяца');
+    expect(rentalElapsedLine('2025-10-07', '2026-09-07')).toBe('Прошло 11 месяцев');
+    expect(rentalElapsedLine('2024-12-07', '2026-09-07')).toBe('Прошёл 21 месяц');
+    expect(rentalElapsedLine('2024-11-07', '2026-09-07')).toBe('Прошло 22 месяца');
   });
 });
 
