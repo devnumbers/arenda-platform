@@ -250,8 +250,10 @@ func (s *TaskStore) ListGlobalWithoutProperty(
 // with the total count of the same filter (ticket #547): the merged feed's
 // SQL cut to property_id IN the list; the use case has already proven every
 // id's visibility, archived properties contribute nothing (решение 9).
+// The withoutProperty flag unions the actor's own property-less rows in —
+// the feed filter's «Общие задачи» + objects (решение владельца 2026-09-07).
 func (s *TaskStore) ListGlobalOfProperties(
-	ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID, q application.TasksListQuery,
+	ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID, withoutProperty bool, q application.TasksListQuery,
 ) (rows []application.GlobalTaskRow, total int, err error) {
 	ids := make([]string, len(propertyIDs))
 	for i, id := range propertyIDs {
@@ -261,18 +263,20 @@ func (s *TaskStore) ListGlobalOfProperties(
 	return listGlobalPage(s.db, actor, q,
 		func(queries *postgres.Queries) (int64, error) {
 			return queries.CountTasksGlobalOfProperties(ctx, postgres.CountTasksGlobalOfPropertiesParams{
-				OwnerID:     pgconv.UUIDToPgtype(actor),
-				Column2:     q.Completed,
-				PropertyIds: joined,
+				OwnerID:         pgconv.UUIDToPgtype(actor),
+				Column2:         q.Completed,
+				PropertyIds:     joined,
+				WithoutProperty: withoutProperty,
 			})
 		},
 		func(queries *postgres.Queries, page postgres.ListActiveTasksGlobalParams) ([]postgres.ListActiveTasksGlobalOfPropertiesRow, error) {
 			return queries.ListActiveTasksGlobalOfProperties(
 				ctx, postgres.ListActiveTasksGlobalOfPropertiesParams{
-					OwnerID:     page.OwnerID,
-					Limit:       page.Limit,
-					Offset:      page.Offset,
-					PropertyIds: joined,
+					OwnerID:         page.OwnerID,
+					Limit:           page.Limit,
+					Offset:          page.Offset,
+					PropertyIds:     joined,
+					WithoutProperty: withoutProperty,
 				})
 		},
 		func(queries *postgres.Queries, page postgres.ListCompletedTasksGlobalParams) (
@@ -280,10 +284,11 @@ func (s *TaskStore) ListGlobalOfProperties(
 		) {
 			return queries.ListCompletedTasksGlobalOfProperties(
 				ctx, postgres.ListCompletedTasksGlobalOfPropertiesParams{
-					OwnerID:     page.OwnerID,
-					Limit:       page.Limit,
-					Offset:      page.Offset,
-					PropertyIds: joined,
+					OwnerID:         page.OwnerID,
+					Limit:           page.Limit,
+					Offset:          page.Offset,
+					PropertyIds:     joined,
+					WithoutProperty: withoutProperty,
 				})
 		},
 		ofPropertiesRowFields,

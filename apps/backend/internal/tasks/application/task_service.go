@@ -223,13 +223,16 @@ func (s *TaskService) ClearCompletedJournalOwnerBook(
 // and read in the data owner's scope; several listed properties — the merged
 // feed cut to the list, every id proven visible first (one invisible id is
 // the privacy ErrNotFound of the whole request, ticket #547); the
-// property-less slice — the actor's own book only (ADR 0052); no filter —
-// the merged feed: their own tasks plus the bound tasks of the properties
-// they can view (ADR 0028), the visibility predicate living in the store's
-// SQL. Every item's view bucket is computed against its data owner's current
-// moment (CONTEXT.md «Просрочка» — a merged page may span owners); the
-// page's today is the reading actor's calendar date on the merged branches,
-// the data owner's on the single-property branch. Reads never tick.
+// property-less slice — the actor's own book only (ADR 0052); the union of
+// the listed properties and the property-less flag — the feed filter's
+// «Общие задачи» + objects (решение владельца 2026-09-07, the same proof
+// first); no filter — the merged feed: their own tasks plus the bound tasks
+// of the properties they can view (ADR 0028), the visibility predicate
+// living in the store's SQL. Every item's view bucket is computed against
+// its data owner's current moment (CONTEXT.md «Просрочка» — a merged page
+// may span owners); the page's today is the reading actor's calendar date
+// on the merged branches, the data owner's on the single-property branch.
+// Reads never tick.
 func (s *TaskService) ListGlobalTasks(
 	ctx context.Context, actor uuid.UUID, q GlobalTasksListQuery,
 ) (TasksPage, error) {
@@ -237,6 +240,17 @@ func (s *TaskService) ListGlobalTasks(
 		return TasksPage{}, err
 	}
 	switch {
+	case len(q.PropertyIDs) > 0 && q.WithoutProperty:
+		// Union «Общие задачи» + объекты (решение владельца 2026-09-07):
+		// каждый объект доказуемо видим до чтения, срез живёт в SQL.
+		if err := s.proveGlobalPropertiesVisible(ctx, actor, q.PropertyIDs); err != nil {
+			return TasksPage{}, err
+		}
+		ids := q.PropertyIDs
+		return s.listGlobalSlice(ctx, actor, q.TasksListQuery,
+			func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error) {
+				return s.tasks.ListGlobalOfProperties(ctx, actor, ids, true, q)
+			})
 	case len(q.PropertyIDs) == 1:
 		return s.listGlobalOfProperty(ctx, actor, q.PropertyIDs[0], q.TasksListQuery)
 	case len(q.PropertyIDs) > 1:
@@ -246,7 +260,7 @@ func (s *TaskService) ListGlobalTasks(
 		ids := q.PropertyIDs
 		return s.listGlobalSlice(ctx, actor, q.TasksListQuery,
 			func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error) {
-				return s.tasks.ListGlobalOfProperties(ctx, actor, ids, q)
+				return s.tasks.ListGlobalOfProperties(ctx, actor, ids, false, q)
 			})
 	case q.WithoutProperty:
 		return s.listGlobalSlice(ctx, actor, q.TasksListQuery, s.tasks.ListGlobalWithoutProperty)

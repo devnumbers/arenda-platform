@@ -275,10 +275,11 @@ FOR UPDATE
 // tasks_rules.sql, task reads/completions in tasks_tasks.sql.
 // Serialization point of the tick: the run locks the owner's
 // active/maintenance property rows, ordered by id, before reading or writing
-// anything. Context mutations take the same lock per property through
-// GetPropertyForTaskMutation, so update-vs-tick, archive-vs-tick and
-// delete-vs-tick serialize on one point. Archived properties are skipped by
-// the tick entirely.
+// anything. Context mutations take the same ordered set at their
+// transaction's front (#546 — the deadlock-free global order), so
+// update-vs-tick, archive-vs-tick, delete-vs-tick and mutation-vs-mutation
+// serialize on one lock order. Archived properties are skipped by the tick
+// entirely.
 func (q *Queries) LockTaskOwnerProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, lockTaskOwnerProperties, ownerID)
 	if err != nil {

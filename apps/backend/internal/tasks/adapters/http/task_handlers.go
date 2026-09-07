@@ -94,7 +94,8 @@ func writeTasksPage(r *http.Request, w http.ResponseWriter, page application.Tas
 
 // ListTasks implements GET /tasks — the global «Задачи» screen (ticket
 // #521). The propertyId filter is a comma-separated uuid list (ticket
-// #547); the property filters are mutually exclusive, and a malformed uuid
+// #547); combined with withoutProperty it is the feed filter's «Общие
+// задачи» + objects union (решение владельца 2026-09-07), a malformed uuid
 // in the list is the contract's 400 via the use case's ErrInvalidInput. The
 // buckets are computed server-side against each item's data owner's moment;
 // the page carries the reading actor's today for the section bucketing.

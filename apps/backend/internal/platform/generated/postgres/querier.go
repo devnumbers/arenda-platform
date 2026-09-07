@@ -86,7 +86,8 @@ type Querier interface {
 	// feed restricted to the picker's selection — the visibility predicate is
 	// the feed's, the list arrives comma-separated (uuids hold no commas).
 	// Archived properties contribute nothing (карта #518, решение 9); the
-	// property-less slice is not reachable through this filter.
+	// without_property flag unions the actor's own property-less rows in — the
+	// feed filter's «Общие задачи» + objects (решение владельца 2026-09-07).
 	CountTasksGlobalOfProperties(ctx context.Context, arg CountTasksGlobalOfPropertiesParams) (int64, error)
 	// The property-less cut of the global listing (ADR 0052: the actor's own
 	// book only). No property join — the label is always absent there.
@@ -291,9 +292,11 @@ type Querier interface {
 	// archived flag and the display name (the global listing's row projection,
 	// ticket #521), no lock.
 	GetPropertyForTask(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskRow, error)
-	// The mutation's serialization point: the property row locked inside the
-	// caller's transaction, so mutation-vs-tick, mutation-vs-mutation and
-	// archive-vs-mutation serialize on one point (ADR 0049 §3).
+	// The property row locked inside the caller's transaction: for an
+	// active/maintenance row the conveyor's owner-wide set lock already holds
+	// it (the #546 global order), so this re-lock is a no-op; an archived row
+	// stands outside that set, and this lock closes the archive-vs-mutation
+	// race before the read-only check (ADR 0049 §3).
 	GetPropertyForTaskMutation(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskMutationRow, error)
 	GetPropertyMember(ctx context.Context, arg GetPropertyMemberParams) (PropertyMember, error)
 	GetPropertyMemberByPropertyAndUser(ctx context.Context, arg GetPropertyMemberByPropertyAndUserParams) (PropertyMember, error)
@@ -412,7 +415,8 @@ type Querier interface {
 	// sections stay contiguous for the client's pagination and bucketing.
 	ListActiveTasksGlobal(ctx context.Context, arg ListActiveTasksGlobalParams) ([]ListActiveTasksGlobalRow, error)
 	// The active tasks of the listed properties, the merged feed's visibility
-	// and due order (ticket #547).
+	// and due order (ticket #547); without_property unions the actor's own
+	// property-less rows in (решение владельца 2026-09-07).
 	ListActiveTasksGlobalOfProperties(ctx context.Context, arg ListActiveTasksGlobalOfPropertiesParams) ([]ListActiveTasksGlobalOfPropertiesRow, error)
 	// The active property-less tasks of the actor's book, the same due order as
 	// the property listings (ticket #521).
@@ -427,7 +431,8 @@ type Querier interface {
 	// completions first (ticket #521); archived properties are out (решение 9).
 	ListCompletedTasksGlobal(ctx context.Context, arg ListCompletedTasksGlobalParams) ([]ListCompletedTasksGlobalRow, error)
 	// The completed journal of the listed properties, newest completions first
-	// (ticket #547).
+	// (ticket #547); without_property unions the actor's own property-less
+	// journal in (решение владельца 2026-09-07).
 	ListCompletedTasksGlobalOfProperties(ctx context.Context, arg ListCompletedTasksGlobalOfPropertiesParams) ([]ListCompletedTasksGlobalOfPropertiesRow, error)
 	// The completed journal of the actor's property-less tasks, newest
 	// completions first (ticket #521).
@@ -591,10 +596,11 @@ type Querier interface {
 	// tasks_rules.sql, task reads/completions in tasks_tasks.sql.
 	// Serialization point of the tick: the run locks the owner's
 	// active/maintenance property rows, ordered by id, before reading or writing
-	// anything. Context mutations take the same lock per property through
-	// GetPropertyForTaskMutation, so update-vs-tick, archive-vs-tick and
-	// delete-vs-tick serialize on one point. Archived properties are skipped by
-	// the tick entirely.
+	// anything. Context mutations take the same ordered set at their
+	// transaction's front (#546 — the deadlock-free global order), so
+	// update-vs-tick, archive-vs-tick, delete-vs-tick and mutation-vs-mutation
+	// serialize on one lock order. Archived properties are skipped by the tick
+	// entirely.
 	LockTaskOwnerProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error

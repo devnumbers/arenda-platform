@@ -657,3 +657,120 @@ func TestGlobalList_OfPropertiesSkipsArchived(t *testing.T) {
 		t.Fatalf("total = %d, want 2 (the active property's tasks only)", page.Total)
 	}
 }
+
+// The filter's «Общие задачи» union (решение владельца 2026-09-07): the
+// listed properties and the property-less flag combine — the union page is
+// the listed properties' cut plus the actor's own property-less book.
+
+func TestGlobalList_UnionOfPropertiesAndWithout(t *testing.T) {
+	t.Parallel()
+	ownerH, _, ownerPropID, secondPropID := multiSelectScenario(t)
+
+	// One property plus the property-less flag: that property's bound tasks
+	// and the owner's own unbound ones, not the second property's.
+	page, err := ownerH.tasks.ListGlobalTasks(ownerH.ctx(), ownerH.owner, tasksapp.GlobalTasksListQuery{
+		PropertyIDs:     []uuid.UUID{ownerPropID},
+		WithoutProperty: true,
+	})
+	if err != nil {
+		t.Fatalf("union single-property list: %v", err)
+	}
+	if page.Total != 4 || len(page.Items) != 4 {
+		t.Fatalf("union single-property = %d items / total %d, want 4/4 (bound 2 + property-less 2)", len(page.Items), page.Total)
+	}
+	for _, item := range page.Items {
+		if item.Task.PropertyID != nil && *item.Task.PropertyID == secondPropID {
+			t.Fatalf("the unlisted property leaked into the union: %+v", item.Task)
+		}
+	}
+
+	// Both properties plus the flag: the owner's whole visible book (6).
+	page, err = ownerH.tasks.ListGlobalTasks(ownerH.ctx(), ownerH.owner, tasksapp.GlobalTasksListQuery{
+		PropertyIDs:     []uuid.UUID{ownerPropID, secondPropID},
+		WithoutProperty: true,
+	})
+	if err != nil {
+		t.Fatalf("union multi-property list: %v", err)
+	}
+	if page.Total != 6 || len(page.Items) != 6 {
+		t.Fatalf("union multi-property = %d items / total %d, want 6/6", len(page.Items), page.Total)
+	}
+}
+
+func TestGlobalList_UnionParticipantKeepsOwnBook(t *testing.T) {
+	t.Parallel()
+	_, participantH, ownerPropID, _ := multiSelectScenario(t)
+
+	// The participant unions the shared property with the flag: the shared
+	// bound rows and the participant's OWN property-less book — the feed
+	// owner's unbound tasks stay out (ADR 0052, the reader's book only).
+	if _, err := participantH.rules.CreateRuleWithoutProperty(participantH.ctx(), participantH.owner, withoutPropertyCreateCmd()); err != nil {
+		t.Fatalf("create participant property-less rule: %v", err)
+	}
+	page, err := participantH.tasks.ListGlobalTasks(participantH.ctx(), participantH.owner, tasksapp.GlobalTasksListQuery{
+		PropertyIDs:     []uuid.UUID{ownerPropID},
+		WithoutProperty: true,
+	})
+	if err != nil {
+		t.Fatalf("participant union list: %v", err)
+	}
+	if page.Total != 4 || len(page.Items) != 4 {
+		t.Fatalf("participant union = %d items / total %d, want 4/4 (shared 2 + own property-less 2)", len(page.Items), page.Total)
+	}
+	for _, item := range page.Items {
+		if item.Task.PropertyID == nil {
+			if item.Task.OwnerID != participantH.owner {
+				t.Fatalf("the feed owner's property-less task leaked into the participant's union: %+v", item.Task)
+			}
+			if item.PropertyName != "" {
+				t.Fatalf("property-less row carries a label %q", item.PropertyName)
+			}
+		}
+	}
+}
+
+func TestGlobalList_UnionOneInvisibleIsPrivacy404(t *testing.T) {
+	t.Parallel()
+	_, participantH0, ownerPropID, _ := multiSelectScenario(t)
+
+	h := participantH0
+	stranger, strangerProp := h.seedSecondOwner(t, taskMoscowTZ, "Чужак")
+	strangerH := *h
+	strangerH.owner = stranger
+	strangerH.propID = strangerProp
+
+	_, err := strangerH.tasks.ListGlobalTasks(strangerH.ctx(), stranger, tasksapp.GlobalTasksListQuery{
+		PropertyIDs:     []uuid.UUID{strangerProp, ownerPropID},
+		WithoutProperty: true,
+	})
+	if !errors.Is(err, tasksapp.ErrNotFound) {
+		t.Fatalf("union with a foreign property = %v, want ErrNotFound", err)
+	}
+}
+
+func TestGlobalList_UnionSkipsArchived(t *testing.T) {
+	t.Parallel()
+	ownerH, _, ownerPropID, secondPropID := multiSelectScenario(t)
+
+	if _, err := ownerH.pool.Exec(ownerH.ctx(),
+		`UPDATE properties SET status = 'archived' WHERE id = $1`, secondPropID,
+	); err != nil {
+		t.Fatalf("archive second property: %v", err)
+	}
+
+	page, err := ownerH.tasks.ListGlobalTasks(ownerH.ctx(), ownerH.owner, tasksapp.GlobalTasksListQuery{
+		PropertyIDs:     []uuid.UUID{ownerPropID, secondPropID},
+		WithoutProperty: true,
+	})
+	if err != nil {
+		t.Fatalf("archived union list: %v", err)
+	}
+	if page.Total != 4 || len(page.Items) != 4 {
+		t.Fatalf("archived union = %d items / total %d, want 4/4 (active property 2 + property-less 2)", len(page.Items), page.Total)
+	}
+	for _, item := range page.Items {
+		if item.Task.PropertyID != nil && *item.Task.PropertyID == secondPropID {
+			t.Fatalf("archived property's task leaked into the union: %+v", item.Task)
+		}
+	}
+}

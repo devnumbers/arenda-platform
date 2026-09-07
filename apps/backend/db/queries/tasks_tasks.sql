@@ -136,7 +136,8 @@ LIMIT $2 OFFSET $3;
 -- feed restricted to the picker's selection — the visibility predicate is
 -- the feed's, the list arrives comma-separated (uuids hold no commas).
 -- Archived properties contribute nothing (карта #518, решение 9); the
--- property-less slice is not reachable through this filter.
+-- without_property flag unions the actor's own property-less rows in — the
+-- feed filter's «Общие задачи» + objects (решение владельца 2026-09-07).
 
 -- name: CountTasksGlobalOfProperties :one
 SELECT count(*) FROM tasks t
@@ -150,13 +151,17 @@ WHERE (
               AND pm.status = 'active'
           )
       )
-  AND t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
-  AND p.status != 'archived'
+  AND (
+       t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+       OR (sqlc.arg('without_property')::bool AND t.property_id IS NULL)
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
   AND (t.completed_date IS NOT NULL) = $2::boolean;
 
 -- name: ListActiveTasksGlobalOfProperties :many
 -- The active tasks of the listed properties, the merged feed's visibility
--- and due order (ticket #547).
+-- and due order (ticket #547); without_property unions the actor's own
+-- property-less rows in (решение владельца 2026-09-07).
 SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
        r.repeat AS rule_repeat,
        p.name AS property_name
@@ -172,15 +177,19 @@ WHERE (
               AND pm.status = 'active'
           )
       )
-  AND t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
-  AND p.status != 'archived'
+  AND (
+       t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+       OR (sqlc.arg('without_property')::bool AND t.property_id IS NULL)
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
   AND t.completed_date IS NULL
 ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
 LIMIT $2 OFFSET $3;
 
 -- name: ListCompletedTasksGlobalOfProperties :many
 -- The completed journal of the listed properties, newest completions first
--- (ticket #547).
+-- (ticket #547); without_property unions the actor's own property-less
+-- journal in (решение владельца 2026-09-07).
 SELECT t.id, t.owner_id, t.property_id, t.rule_id, t.due_date, t.due_time, t.title, t.comment, t.completed_date, t.created_at, t.updated_at,
        r.repeat AS rule_repeat,
        p.name AS property_name
@@ -196,8 +205,11 @@ WHERE (
               AND pm.status = 'active'
           )
       )
-  AND t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
-  AND p.status != 'archived'
+  AND (
+       t.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+       OR (sqlc.arg('without_property')::bool AND t.property_id IS NULL)
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
   AND t.completed_date IS NOT NULL
 ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
 LIMIT $2 OFFSET $3;

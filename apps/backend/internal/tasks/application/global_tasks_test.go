@@ -80,8 +80,10 @@ type globalTaskStoreDouble struct {
 	TaskStore
 	listGlobal                func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
 	listGlobalWithoutProperty func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
-	listGlobalOfProperties    func(ctx context.Context, actor uuid.UUID, ids []uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
-	listByProperty            func(ctx context.Context, scope, propertyID uuid.UUID, q TasksListQuery) ([]domain.Task, int, error)
+	listGlobalOfProperties    func(
+		ctx context.Context, actor uuid.UUID, ids []uuid.UUID, without bool, q TasksListQuery,
+	) ([]GlobalTaskRow, int, error)
+	listByProperty func(ctx context.Context, scope, propertyID uuid.UUID, q TasksListQuery) ([]domain.Task, int, error)
 }
 
 func (s *globalTaskStoreDouble) ListGlobal(
@@ -103,12 +105,12 @@ func (s *globalTaskStoreDouble) ListGlobalWithoutProperty(
 }
 
 func (s *globalTaskStoreDouble) ListGlobalOfProperties(
-	ctx context.Context, actor uuid.UUID, ids []uuid.UUID, q TasksListQuery,
+	ctx context.Context, actor uuid.UUID, ids []uuid.UUID, without bool, q TasksListQuery,
 ) ([]GlobalTaskRow, int, error) {
 	if s.listGlobalOfProperties == nil {
 		return nil, 0, errors.New("unexpected ListGlobalOfProperties call")
 	}
-	return s.listGlobalOfProperties(ctx, actor, ids, q)
+	return s.listGlobalOfProperties(ctx, actor, ids, without, q)
 }
 
 func (s *globalTaskStoreDouble) ListByProperty(
@@ -190,7 +192,7 @@ func TestPrepareGlobalTasksQuery(t *testing.T) {
 		assert.True(t, q.Completed)
 	})
 
-	t.Run("both property filters together are invalid input", func(t *testing.T) {
+	t.Run("both filters together are the union query", func(t *testing.T) {
 		t.Parallel()
 		prop := uuid.Must(uuid.NewV7())
 		q := GlobalTasksListQuery{
@@ -198,7 +200,8 @@ func TestPrepareGlobalTasksQuery(t *testing.T) {
 			PropertyIDs:     []uuid.UUID{prop},
 			WithoutProperty: true,
 		}
-		assert.ErrorIs(t, PrepareGlobalTasksQuery(&q), ErrInvalidInput)
+		require.NoError(t, PrepareGlobalTasksQuery(&q))
+		assert.Equal(t, 10, q.Limit)
 	})
 
 	t.Run("pagination bounds propagate", func(t *testing.T) {
@@ -341,24 +344,74 @@ func TestListGlobalTasks_PropertyBranchPrivacy(t *testing.T) {
 	assert.False(t, listed, "the store is never touched without the view capability")
 }
 
-func TestListGlobalTasks_BothFiltersRejected(t *testing.T) {
+func TestListGlobalTasks_UnionBranch(t *testing.T) {
 	t.Parallel()
 
+	// Фикс фильтра ленты (решение владельца 2026-09-07): «Общие задачи»
+	// выбираются вместе с объектами — union-срез живёт в SQL стор-метода
+	// ListGlobalOfProperties, use case доказывает видимость каждого объекта
+	// и передаёт список без изменений.
+	secondProperty := uuid.Must(uuid.NewV7())
+	due := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	var listedIDs []uuid.UUID
+	var listedWithout bool
 	store := &globalTaskStoreDouble{
-		listGlobal: func(context.Context, uuid.UUID, TasksListQuery) ([]GlobalTaskRow, int, error) {
-			t.Error("the store must not be called for an invalid query")
+		listGlobalOfProperties: func(
+			_ context.Context, actor uuid.UUID, ids []uuid.UUID, without bool, q TasksListQuery,
+		) ([]GlobalTaskRow, int, error) {
+			assert.Equal(t, globalActor, actor)
+			assert.False(t, q.Completed)
+			listedIDs = ids
+			listedWithout = without
+			return []GlobalTaskRow{
+				globalRow(globalActor, &globalProperty, &due, "Квартира"),
+				globalRow(globalActor, nil, &due, ""),
+			}, 2, nil
+		},
+	}
+	clock := &globalClockDouble{moments: map[uuid.UUID]OwnerMoment{
+		globalActor: actorMoment,
+	}}
+	svc := newGlobalTaskService(store, &globalPropertyStoreDouble{}, clock, globalPolicyDouble{role: sharedpolicy.RoleOwner})
+
+	page, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{
+		TasksListQuery:  TasksListQuery{Limit: 10},
+		PropertyIDs:     []uuid.UUID{globalProperty, secondProperty},
+		WithoutProperty: true,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []uuid.UUID{globalProperty, secondProperty}, listedIDs, "the store gets the picker's list")
+	assert.True(t, listedWithout, "the union flag reaches the store")
+	require.Len(t, page.Items, 2)
+	assert.Equal(t, "Квартира", page.Items[0].PropertyName)
+	assert.Empty(t, page.Items[1].PropertyName, "the property-less rows keep the label empty")
+	assert.Equal(t, actorMoment.Today, page.Today, "today is the reader's calendar date on the union branch")
+}
+
+func TestListGlobalTasks_UnionBranchPrivacy(t *testing.T) {
+	t.Parallel()
+
+	var listed bool
+	store := &globalTaskStoreDouble{
+		listGlobalOfProperties: func(
+			_ context.Context, _ uuid.UUID, _ []uuid.UUID, _ bool, _ TasksListQuery,
+		) ([]GlobalTaskRow, int, error) {
+			listed = true
 			return nil, 0, nil
 		},
 	}
-	svc := newGlobalTaskService(store, &globalPropertyStoreDouble{}, &globalClockDouble{}, globalPolicyDouble{role: sharedpolicy.RoleOwner})
+	svc := newGlobalTaskService(
+		store, &globalPropertyStoreDouble{}, &globalClockDouble{},
+		globalPolicyDouble{role: sharedpolicy.RoleNone},
+	)
 
-	prop := globalProperty
 	_, err := svc.ListGlobalTasks(context.Background(), globalActor, GlobalTasksListQuery{
-		TasksListQuery:  TasksListQuery{Limit: 10},
-		PropertyIDs:     []uuid.UUID{prop},
+		PropertyIDs:     []uuid.UUID{globalProperty},
 		WithoutProperty: true,
 	})
-	assert.ErrorIs(t, err, ErrInvalidInput)
+	require.ErrorIs(t, err, ErrNotFound, "one invisible id is the privacy 404 of the whole union request")
+	assert.False(t, listed, "the store is never touched without the view capability")
 }
 
 func TestListGlobalTasks_StoreErrorPasses(t *testing.T) {
@@ -384,7 +437,9 @@ func TestListGlobalTasks_OfPropertiesBranch(t *testing.T) {
 	due := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	var listedIDs []uuid.UUID
 	store := &globalTaskStoreDouble{
-		listGlobalOfProperties: func(_ context.Context, actor uuid.UUID, ids []uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error) {
+		listGlobalOfProperties: func(
+			_ context.Context, actor uuid.UUID, ids []uuid.UUID, _ bool, q TasksListQuery,
+		) ([]GlobalTaskRow, int, error) {
 			assert.Equal(t, globalActor, actor)
 			assert.False(t, q.Completed)
 			listedIDs = ids
@@ -420,7 +475,9 @@ func TestListGlobalTasks_OfPropertiesPrivacy(t *testing.T) {
 
 	var listed bool
 	store := &globalTaskStoreDouble{
-		listGlobalOfProperties: func(context.Context, uuid.UUID, []uuid.UUID, TasksListQuery) ([]GlobalTaskRow, int, error) {
+		listGlobalOfProperties: func(
+			_ context.Context, _ uuid.UUID, _ []uuid.UUID, _ bool, _ TasksListQuery,
+		) ([]GlobalTaskRow, int, error) {
 			listed = true
 			return nil, 0, nil
 		},

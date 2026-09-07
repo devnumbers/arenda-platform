@@ -112,24 +112,34 @@ WHERE (
               AND pm.status = 'active'
           )
       )
-  AND t.property_id = ANY(string_to_array($3::text, ',')::uuid[])
-  AND p.status != 'archived'
+  AND (
+       t.property_id = ANY(string_to_array($3::text, ',')::uuid[])
+       OR ($4::bool AND t.property_id IS NULL)
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
   AND (t.completed_date IS NOT NULL) = $2::boolean
 `
 
 type CountTasksGlobalOfPropertiesParams struct {
-	OwnerID     pgtype.UUID `json:"owner_id"`
-	Column2     bool        `json:"column_2"`
-	PropertyIds string      `json:"property_ids"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+	Column2         bool        `json:"column_2"`
+	PropertyIds     string      `json:"property_ids"`
+	WithoutProperty bool        `json:"without_property"`
 }
 
 // The listed-properties cut of the global listing (ticket #547): the merged
 // feed restricted to the picker's selection — the visibility predicate is
 // the feed's, the list arrives comma-separated (uuids hold no commas).
 // Archived properties contribute nothing (карта #518, решение 9); the
-// property-less slice is not reachable through this filter.
+// without_property flag unions the actor's own property-less rows in — the
+// feed filter's «Общие задачи» + objects (решение владельца 2026-09-07).
 func (q *Queries) CountTasksGlobalOfProperties(ctx context.Context, arg CountTasksGlobalOfPropertiesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countTasksGlobalOfProperties, arg.OwnerID, arg.Column2, arg.PropertyIds)
+	row := q.db.QueryRow(ctx, countTasksGlobalOfProperties,
+		arg.OwnerID,
+		arg.Column2,
+		arg.PropertyIds,
+		arg.WithoutProperty,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -485,18 +495,22 @@ WHERE (
               AND pm.status = 'active'
           )
       )
-  AND t.property_id = ANY(string_to_array($4::text, ',')::uuid[])
-  AND p.status != 'archived'
+  AND (
+       t.property_id = ANY(string_to_array($4::text, ',')::uuid[])
+       OR ($5::bool AND t.property_id IS NULL)
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
   AND t.completed_date IS NULL
 ORDER BY t.due_date ASC NULLS LAST, t.due_time ASC NULLS FIRST, t.created_at ASC, t.id ASC
 LIMIT $2 OFFSET $3
 `
 
 type ListActiveTasksGlobalOfPropertiesParams struct {
-	OwnerID     pgtype.UUID `json:"owner_id"`
-	Limit       int32       `json:"limit"`
-	Offset      int32       `json:"offset"`
-	PropertyIds string      `json:"property_ids"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+	Limit           int32       `json:"limit"`
+	Offset          int32       `json:"offset"`
+	PropertyIds     string      `json:"property_ids"`
+	WithoutProperty bool        `json:"without_property"`
 }
 
 type ListActiveTasksGlobalOfPropertiesRow struct {
@@ -516,13 +530,15 @@ type ListActiveTasksGlobalOfPropertiesRow struct {
 }
 
 // The active tasks of the listed properties, the merged feed's visibility
-// and due order (ticket #547).
+// and due order (ticket #547); without_property unions the actor's own
+// property-less rows in (решение владельца 2026-09-07).
 func (q *Queries) ListActiveTasksGlobalOfProperties(ctx context.Context, arg ListActiveTasksGlobalOfPropertiesParams) ([]ListActiveTasksGlobalOfPropertiesRow, error) {
 	rows, err := q.db.Query(ctx, listActiveTasksGlobalOfProperties,
 		arg.OwnerID,
 		arg.Limit,
 		arg.Offset,
 		arg.PropertyIds,
+		arg.WithoutProperty,
 	)
 	if err != nil {
 		return nil, err
@@ -789,18 +805,22 @@ WHERE (
               AND pm.status = 'active'
           )
       )
-  AND t.property_id = ANY(string_to_array($4::text, ',')::uuid[])
-  AND p.status != 'archived'
+  AND (
+       t.property_id = ANY(string_to_array($4::text, ',')::uuid[])
+       OR ($5::bool AND t.property_id IS NULL)
+      )
+  AND (t.property_id IS NULL OR p.status != 'archived')
   AND t.completed_date IS NOT NULL
 ORDER BY t.completed_date DESC, t.created_at DESC, t.id ASC
 LIMIT $2 OFFSET $3
 `
 
 type ListCompletedTasksGlobalOfPropertiesParams struct {
-	OwnerID     pgtype.UUID `json:"owner_id"`
-	Limit       int32       `json:"limit"`
-	Offset      int32       `json:"offset"`
-	PropertyIds string      `json:"property_ids"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+	Limit           int32       `json:"limit"`
+	Offset          int32       `json:"offset"`
+	PropertyIds     string      `json:"property_ids"`
+	WithoutProperty bool        `json:"without_property"`
 }
 
 type ListCompletedTasksGlobalOfPropertiesRow struct {
@@ -820,13 +840,15 @@ type ListCompletedTasksGlobalOfPropertiesRow struct {
 }
 
 // The completed journal of the listed properties, newest completions first
-// (ticket #547).
+// (ticket #547); without_property unions the actor's own property-less
+// journal in (решение владельца 2026-09-07).
 func (q *Queries) ListCompletedTasksGlobalOfProperties(ctx context.Context, arg ListCompletedTasksGlobalOfPropertiesParams) ([]ListCompletedTasksGlobalOfPropertiesRow, error) {
 	rows, err := q.db.Query(ctx, listCompletedTasksGlobalOfProperties,
 		arg.OwnerID,
 		arg.Limit,
 		arg.Offset,
 		arg.PropertyIds,
+		arg.WithoutProperty,
 	)
 	if err != nil {
 		return nil, err
