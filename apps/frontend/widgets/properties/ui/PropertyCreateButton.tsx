@@ -4,7 +4,7 @@ import type {JSX} from 'react';
 import NextLink from 'next/link';
 import {Tooltip} from '@heroui/react';
 import {Icon} from '@/shared/ui/icon';
-import {HomeAdd} from '@/shared/assets/icons';
+import {BoldHome} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import styles from './PropertyCreateButton.module.css';
 
@@ -23,7 +23,7 @@ export function PropertyCreateButton({canAdd, isLoading}: PropertyCreateButtonPr
                 aria-label="Добавить объект"
             >
                 <Icon size="l">
-                    <HomeAdd/>
+                    <BoldHome className="text-error"/>
                 </Icon>
             </button>
         );
@@ -37,7 +37,7 @@ export function PropertyCreateButton({canAdd, isLoading}: PropertyCreateButtonPr
                 aria-label="Добавить объект"
             >
                 <Icon size="l">
-                    <HomeAdd/>
+                    <BoldHome className="text-error"/>
                 </Icon>
             </NextLink>
         );
@@ -52,7 +52,7 @@ export function PropertyCreateButton({canAdd, isLoading}: PropertyCreateButtonPr
                     aria-label="Сменить тариф"
                 >
                     <Icon size="l">
-                        <HomeAdd/>
+                        <BoldHome className="text-error"/>
                     </Icon>
                 </NextLink>
             </Tooltip.Trigger>

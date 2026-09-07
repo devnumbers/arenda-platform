@@ -6,11 +6,11 @@ import {
   ArrowLeft,
   Calendar,
   Cancel,
-  ChangeHorizontal,
+  ChangeVertical,
   Check,
   Filter,
   Search,
-  Trash,
+  TrashBin,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -541,7 +541,7 @@ function PaymentEditForm({
           title="Доход или расход"
           ariaLabel={`Доход или расход: ${TYPE_LABELS[form.type]}, нажмите, чтобы сменить`}
           value={TYPE_LABELS[form.type]}
-          icon={<ChangeHorizontal className="h-6 w-6 text-content-secondary" aria-hidden />}
+          icon={<ChangeVertical className="h-6 w-6 text-content-secondary" aria-hidden />}
           onClick={() => update('type', togglePaymentType(form.type))}
         />
 
@@ -549,7 +549,7 @@ function PaymentEditForm({
           title="Способ оплаты"
           ariaLabel={`Способ оплаты: ${FORM_OF_PAYMENT_LABELS[form.paymentForm]}, нажмите, чтобы сменить`}
           value={FORM_OF_PAYMENT_LABELS[form.paymentForm]}
-          icon={<ChangeHorizontal className="h-6 w-6 text-content-secondary" aria-hidden />}
+          icon={<ChangeVertical className="h-6 w-6 text-content-secondary" aria-hidden />}
           onClick={() => update('paymentForm', togglePaymentForm(form.paymentForm))}
         />
 
@@ -577,7 +577,7 @@ function PaymentEditForm({
             onClick={() => setDeleteOpen(true)}
           >
             <span className="flex items-center justify-center gap-2">
-              <Trash className="h-6 w-6" aria-hidden />
+              <TrashBin className="h-6 w-6" aria-hidden />
               Удалить платеж
             </span>
           </Button>

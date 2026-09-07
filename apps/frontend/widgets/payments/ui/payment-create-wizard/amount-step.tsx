@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { ChangeHorizontal } from '@/shared/assets/icons';
+import { ChangeVertical } from '@/shared/assets/icons';
 import type { PaymentForm, PaymentType } from '@/entities/payment';
 import { AmountField, ChipButton } from '@/shared/ui/design';
 import {
@@ -66,14 +66,14 @@ export function AmountStep({
           <ChipButton
             aria-label={`Форма оплаты: ${FORM_OF_PAYMENT_LABELS[currentForm]}, нажмите, чтобы сменить`}
             onClick={() => onPaymentFormChange(togglePaymentForm(currentForm))}
-            trailingIcon={<ChangeHorizontal />}
+            trailingIcon={<ChangeVertical />}
           >
             {FORM_OF_PAYMENT_LABELS[currentForm]}
           </ChipButton>
           <ChipButton
             aria-label={`Тип платежа: ${TYPE_LABELS[currentType]}, нажмите, чтобы сменить`}
             onClick={() => onTypeChange(togglePaymentType(currentType))}
-            trailingIcon={<ChangeHorizontal />}
+            trailingIcon={<ChangeVertical />}
           >
             {TYPE_LABELS[currentType]}
           </ChipButton>

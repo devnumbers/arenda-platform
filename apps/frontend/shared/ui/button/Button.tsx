@@ -2,7 +2,7 @@
 
 import type {ButtonHTMLAttributes, JSX, ReactNode} from 'react';
 import clsx from 'clsx';
-import {Loading} from '@/shared/assets/icons';
+import {Sync} from '@/shared/assets/icons';
 import {Icon} from '@/shared/ui/icon';
 import styles from './Button.module.css';
 
@@ -66,7 +66,7 @@ export function Button({
             {loading && (
                 <span className={styles.spinnerOverlay}>
                     <Icon size={spinnerSizeMap[size]} className={styles.spinner}>
-                        <Loading/>
+                        <Sync className="text-error"/>
                     </Icon>
                 </span>
             )}

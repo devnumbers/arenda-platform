@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX, SubmitEvent } from 'react';
-import { BoldUser, ChevronDown } from '@/shared/assets/icons';
+import { BoldUser, SmallArrowDown } from '@/shared/assets/icons';
 import { formatPhoneInput } from '@/shared/lib/phone';
 import { useProperties } from '@/features/properties';
 import { TextField, Textarea } from '@/shared/ui/design';
@@ -190,7 +190,7 @@ export function ContactForm({
             aria-hidden
             className="flex h-11 w-11 shrink-0 items-center justify-center text-content-tertiary"
           >
-            <ChevronDown className="h-4 w-4" />
+            <SmallArrowDown className="h-4 w-4" />
           </span>
         </button>
         {errorOf('propertyId') !== undefined && (

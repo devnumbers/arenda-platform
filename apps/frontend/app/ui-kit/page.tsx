@@ -8,7 +8,7 @@ import {IconLink} from '@/shared/ui/icon-link';
 import {LinkButton} from '@/shared/ui/link-button';
 import {notify} from '@/shared/lib/notifications';
 import {TextField} from '@/shared/ui/text-field';
-import {ArrowRight, Home, Loading, Search, Settings, Support,} from '@/shared/assets/icons';
+import {SmallArrowRight, BoldHome, Search, Setting, Support, Sync,} from '@/shared/assets/icons';
 import {DesignLayerShowcase} from './design-layer';
 import styles from './page.module.css';
 
@@ -64,8 +64,8 @@ export default function UiKitPage(): JSX.Element {
                             <Button
                                 variant={variant}
                                 size="medium"
-                                leftIcon={<Home/>}
-                                rightIcon={<ArrowRight/>}
+                                leftIcon={<BoldHome/>}
+                                rightIcon={<SmallArrowRight/>}
                                 subtitle="Subtitle"
                             >
                                 With icons
@@ -99,11 +99,11 @@ export default function UiKitPage(): JSX.Element {
                                     variant={variant}
                                     size={size}
                                     rounded
-                                    icon={<Settings/>}
-                                    aria-label={`Settings ${size}`}
+                                    icon={<Setting/>}
+                                    aria-label={`Setting ${size}`}
                                 />
                             ))}
-                            <IconButton variant={variant} icon={<Loading/>} aria-label="Loading" loading/>
+                            <IconButton variant={variant} icon={<Sync className="text-error"/>} aria-label="Loading" loading/>
                         </div>
                     </div>
                 ))}
@@ -120,7 +120,7 @@ export default function UiKitPage(): JSX.Element {
                     <LinkButton href="#" variant="primary" loading>
                         loading
                     </LinkButton>
-                    <LinkButton href="#" variant="primary" leftIcon={<Home/>} rightIcon={<ArrowRight/>}>
+                    <LinkButton href="#" variant="primary" leftIcon={<BoldHome/>} rightIcon={<SmallArrowRight/>}>
                         with icons
                     </LinkButton>
                 </div>
@@ -138,7 +138,7 @@ export default function UiKitPage(): JSX.Element {
                             aria-label={`Support ${variant}`}
                         />
                     ))}
-                    <IconLink href="#" variant="primary" icon={<Loading/>} aria-label="Loading" loading/>
+                    <IconLink href="#" variant="primary" icon={<Sync className="text-error"/>} aria-label="Loading" loading/>
                 </div>
             </section>
 

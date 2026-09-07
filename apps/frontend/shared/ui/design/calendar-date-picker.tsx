@@ -7,7 +7,7 @@ import {
   useState,
   type JSX,
 } from 'react';
-import { ArrowLeft, ChevronDown } from '@/shared/assets/icons';
+import { ArrowLeft, SmallArrowDown } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
   Button,
@@ -334,7 +334,7 @@ function MonthJumpChip({
       className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-pill bg-surface-muted px-5 text-base font-medium text-content outline-none transition-colors hover:bg-surface-muted-hover active:bg-surface-muted-hover focus-visible:ring-2 focus-visible:ring-primary"
     >
       {label}
-      <ChevronDown className="h-6 w-6 text-content-secondary" aria-hidden />
+      <SmallArrowDown className="h-6 w-6 text-content-secondary" aria-hidden />
     </button>
   );
 }

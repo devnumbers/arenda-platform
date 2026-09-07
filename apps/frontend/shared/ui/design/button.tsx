@@ -1,7 +1,7 @@
 import type { ComponentProps, JSX, ReactNode } from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { Loading } from '@/shared/assets/icons';
+import { Sync } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 
 /**
@@ -90,7 +90,7 @@ export function Button({
       {...props}
     >
       {loading ? (
-        <Loading className="h-6 w-6 animate-spin" aria-hidden />
+        <Sync className="h-6 w-6 animate-spin text-error" aria-hidden />
       ) : (
         <>
           {leadingIcon !== undefined && (

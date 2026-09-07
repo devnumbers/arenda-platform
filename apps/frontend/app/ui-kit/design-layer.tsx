@@ -8,12 +8,12 @@ import {
     BoldHome,
     BoldPerson,
     BoldSofa,
-    ChangeHorizontal,
+    ChangeVertical,
     Edit,
-    Home,
     Move,
     Search,
-    SortingDown,
+    SortingBigSmall,
+    SortingSmallBig,
     Star,
     StarOff,
 } from '@/shared/assets/icons';
@@ -193,7 +193,7 @@ export function DesignLayerShowcase(): JSX.Element {
                         ))}
                         <Button loading>loading</Button>
                         <Button disabled>disabled</Button>
-                        <Button variant="primary" leadingIcon={<Home />} trailingIcon={<Edit />}>
+                        <Button variant="primary" leadingIcon={<BoldHome />} trailingIcon={<Edit />}>
                             with icons
                         </Button>
                     </div>
@@ -350,7 +350,7 @@ export function DesignLayerShowcase(): JSX.Element {
                     <h3 className={styles.groupTitle}>ChipButton</h3>
                     <div className={styles.grid}>
                         <ChipButton
-                            leadingIcon={<SortingDown />}
+                            leadingIcon={<SortingSmallBig />}
                             trailingIcon={<ArrowDown />}
                             selected={chip === 'name'}
                             onClick={() => setChip('name')}
@@ -358,7 +358,7 @@ export function DesignLayerShowcase(): JSX.Element {
                             По названию
                         </ChipButton>
                         <ChipButton
-                            leadingIcon={<SortingDown />}
+                            leadingIcon={<SortingBigSmall />}
                             trailingIcon={<ArrowDown />}
                             selected={chip === 'amount'}
                             onClick={() => setChip('amount')}
@@ -668,7 +668,7 @@ export function DesignLayerShowcase(): JSX.Element {
                         <div className="flex justify-center gap-2">
                             <ChipButton
                                 className="w-40"
-                                trailingIcon={<ChangeHorizontal />}
+                                trailingIcon={<ChangeVertical />}
                                 aria-label={`Форма оплаты: ${paymentForm === 'transfer' ? 'Перевод' : 'Наличные'}. Нажмите, чтобы переключить`}
                                 onClick={() => setPaymentForm((prev) => (prev === 'transfer' ? 'cash' : 'transfer'))}
                             >
@@ -676,7 +676,7 @@ export function DesignLayerShowcase(): JSX.Element {
                             </ChipButton>
                             <ChipButton
                                 className="w-40"
-                                trailingIcon={<ChangeHorizontal />}
+                                trailingIcon={<ChangeVertical />}
                                 aria-label={`Направление: ${direction === 'income' ? 'Доход' : 'Расход'}. Нажмите, чтобы переключить`}
                                 onClick={() => setDirection((prev) => (prev === 'income' ? 'expense' : 'income'))}
                             >

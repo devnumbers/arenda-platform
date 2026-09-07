@@ -7,7 +7,7 @@ import {Skeleton} from '@heroui/react/skeleton';
 import {notify} from '@/shared/lib/notifications';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
-import {StarColored} from '@/shared/assets/icons';
+import {BoldStar} from '@/shared/assets/icons';
 import {useLogout, useMe} from '@/features/auth';
 import {ROUTES} from '@/shared/config/routes';
 import type {User} from '@/entities/user';
@@ -63,7 +63,7 @@ export function ProfileOverview(): JSX.Element {
                         <span className={styles.userName}>{getFullName(me)}</span>
                         <span className={styles.tariffBadge}>
                               <Icon size="s">
-                                <StarColored/>
+                                <BoldStar className="text-error"/>
                               </Icon>
                                 <span>{getTariffLabel(me.subscription?.tariff.name)}</span>
                         </span>

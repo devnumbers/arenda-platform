@@ -2,7 +2,7 @@
 
 import { useState, type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Cancel, Home, Trash } from '@/shared/assets/icons';
+import { ArrowLeft, BoldHome, Cancel, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { goBack } from '@/shared/lib/navigation';
@@ -137,7 +137,7 @@ export function OperationDetailScreen({
         trailing={
           deletable && (
             <IconButton
-              icon={<Trash />}
+              icon={<TrashBin />}
               label="Удалить операцию"
               onClick={() => setConfirmDelete(true)}
             />
@@ -334,7 +334,7 @@ export function OperationView({
           className="px-6 py-3 [&>span]:px-0"
           categoryIcon={
             <span className="flex h-11 w-11 items-center justify-center rounded-pill bg-surface-muted">
-              <Home className="h-6 w-6 text-content-tertiary" aria-hidden />
+              <BoldHome className="h-6 w-6 text-content-tertiary" aria-hidden />
             </span>
           }
           title={propertyTitle !== '' ? propertyTitle : 'Объект'}

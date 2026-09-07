@@ -3,7 +3,7 @@
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, JSX } from 'react';
 import NextLink from 'next/link';
 import clsx from 'clsx';
-import { Loading } from '@/shared/assets/icons';
+import { Sync } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
 import type { ButtonProps, ButtonSize } from '@/shared/ui/button/Button';
 import styles from './LinkButton.module.css';
@@ -61,7 +61,7 @@ export function LinkButton({
     >
       {loading ? (
         <Icon size={spinnerSizeMap[size]} className={styles.spinner}>
-          <Loading />
+          <Sync className="text-error" />
         </Icon>
       ) : (
         <>

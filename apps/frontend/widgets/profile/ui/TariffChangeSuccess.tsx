@@ -4,7 +4,7 @@ import { useEffect, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Loading, StatusDanger, StatusGood } from '@/shared/assets/icons';
+import { StatusIconDanger, StatusIconGood, Sync } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
 import { Button } from '@/shared/ui/button';
 import { LinkButton } from '@/shared/ui/link-button';
@@ -47,7 +47,7 @@ export function TariffChangeSuccess(): JSX.Element {
           <div className={styles.card}>
             <div className={styles.iconWrapper}>
               <Icon size="l" className={styles.spinner}>
-                <Loading />
+                <Sync className="text-error" />
               </Icon>
             </div>
 
@@ -83,7 +83,7 @@ export function TariffChangeSuccess(): JSX.Element {
           <div className={styles.card}>
             <div className={clsx(styles.iconWrapper, styles.iconError)}>
               <Icon size="l">
-                <StatusDanger />
+                <StatusIconDanger />
               </Icon>
             </div>
 
@@ -116,7 +116,7 @@ export function TariffChangeSuccess(): JSX.Element {
       <div className={styles.card}>
         <div className={styles.iconWrapper}>
           <Icon size="l">
-            <StatusGood />
+            <StatusIconGood />
           </Icon>
         </div>
 

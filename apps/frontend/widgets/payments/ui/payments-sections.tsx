@@ -1,5 +1,5 @@
 import type { JSX, ReactNode } from 'react';
-import { ChevronDown, Star } from '@/shared/assets/icons';
+import { SmallArrowDown, Star } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
   formatDayMonth,
@@ -59,7 +59,7 @@ export function PaymentsSection({
           className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
         >
           <h2 className={headingClass}>{title}</h2>
-          <ChevronDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
+          <SmallArrowDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
         </button>
         {isEmpty && <p className={`${hintClass} mt-2 max-w-[360px]`}>{emptyHint}</p>}
       </div>
@@ -96,7 +96,7 @@ export function PaymentsGroup({
             className="flex w-full cursor-pointer items-center justify-between rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
           >
             <h2 className={headingClass}>{title}</h2>
-            <ChevronDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
+            <SmallArrowDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
           </button>
         ) : (
           <h2 className={headingClass}>{title}</h2>

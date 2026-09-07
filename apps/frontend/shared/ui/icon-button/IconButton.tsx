@@ -2,7 +2,7 @@
 
 import type { ButtonHTMLAttributes, JSX, ReactNode } from 'react';
 import clsx from 'clsx';
-import { Loading } from '@/shared/assets/icons';
+import { Sync } from '@/shared/assets/icons';
 import { Icon, type IconSize } from '@/shared/ui/icon';
 import type { ButtonSize, ButtonVariant } from '@/shared/ui/button/Button';
 import styles from './IconButton.module.css';
@@ -59,7 +59,7 @@ export function IconButton({
     >
       {loading ? (
         <Icon size={iconSizeMap[size]} className={styles.spinner}>
-          <Loading />
+          <Sync className="text-error" />
         </Icon>
       ) : (
         <Icon size={iconSizeMap[size]}>{icon}</Icon>

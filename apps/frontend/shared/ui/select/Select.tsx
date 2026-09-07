@@ -12,7 +12,7 @@ import {
     useState,
 } from 'react';
 import clsx from 'clsx';
-import { ChevronDown } from '@/shared/assets/icons';
+import { SmallArrowDown } from '@/shared/assets/icons';
 import { TextField } from '@/shared/ui/text-field';
 import {
     focusListboxEdge,
@@ -238,7 +238,7 @@ export function Select<Value extends string = string>({
                     <span className={styles.control}>
                         <span className={styles.value}>{selectedLabel || placeholder}</span>
                         <span className={styles.chevron} aria-hidden="true">
-                            <ChevronDown />
+                            <SmallArrowDown />
                         </span>
                     </span>
                     {error && <span className={styles.errorText}>{error}</span>}

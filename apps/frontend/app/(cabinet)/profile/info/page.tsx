@@ -4,7 +4,7 @@ import { Card } from '@heroui/react/card';
 import { PageHeader } from '@/shared/ui/page-header';
 import { PageShell } from '@/shared/ui/page-shell';
 import { Icon } from '@/shared/ui/icon';
-import { ArrowRight } from '@/shared/assets/icons';
+import { SmallArrowRight } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import styles from './page.module.css';
 
@@ -44,7 +44,7 @@ export default function InfoPage() {
             <Card className={styles.card}>
               <span className={styles.itemTitle}>{item.title}</span>
               <Icon size="s">
-                <ArrowRight />
+                <SmallArrowRight />
               </Icon>
             </Card>
           </NextLink>

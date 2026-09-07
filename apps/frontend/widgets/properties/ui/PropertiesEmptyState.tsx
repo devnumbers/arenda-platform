@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { Tooltip } from '@heroui/react';
 import { ROUTES } from '@/shared/config/routes';
 import { EmptyState } from '@/shared/ui/empty-state';
-import { HomeAdd } from '@/shared/assets/icons';
+import { BoldHome } from '@/shared/assets/icons';
 import { Icon } from '@/shared/ui/icon';
 import styles from './PropertiesEmptyState.module.css';
 
@@ -29,7 +29,7 @@ export function PropertiesEmptyState({ canAdd, isLoading }: PropertiesEmptyState
             aria-label="Создать объект"
           >
             <Icon size="m">
-              <HomeAdd />
+              <BoldHome className="text-error" />
             </Icon>
             Создать объект
           </button>
@@ -55,7 +55,7 @@ export function PropertiesEmptyState({ canAdd, isLoading }: PropertiesEmptyState
                 aria-label="Создать объект (достигнут лимит)"
               >
                 <Icon size="m">
-                  <HomeAdd />
+                  <BoldHome className="text-error" />
                 </Icon>
                 Создать объект
               </button>
@@ -77,7 +77,7 @@ export function PropertiesEmptyState({ canAdd, isLoading }: PropertiesEmptyState
       actionText="Создать объект"
       actionIcon={
         <Icon size="m">
-          <HomeAdd />
+          <BoldHome className="text-error" />
         </Icon>
       }
     />

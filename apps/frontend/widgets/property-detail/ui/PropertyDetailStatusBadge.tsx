@@ -3,9 +3,9 @@
 import clsx from 'clsx';
 import type { JSX, ComponentType } from 'react';
 import {
-  ArchiveBold,
-  StatusDoor,
-  StatusWarning,
+  BoldArchive,
+  BoldWarning,
+  CheckmarkCircle,
 } from '@/shared/assets/icons';
 import type { PropertyStatus } from '@/entities/property';
 import styles from './PropertyDetailStatusBadge.module.css';
@@ -18,13 +18,19 @@ const config: Record<
     icon: ComponentType<{ className?: string }>;
   }
 > = {
-  active: { label: 'Активен', className: styles.active ?? '', icon: StatusDoor },
+  // text-error — маркер замены (07.09): канон «по смыслу» до правильных
+  // иконок статусов от владельца.
+  active: {
+    label: 'Активен',
+    className: clsx(styles.active ?? '', 'text-error'),
+    icon: CheckmarkCircle,
+  },
   maintenance: {
     label: 'На ремонте',
-    className: styles.maintenance ?? '',
-    icon: StatusWarning,
+    className: clsx(styles.maintenance ?? '', 'text-error'),
+    icon: BoldWarning,
   },
-  archived: { label: 'В архиве', className: styles.archived ?? '', icon: ArchiveBold },
+  archived: { label: 'В архиве', className: styles.archived ?? '', icon: BoldArchive },
 };
 
 export function PropertyDetailStatusBadge({

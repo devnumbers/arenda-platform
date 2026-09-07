@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { JSX, ReactNode } from 'react';
-import { Check, ChevronDown } from '@/shared/assets/icons';
+import { Check, SmallArrowDown } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { ListRow } from './list-row';
 import { Modal, ModalContent } from './modal';
@@ -115,7 +115,7 @@ export function PickerField({
           className="flex h-11 w-11 shrink-0 items-center justify-center text-content-tertiary"
           aria-hidden
         >
-          <ChevronDown className="h-4 w-4" />
+          <SmallArrowDown className="h-4 w-4" />
         </span>
       </button>
       {error !== undefined && <span className="text-[13px] leading-[15px] text-error">{error}</span>}

@@ -4,7 +4,7 @@ import {Card} from '@heroui/react/card';
 import {PageHeader} from '@/shared/ui/page-header';
 import {PageShell} from '@/shared/ui/page-shell';
 import {Icon} from '@/shared/ui/icon';
-import {ArrowRight} from '@/shared/assets/icons';
+import {SmallArrowRight} from '@/shared/assets/icons';
 import styles from './SupportPage.module.css';
 
 type Contact = {
@@ -54,7 +54,7 @@ export function SupportPage(): JSX.Element {
                                 <div className={styles.contactRight}>
                                     <span className={styles.contactValue}>{contact.value}</span>
                                     <Icon size="s">
-                                        <ArrowRight/>
+                                        <SmallArrowRight/>
                                     </Icon>
                                 </div>
                             </Card>

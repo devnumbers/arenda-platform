@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { JSX } from 'react';
-import { Menu } from '@/shared/assets/icons';
+import { Kebab } from '@/shared/assets/icons';
 import type { PropertyStatus } from '@/entities/property';
 import { IconButton } from '@/shared/ui/icon-button';
 import { Select, type SelectOption } from '@/shared/ui/select';
@@ -81,7 +81,7 @@ export function PropertyActionMenu({
                     variant="secondary"
                     size="large"
                     aria-label="Действия"
-                    icon={<Menu />}
+                    icon={<Kebab />}
                     disabled={disabled}
                     onClick={onClick}
                 />

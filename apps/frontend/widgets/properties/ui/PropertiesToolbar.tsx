@@ -4,7 +4,7 @@ import type {JSX, ReactNode} from 'react';
 import {useCallback, useMemo, useState} from 'react';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
-import {ChevronDown, ChevronUp, Filter} from '@/shared/assets/icons';
+import {Filter, SmallArrowDown, SmallArrowUp} from '@/shared/assets/icons';
 import {propertyTypeOptions} from '@/features/properties';
 import {statusFilterOptions, type StatusFilterValue,} from '@/features/properties';
 import type {PropertyType} from '@/entities/property';
@@ -254,7 +254,7 @@ export function PropertiesToolbar({
                                 size="medium"
                                 rightIcon={
                                     <Icon size="s">
-                                        {isOpen ? <ChevronUp/> : <ChevronDown/>}
+                                        {isOpen ? <SmallArrowUp className="text-error"/> : <SmallArrowDown/>}
                                     </Icon>
                                 }
                                 onClick={onClick}
@@ -279,7 +279,7 @@ export function PropertiesToolbar({
                                     size="medium"
                                     rightIcon={
                                         <Icon size="s">
-                                            {isOpen ? <ChevronUp/> : <ChevronDown/>}
+                                            {isOpen ? <SmallArrowUp className="text-error"/> : <SmallArrowDown/>}
                                         </Icon>
                                     }
                                     onClick={onClick}
@@ -300,7 +300,7 @@ export function PropertiesToolbar({
                                 size="medium"
                                 rightIcon={
                                     <Icon size="s">
-                                        {isOpen ? <ChevronUp/> : <ChevronDown/>}
+                                        {isOpen ? <SmallArrowUp className="text-error"/> : <SmallArrowDown/>}
                                     </Icon>
                                 }
                                 onClick={onClick}

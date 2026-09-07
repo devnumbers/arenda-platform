@@ -3,7 +3,7 @@
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { ArrowLeft, ChangeHorizontal } from '@/shared/assets/icons';
+import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
@@ -125,7 +125,7 @@ export function PaymentHistoryScreen({
                 <>
                   <div className="px-6 pb-2">
                     <ChipButton
-                      trailingIcon={<ChangeHorizontal />}
+                      trailingIcon={<ChangeVertical />}
                       onClick={toggleOrder}
                       aria-label={
                         order === 'desc'

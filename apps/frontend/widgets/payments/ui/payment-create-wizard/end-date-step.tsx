@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { ArrowRight } from '@/shared/assets/icons';
+import { SmallArrowRight } from '@/shared/assets/icons';
 import type { IsoDate } from '@/entities/payment';
 import { formatDayMonthWithYear } from '@/entities/payment';
 import { CalendarDatePicker, ListRow } from '@/shared/ui/design';
@@ -47,7 +47,7 @@ export function EndDateStep({
           title={endDate !== undefined ? formatDayMonthWithYear(endDate, today) : 'Выбрать дату'}
           className="py-4"
           onSelect={() => setPickerOpen(true)}
-          trailing={<ArrowRight className="h-6 w-6" aria-hidden />}
+          trailing={<SmallArrowRight className="h-6 w-6" aria-hidden />}
         />
       </div>
 

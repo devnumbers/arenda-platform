@@ -5,14 +5,20 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import {
   BoldBill,
-  NavObjects,
-  NavProfile,
-  NavSupport,
-  NavContacts,
-  BottomObjects,
-  BottomProfile,
+  HomeMain,
+  Support,
+  Team,
+  UserCircle,
 } from '@/shared/assets/icons';
 import styles from './NavItem.module.css';
+
+// text-error — маркер замены (07.09): канон «по смыслу» до правильных
+// иконок навигации от владельца.
+function redIcon(Icon: IconComponent): IconComponent {
+  return function RedIcon({ className }) {
+    return <Icon className={clsx(className, 'text-error')} />;
+  };
+}
 
 export type NavItemProps = {
   readonly href: string;
@@ -26,13 +32,13 @@ export type NavItemProps = {
 type IconComponent = ComponentType<{ readonly className?: string }>;
 
 const iconMap: Record<string, IconComponent> = {
-  NavObjects,
-  NavProfile,
-  NavSupport,
+  NavObjects: redIcon(HomeMain),
+  NavProfile: redIcon(UserCircle),
+  NavSupport: redIcon(Support),
   NavOperations: BoldBill,
-  NavContacts,
-  BottomObjects,
-  BottomProfile,
+  NavContacts: Team,
+  BottomObjects: redIcon(HomeMain),
+  BottomProfile: redIcon(UserCircle),
 };
 
 export function NavItem({

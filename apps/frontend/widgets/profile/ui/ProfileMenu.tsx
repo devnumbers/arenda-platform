@@ -4,7 +4,7 @@ import type {JSX} from 'react';
 import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
 import {Icon} from '@/shared/ui/icon';
-import {ArrowRight} from '@/shared/assets/icons';
+import {SmallArrowRight} from '@/shared/assets/icons';
 import {ROUTES} from '@/shared/config/routes';
 import styles from './ProfileMenu.module.css';
 
@@ -36,7 +36,7 @@ export function ProfileMenu(): JSX.Element {
                     <Card className={styles.card}>
                         <span className={styles.title}>{item.title}</span>
                         <Icon size="s">
-                            <ArrowRight/>
+                            <SmallArrowRight/>
                         </Icon>
                     </Card>
                 </NextLink>

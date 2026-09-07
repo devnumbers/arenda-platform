@@ -4,8 +4,7 @@ import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  ArrowSLeft,
-  ArrowSRight,
+  SmallArrowRight,
   Search,
 } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
@@ -49,7 +48,8 @@ const SCREEN_COPY = {
  * 1492-59865): те же чипы, что на главном экране операций, вместо двух
  * карточек — H1 направления за период («Нет доходов»/«Нет трат» при
  * пустом периоде, #478) с круглыми стрелками листания
- * по месяцам (ArrowSLeft/ArrowSRight 44×44); ниже — список операций одного
+ * по месяцам (ArrowLeft/SmallArrowRight 44×44 — канон; класс text-error —
+ * маркер до правильных иконок владельца); ниже — список операций одного
  * типа за период, группировка и строки как на главном (общий
  * OperationsDateList). Скоуп сужен `type` — фильтр списка и сводки #473.
  * Период и категории живут в адресе (#477): дефолт — текущий месяц,
@@ -218,7 +218,7 @@ export function OperationsOfTypeScreen({
                    * в адрес (#477), дефолт — текущий месяц. */}
                   <div className="flex items-stretch px-3.5">
                     <IconButton
-                      icon={<ArrowSLeft />}
+                      icon={<ArrowLeft className="text-error" />}
                       label="Предыдущий месяц"
                       onClick={() =>
                         applyPeriod(shiftOperationsPeriod(period, -1))
@@ -232,7 +232,7 @@ export function OperationsOfTypeScreen({
                       </span>
                     </div>
                     <IconButton
-                      icon={<ArrowSRight />}
+                      icon={<SmallArrowRight className="text-error" />}
                       label="Следующий месяц"
                       disabled={nextIsFuture}
                       onClick={() =>

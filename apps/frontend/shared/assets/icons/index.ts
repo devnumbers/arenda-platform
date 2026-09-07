@@ -1,38 +1,16 @@
-export { default as Clock } from './clock.svg';
-export { default as Loading } from './loading.svg';
 export { default as ArrowLeft } from './arrow-left.svg';
-export { default as ArrowRight } from './arrow-right.svg';
-export { default as ArrowSLeft } from './arrow-s-left.svg';
-export { default as ArrowSRight } from './arrow-s-right.svg';
-export { default as Menu } from './menu.svg';
 export { default as Cancel } from './cancel.svg';
 export { default as Search } from './search.svg';
 export { default as Support } from './support.svg';
-export { default as Home } from './home.svg';
 export { default as BoldKey } from './bold-key.svg';
-export { default as BoldUsers } from './bold-users.svg';
-export { default as Settings } from './settings.svg';
-export { default as StarColored } from './star-colored.svg';
-export { default as Trash } from './trash.svg';
-export { default as NavObjects } from './nav-objects.svg';
-export { default as NavProfile } from './nav-profile.svg';
-export { default as NavSupport } from './nav-support.svg';
-export { default as NavContacts } from './bold-users.svg';
-export { default as BottomObjects } from './bottom-objects.svg';
-export { default as BottomProfile } from './bottom-profile.svg';
+// Notification Dot 651:6759 (владелец 07.09): красная точка уведомления
+// 14×14 с кантом #F3F4F6 — цвета запечены по макету.
+export { default as NotificationDot } from './notification-dot.svg';
 export { default as Filter } from './filter.svg';
-export { default as ChevronDown } from './chevron-down.svg';
-export { default as ChevronUp } from './chevron-up.svg';
-export { default as HomeAdd } from './home-add.svg';
-export { default as StatusGood } from './status-good.svg';
-export { default as StatusWarning } from './status-warning.svg';
-export { default as StatusDanger } from './status-danger.svg';
-export { default as StatusDoor } from './status-door.svg';
 export { default as BadgeDanger } from './badge-danger.svg';
 export { default as BadgeGood } from './badge-good.svg';
 export { default as BadgeInfo } from './badge-info.svg';
 export { default as BadgeWarning } from './badge-warning.svg';
-export { default as ArchiveBold } from './archive-bold.svg';
 export { default as BoldBell } from './bold-bell.svg';
 export { default as BoldBill } from './bold-bill.svg';
 export { default as BoldBox } from './bold-box.svg';
@@ -80,7 +58,6 @@ export { default as BoldWrench } from './bold-wrench.svg';
 export { default as Check } from './check.svg';
 export { default as Edit } from './edit.svg';
 export { default as ArrowDown } from './arrow-down.svg';
-export { default as SortingDown } from './sorting-down.svg';
 // Направление сортировки: SortingSmallBig 418:4608 — возрастание (от
 // меньшего к большему), SortingBigSmall 418:4607 — убывание; SmallArrowDown
 // 671:7320 — хвостовая стрелка чипа, всегда вниз. currentColor.
@@ -105,9 +82,8 @@ export { default as StatusIconGood } from './status-icon-good.svg';
 export { default as StatusIconCheck } from './status-icon-check.svg';
 export { default as StatusIconInfo } from './status-icon-info.svg';
 
-// Дизайн-слой платежей, тикет #459: «смена направления» 24×24 чипов суммы
-// (currentColor) — Figma 835:19789.
-export { default as ChangeHorizontal } from './change-horizontal.svg';
+// Дизайн-слой платежей, тикет #459: «смена направления» чипов суммы —
+// канонный ChangeVertical (Figma 858:20998) из блока канона ниже (07.09).
 
 // Экран «Платежи объекта» (#463): «создать новый» в шите выбора — Figma 189:2436.
 export { default as Add } from './add.svg';
@@ -155,3 +131,59 @@ export { default as Checkmark } from './checkmark.svg';
 // Icon/Bold/Objects 208:2994 («Общий контакт») и Icon/Bold/Home 189:931
 // (объекты; в наборе это BoldHome).
 export { default as BoldObjects } from './bold-objects.svg';
+
+// Канонический набор иконок (96, владелец 07.09): Icon/Bold/* и Icon/R/* из
+// Figma «Рентли. Новые экраны сервиса». Полное сопоставление узлов —
+// README.md рядом. Иконки не рисуются сами — только экспорт из Figma;
+// цвет — currentColor (кроме запечённых дизайнерских: BoldUser #D3D7D9
+// и градиентных статусов Icon/Color/*, см. README).
+// Bold-стиль — префикс bold-, контурный R — без
+// префикса (как Check/Edit/Calendar выше).
+// Bold: Star 879:17720, Archive 1858:100932, Case 766:10597, Wallet 879:17713.
+export { default as BoldStar } from './bold-star.svg';
+export { default as BoldArchive } from './bold-archive.svg';
+export { default as BoldCase } from './bold-case.svg';
+export { default as BoldWallet } from './bold-wallet.svg';
+// R: AccountSetting 472:4958, Archive 189:818, Block 1804:108181,
+// Change 1134:49309, ChangeVertical 858:20998, CheckmarkCircle 1644:94847,
+// Computer 1804:105311, Download 189:836, Exit 472:4952, Info 1296:48308,
+// Key 119:1104, Minus 1858:105685, PaintBrush 189:800, Phone 1804:105303,
+// Pin 501:8839, PinOff 890:30954, Setting 1740:100244, Sync 1804:105034,
+// Team 472:5276, TeamAdd 1804:108296, Undo 1883:71902, UserCircle 1652:82357,
+// Wallet 550:8808.
+export { default as AccountSetting } from './account-setting.svg';
+export { default as Archive } from './archive.svg';
+export { default as Block } from './block.svg';
+export { default as Change } from './change.svg';
+export { default as ChangeVertical } from './change-vertical.svg';
+export { default as CheckmarkCircle } from './checkmark-circle.svg';
+export { default as Computer } from './computer.svg';
+export { default as Download } from './download.svg';
+export { default as Exit } from './exit.svg';
+export { default as Info } from './info.svg';
+export { default as Key } from './key.svg';
+export { default as Minus } from './minus.svg';
+export { default as PaintBrush } from './paint-brush.svg';
+export { default as Phone } from './phone.svg';
+export { default as Pin } from './pin.svg';
+export { default as PinOff } from './pin-off.svg';
+export { default as Setting } from './setting.svg';
+export { default as Sync } from './sync.svg';
+export { default as Team } from './team.svg';
+export { default as TeamAdd } from './team-add.svg';
+export { default as Undo } from './undo.svg';
+export { default as UserCircle } from './user-circle.svg';
+export { default as Wallet } from './wallet.svg';
+
+// S-стиль (владелец 07.09): контурные 16×16, обводка 1.2 — маленькие глифы
+// для строк списков и плиток. Файлы — суффикс -small (как clock-small).
+// Clock 594:13394, HomeMain 1726:86759, Archive 1603:90962,
+// Calendar 1550:91499, PaintBrush 1603:90961, Key 1603:91160,
+// Star 890:28175, Pin 1603:91203, Repeat 284:1108 — currentColor.
+export { default as ArchiveSmall } from './archive-small.svg';
+export { default as CalendarSmall } from './calendar-small.svg';
+export { default as PaintBrushSmall } from './paint-brush-small.svg';
+export { default as KeySmall } from './key-small.svg';
+export { default as PinSmall } from './pin-small.svg';
+// Уже потреблялись: ClockSmall, HomeMainSmall, Repeat, Star (файлы обновлены
+// свежими экспортами, см. README).

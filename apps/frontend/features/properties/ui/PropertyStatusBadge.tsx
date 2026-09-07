@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
-import { StatusWarning, StatusDoor } from '@/shared/assets/icons';
+import clsx from 'clsx';
+import { BoldWarning, CheckmarkCircle } from '@/shared/assets/icons';
 import type { DisplayStatus } from '@/features/properties/lib/property-statuses';
 import styles from './PropertyStatusBadge.module.css';
 
@@ -14,8 +15,10 @@ type StatusConfig = {
 };
 
 const config: Record<DisplayStatus, StatusConfig> = {
-  active: { label: 'Активен', color: '#A1A3A6', icon: StatusDoor },
-  maintenance: { label: 'На ремонте', color: '#EBB800', icon: StatusWarning },
+  // text-error — маркер замены (07.09): канон «по смыслу» до правильных
+  // иконок статусов от владельца.
+  active: { label: 'Активен', color: '#A1A3A6', icon: CheckmarkCircle },
+  maintenance: { label: 'На ремонте', color: '#EBB800', icon: BoldWarning },
 };
 
 export function PropertyStatusBadge({ status }: PropertyStatusBadgeProps): JSX.Element {
@@ -25,7 +28,7 @@ export function PropertyStatusBadge({ status }: PropertyStatusBadgeProps): JSX.E
 
   return (
     <span className={styles.badge} style={{ color: item.color }}>
-      <Icon className={styles.icon} />
+      <Icon className={clsx(styles.icon, 'text-error')} />
       {text}
     </span>
   );

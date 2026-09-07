@@ -6,7 +6,7 @@ import {Card} from '@heroui/react/card';
 import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
 import {PageHeader} from '@/shared/ui/page-header';
-import {ArrowRight} from '@/shared/assets/icons';
+import {SmallArrowRight} from '@/shared/assets/icons';
 import {useMe} from '@/features/auth';
 import {ROUTES} from '@/shared/config/routes';
 import styles from './AccountOverview.module.css';
@@ -48,7 +48,7 @@ export function AccountOverview(): JSX.Element {
                             <div className={styles.phoneRight}>
                                 <span className={styles.phoneValue}>{me.phone}</span>
                                 <Icon size="s">
-                                    <ArrowRight/>
+                                    <SmallArrowRight/>
                                 </Icon>
                             </div>
                         </Card>

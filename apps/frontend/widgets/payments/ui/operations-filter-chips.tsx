@@ -2,7 +2,7 @@
 
 import type { JSX } from "react";
 import clsx from "clsx";
-import { ChevronDown } from "@/shared/assets/icons";
+import { SmallArrowDown } from "@/shared/assets/icons";
 import { ChipButton } from "@/shared/ui/design";
 
 export type OperationsFilterChipsProps = {
@@ -51,7 +51,7 @@ export function OperationsFilterChips({
     <div className={clsx("flex gap-1.5 overflow-x-auto", className)}>
       <ChipButton
         selected
-        trailingIcon={<ChevronDown />}
+        trailingIcon={<SmallArrowDown />}
         onClick={onOpenPeriod}
       >
         {periodLabel}
@@ -59,7 +59,7 @@ export function OperationsFilterChips({
       {propertyLabel !== undefined && onOpenProperties !== undefined && (
         <ChipButton
           selected={propertyActive}
-          trailingIcon={<ChevronDown />}
+          trailingIcon={<SmallArrowDown />}
           onClick={onOpenProperties}
         >
           {propertyLabel}
@@ -67,7 +67,7 @@ export function OperationsFilterChips({
       )}
       <ChipButton
         selected={categoriesActive}
-        trailingIcon={<ChevronDown />}
+        trailingIcon={<SmallArrowDown />}
         onClick={onOpenCategories}
       >
         {categoriesLabel}

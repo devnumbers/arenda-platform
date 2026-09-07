@@ -22,7 +22,9 @@ Rules for the Next.js frontend in `apps/frontend`. Also follow the root `AGENTS.
 
 ## Design Conventions
 
-Before building or changing any screen, surface, or design-layer component, read `DESIGN.md` (same directory): breakpoints and widths, header/page anatomy, which surface to choose (route / fullscreen overlay / modal / picker menu), pickers and wheels, list states, motion/hover/focus, date and money formatting, Figma-first workflow, and how owner design decisions get recorded. The live catalog of design-layer components is the `/ui-kit` route.
+Before building or changing any screen, surface, or design-layer component, read `DESIGN.md` (same directory): breakpoints and widths, header/page anatomy, which surface to choose (route / fullscreen overlay / modal / picker menu), pickers and wheels, list states, icons, motion/hover/focus, date and money formatting, Figma-first workflow, and how owner design decisions get recorded. The live catalog of design-layer components is the `/ui-kit` route.
+
+Icons: use only the canonical set in `shared/assets/icons` (owner-approved SVGs from Figma — Bold/R 24×24 plus the S 16×16 style; mapping in `shared/assets/icons/README.md`). Never draw, inline, or generate icons yourself — a missing icon means exporting its node from Figma or asking the owner (DESIGN.md §10). Render small sizes with the same file, never create size-duplicate files.
 
 ## MCP Servers
 

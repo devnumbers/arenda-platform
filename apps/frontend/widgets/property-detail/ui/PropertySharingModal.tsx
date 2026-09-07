@@ -9,7 +9,7 @@ import {ApiError} from '@/shared/api/errors';
 import {Button} from '@/shared/ui/button';
 import {TextField} from '@/shared/ui/text-field';
 import {Select, type SelectOption} from '@/shared/ui/select';
-import {Cancel, ChevronDown} from '@/shared/assets/icons';
+import {Cancel, SmallArrowDown} from '@/shared/assets/icons';
 import {ACCESS_ROLE_LABELS} from '@/entities/access';
 import {accessRoleIcon} from '@/entities/access';
 import {AccessRoleBadge} from '@/entities/access';
@@ -308,7 +308,7 @@ export function PropertySharingModal({
                                                             className={styles.addTriggerChevron}
                                                             aria-hidden="true"
                                                         >
-                                                            <ChevronDown/>
+                                                            <SmallArrowDown/>
                                                         </span>
                                                     </button>
                                                 )}

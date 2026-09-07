@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { ArrowRight, CheckBoxFalse, CheckBoxTrue } from '@/shared/assets/icons';
+import { SmallArrowRight, CheckBoxFalse, CheckBoxTrue } from '@/shared/assets/icons';
 import { type IsoDate, type Recurrence } from '@/entities/payment';
 import { CalendarDatePicker, ListRow } from '@/shared/ui/design';
 import { isoDayOfMonth, isoMonthNumber } from '@/shared/lib/calendar';
@@ -122,7 +122,7 @@ export function PeriodicityStep({
               className="py-3.5"
               title={option.label}
               onSelect={() => pickKind(option.kind)}
-              trailing={<ArrowRight className="h-6 w-6" aria-hidden />}
+              trailing={<SmallArrowRight className="h-6 w-6" aria-hidden />}
             />
           ))}
         </div>

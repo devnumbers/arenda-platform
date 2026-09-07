@@ -1,7 +1,7 @@
 'use client';
 
 import {type JSX, type ReactNode} from 'react';
-import {Clock} from '@/shared/assets/icons';
+import {BoldClock} from '@/shared/assets/icons';
 import {Button} from '@/shared/ui/button';
 import {formatTimer} from '@/features/auth/lib/format-timer';
 import styles from './SendCodeButton.module.css';
@@ -40,7 +40,7 @@ export function SendCodeButton({
             subtitle={
                 remainingSeconds > 0 ? (
                     <span className={styles.timerRow}>
-            <Clock className={styles.timerIcon}/>
+            <BoldClock className={styles.timerIcon}/>
             <span className={styles.timerText}>{formatTimer(remainingSeconds)}</span>
           </span>
                 ) : undefined

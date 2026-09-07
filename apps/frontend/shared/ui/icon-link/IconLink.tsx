@@ -3,7 +3,7 @@
 import type {AnchorHTMLAttributes, ButtonHTMLAttributes, JSX} from 'react';
 import NextLink from 'next/link';
 import clsx from 'clsx';
-import {Loading} from '@/shared/assets/icons';
+import {Sync} from '@/shared/assets/icons';
 import {Icon, type IconSize} from '@/shared/ui/icon';
 import type {ButtonSize} from '@/shared/ui/button/Button';
 import type {IconButtonProps} from '@/shared/ui/icon-button/IconButton';
@@ -47,7 +47,7 @@ export function IconLink({
         >
             {loading ? (
                 <Icon size={iconSizeMap[size]} className={styles.spinner}>
-                    <Loading/>
+                    <Sync className="text-error"/>
                 </Icon>
             ) : (
                 <Icon size={iconSizeMap[size]}>{icon}</Icon>

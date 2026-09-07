@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArchiveBold, BoldHome, BoldObjects, Check } from '@/shared/assets/icons';
+import { BoldArchive, BoldHome, BoldObjects, Check } from '@/shared/assets/icons';
 import { buildReturnUrl } from '@/shared/lib/navigation';
 import { clientTodayIso } from '@/entities/payment';
 import {
@@ -154,7 +154,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
           <ListRow
             leading={
               <SelectAvatar
-                fallback={<ArchiveBold className="h-6 w-6 text-[#D3D7D9]" />}
+                fallback={<BoldArchive className="h-6 w-6 text-[#D3D7D9]" />}
               />
             }
             title="Объекты в архиве"
@@ -185,7 +185,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
 /** Аватар строки выбора (паттерн contact-object-select): круг 44px
  * #F3F4F6 с белым кольцом 2.5px; фото объекта или иконка-плейсхолдер —
  * дом (BoldHome) у объектов, BoldObjects (Figma 208:2994) у «Все объекты»,
- * ArchiveBold у опции архива (#549). Цвет плейсхолдеров — #D3D7D9 по макету
+ * BoldArchive у опции архива (#549). Цвет плейсхолдеров — #D3D7D9 по макету
  * (1733-26805/26831, пиксельная сверка 07.09), не text-content-tertiary. */
 function SelectAvatar({ photoUrl, fallback }: {
   readonly photoUrl?: string;
