@@ -81,3 +81,4 @@ ON CONFLICT (id) DO UPDATE
 SET date = EXCLUDED.date,
     paid_date = EXCLUDED.paid_date,
     status = EXCLUDED.status;
+

@@ -88,7 +88,7 @@ func TestAttributesCatalogKeys(t *testing.T) {
 	apartmentWant := []string{
 		attrAreaKitchen, attrAreaLiving, attrAreaTotal, attrBalcony, attrBathroom,
 		attrCeilingHeight, attrFloor, attrFloorsTotal, attrParkingType, attrRenovation,
-		attrRooms, attrYearBuilt,
+		attrYearBuilt,
 	}
 	if got := CatalogKeys(PropertyTypeApartment); !slices.Equal(got, apartmentWant) {
 		t.Fatalf("apartment keys = %v, want %v", got, apartmentWant)
@@ -99,7 +99,7 @@ func TestAttributesCatalogKeys(t *testing.T) {
 
 	roomWant := []string{
 		attrAreaKitchen, attrAreaTotal, attrBalcony, attrBathroom, attrFloor,
-		attrFloorsTotal, attrRenovation, attrRooms, attrYearBuilt,
+		attrFloorsTotal, attrRenovation, attrYearBuilt,
 	}
 	if got := CatalogKeys(PropertyTypeRoom); !slices.Equal(got, roomWant) {
 		t.Fatalf("room keys = %v, want %v", got, roomWant)
@@ -158,12 +158,11 @@ func TestAttributesEnumValues(t *testing.T) {
 		valid    string
 		invalid  string
 	}{
-		{PropertyTypeApartment, attrRooms, enumStudio, "studioo"},
 		{PropertyTypeApartment, attrBathroom, enumCombined, "ensuite"},
 		{PropertyTypeApartment, attrBalcony, enumLoggia, "terrace"},
 		{PropertyTypeApartment, attrRenovation, enumEuro, "lux"},
 		{PropertyTypeApartment, attrParkingType, enumUnderground, "valet"},
-		{PropertyTypeRoom, attrRooms, "2", enumStudio},
+		{PropertyTypeRoom, attrBathroom, enumSeparate, "ensuite"},
 		{PropertyTypeHouse, attrLandType, enumGarden, enumResidential},
 		{PropertyTypeHouse, attrHouseType, enumTownhouse, "cottage"},
 		{PropertyTypeHouse, attrMaterial, enumBrickMonolithic, "straw"},
@@ -277,17 +276,13 @@ func TestAttributesRoomHasNoAreaLiving(t *testing.T) {
 	assertHasField(t, res, attrAreaLiving, "unknown attribute for property type room")
 }
 
-func TestAttributesRoomRoomsStartsAtTwo(t *testing.T) {
+func TestAttributesRoomRoomsUnknown(t *testing.T) {
 	t.Parallel()
 
-	for _, v := range []string{enumStudio, "1"} {
-		res := ValidateAttributes(PropertyTypeRoom, Attributes{attrRooms: v})
-		assertHasField(t, res, attrRooms, "must be one of")
-	}
+	// Ключ rooms выведен из наборов квартиры и комнаты: он больше не входит
+	// в каталог и отвергается как неизвестный.
 	res := ValidateAttributes(PropertyTypeRoom, Attributes{attrRooms: "2"})
-	if !res.Valid() {
-		t.Fatalf("rooms=2 on room should be valid, got errors: %+v", res.Errors)
-	}
+	assertHasField(t, res, attrRooms, "unknown attribute")
 }
 
 func TestAttributesCrossValidations(t *testing.T) {
@@ -382,17 +377,17 @@ func TestAttributesNullValues(t *testing.T) {
 func TestAttributesMultipleErrorsCollected(t *testing.T) {
 	t.Parallel()
 
-	// Floor=-4 (out of range), rooms=invalid, area_total=0.5 (below min).
+	// Floor=-4 (out of range), balcony=invalid, area_total=0.5 (below min).
 	res := ValidateAttributes(PropertyTypeApartment, Attributes{
 		attrFloor:     float64(-4),
-		attrRooms:     "studioo",
+		attrBalcony:   "studioo",
 		attrAreaTotal: 0.5,
 	})
 	fields := make(map[string]bool)
 	for _, e := range res.Errors {
 		fields[e.Field] = true
 	}
-	for _, want := range []string{attrFloor, attrRooms, attrAreaTotal} {
+	for _, want := range []string{attrFloor, attrBalcony, attrAreaTotal} {
 		if !fields[want] {
 			t.Fatalf("expected an error on field %q, got errors: %+v", want, res.Errors)
 		}
@@ -510,8 +505,8 @@ func TestAttributesNumberTypeStrictness(t *testing.T) {
 	assertHasField(t, res, attrFloor, "expected an integer")
 
 	// A float64 in a string field position is a type mismatch too.
-	res = ValidateAttributes(PropertyTypeApartment, Attributes{attrRooms: 3.0})
-	assertHasField(t, res, attrRooms, "expected a string")
+	res = ValidateAttributes(PropertyTypeParking, Attributes{attrSpotNumber: 3.0})
+	assertHasField(t, res, attrSpotNumber, "expected a string")
 }
 
 func TestAttributesApartmentsMirrorsApartment(t *testing.T) {
@@ -520,7 +515,7 @@ func TestAttributesApartmentsMirrorsApartment(t *testing.T) {
 	// A valid apartment set must also be valid for the apartments type, and a
 	// cross-field violation surfaces identically.
 	valid := Attributes{
-		attrRooms:       "3",
+		attrBalcony:     enumLoggia,
 		attrAreaTotal:   60.0,
 		attrAreaLiving:  40.0,
 		attrAreaKitchen: 10.0,

@@ -3,7 +3,6 @@
 import type { AttrKey } from './attr-keys';
 
 export const fieldLabels: Readonly<Record<AttrKey, string>> = {
-  "rooms": "Комнаты",
   "area_total": "Общая площадь",
   "area_living": "Жилая площадь",
   "area_kitchen": "Площадь кухни",
@@ -17,6 +16,7 @@ export const fieldLabels: Readonly<Record<AttrKey, string>> = {
   "parking_type": "Парковка",
   "land_area": "Площадь участка",
   "land_type": "Тип участка",
+  "rooms": "Комнаты",
   "house_type": "Тип дома",
   "material": "Материал",
   "shower": "Душ",
@@ -30,16 +30,6 @@ export const fieldLabels: Readonly<Record<AttrKey, string>> = {
 export const enumLabels: Readonly<
   Partial<Record<AttrKey, Readonly<Record<string, string>>>>
 > = {
-  "rooms": {
-    "studio": "Студия",
-    "1": "1",
-    "2": "2",
-    "3": "3",
-    "4": "4",
-    "5": "5",
-    "6": "6",
-    "7_plus": "7+",
-  },
   "bathroom": {
     "combined": "Совмещенный",
     "separate": "Раздельный",
@@ -69,6 +59,15 @@ export const enumLabels: Readonly<
     "izhs": "ИЖС",
     "garden": "Садовый",
     "farm": "Фермерский",
+  },
+  "rooms": {
+    "1": "1",
+    "2": "2",
+    "3": "3",
+    "4": "4",
+    "5": "5",
+    "6": "6",
+    "7_plus": "7+",
   },
   "house_type": {
     "detached": "Отдельный",

@@ -32,11 +32,11 @@ describe('validateField — unknown field / type', () => {
   });
 });
 
-describe('validateField — enum (rooms on apartment)', () => {
+describe('validateField — enum (bathroom on apartment)', () => {
   const type = asType('apartment');
-  const key: AttrKey = 'rooms';
+  const key: AttrKey = 'bathroom';
 
-  it.each(['studio', '1', '2', '3', '4', '5', '6', '7_plus'])(
+  it.each(['combined', 'separate', 'multiple'])(
     'returns undefined for a valid option %s',
     (option) => {
       expect(validateField(type, key, option)).toBeUndefined();
@@ -44,7 +44,7 @@ describe('validateField — enum (rooms on apartment)', () => {
   );
 
   it('returns "значение некорректно" for a value not in options', () => {
-    expect(validateField(type, key, '8')).toBe('значение некорректно');
+    expect(validateField(type, key, 'ensuite')).toBe('значение некорректно');
   });
 
   it('returns "значение некорректно" for a numeric value (enum expects string)', () => {
@@ -187,12 +187,12 @@ describe('validateAttributes — error aggregation', () => {
     const attrs: PropertyAttributes = {
       area_total: 0, // below min -> error
       floor: 5.5, // not integer -> error
-      rooms: 'invalid', // not in options -> error
+      bathroom: 'invalid', // not in options -> error
     };
     const errors = validateAttributes(type, attrs);
     expect(errors.area_total).toBe('от 1 до 100000 м²');
     expect(errors.floor).toBe('от -3 до 200');
-    expect(errors.rooms).toBe('значение некорректно');
+    expect(errors.bathroom).toBe('значение некорректно');
   });
 
   it('ignores keys not in the catalog for the type', () => {
@@ -200,7 +200,7 @@ describe('validateAttributes — error aggregation', () => {
     const attrs: PropertyAttributes = {
       land_area: 5, // not an apartment field
       unknown_key: 'whatever',
-      rooms: '2',
+      bathroom: 'separate',
     };
     const errors = validateAttributes(type, attrs);
     expect(errors).toEqual({});
@@ -211,7 +211,7 @@ describe('validateAttributes — error aggregation', () => {
   it('ignores non-string/number values', () => {
     const type = asType('apartment');
     const attrs = {
-      rooms: '2',
+      bathroom: 'separate',
       weird: { foo: 'bar' },
     } as unknown as PropertyAttributes;
     const errors = validateAttributes(type, attrs);
@@ -221,7 +221,6 @@ describe('validateAttributes — error aggregation', () => {
   it('a fully valid apartment yields no errors', () => {
     const type = asType('apartment');
     const attrs: PropertyAttributes = {
-      rooms: '2',
       area_total: 55.5,
       area_living: 35,
       area_kitchen: 10,
@@ -347,32 +346,32 @@ describe('validateAttributes — string numeric inputs are parsed for cross-rule
 describe('filterByType', () => {
   it('keeps only keys allowed for the type', () => {
     const attrs: PropertyAttributes = {
-      rooms: '2',
+      bathroom: 'separate',
       area_total: 50,
       land_area: 5, // not an apartment field
     };
     const filtered = filterByType(asType('apartment'), attrs);
-    expect(filtered).toHaveProperty('rooms', '2');
+    expect(filtered).toHaveProperty('bathroom', 'separate');
     expect(filtered).toHaveProperty('area_total', 50);
     expect(filtered).not.toHaveProperty('land_area');
   });
 
   it('drops unknown keys', () => {
-    const attrs: PropertyAttributes = { rooms: '2', whatever: 1 };
+    const attrs: PropertyAttributes = { bathroom: 'separate', whatever: 1 };
     const filtered = filterByType(asType('apartment'), attrs);
     expect(filtered).not.toHaveProperty('whatever');
   });
 
   it('keeps only string and number values, drops other types', () => {
     const attrs = {
-      rooms: '2',
+      bathroom: 'separate',
       area_total: 50,
       nested: { x: 1 },
       arr: [1, 2],
       bool: true,
     } as unknown as PropertyAttributes;
     const filtered = filterByType(asType('apartment'), attrs);
-    expect(filtered).toHaveProperty('rooms', '2');
+    expect(filtered).toHaveProperty('bathroom', 'separate');
     expect(filtered).toHaveProperty('area_total', 50);
     expect(filtered).not.toHaveProperty('nested');
     expect(filtered).not.toHaveProperty('arr');

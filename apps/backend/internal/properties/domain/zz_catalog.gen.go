@@ -60,7 +60,6 @@ func maxYearBuilt() int {
 
 var (
 	apartmentFields = map[string]fieldDef{
-		"rooms":          {kind: kindEnum, enumVals: []string{"studio", "1", "2", "3", "4", "5", "6", "7_plus"}, enumLabels: map[string]string{"studio": "Студия", "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7_plus": "7+"}, label: "Комнаты"},
 		"area_total":     {kind: kindNumber, minFloat: 1, maxFloat: 100000, label: "Общая площадь"},
 		"area_living":    {kind: kindNumber, minFloat: 1, maxFloat: 100000, label: "Жилая площадь"},
 		"area_kitchen":   {kind: kindNumber, minFloat: 1, maxFloat: 100000, label: "Площадь кухни"},
@@ -75,7 +74,6 @@ var (
 	}
 
 	roomFields = map[string]fieldDef{
-		"rooms":        {kind: kindEnum, enumVals: []string{"2", "3", "4", "5", "6", "7_plus"}, enumLabels: map[string]string{"2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7_plus": "7+"}, label: "Комнаты"},
 		"area_total":   {kind: kindNumber, minFloat: 1, maxFloat: 100000, label: "Общая площадь"},
 		"area_kitchen": {kind: kindNumber, minFloat: 1, maxFloat: 100000, label: "Площадь кухни"},
 		"floor":        {kind: kindInteger, minInt: -3, maxInt: 200, label: "Этаж"},

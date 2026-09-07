@@ -59,33 +59,6 @@
   gap: 16px;
 }
 
-.notice {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px;
-  border-radius: var(--radius-button);
-  background: var(--color-warning-bg);
-}
-
-.noticeText {
-  margin: 0;
-  font-size: var(--font-size-text-m);
-  line-height: var(--line-height-text-m);
-  color: var(--color-text);
-}
-
-.noticeClose {
-  flex-shrink: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 20px;
-  line-height: 1;
-  color: var(--color-text-muted);
-}
 
 @media (min-width: 768px) {
   .sectionTitle {

@@ -92,17 +92,19 @@ export function useProperty(
 }
 
 export function useCreateProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   PropertyCreateRequest
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: PropertyCreateRequest) =>
-      apiClient<PropertyResponse>('/properties', {
+    mutationFn: async (data: PropertyCreateRequest) => {
+      const response = await apiClient<PropertyResponse>('/properties', {
         method: 'POST',
         body: JSON.stringify(data),
-      }),
+      });
+      return mapPropertyResponse(response);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
     },

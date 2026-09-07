@@ -57,7 +57,9 @@ const (
 	// Фикстуры create-команд и коды атрибутов, повторённые в этом файле.
 	attrTestCreateName    = "Apt"
 	attrTestCreateAddress = "Street 1"
-	attrRooms             = "rooms"
+	attrBalcony           = "balcony"
+	attrBalconyLoggia     = "loggia"
+	attrBalconyNone       = "none"
 	attrAreaTotal         = "area_total"
 	attrFloor             = "floor"
 )
@@ -74,7 +76,7 @@ func TestCreateProperty_WithValidAttributes(t *testing.T) {
 	svc := newAttrCreateService(repo)
 
 	attrs := map[string]any{
-		attrRooms:      "2",
+		attrBalcony:    attrBalconyLoggia,
 		attrAreaTotal:  float64(50.0),
 		attrFloor:      float64(3), // Validator expects JSON-style float64 integers.
 		"floors_total": float64(5),
@@ -91,7 +93,7 @@ func TestCreateProperty_WithValidAttributes(t *testing.T) {
 		t.Fatalf("CreateProperty with valid attributes failed: %v", err)
 	}
 
-	want := []string{attrAreaTotal, attrFloor, "floors_total", attrRooms}
+	want := []string{attrAreaTotal, attrFloor, "floors_total", attrBalcony}
 	if len(created.Attributes) != len(want) {
 		t.Fatalf("expected %d attribute keys, got %d (%v)", len(want), len(created.Attributes), created.Attributes)
 	}
@@ -215,7 +217,7 @@ func TestUpdateProperty_AttributesNotPresent_LeavesAttributesUntouched(t *testin
 		Type:       domain.PropertyTypeApartment,
 		Address:    testPropertyAddress,
 		Status:     domain.PropertyStatusActive,
-		Attributes: domain.Attributes{attrRooms: "2"},
+		Attributes: domain.Attributes{attrBalcony: attrBalconyLoggia},
 	}
 	repo := newLockingFakePropertyRepo(property)
 	svc := newAttrService(repo)
@@ -228,8 +230,8 @@ func TestUpdateProperty_AttributesNotPresent_LeavesAttributesUntouched(t *testin
 		t.Fatalf("UpdateProperty failed: %v", err)
 	}
 
-	if got := updated.Attributes[attrRooms]; got != "2" {
-		t.Errorf("expected rooms to remain \"2\", got %v (attrs=%v)", got, updated.Attributes)
+	if got := updated.Attributes[attrBalcony]; got != attrBalconyLoggia {
+		t.Errorf("expected balcony to remain loggia, got %v (attrs=%v)", got, updated.Attributes)
 	}
 }
 
@@ -249,7 +251,7 @@ func TestUpdateProperty_AttributesEmptyObject_ClearsAll(t *testing.T) {
 		Type:       domain.PropertyTypeApartment,
 		Address:    testPropertyAddress,
 		Status:     domain.PropertyStatusActive,
-		Attributes: domain.Attributes{attrRooms: "2"},
+		Attributes: domain.Attributes{attrBalcony: attrBalconyLoggia},
 	}
 	repo := newLockingFakePropertyRepo(property)
 	svc := newAttrService(repo)
@@ -283,13 +285,13 @@ func TestUpdateProperty_AttributesFullReplacement(t *testing.T) {
 		Type:       domain.PropertyTypeApartment,
 		Address:    testPropertyAddress,
 		Status:     domain.PropertyStatusActive,
-		Attributes: domain.Attributes{attrRooms: "2"},
+		Attributes: domain.Attributes{attrBalcony: attrBalconyLoggia},
 	}
 	repo := newLockingFakePropertyRepo(property)
 	svc := newAttrService(repo)
 
 	newAttrs := map[string]any{
-		attrRooms:     "3",
+		attrBalcony:   attrBalconyNone,
 		attrAreaTotal: float64(45.0),
 	}
 	updated, err := svc.UpdateProperty(ctx, ownerID, propertyID, UpdatePropertyCommand{
@@ -302,8 +304,8 @@ func TestUpdateProperty_AttributesFullReplacement(t *testing.T) {
 	if len(updated.Attributes) != 2 {
 		t.Fatalf("expected exactly 2 attribute keys, got %d: %v", len(updated.Attributes), updated.Attributes)
 	}
-	if got := updated.Attributes[attrRooms]; got != "3" {
-		t.Errorf("expected rooms to be \"3\", got %v", got)
+	if got := updated.Attributes[attrBalcony]; got != attrBalconyNone {
+		t.Errorf("expected balcony to be none, got %v", got)
 	}
 	if got := updated.Attributes[attrAreaTotal]; got != float64(45.0) {
 		t.Errorf("expected area_total to be 45.0, got %v", got)
@@ -326,13 +328,13 @@ func TestUpdateProperty_AttributesIdempotentReplacement(t *testing.T) {
 		Type:       domain.PropertyTypeApartment,
 		Address:    testPropertyAddress,
 		Status:     domain.PropertyStatusActive,
-		Attributes: domain.Attributes{attrRooms: "2"},
+		Attributes: domain.Attributes{attrBalcony: attrBalconyLoggia},
 	}
 	repo := newLockingFakePropertyRepo(property)
 	svc := newAttrService(repo)
 
 	attrs := map[string]any{
-		attrRooms:     "3",
+		attrBalcony:   attrBalconyNone,
 		attrAreaTotal: float64(45.0),
 	}
 
@@ -385,7 +387,7 @@ func TestUpdateProperty_InvalidAttributes_ReturnsValidationError(t *testing.T) {
 		Type:       domain.PropertyTypeApartment,
 		Address:    testPropertyAddress,
 		Status:     domain.PropertyStatusActive,
-		Attributes: domain.Attributes{attrRooms: "2"},
+		Attributes: domain.Attributes{attrBalcony: attrBalconyLoggia},
 	}
 	repo := newLockingFakePropertyRepo(property)
 	svc := newAttrService(repo)
@@ -428,7 +430,7 @@ func TestUpdateProperty_LosslessOnTypeChange(t *testing.T) {
 		Type:       domain.PropertyTypeApartment,
 		Address:    testPropertyAddress,
 		Status:     domain.PropertyStatusActive,
-		Attributes: domain.Attributes{attrRooms: "2", attrAreaTotal: float64(50.0)},
+		Attributes: domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50.0)},
 	}
 	repo := newLockingFakePropertyRepo(property)
 	svc := newAttrService(repo)
@@ -444,7 +446,7 @@ func TestUpdateProperty_LosslessOnTypeChange(t *testing.T) {
 	if updated.Type != domain.PropertyTypeHouse {
 		t.Errorf("expected type house, got %q", updated.Type)
 	}
-	if got := updated.Attributes[attrRooms]; got != "2" {
+	if got := updated.Attributes[attrBalcony]; got != attrBalconyLoggia {
 		t.Errorf("expected rooms to survive type change (\"2\"), got %v", got)
 	}
 	if got := updated.Attributes[attrAreaTotal]; got != float64(50.0) {
@@ -472,7 +474,7 @@ func TestUpdateProperty_AttributesValidatedAgainstNewType(t *testing.T) {
 			Type:       domain.PropertyTypeApartment,
 			Address:    testPropertyAddress,
 			Status:     domain.PropertyStatusActive,
-			Attributes: domain.Attributes{attrRooms: "2"},
+			Attributes: domain.Attributes{attrBalcony: attrBalconyLoggia},
 		}
 		repo := newLockingFakePropertyRepo(property)
 		svc := newAttrService(repo)
@@ -499,7 +501,7 @@ func TestUpdateProperty_AttributesValidatedAgainstNewType(t *testing.T) {
 			Type:       domain.PropertyTypeApartment,
 			Address:    testPropertyAddress,
 			Status:     domain.PropertyStatusActive,
-			Attributes: domain.Attributes{attrRooms: "2"},
+			Attributes: domain.Attributes{attrBalcony: attrBalconyLoggia},
 		}
 		repo := newLockingFakePropertyRepo(property)
 		svc := newAttrService(repo)
