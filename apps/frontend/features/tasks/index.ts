@@ -34,6 +34,10 @@ export {
 } from './lib/global-tasks';
 export { useTasksFeedFilter } from './lib/use-tasks-feed-filter';
 export {
+  EMPTY_TASKS_FEED_FILTER,
+  type TasksFeedFilter,
+} from './lib/tasks-feed-filter';
+export {
   canCreateTask,
   EMPTY_TASK_CREATE_DRAFT,
   isTaskTitleFilled,

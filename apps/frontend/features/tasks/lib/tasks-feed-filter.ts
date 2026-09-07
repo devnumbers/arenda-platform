@@ -14,6 +14,12 @@ export type TasksFeedFilter = {
   readonly withoutProperty: boolean;
 };
 
+/** Пустой фильтр — «Все задачи», весь merged-фид. */
+export const EMPTY_TASKS_FEED_FILTER: TasksFeedFilter = {
+  propertyIds: [],
+  withoutProperty: false,
+};
+
 /** Минимальный источник параметров — ReadonlyURLSearchParams Next ему
  * удовлетворяет; структурный тип держит модуль чистым для vitest. */
 export type TasksFeedFilterParamsSource = {

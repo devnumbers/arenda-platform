@@ -241,27 +241,12 @@ func (s *TaskService) ListGlobalTasks(
 	}
 	switch {
 	case len(q.PropertyIDs) > 0 && q.WithoutProperty:
-		// Union «Общие задачи» + объекты (решение владельца 2026-09-07):
-		// каждый объект доказуемо видим до чтения, срез живёт в SQL.
-		if err := s.proveGlobalPropertiesVisible(ctx, actor, q.PropertyIDs); err != nil {
-			return TasksPage{}, err
-		}
-		ids := q.PropertyIDs
-		return s.listGlobalSlice(ctx, actor, q.TasksListQuery,
-			func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error) {
-				return s.tasks.ListGlobalOfProperties(ctx, actor, ids, true, q)
-			})
+		// Union «Общие задачи» + объекты (решение владельца 2026-09-07).
+		return s.listGlobalOfPropertiesSlice(ctx, actor, q, true)
 	case len(q.PropertyIDs) == 1:
 		return s.listGlobalOfProperty(ctx, actor, q.PropertyIDs[0], q.TasksListQuery)
 	case len(q.PropertyIDs) > 1:
-		if err := s.proveGlobalPropertiesVisible(ctx, actor, q.PropertyIDs); err != nil {
-			return TasksPage{}, err
-		}
-		ids := q.PropertyIDs
-		return s.listGlobalSlice(ctx, actor, q.TasksListQuery,
-			func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error) {
-				return s.tasks.ListGlobalOfProperties(ctx, actor, ids, false, q)
-			})
+		return s.listGlobalOfPropertiesSlice(ctx, actor, q, false)
 	case q.WithoutProperty:
 		return s.listGlobalSlice(ctx, actor, q.TasksListQuery, s.tasks.ListGlobalWithoutProperty)
 	default:
@@ -283,6 +268,24 @@ func (s *TaskService) proveGlobalPropertiesVisible(
 		}
 	}
 	return nil
+}
+
+// listGlobalOfPropertiesSlice is the shared body of the multi-property and
+// union branches of the global listing (ticket #547, «Общие задачи» —
+// решение владельца 2026-09-07): every listed property is proven visible
+// before the store is touched, then the cut (optionally unioned with the
+// reader's own property-less rows) is read in one merged page.
+func (s *TaskService) listGlobalOfPropertiesSlice(
+	ctx context.Context, actor uuid.UUID, q GlobalTasksListQuery, withoutProperty bool,
+) (TasksPage, error) {
+	if err := s.proveGlobalPropertiesVisible(ctx, actor, q.PropertyIDs); err != nil {
+		return TasksPage{}, err
+	}
+	ids := q.PropertyIDs
+	return s.listGlobalSlice(ctx, actor, q.TasksListQuery,
+		func(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error) {
+			return s.tasks.ListGlobalOfProperties(ctx, actor, ids, withoutProperty, q)
+		})
 }
 
 // listGlobalOfProperty is the property-filtered branch of the global listing:

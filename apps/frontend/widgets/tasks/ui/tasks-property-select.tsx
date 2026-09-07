@@ -3,20 +3,17 @@
 import type { JSX } from 'react';
 import { BoldHome, BoldObjects, Cancel, Check, CheckBoxFalse, CheckBoxTrue } from '@/shared/assets/icons';
 import { Button, IconButton, PageContent, Skeleton, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { EMPTY_TASKS_FEED_FILTER, type TasksFeedFilter } from '@/features/tasks';
 import { useProperties } from '@/features/properties';
 
-/** Черновик фильтра ленты: «Общие задачи» + список объектов; оба пустые —
- * «Все задачи», весь merged-фид (решение владельца 2026-09-07). */
-export type TasksFilterDraft = {
-  readonly withoutProperty: boolean;
-  readonly propertyIds: ReadonlyArray<string>;
-};
+/** Черновик фильтра ленты — структурно тот же срез, что и разобранный
+ * URL-фильтр (TasksFeedFilter): «Общие задачи» + объекты, оба пустые —
+ * «Все задачи» (решение владельца 2026-09-07). Строгий черновик живёт
+ * в состоянии страницы, URL трогает только «Выбрать»/✓. */
+export type TasksFilterDraft = TasksFeedFilter;
 
 /** Пустой черновик = «Все задачи». */
-export const EMPTY_TASKS_FILTER_DRAFT: TasksFilterDraft = {
-  withoutProperty: false,
-  propertyIds: [],
-};
+export const EMPTY_TASKS_FILTER_DRAFT = EMPTY_TASKS_FEED_FILTER;
 
 /**
  * Страница «Выбрать объект» — фильтр глобальной ленты «Задачи» (карта

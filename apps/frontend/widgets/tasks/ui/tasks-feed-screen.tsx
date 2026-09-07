@@ -100,15 +100,16 @@ export function TasksFeedScreen(): JSX.Element {
   // Авто-сброс фильтра при 404 (решение 8 #522): объект удалён или доступ
   // отозван — privacy 404, мёртвый фильтр из адреса убирает replace, чтобы
   // «назад» не возвращало на ту же ошибку.
+  const { propertyIds, withoutProperty } = filter;
   useEffect(() => {
-    if (filter.propertyIds.length === 0 && !filter.withoutProperty) {
+    if (propertyIds.length === 0 && !withoutProperty) {
       return;
     }
     const error = activeQuery.error ?? completedQuery.error;
     if (error instanceof ApiError && error.status === 404) {
       applyFeedFilter(EMPTY_TASKS_FILTER_DRAFT, { replace: true });
     }
-  }, [filter, activeQuery.error, completedQuery.error, applyFeedFilter]);
+  }, [propertyIds, withoutProperty, activeQuery.error, completedQuery.error, applyFeedFilter]);
 
   // Ручная мемоизация активных — требование react-hooks/exhaustive-deps:
   // массив входит в зависимости производных ниже (React Compiler прогоняет
