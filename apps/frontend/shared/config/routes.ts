@@ -60,6 +60,8 @@ export const ROUTES = {
   propertyRentalTerms: (id: string) => `/properties/${id}/rentals/terms`,
   /** Правка условий аренды (#532): форма поверх условий, начало read-only. */
   propertyRentalTermsEdit: (id: string) => `/properties/${id}/rentals/terms/edit`,
+  /** Продление аренды (#533): новая дата окончания поверх PATCH plannedEndDate. */
+  propertyRentalExtend: (id: string) => `/properties/${id}/rentals/extend`,
   /** Экран «Контакты объекта» (#508) — новый хром, книга контактов (ADR 0051). */
   propertyContacts: (id: string) => `/properties/${id}/contacts`,
   /** Создание контакта (#509); до тикета путь ведёт на 404. */

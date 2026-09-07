@@ -28,10 +28,11 @@ import { RentalGroup } from './rental-group';
  * Условия аренды / Арендатор. «Оплатить платеж» ведёт на страницу
  * операции (решение владельца 2026-09-07) — оплата каноническим «Отметить
  * оплаченной» там же, как со страницы платежа. Секция «Арендатор» выводится
- * только с арендатором. Действия «Редактировать» (#532), «Продлить»
- * (#533), «Завершить» (#534), кнопка «Прошлые аренды» (#535) и хвостовая
- * правка в шапке скрыты до готовности своих экранов (решение владельца
- * 2026-09-07).
+ * только с арендатором. Действия «Редактировать» (#532) и «Продлить»
+ * (#533) живут своими экранами; «Завершить» (#534), кнопка «Прошлые
+ * аренды» (#535) и хвостовая правка в шапке скрыты до готовности своих
+ * экранов (решение владельца 2026-09-07). «Продлить аренду» — только у
+ * срочной аренды: бессрочной продлевать нечего.
  *
  * Статусы «ожидает начала»/«ожидает действия» макетом не нарисованы — тот
  * же рендер деградирует честно: без будущего платежа нет строки дней и
@@ -89,18 +90,35 @@ export function RentalDetailBody({
           </div>
         </div>
 
-        {canMutate && nextPayment !== null && (
-          <div className="flex justify-center">
-            {/* «Продлить аренду» и «Завершить аренду» встанут рядом с
-                оплатой в #533 и #534 (Figma 1232:61272). */}
-            <RoundActionButton
-              variant="primary"
-              icon={<Check />}
-              caption="Оплатить платеж"
-              onClick={() =>
-                router.push(ROUTES.propertyOperation(propertyId, nextPayment.operationId))
-              }
-            />
+        {canMutate && (nextPayment !== null || rental.plannedEndDate !== null) && (
+          /* Пара — равными колонками (Figma 1232:61272, как круглые кнопки
+              страницы платежа); одиночная — по центру, как в #531. */
+          <div
+            className={
+              nextPayment !== null && rental.plannedEndDate !== null
+                ? 'grid grid-cols-2 justify-items-center'
+                : 'flex justify-center'
+            }
+          >
+            {/* «Завершить аренду» встанет рядом в #534. */}
+            {rental.plannedEndDate !== null && (
+              <RoundActionButton
+                variant="secondary"
+                icon={<Calendar />}
+                caption="Продлить аренду"
+                onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
+              />
+            )}
+            {nextPayment !== null && (
+              <RoundActionButton
+                variant="primary"
+                icon={<Check />}
+                caption="Оплатить платеж"
+                onClick={() =>
+                  router.push(ROUTES.propertyOperation(propertyId, nextPayment.operationId))
+                }
+              />
+            )}
           </div>
         )}
 

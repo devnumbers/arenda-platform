@@ -21,7 +21,7 @@ export {
 export type { RentalEditForm } from './lib/edit-model';
 export { useRentalWizardDraft } from './lib/use-rental-wizard-draft';
 export type { RentalWizardDraft } from './lib/use-rental-wizard-draft';
-export { rentalSuccessCopy } from './lib/success-copy';
+export { rentalExtendSuccessCopy, rentalSuccessCopy } from './lib/success-copy';
 export {
   currentRentalOf,
   rentalCommentText,
