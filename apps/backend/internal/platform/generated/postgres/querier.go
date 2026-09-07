@@ -404,8 +404,10 @@ type Querier interface {
 	// ticket #521): no single scope exists to resolve through the
 	// policy port, and an active membership grants the read right here; a
 	// suspended one does not. The feed is paid-only — planned/overdue are the
-	// property screens' vocabulary — and the archived properties are out of it,
-	// so the property join doubles as the archive cut.
+	// property screens' vocabulary — and the archived properties are out of it
+	// by default: the property join doubles as the archive cut, lifted only by
+	// the include_archived opt-in (ticket #549) under the same visibility
+	// predicate.
 	// The propertyIds filter ('' is any) is validated through the view gate by
 	// the application layer before this SQL runs — the uuid[] cast never sees a
 	// foreign id (its row would be invisible anyway) or a non-uuid.

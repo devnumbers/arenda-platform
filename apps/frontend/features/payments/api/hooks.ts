@@ -402,6 +402,9 @@ export function useGlobalOperationsPaged(
       if (scope.type !== undefined) {
         params.set('type', scope.type);
       }
+      if (scope.includeArchived) {
+        params.set('includeArchived', 'true');
+      }
       if (scope.dateFrom !== undefined) {
         params.set('date_from', scope.dateFrom);
       }
@@ -446,6 +449,9 @@ export function useGlobalOperationsSummary(
       }
       if (scope.type !== undefined) {
         params.set('type', scope.type);
+      }
+      if (scope.includeArchived) {
+        params.set('includeArchived', 'true');
       }
       if (scope.dateFrom !== undefined) {
         params.set('date_from', scope.dateFrom);

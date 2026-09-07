@@ -427,15 +427,16 @@ func globalOperationsFromListParams(
 	}
 	query := newListOperationsQuery(nil, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, params.Search)
 	return application.GlobalOperationsListQuery{
-		PropertyIDs: propertyIDs,
-		DateFrom:    query.DateFrom,
-		DateTo:      query.DateTo,
-		Limit:       query.Limit,
-		Offset:      query.Offset,
-		Search:      query.Search,
-		Asc:         query.Asc,
-		Type:        typ,
-		Categories:  splitCategorySlugs(params.Category),
+		PropertyIDs:     propertyIDs,
+		DateFrom:        query.DateFrom,
+		DateTo:          query.DateTo,
+		Limit:           query.Limit,
+		Offset:          query.Offset,
+		Search:          query.Search,
+		Asc:             query.Asc,
+		Type:            typ,
+		Categories:      splitCategorySlugs(params.Category),
+		IncludeArchived: derefBool(params.IncludeArchived),
 	}, nil
 }
 
@@ -454,13 +455,20 @@ func globalOperationsFromSummaryParams(
 		return application.GlobalOperationsSummaryQuery{}, err
 	}
 	return application.GlobalOperationsSummaryQuery{
-		PropertyIDs: propertyIDs,
-		DateFrom:    datePtrFromWire(params.DateFrom),
-		DateTo:      datePtrFromWire(params.DateTo),
-		Search:      derefString(params.Search),
-		Type:        typ,
-		Categories:  splitCategorySlugs(params.Category),
+		PropertyIDs:     propertyIDs,
+		DateFrom:        datePtrFromWire(params.DateFrom),
+		DateTo:          datePtrFromWire(params.DateTo),
+		Search:          derefString(params.Search),
+		Type:            typ,
+		Categories:      splitCategorySlugs(params.Category),
+		IncludeArchived: derefBool(params.IncludeArchived),
 	}, nil
+}
+
+// derefBool lifts an optional boolean parameter onto its value form; a
+// missing parameter is the false no-opt-in value.
+func derefBool(b *bool) bool {
+	return b != nil && *b
 }
 
 // derefString lifts an optional string parameter onto its value form; a

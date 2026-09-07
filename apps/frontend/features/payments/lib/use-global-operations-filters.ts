@@ -38,6 +38,7 @@ export function useGlobalOperationsFilters(): {
     params.delete('to');
     params.delete('category');
     params.delete('property');
+    params.delete('archived');
     for (const [name, value] of Object.entries(globalOperationsFiltersParams(next))) {
       params.set(name, value);
     }
@@ -54,12 +55,33 @@ export function useGlobalOperationsFilters(): {
     filters,
     applyPeriod: (period, options) =>
       apply(
-        { period, categories: filters.categories, propertyIds: filters.propertyIds },
+        {
+          period,
+          categories: filters.categories,
+          propertyIds: filters.propertyIds,
+          archived: filters.archived,
+        },
         options?.replace === true,
       ),
     applyCategories: (categories) =>
-      apply({ period: filters.period, categories, propertyIds: filters.propertyIds }, false),
+      apply(
+        {
+          period: filters.period,
+          categories,
+          propertyIds: filters.propertyIds,
+          archived: filters.archived,
+        },
+        false,
+      ),
     applyPropertyIds: (propertyIds) =>
-      apply({ period: filters.period, categories: filters.categories, propertyIds }, false),
+      apply(
+        {
+          period: filters.period,
+          categories: filters.categories,
+          propertyIds,
+          archived: filters.archived,
+        },
+        false,
+      ),
   };
 }

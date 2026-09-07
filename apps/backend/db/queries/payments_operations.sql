@@ -194,8 +194,10 @@ WHERE owner_id = sqlc.arg('owner')
 -- ticket #521): no single scope exists to resolve through the
 -- policy port, and an active membership grants the read right here; a
 -- suspended one does not. The feed is paid-only — planned/overdue are the
--- property screens' vocabulary — and the archived properties are out of it,
--- so the property join doubles as the archive cut.
+-- property screens' vocabulary — and the archived properties are out of it
+-- by default: the property join doubles as the archive cut, lifted only by
+-- the include_archived opt-in (ticket #549) under the same visibility
+-- predicate.
 -- The propertyIds filter ('' is any) is validated through the view gate by
 -- the application layer before this SQL runs — the uuid[] cast never sees a
 -- foreign id (its row would be invisible anyway) or a non-uuid.
@@ -232,9 +234,10 @@ WHERE op.status = 'paid'
               AND pm.status = 'active'
           )
       )
-  AND p.status != 'archived'
+  AND (sqlc.arg('include_archived')::bool OR p.status != 'archived')
   AND (sqlc.arg('property_ids')::text = ''
-       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+       OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
   AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
   AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
@@ -271,9 +274,10 @@ WHERE op.status = 'paid'
               AND pm.status = 'active'
           )
       )
-  AND p.status != 'archived'
+  AND (sqlc.arg('include_archived')::bool OR p.status != 'archived')
   AND (sqlc.arg('property_ids')::text = ''
-       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+       OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
   AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
   AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''
@@ -304,10 +308,11 @@ WHERE op.status = 'paid'
               AND pm.status = 'active'
           )
       )
-  AND p.status != 'archived'
+  AND (sqlc.arg('include_archived')::bool OR p.status != 'archived')
   AND op.category_slug IS NOT NULL
   AND (sqlc.arg('property_ids')::text = ''
-       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+       OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
   AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
   AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
   AND (sqlc.arg('search')::text = ''

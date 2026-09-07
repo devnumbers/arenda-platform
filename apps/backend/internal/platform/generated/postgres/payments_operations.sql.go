@@ -314,38 +314,40 @@ WHERE op.status = 'paid'
               AND pm.status = 'active'
           )
       )
-  AND p.status != 'archived'
-  AND ($2::text = ''
-       OR op.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
-  AND ($3::date IS NULL OR op.date >= $3)
-  AND ($4::date IS NULL OR op.date <= $4)
-  AND ($5::text = ''
-       OR op.title ILIKE '%' || $5::text || '%' ESCAPE '\'
-       OR op.category_label ILIKE '%' || $5::text || '%' ESCAPE '\'
-       OR ($6::text <> ''
-           AND CAST(op.amount_kopecks AS text) LIKE '%' || $6::text || '%'))
-  AND ($7::text = '' OR op.type = $7::text)
-  AND ($8::text = ''
-       OR op.category_slug = ANY(string_to_array($8::text, ',')))
+  AND ($2::bool OR p.status != 'archived')
+  AND ($3::text = ''
+       OR op.property_id = ANY(string_to_array($3::text, ',')::uuid[])
+       OR ($2::bool AND p.status = 'archived'))
+  AND ($4::date IS NULL OR op.date >= $4)
+  AND ($5::date IS NULL OR op.date <= $5)
+  AND ($6::text = ''
+       OR op.title ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR ($7::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $7::text || '%'))
+  AND ($8::text = '' OR op.type = $8::text)
+  AND ($9::text = ''
+       OR op.category_slug = ANY(string_to_array($9::text, ',')))
 ORDER BY
-  CASE WHEN $9::text = 'asc' THEN op.date END ASC,
-  CASE WHEN $9::text = 'desc' THEN op.date END DESC,
+  CASE WHEN $10::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $10::text = 'desc' THEN op.date END DESC,
   op.id DESC
-LIMIT $11 OFFSET $10
+LIMIT $12 OFFSET $11
 `
 
 type ListPaidOperationsGlobalParams struct {
-	Actor        pgtype.UUID `json:"actor"`
-	PropertyIds  string      `json:"property_ids"`
-	DateFrom     pgtype.Date `json:"date_from"`
-	DateTo       pgtype.Date `json:"date_to"`
-	Search       string      `json:"search"`
-	SearchDigits string      `json:"search_digits"`
-	Type         string      `json:"type"`
-	Categories   string      `json:"categories"`
-	Order        string      `json:"order"`
-	Offset       int32       `json:"offset"`
-	Limit        int32       `json:"limit"`
+	Actor           pgtype.UUID `json:"actor"`
+	IncludeArchived bool        `json:"include_archived"`
+	PropertyIds     string      `json:"property_ids"`
+	DateFrom        pgtype.Date `json:"date_from"`
+	DateTo          pgtype.Date `json:"date_to"`
+	Search          string      `json:"search"`
+	SearchDigits    string      `json:"search_digits"`
+	Type            string      `json:"type"`
+	Categories      string      `json:"categories"`
+	Order           string      `json:"order"`
+	Offset          int32       `json:"offset"`
+	Limit           int32       `json:"limit"`
 }
 
 type ListPaidOperationsGlobalRow struct {
@@ -372,8 +374,10 @@ type ListPaidOperationsGlobalRow struct {
 // ticket #521): no single scope exists to resolve through the
 // policy port, and an active membership grants the read right here; a
 // suspended one does not. The feed is paid-only — planned/overdue are the
-// property screens' vocabulary — and the archived properties are out of it,
-// so the property join doubles as the archive cut.
+// property screens' vocabulary — and the archived properties are out of it
+// by default: the property join doubles as the archive cut, lifted only by
+// the include_archived opt-in (ticket #549) under the same visibility
+// predicate.
 // The propertyIds filter (” is any) is validated through the view gate by
 // the application layer before this SQL runs — the uuid[] cast never sees a
 // foreign id (its row would be invisible anyway) or a non-uuid.
@@ -384,6 +388,7 @@ type ListPaidOperationsGlobalRow struct {
 func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error) {
 	rows, err := q.db.Query(ctx, listPaidOperationsGlobal,
 		arg.Actor,
+		arg.IncludeArchived,
 		arg.PropertyIds,
 		arg.DateFrom,
 		arg.DateTo,
@@ -636,26 +641,28 @@ WHERE op.status = 'paid'
               AND pm.status = 'active'
           )
       )
-  AND p.status != 'archived'
-  AND ($2::text = ''
-       OR op.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
-  AND ($3::date IS NULL OR op.date >= $3)
-  AND ($4::date IS NULL OR op.date <= $4)
-  AND ($5::text = ''
-       OR op.title ILIKE '%' || $5::text || '%' ESCAPE '\'
-       OR op.category_label ILIKE '%' || $5::text || '%' ESCAPE '\'
-       OR ($6::text <> ''
-           AND CAST(op.amount_kopecks AS text) LIKE '%' || $6::text || '%'))
+  AND ($2::bool OR p.status != 'archived')
+  AND ($3::text = ''
+       OR op.property_id = ANY(string_to_array($3::text, ',')::uuid[])
+       OR ($2::bool AND p.status = 'archived'))
+  AND ($4::date IS NULL OR op.date >= $4)
+  AND ($5::date IS NULL OR op.date <= $5)
+  AND ($6::text = ''
+       OR op.title ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR ($7::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $7::text || '%'))
 GROUP BY op.type
 `
 
 type SumPaidOperationTotalsGlobalParams struct {
-	Actor        pgtype.UUID `json:"actor"`
-	PropertyIds  string      `json:"property_ids"`
-	DateFrom     pgtype.Date `json:"date_from"`
-	DateTo       pgtype.Date `json:"date_to"`
-	Search       string      `json:"search"`
-	SearchDigits string      `json:"search_digits"`
+	Actor           pgtype.UUID `json:"actor"`
+	IncludeArchived bool        `json:"include_archived"`
+	PropertyIds     string      `json:"property_ids"`
+	DateFrom        pgtype.Date `json:"date_from"`
+	DateTo          pgtype.Date `json:"date_to"`
+	Search          string      `json:"search"`
+	SearchDigits    string      `json:"search_digits"`
 }
 
 type SumPaidOperationTotalsGlobalRow struct {
@@ -671,6 +678,7 @@ type SumPaidOperationTotalsGlobalRow struct {
 func (q *Queries) SumPaidOperationTotalsGlobal(ctx context.Context, arg SumPaidOperationTotalsGlobalParams) ([]SumPaidOperationTotalsGlobalRow, error) {
 	rows, err := q.db.Query(ctx, sumPaidOperationTotalsGlobal,
 		arg.Actor,
+		arg.IncludeArchived,
 		arg.PropertyIds,
 		arg.DateFrom,
 		arg.DateTo,
@@ -712,33 +720,35 @@ WHERE op.status = 'paid'
               AND pm.status = 'active'
           )
       )
-  AND p.status != 'archived'
+  AND ($2::bool OR p.status != 'archived')
   AND op.category_slug IS NOT NULL
-  AND ($2::text = ''
-       OR op.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
-  AND ($3::date IS NULL OR op.date >= $3)
-  AND ($4::date IS NULL OR op.date <= $4)
-  AND ($5::text = ''
-       OR op.title ILIKE '%' || $5::text || '%' ESCAPE '\'
-       OR op.category_label ILIKE '%' || $5::text || '%' ESCAPE '\'
-       OR ($6::text <> ''
-           AND CAST(op.amount_kopecks AS text) LIKE '%' || $6::text || '%'))
-  AND ($7::text = '' OR op.type = $7::text)
-  AND ($8::text = ''
-       OR op.category_slug = ANY(string_to_array($8::text, ',')))
+  AND ($3::text = ''
+       OR op.property_id = ANY(string_to_array($3::text, ',')::uuid[])
+       OR ($2::bool AND p.status = 'archived'))
+  AND ($4::date IS NULL OR op.date >= $4)
+  AND ($5::date IS NULL OR op.date <= $5)
+  AND ($6::text = ''
+       OR op.title ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR ($7::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $7::text || '%'))
+  AND ($8::text = '' OR op.type = $8::text)
+  AND ($9::text = ''
+       OR op.category_slug = ANY(string_to_array($9::text, ',')))
 GROUP BY op.category_slug, op.category_label, op.type
 ORDER BY total_kopecks DESC, op.category_slug
 `
 
 type SumPaidOperationsByCategoryGlobalParams struct {
-	Actor        pgtype.UUID `json:"actor"`
-	PropertyIds  string      `json:"property_ids"`
-	DateFrom     pgtype.Date `json:"date_from"`
-	DateTo       pgtype.Date `json:"date_to"`
-	Search       string      `json:"search"`
-	SearchDigits string      `json:"search_digits"`
-	Type         string      `json:"type"`
-	Categories   string      `json:"categories"`
+	Actor           pgtype.UUID `json:"actor"`
+	IncludeArchived bool        `json:"include_archived"`
+	PropertyIds     string      `json:"property_ids"`
+	DateFrom        pgtype.Date `json:"date_from"`
+	DateTo          pgtype.Date `json:"date_to"`
+	Search          string      `json:"search"`
+	SearchDigits    string      `json:"search_digits"`
+	Type            string      `json:"type"`
+	Categories      string      `json:"categories"`
 }
 
 type SumPaidOperationsByCategoryGlobalRow struct {
@@ -755,6 +765,7 @@ type SumPaidOperationsByCategoryGlobalRow struct {
 func (q *Queries) SumPaidOperationsByCategoryGlobal(ctx context.Context, arg SumPaidOperationsByCategoryGlobalParams) ([]SumPaidOperationsByCategoryGlobalRow, error) {
 	rows, err := q.db.Query(ctx, sumPaidOperationsByCategoryGlobal,
 		arg.Actor,
+		arg.IncludeArchived,
 		arg.PropertyIds,
 		arg.DateFrom,
 		arg.DateTo,

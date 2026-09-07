@@ -447,3 +447,74 @@ func TestListGlobalOperations_ViewerReadsSharedFeed(t *testing.T) {
 		t.Fatalf("viewer feed = %+v, want the same four paid rows — a viewer reads the merged feed", items)
 	}
 }
+
+func TestListGlobalOperations_IncludeArchived(t *testing.T) {
+	t.Parallel()
+	// The archive opt-in (ticket #549): the cut is the default, the flag
+	// lifts it — the archived property's paid rows rejoin the merged feed
+	// under the same visibility predicate, property name included.
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	h.globalFeedFixture()
+
+	without, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{})
+	if err != nil {
+		t.Fatalf("list global: %v", err)
+	}
+	if !titlesEqual(feedTitles(without), "Охрана", "ЖКУ", "Аренда", "Аренда") {
+		t.Fatalf("feed without the flag = %v, want the archive cut to hold", feedTitles(without))
+	}
+
+	with, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{IncludeArchived: true})
+	if err != nil {
+		t.Fatalf("list global includeArchived: %v", err)
+	}
+	if !titlesEqual(feedTitles(with), "Охрана", "ЖКУ", "ЖКУ", "Аренда", "Аренда") {
+		t.Fatalf("feed with the flag = %v, want the archived row back in date order", feedTitles(with))
+	}
+	for _, item := range with {
+		if item.Operation.Title == "ЖКУ" && item.PropertyName == "Старый объект" && item.ViewStatus != domain.ViewStatusPaid {
+			t.Errorf("archived row status = %s, want paid", item.ViewStatus)
+		}
+	}
+
+	// The (а) semantics: an explicit selection keeps its active rows and
+	// the flag adds every archived property on top — the flat book's ЖКУ
+	// and Аренда plus the archived ЖКУ, the cut lifting the propertyIds
+	// narrow (ownA = the harness's property).
+	mixed, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{
+			PropertyIDs:     []uuid.UUID{h.propID},
+			IncludeArchived: true,
+		})
+	if err != nil {
+		t.Fatalf("list global ownA+includeArchived: %v", err)
+	}
+	if !titlesEqual(feedTitles(mixed), "ЖКУ", "ЖКУ", "Аренда") {
+		t.Fatalf("propertyIds=[ownA]+flag = %v, want ownA's rows plus the archived one", feedTitles(mixed))
+	}
+}
+
+func TestSummarizeGlobalOperations_IncludeArchived(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	h.globalFeedFixture()
+
+	summary, err := h.ops.SummarizeGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsSummaryQuery{IncludeArchived: true})
+	if err != nil {
+		t.Fatalf("summarize includeArchived: %v", err)
+	}
+	if summary.ExpenseTotalKopecks != 6277000 {
+		t.Errorf("expense total = %d, want 6 277 000 (5 500 000 + the archived 777 000)", summary.ExpenseTotalKopecks)
+	}
+	if summary.IncomeTotalKopecks != 5650000 {
+		t.Errorf("income total = %d, want 5 650 000 — the archive holds no income rows", summary.IncomeTotalKopecks)
+	}
+	for _, got := range summary.Categories {
+		if got.Slug == testIntegrationSlugUtilities && got.Type == domain.TypeExpense && got.TotalKopecks != 1827000 {
+			t.Errorf("utilities expense = %d, want 1 827 000 (1 050 000 + 777 000)", got.TotalKopecks)
+		}
+	}
+}

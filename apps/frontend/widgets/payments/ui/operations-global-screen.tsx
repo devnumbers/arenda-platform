@@ -68,6 +68,7 @@ export function OperationsGlobalScreen(): JSX.Element {
     propertyIds: filters.propertyIds,
     dateFrom: period.from,
     dateTo: period.to,
+    includeArchived: filters.archived,
   };
   const listScope =
     filters.categories.length > 0
@@ -81,6 +82,7 @@ export function OperationsGlobalScreen(): JSX.Element {
   const everQuery = useGlobalOperationsSummary({
     order: "desc",
     propertyIds: filters.propertyIds,
+    includeArchived: filters.archived,
   });
 
   const sentinelRef = useInfiniteScroll(() => {

@@ -10,13 +10,15 @@ import {
 /**
  * Фильтры глобальной ленты «Операции» (#541): период и категории — те же
  * правила, что на объектных экранах (#477), плюс мультивыбор объектов
- * (решение владельца #539): состояние живёт в адресе
- * (?from=&to=&property=&category=), дефолт — текущий месяц, все объекты,
- * все категории.
+ * (решение владельца #539) и опция архива (#549): состояние живёт в адресе
+ * (?from=&to=&property=&category=&archived=), дефолт — текущий месяц, все
+ * объекты, все категории, архив исключён.
  */
 export type GlobalOperationsFilters = OperationsFilters & {
   /** Выбранные объекты (uuid, порядок выбора); пусто — «Все объекты». */
   readonly propertyIds: ReadonlyArray<string>;
+  /** Операции архивных объектов включены в скоуп (#549, ?archived=1). */
+  readonly archived: boolean;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,7 +41,7 @@ export function resolveGlobalFilterReturnPath(raw: string | null): string {
 /** Чтение фильтров глобальной ленты: период и категории — правила
  * объектного экрана (битые даты/перевёрнутый период/будущий хвост
  * отбрасываются), объекты — непустые uuid без дублей, порядок выбора
- * сохраняется. */
+ * сохраняется; архив включён только явным archived=1 (#549). */
 export function readGlobalOperationsFilters(
   params: OperationsParamsSource,
   today: IsoDate,
@@ -55,12 +57,13 @@ export function readGlobalOperationsFilters(
     seen.add(candidate);
     propertyIds.push(candidate);
   }
-  return { period, categories, propertyIds };
+  return { period, categories, propertyIds, archived: params.get('archived') === '1' };
 }
 
 /** Параметры URL фильтров глобальной ленты: те же правила записи, что на
  * объектном экране (явный выбор пишется всегда, дефолт — пустой query),
- * объекты — comma-list по имени параметра `property`. */
+ * объекты — comma-list по имени параметра `property`, архив — archived=1
+ * только когда включён (#549). */
 export function globalOperationsFiltersParams(
   filters: GlobalOperationsFilters,
 ): Record<string, string> {
@@ -74,6 +77,9 @@ export function globalOperationsFiltersParams(
   }
   if (filters.propertyIds.length > 0) {
     result.property = filters.propertyIds.join(',');
+  }
+  if (filters.archived) {
+    result.archived = '1';
   }
   return result;
 }

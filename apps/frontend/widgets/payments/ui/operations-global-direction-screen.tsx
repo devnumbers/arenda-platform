@@ -68,18 +68,21 @@ export function OperationsGlobalDirectionScreen({
   // Пикер периода — канонический оверлей поверх списка.
   const [periodOpen, setPeriodOpen] = useState(false);
 
-  const listQuery = useGlobalOperationsPaged(
-    globalDirectionListScope(period, filters.propertyIds, filters.categories, type),
-  );
-  const summaryQuery = useGlobalOperationsSummary(
-    globalDirectionSummaryScope(period, filters.propertyIds, type),
-  );
+  const listQuery = useGlobalOperationsPaged({
+    ...globalDirectionListScope(period, filters.propertyIds, filters.categories, type),
+    includeArchived: filters.archived,
+  });
+  const summaryQuery = useGlobalOperationsSummary({
+    ...globalDirectionSummaryScope(period, filters.propertyIds, type),
+    includeArchived: filters.archived,
+  });
   // All-time сводка направления (без периода/категорий): отличает «операций
   // направления не было никогда» (#478) от пустого периода/фильтра.
   const everQuery = useGlobalOperationsSummary({
     order: 'desc',
     propertyIds: filters.propertyIds,
     type,
+    includeArchived: filters.archived,
   });
 
   const sentinelRef = useInfiniteScroll(() => {

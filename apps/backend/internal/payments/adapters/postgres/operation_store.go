@@ -166,17 +166,18 @@ func (s *OperationStore) ListGlobal(
 		return nil, application.ErrInvalidInput
 	}
 	rows, err := s.q().ListPaidOperationsGlobal(ctx, postgres.ListPaidOperationsGlobalParams{
-		Actor:        pgconv.UUIDToPgtype(actor),
-		PropertyIds:  joinPropertyIDs(q.PropertyIDs),
-		DateFrom:     pgconv.DatePtrToPgtype(q.DateFrom),
-		DateTo:       pgconv.DatePtrToPgtype(q.DateTo),
-		Search:       escapeLikePattern(q.Search),
-		SearchDigits: searchAmountDigits(q.Search),
-		Type:         operationsTypeFilter(q.Type),
-		Categories:   joinCategorySlugs(q.Categories),
-		Order:        operationsOrder(q.Asc),
-		Offset:       paginationToInt32(q.Offset),
-		Limit:        paginationToInt32(q.Limit),
+		Actor:           pgconv.UUIDToPgtype(actor),
+		PropertyIds:     joinPropertyIDs(q.PropertyIDs),
+		DateFrom:        pgconv.DatePtrToPgtype(q.DateFrom),
+		DateTo:          pgconv.DatePtrToPgtype(q.DateTo),
+		Search:          escapeLikePattern(q.Search),
+		SearchDigits:    searchAmountDigits(q.Search),
+		Type:            operationsTypeFilter(q.Type),
+		Categories:      joinCategorySlugs(q.Categories),
+		IncludeArchived: q.IncludeArchived,
+		Order:           operationsOrder(q.Asc),
+		Offset:          paginationToInt32(q.Offset),
+		Limit:           paginationToInt32(q.Limit),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list global operations: %w", err)
@@ -211,12 +212,13 @@ func (s *OperationStore) SummarizeGlobal(
 	searchDigits := searchAmountDigits(q.Search)
 	propertyIDs := joinPropertyIDs(q.PropertyIDs)
 	totalsParams := postgres.SumPaidOperationTotalsGlobalParams{
-		Actor:        pgconv.UUIDToPgtype(actor),
-		PropertyIds:  propertyIDs,
-		DateFrom:     pgconv.DatePtrToPgtype(q.DateFrom),
-		DateTo:       pgconv.DatePtrToPgtype(q.DateTo),
-		Search:       search,
-		SearchDigits: searchDigits,
+		Actor:           pgconv.UUIDToPgtype(actor),
+		PropertyIds:     propertyIDs,
+		DateFrom:        pgconv.DatePtrToPgtype(q.DateFrom),
+		DateTo:          pgconv.DatePtrToPgtype(q.DateTo),
+		Search:          search,
+		SearchDigits:    searchDigits,
+		IncludeArchived: q.IncludeArchived,
 	}
 	totals, err := s.q().SumPaidOperationTotalsGlobal(ctx, totalsParams)
 	if err != nil {
@@ -224,14 +226,15 @@ func (s *OperationStore) SummarizeGlobal(
 	}
 
 	categories, err := s.q().SumPaidOperationsByCategoryGlobal(ctx, postgres.SumPaidOperationsByCategoryGlobalParams{
-		Actor:        totalsParams.Actor,
-		PropertyIds:  totalsParams.PropertyIds,
-		DateFrom:     totalsParams.DateFrom,
-		DateTo:       totalsParams.DateTo,
-		Search:       search,
-		SearchDigits: searchDigits,
-		Type:         operationsTypeFilter(q.Type),
-		Categories:   joinCategorySlugs(q.Categories),
+		Actor:           totalsParams.Actor,
+		PropertyIds:     totalsParams.PropertyIds,
+		DateFrom:        totalsParams.DateFrom,
+		DateTo:          totalsParams.DateTo,
+		Search:          search,
+		SearchDigits:    searchDigits,
+		Type:            operationsTypeFilter(q.Type),
+		Categories:      joinCategorySlugs(q.Categories),
+		IncludeArchived: q.IncludeArchived,
 	})
 	if err != nil {
 		return application.OperationsSummary{}, fmt.Errorf("sum global operations by category: %w", err)

@@ -63,7 +63,10 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
   const period = filters.period ?? defaultOperationsPeriod(today);
 
   const summaryQuery = useGlobalOperationsSummary(
-    globalSearchSummaryScope(period, filters.propertyIds, debounced),
+    {
+      ...globalSearchSummaryScope(period, filters.propertyIds, debounced),
+      includeArchived: filters.archived,
+    },
     { enabled: debounced !== '' },
   );
 
@@ -73,7 +76,10 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
   const effectiveSlug = chips.some((chip) => chip.selected) ? selectedSlug : null;
 
   const listQuery = useGlobalOperationsPaged(
-    globalSearchListScope(period, filters.propertyIds, debounced, effectiveSlug),
+    {
+      ...globalSearchListScope(period, filters.propertyIds, debounced, effectiveSlug),
+      includeArchived: filters.archived,
+    },
     { enabled: debounced !== '' },
   );
 

@@ -22,6 +22,7 @@ describe('readGlobalOperationsFilters', () => {
       period: null,
       categories: [],
       propertyIds: [],
+      archived: false,
     });
   });
 
@@ -40,6 +41,7 @@ describe('readGlobalOperationsFilters', () => {
       period: { from: '2026-08-10', to: '2026-09-01' },
       categories: ['rent', 'security'],
       propertyIds: [PROP_A, PROP_B],
+      archived: false,
     });
   });
 
@@ -53,21 +55,44 @@ describe('readGlobalOperationsFilters', () => {
       period: null,
       categories: [],
       propertyIds: [PROP_A, PROP_B],
+      archived: false,
     });
   });
 
   it('перевёрнутый период отбрасывается, как на объектном экране', () => {
     expect(
       readGlobalOperationsFilters(paramsOf({ from: '2026-09-10', to: '2026-09-01' }), TODAY),
-    ).toEqual({ period: null, categories: [], propertyIds: [] });
+    ).toEqual({ period: null, categories: [], propertyIds: [], archived: false });
+  });
+
+  it('архив включён только явным archived=1 (#549)', () => {
+    expect(readGlobalOperationsFilters(paramsOf({ archived: '1' }), TODAY).archived).toBe(true);
+    expect(readGlobalOperationsFilters(paramsOf({ archived: '0' }), TODAY).archived).toBe(false);
+    expect(readGlobalOperationsFilters(paramsOf({ archived: 'да' }), TODAY).archived).toBe(false);
   });
 });
 
 describe('globalOperationsFiltersParams', () => {
   it('дефолт даёт пустой набор параметров', () => {
     expect(
-      globalOperationsFiltersParams({ period: null, categories: [], propertyIds: [] }),
+      globalOperationsFiltersParams({
+        period: null,
+        categories: [],
+        propertyIds: [],
+        archived: false,
+      }),
     ).toEqual({});
+  });
+
+  it('включённый архив пишет archived=1, выключенный — ничего (#549)', () => {
+    expect(
+      globalOperationsFiltersParams({
+        period: null,
+        categories: [],
+        propertyIds: [],
+        archived: true,
+      }),
+    ).toEqual({ archived: '1' });
   });
 
   it('явный выбор пишет from/to/category/property', () => {
@@ -76,6 +101,7 @@ describe('globalOperationsFiltersParams', () => {
         period: { from: '2026-08-01', to: '2026-08-31' },
         categories: ['rent'],
         propertyIds: [PROP_A, PROP_B],
+        archived: false,
       }),
     ).toEqual({
       from: '2026-08-01',

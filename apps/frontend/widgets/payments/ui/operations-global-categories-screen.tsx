@@ -58,9 +58,10 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
   // главный список.
   const returnTo = resolveGlobalFilterReturnPath(searchParams.get('return'));
 
-  const summaryQuery = useGlobalOperationsSummary(
-    globalCategoriesSummaryScope(period, filters.propertyIds),
-  );
+  const summaryQuery = useGlobalOperationsSummary({
+    ...globalCategoriesSummaryScope(period, filters.propertyIds),
+    includeArchived: filters.archived,
+  });
   const rows = operationsCategoryRows(summaryQuery.data?.categories ?? []);
 
   const toggle = (slug: string): void => {

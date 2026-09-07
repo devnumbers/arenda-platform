@@ -329,6 +329,10 @@ type GlobalOperationsListQuery struct {
 	// Categories filters on the operation's category snapshot (nil = no
 	// filter); a row without a category snapshot never matches.
 	Categories []string
+	// IncludeArchived lifts the feed's archive cut (#549): the archived
+	// properties' paid rows rejoin under the same visibility predicate.
+	// False — the contract default — keeps the archive excluded.
+	IncludeArchived bool
 }
 
 // GlobalOperationsSummaryQuery is the global summary's request (ticket
@@ -344,6 +348,10 @@ type GlobalOperationsSummaryQuery struct {
 	Search      string
 	Type        *domain.PaymentType
 	Categories  []string
+	// IncludeArchived lifts the archive cut (#549): the archived
+	// properties' paid rows count in the totals and the breakdown.
+	// False — the contract default — keeps the archive excluded.
+	IncludeArchived bool
 }
 
 // PrepareGlobalOperationsQuery validates the global listing request in place

@@ -182,6 +182,9 @@ export type GlobalOperationScope = {
   readonly search?: string;
   /** Направление (страницы «Расходы»/«Доходы» #548); без значения — все. */
   readonly type?: 'income' | 'expense';
+  /** Операции архивных объектов включены (#549, ?archived=1); без значения
+   * — архив исключён (контракт #540). */
+  readonly includeArchived?: boolean;
 };
 
 // features/payments (глобальная лента операций)
@@ -199,6 +202,7 @@ export const globalOperationKeys = {
       scope.dateTo ?? '',
       scope.search ?? '',
       scope.type ?? '',
+      scope.includeArchived ?? false,
     ] as const,
   /** Глобальная сводка (#540): период, объекты и поиск — часть ключа;
    * категории в ключ не входят — сводка категорийный фильтр не принимает
@@ -213,6 +217,7 @@ export const globalOperationKeys = {
       scope.dateTo ?? '',
       scope.search ?? '',
       scope.type ?? '',
+      scope.includeArchived ?? false,
     ] as const,
 };
 

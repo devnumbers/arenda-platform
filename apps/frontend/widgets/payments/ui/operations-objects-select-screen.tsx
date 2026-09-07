@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BoldHome, BoldObjects, Check } from '@/shared/assets/icons';
+import { ArchiveBold, BoldHome, BoldObjects, Check } from '@/shared/assets/icons';
 import { buildReturnUrl } from '@/shared/lib/navigation';
 import { clientTodayIso } from '@/entities/payment';
 import {
@@ -46,6 +46,8 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
   // Черновик живёт от монтирования до монтирования: страница монтируется
   // заново на каждый вход, useState инициализируется применённым выбором.
   const [draft, setDraft] = useState<ReadonlyArray<string>>(filters.propertyIds);
+  // Опция архива (#549) — часть того же черновика: «назад» отбрасывает.
+  const [archivedDraft, setArchivedDraft] = useState(filters.archived);
 
   const propertiesQuery = useProperties();
   const properties = propertiesQuery.data ?? [];
@@ -69,7 +71,11 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
     router.replace(
       buildReturnUrl(
         returnTo,
-        globalOperationsFiltersParams({ ...filters, propertyIds: draft }),
+        globalOperationsFiltersParams({
+          ...filters,
+          propertyIds: draft,
+          archived: archivedDraft,
+        }),
       ),
     );
   };
@@ -142,6 +148,26 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
               onSelect={() => toggleProperty(property.id)}
             />
           ))}
+          {/* Опция архива (#549, Figma 1733-26805): за разделителем, после
+           * объектов — включение добавляет их операции к текущему выбору. */}
+          <div aria-hidden className="mx-6 mt-1 h-px bg-surface-muted" />
+          <ListRow
+            leading={
+              <SelectAvatar
+                fallback={<ArchiveBold className="h-6 w-6 text-content-tertiary" />}
+              />
+            }
+            title="Объекты в архиве"
+            trailing={
+              <Checkbox
+                aria-label="Объекты в архиве"
+                checked={archivedDraft}
+                onCheckedChange={() => setArchivedDraft((current) => !current)}
+                onClick={(event) => event.stopPropagation()}
+              />
+            }
+            onSelect={() => setArchivedDraft((current) => !current)}
+          />
         </div>
       </PageContent>
 

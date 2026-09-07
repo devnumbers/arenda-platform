@@ -1102,7 +1102,8 @@ paths:
         predicate lives in the store's SQL, the tasks global feed's rule).
         The feed is paid-only: planned and overdue occurrences are the
         property screens' vocabulary, cancelled operations do not exist for
-        reads. The operations of archived properties are not in the feed.
+        reads. The operations of archived properties are not in the feed
+        unless includeArchived lifts the cut (#549).
         The propertyIds filter narrows the feed to the listed properties,
         each resolved through its view gate — an unknown or non-visible id
         is the privacy 404. Every row carries propertyName, the bound
@@ -1117,6 +1118,7 @@ paths:
         - $ref: '#/components/parameters/OperationsDateTo'
         - $ref: '#/components/parameters/OperationsSearch'
         - $ref: '#/components/parameters/OperationsTypeFilter'
+        - $ref: '#/components/parameters/OperationsIncludeArchived'
         - $ref: '#/components/parameters/OperationsCategoriesFilter'
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
@@ -1157,6 +1159,7 @@ paths:
         - $ref: '#/components/parameters/OperationsDateTo'
         - $ref: '#/components/parameters/OperationsSearch'
         - $ref: '#/components/parameters/OperationsTypeFilter'
+        - $ref: '#/components/parameters/OperationsIncludeArchived'
         - $ref: '#/components/parameters/OperationsCategoriesFilter'
       responses:
         '200':
@@ -3409,6 +3412,16 @@ components:
       schema:
         type: string
         enum: [income, expense]
+    OperationsIncludeArchived:
+      name: includeArchived
+      in: query
+      required: false
+      description: >-
+        Lift the archive cut (#549): operations of archived properties rejoin
+        the feed or the summary under the same visibility predicate. A missing
+        value or false keeps the archive excluded (the #540 contract default).
+      schema:
+        type: boolean
     OperationsCategoriesFilter:
       name: category
       in: query
