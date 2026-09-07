@@ -8,5 +8,6 @@ export type {
   RentalProgress,
   RentalStatus,
   RentalTenant,
+  RentalUpdateCommand,
   RentalUtilities,
 } from './model/types';

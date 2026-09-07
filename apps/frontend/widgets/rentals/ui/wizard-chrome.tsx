@@ -1,21 +1,37 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { JSX } from 'react';
-import { Cancel } from '@/shared/assets/icons';
+import { ArrowLeft, Cancel, SmallArrowDown } from '@/shared/assets/icons';
+import type { RentalPaymentDay, RentalUtilities } from '@/entities/rental';
 import { cn } from '@/shared/lib/cn';
 import {
+  Button,
+  Checkbox,
   groupedAmount,
   IconButton,
+  ListRow,
+  MonthDaysGrid,
+  PageContent,
+  PickerMenu,
+  type PickerMenuGroup,
   sanitizeAmountInput,
+  StickyBottomBar,
+  Switch,
   syncAmountInputDom,
+  TopNav,
+  TopNavTitle,
 } from '@/shared/ui/design';
+import { paymentDayFromPicker, UTILITIES_OPTIONS, utilitiesLabel } from '@/features/rentals';
 
 /**
- * Общий хром шагов визарда создания аренды (#530): заголовок шага —
- * Mobile/Heading/H1 28/32 из макета (1270:46904 — крупнее, чем H3-заголовки
- * визарда платежей), нижняя панель действия над StickyBottomBar, поля
- * «Input Field» (1270:46905/47386): хвостовые иконки — канон IconButton
- * primary (круг 44, hover-подложка), обязательные поля — красная
- * звёздочка (решение владельца 2026-09-05).
+ * Общий хром арендных форм (#530/#532): заголовок шага — Mobile/Heading/H1
+ * 28/32 из макета (1270:46904 — крупнее, чем H3-заголовки визарда
+ * платежей), нижняя панель действия над StickyBottomBar, поля «Input Field»
+ * (1270:46905/47386): хвостовые иконки — канон IconButton primary (круг 44,
+ * hover-подложка), обязательные поля — красная звёздочка (решение владельца
+ * 2026-09-05). Здесь же канонные куски, общие визарду создания (#530) и
+ * правке условий (#532): пикер дня оплаты, поле коммуналки, строка
+ * тумблера автоплатежа.
  */
 
 export function WizardHeading({
@@ -168,6 +184,179 @@ export function MoneyField({
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/** Полноэкранный оверлей выбора дня оплаты (общий для визарда #530 и правки
+ * условий #532; поверхность «временный пикер поверх формы»): одиночный
+ * выбор числа либо «последний день месяца» — они взаимоисключимы, тап по
+ * выбранному числу снимает его. */
+export function PaymentDayPicker({
+  initial,
+  onClose,
+  onConfirm,
+}: {
+  readonly initial: RentalPaymentDay | undefined;
+  readonly onClose: () => void;
+  readonly onConfirm: (paymentDay: RentalPaymentDay | undefined) => void;
+}): JSX.Element {
+  const [draftDay, setDraftDay] = useState<number | undefined>(
+    typeof initial === 'number' ? initial : undefined,
+  );
+  const [draftLast, setDraftLast] = useState<boolean>(initial === 'last');
+
+  const handleDay = (day: number): void => {
+    setDraftLast(false);
+    setDraftDay((prev) => (prev === day ? undefined : day));
+  };
+
+  const handleLast = (): void => {
+    if (draftLast) {
+      setDraftLast(false);
+      return;
+    }
+    setDraftLast(true);
+    setDraftDay(undefined);
+  };
+
+  const ready = draftLast || draftDay !== undefined;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Выбор дня оплаты"
+      className="fixed inset-0 z-50 flex flex-col bg-surface"
+    >
+      <TopNav
+        leading={
+          <IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />
+        }
+      >
+        <TopNavTitle title="Выберите день" />
+      </TopNav>
+      <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
+        <div className="flex-1 min-h-0 overflow-y-auto pb-6">
+          <div className="pt-6">
+            <MonthDaysGrid
+              days={30}
+              selectedDays={
+                draftDay === undefined || draftLast ? undefined : new Set([draftDay])
+              }
+              onDayToggle={handleDay}
+            />
+          </div>
+          <div className="pt-6">
+            {/* Строка — сам переключатель (Enter/Space/клик по ListRow);
+                чекбокс — его зрительный индикатор, некликабельный: тап
+                не должен тонуть дважды (строка + чекбокс). */}
+            <ListRow
+              title="Последний день месяца"
+              onSelect={handleLast}
+              trailing={
+                <Checkbox
+                  checked={draftLast}
+                  tabIndex={-1}
+                  aria-hidden
+                  className="pointer-events-none"
+                />
+              }
+            />
+          </div>
+        </div>
+        {/* Футер только с черновиком выбора (решение владельца 2026-09-05:
+            скрытие вместо дизейбла); на планшете тянется с шитом. */}
+        {ready && (
+          <StickyBottomBar fullWidthContent>
+            <WizardBottomBar>
+              <Button
+                className="w-full"
+                onClick={() => onConfirm(paymentDayFromPicker({ day: draftDay, last: draftLast }))}
+              >
+                Выбрать
+              </Button>
+            </WizardBottomBar>
+          </StickyBottomBar>
+        )}
+      </PageContent>
+    </div>
+  );
+}
+
+/** Поле режима коммунальных платежей (общее для шага условий #530 и правки
+ * #532): триггер-бокс + PickerMenu (меню на десктопе, шит на мобиле —
+ * канон выбора одной опции, выбор применяется сразу). */
+export function UtilitiesPickerField({
+  value,
+  onChange,
+}: {
+  readonly value: RentalUtilities;
+  readonly onChange: (utilities: RentalUtilities) => void;
+}): JSX.Element {
+  const groups: ReadonlyArray<PickerMenuGroup> = [
+    {
+      options: UTILITIES_OPTIONS.map((option) => ({
+        label: option.label,
+        selected: value === option.value,
+        onSelect: () => onChange(option.value),
+      })),
+    },
+  ];
+
+  return (
+    <div className="flex w-full flex-col gap-2 font-sans">
+      <FieldTitle title="Коммунальные платежи" />
+      <PickerMenu title="Коммунальные платежи" groups={groups}>
+        <button
+          type="button"
+          aria-label={`Коммунальные платежи: ${utilitiesLabel(value)}`}
+          className="group/trigger flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]"
+        >
+          <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
+            {utilitiesLabel(value)}
+          </span>
+          {/* Хвостовая иконка — IconButton-primary-анатомия (круг 44 с
+              hover-подложкой), как у триггеров дат. */}
+          <span
+            aria-hidden
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-content transition-colors group-hover/trigger:bg-surface-muted group-active/trigger:bg-surface-muted-hover"
+          >
+            <SmallArrowDown className="h-6 w-6" />
+          </span>
+        </button>
+      </PickerMenu>
+    </div>
+  );
+}
+
+/** Строка тумблера «Сделать платеж автоматическим?» (общая для шага
+ * настроек #530 и правки #532; опечатки подписи макета не воспроизводятся):
+ * включённый автоплатёж фиксирует оплату в назначенный день сам,
+ * выключенный оставляет отметку владельцу. */
+export function AutoPayRow({
+  checked,
+  onCheckedChange,
+}: {
+  readonly checked: boolean;
+  readonly onCheckedChange: (checked: boolean) => void;
+}): JSX.Element {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-base font-medium leading-[18px] text-content">
+          Сделать платеж автоматическим?
+        </span>
+        <span className="text-sm leading-4 text-content-tertiary">
+          Оплата аренды автоматически зафиксируется в назначенный день.
+          Либо отмечайте её вручную, а мы пришлём напоминание
+        </span>
+      </div>
+      <Switch
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+        aria-label="Сделать платеж автоматическим"
+      />
     </div>
   );
 }

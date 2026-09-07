@@ -2,22 +2,11 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { ArrowLeft, Calendar } from '@/shared/assets/icons';
+import { Calendar } from '@/shared/assets/icons';
 import type { RentalPaymentDay } from '@/entities/rental';
-import { paymentDayFromPicker, paymentDayLabel } from '@/features/rentals';
-import {
-  Button,
-  Checkbox,
-  IconButton,
-  ListRow,
-  MonthDaysGrid,
-  PageContent,
-  StickyBottomBar,
-  TopNav,
-  TopNavTitle,
-} from '@/shared/ui/design';
+import { paymentDayLabel } from '@/features/rentals';
 import { kopecksToAmountInputString, parseRublesToKopecks } from '@/shared/lib/format-money';
-import { MoneyField, PickerTriggerBox, WizardBottomBar, WizardHeading } from './wizard-chrome';
+import { MoneyField, PaymentDayPicker, PickerTriggerBox, WizardHeading } from './wizard-chrome';
 
 /**
  * Шаг 1 «Цена и число оплаты» (Figma 1270:46904/47385): денежный ввод с
@@ -93,100 +82,5 @@ export function AmountDayStep({
         />
       )}
     </>
-  );
-}
-
-/** Полноэкранный оверлей выбора дня оплаты (поверхность «временный пикер
- * поверх формы»): одиночный выбор числа либо «последний день месяца» —
- * они взаимоисключимы, тап по выбранному числу снимает его. */
-function PaymentDayPicker({
-  initial,
-  onClose,
-  onConfirm,
-}: {
-  readonly initial: RentalPaymentDay | undefined;
-  readonly onClose: () => void;
-  readonly onConfirm: (paymentDay: RentalPaymentDay | undefined) => void;
-}): JSX.Element {
-  const [draftDay, setDraftDay] = useState<number | undefined>(
-    typeof initial === 'number' ? initial : undefined,
-  );
-  const [draftLast, setDraftLast] = useState<boolean>(initial === 'last');
-
-  const handleDay = (day: number): void => {
-    setDraftLast(false);
-    setDraftDay((prev) => (prev === day ? undefined : day));
-  };
-
-  const handleLast = (): void => {
-    if (draftLast) {
-      setDraftLast(false);
-      return;
-    }
-    setDraftLast(true);
-    setDraftDay(undefined);
-  };
-
-  const ready = draftLast || draftDay !== undefined;
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Выбор дня оплаты"
-      className="fixed inset-0 z-50 flex flex-col bg-surface"
-    >
-      <TopNav
-        leading={
-          <IconButton icon={<ArrowLeft />} label="Назад" onClick={onClose} />
-        }
-      >
-        <TopNavTitle title="Выберите день" />
-      </TopNav>
-      <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
-        <div className="flex-1 min-h-0 overflow-y-auto pb-6">
-          <div className="pt-6">
-            <MonthDaysGrid
-              days={30}
-              selectedDays={
-                draftDay === undefined || draftLast ? undefined : new Set([draftDay])
-              }
-              onDayToggle={handleDay}
-            />
-          </div>
-          <div className="pt-6">
-            {/* Строка — сам переключатель (Enter/Space/клик по ListRow);
-                чекбокс — его зрительный индикатор, некликабельный: тап
-                не должен тонуть дважды (строка + чекбокс). */}
-            <ListRow
-              title="Последний день месяца"
-              onSelect={handleLast}
-              trailing={
-                <Checkbox
-                  checked={draftLast}
-                  tabIndex={-1}
-                  aria-hidden
-                  className="pointer-events-none"
-                />
-              }
-            />
-          </div>
-        </div>
-        {/* Футер только с черновиком выбора (решение владельца 2026-09-05:
-            скрытие вместо дизейбла); на планшете тянется с шитом. */}
-        {ready && (
-          <StickyBottomBar fullWidthContent>
-            <WizardBottomBar>
-              <Button
-                className="w-full"
-                onClick={() => onConfirm(paymentDayFromPicker({ day: draftDay, last: draftLast }))}
-              >
-                Выбрать
-              </Button>
-            </WizardBottomBar>
-          </StickyBottomBar>
-        )}
-      </PageContent>
-    </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import type { JSX } from 'react';
-import { ArrowLeft } from '@/shared/assets/icons';
+import { ArrowLeft, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { currentRentalOf, rentalCommentText, rentalTermsRows, useRentals } from '@/features/rentals';
@@ -11,8 +11,8 @@ import { Button, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '
 /**
  * «Условия аренды» read-only (#531, Figma 1302:53783/1550:94419): полный
  * просмотр условий текущей аренды — восемь строк, пустые значения «Не
- * указано», комментарий под ними. Правка условий (#532) добавит хвостовую
- * кнопку шапки; завершённая карточка (#535) переиспользует экран.
+ * указано», комментарий под ними. Карандаш в шапке ведёт на правку
+ * условий (#532); завершённая карточка (#535) переиспользует экран.
  */
 export function RentalTermsScreen({ propertyId }: { readonly propertyId: string }): JSX.Element {
   const router = useRouter();
@@ -28,6 +28,15 @@ export function RentalTermsScreen({ propertyId }: { readonly propertyId: string 
             label="Назад"
             onClick={() => goBack(router, ROUTES.propertyRental(propertyId))}
           />
+        }
+        trailing={
+          rental === undefined ? undefined : (
+            <IconButton
+              icon={<Edit />}
+              label="Изменить условия"
+              onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
+            />
+          )
         }
       >
         <TopNavTitle title="Условия аренды" />

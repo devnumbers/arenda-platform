@@ -1,4 +1,4 @@
-export { useCreateRental, useRentals } from './api/hooks';
+export { useCreateRental, useRentals, useUpdateRental } from './api/hooks';
 export {
   buildRentalCreateCommand,
   draftAfterStartChange,
@@ -12,6 +12,13 @@ export {
   WIZARD_TOTAL_STEPS,
 } from './lib/wizard-model';
 export type { RentalWizardStep } from './lib/wizard-model';
+export {
+  buildRentalUpdateCommand,
+  rentalEditFormFromRental,
+  rentalPlannedEndDateEditError,
+  RENTAL_COMMENT_MAX,
+} from './lib/edit-model';
+export type { RentalEditForm } from './lib/edit-model';
 export { useRentalWizardDraft } from './lib/use-rental-wizard-draft';
 export type { RentalWizardDraft } from './lib/use-rental-wizard-draft';
 export { rentalSuccessCopy } from './lib/success-copy';

@@ -93,3 +93,22 @@ export type RentalCreateCommand = {
   readonly contactId: string | null;
   readonly autoPay: boolean;
 };
+
+/**
+ * Команда правки условий (PATCH /properties/{propertyId}/rentals/{rentalId},
+ * #532): частичное тело — включены только изменённые поля (дифф формы,
+ * прецедент правки платежа #467). Nullable-поля — tri-state: опущенное
+ * остаётся без изменений, явный null очищает (ADR 0053 §4). Начало не
+ * правится; сумма, день оплаты, автоплатёж и окончание сервер синхронно
+ * переносит на Платёж арендной платы.
+ */
+export type RentalUpdateCommand = {
+  readonly amountKopecks?: number;
+  readonly paymentDay?: RentalPaymentDay;
+  readonly autoPay?: boolean;
+  readonly plannedEndDate?: IsoDate | null;
+  readonly utilities?: RentalUtilities;
+  readonly depositKopecks?: number | null;
+  readonly commissionKopecks?: number | null;
+  readonly comment?: string | null;
+};

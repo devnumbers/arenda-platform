@@ -2,19 +2,22 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { Calendar, SmallArrowDown } from '@/shared/assets/icons';
+import { Calendar } from '@/shared/assets/icons';
 import { addDays, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { kopecksToAmountInputString, parseRublesToKopecks } from '@/shared/lib/format-money';
 import type { RentalUtilities } from '@/entities/rental';
 import {
-  UTILITIES_OPTIONS,
   rentalPlannedEndDateError,
   rentalStartDateError,
-  utilitiesLabel,
 } from '@/features/rentals';
-import { CalendarDatePicker, PickerMenu, type PickerMenuGroup } from '@/shared/ui/design';
-import { FieldTitle, MoneyField, PickerTriggerBox, WizardHeading } from './wizard-chrome';
+import { CalendarDatePicker } from '@/shared/ui/design';
+import {
+  MoneyField,
+  PickerTriggerBox,
+  UtilitiesPickerField,
+  WizardHeading,
+} from './wizard-chrome';
 
 /**
  * Шаг 2 «Условия аренды» (Figma 1270:46821/47960, шит даты 1270:37644):
@@ -156,51 +159,5 @@ export function ConditionsStep({
         />
       )}
     </>
-  );
-}
-
-/** Поле режима коммунальных платежей: триггер-бокс + PickerMenu (меню на
- * десктопе, шит на мобиле — канон выбора одной опции, выбор применяется
- * сразу). */
-function UtilitiesPickerField({
-  value,
-  onChange,
-}: {
-  readonly value: RentalUtilities;
-  readonly onChange: (utilities: RentalUtilities) => void;
-}): JSX.Element {
-  const groups: ReadonlyArray<PickerMenuGroup> = [
-    {
-      options: UTILITIES_OPTIONS.map((option) => ({
-        label: option.label,
-        selected: value === option.value,
-        onSelect: () => onChange(option.value),
-      })),
-    },
-  ];
-
-  return (
-    <div className="flex w-full flex-col gap-2 font-sans">
-      <FieldTitle title="Коммунальные платежи" />
-      <PickerMenu title="Коммунальные платежи" groups={groups}>
-        <button
-          type="button"
-          aria-label={`Коммунальные платежи: ${utilitiesLabel(value)}`}
-          className="group/trigger flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]"
-        >
-          <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
-            {utilitiesLabel(value)}
-          </span>
-          {/* Хвостовая иконка — IconButton-primary-анатомия (круг 44 с
-              hover-подложкой), как у триггеров дат. */}
-          <span
-            aria-hidden
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-content transition-colors group-hover/trigger:bg-surface-muted group-active/trigger:bg-surface-muted-hover"
-          >
-            <SmallArrowDown className="h-6 w-6" />
-          </span>
-        </button>
-      </PickerMenu>
-    </div>
   );
 }

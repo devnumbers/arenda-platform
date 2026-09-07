@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
 import { mapRental } from '@/entities/rental';
-import type { Rental, RentalCreateCommand } from '@/entities/rental';
-import { paymentKeys, rentalKeys } from '@/shared/api/query-keys';
+import type { Rental, RentalCreateCommand, RentalUpdateCommand } from '@/entities/rental';
+import { paymentKeys, paymentOperationKeys, rentalKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 
 type RentalResponseDto = components['schemas']['RentalResponse'];
@@ -52,5 +52,34 @@ export function useRentals(propertyId: string): UseQueryResult<Rental[], ApiErro
       return response.items.map(mapRental);
     },
     enabled: Boolean(propertyId),
+  });
+}
+
+/**
+ * Правка условий аренды (#532): частичный PATCH — команда уже посчитана
+ * диффом формы (edit-model), опущенное поле остаётся без изменений, явный
+ * null очищает (tri-state ADR 0053 §4). Сервер в транзакции синхронно правит
+ * Платёж арендной платы (сумма, день оплаты, автоплатёж, окончание) и гоняет
+ * тик — инвалидируются аренды, правила и операции. Начало не правится;
+ * завершённая аренда — 409.
+ */
+export function useUpdateRental(
+  propertyId: string,
+  rentalId: string,
+): UseMutationResult<Rental, ApiError, RentalUpdateCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: RentalUpdateCommand) => {
+      const response = await apiClient<RentalResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/rentals/${encodeURIComponent(rentalId)}`,
+        { method: 'PATCH', body: JSON.stringify(command) },
+      );
+      return mapRental(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: rentalKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
   });
 }
