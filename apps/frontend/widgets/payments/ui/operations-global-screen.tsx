@@ -41,7 +41,8 @@ import { summaryBarSegments } from "../lib/summary-bar";
  * сгруппированные по датам; у строки — подзаголовок-объект. Сверху — чипы
  * «Период» (дефолт — текущий месяц), «Объект» («Все объекты»/«1 объект»/
  * «N объектов» — ведёт на мультивыбор #542) и «Категория» (#544); карточки
- * «Расходы»/«Доходы» некликабельны (решение владельца #539) — полоса
+ * «Расходы»/«Доходы» ведут на страницы направления (#548 — отменяет
+ * решение #539 о некликабельных карточках); полоса
  * разбивки пилюлями категорий та же, что на объектном экране; сводка
  * категорийный фильтр не принимает, объектный и период — принимают.
  * Фильтры живут в адресе (?from=&to=&property=&category= — шарабельно).
@@ -197,8 +198,9 @@ export function OperationsGlobalScreen(): JSX.Element {
                 ) : (
                   <>
                     {/* Карточки сводки (Figma 1510-77101): сумма за период +
-                     * полоса-разбивка пилюлями категорий. Некликабельны —
-                     * глобальные экраны направления вне скоупа (#539). */}
+                     * полоса-разбивка пилюлями категорий. Тап ведёт на
+                     * страницу направления (#548 — отменяет решение #539
+                     * о некликабельных карточках). */}
                     <div className="flex gap-2">
                       <OperationsSummaryCard
                         label="Расходы"
@@ -207,6 +209,14 @@ export function OperationsGlobalScreen(): JSX.Element {
                           summaryQuery.data,
                           "expense",
                         )}
+                        openLabel="Открыть все расходы"
+                        onOpen={() =>
+                          router.push(
+                            filterHref(ROUTES.operationsExpenses, {
+                              return: ROUTES.operations,
+                            }),
+                          )
+                        }
                       />
                       <OperationsSummaryCard
                         label="Доходы"
@@ -215,6 +225,14 @@ export function OperationsGlobalScreen(): JSX.Element {
                           summaryQuery.data,
                           "income",
                         )}
+                        openLabel="Открыть все доходы"
+                        onOpen={() =>
+                          router.push(
+                            filterHref(ROUTES.operationsIncomes, {
+                              return: ROUTES.operations,
+                            }),
+                          )
+                        }
                       />
                     </div>
 

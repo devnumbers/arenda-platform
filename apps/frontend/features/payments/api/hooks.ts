@@ -399,6 +399,9 @@ export function useGlobalOperationsPaged(
       if (scope.categories !== undefined && scope.categories.length > 0) {
         params.set('category', scope.categories.join(','));
       }
+      if (scope.type !== undefined) {
+        params.set('type', scope.type);
+      }
       if (scope.dateFrom !== undefined) {
         params.set('date_from', scope.dateFrom);
       }
@@ -425,10 +428,10 @@ export function useGlobalOperationsPaged(
 /**
  * Глобальная сводка периода (#540) за карточками «Расходы/Доходы» и чипом
  * «Категория»: итоги всегда оба направления; категорийный фильтр сводку не
- * сужает (решение владельца #539) — в запрос уходят только объекты, период
- * и поиск. Поиск (#543) — тот же предикат, что у списка: разбивка
- * становится чипами совпавших категорий; `options.enabled` глушит запрос,
- * keepPreviousData — карточки не мигают при смене фильтров.
+ * сужает (решение владельца #539) — в запрос уходят только объекты, период,
+ * тип направления (#548) и поиск. Поиск (#543) — тот же предикат, что у
+ * списка: разбивка становится чипами совпавших категорий; `options.enabled`
+ * глушит запрос, keepPreviousData — карточки не мигают при смене фильтров.
  */
 export function useGlobalOperationsSummary(
   scope: GlobalOperationScope,
@@ -440,6 +443,9 @@ export function useGlobalOperationsSummary(
       const params = new URLSearchParams();
       if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
         params.set('propertyIds', scope.propertyIds.join(','));
+      }
+      if (scope.type !== undefined) {
+        params.set('type', scope.type);
       }
       if (scope.dateFrom !== undefined) {
         params.set('date_from', scope.dateFrom);

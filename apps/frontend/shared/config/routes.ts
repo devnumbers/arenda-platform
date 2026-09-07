@@ -41,6 +41,10 @@ export const ROUTES = {
   operationsObjects: '/operations/objects',
   /** Глобальный выбор категории фильтра (#544). */
   operationsCategories: '/operations/categories',
+  /** Страницы направления глобальной ленты (#548): все доходы/расходы
+   * выбранного скоупа за период; вход — карточки сводки на главной. */
+  operationsExpenses: '/operations/expenses',
+  operationsIncomes: '/operations/incomes',
   /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
   propertyOperations: (id: string) => `/properties/${id}/operations`,
   /** Экраны «Доходы объекта»/«Расходы объекта» (#475): список одного

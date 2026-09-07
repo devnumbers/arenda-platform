@@ -168,8 +168,9 @@ export const taskKeys = {
 /**
  * Скоуп глобальной ленты операций (#541, контракт /operations #540):
  * paid-only — статусного фильтра нет, лента несёт только оплаченные факты.
- * Мультивыбор объектов, категории (слаги), границы периода и поисковый
- * запрос целиком уходят в ключ react-query и в query-параметры запроса.
+ * Мультивыбор объектов, категории (слаги), границы периода, поисковый
+ * запрос и тип направления (страницы «Расходы»/«Доходы» #548) целиком
+ * уходят в ключ react-query и в query-параметры запроса.
  */
 export type GlobalOperationScope = {
   readonly order: PaymentOperationOrder;
@@ -179,6 +180,8 @@ export type GlobalOperationScope = {
   readonly dateFrom?: string;
   readonly dateTo?: string;
   readonly search?: string;
+  /** Направление (страницы «Расходы»/«Доходы» #548); без значения — все. */
+  readonly type?: 'income' | 'expense';
 };
 
 // features/payments (глобальная лента операций)
@@ -195,6 +198,7 @@ export const globalOperationKeys = {
       scope.dateFrom ?? '',
       scope.dateTo ?? '',
       scope.search ?? '',
+      scope.type ?? '',
     ] as const,
   /** Глобальная сводка (#540): период, объекты и поиск — часть ключа;
    * категории в ключ не входят — сводка категорийный фильтр не принимает
@@ -208,6 +212,7 @@ export const globalOperationKeys = {
       scope.dateFrom ?? '',
       scope.dateTo ?? '',
       scope.search ?? '',
+      scope.type ?? '',
     ] as const,
 };
 
