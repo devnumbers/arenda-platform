@@ -5,9 +5,17 @@ export {
   useCompleteTask,
   useCreateTaskRule,
   useDeleteCompletedTasks,
+  usePropertylessTaskRule,
+  usePropertylessTasks,
   useTaskRule,
   useUncompleteTask,
+  useUpdatePropertylessTaskRule,
   useUpdateTaskRule,
+  useCompleteAllGlobalTasks,
+  useCompleteGlobalTask,
+  useDeleteCompletedGlobalTasks,
+  useGlobalActiveTasks,
+  useGlobalCompletedTasks,
 } from './api/hooks';
 export {
   DEFAULT_TASKS_SORT,
@@ -19,6 +27,16 @@ export {
   type TasksSortDirection,
   type TasksSortField,
 } from './lib/tasks-list';
+export {
+  canMutateFeedTask,
+  mutableFeedTasks,
+  type FeedPropertyRef,
+} from './lib/global-tasks';
+export { useTasksFeedFilter } from './lib/use-tasks-feed-filter';
+export {
+  EMPTY_TASKS_FEED_FILTER,
+  type TasksFeedFilter,
+} from './lib/tasks-feed-filter';
 export {
   canCreateTask,
   EMPTY_TASK_CREATE_DRAFT,

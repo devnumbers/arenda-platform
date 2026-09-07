@@ -441,6 +441,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible tasks (the global «Задачи» screen)
+         * @description The global read side of the tasks context (ADR 0052, ticket #521). Without a property filter the response is the actor's visible merged feed: their own tasks — bound and property-less — plus the bound tasks of the properties they can view (ADR 0028; a sharing member never sees the feed owner's property-less tasks). The tasks of archived properties are not in the feed — non-archived properties plus the property-less cut only (карта #518, решение 9). The property filters select one slice: propertyId — the tasks of the listed properties (one id keeps the one-property slice semantics, several — the picker's multi-select, ticket #547), every listed id resolved through its view gate (one invisible id is the privacy 404 of the whole request); withoutProperty — the property-less slice of the actor's own book. The two filters combine freely — the union is the feed filter's «Общие задачи» + objects (решение владельца 2026-09-07); the property-less rows stay the reader's own book (ADR 0052). Every item's status is computed against its data owner's current moment (a merged page may span owners); today is the reading actor's current date — the day boundary for the «Сегодня»/«Завтра» sections (the data owner's on the single-id branch). The flat order is by due date — the property screen's section-contiguous backbone; the screen sorts rows inside the sections client-side (по дате создания / по названию, like the property screen). Reads never tick.
+         */
+        get: operations["listTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * «Удалить все выполненные» — clear the actor's book-wide completed journal
+         * @description The book-wide twin of the property journal clear (ticket #536): the completed tasks of the actor's deleted rules (rule_id IS NULL) are removed forever across their own book — the bound rows and the property-less ones (ADR 0052) in the same query. The completed tasks of live rules stay — they hold the materialization dedup keys, and clearing them would re-materialize the rule's whole past (ADR 0051). The archived properties' journals stay frozen (ADR 0025), and the shared-to properties' journals are other owners' books — the clear is owner-scope (ADR 0028). No rule data changes — the tick is a no-op.
+         */
+        delete: operations["deleteCompletedTasksWithoutProperty"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a task rule without a property (the owner's own book)
+         * @description The property-less slice of the tasks context (ADR 0052): the rule lives in the actor's own book — there is no property to resolve a role on, the actor is the data owner and the only actor who can create here. The first materialization happens in the same call: the undated task of an undated rule, every occurrence due today, and the single future one — today in the owner's timezone. The due date must be today or later in the owner's timezone — backdated rules are rejected.
+         */
+        post: operations["createTaskRuleWithoutProperty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Load a task rule of the property-less slice (the edit screen)
+         * @description Owner-only (ADR 0052): a foreign actor — including a member of any shared property — gets the privacy 404. A rule bound to a property is invisible on this path: the slices never mix.
+         */
+        get: operations["getTaskRuleWithoutProperty"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a property-less task rule (hard)
+         * @description Every uncompleted task of the rule is physically removed; the completed journal stays with its snapshots (ruleId set to null). Owner-only (ADR 0052).
+         */
+        delete: operations["deleteTaskRuleWithoutProperty"];
+        options?: never;
+        head?: never;
+        /**
+         * Partial task rule update on the property-less slice
+         * @description The same PATCH semantics as the property path: omitted fields stay unchanged; comment, dueDate and dueTime are tri-state (null clears). The edit invalidates the not-yet-due uncompleted tasks — the tick stands the single future again with fresh snapshots; already due and completed tasks keep their frozen snapshots. A newly set due date must be today or later in the owner's timezone.
+         */
+        patch: operations["updateTaskRuleWithoutProperty"];
+        trace?: never;
+    };
+    "/tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Выполнить» a property-less task
+         * @description The completion fact is stamped with today in the owner's timezone; a repeated completion is a 409. The rule's schedule is not touched. Owner-only (ADR 0052); a task bound to a property is invisible on this path.
+         */
+        post: operations["completeTaskWithoutProperty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}/uncomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Отменить выполнение» a property-less task
+         * @description The completion fact is cleared and the task returns to the active ones; the rule's schedule is untouched. Possible only while the rule lives — a journal row of a deleted rule is a 409. Owner-only (ADR 0052); a task bound to a property is invisible on this path.
+         */
+        post: operations["uncompleteTaskWithoutProperty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/tasks": {
         parameters: {
             query?: never;
@@ -2117,12 +2245,15 @@ export interface components {
             dueTime?: components["schemas"]["TaskTime"] | null;
             repeat?: components["schemas"]["TaskRepeat"];
         };
-        /** @description One task rule: the setting that produces tasks. It is never itself completed, overdue or undated — those are states of its tasks. */
+        /** @description One task rule: the setting that produces tasks. It is never itself completed, overdue or undated — those are states of its tasks. propertyId null marks the property-less slice (ADR 0052): the rule lives in the owner's own book. */
         TaskRuleResponse: {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
-            propertyId: string;
+            /**
+             * Format: uuid
+             * @description The bound property; null = the rule without a property (ADR 0052).
+             */
+            propertyId: string | null;
             title: string;
             comment: string | null;
             /**
@@ -2142,8 +2273,13 @@ export interface components {
         TaskResponse: {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
-            propertyId: string;
+            /**
+             * Format: uuid
+             * @description The bound property, snapshotted at materialization; null = the task without a property (ADR 0052).
+             */
+            propertyId: string | null;
+            /** @description The display name of the bound property — the global screen's row label (list projection only, filled on the global listing; null elsewhere — the property screen resolves the property by its id). */
+            propertyName?: string | null;
             /**
              * Format: uuid
              * @description The producing rule; null marks it deleted (the journal row is read-only).
@@ -3652,6 +3788,209 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                /** @description Filter by bound properties — a comma-separated list of one or more property UUIDs (the picker's multi-select, ticket #547). A single id keeps the one-property slice of ticket #521: resolved through the property's view gate (a stranger gets the privacy 404), today is the data owner's. Several ids select the tasks of those properties in one merged page — every listed id must be visible to the reader (one invisible id is a privacy 404 of the whole request), today is the reader's, and archived properties contribute nothing (карта #518, решение 9). Combining it with withoutProperty is the union filter's «Общие задачи» + objects (решение владельца 2026-09-07); a malformed UUID in the list is a 400. */
+                propertyId?: string;
+                /** @description The property-less slice of the actor's own book («без объекта», ADR 0052). Combining it with propertyId unions the two cuts — the property-less rows stay the reader's own book (решение владельца 2026-09-07). */
+                withoutProperty?: boolean;
+                /** @description The bucket selector: false (default) — the active tasks (the screen's Просроченные/Сегодня/даты/Без даты sections), true — the completed journal. total always counts the same bucket. */
+                completed?: boolean;
+                limit?: components["parameters"]["TasksLimit"];
+                offset?: components["parameters"]["TasksOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tasks page. status is the server-computed view bucket (active, overdue, undated, completed); propertyName is the bound property's display name for the global row — null on the property-less slice. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasksResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteCompletedTasksWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Completed journal cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createTaskRuleWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task rule created (propertyId is null) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getTaskRuleWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task rule (propertyId is null) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTaskRuleWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task rule deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTaskRuleWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRuleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task rule updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    completeTaskWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task completed (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    uncompleteTaskWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task reopened (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };

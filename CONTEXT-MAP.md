@@ -11,7 +11,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - [Rentals](./apps/backend/internal/rentals/CONTEXT.md) — rental tenancy of a property: period, terms, payment day, utilities, deposit (the clean-slate successor of the removed leases domain, ADR 0046). Each rental manages exactly one rent payment in the Payments context.
 - [Contacts](./apps/backend/internal/contacts/CONTEXT.md) — the owner's contact book: cards of people for a property (plumber, management company, concierge); the property link is optional (ADR 0051).
 - [Payments](./apps/backend/internal/payments/CONTEXT.md) — payment rules and operation occurrences per property: income/expense record-keeping, auto pay, overdue debt, pauses (ADR 0047).
-- [Tasks](./apps/backend/internal/tasks/CONTEXT.md) — task rules and task occurrences per property: manual to-do tracking; overdue and «undated» are computed states, the completed journal survives rule deletion (ADR 0051).
+- [Tasks](./apps/backend/internal/tasks/CONTEXT.md) — task rules and task occurrences, on a property or created without one: manual to-do tracking; overdue and «undated» are computed states, the completed journal survives rule deletion (ADR 0051); propertyless tasks live in the owner's book (ADR 0052).
 - [Notifications](./apps/backend/internal/notifications/CONTEXT.md) — delivery channels (email, Web Push), per-channel preferences, the `subscription_grace` event with direct sending, and the grace worker.
 - [Billing](./apps/backend/internal/billing/CONTEXT.md) — tariffs, subscriptions, payment methods, T-Kassa integration.
 - [Access](./apps/backend/internal/access/CONTEXT.md) — property sharing, member roles, derived object access.
@@ -28,7 +28,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - **Properties → Rentals**: a rental belongs to exactly one property (`property_id`); access to it follows the property access roles (ADR 0028).
 - **Rentals → Payments**: a rental manages exactly one rent payment (income, category `rent`): creating, editing terms, extending, completing, and deleting the rental atomically drive the payment; the payment cannot be deleted past the rental.
 - **Rentals → Contacts**: a rental may reference a contact from the owner's book as the tenant; deleting the contact nulls the reference (ADR 0051).
-- **Properties → Tasks**: a task rule and its tasks belong to exactly one property (`property_id`); access to them follows the property access roles (ADR 0028). Archive is read-only for tasks (the tick skips archived properties); deletion is a total cascade (ADR 0051).
+- **Properties → Tasks**: a task rule and its tasks belong to exactly one property (`property_id`) or, created explicitly without one, live in the owner's book as propertyless tasks (ADR 0052). Access to property-bound tasks follows the property access roles (ADR 0028); propertyless tasks are owner-only. Archive is read-only for tasks (the tick skips archived properties); deleting a property cascades its rules and tasks in both ADR 0025 modes (ADR 0051) — propertyless tasks are unaffected. Propertyless rules resolve «today», overdue, and completion in the owner's timezone (ADR 0048).
 - **Properties → Billing**: Active property count feeds subscription tariff limits.
 - **Billing → Access**: Downgrade/grace-period may suspend shared access when limits shrink.
 - **All → Audit**: Every context records user/admin/system actions to the audit log.

@@ -18,10 +18,20 @@ export const ROUTES = {
     `/properties/${id}/payments/${paymentId}`,
   /** Экран «Задачи объекта» (#499): единый список групп-секций. */
   propertyTasks: (id: string) => `/properties/${id}/tasks`,
+  /** Экран «Задачи» — глобальная лента всех задач (карта #518, тикет #523):
+   * merged-фид читателя, топ-уровень рядом с объектами. */
+  tasks: '/tasks',
   /** Экран «Создать задачу» (#500): полноэкранная форма в два шага. */
   propertyTaskCreate: (id: string) => `/properties/${id}/tasks/new`,
+  /** Тот же экран с глобальной ленты «Задачи» (#525): вход без
+   * предвыбранного объекта. */
+  taskCreate: '/tasks/new',
   /** Экран «Изменить задачу» (#502): правка правила, тапом по строке списка. */
   propertyTaskEdit: (id: string, ruleId: string) => `/properties/${id}/tasks/${ruleId}/edit`,
+  /** Плоский маршрут правки безобъектного правила (#537): та же форма
+   * «Изменить задачу» вне объекта; тап по активной безобъектной строке
+   * глобальной ленты (#523). Правило объекта на нём невидимо (privacy 404). */
+  taskEdit: (ruleId: string) => `/tasks/${ruleId}/edit`,
   /** Подэкраны страницы платежа (#466): график, история, просрочки. */
   propertyPaymentSchedule: (id: string, paymentId: string) =>
     `/properties/${id}/payments/${paymentId}/schedule`,

@@ -27,10 +27,13 @@ export const TASK_REPEAT_OPTIONS: ReadonlyArray<{
   { value: 'yearly', label: 'Год' },
 ];
 
-/** Черновик формы: всё, кроме названия, необязательно. */
+/** Черновик формы: всё, кроме названия, необязательно. Объект тоже: null —
+ * «Общая задача», правило без объекта (#525). */
 export type TaskCreateDraft = {
   readonly title: string;
   readonly comment: string;
+  /** Привязка правила: uuid объекта или null — правило без объекта (ADR 0052). */
+  readonly propertyId: string | null;
   readonly dueDate: IsoDate | null;
   /** HH:MM из пикера времени; null — на весь день. */
   readonly dueTime: string | null;
@@ -40,6 +43,7 @@ export type TaskCreateDraft = {
 export const EMPTY_TASK_CREATE_DRAFT: TaskCreateDraft = {
   title: '',
   comment: '',
+  propertyId: null,
   dueDate: null,
   dueTime: null,
   repeat: null,
@@ -53,9 +57,12 @@ export function isTaskTitleFilled(title: string): boolean {
 /**
  * Контрактные зависимости шага 2: время и повтор требуют дату. Экран
  * дизейблит чипы и пикер времени без даты — здесь последняя линия
- * перед запросом.
+ * перед запросом. Объект не участвует — общая с правкой (#502): принимает
+ * и её черновик.
  */
-export function canCreateTask(draft: TaskCreateDraft): boolean {
+export function canCreateTask(
+  draft: Pick<TaskCreateDraft, 'title' | 'dueDate' | 'dueTime' | 'repeat'>,
+): boolean {
   if (!isTaskTitleFilled(draft.title)) {
     return false;
   }
@@ -68,7 +75,8 @@ export function canCreateTask(draft: TaskCreateDraft): boolean {
   return true;
 }
 
-/** Payload POST /properties/{id}/tasks/rules; null — черновик невалиден. */
+/** Payload POST создания правила; null — черновик невалиден. Объект в теле
+ * не участвует — им выбирается эндпоинт (taskRuleCreatePath). */
 export function buildTaskRuleCreateRequest(
   draft: TaskCreateDraft,
 ): TaskRuleCreateRequestDto | null {
@@ -83,4 +91,16 @@ export function buildTaskRuleCreateRequest(
     ...(draft.dueTime !== null ? { dueTime: draft.dueTime } : {}),
     repeat: draft.repeat ?? 'once',
   };
+}
+
+/**
+ * Эндпоинт создания по объекту черновика (#525): с объектом — объектный
+ * POST /properties/{id}/tasks/rules, без («Общая задача») — глобальный
+ * POST /tasks/rules (#520). Общего «создать с объектом в теле» в контракте
+ * нет — срез правила задаёт путь.
+ */
+export function taskRuleCreatePath(propertyId: string | null): string {
+  return propertyId === null
+    ? '/tasks/rules'
+    : `/properties/${encodeURIComponent(propertyId)}/tasks/rules`;
 }

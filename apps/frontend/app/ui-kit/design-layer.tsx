@@ -853,6 +853,9 @@ export function DesignLayerShowcase(): JSX.Element {
                                 />
                             </div>
                         </TopNav>
+                        {/* Хаб-вариант (#523): «крылья» и на мобайле; вживую
+                         * смотрится на экране «Задачи» (/tasks). */}
+                        <TopNav mobileWings />
                     </div>
                 </div>
 

@@ -4,14 +4,17 @@
 -- in tasks_tick.sql, the task reads/completions in tasks_tasks.sql.
 
 -- name: GetPropertyForTask :one
--- The payments-scoped read of the property (ADR 0028): the data owner and
--- the archived flag, no lock.
-SELECT id, owner_id, status FROM properties WHERE id = $1;
+-- The tasks-scoped read of the property (ADR 0028): the data owner, the
+-- archived flag and the display name (the global listing's row projection,
+-- ticket #521), no lock.
+SELECT id, owner_id, status, name FROM properties WHERE id = $1;
 
 -- name: GetPropertyForTaskMutation :one
--- The mutation's serialization point: the property row locked inside the
--- caller's transaction, so mutation-vs-tick, mutation-vs-mutation and
--- archive-vs-mutation serialize on one point (ADR 0049 §3).
+-- The property row locked inside the caller's transaction: for an
+-- active/maintenance row the conveyor's owner-wide set lock already holds
+-- it (the #546 global order), so this re-lock is a no-op; an archived row
+-- stands outside that set, and this lock closes the archive-vs-mutation
+-- race before the read-only check (ADR 0049 §3).
 SELECT id, owner_id, status FROM properties WHERE id = $1 FOR UPDATE;
 
 -- name: CreateTaskRule :exec
@@ -44,6 +47,14 @@ DELETE FROM task_rules WHERE id = $1 AND owner_id = $2;
 SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, created_at, updated_at
 FROM task_rules
 WHERE id = $1 AND owner_id = $2 AND property_id = $3;
+
+-- name: GetTaskRuleWithoutProperty :one
+-- The property-less cut of the rule read (ADR 0052: the slices never mix —
+-- the predicate over property_id picks the slice explicitly). The id-scoped
+-- owner key is the privacy 404; a bound rule is invisible here by design.
+SELECT id, owner_id, property_id, title, comment, due_date, due_time, repeat, created_at, updated_at
+FROM task_rules
+WHERE id = $1 AND owner_id = $2 AND property_id IS NULL;
 
 -- name: DeleteRuleNotDueUncompleted :exec
 -- The edit invalidation (resolution #496): the rule's uncompleted tasks that

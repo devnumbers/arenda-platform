@@ -37,14 +37,26 @@ export type TopNavProps = {
    * рисуется — его роль играет глиф внутри поля, сходящийся с позицией
    * кнопки поиска (36px от края), поэтому переключение не дёргается. */
   readonly variant?: 'default' | 'search';
+  /** «Крылья» (лого + кнопка профиля) и на мобайле, не только на десктопе
+   * (Figma 1733-27411 — глобальная лента «Задачи» #523): хаб-экраны без
+   * leading-кнопки открываются шапкой хаба. */
+  readonly mobileWings?: boolean;
 };
 
-export function TopNav({ leading, trailing, children, className, variant = 'default' }: TopNavProps): JSX.Element {
+export function TopNav({
+  leading,
+  trailing,
+  children,
+  className,
+  variant = 'default',
+  mobileWings = false,
+}: TopNavProps): JSX.Element {
   const router = useRouter();
   const user = useTopNavUser();
 
   const firstName = user?.name;
   const displayName = firstName?.length ? firstName : 'Пользователь';
+  const wingsClass = mobileWings ? 'flex' : 'hidden desktop:flex';
 
   return (
     <header
@@ -58,11 +70,14 @@ export function TopNav({ leading, trailing, children, className, variant = 'defa
       <Link
         href={ROUTES.properties}
         aria-label="Объекты"
-        className="absolute left-0 top-0 hidden h-[72px] items-center pl-[22px] outline-none focus-visible:rounded-pill focus-visible:ring-2 focus-visible:ring-primary desktop:flex"
+        className={cn(
+          'absolute left-0 top-0 h-[72px] items-center pl-[22px] outline-none focus-visible:rounded-pill focus-visible:ring-2 focus-visible:ring-primary desktop:flex',
+          wingsClass,
+        )}
       >
         <HeaderLogo />
       </Link>
-      <div className="absolute right-0 top-0 hidden h-[72px] items-center desktop:flex">
+      <div className={cn('absolute right-0 top-0 h-[72px] items-center desktop:flex', wingsClass)}>
         <UserButton name={displayName} onClick={() => router.push(ROUTES.profile)} />
       </div>
       {variant === 'search' ? (

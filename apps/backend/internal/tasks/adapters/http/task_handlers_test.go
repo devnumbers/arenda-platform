@@ -22,12 +22,21 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/tasks/domain"
 )
 
-// fakeTaskRulesManager is the func-backed TaskRulesManager double.
+// fakeTaskRulesManager is the func-backed TaskRulesManager double. The
+// property-less slice doubles live in a nested struct (ADR 0052) — the two
+// contracts stay visibly distinct and the slices never blur in a test.
 type fakeTaskRulesManager struct {
 	create func(ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreateRuleCommand) (domain.TaskRule, error)
 	get    func(ctx context.Context, actor, propertyID, ruleID uuid.UUID) (domain.TaskRule, error)
 	update func(ctx context.Context, actor, propertyID, ruleID uuid.UUID, cmd application.UpdateRuleCommand) (domain.TaskRule, error)
 	del    func(ctx context.Context, actor, propertyID, ruleID uuid.UUID) error
+
+	withoutProperty struct {
+		create func(ctx context.Context, actor uuid.UUID, cmd application.CreateRuleCommand) (domain.TaskRule, error)
+		get    func(ctx context.Context, actor, ruleID uuid.UUID) (domain.TaskRule, error)
+		update func(ctx context.Context, actor, ruleID uuid.UUID, cmd application.UpdateRuleCommand) (domain.TaskRule, error)
+		del    func(ctx context.Context, actor, ruleID uuid.UUID) error
+	}
 }
 
 func (f *fakeTaskRulesManager) CreateRule(
@@ -64,12 +73,53 @@ func (f *fakeTaskRulesManager) DeleteRule(ctx context.Context, actor, propertyID
 	return f.del(ctx, actor, propertyID, ruleID)
 }
 
+func (f *fakeTaskRulesManager) CreateRuleWithoutProperty(
+	ctx context.Context, actor uuid.UUID, cmd application.CreateRuleCommand,
+) (domain.TaskRule, error) {
+	if f.withoutProperty.create == nil {
+		return domain.TaskRule{}, errors.New("unexpected CreateRuleWithoutProperty call")
+	}
+	return f.withoutProperty.create(ctx, actor, cmd)
+}
+
+func (f *fakeTaskRulesManager) GetRuleWithoutProperty(
+	ctx context.Context, actor, ruleID uuid.UUID,
+) (domain.TaskRule, error) {
+	if f.withoutProperty.get == nil {
+		return domain.TaskRule{}, errors.New("unexpected GetRuleWithoutProperty call")
+	}
+	return f.withoutProperty.get(ctx, actor, ruleID)
+}
+
+func (f *fakeTaskRulesManager) UpdateRuleWithoutProperty(
+	ctx context.Context, actor, ruleID uuid.UUID, cmd application.UpdateRuleCommand,
+) (domain.TaskRule, error) {
+	if f.withoutProperty.update == nil {
+		return domain.TaskRule{}, errors.New("unexpected UpdateRuleWithoutProperty call")
+	}
+	return f.withoutProperty.update(ctx, actor, ruleID, cmd)
+}
+
+func (f *fakeTaskRulesManager) DeleteRuleWithoutProperty(
+	ctx context.Context, actor, ruleID uuid.UUID,
+) error {
+	if f.withoutProperty.del == nil {
+		return errors.New("unexpected DeleteRuleWithoutProperty call")
+	}
+	return f.withoutProperty.del(ctx, actor, ruleID)
+}
+
 // fakeTasksManager is the func-backed TasksManager double.
 type fakeTasksManager struct {
 	list       func(ctx context.Context, actor, propertyID uuid.UUID, q application.TasksListQuery) (application.TasksPage, error)
+	listGlobal func(ctx context.Context, actor uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error)
 	complete   func(ctx context.Context, actor, propertyID, taskID uuid.UUID) (domain.Task, error)
 	uncomplete func(ctx context.Context, actor, propertyID, taskID uuid.UUID) (domain.Task, error)
 	clear      func(ctx context.Context, actor, propertyID uuid.UUID) (int64, error)
+
+	completeWithoutProperty   func(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
+	uncompleteWithoutProperty func(ctx context.Context, actor, taskID uuid.UUID) (domain.Task, error)
+	clearOwnerBook            func(ctx context.Context, actor uuid.UUID) (int64, error)
 }
 
 func (f *fakeTasksManager) ListTasks(
@@ -108,6 +158,42 @@ func (f *fakeTasksManager) ClearCompletedJournal(
 	return f.clear(ctx, actor, propertyID)
 }
 
+func (f *fakeTasksManager) CompleteTaskWithoutProperty(
+	ctx context.Context, actor, taskID uuid.UUID,
+) (domain.Task, error) {
+	if f.completeWithoutProperty == nil {
+		return domain.Task{}, errors.New("unexpected CompleteTaskWithoutProperty call")
+	}
+	return f.completeWithoutProperty(ctx, actor, taskID)
+}
+
+func (f *fakeTasksManager) UncompleteTaskWithoutProperty(
+	ctx context.Context, actor, taskID uuid.UUID,
+) (domain.Task, error) {
+	if f.uncompleteWithoutProperty == nil {
+		return domain.Task{}, errors.New("unexpected UncompleteTaskWithoutProperty call")
+	}
+	return f.uncompleteWithoutProperty(ctx, actor, taskID)
+}
+
+func (f *fakeTasksManager) ListGlobalTasks(
+	ctx context.Context, actor uuid.UUID, q application.GlobalTasksListQuery,
+) (application.TasksPage, error) {
+	if f.listGlobal == nil {
+		return application.TasksPage{}, errors.New("unexpected ListGlobalTasks call")
+	}
+	return f.listGlobal(ctx, actor, q)
+}
+
+func (f *fakeTasksManager) ClearCompletedJournalOwnerBook(
+	ctx context.Context, actor uuid.UUID,
+) (int64, error) {
+	if f.clearOwnerBook == nil {
+		return 0, errors.New("unexpected ClearCompletedJournalOwnerBook call")
+	}
+	return f.clearOwnerBook(ctx, actor)
+}
+
 // fixtureRule is the tests' fixture rule.
 func fixtureRule() domain.TaskRule {
 	id := uuid.Must(uuid.NewV7())
@@ -115,7 +201,7 @@ func fixtureRule() domain.TaskRule {
 	created := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
 	tod := domain.TimeOfDay(15*60 + 13)
 	return domain.TaskRule{
-		ID: id, PropertyID: uuid.Must(uuid.NewV7()),
+		ID: id, PropertyID: new(uuid.Must(uuid.NewV7())),
 		Title: "Проверить счётчики", DueDate: &due, DueTime: &tod,
 		Repeat: domain.RepeatWeekly, CreatedAt: created, UpdatedAt: created,
 	}
@@ -128,7 +214,7 @@ func fixtureTask() domain.Task {
 	due := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	created := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
 	return domain.Task{
-		ID: id, PropertyID: uuid.Must(uuid.NewV7()), RuleID: &ruleID,
+		ID: id, PropertyID: new(uuid.Must(uuid.NewV7())), RuleID: &ruleID,
 		DueDate: &due, Title: "Вынести мусор",
 		CreatedAt: created, UpdatedAt: created,
 	}
@@ -168,9 +254,31 @@ func TestTaskHandlers_Unauthorized(t *testing.T) {
 		"list tasks": func(w http.ResponseWriter, r *http.Request) {
 			th.ListPropertyTasks(w, r, propertyID, openapi.ListPropertyTasksParams{})
 		},
+		"list global tasks": func(w http.ResponseWriter, r *http.Request) {
+			th.ListTasks(w, r, openapi.ListTasksParams{})
+		},
 		"complete":         func(w http.ResponseWriter, r *http.Request) { th.CompleteTask(w, r, propertyID, otherID) },
 		"uncomplete":       func(w http.ResponseWriter, r *http.Request) { th.UncompleteTask(w, r, propertyID, otherID) },
 		"delete completed": func(w http.ResponseWriter, r *http.Request) { th.DeleteCompletedTasks(w, r, propertyID) },
+
+		"create rule without property": func(w http.ResponseWriter, r *http.Request) {
+			rh.CreateTaskRuleWithoutProperty(w, r)
+		},
+		"get rule without property": func(w http.ResponseWriter, r *http.Request) {
+			rh.GetTaskRuleWithoutProperty(w, r, otherID)
+		},
+		"update rule without property": func(w http.ResponseWriter, r *http.Request) {
+			rh.UpdateTaskRuleWithoutProperty(w, r, otherID)
+		},
+		"delete rule without property": func(w http.ResponseWriter, r *http.Request) {
+			rh.DeleteTaskRuleWithoutProperty(w, r, otherID)
+		},
+		"complete task without property": func(w http.ResponseWriter, r *http.Request) {
+			th.CompleteTaskWithoutProperty(w, r, otherID)
+		},
+		"uncomplete task without property": func(w http.ResponseWriter, r *http.Request) {
+			th.UncompleteTaskWithoutProperty(w, r, otherID)
+		},
 	}
 	for name, call := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -367,6 +475,186 @@ func TestTaskHandlers_ListPropertyTasks_FoldsParamsAndBuckets(t *testing.T) {
 	}
 	if resp.Items[1].Repeat != nil {
 		t.Fatalf("repeat without the rule projection = %q, want null", *resp.Items[1].Repeat)
+	}
+}
+
+func TestTaskHandlers_ListTasks_FoldsParamsAndProjectsName(t *testing.T) {
+	t.Parallel()
+
+	actor := uuid.Must(uuid.NewV7())
+	var gotActor uuid.UUID
+	var gotQ application.GlobalTasksListQuery
+	svc := &fakeTasksManager{
+		listGlobal: func(_ context.Context, a uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error) {
+			gotActor = a
+			gotQ = q
+			first := fixtureTask()
+			return application.TasksPage{
+				Items: []application.TaskListItem{
+					{Task: first, Status: domain.ViewOverdue, PropertyName: "Дача"},
+					{Task: fixtureTask(), Status: domain.ViewActive},
+				},
+				Total: 2,
+				Today: time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	}
+	h := NewTaskHandlers(svc, nil)
+
+	propertyID := uuid.Must(uuid.NewV7())
+	propertyIDParam := propertyID.String()
+	completed := true
+	limit := openapi.TasksLimit(10)
+	offset := openapi.TasksOffset(5)
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), actor),
+		http.MethodGet, "/tasks", nil,
+	)
+	w := httptest.NewRecorder()
+	h.ListTasks(w, req, openapi.ListTasksParams{
+		PropertyId: &propertyIDParam,
+		Completed:  &completed,
+		Limit:      &limit,
+		Offset:     &offset,
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if gotActor != actor {
+		t.Fatalf("actor = %s, want %s", gotActor, actor)
+	}
+	if len(gotQ.PropertyIDs) != 1 || gotQ.PropertyIDs[0] != propertyID {
+		t.Fatalf("property filter = %v", gotQ.PropertyIDs)
+	}
+	if gotQ.WithoutProperty {
+		t.Fatalf("withoutProperty leaked: %+v", gotQ)
+	}
+	if !gotQ.Completed || gotQ.Limit != 10 || gotQ.Offset != 5 {
+		t.Fatalf("query = %+v", gotQ)
+	}
+
+	var resp openapi.TasksResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Items) != 2 || resp.Total != 2 {
+		t.Fatalf("response = %d items / total %d", len(resp.Items), resp.Total)
+	}
+	if resp.Items[0].PropertyName == nil || *resp.Items[0].PropertyName != "Дача" {
+		t.Fatalf("propertyName = %v, want Дача", resp.Items[0].PropertyName)
+	}
+	if resp.Items[1].PropertyName != nil {
+		t.Fatalf("property-less propertyName = %q, want null", *resp.Items[1].PropertyName)
+	}
+}
+
+func TestTaskHandlers_ListTasks_FoldsWithoutProperty(t *testing.T) {
+	t.Parallel()
+
+	var gotQ application.GlobalTasksListQuery
+	svc := &fakeTasksManager{
+		listGlobal: func(_ context.Context, _ uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error) {
+			gotQ = q
+			return application.TasksPage{Items: []application.TaskListItem{}, Total: 0, Today: time.Time{}}, nil
+		},
+	}
+	h := NewTaskHandlers(svc, nil)
+
+	without := true
+	req := userRequest(t, http.MethodGet, "/tasks", "")
+	w := httptest.NewRecorder()
+	h.ListTasks(w, req, openapi.ListTasksParams{WithoutProperty: &without})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if !gotQ.WithoutProperty || len(gotQ.PropertyIDs) != 0 {
+		t.Fatalf("query = %+v", gotQ)
+	}
+}
+
+func TestTaskHandlers_ListTasks_MultiPropertyIDs(t *testing.T) {
+	t.Parallel()
+
+	first := uuid.Must(uuid.NewV7())
+	second := uuid.Must(uuid.NewV7())
+	var gotQ application.GlobalTasksListQuery
+	svc := &fakeTasksManager{
+		listGlobal: func(_ context.Context, _ uuid.UUID, q application.GlobalTasksListQuery) (application.TasksPage, error) {
+			gotQ = q
+			return application.TasksPage{Items: []application.TaskListItem{}, Total: 0, Today: time.Time{}}, nil
+		},
+	}
+	h := NewTaskHandlers(svc, nil)
+
+	list := first.String() + ", " + second.String() + ","
+	req := userRequest(t, http.MethodGet, "/tasks", "")
+	w := httptest.NewRecorder()
+	h.ListTasks(w, req, openapi.ListTasksParams{PropertyId: &list})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if len(gotQ.PropertyIDs) != 2 || gotQ.PropertyIDs[0] != first || gotQ.PropertyIDs[1] != second {
+		t.Fatalf("property filter = %v, want both ids", gotQ.PropertyIDs)
+	}
+}
+
+func TestTaskHandlers_ListTasks_MalformedPropertyID400(t *testing.T) {
+	t.Parallel()
+
+	var listed bool
+	svc := &fakeTasksManager{
+		listGlobal: func(context.Context, uuid.UUID, application.GlobalTasksListQuery) (application.TasksPage, error) {
+			listed = true
+			return application.TasksPage{}, nil
+		},
+	}
+	h := NewTaskHandlers(svc, nil)
+
+	garbage := "квартира"
+	req := userRequest(t, http.MethodGet, "/tasks", "")
+	w := httptest.NewRecorder()
+	h.ListTasks(w, req, openapi.ListTasksParams{PropertyId: &garbage})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	if listed {
+		t.Fatal("the use case must not be reached with a malformed uuid")
+	}
+}
+
+func TestTaskHandlers_ListTasks_ErrorMapping(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"both property filters 400", application.ErrInvalidInput, http.StatusBadRequest},
+		{"foreign propertyId privacy 404", application.ErrNotFound, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc := &fakeTasksManager{
+				listGlobal: func(
+					_ context.Context, _ uuid.UUID, _ application.GlobalTasksListQuery,
+				) (application.TasksPage, error) {
+					return application.TasksPage{}, tt.err
+				},
+			}
+			h := NewTaskHandlers(svc, nil)
+			req := userRequest(t, http.MethodGet, "/tasks", "")
+			w := httptest.NewRecorder()
+			h.ListTasks(w, req, openapi.ListTasksParams{})
+			if w.Code != tt.want {
+				t.Fatalf("status = %d, want %d", w.Code, tt.want)
+			}
+		})
 	}
 }
 

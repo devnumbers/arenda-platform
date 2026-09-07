@@ -44,11 +44,13 @@ var (
 )
 
 // PropertyRef is the tasks view of the property a use case targets: the data
-// owner (the SQL scope, ADR 0028) and the archived flag. The properties
-// context owns the entity; tasks never needs its rest.
+// owner (the SQL scope, ADR 0028), the archived flag and the display name
+// (the global listing's row projection, ticket #521). The properties context
+// owns the entity; tasks never needs its rest.
 type PropertyRef struct {
 	OwnerID  uuid.UUID
 	Archived bool
+	Name     string
 }
 
 // PropertyStore resolves the property a tasks use case targets. The
@@ -68,11 +70,16 @@ type PropertyStore interface {
 
 // RuleStore is the persistence port of the task rules. Reads and writes are
 // scoped by the data owner (ADR 0028) and the nested path rule→property is
-// enforced in the queries themselves.
+// enforced in the queries themselves; the property-less cut (ADR 0052) is a
+// separate explicit key — the slices never mix.
 type RuleStore interface {
 	// Get loads one rule; ErrNotFound when the id is unknown, belongs to
 	// another owner or hangs on another property.
 	Get(ctx context.Context, id, scope, propertyID uuid.UUID) (domain.TaskRule, error)
+	// GetWithoutProperty loads one rule of the property-less cut; ErrNotFound
+	// when the id is unknown, belongs to another owner or hangs on a property
+	// (ADR 0052).
+	GetWithoutProperty(ctx context.Context, id, scope uuid.UUID) (domain.TaskRule, error)
 	// Create inserts a new rule (id and owner_id are app-side).
 	Create(ctx context.Context, rule domain.TaskRule) error
 	// Update writes the editable fields of the rule.
@@ -102,10 +109,38 @@ type TaskStore interface {
 	// Get loads one task; ErrNotFound when the id is unknown, foreign or
 	// hangs on another property.
 	Get(ctx context.Context, id, scope, propertyID uuid.UUID) (domain.Task, error)
+	// GetWithoutProperty loads one task of the property-less cut; ErrNotFound
+	// when the id is unknown, belongs to another owner or hangs on a property
+	// (ADR 0052).
+	GetWithoutProperty(ctx context.Context, id, scope uuid.UUID) (domain.Task, error)
 	// ListByProperty returns one page of the property's tasks — active
 	// (uncompleted) or completed per the query — with the total count of the
 	// same filter (the «Выполненные N» section header).
 	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID, q TasksListQuery) ([]domain.Task, int, error)
+	// ListGlobal returns one page of the actor's visible merged feed
+	// (ticket #521): their own tasks — bound and property-less — plus the
+	// bound tasks of the properties they can view (ADR 0028, the merged
+	// visibility ADR 0052 decision 3). The rows carry the bound property's
+	// display name; Status is zero and stays the use case's to compute
+	// against each row owner's moment.
+	ListGlobal(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
+	// ListGlobalWithoutProperty returns one page of the property-less cut of
+	// the actor's own book (ADR 0052) — the global listing's «без объекта»
+	// filter. The same row contract as ListGlobal; PropertyName is always
+	// empty there.
+	ListGlobalWithoutProperty(ctx context.Context, actor uuid.UUID, q TasksListQuery) ([]GlobalTaskRow, int, error)
+	// ListGlobalOfProperties returns one page of the listed properties'
+	// tasks in the merged-feed visibility (ticket #547): the SQL cuts the
+	// feed to t.property_id in the list; archived properties contribute
+	// nothing (ADR 0025/решение 9). The same row contract as ListGlobal;
+	// the use case has already proven every listed property's visibility
+	// (the privacy 404 lives there). The withoutProperty flag extends the
+	// cut with the actor's own property-less rows — the feed filter's
+	// «Общие задачи» union (решение владельца 2026-09-07); false
+	// reproduces the pure property cut of #547.
+	ListGlobalOfProperties(
+		ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID, withoutProperty bool, q TasksListQuery,
+	) ([]GlobalTaskRow, int, error)
 	// Complete stamps the completion fact (completed_date = day) on the
 	// still-active task; rows affected = 0 surfaces as ErrAlreadyCompleted.
 	Complete(ctx context.Context, id, scope uuid.UUID, day time.Time) error
@@ -119,6 +154,14 @@ type TaskStore interface {
 	// keys, and clearing them would re-materialize the rule's whole past
 	// (ADR 0051).
 	DeleteCompletedJournal(ctx context.Context, scope, propertyID uuid.UUID) (int64, error)
+	// DeleteCompletedJournalOwnerBook is the book-wide twin (ticket #536):
+	// the completed tasks of the owner's deleted rules across both slices in
+	// one query — the bound rows on non-archived properties and the
+	// property-less ones (ADR 0052); the archived properties' journals stay
+	// frozen (ADR 0025) and other owners' books are untouched (owner-scope,
+	// ADR 0028). The same live-rule protection as the property-scoped
+	// variant. It returns the number of removed rows.
+	DeleteCompletedJournalOwnerBook(ctx context.Context, scope uuid.UUID) (int64, error)
 	WithTx(tx transaction.Tx) (TaskStore, error)
 }
 
@@ -156,10 +199,45 @@ func PrepareTasksQuery(q *TasksListQuery) error {
 // TaskListItem pairs one task with its server-computed view status
 // (CONTEXT.md «Просрочка», «Без срока»): the buckets are never stored — they
 // are derived against the owner's current moment before the response leaves
-// the use case; clients never need the owner's timezone.
+// the use case; clients never need the owner's timezone. PropertyName is the
+// global listing's row projection — the bound property's display name, empty
+// on the property-scoped listings and the property-less slice.
 type TaskListItem struct {
-	Task   domain.Task
-	Status domain.TaskViewStatus
+	Task         domain.Task
+	Status       domain.TaskViewStatus
+	PropertyName string
+}
+
+// GlobalTaskRow is one row of the global listings' read projection
+// (ticket #521): the task plus the bound property's display name — the
+// global screen's per-row label, empty on the property-less slice. The use
+// case turns it into a TaskListItem by computing Status against the row
+// owner's moment.
+type GlobalTaskRow struct {
+	Task         domain.Task
+	PropertyName string
+}
+
+// GlobalTasksListQuery is the global listing request (ticket #521): the
+// TasksListQuery pagination and bucket fields plus the property filter —
+// PropertyIDs (one id — the tasks of that one property resolved through its
+// view gate, ticket #521; several — the picker's multi-select over the
+// merged feed, ticket #547), WithoutProperty (the property-less slice of
+// the actor's own book) or their union — both set is the filter's «Общие
+// задачи» plus objects (решение владельца 2026-09-07). Neither set lists
+// the actor's visible merged feed.
+type GlobalTasksListQuery struct {
+	TasksListQuery
+	PropertyIDs     []uuid.UUID
+	WithoutProperty bool
+}
+
+// PrepareGlobalTasksQuery validates the global listing request in place:
+// the pagination rules of PrepareTasksQuery. The property filter and the
+// property-less flag combine freely — the union is the feed filter's
+// «Общие задачи» + objects (решение владельца 2026-09-07).
+func PrepareGlobalTasksQuery(q *GlobalTasksListQuery) error {
+	return PrepareTasksQuery(&q.TasksListQuery)
 }
 
 // TasksPage is one listing page plus the total count of the same filter (the
@@ -172,8 +250,9 @@ type TasksPage struct {
 }
 
 // OwnerSnapshot is the tick's read side in one interface fact: the owner's
-// task rules on non-archived properties and the dedup keys of their existing
-// tasks. How many queries build it is the adapter's business.
+// task rules — property-less and on non-archived properties (ADR 0052) —
+// and the dedup keys of their existing tasks. How many queries build it is
+// the adapter's business.
 type OwnerSnapshot struct {
 	Rules []domain.TaskRule
 	// Existing keys the listed rules' tasks by rule: dated rows by due date
@@ -186,12 +265,21 @@ type OwnerSnapshot struct {
 // plan. Every method must run inside the tick's unit of work.
 type TickStore interface {
 	// LockOwnerProperties takes the tick's serialization point: FOR UPDATE on
-	// the owner's active/maintenance property rows. Context mutations lock
-	// the same rows per property, so update-vs-tick, archive-vs-tick and
-	// delete-vs-tick serialize on one point.
+	// the owner's active/maintenance property rows, ordered by id. Context
+	// mutations take the same ordered set at the transaction's front (#546),
+	// so update-vs-tick, archive-vs-tick, delete-vs-tick and
+	// mutation-vs-mutation serialize on one lock order without deadlocks.
 	LockOwnerProperties(ctx context.Context, ownerID uuid.UUID) error
-	// LoadOwnerSnapshot returns the owner's task rules on non-archived
-	// properties with the dedup keys of their existing tasks.
+	// LockOwner takes the property-less cut's serialization point (ADR 0052):
+	// FOR UPDATE on the owner's users row. Owner-scope mutations hold it for
+	// their whole transaction. The full tick takes it after the property
+	// rows; bound-rule mutations never do — the slices' rules are disjoint
+	// row sets, and crossed lock orders would invite deadlocks.
+	LockOwner(ctx context.Context, ownerID uuid.UUID) error
+	// LoadOwnerSnapshot returns the owner's task rules — the property-less
+	// cut plus the rules on non-archived properties (ADR 0052) — with the
+	// dedup keys of their existing tasks. The tick bodies pick their slice
+	// by the rule's PropertyID.
 	LoadOwnerSnapshot(ctx context.Context, ownerID uuid.UUID) (OwnerSnapshot, error)
 	// ApplyTickPlan applies one rule's plan inside the caller's transaction:
 	// the idempotent task inserts (due dates, the missing single future and

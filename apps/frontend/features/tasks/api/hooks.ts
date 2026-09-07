@@ -13,7 +13,8 @@ import { mapTask, mapTaskRule, mapTasksPage } from '@/entities/task';
 import type { Task, TaskRule, TasksPage } from '@/entities/task';
 import { taskKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
-import { buildTaskRuleCreateRequest, type TaskCreateDraft } from '../lib/task-create';
+import { buildTaskRuleCreateRequest, taskRuleCreatePath, type TaskCreateDraft } from '../lib/task-create';
+import { taskCompletionPath } from '../lib/global-tasks';
 import type { TaskRuleUpdateCommand } from '../lib/task-edit';
 
 type TaskResponseDto = components['schemas']['TaskResponse'];
@@ -167,16 +168,16 @@ export function useDeleteCompletedTasks(
 }
 
 /**
- * Создание задачи = создание правила (словарь #494, #500): POST /tasks/rules
+ * Создание задачи = создание правила (словарь #494, #500): POST правил
  * сразу материализует вхождения. Дата опциональна — без неё задача попадает
  * в «Без срока»; repeat в контракте обязателен, «без повтора» уходит как
- * once (черновик собирает lib/task-create). Тело ответа экрану не нужно —
+ * once (черновик собирает lib/task-create). Эндпоинт выбирает объект
+ * черновика (#525): с объектом — объектный путь, «Общая задача» —
+ * глобальный /tasks/rules (#520). Тело ответа экрану не нужно —
  * результат виден по перечитанному списку (инвалидация всего taskKeys,
  * как у остальных мутаций контекста).
  */
-export function useCreateTaskRule(
-  propertyId: string,
-): UseMutationResult<void, ApiError, TaskCreateDraft> {
+export function useCreateTaskRule(): UseMutationResult<void, ApiError, TaskCreateDraft> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (draft: TaskCreateDraft) => {
@@ -185,10 +186,10 @@ export function useCreateTaskRule(
         // Недостижимо через UI: кнопка «Создать» задизейблена canCreateTask.
         throw new Error('Черновик задачи не прошёл валидацию');
       }
-      await apiClient<unknown>(
-        `/properties/${encodeURIComponent(propertyId)}/tasks/rules`,
-        { method: 'POST', body: JSON.stringify(request) },
-      );
+      await apiClient<unknown>(taskRuleCreatePath(draft.propertyId), {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.all });
@@ -214,6 +215,179 @@ export function useTaskRule(
 }
 
 /**
+ * Правило без объекта — предзаполнение плоской формы «Изменить задачу»
+ * (#537): глобальный GET /tasks/rules/{ruleId} (#520), owner-only. Правило,
+ * привязанное к объекту, на этом пути невидимо — privacy 404, срезы не
+ * смешиваются (ADR 0052).
+ */
+export function usePropertylessTaskRule(
+  ruleId: string,
+): UseQueryResult<TaskRule, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.propertylessRule(ruleId),
+    queryFn: async () => {
+      const response = await apiClient<TaskRuleResponseDto>(
+        `/tasks/rules/${encodeURIComponent(ruleId)}`,
+      );
+      return mapTaskRule(response);
+    },
+    enabled: Boolean(ruleId),
+  });
+}
+
+/**
+ * «Сегодня» владельца для плоской формы правки (ADR 0048) — страница
+ * глобального листинга GET /tasks?withoutProperty=true (#521); лимит 1:
+ * форме нужна только дата, ленту безобъектного среза строит экран #523.
+ * Владелец — сам читатель, today его календаря (контракт #521). enabled —
+ * для форм, где срез входа другой (создание с объекта, #525).
+ */
+export function usePropertylessTasks(
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<TasksPage, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.propertylessTasks(),
+    queryFn: async () => {
+      const response = await apiClient<TasksPageDto>(
+        '/tasks?withoutProperty=true&completed=false&limit=1',
+      );
+      return mapTasksPage(response);
+    },
+    enabled: options.enabled ?? true,
+  });
+}
+
+/** Путь активного/выполненного бакета глобального листинга GET /tasks:
+ * фильтр (#524/#547) — необязательный comma-separated сегмент propertyId и
+ * флаг withoutProperty («Общие задачи», union с объектами — решение
+ * владельца 2026-09-07) перед бакетом. */
+const globalTasksPath = (
+  completed: boolean,
+  propertyIds: ReadonlyArray<string>,
+  withoutProperty: boolean,
+): string => {
+  const parts: string[] = [];
+  if (propertyIds.length > 0) {
+    parts.push(`propertyId=${encodeURIComponent(propertyIds.join(','))}`);
+  }
+  if (withoutProperty) {
+    parts.push('withoutProperty=true');
+  }
+  parts.push(`completed=${completed}`, `limit=${TASKS_PAGE_LIMIT}`);
+  return `/tasks?${parts.join('&')}`;
+};
+
+/**
+ * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
+ * merged-фид читателя (свои задачи + задачи видимых объектов, архивы мимо —
+ * решения #522); фильтр (#524/#547) — срез перечисленных объектов,
+ * «Общие задачи» — безобъектная книга читателя, вместе — union (решение
+ * владельца 2026-09-07); смена фильтра меняет ключ и перечитывает. Лимит —
+ * максимум контракта: лента группируется целиком, как на объекте. today —
+ * календарь читателя (на срезе одного объекта — владельца данных).
+ * Сестринский хук журнала — useGlobalCompletedTasks.
+ */
+export function useGlobalActiveTasks(
+  propertyIds: ReadonlyArray<string>,
+  withoutProperty = false,
+): UseQueryResult<TasksPage, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.global(false, propertyIds, withoutProperty),
+    queryFn: async () =>
+      mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(false, propertyIds, withoutProperty))),
+  });
+}
+
+/** Журнал глобальной ленты — сворачиваемая секция «Выполненные N». */
+export function useGlobalCompletedTasks(
+  propertyIds: ReadonlyArray<string>,
+  withoutProperty = false,
+): UseQueryResult<TasksPage, ApiError> {
+  return useQuery({
+    queryKey: taskKeys.global(true, propertyIds, withoutProperty),
+    queryFn: async () =>
+      mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(true, propertyIds, withoutProperty))),
+  });
+}
+
+/**
+ * Выполнить/снять в ленте: срез маршрутизирует lib/global-tasks (ADR 0052)
+ * — безобъектная задача в глобальный путь, объектная в путь своего объекта.
+ * Инвалидация taskKeys.all перечитывает и ленту, и все объектные экраны.
+ */
+export function useCompleteGlobalTask(
+  action: 'complete' | 'uncomplete',
+): UseMutationResult<Task, ApiError, Task> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (task: Task) => {
+      const response = await apiClient<TaskResponseDto>(
+        taskCompletionPath(task, action),
+        { method: 'POST' },
+      );
+      return mapTask(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
+ * «Отметить все» в ленте: по одному POST на задачу (bulk-эндпоинта нет),
+ * маршрут — по срезу каждой строки. Цикл последовательный: параллельные
+ * POST complete ловят серверный дедлок на блокировке строк свойств
+ * владельца (SQLSTATE 40P01 — дефект сериализации, отдельный тикет бэка).
+ * Сбои отдельных запросов глотаются осознанно, как на объекте (решение
+ * владельца 2026-09-03) — список перечитается и покажет факт. Выбор
+ * мутабельных строк — lib/global-tasks.
+ */
+export function useCompleteAllGlobalTasks(): UseMutationResult<
+  void,
+  ApiError,
+  readonly Task[]
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (tasks: readonly Task[]) => {
+      for (const task of tasks) {
+        try {
+          await apiClient<TaskResponseDto>(taskCompletionPath(task, 'complete'), {
+            method: 'POST',
+          });
+        } catch {
+          // Проглатываем: факт покажет перечитанный список.
+        }
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
+ * «Удалить выполненные» ленты: глобальный DELETE /tasks/completed (#536) —
+ * журнал удалённых правил всей книги читателя (owner-scope ADR 0028):
+ * журналы общих объектов чужие, их сносит владелец на своём экране.
+ */
+export function useDeleteCompletedGlobalTasks(): UseMutationResult<
+  void,
+  ApiError,
+  void
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient<void>('/tasks/completed', { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
  * Сохранение правки правила (#502): частичный PATCH — команду-дифф собирает
  * lib/task-edit (только изменённые поля; comment/dueDate/dueTime —
  * три-стейт, null очищает). Сервер перематериализует будущие вхождения
@@ -229,6 +403,30 @@ export function useUpdateTaskRule(
     mutationFn: async (command: TaskRuleUpdateCommand) => {
       await apiClient<unknown>(
         `/properties/${encodeURIComponent(propertyId)}/tasks/rules/${encodeURIComponent(ruleId)}`,
+        { method: 'PATCH', body: JSON.stringify(command) },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
+ * Сохранение правки правила без объекта (#537): тот же частичный PATCH,
+ * что у объектного пути (#502), — глобальный /tasks/rules/{ruleId} (#520).
+ * Команду-дифф собирает общий lib/task-edit; сервер перематериализует
+ * будущие вхождения по поясу владельца (ADR 0052). Ответа экрану не нужно —
+ * инвалидация taskKeys.all перечитывает и объектный, и безобъектный срезы.
+ */
+export function useUpdatePropertylessTaskRule(
+  ruleId: string,
+): UseMutationResult<void, ApiError, TaskRuleUpdateCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (command: TaskRuleUpdateCommand) => {
+      await apiClient<unknown>(
+        `/tasks/rules/${encodeURIComponent(ruleId)}`,
         { method: 'PATCH', body: JSON.stringify(command) },
       );
     },

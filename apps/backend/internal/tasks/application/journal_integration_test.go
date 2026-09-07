@@ -162,6 +162,133 @@ func TestClearCompletedJournal_ScopedToDeletedRules(t *testing.T) {
 	}
 }
 
+func TestClearCompletedJournalOwnerBook_WholeBook(t *testing.T) {
+	t.Parallel()
+
+	h := newTasksHarness(t).withOwner(taskMoscowTZ)
+
+	// The bound slice: rule A gets deleted (its journal is the clear's
+	// target), rule B stays alive (its completed row is the dedup key).
+	ruleA := h.seedRule(aug27, "", string(domain.RepeatWeekly), "Правило A")
+	ruleB := h.seedRule(day10, "", string(domain.RepeatOnce), "Правило B")
+	// The property-less slice (ADR 0052) mirrors it: «Личное A» is deleted,
+	// «Личное B» stays alive (its completed row is the dedup key too).
+	wpDead := h.seedRuleWithoutProperty(aug27, "", string(domain.RepeatOnce), "Личное A")
+	h.seedRuleWithoutProperty(day10, "", string(domain.RepeatOnce), "Личное B")
+	h.runTick()
+
+	h.completeAllBut(ruleA, day17)
+	h.completeAllBut(ruleB, "")
+	for _, task := range h.loadTasksWithoutProperty(t) {
+		if _, err := h.tasks.CompleteTaskWithoutProperty(h.ctx(), h.owner, task.ID); err != nil {
+			t.Fatalf("complete property-less task: %v", err)
+		}
+	}
+
+	// The two journal targets lose their rules; the live ones keep theirs.
+	if err := h.rules.DeleteRule(h.ctx(), h.owner, h.propID, ruleA); err != nil {
+		t.Fatalf("delete rule A: %v", err)
+	}
+	if err := h.rules.DeleteRuleWithoutProperty(h.ctx(), h.owner, wpDead); err != nil {
+		t.Fatalf("delete property-less rule: %v", err)
+	}
+
+	// Rows that must survive the book-wide clear: an archived property's
+	// journal (frozen data, ADR 0025) and a foreign owner's journal.
+	archivedProp, foreign := h.seedSurvivingJournalRows()
+
+	cleared, err := h.tasks.ClearCompletedJournalOwnerBook(h.ctx(), h.owner)
+	if err != nil {
+		t.Fatalf("clear completed journal of owner book: %v", err)
+	}
+	assertWholeBookClearState(t, h, archivedProp, foreign, cleared)
+}
+
+// seedSurvivingJournalRows inserts the journal rows the book-wide clear must
+// not touch: one on the owner's own archived property, one in a foreign
+// owner's book. Returns the archived property id and the foreign owner id.
+func (h *tasksHarness) seedSurvivingJournalRows() (archivedProp, foreign uuid.UUID) {
+	h.t.Helper()
+
+	archivedProp = uuid.Must(uuid.NewV7())
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO properties (id, owner_id, name, type, address, status)
+		 VALUES ($1, $2, 'Архив', 'apartment', 'Москва, Тверская 2', 'archived')`,
+		archivedProp, h.owner); err != nil {
+		h.t.Fatalf("seed archived property: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO tasks (id, owner_id, property_id, rule_id, title, completed_date)
+		 VALUES ($1, $2, $3, NULL, 'Архивный журнал', $4)`,
+		uuid.Must(uuid.NewV7()), h.owner, archivedProp, day10); err != nil {
+		h.t.Fatalf("seed archived journal row: %v", err)
+	}
+	foreign = uuid.Must(uuid.NewV7())
+	h.seedActor(foreign)
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO tasks (id, owner_id, rule_id, title, completed_date)
+		 VALUES ($1, $2, NULL, 'Чужой журнал', $3)`,
+		uuid.Must(uuid.NewV7()), foreign, day10); err != nil {
+		h.t.Fatalf("seed foreign journal row: %v", err)
+	}
+	return archivedProp, foreign
+}
+
+// assertWholeBookClearState pins the post-clear state: only the clearable
+// journal rows of the owner's book are gone; the live rules' dedup keys, the
+// archived and the foreign journals survive; the audit entry carries the
+// removed count.
+func assertWholeBookClearState(
+	t *testing.T, h *tasksHarness, archivedProp, foreign uuid.UUID, cleared int64,
+) {
+	t.Helper()
+
+	if cleared != 4 {
+		t.Fatalf("cleared = %d, want 4 (3 bound journal rows + 1 property-less)", cleared)
+	}
+	// No clearable journal row survived on either slice...
+	countJournal(t, h, `owner_id = $1 AND completed_date IS NOT NULL AND rule_id IS NULL
+		AND (property_id IS NULL OR EXISTS (
+		      SELECT 1 FROM properties p
+		      WHERE p.id = property_id AND p.status != 'archived'))`, h.owner,
+		"clearable journal rows survived the clear", 0)
+
+	// The live rules keep their completed rows (the dedup keys).
+	countJournal(t, h, `owner_id = $1 AND completed_date IS NOT NULL AND rule_id IS NOT NULL`, h.owner,
+		"live rules' completed rows", 2)
+	// The archived property's journal stays frozen...
+	countJournal(t, h, `property_id = $1`, archivedProp, "archived property journal rows", 1)
+	// ...and the foreign owner's book is untouched.
+	countJournal(t, h, `owner_id = $1 AND completed_date IS NOT NULL AND rule_id IS NULL`, foreign,
+		"foreign owner journal rows", 1)
+
+	// The audit entry carries the removed count (the shared clear action).
+	var auditCount string
+	if err := h.pool.QueryRow(h.ctx(), `
+		SELECT context->>'count' FROM audit_log
+		WHERE action = 'task.completed_cleared' AND actor_id = $1
+		ORDER BY created_at DESC LIMIT 1`,
+		h.owner).Scan(&auditCount); err != nil {
+		t.Fatalf("read audit entry: %v", err)
+	}
+	if auditCount != "4" {
+		t.Fatalf("audit count = %q, want \"4\"", auditCount)
+	}
+}
+
+// countJournal counts the tasks table rows matching one raw predicate and
+// fails when the count differs from want.
+func countJournal(t *testing.T, h *tasksHarness, where string, arg any, label string, want int) {
+	t.Helper()
+	var got int
+	if err := h.pool.QueryRow(h.ctx(), `SELECT count(*) FROM tasks WHERE `+where, arg).Scan(&got); err != nil {
+		t.Fatalf("count %s: %v", label, err)
+	}
+	if got != want {
+		t.Fatalf("%s = %d, want %d", label, got, want)
+	}
+}
+
 func TestListTasks_BucketsAndTotal(t *testing.T) {
 	t.Parallel()
 

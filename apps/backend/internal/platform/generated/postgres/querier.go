@@ -66,6 +66,32 @@ type Querier interface {
 	// The total count of one bucket — the «Выполненные N» counter (false =
 	// active tasks, true = the completed journal).
 	CountTasksByProperty(ctx context.Context, arg CountTasksByPropertyParams) (int64, error)
+	// The global listings' visibility predicate (ticket #521): the actor's own
+	// rows — bound and property-less — plus the bound rows of the properties
+	// they share with an active membership (ADR 0028 read scope with the merged
+	// visibility of ADR 0052 decision 3). The policy port maps an actor to a
+	// role per property; the merged feed has no single scope to resolve, so the
+	// actor-scoped read carries its visibility predicate here, beside the data.
+	// A suspended membership grants no read (the SQL-level status filter, the
+	// property_members precedent); the property-less rows are the owner's alone
+	// — the member EXISTS needs a property to match.
+	//
+	// The bound task rows always carry owner_id of the property's owner (there
+	// is no re-binding), so the owner branch covers the actor's own properties.
+	// The total of one bucket of the actor's visible merged feed. The tasks of
+	// archived properties are not in the global feed (карта #518 решение 9,
+	// тикет #522): non-archived properties plus the property-less cut.
+	CountTasksGlobal(ctx context.Context, arg CountTasksGlobalParams) (int64, error)
+	// The listed-properties cut of the global listing (ticket #547): the merged
+	// feed restricted to the picker's selection — the visibility predicate is
+	// the feed's, the list arrives comma-separated (uuids hold no commas).
+	// Archived properties contribute nothing (карта #518, решение 9); the
+	// without_property flag unions the actor's own property-less rows in — the
+	// feed filter's «Общие задачи» + objects (решение владельца 2026-09-07).
+	CountTasksGlobalOfProperties(ctx context.Context, arg CountTasksGlobalOfPropertiesParams) (int64, error)
+	// The property-less cut of the global listing (ADR 0052: the actor's own
+	// book only). No property join — the label is always absent there.
+	CountTasksGlobalWithoutProperty(ctx context.Context, arg CountTasksGlobalWithoutPropertyParams) (int64, error)
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
 	CountUsersTotalAdmin(ctx context.Context) (int64, error)
@@ -103,6 +129,13 @@ type Querier interface {
 	// completed tasks of live rules stay — they hold the tick's dedup keys, and
 	// clearing them would re-materialize the rule's whole past (ADR 0051).
 	DeleteCompletedJournal(ctx context.Context, arg DeleteCompletedJournalParams) (int64, error)
+	// «Удалить все выполненные» across the owner's whole book (ticket #536):
+	// the completed tasks of the deleted rules (rule_id IS NULL) in one query —
+	// the bound rows and the property-less ones (nullable property_id, ADR 0052).
+	// Archived properties stay frozen (ADR 0025) and the shared-to properties'
+	// journals are other owners' books (owner-scope, ADR 0028). The completed
+	// tasks of live rules stay — the tick's dedup keys (ADR 0051).
+	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
 	// The hygiene batch (ticket #433): sessions past their lifetime, whatever
 	// their status — an expired session never produces a payment method, and the
@@ -255,12 +288,15 @@ type Querier interface {
 	// lock and the rule's task invalidations (ADR 0051). The property lock
 	// mirrors the payments precedent (ADR 0049 §3); the tick's persistence lives
 	// in tasks_tick.sql, the task reads/completions in tasks_tasks.sql.
-	// The payments-scoped read of the property (ADR 0028): the data owner and
-	// the archived flag, no lock.
+	// The tasks-scoped read of the property (ADR 0028): the data owner, the
+	// archived flag and the display name (the global listing's row projection,
+	// ticket #521), no lock.
 	GetPropertyForTask(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskRow, error)
-	// The mutation's serialization point: the property row locked inside the
-	// caller's transaction, so mutation-vs-tick, mutation-vs-mutation and
-	// archive-vs-mutation serialize on one point (ADR 0049 §3).
+	// The property row locked inside the caller's transaction: for an
+	// active/maintenance row the conveyor's owner-wide set lock already holds
+	// it (the #546 global order), so this re-lock is a no-op; an archived row
+	// stands outside that set, and this lock closes the archive-vs-mutation
+	// race before the read-only check (ADR 0049 §3).
 	GetPropertyForTaskMutation(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskMutationRow, error)
 	GetPropertyMember(ctx context.Context, arg GetPropertyMemberParams) (PropertyMember, error)
 	GetPropertyMemberByPropertyAndUser(ctx context.Context, arg GetPropertyMemberByPropertyAndUserParams) (PropertyMember, error)
@@ -306,8 +342,8 @@ type Querier interface {
 	// «Удалить все выполненные» journal clear (ADR 0051, resolutions #496/#497).
 	// Rule CRUD lives in tasks_rules.sql, the tick's persistence in
 	// tasks_tick.sql.
-	// The nested path task→property is part of the key: a foreign or re-hung row
-	// is the privacy 404. rule_repeat is the live rule's repeat read through the
+	// The nested path task→property is part of the key: a foreign or re-hung
+	// row is the privacy 404. rule_repeat is the live rule's repeat read through the
 	// LEFT JOIN (null once the rule is deleted) — the wire's ↻ mark; the task
 	// row itself carries no repeat snapshot.
 	GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error)
@@ -319,6 +355,13 @@ type Querier interface {
 	// The nested path rule→property is part of the key: a foreign or re-hung
 	// row is the privacy 404.
 	GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (TaskRule, error)
+	// The property-less cut of the rule read (ADR 0052: the slices never mix —
+	// the predicate over property_id picks the slice explicitly). The id-scoped
+	// owner key is the privacy 404; a bound rule is invisible here by design.
+	GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRuleWithoutPropertyParams) (TaskRule, error)
+	// The property-less cut of the task read (ADR 0052: the slices never mix).
+	// rule_repeat is the same live-rule read projection as in GetTask.
+	GetTaskWithoutProperty(ctx context.Context, arg GetTaskWithoutPropertyParams) (GetTaskWithoutPropertyRow, error)
 	GetUserByEmail(ctx context.Context, dollar_1 string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
@@ -365,12 +408,35 @@ type Querier interface {
 	// sections. Due order with the undated last — the client buckets sections
 	// against the owner's today delivered by the response.
 	ListActiveTasksByProperty(ctx context.Context, arg ListActiveTasksByPropertyParams) ([]ListActiveTasksByPropertyRow, error)
+	// The active tasks of the actor's visible merged feed, due order with the
+	// undated last — the global screen's sections (ticket #521). property_name
+	// is the row's property label; the actor's today travels in the response.
+	// Archived properties are out of the feed (карта #518 решение 9): the
+	// sections stay contiguous for the client's pagination and bucketing.
+	ListActiveTasksGlobal(ctx context.Context, arg ListActiveTasksGlobalParams) ([]ListActiveTasksGlobalRow, error)
+	// The active tasks of the listed properties, the merged feed's visibility
+	// and due order (ticket #547); without_property unions the actor's own
+	// property-less rows in (решение владельца 2026-09-07).
+	ListActiveTasksGlobalOfProperties(ctx context.Context, arg ListActiveTasksGlobalOfPropertiesParams) ([]ListActiveTasksGlobalOfPropertiesRow, error)
+	// The active property-less tasks of the actor's book, the same due order as
+	// the property listings (ticket #521).
+	ListActiveTasksGlobalWithoutProperty(ctx context.Context, arg ListActiveTasksGlobalWithoutPropertyParams) ([]ListActiveTasksGlobalWithoutPropertyRow, error)
 	// Admin tariff listing: every tariff including hidden ones (issue #247).
 	ListAllTariffs(ctx context.Context) ([]Tariff, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
 	// The completed journal of the property, newest completions first.
 	ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]ListCompletedTasksByPropertyRow, error)
+	// The completed journal of the actor's visible merged feed, newest
+	// completions first (ticket #521); archived properties are out (решение 9).
+	ListCompletedTasksGlobal(ctx context.Context, arg ListCompletedTasksGlobalParams) ([]ListCompletedTasksGlobalRow, error)
+	// The completed journal of the listed properties, newest completions first
+	// (ticket #547); without_property unions the actor's own property-less
+	// journal in (решение владельца 2026-09-07).
+	ListCompletedTasksGlobalOfProperties(ctx context.Context, arg ListCompletedTasksGlobalOfPropertiesParams) ([]ListCompletedTasksGlobalOfPropertiesRow, error)
+	// The completed journal of the actor's property-less tasks, newest
+	// completions first (ticket #521).
+	ListCompletedTasksGlobalWithoutProperty(ctx context.Context, arg ListCompletedTasksGlobalWithoutPropertyParams) ([]ListCompletedTasksGlobalWithoutPropertyRow, error)
 	// The owner's slice per the query scope: 'all' — the whole book,
 	// 'without_property' — the unbound cards, 'property' — one property's cards
 	// (property_id must be set for it). search ('' = no filter) is a
@@ -470,11 +536,11 @@ type Querier interface {
 	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)
 	// The hourly zone sweep of the tasks tick worker (ADR 0048 p.3): the
-	// distinct owner timezones having task rules on active/maintenance
-	// properties, with the data owners of each zone. One "today" is computed per
-	// zone in Go; owners without rules on such properties are not sweep targets.
-	// Stateless — every run re-lists, no per-zone or per-owner tick state is
-	// kept.
+	// distinct owner timezones having task rules — without a property (ADR 0052)
+	// or on active/maintenance properties — with the data owners of each zone.
+	// One "today" is computed per zone in Go; owners without tickable rules are
+	// not sweep targets. Stateless — every run re-lists, no per-zone or
+	// per-owner tick state is kept.
 	ListTaskTickZones(ctx context.Context) ([]ListTaskTickZonesRow, error)
 	// Dedup keys and statuses of the listed payments' operations: existence by
 	// (payment_id, date), status for the future-planned rebuild.
@@ -490,7 +556,9 @@ type Querier interface {
 	// for dated rows and by rule_id alone for the undated one; the completed
 	// flag steers the single-future walk (completed-ahead rows are skipped).
 	ListTickTaskKeys(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickTaskKeysRow, error)
-	// The owner's task rules on non-archived properties — the tick's read side.
+	// The owner's tick read side: rules without a property plus rules on
+	// non-archived properties (ADR 0052). The LEFT JOIN keeps the property-less
+	// cut while the status predicate still skips archived ones.
 	ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickTaskRulesByOwnerRow, error)
 	// The hourly zone sweep of the tick worker (ADR 0048 p.3): the distinct owner
 	// timezones having payment rules on active/maintenance properties, with the
@@ -515,16 +583,24 @@ type Querier interface {
 	// pair must not interleave with a concurrent switch, or the one-active
 	// partial unique index rejects the second committer.
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
+	// The owner row is the serialization anchor of the property-less cut (ADR
+	// 0052): owner-scope mutations lock it before reading or writing a rule, and
+	// the full tick locks it after the property rows, so owner-mutation-vs-tick
+	// serializes on one point. A bound-rule mutation never takes this lock — the
+	// two slices' rules are disjoint row sets, and crossing the lock orders
+	// would invite deadlocks.
+	LockTaskOwner(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	// Tasks context queries: the materialization tick's persistence (ADR 0051,
 	// mirroring ADR 0049 §3). The owner-level rule listing, the task dedup keys,
 	// the idempotent inserts and the future rebuild. Rule CRUD lives in
 	// tasks_rules.sql, task reads/completions in tasks_tasks.sql.
 	// Serialization point of the tick: the run locks the owner's
 	// active/maintenance property rows, ordered by id, before reading or writing
-	// anything. Context mutations take the same lock per property through
-	// GetPropertyForTaskMutation, so update-vs-tick, archive-vs-tick and
-	// delete-vs-tick serialize on one point. Archived properties are skipped by
-	// the tick entirely.
+	// anything. Context mutations take the same ordered set at their
+	// transaction's front (#546 — the deadlock-free global order), so
+	// update-vs-tick, archive-vs-tick, delete-vs-tick and mutation-vs-mutation
+	// serialize on one lock order. Archived properties are skipped by the tick
+	// entirely.
 	LockTaskOwnerProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error

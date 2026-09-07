@@ -13,9 +13,13 @@ import (
 // replaces a status column: nil = active, a date = the completion fact;
 // "overdue" and "undated" are computed, never stored.
 type Task struct {
-	ID         uuid.UUID
-	OwnerID    uuid.UUID
-	PropertyID uuid.UUID
+	ID      uuid.UUID
+	OwnerID uuid.UUID
+	// PropertyID is the task's property binding, snapshotted from the rule at
+	// materialization; nil = the task without a property (ADR 0052). A bound
+	// task never becomes property-less — deleting the property deletes its
+	// tasks outright.
+	PropertyID *uuid.UUID
 	// RuleID points at the producing rule; nil after the rule's hard delete —
 	// the completed journal row stays with its snapshots (resolution #496).
 	RuleID *uuid.UUID
@@ -48,7 +52,7 @@ func NewMaterializedTask(rule TaskRule, date *time.Time) Task {
 	}
 	task := Task{
 		OwnerID:    rule.OwnerID,
-		PropertyID: rule.PropertyID,
+		PropertyID: cloneUUIDPtr(rule.PropertyID),
 		DueDate:    date,
 		DueTime:    rule.DueTime,
 		Title:      rule.Title,
@@ -61,4 +65,13 @@ func NewMaterializedTask(rule TaskRule, date *time.Time) Task {
 		task.Comment = &comment
 	}
 	return task
+}
+
+// cloneUUIDPtr copies an optional UUID without aliasing the rule's value:
+// the task's snapshot must not follow later mutations of the rule struct.
+func cloneUUIDPtr(u *uuid.UUID) *uuid.UUID {
+	if u == nil {
+		return nil
+	}
+	return new(*u)
 }

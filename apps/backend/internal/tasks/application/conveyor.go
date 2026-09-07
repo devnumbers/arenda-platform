@@ -3,9 +3,10 @@ package application
 // The mutation conveyor and the shared gate builders of the tasks use
 // cases. Every mutation of the context — rules and tasks alike — runs
 // through the same ordering invariants structurally (ADR 0051, mirroring
-// ADR 0049 §3): the role gate, the property row lock, the owner's today,
-// the change step, its audit entry in the same transaction and the
-// materialization tick after the change. Reads never tick and never write.
+// ADR 0049 §3): the role gate, the owner's ordered property-row set lock,
+// the owner's today, the change step, its audit entry in the same
+// transaction and the materialization tick after the change. Reads never
+// tick and never write.
 
 import (
 	"context"
@@ -64,11 +65,20 @@ type mutationGates struct {
 
 // runMutation is the mutation conveyor shared by every use case of this
 // context — rules and tasks alike. It runs, in one transaction and in this
-// order: the role gate, the property serialization lock (FOR UPDATE), the
-// owner's today, the load of the target rule (skipped for a zero ruleID),
-// the change step, its audit entry, and the materialization tick when the
-// step asked for it. After commit it returns the step's response,
+// order: the role gate, the owner-wide ordered property-row lock (the tick's
+// serialization point taken at the front — the deadlock-free global order,
+// #546), the owner's today, the load of the target rule (skipped for a zero
+// ruleID), the change step, its audit entry, and the materialization tick
+// when the step asked for it. After commit it returns the step's response,
 // post-commit-re-read applied.
+//
+// The owner-wide lock must be the transaction's first property lock: two
+// mutations that each held only their own property row and then scanned the
+// owner's set deadlocked (SQLSTATE 40P01, #546) — the set scan is ordered by
+// id, but a pre-held arbitrary member stands outside that order. The owner
+// is resolved by an unlocked read (owner_id never moves), the set lock
+// covers every active/maintenance row including this one, and the archived
+// check below still reads the row under its lock.
 func runMutation[T any](
 	g mutationGates,
 	ctx context.Context, actor, propertyID, ruleID uuid.UUID,
@@ -83,6 +93,13 @@ func runMutation[T any](
 	var scope uuid.UUID
 	var out mutationOutcome[T]
 	err = g.factory.runInTx(ctx, func(stores *txStores) error {
+		ref, err := stores.properties.Get(ctx, propertyID)
+		if err != nil {
+			return err
+		}
+		if err := stores.tick.LockOwnerProperties(ctx, ref.OwnerID); err != nil {
+			return err
+		}
 		prop, today, err := lockActiveProperty(ctx, stores, g.calendar, propertyID)
 		if err != nil {
 			return err
@@ -110,7 +127,7 @@ func runMutation[T any](
 		if !out.Tick {
 			return nil
 		}
-		return stores.tickOwner(ctx, scope, today)
+		return stores.tickOwnerProperties(ctx, scope, today)
 	})
 	if err != nil {
 		return zero, err
@@ -140,9 +157,88 @@ func rereadRule[T any](
 	return resp, nil
 }
 
-// lockActiveProperty loads the property with its row locked — the mutation's
-// serialization point — resolves the owner's today and rejects the read-only
-// archived state.
+// runOwnerMutation is the property-less twin of runMutation (ADR 0052): the
+// same ordering invariants over the owner's own book, where there is no
+// property to resolve a role on — the actor is the data owner (scope =
+// actor, the ADR 0028 matrix defines no members outside a property) or the
+// privacy 404 hides the data. It runs, in one transaction and in this order:
+// the owner-row serialization lock (FOR UPDATE users — the anchor ADR 0052
+// chose for the property-less slice), the owner's today, the load of the
+// target property-less rule (skipped for a zero ruleID), the change step,
+// its audit entry and the property-less materialization tick. After commit
+// it returns the step's response, post-commit-re-read applied.
+func runOwnerMutation[T any](
+	g mutationGates,
+	ctx context.Context, actor, ruleID uuid.UUID,
+	change changeStep[T],
+) (T, error) {
+	var zero T
+	var out mutationOutcome[T]
+	err := g.factory.runInTx(ctx, func(stores *txStores) error {
+		if err := stores.tick.LockOwner(ctx, actor); err != nil {
+			return err
+		}
+		today, err := ownerToday(g.calendar, ctx, actor)
+		if err != nil {
+			return err
+		}
+		rule := domain.TaskRule{}
+		if ruleID != uuid.Nil {
+			rule, err = stores.rules.GetWithoutProperty(ctx, ruleID, actor)
+			if err != nil {
+				return err
+			}
+		}
+		out, err = change(ctx, stores, actor, rule, today)
+		if err != nil {
+			return err
+		}
+		entityType := out.AuditEntity
+		if entityType == "" {
+			entityType = auditdomain.EntityTaskRule
+		}
+		if err := recordAudit(ctx, stores, actor, sharedpolicy.RoleOwner,
+			out.Audit, entityType, out.AuditEntityID, out.AuditCtx); err != nil {
+			return err
+		}
+		if !out.Tick {
+			return nil
+		}
+		return stores.tickOwnerWithoutProperty(ctx, actor, today)
+	})
+	if err != nil {
+		return zero, err
+	}
+	if out.RereadRuleID == nil {
+		return out.Response, nil
+	}
+	return rereadOwnerRule[T](g, ctx, actor, *out.RereadRuleID)
+}
+
+// rereadOwnerRule is rereadRule's property-less counterpart: the re-read
+// goes through the property-less cut key, so a response can never describe a
+// bound rule.
+func rereadOwnerRule[T any](
+	g mutationGates,
+	ctx context.Context, owner, ruleID uuid.UUID,
+) (T, error) {
+	var zero T
+	stored, err := g.factory.rules.GetWithoutProperty(ctx, ruleID, owner)
+	if err != nil {
+		return zero, err
+	}
+	resp, ok := any(stored).(T)
+	if !ok {
+		return zero, errors.New("tasks conveyor: reread requires a rule-shaped response")
+	}
+	return resp, nil
+}
+
+// lockActiveProperty loads the property with its row locked — for an
+// active/maintenance row the conveyor's owner-wide lock already holds it, so
+// this re-lock is a no-op; an archived row stands outside that set, and the
+// lock here closes the archive-vs-mutation race before the read-only check.
+// It then resolves the owner's today and rejects the archived state.
 func lockActiveProperty(
 	ctx context.Context, stores *txStores, calendar OwnerCalendar, propertyID uuid.UUID,
 ) (PropertyRef, time.Time, error) {
@@ -234,29 +330,43 @@ func resolveReadScope(
 	ctx context.Context, policy sharedpolicy.Policy, properties PropertyStore,
 	actor, propertyID uuid.UUID,
 ) (uuid.UUID, error) {
+	scope, err := resolveReadScopeRef(ctx, policy, properties, actor, propertyID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return scope.OwnerID, nil
+}
+
+// resolveReadScopeRef is resolveReadScope returning the full property
+// reference — the data owner plus the display name the global listing
+// projects into its rows (ticket #521).
+func resolveReadScopeRef(
+	ctx context.Context, policy sharedpolicy.Policy, properties PropertyStore,
+	actor, propertyID uuid.UUID,
+) (PropertyRef, error) {
 	if policy == nil {
 		prop, err := properties.Get(ctx, propertyID)
 		if err != nil {
-			return uuid.Nil, err
+			return PropertyRef{}, err
 		}
 		if prop.OwnerID != actor {
-			return uuid.Nil, ErrNotFound
+			return PropertyRef{}, ErrNotFound
 		}
-		return actor, nil
+		return prop, nil
 	}
 	role, err := policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
+		return PropertyRef{}, fmt.Errorf("resolve role: %w", err)
 	}
 	// Every non-allow outcome hides the data's existence: none and suspended
 	// are the privacy 404, forbidden (unreachable for view today) would mean
 	// the same for reads.
 	if sharedpolicy.GateFor(role, sharedpolicy.CanView) != sharedpolicy.GateAllow {
-		return uuid.Nil, ErrNotFound
+		return PropertyRef{}, ErrNotFound
 	}
 	prop, err := properties.Get(ctx, propertyID)
 	if err != nil {
-		return uuid.Nil, err
+		return PropertyRef{}, err
 	}
-	return prop.OwnerID, nil
+	return prop, nil
 }

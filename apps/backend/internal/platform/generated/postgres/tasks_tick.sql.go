@@ -121,9 +121,9 @@ func (q *Queries) InsertMaterializedUndatedTask(ctx context.Context, arg InsertM
 const listTaskTickZones = `-- name: ListTaskTickZones :many
 SELECT DISTINCT u.timezone, r.owner_id
 FROM task_rules r
-JOIN properties pr ON pr.id = r.property_id
 JOIN users u ON u.id = r.owner_id
-WHERE pr.status IN ('active', 'maintenance')
+LEFT JOIN properties pr ON pr.id = r.property_id
+WHERE r.property_id IS NULL OR pr.status IN ('active', 'maintenance')
 ORDER BY u.timezone, r.owner_id
 `
 
@@ -133,11 +133,11 @@ type ListTaskTickZonesRow struct {
 }
 
 // The hourly zone sweep of the tasks tick worker (ADR 0048 p.3): the
-// distinct owner timezones having task rules on active/maintenance
-// properties, with the data owners of each zone. One "today" is computed per
-// zone in Go; owners without rules on such properties are not sweep targets.
-// Stateless — every run re-lists, no per-zone or per-owner tick state is
-// kept.
+// distinct owner timezones having task rules — without a property (ADR 0052)
+// or on active/maintenance properties — with the data owners of each zone.
+// One "today" is computed per zone in Go; owners without tickable rules are
+// not sweep targets. Stateless — every run re-lists, no per-zone or
+// per-owner tick state is kept.
 func (q *Queries) ListTaskTickZones(ctx context.Context) ([]ListTaskTickZonesRow, error) {
 	rows, err := q.db.Query(ctx, listTaskTickZones)
 	if err != nil {
@@ -196,9 +196,9 @@ func (q *Queries) ListTickTaskKeys(ctx context.Context, dollar_1 []pgtype.UUID) 
 const listTickTaskRulesByOwner = `-- name: ListTickTaskRulesByOwner :many
 SELECT r.id, r.owner_id, r.property_id, r.title, r.comment, r.due_date, r.due_time, r.repeat
 FROM task_rules r
-JOIN properties pr ON pr.id = r.property_id
+LEFT JOIN properties pr ON pr.id = r.property_id
 WHERE r.owner_id = $1
-  AND pr.status IN ('active', 'maintenance')
+  AND (r.property_id IS NULL OR pr.status IN ('active', 'maintenance'))
 `
 
 type ListTickTaskRulesByOwnerRow struct {
@@ -212,7 +212,9 @@ type ListTickTaskRulesByOwnerRow struct {
 	Repeat     string      `json:"repeat"`
 }
 
-// The owner's task rules on non-archived properties — the tick's read side.
+// The owner's tick read side: rules without a property plus rules on
+// non-archived properties (ADR 0052). The LEFT JOIN keeps the property-less
+// cut while the status predicate still skips archived ones.
 func (q *Queries) ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickTaskRulesByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listTickTaskRulesByOwner, ownerID)
 	if err != nil {
@@ -242,6 +244,23 @@ func (q *Queries) ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.U
 	return items, nil
 }
 
+const lockTaskOwner = `-- name: LockTaskOwner :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE
+`
+
+// The owner row is the serialization anchor of the property-less cut (ADR
+// 0052): owner-scope mutations lock it before reading or writing a rule, and
+// the full tick locks it after the property rows, so owner-mutation-vs-tick
+// serializes on one point. A bound-rule mutation never takes this lock — the
+// two slices' rules are disjoint row sets, and crossing the lock orders
+// would invite deadlocks.
+func (q *Queries) LockTaskOwner(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTaskOwner, id)
+	var id_2 pgtype.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const lockTaskOwnerProperties = `-- name: LockTaskOwnerProperties :many
 
 SELECT id FROM properties
@@ -256,10 +275,11 @@ FOR UPDATE
 // tasks_rules.sql, task reads/completions in tasks_tasks.sql.
 // Serialization point of the tick: the run locks the owner's
 // active/maintenance property rows, ordered by id, before reading or writing
-// anything. Context mutations take the same lock per property through
-// GetPropertyForTaskMutation, so update-vs-tick, archive-vs-tick and
-// delete-vs-tick serialize on one point. Archived properties are skipped by
-// the tick entirely.
+// anything. Context mutations take the same ordered set at their
+// transaction's front (#546 — the deadlock-free global order), so
+// update-vs-tick, archive-vs-tick, delete-vs-tick and mutation-vs-mutation
+// serialize on one lock order. Archived properties are skipped by the tick
+// entirely.
 func (q *Queries) LockTaskOwnerProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, lockTaskOwnerProperties, ownerID)
 	if err != nil {
