@@ -946,6 +946,49 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/operations:
+    post:
+      operationId: createOperation
+      summary: Create a manual operation (the one-off paid fact)
+      description: >
+        The manual one-off income/expense fact on the property (ticket #569).
+        It is born paid: date = paidDate = today in the property owner's
+        timezone (ADR 0048), no originating rule behind it (paymentId null)
+        and no payment form (paymentForm null). The category travels as the
+        default-catalog slug and freezes as the snapshot with its label.
+        Full Access and above may create; on an archived property the
+        mutation is the conflict.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOperationRequest'
+      responses:
+        '201':
+          description: Operation created (status is paid, paidDate = today in the owner's timezone)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     get:
       operationId: listPropertyOperations
       security:
@@ -5138,6 +5181,30 @@ components:
       properties:
         favorite:
           type: boolean
+
+    CreateOperationRequest:
+      description: >-
+        The body of the manual operation creation (ticket #569). The date is
+        server-set — today in the property owner's timezone — and the fact is
+        born paid; no payment form exists behind a manual fact.
+      type: object
+      required: [type, title, amountKopecks, categorySlug]
+      properties:
+        type:
+          type: string
+          enum: [income, expense]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amountKopecks:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000000000
+        categorySlug:
+          type: string
+          description: Slug of the default category catalog; frozen as the operation's snapshot.
 
     OperationResponse:
       description: >-

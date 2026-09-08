@@ -24,6 +24,9 @@ const (
 	testLabelRent    = "Арендная плата"
 	testDetailNotFmt = "Не найдено"
 	testTitleRent    = "Аренда"
+	// TestSlugUtilities is the utilities slug of the operation fixtures
+	// (the category snapshot the manual-creation tests freeze).
+	testSlugUtilities = "utilities"
 )
 
 // fakePaymentManager is the func-backed PaymentManager double: every use case

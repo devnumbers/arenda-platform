@@ -108,6 +108,10 @@ func (noopOperationStore) Cancel(context.Context, uuid.UUID, uuid.UUID, uuid.UUI
 	return nil
 }
 
+func (noopOperationStore) Create(context.Context, domain.Operation) error {
+	panic("unused")
+}
+
 func (noopOperationStore) ListByPayment(
 	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, OperationsListQuery,
 ) ([]domain.Operation, error) {
