@@ -3,14 +3,12 @@
     "servers": {
       "playwright": {
         "type": "stdio",
-        "command": "npx",
+        "command": "playwright-mcp",
         "args": [
-          "-y",
-          "@playwright/mcp@0.0.80",
           "--isolated",
           "--output-dir=.playwright-mcp/artifacts"
         ],
-        "timeoutMs": 60000
+        "timeoutMs": 180000
       }
     }
   }
