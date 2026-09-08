@@ -2,15 +2,22 @@ import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 
 /** Ручка шита (Figma 847:11295 Drag Handle): серая пилюля 36×4 в полосе
- * высотой 16. Общая для StickyBottomBar и модалки-шита. */
+ * высотой 16. Общая для StickyBottomBar и модалки-шита. Вариант `wide` —
+ * пилюля 48×4 в полосе 24 — ручка шита «Еще» (Figma 1721:57140, тикет
+ * #560). */
 export type SheetDragHandleProps = {
   readonly className?: string;
+  /** Широкая ручка 48×4 в полосе 24 — шит «Еще» TabBar. */
+  readonly wide?: boolean;
 };
 
-export function SheetDragHandle({ className }: SheetDragHandleProps): JSX.Element {
+export function SheetDragHandle({ className, wide = false }: SheetDragHandleProps): JSX.Element {
   return (
-    <div className={cn('flex h-4 shrink-0 items-center justify-center', className)} aria-hidden>
-      <div className="h-1 w-9 rounded-pill bg-input-border" />
+    <div
+      className={cn('flex shrink-0 items-center justify-center', wide ? 'h-6' : 'h-4', className)}
+      aria-hidden
+    >
+      <div className={cn('h-1 rounded-pill bg-input-border', wide ? 'w-12' : 'w-9')} />
     </div>
   );
 }

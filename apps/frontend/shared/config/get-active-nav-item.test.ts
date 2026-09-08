@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HomeMain, Wallet } from '@/shared/assets/icons';
-import { getActiveNavItem } from './get-active-nav-item';
+import { getActiveNavItem, getActiveMobileTab } from './get-active-nav-item';
 import { allNavSections, type NavSection } from './navigation';
 
 const activeSectionId = (pathname: string): string | null =>
@@ -78,5 +78,28 @@ describe('правила активности навигации (#558)', () => 
 
     expect(active).toBe(expected);
     expect(active?.label).toBe('Задачи');
+  });
+});
+
+describe('активный таб мобильного TabBar (#560)', () => {
+  it('«Объекты» — корень и внутренние страницы объекта', () => {
+    expect(getActiveMobileTab('/properties')).toBe('properties');
+    expect(getActiveMobileTab('/properties/new')).toBe('properties');
+    expect(getActiveMobileTab('/properties/42/payments')).toBe('properties');
+  });
+
+  it('«Уведомления» — только раздел уведомлений, не весь профиль', () => {
+    expect(getActiveMobileTab('/profile/notifications')).toBe('notifications');
+    expect(getActiveMobileTab('/profile/notifications/settings')).toBe('notifications');
+    expect(getActiveMobileTab('/profile')).toBe('more');
+  });
+
+  it('«Еще» — глобальные разделы без своего таба, профиль и прочее', () => {
+    expect(getActiveMobileTab('/operations')).toBe('more');
+    expect(getActiveMobileTab('/tasks/new')).toBe('more');
+    expect(getActiveMobileTab('/payments')).toBe('more');
+    expect(getActiveMobileTab('/contacts')).toBe('more');
+    expect(getActiveMobileTab('/')).toBe('more');
+    expect(getActiveMobileTab('/ui-kit')).toBe('more');
   });
 });

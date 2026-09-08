@@ -35,6 +35,7 @@ import {
     ModalClose,
     ModalContent,
     ModalTrigger,
+    MoreSheet,
     MonthDaysGrid,
     MonthYearPicker,
     PageContent,
@@ -174,6 +175,7 @@ export function DesignLayerShowcase(): JSX.Element {
     const [pickerEmpty, setPickerEmpty] = useState<string | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
     return (
         <>
@@ -889,6 +891,21 @@ export function DesignLayerShowcase(): JSX.Element {
                             </ModalContent>
                         </Modal>
                     </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>MoreSheet · шит «Еще» мобильного TabBar</h3>
+                    <p className={styles.groupTitle}>
+                        Выезжающий снизу шит навигации: ручка 48×4, два ряда разделов из нав-модели,
+                        нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560). Выезд
+                        400ms на кривой vaul, оверлей — fade 250ms; закрытие — оверлей, свайп вниз,
+                        повторный тап «Еще». В продукте живёт в TabBar (мобайл/планшет ≤768), здесь —
+                        с ручным триггером.
+                    </p>
+                    <div className={styles.grid}>
+                        <Button onClick={() => setMoreSheetOpen(true)}>Открыть шит «Еще»</Button>
+                    </div>
+                    <MoreSheet open={moreSheetOpen} onOpenChange={setMoreSheetOpen} />
                 </div>
 
                 <div className={styles.group}>

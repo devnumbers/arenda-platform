@@ -54,6 +54,7 @@ export {
   TabBarVisibilityProvider,
   useTabBarSuppression,
 } from './tab-bar';
+export { MoreSheet, type MoreSheetProps } from './more-sheet';
 export { HeaderLogo, type HeaderLogoProps } from './header-logo';
 export {
   Modal,

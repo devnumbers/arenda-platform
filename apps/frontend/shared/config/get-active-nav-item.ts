@@ -28,3 +28,19 @@ export function getActiveNavItem(
 
   return active;
 }
+
+/** Идентификатор таба мобильного TabBar («Объекты / Уведомления / Еще»). */
+export type MobileTabId = 'properties' | 'notifications' | 'more';
+
+/** Активный таб TabBar по URL — правила разделов (#558), спроецированные на
+ * три таба: свой таб есть только у «Объектов» (корень и внутренние страницы
+ * объекта) и «Уведомлений»; глобальные разделы без своего таба, профиль и
+ * прочее подсвечивают «Еще» (тикет #560). */
+export function getActiveMobileTab(pathname: string): MobileTabId {
+  const section = getActiveNavItem(pathname);
+
+  if (section?.id === 'properties') return 'properties';
+  if (section?.id === 'notifications') return 'notifications';
+
+  return 'more';
+}

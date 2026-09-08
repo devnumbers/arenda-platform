@@ -337,6 +337,40 @@
     }
 }
 
+/* Шит «Еще» TabBar (Figma 1721:57140, #560; рецепт — docs/research/
+   2026-09-08-sheet-eshche-animation.md): выезд 400ms, закрытие 300ms на
+   канонной кривой vaul cubic-bezier(0.32,0.72,0,1), оверлей — канонный
+   fade 250ms. Специфичность class+attr перебивает CSS-бейзлайн vaul
+   (animation/transition-duration 0.5s на [data-vaul-drawer]/[data-vaul-overlay])
+   независимо от порядка стилей; после drag-release vaul ставит duration
+   inline — флик закрывается по инерции, это канон (research §2). */
+.more-sheet-drawer[data-vaul-drawer] {
+    animation-duration: 400ms;
+    transition-duration: 400ms;
+}
+
+.more-sheet-drawer[data-vaul-drawer][data-state='closed'] {
+    animation-duration: 300ms;
+    transition-duration: 300ms;
+}
+
+.more-sheet-overlay[data-vaul-overlay][data-vaul-snap-points='false'] {
+    animation-duration: 250ms;
+    transition-duration: 250ms;
+}
+
+/* prefers-reduced-motion: анимацию не выключаем, а укорачиваем до ~150ms,
+   fade сохраняем; drag-жесты не трогаем — это управление, не декор
+   (research §9). */
+@media (prefers-reduced-motion: reduce) {
+    .more-sheet-drawer[data-vaul-drawer],
+    .more-sheet-drawer[data-vaul-drawer][data-state='closed'],
+    .more-sheet-overlay[data-vaul-overlay][data-vaul-snap-points='false'] {
+        animation-duration: 150ms;
+        transition-duration: 150ms;
+    }
+}
+
 /* Document
    ========================================================================== */
 

@@ -63,3 +63,28 @@ export const allNavSections: ReadonlyArray<NavSection> = [
   ...mainNavSections,
   ...secondaryNavSections,
 ];
+
+/** Раздел по id — для поверхностей, берущих из конфига отдельные пункты
+ * (табы TabBar). Ошибка — только при программной опечатке: id статически
+ * ограничен типом NavSectionId. */
+export function navSectionById(id: NavSectionId): NavSection {
+  const section = allNavSections.find((entry) => entry.id === id);
+
+  if (section === undefined) {
+    throw new Error(`navigation: нет раздела «${id}»`);
+  }
+
+  return section;
+}
+
+/** Пункты шита «Еще» (Figma 1721:57140, тикет #560): главные разделы,
+ * кроме «Объектов» (он — таб TabBar), плюс «Поддержка» — два ряда по три
+ * в порядке Figma. «Уведомления» в шите нет — это средний таб TabBar. */
+export const moreSheetNavSections: ReadonlyArray<NavSection> = [
+  navSectionById('payments'),
+  navSectionById('operations'),
+  navSectionById('tasks'),
+  navSectionById('contacts'),
+  navSectionById('participants'),
+  navSectionById('support'),
+];
