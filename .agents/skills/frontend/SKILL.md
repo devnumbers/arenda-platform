@@ -11,8 +11,9 @@ A thin orientation skill: the rules live in repo documents and ESLint gates; thi
 
 1. `apps/frontend/AGENTS.md` — stack (Next.js 16.3.1, React 19.2.4, React Compiler), FSD architecture with enforced boundaries, API & data flow, quality gates. It also directs you to the bundled Next docs in `node_modules/next/dist/docs/` before writing code — Next 16 has breaking changes versus training data.
 2. `apps/frontend/CODING_STANDARDS.md` — FSD slice anatomy, DTO/command mapping patterns, react-query conventions, forms, styling and React Compiler rules, testing patterns, review rubric.
-3. `apps/frontend/eslint.config.mjs` — `boundaries/dependencies` (layer direction, public API via `index.ts`) and `no-restricted-imports` (generated client, DTO leaks); enforced, so review does not re-report them.
-4. Research series (map #326): `docs/research/2026-08-18-frontend-benchmark.md`, `2026-08-18-eslint-ts-strictness.md`, `2026-08-18-frontend-security.md`, `2026-08-18-frontend-remediation-grid.md`.
+3. `apps/frontend/DESIGN.md` — design conventions and the Figma-first pipeline (§11): mandatory before any screen/surface/design-layer work. Two Figma MCP servers with non-overlapping roles: `figma` (Dev Mode, `get_design_context`/`get_variable_defs`/`get_screenshot` — first step of laying out a screen) and `figma-context` (asset/icon exports); pixel-diff loop `npm run figma:diff`.
+4. `apps/frontend/eslint.config.mjs` — `boundaries/dependencies` (layer direction, public API via `index.ts`) and `no-restricted-imports` (generated client, DTO leaks); enforced, so review does not re-report them.
+5. Research series (map #326): `docs/research/2026-08-18-frontend-benchmark.md`, `2026-08-18-eslint-ts-strictness.md`, `2026-08-18-frontend-security.md`, `2026-08-18-frontend-remediation-grid.md`.
 
 ## Sharpest rules agents get wrong
 
