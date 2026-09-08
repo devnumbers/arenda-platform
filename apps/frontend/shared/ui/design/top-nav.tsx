@@ -26,7 +26,17 @@ import { useTopNavUser } from './top-nav-user-context';
  * слоты leading/trailing наложены абсолютно по краям (Figma 1425:55798):
  * центр никогда не смещается от наличия или числа кнопок. Длинные
  * заголовки сжимаются с min-w-0 (truncate у TopNavTitle), не распирая
- * страницу на узких экранах. */
+ * страницу на узких экранах.
+ *
+ * Крылья и ведущая кнопка (решение владельца 2026-09-08, аудит #563):
+ * на планшетном ярусе (561–1023) у подэкранов с leading-кнопкой крылья
+ * не рисуются — колонка 560 начинается там же, где кончается лого, и
+ * «крыло» наложилось бы на неё; их хедер — мобильная анатомия (leading,
+ * центр, trailing) в закреплённой колонке. На ПК ≥1024 крылья всегда —
+ * до колонки >=232px, наложения нет. Хаб-экраны (без leading) держат
+ * крылья на всём планшетно-ПК диапазоне (Figma 1603:93153). mobileWings
+ * и leading вместе не сочетаются: mobileWings — признак хаба, хаб без
+ * leading. */
 export type TopNavProps = {
   readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
@@ -56,7 +66,13 @@ export function TopNav({
 
   const firstName = user?.name;
   const displayName = firstName?.length ? firstName : 'Пользователь';
-  const wingsClass = mobileWings ? 'flex' : 'hidden tablet:flex';
+  // Крылья: мобайл — только с mobileWings; планшет (561–1023) — без
+  // leading-кнопки (иначе наложение на колонку 560, см. JSDoc), ПК — всегда.
+  // Boolean — чтобы условный leading={cond && <Button/>} при cond=false
+  // считался «без leading».
+  const hasLeading = Boolean(leading);
+  const wingsMobileClass = mobileWings ? 'flex' : 'hidden';
+  const wingsTierClass = hasLeading ? 'desktop:flex' : 'tablet:flex';
 
   return (
     <header
@@ -71,13 +87,20 @@ export function TopNav({
         href={ROUTES.properties}
         aria-label="Объекты"
         className={cn(
-          'absolute left-0 top-0 h-[72px] items-center pl-[22px] outline-none focus-visible:rounded-pill focus-visible:ring-2 focus-visible:ring-primary tablet:flex',
-          wingsClass,
+          'absolute left-0 top-0 h-[72px] items-center pl-[22px] outline-none focus-visible:rounded-pill focus-visible:ring-2 focus-visible:ring-primary',
+          wingsMobileClass,
+          wingsTierClass,
         )}
       >
         <HeaderLogo />
       </Link>
-      <div className={cn('absolute right-0 top-0 h-[72px] items-center tablet:flex', wingsClass)}>
+      <div
+        className={cn(
+          'absolute right-0 top-0 h-[72px] items-center',
+          wingsMobileClass,
+          wingsTierClass,
+        )}
+      >
         <UserButton name={displayName} onClick={() => router.push(ROUTES.profile)} />
       </div>
       {variant === 'search' ? (
