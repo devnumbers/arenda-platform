@@ -13,10 +13,9 @@ import { DesktopMenuButton } from './desktop-menu-button';
  * getActiveNavItem по списку сайдбара: объект и его внутренние страницы
  * подсвечивают «Объекты», глобальные разделы — свой пункт; профиль/прочее
  * и /profile/notifications (вне шестёрки) — без подсветки. Только ПК
- * ≥1200 (hidden wide:block; граница — из логики старого кабинета
- * Sidebar ≥1200 / BottomNav ≤1199, решение владельца 08.09: боковое меню
- * есть только у ПК-версии, зона 769–1199 — планшетный хром с TabBar).
- * Рендерит ScreenLayout. */
+ * ≥1024 (hidden desktop:block; ярусы владельца 08.09: мобайл 320–560,
+ * планшет 561–1023, ПК от 1024 — боковое меню есть только у ПК-версии,
+ * в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout. */
 export function DesktopSidebar(): JSX.Element {
   const pathname = usePathname();
   const activeSectionId = getActiveNavItem(pathname, mainNavSections)?.id;
@@ -24,7 +23,7 @@ export function DesktopSidebar(): JSX.Element {
   return (
     <nav
       aria-label="Основная навигация"
-      className="fixed left-0 top-0 z-30 hidden px-3 pb-3 pt-[72px] font-sans wide:block"
+      className="fixed left-0 top-0 z-30 hidden px-3 pb-3 pt-[72px] font-sans desktop:block"
     >
       <div className="flex w-[200px] flex-col gap-0.5">
         {mainNavSections.map((section) => (

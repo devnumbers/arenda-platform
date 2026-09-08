@@ -54,7 +54,7 @@ export function TabBarRow({
   const activeTab = moreActive ? 'more' : getActiveMobileTab(pathname);
 
   return (
-    <div className="mx-auto flex h-[72px] w-full wide:max-w-[560px] items-stretch px-4">
+    <div className="mx-auto flex h-[72px] w-full items-stretch px-4">
       {LINK_TABS.map((section) => (
         <TabNavLink
           key={section.id}

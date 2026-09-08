@@ -33,9 +33,11 @@ import { SheetDragHandle } from './sheet-drag-handle';
  * только в карточке, по Figma-компоненту Modal (936:33834, варианты
  * Popup/Sheet): в шите закрытие — свайп вниз или тап по оверлею. */
 
-/** SSR-безопасное определение широкого вьюпорта: до гидратации — true
- * (карточка), после — факт; модалки открываются только по взаимодействию
- * пользователя, к тому времени ветвление уже скорректировано. */
+/** SSR-безопасное определение широкого вьюпорта для канвы модалок
+ * (шит ↔ карточка, порог 768 — отдельная канва, не ярусы хрома, решение
+ * владельца 08.09 #561): до гидратации — true (карточка), после — факт;
+ * модалки открываются только по взаимодействию пользователя, к тому
+ * времени ветвление уже скорректировано. */
 export function useIsDesktop(): boolean {
   const [isDesktop, setIsDesktop] = useState(true);
   useEffect(() => {
@@ -125,7 +127,10 @@ export function ModalContent({
   );
   const body = (
     <>
-      <SheetDragHandle className="tablet:hidden" />
+      {/* Канва модалок не привязана к ярусам хрома: карточка от 768
+       * (useIsDesktop), решение владельца 08.09 #561 — литерал, не токен
+       * tablet: (тот с 08.09 = 561, начало планшетного яруса). */}
+      <SheetDragHandle className="min-[768px]:hidden" />
       <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {titleBlock}
         {description !== undefined && (

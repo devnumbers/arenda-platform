@@ -13,14 +13,14 @@ import { useTopNavUser } from './top-nav-user-context';
  * 72 — центральная часть (Figma 948:48573 «Top Navigation») с слотами —
  * leading слева (кнопка «назад»), trailing справа (кнопки действий), в
  * центре children (Title+Subtitle, StepsChip, поиск или лого — композиция
- * экрана). Мобайл (768 и уже): полоса во всю ширину вьюпорта, в потоке
+ * экрана). Мобайл (560 и уже): полоса во всю ширину вьюпорта, в потоке
  * страницы — не закрепляется, уходит вместе со скроллом (футер снизу
- * закрепляет TabBar). Десктоп (от 769): полоса закреплена над прокруткой,
- * центральная часть — колонка max-560 по центру (как контент страницы),
- * по краям вьюпорта — крылья: лого «Рентли» (отступ 22) и кнопка профиля
- * (отступ даёт её собственный паддинг 14). Имя в кнопке приносит
- * TopNavUserContext (источник — useMe в widgets/screen-layout); до
- * загрузки и при ошибке — плейсхолдер.
+ * закрепляет TabBar). Планшет и ПК (от 561): полоса закреплена над
+ * прокруткой, центральная часть — колонка max-560 по центру (как контент
+ * страницы), по краям вьюпорта — крылья: лого «Рентли» (отступ 22) и
+ * кнопка профиля (отступ даёт её собственный паддинг 14). Имя в кнопке
+ * приносит TopNavUserContext (источник — useMe в widgets/screen-layout);
+ * до загрузки и при ошибке — плейсхолдер.
  *
  * Раскладка центра — заголовок центрируется относительно всей полосы,
  * слоты leading/trailing наложены абсолютно по краям (Figma 1425:55798):
@@ -56,14 +56,14 @@ export function TopNav({
 
   const firstName = user?.name;
   const displayName = firstName?.length ? firstName : 'Пользователь';
-  const wingsClass = mobileWings ? 'flex' : 'hidden desktop:flex';
+  const wingsClass = mobileWings ? 'flex' : 'hidden tablet:flex';
 
   return (
     <header
       aria-label="Навигация экрана"
       className={cn(
         'relative z-40 w-full bg-white font-sans pt-[env(safe-area-inset-top)]',
-        'desktop:fixed desktop:inset-x-0 desktop:top-0',
+        'tablet:fixed tablet:inset-x-0 tablet:top-0',
         className,
       )}
     >
@@ -71,17 +71,17 @@ export function TopNav({
         href={ROUTES.properties}
         aria-label="Объекты"
         className={cn(
-          'absolute left-0 top-0 h-[72px] items-center pl-[22px] outline-none focus-visible:rounded-pill focus-visible:ring-2 focus-visible:ring-primary desktop:flex',
+          'absolute left-0 top-0 h-[72px] items-center pl-[22px] outline-none focus-visible:rounded-pill focus-visible:ring-2 focus-visible:ring-primary tablet:flex',
           wingsClass,
         )}
       >
         <HeaderLogo />
       </Link>
-      <div className={cn('absolute right-0 top-0 h-[72px] items-center desktop:flex', wingsClass)}>
+      <div className={cn('absolute right-0 top-0 h-[72px] items-center tablet:flex', wingsClass)}>
         <UserButton name={displayName} onClick={() => router.push(ROUTES.profile)} />
       </div>
       {variant === 'search' ? (
-        <div className="relative mx-auto flex h-[72px] w-full desktop:max-w-[560px] items-center pl-3.5 pr-3.5">
+        <div className="relative mx-auto flex h-[72px] w-full tablet:max-w-[560px] items-center pl-3.5 pr-3.5">
           {leading !== undefined && <div className="flex shrink-0 items-center">{leading}</div>}
           <div className="ml-1 flex h-full min-w-0 flex-1 items-center">{children}</div>
         </div>
@@ -89,7 +89,7 @@ export function TopNav({
         /* Слоты — абсолютные слои по краям (Figma 1425:55798): центр
          * центрируется относительно всей полосы и не смещается от
          * наличия/отсутствия кнопок (правый слот всегда «зарезервирован»). */
-        <div className="relative mx-auto h-[72px] w-full desktop:max-w-[560px]">
+        <div className="relative mx-auto h-[72px] w-full tablet:max-w-[560px]">
           {leading !== undefined && (
             <div className="absolute left-0 top-0 flex h-full items-center pl-3.5">{leading}</div>
           )}

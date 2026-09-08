@@ -13,12 +13,12 @@ import { TopNavUserProvider } from './top-nav-user-provider';
  * он же единый хедер (Figma 1185:40818–19): мобайл (768 и уже) — полоса в
  * потоке страницы во всю ширину; десктоп (от 769) — закреплён над
  * прокруткой, центральная часть — колонка max-560, по краям лого и кнопка
- * профиля; высоту 72 компенсирует `desktop:pt-[72px]`. На ПК (от 1200,
- * граница старого кабинета — решение владельца 08.09, #561) хром дополняет
+ * профиля; высоту 72 компенсирует `tablet:pt-[72px]` (хедер закреплён
+ * от 561). На ПК (от 1024, решение владельца 08.09 #561) хром дополняет
  * десктопная навигация (Figma 1603:89079): сайдбар из 6 разделов слева под
  * хедером (DesktopSidebar) и плавающие пилюли «Уведомления»/«Поддержка»
  * по нижним углам (DesktopNavPills) — оба компонента сами скрыты до ПК.
- * Снизу — TabBar (футер, мобайл и планшет 1199 и уже): экраны со
+ * Снизу — TabBar (футер, мобайл и планшет 1023 и уже): экраны со
  * StickyBottomBar глушат его сами через TabBarVisibilityProvider/
  * useTabBarSuppression — вместе с ним глушатся и пилюли. TopNavUserProvider прокидывает имя собственника в «крыло»
  * профиля (граница shared/feature). Sidebar/BottomNav старого кабинета
@@ -28,7 +28,7 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
   return (
     <TabBarVisibilityProvider>
       <TopNavUserProvider>
-        <div className="flex min-h-screen flex-col desktop:pt-[72px]">
+        <div className="flex min-h-screen flex-col tablet:pt-[72px]">
           <DesktopSidebar />
           {children}
           <DesktopNavPills />

@@ -12,9 +12,9 @@ import { useTabBarSuppressionState } from './tab-bar';
  * в правом-нижнем (авто-ширина); обёртки p-12 держат плашку у краёв
  * вьюпорта. Разделы — secondaryNavSections нав-модели (#558), активность —
  * getActiveNavItem по их списку: «Уведомления» подсвечивается на
- * /profile/notifications*. Только ПК ≥1200 (hidden wide:block; граница —
- * из логики старого кабинета, решение владельца 08.09: пилюли — часть
- * ПК-хрома, в 769–1199 планшетный хром с TabBar). Рендерит ScreenLayout.
+ * /profile/notifications*. Только ПК ≥1024 (hidden desktop:block; ярусы
+ * владельца 08.09: пилюли — часть ПК-хрома, в 561–1023 планшетный хром
+ * с TabBar). Рендерит ScreenLayout.
  * Пока на экране смонтирован StickyBottomBar, пилюли глушатся вместе с
  * TabBar (useTabBarSuppression): нижняя панель — полноширинный белый шит,
  * углы под ним не кликабельны — тот же канон «честной недоступности», что
@@ -28,7 +28,7 @@ export function DesktopNavPills(): JSX.Element | null {
   if (!present || bars > 0) return null;
 
   return (
-    <nav aria-label="Дополнительная навигация" className="hidden font-sans wide:block">
+    <nav aria-label="Дополнительная навигация" className="hidden font-sans desktop:block">
       <div className="fixed bottom-0 left-0 z-30 p-3">
         <DesktopMenuButton
           section={navSectionById('notifications')}
