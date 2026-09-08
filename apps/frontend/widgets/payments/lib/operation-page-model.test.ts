@@ -3,6 +3,7 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import type { PaymentOperation } from '@/entities/payment';
 import {
   operationDelayRow,
+  operationDetailRows,
   operationHeroAmount,
   operationSubtitle,
 } from './operation-page-model';
@@ -112,5 +113,71 @@ describe('operationHeroAmount', () => {
 
   it('просроченная — красная', () => {
     expect(operationHeroAmount(operation({ status: 'overdue' })).tone).toBe('danger');
+  });
+});
+
+describe('operationDetailRows', () => {
+  it('manual-операция (paymentId null) — «Дата операции» + «Статус: Выполнена» (1858-105181)', () => {
+    const manual = operation({
+      paymentId: null,
+      status: 'paid',
+      paidDate: '2026-11-10',
+    });
+    expect(operationDetailRows(manual, '2026-11-10')).toEqual([
+      { label: 'Дата операции', text: '10 ноября' },
+      { label: 'Статус', text: 'Выполнена' },
+    ]);
+  });
+
+  it('manual-операция прошлого года — дата с годом; оплата и задержка не показываются', () => {
+    const manual = operation({
+      paymentId: null,
+      status: 'paid',
+      date: '2025-11-10',
+      paidDate: '2025-11-13',
+    });
+    expect(operationDetailRows(manual, '2026-11-10')).toEqual([
+      { label: 'Дата операции', text: '10 ноября, 2025' },
+      { label: 'Статус', text: 'Выполнена' },
+    ]);
+  });
+
+  it('manual-операция с удалённого правила — просроченный статус красным', () => {
+    const orphan = operation({ paymentId: null, status: 'overdue' });
+    expect(operationDetailRows(orphan, '2026-11-13')).toEqual([
+      { label: 'Дата операции', text: '10 ноября' },
+      { label: 'Статус', text: 'Просрочена', danger: true },
+    ]);
+  });
+
+  it('операция правила — плановая/фактическая/задержка/статус как раньше', () => {
+    const late = operation({ status: 'paid', paidDate: '2026-11-13' });
+    expect(operationDetailRows(late, '2026-11-13')).toEqual([
+      { label: 'Фактическая оплата', text: '13 ноября' },
+      { label: 'Плановая оплата', text: '10 ноября' },
+      { label: 'Задержана на', text: '3 дня' },
+      { label: 'Статус', text: 'Выполнена' },
+    ]);
+  });
+
+  it('операция правила в срок — без строки задержки; плановая — без фактической', () => {
+    const ontime = operation({ status: 'paid', paidDate: '2026-11-10' });
+    expect(operationDetailRows(ontime, '2026-11-13')).toEqual([
+      { label: 'Фактическая оплата', text: '10 ноября' },
+      { label: 'Плановая оплата', text: '10 ноября' },
+      { label: 'Статус', text: 'Выполнена' },
+    ]);
+    expect(operationDetailRows(operation(), '2026-11-05')).toEqual([
+      { label: 'Плановая оплата', text: '10 ноября' },
+      { label: 'Статус', text: 'Запланирована' },
+    ]);
+  });
+
+  it('просроченная правила — задержка и статус красным', () => {
+    expect(operationDetailRows(operation({ status: 'overdue' }), '2026-11-13')).toEqual([
+      { label: 'Плановая оплата', text: '10 ноября' },
+      { label: 'Задержана на', text: '3 дня' },
+      { label: 'Статус', text: 'Просрочена', danger: true },
+    ]);
   });
 });

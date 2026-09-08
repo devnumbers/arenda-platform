@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "@/shared/assets/icons";
+import { Add, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
@@ -20,7 +20,7 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from "@/features/payments";
-import { Button, PageContent } from "@/shared/ui/design";
+import { Button, IconButton, PageContent } from "@/shared/ui/design";
 import { PageHeader } from "@/shared/ui/page-header";
 import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
 import {
@@ -47,11 +47,13 @@ import { summaryBarSegments } from "../lib/summary-bar";
  * категорийный фильтр не принимает, объектный и период — принимают.
  * Фильтры живут в адресе (?from=&to=&property=&category= — шарабельно).
  * Порции по 50 с бесконечным скроллом; строка ведёт на страницу операции
- * своего объекта. Поиск — пилюля «Найти операцию» (#543), кнопка «+»
- * скрыта (решение владельца #539). Совсем пустая книга (all-time сводка
- * выбранного скоупа без операций) вместо контента — «Операций еще не
- * было», как на объектном экране (#478). Вход — пункт бокового меню
- * кабинета, только ПК (решение владельца #539).
+ * своего объекта. Поиск — пилюля «Найти операцию» (#543); «+» в шапке
+ * ведёт в визард одиночной операции (#570; решение владельца 2026-09-08
+ * #571 отменяет решение #539 о скрытой «+»). Совсем пустая книга (all-time
+ * сводка выбранного скоупа без операций) вместо контента — «Операций еще
+ * не было» с CTA «Добавить операцию» (#571), как на объектном экране
+ * (#478). Вход — пункт бокового меню кабинета, только ПК (решение
+ * владельца #539).
  */
 export function OperationsGlobalScreen(): JSX.Element {
   const router = useRouter();
@@ -124,20 +126,40 @@ export function OperationsGlobalScreen(): JSX.Element {
 
   return (
     <>
-      <PageHeader title="Операции" />
+      {/* «+» — в визард одиночной операции (#571, решение владельца
+       * 2026-09-08); в neverHad вместе с поиском скрыта, действие —
+       * CTA пустого состояния. */}
+      <PageHeader
+        title="Операции"
+        actions={
+          neverHad ? undefined : (
+            <IconButton
+              icon={<Add />}
+              label="Добавить операцию"
+              onClick={() => router.push(ROUTES.operationsNew)}
+            />
+          )
+        }
+      />
 
       <PageContent>
         {neverHad ? (
-          <OperationsNeverHad />
+          <OperationsNeverHad
+            action={
+              <Button onClick={() => router.push(ROUTES.operationsNew)}>
+                Добавить операцию
+              </Button>
+            }
+          />
         ) : (
           <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
             {/* Ритм страницы — ровно 24px по бокам (решение владельца
              * 2026-09-05): контент кабинета даёт 20px до 1200px и 0 после,
              * страница выравнивает себя до 24 сама и прижимает все элементы
              * (пилюля, чипы, карточки, лента) к этому краю без своих вставок. */}
-            {/* Пилюля поиска (#543) — кнопка на отдельную страницу; «+» скрыта
-             * (решение владельца #539: создания разовой операции вне правила
-             * нет). */}
+            {/* Пилюля поиска (#543) — кнопка на отдельную страницу; «+»
+             * переехала в шапку (решение владельца 2026-09-08 #571 —
+             * отмена решения #539). */}
             <OperationsSearchPill
               onOpenSearch={() =>
                 router.push(filterHref(ROUTES.operationsSearch))
@@ -275,7 +297,8 @@ export function OperationsGlobalScreen(): JSX.Element {
 
 /** Пилюля поиска (макет 1726-90017): серый rounded-pill на всю ширину,
  * лупа и подпись «Найти операцию»; тап открывает страницу поиска #543.
- * Кнопка «+» из макета скрыта (решение владельца #539). */
+ * Кнопка «+» рядом с пилюлей переехала в шапку страницы (решение
+ * владельца 2026-09-08 #571 — отмена решения #539). */
 function OperationsSearchPill({
   onOpenSearch,
 }: {

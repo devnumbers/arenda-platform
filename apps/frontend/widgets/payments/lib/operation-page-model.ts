@@ -1,6 +1,6 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
+import { formatDayMonthWithYear, formatOverdueDays } from '@/entities/payment';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { formatOverdueDays } from '@/entities/payment';
 import { daysOverdue } from './overdue-days';
 
 /**
@@ -74,6 +74,52 @@ export type OperationHeroAmount = {
   readonly text: string;
   readonly tone: 'default' | 'success' | 'danger';
 };
+
+/** Строка секции «Подробнее» страницы операции; просрочка — красным. */
+export type OperationDetailRow = {
+  readonly label: string;
+  readonly text: string;
+  readonly danger?: boolean;
+};
+
+/** Строки секции «Подробнее». У операции правила — сравнение срока с
+ * фактом (1419:25859 / 1419:25645): фактическая и плановая оплата,
+ * отклонение, статус. У операции без правила — manual-факт (#569) или
+ * хвост удалённого правила (1858-105181, #571): правила больше нет,
+ * сравнивать не с чем — «Дата операции» и статус без строк задержки. */
+export function operationDetailRows(
+  operation: PaymentOperation,
+  today: IsoDate,
+): readonly OperationDetailRow[] {
+  const status: OperationDetailRow =
+    operation.status === 'overdue'
+      ? { label: 'Статус', text: 'Просрочена', danger: true }
+      : {
+          label: 'Статус',
+          text: operation.status === 'paid' ? 'Выполнена' : 'Запланирована',
+        };
+
+  if (operation.paymentId === null) {
+    return [
+      { label: 'Дата операции', text: formatDayMonthWithYear(operation.date, today) },
+      status,
+    ];
+  }
+
+  const rows: OperationDetailRow[] = [];
+  if (operation.paidDate !== undefined) {
+    rows.push({
+      label: 'Фактическая оплата',
+      text: formatDayMonthWithYear(operation.paidDate, today),
+    });
+  }
+  rows.push({ label: 'Плановая оплата', text: formatDayMonthWithYear(operation.date, today) });
+  const delay = operationDelayRow(operation, today);
+  if (delay !== null) {
+    rows.push({ label: delay.label, text: delay.text });
+  }
+  return [...rows, status];
+}
 
 /** Сумма hero-блока (1419:25645 / 1444:66228): оплаченный доход — зелёная
  * с плюсом, расход — с минусом, просроченная — красная, остальное — тёмная

@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search } from '@/shared/assets/icons';
+import { Add, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { clientTodayIso, type PaymentType } from '@/entities/payment';
@@ -49,10 +49,11 @@ export type OperationsGlobalDirectionScreenProps = {
  * #540), некликабельна, полоса разбивки та же. Лента — контракт `type`
  * списка /operations, порции по 50 с бесконечным скроллом; строка ведёт
  * на страницу операции своего объекта. Совсем пустая книга направления —
- * «Операций еще не было», как на главной (#478). В шапке — лупа на
- * существующий поиск #543 (без типа направления — решение владельца);
- * «+» из макета не делаем (решение #539). Каркас кабинетный (решение
- * #542), ритм 24px всей страницей (#541).
+ * «Операций еще не было» с CTA «Добавить операцию» (#571), как на главной
+ * (#478). В шапке — лупа на существующий поиск #543 (без типа направления
+ * — решение владельца) и «+» в визард с пресетом направления (макет
+ * 1858-104152; решение владельца 2026-09-08 #571 отменяет решение #539).
+ * Каркас кабинетный (решение #542), ритм 24px всей страницей (#541).
  */
 export function OperationsGlobalDirectionScreen({
   type,
@@ -109,6 +110,10 @@ export function OperationsGlobalDirectionScreen({
     readonly id: string;
   }): void => router.push(ROUTES.propertyOperation(operation.propertyId, operation.id));
 
+  // Визард с пресетом направления от точки входа (#571): с «Доходов» —
+  // Доход, с «Расходов» — Расход (маршрут распознаёт ?type=).
+  const newOperationHref = `${ROUTES.operationsNew}?type=${type}`;
+
   const filterHref = (base: string, extra?: Record<string, string>): string => {
     const params = new URLSearchParams(globalOperationsFiltersParams(filters));
     for (const [name, value] of Object.entries(extra ?? {})) {
@@ -120,26 +125,41 @@ export function OperationsGlobalDirectionScreen({
 
   return (
     <>
-      {/* Шапка направления: «назад» на ленту (filterHref сохраняет фильтры)
-       * и лупа на существующий поиск (#543) с текущими фильтрами; в
-       * neverHad-состоянии лупа скрыта — конвенция зоны (#478). */}
+      {/* Шапка направления: «назад» на ленту (filterHref сохраняет фильтры),
+       * лупа на существующий поиск (#543) с текущими фильтрами и «+» в
+       * визард с пресетом направления (#571); в neverHad-состоянии обе
+       * иконки скрыты — конвенция зоны (#478), действие — CTA пустого
+       * состояния. */}
       <PageHeader
         title={title}
         backHref={filterHref(ROUTES.operations)}
         actions={
           neverHad ? undefined : (
-            <IconButton
-              icon={<Search />}
-              label="Найти операцию"
-              onClick={() => router.push(filterHref(ROUTES.operationsSearch))}
-            />
+            <>
+              <IconButton
+                icon={<Search />}
+                label="Найти операцию"
+                onClick={() => router.push(filterHref(ROUTES.operationsSearch))}
+              />
+              <IconButton
+                icon={<Add />}
+                label="Добавить операцию"
+                onClick={() => router.push(newOperationHref)}
+              />
+            </>
           )
         }
       />
 
       <PageContent>
         {neverHad ? (
-          <OperationsNeverHad />
+          <OperationsNeverHad
+            action={
+              <Button onClick={() => router.push(newOperationHref)}>
+                Добавить операцию
+              </Button>
+            }
+          />
         ) : (
           <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
             {/* Ритм страницы — ровно 24px по бокам (#541): чипы, карточка
