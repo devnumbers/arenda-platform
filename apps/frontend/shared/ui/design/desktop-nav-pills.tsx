@@ -27,13 +27,13 @@ export function DesktopNavPills(): JSX.Element | null {
 
   return (
     <nav aria-label="Дополнительная навигация" className="hidden font-sans desktop:block">
-      <div className="fixed bottom-0 left-0 z-30 hidden p-3 desktop:block">
+      <div className="fixed bottom-0 left-0 z-30 p-3">
         <DesktopMenuButton
           section={navSectionById('notifications')}
           active={activeSectionId === 'notifications'}
         />
       </div>
-      <div className="fixed bottom-0 right-0 z-30 hidden p-3 desktop:block">
+      <div className="fixed bottom-0 right-0 z-30 p-3">
         <DesktopMenuButton
           section={navSectionById('support')}
           active={activeSectionId === 'support'}

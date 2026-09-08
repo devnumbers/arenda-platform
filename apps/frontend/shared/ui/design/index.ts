@@ -53,7 +53,6 @@ export {
   TabBar,
   TabBarVisibilityProvider,
   useTabBarSuppression,
-  useTabBarSuppressionState,
 } from './tab-bar';
 export { MoreSheet, type MoreSheetProps } from './more-sheet';
 export { DesktopMenuButton, type DesktopMenuButtonProps } from './desktop-menu-button';
