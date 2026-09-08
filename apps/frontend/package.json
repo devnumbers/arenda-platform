@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "generate:api": "openapi-typescript ../backend/api/openapi/openapi.yaml -o shared/api/generated.ts",
     "generate:icons": "node scripts/generate-icons.mjs",
-    "generate:splash": "node scripts/generate-splash.mjs"
+    "generate:splash": "node scripts/generate-splash.mjs",
+    "figma:diff": "node scripts/figma-diff.mjs"
   },
   "dependencies": {
     "@heroui/react": "^3.2.1",
@@ -55,6 +56,8 @@
     "eslint-import-resolver-typescript": "^3.10.1",
     "eslint-plugin-boundaries": "^7.2.0",
     "openapi-typescript": "^7.4.0",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }

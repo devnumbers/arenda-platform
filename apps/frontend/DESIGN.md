@@ -205,10 +205,41 @@ leading-слот, заголовок + подзаголовок, значени�
 
 - Перед реализацией тянуть ноду из Figma («Рентли. Новые экраны сервиса»):
   текст тикета ≠ макет. Размеры и отступы — из инспектора ноды, не с
-  глазомера.
+  глазомера. Ссылку брать «Copy link to selection» на блок/компонент, а не
+  на экран-простыню — большие фреймы усекают ответы MCP.
 - Данные Figma авторитетнее скриншотов-рендеров; при коллизии макета со
   здравым смыслом — вопрос владельцу (консистентность продукта важнее буквы
   макета, но менять без решения нельзя).
+- Два MCP-сервера, роли не пересекаются (конфиг и fallback —
+  `docs/agents/mcp.md`): **`figma`** (официальный, OAuth) —
+  `get_design_context` фрейма как первый шаг вёрстки (скилл
+  `figma-design-to-code`; вывод — референс, не код для вставки),
+  `get_variable_defs` (токены), `get_screenshot`. **`figma-context`**
+  (Framelink) — `get_figma_data` (структура/семантика, точечные запросы) и
+  `download_figma_images` (SVG-иконки канона §10, PNG-эталоны узлов).
+- Цикл «1 в 1» (инструмент агента, приёмка — `/ui-walkthrough` владельцем):
+  design context → реализация на каноне → пиксельный диф — PNG-эталон ноды
+  через `download_figma_images` (тот же `pngScale`, что у сравнения) против
+  скриншота страницы: `npm run figma:diff -- --url … --ref node.png
+  --width W --height H --scale S` (Playwright + pixelmatch, бюджет ≤2%;
+  размеры и масштаб — из фрейма/экспорта).
+- Маппинг «Figma → код» (нет пары — ближайшая каноническая поверхность из
+  §4, новую анатомию не заводить):
+
+| Figma (компонент/set) | Код |
+|---|---|
+| `Button` (Primary/Secondary/Clear/White × Size) | `button.tsx` |
+| `Icon Button` | `icon-button.tsx` |
+| `Search Button` (пилюля) | `search-field.tsx` / TopNav-вариант `search` |
+| `Header` (Logo) + `User Button` | `top-nav.tsx` («крылья»), `header-logo.tsx`, `user-button.tsx` |
+| `Page Content` | `page-content.tsx` |
+| `Row Button` | `list-row.tsx` и семейство строк (§6) |
+| `Category Icon` | круглый слот иконки в строках (§6) |
+| `StatusHouseBadge` | бейджи статуса объекта (`PropertyStatusBadge`) |
+| `Notification Dot` | `notification-dot.svg` (§10, запечённый) |
+| `NumbersAlerts` | не иконка: живое число в пилюле, design-компонента нет |
+| `Icon/Bold/*`, `Icon/R/*`, `Icon/S/*` | барель `shared/assets/icons` (§10) |
+| `DesktopMenuButton` | сайдбар кабинета `(cabinet)`; канона в `design/` пока нет |
 
 ## 12. Фиксация решений (живой документ)
 
