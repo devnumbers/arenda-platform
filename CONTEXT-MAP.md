@@ -24,7 +24,7 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 - **Identity → Access**: Identity emits `UserRegistered` when a new account is created; Access consumes it to activate shares issued to a previously-unregistered email.
 - **Properties ↔ Access**: Access governs who can view/edit properties.
 - **Contacts → Properties**: a contact lives in its owner's contact book; the property link is optional (nullable `property_id`). Deleting a property — either ADR 0025 mode — nulls the link; the contact survives in the book (ADR 0054). Property-bound contacts are visible/editable to members by the property access roles (ADR 0028), as with payments; contacts without a property are owner-only.
-- **Properties → Payments**: a payment and its operations belong to exactly one property (`property_id`); access to them follows the property access roles (ADR 0028). Property lifecycle interplay (archive/delete) is decided with the payments schema (ADR 0047, ticket #446).
+- **Properties → Payments**: a payment and its operations belong to exactly one property (`property_id`); access to them follows the property access roles (ADR 0028). Property lifecycle interplay (archive/delete) is decided with the payments schema (ADR 0047).
 - **Properties → Rentals**: a rental belongs to exactly one property (`property_id`); access to it follows the property access roles (ADR 0028).
 - **Rentals → Payments**: a rental manages exactly one rent payment (income, category `rent`): creating, editing terms, extending, completing, and deleting the rental atomically drive the payment; the payment cannot be deleted past the rental.
 - **Rentals → Contacts**: a rental may reference a contact from the owner's book as the tenant; deleting the contact nulls the reference (ADR 0054).
@@ -36,10 +36,6 @@ DDD modular monolith (Go, `apps/backend/internal/`). Domain glossary is split by
 ## Shared kernel
 
 Terms shared across contexts, documented once here:
-
-**Owner / Собственник**: see Identity context — the user role that owns properties and manages rental data.
-
-**Admin / Админ**: see Identity context — internal support user.
 
 **Owner/Admin roles** (canonical home: `internal/shared/actor`, ADR 0034; mirrored by shared/policy for authorization and identity/domain for the account model):
 
