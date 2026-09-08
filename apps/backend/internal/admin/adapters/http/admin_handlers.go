@@ -132,7 +132,7 @@ func (h *AdminHandlers) GetAdminProperty(w http.ResponseWriter, r *http.Request,
 
 // ListAdminPropertyContacts implements GET /admin/property-contacts (the
 // wire path keeps the historical name; the reads come from the contacts
-// context, ADR 0051).
+// context, ADR 0054).
 func (h *AdminHandlers) ListAdminPropertyContacts(w http.ResponseWriter, r *http.Request, params openapi.ListAdminPropertyContactsParams) {
 	filters := adminapp.AdminContactFilters{Limit: 20, Offset: 0}
 	httpsupport.OptInt(&filters.Limit, params.Limit)

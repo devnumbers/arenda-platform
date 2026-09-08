@@ -185,7 +185,7 @@ func (s *AdminService) GetProperty(ctx context.Context, id uuid.UUID) (AdminProp
 }
 
 // ListContacts returns a paginated list of the contact cards bound to a
-// property (ADR 0051).
+// property (ADR 0054).
 // Sort is fixed to created_at ASC; there is no client-controlled sort.
 func (s *AdminService) ListContacts(
 	ctx context.Context, filters AdminContactFilters,

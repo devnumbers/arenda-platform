@@ -19,7 +19,7 @@ const contact: Contact = {
 };
 
 describe('contactFullName — отображаемое имя карточки', () => {
-  it('полный набор — Имя Фамилия Отчество (зеркало FullName домена, ADR 0051)', () => {
+  it('полный набор — Имя Фамилия Отчество (зеркало FullName домена, ADR 0054)', () => {
     expect(contactFullName(contact)).toBe('Анна Петрова Сергеевна');
   });
 
