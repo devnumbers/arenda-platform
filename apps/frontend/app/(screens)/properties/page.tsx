@@ -3,7 +3,7 @@ import {PropertiesPage} from '@/widgets/properties';
 import {parseFiltersFromParams, parseSortFromParams} from '@/widgets/properties';
 
 export const metadata: Metadata = {
-    title: 'Мои объекты — Рентли',
+    title: 'Объекты — Рентли',
     description: 'Список объектов',
 };
 

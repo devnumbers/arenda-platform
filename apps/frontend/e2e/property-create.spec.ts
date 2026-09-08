@@ -25,7 +25,7 @@ const dadataStubConfigured = process.env.DADATA_BASE_URL !== undefined;
 async function openWizard(page: Parameters<typeof openCabinetWithSeededSession>[0], user: Parameters<typeof openCabinetWithSeededSession>[1]): Promise<void> {
   await openCabinetWithSeededSession(page, user);
   await page.goto('/properties');
-  await page.getByRole('link', { name: 'Добавить объект' }).click();
+  await page.getByRole('button', { name: 'Создать объект' }).click();
   await expect(page.getByRole('heading', { name: 'Выберите, какая у вас недвижимость' })).toBeVisible();
 }
 
@@ -60,7 +60,7 @@ test('шаг 1 → шаг 2: категория ведёт на адрес, ру
 
   // Крестик закрывает визард на список объектов.
   await page.getByRole('button', { name: 'Закрыть' }).click();
-  await expect(page.getByRole('heading', { name: 'Мои объекты' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
 });
 
 test('шаг 2: подсказки адреса — список, выбор, возврат после правки', async ({ page, seededUser }, testInfo) => {
@@ -220,6 +220,6 @@ test('returnTo: успех пропускается, redirect на returnTo с p
   // Экран успеха пропущен: визард заменяет запись истории на returnTo,
   // дополненный параметром propertyId созданного объекта.
   await expect(page).toHaveURL(/\/properties\?propertyId=[0-9a-f-]{36}$/);
-  await expect(page.getByRole('heading', { name: 'Мои объекты' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
   await expect(page.getByText('Гараж на Садовой 3', { exact: true })).toBeVisible();
 });
