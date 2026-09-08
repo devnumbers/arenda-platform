@@ -56,6 +56,14 @@ export function useTabBarSuppression(): void {
   }, [acquire, release]);
 }
 
+/** Состояние глушения — для нижнего хрома, который прячется вместе с
+ * TabBar, пока смонтирована нижняя панель действия (пилюли десктопа
+ * #561): вне провайдера present=false (хром неуместен, рендер null),
+ * bars>0 — панель перекрывает низ. */
+export function useTabBarSuppressionState(): TabBarSuppression {
+  return useContext(TabBarSuppressionContext);
+}
+
 export function TabBarVisibilityProvider({ children }: { readonly children: ReactNode }): JSX.Element {
   const [bars, setBars] = useState(0);
   const acquire = useCallback((): void => setBars((n) => n + 1), []);

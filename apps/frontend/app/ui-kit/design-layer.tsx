@@ -28,6 +28,7 @@ import {
     Checkbox,
     ChipButton,
     ConfirmDialog,
+    DesktopMenuButton,
     EmptyState,
     IconButton,
     ListRow,
@@ -61,6 +62,7 @@ import {
     type PickerOption,
     type WheelPickerItem,
 } from '@/shared/ui/design';
+import { navSectionById } from '@/shared/config/navigation';
 import { dateToIso } from '@/shared/lib/calendar';
 import {
     CategoryIcon,
@@ -906,6 +908,30 @@ export function DesignLayerShowcase(): JSX.Element {
                         <Button onClick={() => setMoreSheetOpen(true)}>Открыть шит «Еще»</Button>
                     </div>
                     <MoreSheet open={moreSheetOpen} onOpenChange={setMoreSheetOpen} />
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>DesktopMenuButton · десктопная навигация (#561)</h3>
+                    <p className={styles.groupTitle}>
+                        Кнопка десктопного хрома (Figma 1675:54051): 200×44, radius 16, иконка 24 +
+                        подпись 14/16; активная — серая плашка bg-surface-muted, hover-фона нет.
+                        В продукте ScreenLayout рендерит из них DesktopSidebar (6 разделов слева под
+                        хедером, Figma 1675:54050) и DesktopNavPills («Уведомления» — левый-низ 200,
+                        «Поддержка» — правый-низ авто, Figma 1675:54098/54096) — только на десктопе
+                        ≥769; пилюли глушатся вместе с TabBar, пока открыт StickyBottomBar. Живой
+                        вид — на любом экране продукта при ширине ≥769.
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex flex-col gap-0.5">
+                            <DesktopMenuButton section={navSectionById('properties')} active />
+                            <DesktopMenuButton section={navSectionById('payments')} />
+                            <DesktopMenuButton section={navSectionById('operations')} />
+                        </div>
+                        <div className="flex flex-col items-start gap-2">
+                            <DesktopMenuButton section={navSectionById('notifications')} active />
+                            <DesktopMenuButton section={navSectionById('support')} className="w-fit" />
+                        </div>
+                    </div>
                 </div>
 
                 <div className={styles.group}>

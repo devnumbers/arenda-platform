@@ -53,8 +53,12 @@ export {
   TabBar,
   TabBarVisibilityProvider,
   useTabBarSuppression,
+  useTabBarSuppressionState,
 } from './tab-bar';
 export { MoreSheet, type MoreSheetProps } from './more-sheet';
+export { DesktopMenuButton, type DesktopMenuButtonProps } from './desktop-menu-button';
+export { DesktopSidebar } from './desktop-sidebar';
+export { DesktopNavPills } from './desktop-nav-pills';
 export { HeaderLogo, type HeaderLogoProps } from './header-logo';
 export {
   Modal,

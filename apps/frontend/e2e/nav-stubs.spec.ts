@@ -17,7 +17,9 @@ test('заглушка «Платежи»: хаб-шапка и EmptyState, не
   await page.goto('/payments');
 
   // Хаб-шапка с «крыльями» и на мобайле (лого — ссылка на объекты).
-  await expect(page.getByRole('link', { name: 'Объекты' })).toBeVisible();
+  // Скоуп по хедеру: на десктопе «Объекты» есть и в сайдбаре (#561).
+  const header = page.locator('header[aria-label="Навигация экрана"]');
+  await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'Платежи', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Платежи появятся здесь' })).toBeVisible();
 
@@ -28,7 +30,8 @@ test('заглушка «Участники»: хаб-шапка и EmptyState, 
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants');
 
-  await expect(page.getByRole('link', { name: 'Объекты' })).toBeVisible();
+  const header = page.locator('header[aria-label="Навигация экрана"]');
+  await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
   await expect(
     page.getByRole('heading', { level: 1, name: 'Участники', exact: true }),
   ).toBeVisible();
