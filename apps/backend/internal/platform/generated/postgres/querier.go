@@ -14,6 +14,9 @@ type Querier interface {
 	// The transition log is append-only (enforced by trigger, ADR 0037); the first
 	// transition of a subscription has no prior status or tariff.
 	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
+	// Archiving clears the pin in the same UPDATE: the schema CHECK
+	// (properties_pinned_at_check) demands it, and an unarchived object returns
+	// unpinned (ticket #577).
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
 	// «Удалить операцию» (решение владельца): tombstone-статус cancelled —
 	// строка остаётся с ключом (payment_id, date) и не воскресает на тике,
@@ -414,6 +417,9 @@ type Querier interface {
 	// archived properties are excluded: an archived object does not occupy a
 	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
+	// The main list's order (ticket #577): the pinned first — among themselves
+	// by the pin time (the first pin stays on top, a re-pin never shifts the
+	// order), then the unpinned by updated_at DESC.
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	// The active tasks (uncompleted) of the property: the screen's main
 	// sections. Due order with the undated last — the client buckets sections
@@ -472,7 +478,9 @@ type Querier interface {
 	// stacks (ticket #575); the rules of each stack arrive on the feed query's
 	// rows and the application layer groups them. The search ('' = no filter)
 	// is a case-insensitive substring over the name and the address — it
-	// filters the objects, never their stacks.
+	// filters the objects, never their stacks. The order is the global pin's
+	// (ticket #577): the pinned first — among themselves by the pin time —
+	// then the rest by name. pinned_at travels to the cards for the pin mark.
 	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
 	// Payments context queries: the global surface of the payment rules
 	// (tickets #575, #576) — the merged «Платежи» feed, the search with its
@@ -720,6 +728,13 @@ type Querier interface {
 	// the guard — the lock pass has already proven existence and visibility in
 	// the same transaction. :execrows keeps that ordering honest.
 	SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error)
+	// Atomic PUT pin (ticket #577, the PUT favorite's canon #461: no
+	// read-modify-write). The value — a moment or NULL — is resolved by the
+	// application under the row lock (a re-pin keeps the original pin time);
+	// existence and the edit capability are proven there too. The scope is the
+	// property's owner: the actor may be the full-access member. The updated
+	// row travels back for the response.
+	SetPropertyPin(ctx context.Context, arg SetPropertyPinParams) (Property, error)
 	// The main screen's two counters over the whole visible scope (ticket
 	// #575): the favorite rules — the «Все избранные (N)» card — and the
 	// overdue operations summed across the feed's rules — the «Все

@@ -169,10 +169,13 @@ ORDER BY rule_count DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST, pay.
 -- stacks (ticket #575); the rules of each stack arrive on the feed query's
 -- rows and the application layer groups them. The search ('' = no filter)
 -- is a case-insensitive substring over the name and the address — it
--- filters the objects, never their stacks.
+-- filters the objects, never their stacks. The order is the global pin's
+-- (ticket #577): the pinned first — among themselves by the pin time —
+-- then the rest by name. pinned_at travels to the cards for the pin mark.
 SELECT p.id,
        p.name,
-       p.address
+       p.address,
+       p.pinned_at
 FROM properties p
 WHERE (
        p.owner_id = sqlc.arg('actor')
@@ -187,7 +190,7 @@ WHERE (
   AND (sqlc.arg('search')::text = ''
        OR p.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR p.address ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
-ORDER BY p.name, p.id;
+ORDER BY p.pinned_at, p.name, p.id;
 
 -- name: LastOperationDatesOfPayments :many
 -- The newest materialized date across planned and paid per listed rule —

@@ -130,6 +130,10 @@ type Property struct {
 	// shared ones. Empty when not populated (internal use). Filled by the
 	// read/write service paths that resolve the actor's role.
 	AccessRole sharedpolicy.Role
+	// PinnedAt is the global pin (ticket #577): nil — not pinned, a moment —
+	// pinned since then. The lists order the pinned first, among themselves
+	// by this time; archiving clears it.
+	PinnedAt *time.Time
 	// OwnerName is the public display name of the property owner ("Name
 	// Surname" or a masked phone, never an email), filled only by the detail
 	// read path when the actor is not the owner (issue T11); empty otherwise.

@@ -945,6 +945,41 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/pin:
+    put:
+      operationId: setPropertyPin
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PinnedUpdateRequest'
+      responses:
+        '200':
+          description: Property pin state set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/operations:
     get:
       operationId: listPropertyOperations
@@ -4832,7 +4867,7 @@ components:
 
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, members_count, attributes, created_at, updated_at]
+      required: [id, name, type, address, status, members_count, attributes, created_at, updated_at, pinned_at]
       properties:
         id:
           type: string
@@ -4869,6 +4904,14 @@ components:
         updated_at:
           type: string
           format: date-time
+        pinned_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            The global pin (ticket #577): null — not pinned, a moment — pinned
+            since then. The lists order the pinned first, among themselves by
+            this time. Archiving clears the pin.
 
     PropertyPhoto:
       type: object
@@ -5433,7 +5476,7 @@ components:
         One visible property with its payment stacks (ticket #575): the keys
         grouped into the auto-pay group and the rest.
       type: object
-      required: [propertyId, name, address, autoPayRules, otherRules]
+      required: [propertyId, name, address, autoPayRules, otherRules, pinnedAt]
       properties:
         propertyId:
           type: string
@@ -5442,6 +5485,13 @@ components:
           type: string
         address:
           type: string
+        pinnedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            The object's global pin (ticket #577): null — not pinned, a
+            moment — pinned since then. The cards order the pinned first.
         autoPayRules:
           type: array
           description: The «Автоплатежи» group — the object's auto-pay rules.
@@ -5471,6 +5521,18 @@ components:
       required: [favorite]
       properties:
         favorite:
+          type: boolean
+
+    PinnedUpdateRequest:
+      description: >-
+        The pin toggle body of PUT pin (ticket #577, the favorite toggle's
+        canon): an atomic UPDATE on the server — never a read-modify-write
+        PATCH. Pinning an already-pinned object keeps its original pin time
+        (the PUT's idempotency — the order among the pinned never shifts).
+      type: object
+      required: [pinned]
+      properties:
+        pinned:
           type: boolean
 
     OperationResponse:

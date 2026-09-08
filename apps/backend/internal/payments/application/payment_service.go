@@ -201,7 +201,7 @@ func (s *PaymentService) UpdatePayment(
 				Response:        rule,
 				Audit:           auditdomain.ActionPaymentUpdated,
 				AuditEntityID:   &rule.ID,
-				AuditCtx:        map[string]any{"fields": updatedFields(cmd)},
+				AuditCtx:        map[string]any{auditFieldsKey: updatedFields(cmd)},
 				Tick:            true,
 				RereadPaymentID: &rule.ID,
 			}, nil
@@ -312,10 +312,13 @@ func (s *PaymentService) SetPaymentFavorite(
 				Response:      rule,
 				Audit:         auditdomain.ActionPaymentUpdated,
 				AuditEntityID: &rule.ID,
-				AuditCtx:      map[string]any{"fields": []string{"favorite"}},
+				AuditCtx:      map[string]any{auditFieldsKey: []string{"favorite"}},
 			}, nil
 		})
 }
+
+// auditFieldsKey is the audit context key listing the mutated fields.
+const auditFieldsKey = "fields"
 
 // validateRule is the single validator of the create/update contract
 // invariants — the transport decodes and delegates here, so the rules cannot

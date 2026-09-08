@@ -91,7 +91,8 @@ func (q *Queries) LastOperationDatesOfPayments(ctx context.Context, paymentIds s
 const listGlobalPaymentObjects = `-- name: ListGlobalPaymentObjects :many
 SELECT p.id,
        p.name,
-       p.address
+       p.address,
+       p.pinned_at
 FROM properties p
 WHERE (
        p.owner_id = $1
@@ -106,7 +107,7 @@ WHERE (
   AND ($2::text = ''
        OR p.name ILIKE '%' || $2::text || '%' ESCAPE '\'
        OR p.address ILIKE '%' || $2::text || '%' ESCAPE '\')
-ORDER BY p.name, p.id
+ORDER BY p.pinned_at, p.name, p.id
 `
 
 type ListGlobalPaymentObjectsParams struct {
@@ -115,16 +116,19 @@ type ListGlobalPaymentObjectsParams struct {
 }
 
 type ListGlobalPaymentObjectsRow struct {
-	ID      pgtype.UUID `json:"id"`
-	Name    string      `json:"name"`
-	Address string      `json:"address"`
+	ID       pgtype.UUID        `json:"id"`
+	Name     string             `json:"name"`
+	Address  string             `json:"address"`
+	PinnedAt pgtype.Timestamptz `json:"pinned_at"`
 }
 
 // The actor's visible non-archived properties — the «Объекты» screen's
 // stacks (ticket #575); the rules of each stack arrive on the feed query's
 // rows and the application layer groups them. The search (” = no filter)
 // is a case-insensitive substring over the name and the address — it
-// filters the objects, never their stacks.
+// filters the objects, never their stacks. The order is the global pin's
+// (ticket #577): the pinned first — among themselves by the pin time —
+// then the rest by name. pinned_at travels to the cards for the pin mark.
 func (q *Queries) ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listGlobalPaymentObjects, arg.Actor, arg.Search)
 	if err != nil {
@@ -134,7 +138,12 @@ func (q *Queries) ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPa
 	items := []ListGlobalPaymentObjectsRow{}
 	for rows.Next() {
 		var i ListGlobalPaymentObjectsRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Address); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Address,
+			&i.PinnedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

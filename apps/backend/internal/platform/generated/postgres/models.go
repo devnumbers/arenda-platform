@@ -335,6 +335,7 @@ type Property struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	Attributes  []byte             `json:"attributes"`
+	PinnedAt    pgtype.Timestamptz `json:"pinned_at"`
 }
 
 type PropertyMember struct {

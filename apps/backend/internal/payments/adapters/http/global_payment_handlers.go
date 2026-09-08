@@ -207,6 +207,7 @@ func paymentObjectsGlobalResponse(cards []application.GlobalPaymentObjectCard) o
 			PropertyId:   card.PropertyID,
 			Name:         card.Name,
 			Address:      card.Address,
+			PinnedAt:     card.PinnedAt,
 			AutoPayRules: paymentObjectKeys(card.AutoPayKeys),
 			OtherRules:   paymentObjectKeys(card.OtherKeys),
 		})

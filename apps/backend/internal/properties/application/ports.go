@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
@@ -104,6 +105,11 @@ type PropertyRepository interface {
 	ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
 	ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
 	Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
+	// SetPin writes the global pin in one atomic UPDATE (ticket #577, the
+	// PUT favorite's canon): nil clears it, a moment pins the property since
+	// then. The scope is the property's owner — the edit capability (Owner,
+	// Full Access) is resolved by the service's policy before the call.
+	SetPin(ctx context.Context, id, scope uuid.UUID, pinnedAt *time.Time) (domain.Property, error)
 	Archive(ctx context.Context, id, scope uuid.UUID) error
 	Unarchive(ctx context.Context, id, scope uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error)

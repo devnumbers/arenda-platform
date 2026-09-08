@@ -3,6 +3,7 @@ package http
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -358,6 +359,62 @@ func (h *PropertyHandlers) UnarchiveProperty(w http.ResponseWriter, r *http.Requ
 	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
+// SetPropertyPin implements PUT /properties/{propertyId}/pin (ticket #577):
+// the atomic global pin write, the PUT favorite's canon (ticket #461); the
+// updated property travels back.
+func (h *PropertyHandlers) SetPropertyPin(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	body, err := decodePinBody(w, r)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode set pin request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	property, err := h.svc.SetPropertyPin(r.Context(), actor, propertyID, body.Pinned)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	h.respondWithProperty(w, r, property, http.StatusOK)
+}
+
+// decodePinBody reads the pin toggle body strictly: a required bool cannot
+// express its own absence in the generated struct ({} and {"pinned": false}
+// both decode to false), so a pointer shadow enforces the required flag —
+// the same trick as decodeFavoriteBody (ticket #461).
+func decodePinBody(w http.ResponseWriter, r *http.Request) (openapi.PinnedUpdateRequest, error) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, httpsupport.MaxRequestBodySize))
+	if err != nil {
+		return openapi.PinnedUpdateRequest{}, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var body openapi.PinnedUpdateRequest
+	if err := dec.Decode(&body); err != nil {
+		return openapi.PinnedUpdateRequest{}, err
+	}
+	var shadow struct {
+		Pinned *bool `json:"pinned"`
+	}
+	if err := json.Unmarshal(raw, &shadow); err != nil {
+		return openapi.PinnedUpdateRequest{}, err
+	}
+	if shadow.Pinned == nil {
+		return openapi.PinnedUpdateRequest{}, errors.New("properties: pinned flag is required")
+	}
+	return body, nil
+}
+
 // UploadPropertyPhoto implements POST /properties/{propertyId}/photos.
 func (h *PropertyHandlers) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
@@ -505,6 +562,7 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 		MembersCount: property.MembersCount,
 		CreatedAt:    property.CreatedAt,
 		UpdatedAt:    property.UpdatedAt,
+		PinnedAt:     property.PinnedAt,
 	}
 	resp.Attributes = propertyAttributesResponse(property.Attributes)
 	if property.AccessRole != "" {

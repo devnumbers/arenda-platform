@@ -75,9 +75,12 @@ type GlobalPaymentObjectKey struct {
 // GlobalPaymentObjectCard is one visible property with its payment stacks
 // (ticket #575): the keys grouped into the auto-pay group and the rest.
 type GlobalPaymentObjectCard struct {
-	PropertyID  uuid.UUID
-	Name        string
-	Address     string
+	PropertyID uuid.UUID
+	Name       string
+	Address    string
+	// PinnedAt is the property's global pin (ticket #577): nil — not pinned,
+	// a moment — pinned since then; the objects read orders the pinned first.
+	PinnedAt    *time.Time
 	AutoPayKeys []GlobalPaymentObjectKey
 	OtherKeys   []GlobalPaymentObjectKey
 }
@@ -192,6 +195,7 @@ func (s *GlobalPaymentService) ListGlobalPaymentObjects(
 			PropertyID:  object.PropertyID,
 			Name:        object.Name,
 			Address:     object.Address,
+			PinnedAt:    object.PinnedAt,
 			AutoPayKeys: []GlobalPaymentObjectKey{},
 			OtherKeys:   []GlobalPaymentObjectKey{},
 		}
@@ -271,8 +275,8 @@ func (s *GlobalPaymentService) SaveFavoriteOrder(ctx context.Context, actor uuid
 		}
 		return recordAudit(ctx, stores, actor, auditRole, auditdomain.ActionPaymentUpdated,
 			auditdomain.EntityPayment, nil, map[string]any{
-				"fields": []string{"favorite_order"},
-				"count":  len(orderedIDs),
+				auditFieldsKey: []string{"favorite_order"},
+				"count":        len(orderedIDs),
 			})
 	})
 }

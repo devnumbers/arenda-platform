@@ -362,6 +362,66 @@ func TestListGlobalPaymentObjects(t *testing.T) {
 	}
 }
 
+// The global pin orders the «Объекты» cards (ticket #577): the pinned first
+// — among themselves by the pin time — then the rest by name; the pin time
+// travels onto the card.
+func TestListGlobalPaymentObjects_PinOrder(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	svc := h.globalSvc()
+
+	zebra := h.seedGlobalProperty(h.owner, "Зебра", "active")
+	pinnedLate := h.seedGlobalProperty(h.owner, "Аист", "active")
+	pinnedEarly := h.seedGlobalProperty(h.owner, "Бекон", "active")
+
+	// Direct seed: the properties context owns the pin writes; this read
+	// only consumes the column.
+	pinA := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	pinB := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE properties SET pinned_at = $1 WHERE id = $2`, pinB, pinnedLate,
+	); err != nil {
+		t.Fatalf("seed pin B: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE properties SET pinned_at = $1 WHERE id = $2`, pinA, pinnedEarly,
+	); err != nil {
+		t.Fatalf("seed pin A: %v", err)
+	}
+
+	cards, err := svc.ListGlobalPaymentObjects(h.ctx(), h.owner, "")
+	if err != nil {
+		t.Fatalf("objects: %v", err)
+	}
+	want := []struct {
+		id  uuid.UUID
+		pin *time.Time
+	}{
+		{pinnedEarly, &pinA},
+		{pinnedLate, &pinB},
+		{zebra, nil},
+		{h.propID, nil}, // Then the rest by name: «Зебра» < «Квартира».
+	}
+	if len(cards) != len(want) {
+		got := make([]uuid.UUID, 0, len(cards))
+		for _, c := range cards {
+			got = append(got, c.PropertyID)
+		}
+		t.Fatalf("cards = %v, want %d", got, len(want))
+	}
+	for i, w := range want {
+		if cards[i].PropertyID != w.id {
+			t.Errorf("cards[%d].PropertyID = %s, want %s", i, cards[i].PropertyID, w.id)
+		}
+		switch {
+		case w.pin == nil && cards[i].PinnedAt != nil:
+			t.Errorf("cards[%d].PinnedAt = %v, want nil", i, cards[i].PinnedAt)
+		case w.pin != nil && (cards[i].PinnedAt == nil || !cards[i].PinnedAt.Equal(*w.pin)):
+			t.Errorf("cards[%d].PinnedAt = %v, want %v", i, cards[i].PinnedAt, w.pin)
+		}
+	}
+}
+
 // assertObjectStacks checks the three visible cards: the Квартира stacks
 // (auto-pay group and the rest, each with its dot), the rule-less Дом's
 // empty groups and the shared dacha's key.

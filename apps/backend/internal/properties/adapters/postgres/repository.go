@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -114,6 +115,7 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		Status:      row.Status,
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
+		PinnedAt:    row.PinnedAt,
 	}, row.MembersCount), nil
 }
 
@@ -152,6 +154,7 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		Status:      row.Status,
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
+		PinnedAt:    row.PinnedAt,
 	}, row.MembersCount), nil
 }
 
@@ -185,6 +188,7 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.U
 			Status:      row.Status,
 			CreatedAt:   row.CreatedAt,
 			UpdatedAt:   row.UpdatedAt,
+			PinnedAt:    row.PinnedAt,
 		}, row.MembersCount))
 	}
 	return properties, nil
@@ -208,6 +212,7 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 			Status:      row.Status,
 			CreatedAt:   row.CreatedAt,
 			UpdatedAt:   row.UpdatedAt,
+			PinnedAt:    row.PinnedAt,
 		}, row.MembersCount))
 	}
 	return properties, nil
@@ -227,6 +232,24 @@ func (r *PropertyRepository) Update(ctx context.Context, scope uuid.UUID, proper
 		Description: pgtype.Text{String: property.Description, Valid: true},
 		Attributes:  attrsJSON,
 		Status:      string(property.Status),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Property{}, application.ErrNotFound
+		}
+		return domain.Property{}, err
+	}
+	return propertyFromRow(row), nil
+}
+
+// SetPin writes the global pin in one atomic UPDATE (ticket #577); the value
+// — a moment or NULL — arrives resolved from the application layer, which has
+// proven existence and the edit capability under the row lock.
+func (r *PropertyRepository) SetPin(ctx context.Context, id, scope uuid.UUID, pinnedAt *time.Time) (domain.Property, error) {
+	row, err := r.q().SetPropertyPin(ctx, postgres.SetPropertyPinParams{
+		PinnedAt: pgconv.TimePtrToPgtype(pinnedAt),
+		ID:       pgconv.UUIDToPgtype(id),
+		OwnerID:  pgconv.UUIDToPgtype(scope),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -294,6 +317,7 @@ func propertyFromRow(row postgres.Property) domain.Property {
 		Status:      domain.PropertyStatus(row.Status),
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
+		PinnedAt:    pgconv.TimestamptzToPtrTime(row.PinnedAt),
 	}
 }
 
