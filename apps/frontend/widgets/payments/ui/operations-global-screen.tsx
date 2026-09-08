@@ -20,8 +20,7 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from "@/features/payments";
-import { Button, PageContent } from "@/shared/ui/design";
-import { PageHeader } from "@/shared/ui/page-header";
+import { Button, PageContent, TopNav } from "@/shared/ui/design";
 import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
 import {
   LoadingMoreIndicator,
@@ -50,8 +49,8 @@ import { summaryBarSegments } from "../lib/summary-bar";
  * своего объекта. Поиск — пилюля «Найти операцию» (#543), кнопка «+»
  * скрыта (решение владельца #539). Совсем пустая книга (all-time сводка
  * выбранного скоупа без операций) вместо контента — «Операций еще не
- * было», как на объектном экране (#478). Вход — пункт бокового меню
- * кабинета, только ПК (решение владельца #539).
+ * было», как на объектном экране (#478). Вход — «Операции» в сайдбаре
+ * ПК и в шите «Еще» на мобайле и планшете (единый хром, #564).
  */
 export function OperationsGlobalScreen(): JSX.Element {
   const router = useRouter();
@@ -124,27 +123,32 @@ export function OperationsGlobalScreen(): JSX.Element {
 
   return (
     <>
-      <PageHeader title="Операции" />
+      {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
+       * стандартное — в потоке на мобайле, закреплена на планшете и ПК. */}
+      <TopNav mobileWings />
 
       <PageContent>
+        <h1 className="pl-6 text-[28px] font-semibold leading-8 text-content">
+          Операции
+        </h1>
+
         {neverHad ? (
           <OperationsNeverHad />
         ) : (
-          <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
-            {/* Ритм страницы — ровно 24px по бокам (решение владельца
-             * 2026-09-05): контент кабинета даёт 20px до 1200px и 0 после,
-             * страница выравнивает себя до 24 сама и прижимает все элементы
-             * (пилюля, чипы, карточки, лента) к этому краю без своих вставок. */}
+          <div className="mt-6 flex flex-col gap-6">
             {/* Пилюля поиска (#543) — кнопка на отдельную страницу; «+» скрыта
              * (решение владельца #539: создания разовой операции вне правила
              * нет). */}
-            <OperationsSearchPill
-              onOpenSearch={() =>
-                router.push(filterHref(ROUTES.operationsSearch))
-              }
-            />
+            <div className="px-6">
+              <OperationsSearchPill
+                onOpenSearch={() =>
+                  router.push(filterHref(ROUTES.operationsSearch))
+                }
+              />
+            </div>
 
             <OperationsFilterChips
+              className="px-6"
               periodLabel={
                 filters.period !== null
                   ? operationsPeriodRangeChipLabel(period)
@@ -203,7 +207,7 @@ export function OperationsGlobalScreen(): JSX.Element {
                      * полоса-разбивка пилюлями категорий. Тап ведёт на
                      * страницу направления (#548 — отменяет решение #539
                      * о некликабельных карточках). */}
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 px-6">
                       <OperationsSummaryCard
                         label="Расходы"
                         totalKopecks={summaryQuery.data?.expenseTotalKopecks}
@@ -241,7 +245,6 @@ export function OperationsGlobalScreen(): JSX.Element {
                     <OperationsDateList
                       groups={groups}
                       onSelectOperation={openOperation}
-                      inset={false}
                       renderSubtitle={(operation) => operation.propertyName}
                       tail={
                         <>

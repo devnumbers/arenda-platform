@@ -2,8 +2,8 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BoldArchive, BoldHome, BoldObjects, Check } from '@/shared/assets/icons';
-import { buildReturnUrl } from '@/shared/lib/navigation';
+import { BoldArchive, BoldHome, BoldObjects, Cancel, Check } from '@/shared/assets/icons';
+import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { clientTodayIso } from '@/entities/payment';
 import {
   globalOperationsFiltersParams,
@@ -19,8 +19,9 @@ import {
   PageContent,
   Skeleton,
   StickyBottomBar,
+  TopNav,
+  TopNavTitle,
 } from '@/shared/ui/design';
-import { PageHeader } from '@/shared/ui/page-header';
 import { PaymentsStateCard } from './payments-sections';
 
 /**
@@ -33,9 +34,10 @@ import { PaymentsStateCard } from './payments-sections';
  * нет, #539). Кнопка «Выбрать» просто активна всегда (решение владельца
  * 2026-09-05): пустой черновик — легитимное применение «Все объекты».
  * Период и категории при применении сохраняются — страница приходит с
- * полным набором фильтров в query (#541, filterHref). Каркас — кабинетный:
- * PageHeader с «назад» и ✓ в действиях (зона /operations живёт в кабинете,
- * #541), строки — канон ListRow. Книга без объектов сюда не приводит —
+ * полным набором фильтров в query (#541, filterHref). Шапка — канон
+ * выборщика по макету (✕ + заголовок + ✓, Figma 1733-26805): «Закрыть»
+ * отбрасывает черновик, ✓ в trailing применяет; единый хром (#564).
+ * Строки — канон ListRow. Книга без объектов сюда не приводит —
  * главная показывает «Операций еще не было» (#478) вместо чипов.
  */
 export function OperationsObjectsSelectScreen(): JSX.Element {
@@ -82,16 +84,22 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
 
   return (
     <>
-      <PageHeader
-        title="Выбрать объект"
-        backHref={returnTo}
-        actions={
+      {/* Канон выборщика (Figma 1733-26805): ✕ «Закрыть» отбрасывает
+       * черновик (goBack — по истории, прямой загрузке — на returnTo),
+       * ✓ применяет; заголовок в TopNav. */}
+      <TopNav
+        leading={
+          <IconButton icon={<Cancel />} label="Закрыть" onClick={() => goBack(router, returnTo)} />
+        }
+        trailing={
           <IconButton icon={<Check />} label="Применить выбранные объекты" onClick={apply} />
         }
-      />
+      >
+        <TopNavTitle title="Выбрать объект" />
+      </TopNav>
 
       <PageContent>
-        <div className="-mx-5 min-[1200px]:mx-0">
+        <div>
           <ListRow
             leading={<SelectAvatar fallback={<BoldObjects className="h-6 w-6 text-[#D3D7D9]" />} />}
             title="Все объекты"
@@ -171,9 +179,9 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
         </div>
       </PageContent>
 
-      {/* Ниже 1200 в кабинете видна нижняя навигация (80px + safe-area) —
-          панель приподнимается над ней, чтобы «Выбрать» не пряталась. */}
-      <StickyBottomBar className="max-[1199px]:bottom-[calc(5rem_+_env(safe-area-inset-bottom))]">
+      {/* TabBar глушится сам, пока смонтирована панель (единый хром,
+          #564) — кабинетный лифт над нижней навигацией не нужен. */}
+      <StickyBottomBar>
         <Button className="w-full" onClick={apply}>
           Выбрать
         </Button>

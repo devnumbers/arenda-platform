@@ -2,7 +2,8 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { buildReturnUrl } from '@/shared/lib/navigation';
+import { Cancel } from '@/shared/assets/icons';
+import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { clientTodayIso } from '@/entities/payment';
 import {
   defaultOperationsPeriod,
@@ -19,11 +20,13 @@ import {
   Button,
   Checkbox,
   EmptyState,
+  IconButton,
   ListRow,
   PageContent,
   StickyBottomBar,
+  TopNav,
+  TopNavTitle,
 } from '@/shared/ui/design';
-import { PageHeader } from '@/shared/ui/page-header';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import { globalCategoriesSummaryScope } from '../lib/operations-global-categories-model';
 
@@ -38,10 +41,9 @@ import { globalCategoriesSummaryScope } from '../lib/operations-global-categorie
  * buildReturnUrl + globalOperationsFiltersParams (единый wire-формат с лентой).
  * Кнопка видна при непустом черновике или применённом фильтре (иначе возврат
  * к «Все категории» был бы недостижим); пустой период — EmptyState (Figma
- * 1518-92530, #478), «Выбрать» в этом состоянии не нужен. Каркас кабинетный
- * (решение #542: зона /operations без TopNav — конфликт с сайдбаром),
- * ритм 24px всей страницей (#541); панель приподнята над нижней навигацией
- * кабинета ниже 1200.
+ * 1518-92530, #478), «Выбрать» в этом состоянии не нужен. Шапка — канон
+ * выборщика (как у объектной страницы: ✕ «Закрыть» + заголовок в TopNav,
+ * #564).
  */
 export function OperationsGlobalCategoriesScreen(): JSX.Element {
   const router = useRouter();
@@ -80,13 +82,18 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
 
   return (
     <>
-      <PageHeader title="Выбрать категорию" backHref={returnTo} />
+      {/* Канон выборщика (как у объектной страницы #477): ✕ «Закрыть»
+       * отбрасывает черновик (goBack — по истории, прямой загрузке —
+       * на returnTo). */}
+      <TopNav
+        leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={() => goBack(router, returnTo)} />}
+      >
+        <TopNavTitle title="Выбрать категорию" />
+      </TopNav>
 
-      {/* Ритм страницы — ровно 24px по бокам, как на ленте (#541): чипы и
-       * строки прижаты к этому краю без своих вставок. */}
       <PageContent>
-        <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
-          <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-col gap-6 pt-4">
+          <div className="flex flex-wrap gap-1.5 px-6">
             <span
               aria-hidden
               className="inline-flex h-11 items-center rounded-pill bg-primary px-5 text-sm font-medium text-white"
@@ -155,9 +162,9 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
 
       {draft.length > 0 || filters.categories.length > 0 ? (
         // Пустой черновик при применённом фильтре — легитимное применение
-        // «Все категории»: возврат к дефолту должен быть достижим. Ниже 1200
-        // в кабинете видна нижняя навигация — панель приподнимается над ней.
-        <StickyBottomBar className="max-[1199px]:bottom-[calc(5rem_+_env(safe-area-inset-bottom))]">
+        // «Все категории»: возврат к дефолту должен быть достижим. TabBar
+        // глушится сам, пока смонтирована панель (#564).
+        <StickyBottomBar>
           <Button className="w-full" onClick={apply} aria-label="Выбрать категории">
             Выбрать
           </Button>
