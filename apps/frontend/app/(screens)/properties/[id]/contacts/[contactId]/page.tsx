@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ContactDetailScreen } from '@/widgets/contacts';
 
 /** Экран «Контакт» (#510, макеты 1285:55112 / 1424:54725): деталка
- * карточки книги контактов (ADR 0051) с правкой и удалением. Оболочка
+ * карточки книги контактов (ADR 0054) с правкой и удалением. Оболочка
  * новых экранов (ScreenLayout, колонка 560) — из layout группы (screens). */
 export const metadata: Metadata = {
   title: 'Контакт — Рентли',

@@ -22,7 +22,7 @@ type PropertyRepository interface {
 }
 
 // ContactRepository provides cross-user contact reads for the admin context
-// (ADR 0051: the book lives in the contacts context; admin only reads).
+// (ADR 0054: the book lives in the contacts context; admin only reads).
 type ContactRepository interface {
 	ListContacts(ctx context.Context, filters AdminContactFilters) ([]AdminContactView, int64, error)
 }

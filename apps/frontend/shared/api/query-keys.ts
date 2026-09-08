@@ -31,7 +31,7 @@ export const billingKeys = {
 export const contactKeys = {
   all: ['contacts'] as const,
   /**
-   * Список книги контактов (ADR 0051). propertyId null — плоский список
+   * Список книги контактов (ADR 0054). propertyId null — плоский список
    * всей видимой книги (глобальная страница контактов), иначе — срез объекта.
    * search — серверный фильтр ('' = без); sort/order — серверная сортировка
    * плоского списка (значения — параметры GET /contacts).

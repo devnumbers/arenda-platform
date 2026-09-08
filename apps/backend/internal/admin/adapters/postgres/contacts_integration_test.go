@@ -14,7 +14,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
 )
 
-// The admin read of contacts switched to the contacts table (ADR 0051,
+// The admin read of contacts switched to the contacts table (ADR 0054,
 // ticket #506): the property's bound cards with the display name composed
 // from the name fields; unbound contacts belong to no property card.
 

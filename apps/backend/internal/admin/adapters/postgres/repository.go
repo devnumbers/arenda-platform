@@ -260,7 +260,7 @@ func (r *AdminRepository) propertyViewFromRow(
 }
 
 // ListContacts implements ContactRepository.ListContacts: the property's
-// bound cards of the contacts context (ADR 0051), the display name composed
+// bound cards of the contacts context (ADR 0054), the display name composed
 // from the name fields; the phone column is plaintext, so no decryption is
 // needed.
 func (r *AdminRepository) ListContacts(

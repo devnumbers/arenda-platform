@@ -13,7 +13,7 @@ type Contacts struct {
 	ContactService *contactsapp.ContactService
 }
 
-// WireContacts constructs the contacts context (ADR 0051): the contact book
+// WireContacts constructs the contacts context (ADR 0054): the contact book
 // store, the property reference store, the shared transactional factory
 // (ADR 0033 γ-factory) and the use case service. The policy comes from the
 // access module — contacts is wired after it, so the membership-aware policy

@@ -118,7 +118,7 @@ func run() error {
 		return err
 	}
 
-	// 7.7 Contacts (ADR 0051): the owner's contact book CRUD with the
+	// 7.7 Contacts (ADR 0054): the owner's contact book CRUD with the
 	//     property-scope role gates; wired after access so the
 	//     membership-aware policy resolves the actor/scope matrix (ADR 0028).
 	contactsMod, err := wire.WireContacts(p)

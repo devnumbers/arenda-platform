@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-Экранная карта #522 и макеты Figma вводят создание задачи с опциональным полем «Объект» и глобальную ленту задач владельца. Сегодня контекст tasks (ADR 0051) привязывает каждое правило и каждую задачу к объекту: миграция `000118_tasks_context` — `property_id UUID NOT NULL ... ON DELETE CASCADE` в обеих таблицах, пути контрактов только под `/properties/{propertyId}/tasks`, тик идёт по зонам — DISTINCT TZ собственников с правилами на активных/в maintenance объектах — и сериализуется `FOR UPDATE` строк объектов владельца. Пояс для безобъектного времени уже есть: `users.timezone` NOT NULL (ADR 0048). Прецедент необязательной связи с объектом — книга контактов (ADR 0051 contacts): nullable `property_id`, `ON DELETE SET NULL`, безобъектные записи — только владелец.
+Экранная карта #522 и макеты Figma вводят создание задачи с опциональным полем «Объект» и глобальную ленту задач владельца. Сегодня контекст tasks (ADR 0051) привязывает каждое правило и каждую задачу к объекту: миграция `000118_tasks_context` — `property_id UUID NOT NULL ... ON DELETE CASCADE` в обеих таблицах, пути контрактов только под `/properties/{propertyId}/tasks`, тик идёт по зонам — DISTINCT TZ собственников с правилами на активных/в maintenance объектах — и сериализуется `FOR UPDATE` строк объектов владельца. Пояс для безобъектного времени уже есть: `users.timezone` NOT NULL (ADR 0048). Прецедент необязательной связи с объектом — книга контактов (ADR 0054 contacts): nullable `property_id`, `ON DELETE SET NULL`, безобъектные записи — только владелец.
 
 ## Decision
 
@@ -37,5 +37,5 @@ Accepted
 ## See also
 
 - Карта wayfinder [#518](https://github.com/devnumbers/arenda-platform/issues/518); тикет [#519](https://github.com/devnumbers/arenda-platform/issues/519) (словарь и модель, grilling 2026-09-04).
-- ADR 0051 (контекст Tasks: схема, тик, контракты; там же книга контактов — прецедент nullable-связи), ADR 0048 (TZ собственника и драйверы тика), ADR 0025 (режимы удаления объекта), ADR 0028 (actor/scope), ADR 0033 (UoW).
+- ADR 0051 (контекст Tasks: схема, тик, контракты), ADR 0054 (книга контактов — прецедент nullable-связи), ADR 0048 (TZ собственника и драйверы тика), ADR 0025 (режимы удаления объекта), ADR 0028 (actor/scope), ADR 0033 (UoW).
 - `apps/backend/internal/tasks/CONTEXT.md` — словарь («Задача без объекта»); `CONTEXT-MAP.md` — связь Properties → Tasks.

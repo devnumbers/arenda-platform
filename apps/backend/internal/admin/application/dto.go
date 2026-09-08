@@ -52,7 +52,7 @@ type AdminPropertyView struct {
 }
 
 // AdminContactView is the admin read model of one contact card bound
-// to a property (ADR 0051): the display name is composed from the contact's
+// to a property (ADR 0054): the display name is composed from the contact's
 // name fields by the repository.
 type AdminContactView struct {
 	ID         uuid.UUID

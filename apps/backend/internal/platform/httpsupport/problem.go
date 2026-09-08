@@ -140,7 +140,7 @@ var userFacingDetails = []struct {
 	// Tasks (task rules and tasks, ADR 0051).
 	{tasksapp.ErrInvalidInput, "Некорректные данные задачи"},
 
-	// Contacts (the contact book, ADR 0051).
+	// Contacts (the contact book, ADR 0054).
 	{contactsapp.ErrInvalidInput, "Некорректные данные контакта"},
 
 	// Rentals (ADR 0053).

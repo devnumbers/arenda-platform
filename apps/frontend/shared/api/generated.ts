@@ -2034,7 +2034,7 @@ export interface components {
         PropertyPhotosResponse: {
             items: components["schemas"]["PropertyPhoto"][];
         };
-        /** @description The create payload of a contact card (ADR 0051). Only the first name is required; the phone travels in any accepted Russian spelling and is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands in the property owner's book (the edit gate applies); without one it is created «без объекта» in the actor's own book. */
+        /** @description The create payload of a contact card (ADR 0054). Only the first name is required; the phone travels in any accepted Russian spelling and is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands in the property owner's book (the edit gate applies); without one it is created «без объекта» in the actor's own book. */
         ContactCreateRequest: {
             /** Format: uuid */
             propertyId?: string | null;
@@ -2064,7 +2064,7 @@ export interface components {
             messengerUsername?: string;
             note?: string;
         };
-        /** @description One card of the owner's contact book (ADR 0051): a person useful for a property — not a service user. propertyId null means «без объекта»; the card survives the property's deletion. */
+        /** @description One card of the owner's contact book (ADR 0054): a person useful for a property — not a service user. propertyId null means «без объекта»; the card survives the property's deletion. */
         ContactResponse: {
             /** Format: uuid */
             id: string;

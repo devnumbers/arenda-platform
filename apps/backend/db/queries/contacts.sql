@@ -1,5 +1,5 @@
 -- Contacts context queries: CRUD and search over the owner's contact book
--- (ADR 0051, ticket #506). Reads and writes are scoped by the data owner
+-- (ADR 0054, ticket #506). Reads and writes are scoped by the data owner
 -- (ADR 0028) — the service has already resolved the actor's role. The by-id
 -- read alone is unscoped on purpose: the card itself carries the property
 -- binding the authorization gates on, so the service loads first and
@@ -10,7 +10,7 @@ SELECT * FROM contacts
 WHERE id = $1;
 
 -- name: ListContacts :many
--- The actor's visible slice per the query scope (ADR 0051, ADR 0028):
+-- The actor's visible slice per the query scope (ADR 0054, ADR 0028):
 -- 'all' — the flat book: the actor's own cards plus the cards bound to
 -- properties the actor owns or shares with an active membership (the merged
 -- visibility the global book page reads);
@@ -106,7 +106,7 @@ DELETE FROM contacts
 WHERE id = $1 AND owner_id = $2;
 
 -- name: ListContactsAdmin :many
--- The admin read of one property's contacts (ADR 0051 consequences): the
+-- The admin read of one property's contacts (ADR 0054 consequences): the
 -- bound cards only — an unbound contact belongs to no property card.
 SELECT *
 FROM contacts

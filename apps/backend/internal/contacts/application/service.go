@@ -53,7 +53,7 @@ type UpdateContactCommand struct {
 	PropertyID *PropertyIDUpdate
 }
 
-// ContactService orchestrates the contact book use cases (ADR 0051): create,
+// ContactService orchestrates the contact book use cases (ADR 0054): create,
 // read, list with scope, search and sort, partial update and delete. Access
 // follows the ADR 0028 matrix through the shared policy: a property-bound
 // card is visible to the property's shared members (CanView) and editable by
@@ -142,7 +142,7 @@ func (s *ContactService) GetContact(ctx context.Context, actor, id uuid.UUID) (d
 // ListContacts lists a slice of the visible book. The flat book scope reads
 // the merged visibility — the actor's own cards plus the property-bound
 // cards of the properties the actor can view; the store enforces that
-// predicate, visibility being driven by the binding (ADR 0051). The property
+// predicate, visibility being driven by the binding (ADR 0054). The property
 // scope gates the actor's view capability on the property; the unbound scope
 // reads the actor's own cards alone. Sort/order are validated against the
 // known keys; the empty values mean the defaults (name/asc).

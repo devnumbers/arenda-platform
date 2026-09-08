@@ -6,7 +6,7 @@ package application_test
 // service over the real stores, the real membership policy (ADR 0028) and
 // the real audit recorder, against testcontainers PostgreSQL — the role
 // matrix, the book scopes, the search and the property-detach lifecycle of
-// ADR 0051 (ticket #506).
+// ADR 0054 (ticket #506).
 
 import (
 	"errors"
@@ -355,7 +355,7 @@ func TestContactsIntegration_PropertyDeleteDetaches(t *testing.T) {
 }
 
 // TestContactsIntegration_RoleMatrix exercises the shared-access enforcement
-// (ADR 0028, ADR 0051) end-to-end over the real membership policy: a
+// (ADR 0028, ADR 0054) end-to-end over the real membership policy: a
 // full-access member manages the owner's property-bound contacts, a viewer
 // reads but cannot write, an outsider or a suspended member gets ErrNotFound
 // (the privacy 404).
@@ -499,7 +499,7 @@ func listFlat(
 }
 
 // TestContactsIntegration_FlatBookUnion exercises the merged visibility of
-// the whole-book listing (ADR 0051, ADR 0028): a shared member sees the
+// the whole-book listing (ADR 0054, ADR 0028): a shared member sees the
 // property-bound cards of the shared properties plus their own unbound
 // cards, never the owner's unbound ones; a suspended membership sees only
 // its own book; the owner sees the whole own book.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded by ADR 0051 (книга контактов — отдельный контекст `contacts`; `property_contacts` снесены без переноса данных)
+Superseded by ADR 0054 (книга контактов — отдельный контекст `contacts`; `property_contacts` снесены без переноса данных)
 
 ## Context
 

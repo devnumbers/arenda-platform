@@ -3,7 +3,7 @@
 -- the pre-contacts app code inserts without an id and relies on the
 -- historical DEFAULT, so the restored table keeps it — down migrations are
 -- exempt from the id-column-default lint by construction.
--- The contacts context (ADR 0051) is dropped; its book data is not restored.
+-- The contacts context (ADR 0054) is dropped; its book data is not restored.
 
 CREATE TABLE property_contacts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,5 +1,5 @@
 // Package domain holds the Contacts context core: the contact card of the
-// owner's contact book (ADR 0051). Everything here is pure computation — no
+// owner's contact book (ADR 0054). Everything here is pure computation — no
 // clocks, no I/O.
 package domain
 
@@ -29,7 +29,7 @@ var (
 const MaxNameLength = 255
 
 // Contact is one card of the owner's contact book: a person useful for a
-// property — plumber, management company, concierge (ADR 0051). It is not a
+// property — plumber, management company, concierge (ADR 0054). It is not a
 // service user and never has an account. The optional property binding makes
 // it visible to the property's shared members; with no binding the contact
 // lives in the owner's book alone.
@@ -43,7 +43,7 @@ type Contact struct {
 	// owner's book, never the actor's own.
 	OwnerID uuid.UUID
 	// PropertyID is the optional property binding; nil survives the
-	// property's deletion (FK ON DELETE SET NULL, ADR 0051).
+	// property's deletion (FK ON DELETE SET NULL, ADR 0054).
 	PropertyID *uuid.UUID
 	FirstName  string
 	LastName   string
@@ -67,7 +67,7 @@ type Contact struct {
 }
 
 // FullName returns the contact's name joined from the non-empty parts —
-// the display form the admin surface composes (ADR 0051 consequences).
+// the display form the admin surface composes (ADR 0054 consequences).
 func (c Contact) FullName() string {
 	return strings.Join(nonEmpty(c.FirstName, c.LastName, c.Patronymic), " ")
 }

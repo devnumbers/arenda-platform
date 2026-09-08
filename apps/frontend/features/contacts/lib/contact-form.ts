@@ -13,7 +13,7 @@ export type ContactFormFields = ContactCreateCommand;
 
 /** Форма → команда создания: трим всех текстов, пробельные необязательные
  * поля складываются в пустые строки (сервер трактует их как «не задано»),
- * телефон — в канонический +7XXXXXXXXXX (ADR 0051). Зеркалит нормализацию,
+ * телефон — в канонический +7XXXXXXXXXX (ADR 0054). Зеркалит нормализацию,
  * которую домен contacts требует от вызывающего (#506). */
 export function buildContactCreateCommand(
   fields: ContactFormFields,

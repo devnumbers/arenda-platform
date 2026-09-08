@@ -133,5 +133,5 @@ CREATE INDEX idx_rentals_owner ON rentals(owner_id);
 ## See also
 
 - Карта wayfinder #526; тикет #527 (словарь и 14 решений — вход), #528 (решения этой сессии), #529 (реализация, /tdd).
-- ADR 0047–0049 (Payments: словарь, тик и TZ, схема и контракты — образец), ADR 0051 tasks (прецедент нового контекста), ADR 0051 contacts (книга контактов, nullable property), ADR 0046 (снос legacy-аренд), ADR 0028 (actor/scope), ADR 0033 (UoW), ADR 0020 (аудит; расширенный гэп), ADR 0048 (TZ собственника), ADR 0002/0003/0008/0019 (contract-first / pgx+sqlc / копейки / UUIDv7).
+- ADR 0047–0049 (Payments: словарь, тик и TZ, схема и контракты — образец), ADR 0051 tasks (прецедент нового контекста), ADR 0054 contacts (книга контактов, nullable property), ADR 0046 (снос legacy-аренд), ADR 0028 (actor/scope), ADR 0033 (UoW), ADR 0020 (аудит; расширенный гэп), ADR 0048 (TZ собственника), ADR 0002/0003/0008/0019 (contract-first / pgx+sqlc / копейки / UUIDv7).
 - `apps/backend/internal/rentals/CONTEXT.md` — словарь контекста; `CONTEXT-MAP.md` — Properties → Rentals → Payments/Contacts.

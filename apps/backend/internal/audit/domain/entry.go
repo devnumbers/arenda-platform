@@ -150,7 +150,7 @@ const (
 	ActionTaskCompletedCleared Action = "task.completed_cleared"
 
 	// ActionContactCreated and its neighbours record the Contacts context
-	// user mutations (ADR 0051, ticket #506): in-tx fail-safe. The context
+	// user mutations (ADR 0054, ticket #506): in-tx fail-safe. The context
 	// never carries the contact's PII (names, phone, email) — ids and field
 	// names only. The property_contact.* vocabulary above belongs to the
 	// demolished ADR 0026 surface and stays for the historical audit rows.
@@ -221,7 +221,7 @@ const (
 	// journal (the journal clear has no single entity id — Context.count).
 	EntityTaskRule EntityType = "task_rule"
 	EntityTask     EntityType = "task"
-	// EntityContact is a contact card of the Contacts context (ADR 0051).
+	// EntityContact is a contact card of the Contacts context (ADR 0054).
 	EntityContact EntityType = "contact"
 	// EntityRental is a rental of the Rentals context (ADR 0053): the
 	// occupancy period with its terms; its managed payment audits through

@@ -1,4 +1,4 @@
-// Package http holds the contacts HTTP adapters (ADR 0051, ticket #507): the
+// Package http holds the contacts HTTP adapters (ADR 0054, ticket #507): the
 // flat contact book endpoints — create, list with the property filter and
 // search, get, partial update with the tri-state property binding, delete.
 package http

@@ -1,5 +1,5 @@
 // Package postgres implements the contacts application ports with SQLC
-// queries over PostgreSQL (ADR 0051).
+// queries over PostgreSQL (ADR 0054).
 package postgres
 
 import (
@@ -24,7 +24,7 @@ var (
 	_ application.PropertyStore = (*PropertyStore)(nil)
 )
 
-// ContactStore is the postgres adapter of the contact book port (ADR 0051).
+// ContactStore is the postgres adapter of the contact book port (ADR 0054).
 // Reads and writes are scoped by the data owner; the by-id read is unscoped
 // by contract — the service authorizes from the card's own binding.
 type ContactStore struct {

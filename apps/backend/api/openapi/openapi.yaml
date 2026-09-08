@@ -4748,7 +4748,7 @@ components:
 
     ContactCreateRequest:
       description: >-
-        The create payload of a contact card (ADR 0051). Only the first name
+        The create payload of a contact card (ADR 0054). Only the first name
         is required; the phone travels in any accepted Russian spelling and
         is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands
         in the property owner's book (the edit gate applies); without one it
@@ -4821,7 +4821,7 @@ components:
 
     ContactResponse:
       description: >-
-        One card of the owner's contact book (ADR 0051): a person useful for
+        One card of the owner's contact book (ADR 0054): a person useful for
         a property — not a service user. propertyId null means «без
         объекта»; the card survives the property's deletion.
       type: object

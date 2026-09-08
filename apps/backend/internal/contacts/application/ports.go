@@ -1,5 +1,5 @@
 // Package application holds the contacts use cases and ports: the CRUD and
-// search over the owner's contact book (ADR 0051, ticket #506).
+// search over the owner's contact book (ADR 0054, ticket #506).
 package application
 
 import (
@@ -91,7 +91,7 @@ type ContactStore interface {
 	// service gates the result before it travels anywhere.
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Contact, error)
 	// List returns the actor's visible contacts per the query's scope,
-	// search and sort (ADR 0051): the flat book scope reads the merged
+	// search and sort (ADR 0054): the flat book scope reads the merged
 	// visibility — the actor's own cards plus the cards bound to properties
 	// the actor can view; the property scope reads the cards bound to that
 	// property whatever book they live in; the unbound scope reads the

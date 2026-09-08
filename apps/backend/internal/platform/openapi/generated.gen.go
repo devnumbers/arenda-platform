@@ -1697,7 +1697,7 @@ type ClientErrorReport struct {
 // ClientErrorReportApp Application that reported the error
 type ClientErrorReportApp string
 
-// ContactCreateRequest The create payload of a contact card (ADR 0051). Only the first name is required; the phone travels in any accepted Russian spelling and is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands in the property owner's book (the edit gate applies); without one it is created «без объекта» in the actor's own book.
+// ContactCreateRequest The create payload of a contact card (ADR 0054). Only the first name is required; the phone travels in any accepted Russian spelling and is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands in the property owner's book (the edit gate applies); without one it is created «без объекта» in the actor's own book.
 type ContactCreateRequest struct {
 	Email     *string `json:"email,omitempty"`
 	FirstName string  `json:"firstName"`
@@ -1715,7 +1715,7 @@ type ContactCreateRequest struct {
 	Role *string `json:"role,omitempty"`
 }
 
-// ContactResponse One card of the owner's contact book (ADR 0051): a person useful for a property — not a service user. propertyId null means «без объекта»; the card survives the property's deletion.
+// ContactResponse One card of the owner's contact book (ADR 0054): a person useful for a property — not a service user. propertyId null means «без объекта»; the card survives the property's deletion.
 type ContactResponse struct {
 	CreatedAt         time.Time           `json:"createdAt"`
 	Email             string              `json:"email"`
@@ -9582,7 +9582,7 @@ var swaggerSpec = []string{
 	"9oO/a0zjbdnof/8P77777tra2vnzFy7MpP+pa8AusnqHb2KkVXFnR5vxcCDbX1nGw2XIUoYsvBtsIFWZ",
 	"kjIYTFKczSxdBs1hCr52BjFMrsui3z0C5wyBERWhXVWZENRnWtNuiVoC6yTucTalI2ptJfeRgebgHjJq",
 	"y5yTwe7k+B8PMNSbwHNiFAX8zA13ca10vBivrzjall3krRtXCeagpwdDZAAhjeHslY6z2sGgkR1PKdBh",
-	"cAmG8+bwaZJfoBRm2UYkKSQzUMgao4FlBir0tTAunW+ukI9FNHTJukobYsVHrKaBa9tAJdHiuj20PRZB",
+	"cAmG8+bwaZJfoBRm2UYkKSQzUMgao4FlBir0tTAuXWyukI9FNHTJukobYsVHrKaBa9tAJdHiuj20PRZB",
 	"6i4VQ0KDgA3sJd2IteZUED1gUYS1C6CGhkvVFxaWI/4p2kT+/h/+Q/p/K2QTFwQZ95Rk8T7EApGuzNlv",
 	"S7mLpTVYyA0W+ECbpW5uwGgyNsSuGTMKnVxq+dTXydPk22Ju5eNXz/1MYHo+p+1EMMkk40l1l0nzuz1A",
 	"T4Fyt3/h0qVSzjTHyxYumOgy5b+YvPT0lXMaLxGrnAx9rkwLjmNAuSIDqJMA8LDSmDabFbIqQ8WENBWR",

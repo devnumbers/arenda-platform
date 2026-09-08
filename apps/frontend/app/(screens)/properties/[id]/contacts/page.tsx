@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { ContactsOfPropertyScreen } from '@/widgets/contacts';
 
-/** Экран «Контакты объекта» (#508): книга контактов объекта (ADR 0051)
+/** Экран «Контакты объекта» (#508): книга контактов объекта (ADR 0054)
  * с серверным поиском. Оболочка новых экранов (ScreenLayout, колонка 560)
  * — из layout группы (screens). */
 export const metadata: Metadata = {
