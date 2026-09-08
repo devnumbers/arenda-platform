@@ -8,19 +8,19 @@ The living registry of this repo's agent infrastructure: which tools stand (MCP 
 
 ## MCP servers
 
-Configured per harness, outside the repo (config locations — `docs/agents/mcp.md`), with one exception: `playwright` lives in the committed repo workspace config `.zcode/config.json` (auto-connects in every session and worktree). API keys (context7, figma) are personal and live only in the user config, never in the repo.
+Server roles, config locations, and fallback rules live in `docs/agents/mcp.md` (single source); this table records only the adoption status and the decisions behind it. API keys (context7, figma) are personal and live only in the user config, never in the repo.
 
-| Server | Role | Status |
-| --- | --- | --- |
-| `lean-ctx` | Compressed reads and noisy-output compression, semantic search by meaning, dependency/diff-impact graph, session intelligence | in force |
-| `context7` | Official library/framework documentation | in force |
-| `playwright` | Browser automation and UI verification — the mechanism for **all** repo browser work (live acceptance, headed spec runs, browser debugging), single and parallel sessions alike; one stdio server per session = one visible Chromium per session (`--isolated` in-memory profile, headed by default) | in force — the rule text: `docs/agents/parallel-dev.md` |
-| Browser Use (ZCode plugin, built-in pane) | Ordinary agent web surfing only | restricted — barred from repo browser tasks: all chats share one cookie-partition (auth sessions on `127.0.0.1` cross) and there is one visible pane per window, so parallel-session isolation is impossible |
-| `figma` | Figma design data and image exports | in force |
-| `heroui-react` | HeroUI v3 component docs, source, theme tokens | in force |
-| `serena` | Unified semantic tool for the stack (TS + Go): navigation, references, rename, diagnostics, symbol-level editing | in force — mandatory with a stop-procedure; pinned `serena-agent` 1.7.0 |
-| `gopls` | Go semantics (navigation, references, diagnostics) | removed — replaced by Serena (same gopls binary underneath, launched by Serena from PATH); `govulncheck` lives only as the pinned make target `make backend-vulncheck` |
-| `jetbrains` | GoLand inspections as a quality gate | removed — coverage already exists: golangci-lint + live diagnostics via Serena |
+| Server | Status |
+| --- | --- |
+| `lean-ctx` | in force |
+| `context7` | in force |
+| `playwright` | in force — the mechanism for **all** repo browser work; the rule text: `docs/agents/parallel-dev.md` |
+| Browser Use (ZCode plugin, built-in pane) | restricted — barred from repo browser tasks: all chats share one cookie-partition (auth sessions on `127.0.0.1` cross) and there is one visible pane per window, so parallel-session isolation is impossible |
+| `figma` | in force |
+| `heroui-react` | in force |
+| `serena` | in force — mandatory with a stop-procedure; pinned `serena-agent` 1.7.0 |
+| `gopls` | removed — replaced by Serena (same gopls binary underneath, launched by Serena from PATH); `govulncheck` lives only as the pinned make target `make backend-vulncheck` |
+| `jetbrains` | removed — coverage already exists: golangci-lint + live diagnostics via Serena |
 
 **Serena configuration:** one project at the monorepo root with `language_servers: ["typescript", "go"]`; context `ide` so Serena's file/shell tools auto-disable; memories off (`no-memories` mode); symbol editing on; `.serena/project.yml` committed to the repo; mandatory with a stop-procedure (unavailable → stop and tell the user, no silent substitution); environment prerequisite `uv` + Python 3.13; `serena-agent` pinned at 1.7.0 (`uv tool install -p 3.13 'serena-agent==1.7.0'`). The `gopls` and `jetbrains` MCP entries are gone from both harness configs — Serena is the only semantic server. Adoption went through the adopt-conditionally + spike-gate pattern (criteria and results: issue #299); operational notes: Kimi Code headless sessions can leave the Serena MCP process running after exit (kill leftover `serena start-mcp-server` processes); Serena self-writes `.serena/.gitignore` (`/cache`, `/project.local.yml`), which is committed.
 
@@ -28,7 +28,7 @@ Configured per harness, outside the repo (config locations — `docs/agents/mcp.
 
 ## Skills pipeline
 
-26 skills in `.agents/skills/` — the Matt Pocock pipeline, versioned with the repo, nothing to install. All skills are tool-agnostic (no references to specific MCP servers, hooks, or make targets), so tooling changes don't require skill edits.
+Skills in `.agents/skills/` — the Matt Pocock pipeline, versioned with the repo, nothing to install (the live list is the directory). All skills are tool-agnostic (no references to specific MCP servers, hooks, or make targets), so tooling changes don't require skill edits.
 
 Main flow (idea → ship):
 
