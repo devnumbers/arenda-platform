@@ -14,6 +14,10 @@ export const navItems: ReadonlyArray<NavItemConfig> = [
   // Точка входа книги контактов — только сайдбар десктопа (решение владельца
   // 2026-09-04: мобильную навигацию ставит он позже).
   { label: 'Контакты', href: '/contacts', icon: 'NavContacts', showInBottomNav: false },
+  // Глобальные платежи (карта #573, #578): сайдбар на ПК + пункт меню
+  // «Ещё» на мобиле; вложенные страницы (/payments/*) наследуют подсветку
+  // по префиксу.
+  { label: 'Платежи', href: '/payments', icon: 'NavPayments', showInBottomNav: false },
   { label: 'Профиль', href: '/profile', icon: 'NavProfile', bottomIcon: 'BottomProfile', showInBottomNav: true },
   { label: 'Поддержка', href: '/support', icon: 'NavSupport', showInBottomNav: false },
 ];

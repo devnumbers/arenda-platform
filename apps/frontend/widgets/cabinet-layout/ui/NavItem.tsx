@@ -5,6 +5,7 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import {
   BoldBill,
+  BoldWallet,
   HomeMain,
   Support,
   Team,
@@ -36,6 +37,7 @@ const iconMap: Record<string, IconComponent> = {
   NavProfile: redIcon(UserCircle),
   NavSupport: redIcon(Support),
   NavOperations: BoldBill,
+  NavPayments: BoldWallet,
   NavContacts: Team,
   BottomObjects: redIcon(HomeMain),
   BottomProfile: redIcon(UserCircle),

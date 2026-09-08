@@ -93,6 +93,8 @@ export {
   useDeletePayment,
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
+  useGlobalPaymentObjects,
+  useGlobalPayments,
   usePayment,
   usePaymentOperationsByStatus,
   usePaymentOperationsPaged,

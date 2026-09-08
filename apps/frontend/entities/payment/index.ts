@@ -1,5 +1,16 @@
-export { mapPayment, mapPaymentOperation, mapOperationsSummary } from './model/mappers';
+export {
+  mapGlobalPayment,
+  mapGlobalPaymentFeed,
+  mapGlobalPaymentObject,
+  mapPayment,
+  mapPaymentOperation,
+  mapOperationsSummary,
+} from './model/mappers';
 export type {
+  GlobalPayment,
+  GlobalPaymentFeed,
+  GlobalPaymentObject,
+  GlobalPaymentObjectKey,
   IsoDate,
   OperationsCategorySummary,
   OperationsSummary,

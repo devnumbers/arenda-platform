@@ -55,6 +55,16 @@ export const ROUTES = {
    * выбранного скоупа за период; вход — карточки сводки на главной. */
   operationsExpenses: '/operations/expenses',
   operationsIncomes: '/operations/incomes',
+  /** Экран «Платежи» — глобальная страница платежей (карта #573, тикет
+   * #578): вход — меню «Ещё» и ПК-сайдбар. */
+  payments: '/payments',
+  /** Поиск по платежам (#575, экран #581): вход — пилюля на главной. */
+  paymentsSearch: '/payments/search',
+  /** Страницы категорий главного экрана: избранные (#579), просроченные
+   * (#580), объекты (#582); до своих тикетов пути ведут на 404. */
+  paymentsFavorites: '/payments/favorites',
+  paymentsOverdue: '/payments/overdue',
+  paymentsObjects: '/payments/objects',
   /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
   propertyOperations: (id: string) => `/properties/${id}/operations`,
   /** Экраны «Доходы объекта»/«Расходы объекта» (#475): список одного

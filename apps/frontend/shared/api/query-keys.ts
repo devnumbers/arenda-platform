@@ -244,6 +244,17 @@ export const globalOperationKeys = {
     ] as const,
 };
 
+// features/payments (глобальный экран «Платежи», карта #573)
+export const globalPaymentKeys = {
+  all: ['global-payments'] as const,
+  /** Фид главного экрана GET /payments (#575): без параметров — весь
+   * видимый скоуп целиком; секции и счётчики карточек «Все …» режет фронт. */
+  feed: ['global-payments', 'feed'] as const,
+  /** Стопки объектов GET /payments/objects (#575): поисковый фильтр —
+   * часть ключа ('' = без фильтра). */
+  objects: (search = '') => [...globalPaymentKeys.all, 'objects', search] as const,
+};
+
 // features/subscription
 export const subscriptionKeys = {
   subscription: ['subscription'] as const,

@@ -373,6 +373,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setPropertyPin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/operations": {
         parameters: {
             query?: never;
@@ -2104,6 +2120,11 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /**
+             * Format: date-time
+             * @description The global pin (ticket #577): null — not pinned, a moment — pinned since then. The lists order the pinned first, among themselves by this time. Archiving clears the pin.
+             */
+            pinned_at: string | null;
         };
         PropertyPhoto: {
             /** Format: uuid */
@@ -2358,6 +2379,11 @@ export interface components {
             propertyId: string;
             name: string;
             address: string;
+            /**
+             * Format: date-time
+             * @description The object's global pin (ticket #577): null — not pinned, a moment — pinned since then. The cards order the pinned first.
+             */
+            pinnedAt: string | null;
             /** @description The «Автоплатежи» group — the object's auto-pay rules. */
             autoPayRules: components["schemas"]["PaymentObjectKey"][];
             /** @description The «Платежи» group — the object's non-auto-pay rules. */
@@ -2370,6 +2396,10 @@ export interface components {
         /** @description The favorite toggle body of PUT favorite (an atomic UPDATE on the server — never a read-modify-write PATCH). */
         FavoriteUpdateRequest: {
             favorite: boolean;
+        };
+        /** @description The pin toggle body of PUT pin (ticket #577, the favorite toggle's canon): an atomic UPDATE on the server — never a read-modify-write PATCH. Pinning an already-pinned object keeps its original pin time (the PUT's idempotency — the order among the pinned never shifts). */
+        PinnedUpdateRequest: {
+            pinned: boolean;
         };
         /** @description One operation of the Payments context: a payment occurrence or a manual fact. status carries overdue as a server-computed view status (planned with the date already past in the property owner's timezone). */
         OperationResponse: {
@@ -3842,6 +3872,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setPropertyPin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinnedUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Property pin state set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

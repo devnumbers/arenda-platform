@@ -15,6 +15,9 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
     {title: 'Задачи', href: ROUTES.tasks},
+    // Глобальная страница платежей (карта #573, #578): мобильный вход,
+    // пока меню «Ещё» не строит отдельный хром (карта #556).
+    {title: 'Платежи', href: ROUTES.payments},
     {title: 'Мои данные', href: ROUTES.profilePersonal},
     {title: 'Уведомления', href: ROUTES.profileNotifications},
     {title: 'Аккаунт', href: '/profile/account'},

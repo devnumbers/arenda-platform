@@ -12,8 +12,10 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapPayment, mapPaymentOperation, mapOperationsSummary } from '@/entities/payment';
+import { mapGlobalPaymentFeed, mapGlobalPaymentObject, mapPayment, mapPaymentOperation, mapOperationsSummary } from '@/entities/payment';
 import type {
+  GlobalPaymentFeed,
+  GlobalPaymentObject,
   OperationsSummary,
   Payment,
   PaymentCreateCommand,
@@ -23,6 +25,7 @@ import type {
 } from '@/entities/payment';
 import {
   globalOperationKeys,
+  globalPaymentKeys,
   paymentKeys,
   paymentOperationKeys,
   type GlobalOperationScope,
@@ -613,5 +616,47 @@ export function usePayOperation(
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
     },
+  });
+}
+
+/**
+ * Фид главного экрана «Платежи» (карта #573, #575): все правила видимой
+ * книги целиком (пагинации нет) плюс счётчики целого скоупа — карточки
+ * «Все избранные»/«Все просроченные» читают их; поиск счётчики не сужает.
+ * Секции (избранные/просроченные) из фида режет виджет — в том числе
+ * сортировку избранного по favoriteOrder (#576).
+ */
+export function useGlobalPayments(): UseQueryResult<GlobalPaymentFeed, ApiError> {
+  return useQuery({
+    queryKey: globalPaymentKeys.feed,
+    queryFn: async () => {
+      const response = await apiClient<components['schemas']['PaymentsGlobalResponse']>(
+        '/payments',
+      );
+      return mapGlobalPaymentFeed(response);
+    },
+  });
+}
+
+/**
+ * Стопки объектов для секции «Платежи объектов» и страницы «Объекты»
+ * (#575, #582): видимые объекты с группами правил и флагами просрочки;
+ * закреплённые (#577) сервер отдаёт первыми. search — серверный фильтр
+ * по названию/адресу ('' = без фильтра); keepPreviousData держит список,
+ * пока едет новый запрос.
+ */
+export function useGlobalPaymentObjects(
+  search = '',
+): UseQueryResult<ReadonlyArray<GlobalPaymentObject>, ApiError> {
+  return useQuery({
+    queryKey: globalPaymentKeys.objects(search),
+    queryFn: async () => {
+      const query = search ? `?search=${encodeURIComponent(search)}` : '';
+      const response = await apiClient<components['schemas']['PaymentObjectsGlobalResponse']>(
+        `/payments/objects${query}`,
+      );
+      return response.items.map(mapGlobalPaymentObject);
+    },
+    placeholderData: keepPreviousData,
   });
 }
