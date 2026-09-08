@@ -55,8 +55,14 @@ export const ROUTES = {
    * выбранного скоупа за период; вход — карточки сводки на главной. */
   operationsExpenses: '/operations/expenses',
   operationsIncomes: '/operations/incomes',
+  /** Визард создания одиночной операции (#570): глобальный вход — с шагом
+   * «Выбрать объект»; направление — пресет ?type= (Расходы/Доходы). */
+  operationsNew: '/operations/new',
   /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
   propertyOperations: (id: string) => `/properties/${id}/operations`,
+  /** Визард создания операции с объекта (#570): объектного шага нет,
+   * категория — последний шаг с сабмитом. */
+  propertyOperationsNew: (id: string) => `/properties/${id}/operations/new`,
   /** Экраны «Доходы объекта»/«Расходы объекта» (#475): список одного
    * направления за месяц с листанием. */
   propertyOperationsIncome: (id: string) => `/properties/${id}/operations/income`,

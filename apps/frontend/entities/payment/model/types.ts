@@ -114,6 +114,19 @@ export type PaymentUpdateCommand = Partial<Omit<PaymentCreateCommand, 'endDate'>
   readonly endDate?: IsoDate | null;
 };
 
+/**
+ * Создание ручной операции (#569): контракт camelCase, тело запроса
+ * совпадает с командой один в один. Дату (сегодня в TZ собственника) и
+ * статус paid ставит сервер — факт рождается оплаченным, клиент их не
+ * передаёт; формы оплаты у ручного факта нет.
+ */
+export type OperationCreateCommand = {
+  readonly type: PaymentType;
+  readonly title: string;
+  readonly amountKopecks: number;
+  readonly categorySlug: string;
+};
+
 /** Тело атомарного toggle избранного (PUT favorite). */
 export type PaymentFavoriteCommand = {
   readonly favorite: boolean;

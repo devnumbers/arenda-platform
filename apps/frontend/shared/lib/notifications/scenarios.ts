@@ -191,6 +191,9 @@ const payments = {
   created: ((options?) =>
     notify.success('Платеж создан', options)) satisfies ScenarioFn,
   createError: errorScenario('Не удалось создать платеж'),
+  operationCreated: ((options?) =>
+    notify.success('Операция добавлена', options)) satisfies ScenarioFn,
+  operationCreateError: errorScenario('Не удалось добавить операцию'),
   updated: ((options?) =>
     notify.success('Изменения сохранены', options)) satisfies ScenarioFn,
   updateError: errorScenario('Не удалось сохранить изменения'),
