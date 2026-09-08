@@ -17,9 +17,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
-// testProviderFake is the provider identity shared by the external application tests.
-const testProviderFake = "fake"
-
 type fixedClock struct{ t time.Time }
 
 func (c fixedClock) Now() time.Time { return c.t }

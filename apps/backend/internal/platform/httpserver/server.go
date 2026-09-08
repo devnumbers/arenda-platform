@@ -67,6 +67,7 @@ type Deps struct {
 	AddressSuggester         propertiesapp.AddressSuggester
 	PropertyPayments         *paymentsapp.PaymentService
 	PropertyOperations       *paymentsapp.OperationService
+	GlobalPayments           *paymentsapp.GlobalPaymentService
 	PropertyRentals          *rentalsapp.RentalService
 	PropertyTaskRules        *tasksapp.RuleService
 	PropertyTasks            *tasksapp.TaskService
@@ -166,6 +167,7 @@ func New(deps Deps) http.Handler {
 		deps.AdminSubscriptions, deps.Logger)
 	paymentHandlers := paymentshttp.NewPaymentHandlers(deps.PropertyPayments, deps.Logger)
 	operationHandlers := paymentshttp.NewOperationsHandlers(deps.PropertyOperations, deps.Logger)
+	globalPaymentHandlers := paymentshttp.NewGlobalPaymentHandlers(deps.GlobalPayments, deps.Logger)
 	rentalHandlers := rentalshttp.NewRentalHandlers(deps.PropertyRentals, deps.Logger)
 	taskRuleHandlers := taskshttp.NewRuleHandlers(deps.PropertyTaskRules, deps.Logger)
 	taskHandlers := taskshttp.NewTaskHandlers(deps.PropertyTasks, deps.Logger)
@@ -184,6 +186,7 @@ func New(deps Deps) http.Handler {
 		BillingHandlers:                billingHandlers,
 		PaymentHandlers:                paymentHandlers,
 		OperationsHandlers:             operationHandlers,
+		GlobalPaymentHandlers:          globalPaymentHandlers,
 		RentalHandlers:                 rentalHandlers,
 		RuleHandlers:                   taskRuleHandlers,
 		TaskHandlers:                   taskHandlers,
@@ -309,6 +312,7 @@ type composedHandler struct {
 	*billinghttp.BillingHandlers
 	*paymentshttp.PaymentHandlers
 	*paymentshttp.OperationsHandlers
+	*paymentshttp.GlobalPaymentHandlers
 	*rentalshttp.RentalHandlers
 	*taskshttp.RuleHandlers
 	*taskshttp.TaskHandlers

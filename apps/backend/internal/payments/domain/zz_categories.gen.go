@@ -79,6 +79,12 @@ func CategoryBySlug(slug string) (CategoryCatalogEntry, bool) {
 	return CategoryCatalogEntry{}, false
 }
 
+// CategoryCatalogEntries возвращает все записи дефолтного каталога в
+// порядке каталога. Слайс общий для всех вызовов: не мутировать.
+func CategoryCatalogEntries() []CategoryCatalogEntry {
+	return defaultCategories
+}
+
 // IsValidDefaultCategorySlug сообщает, входит ли слаг в дефолтный каталог.
 func IsValidDefaultCategorySlug(slug string) bool {
 	_, ok := CategoryBySlug(slug)

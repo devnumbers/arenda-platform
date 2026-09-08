@@ -1,0 +1,308 @@
+package http
+
+// The contract tests of the global payment rules endpoints (ticket #575):
+// the wire shape of the feed with the counters, the search's matched
+// categories and the «Объекты» stacks — against func-backed doubles,
+// mirroring operation_handlers_test.go.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+)
+
+// The fixtures' recurring literals; goconst wants named constants.
+const wirePropertyName = "Моя квартира"
+
+var (
+	wireToday   = time.Date(2026, time.September, 8, 0, 0, 0, 0, time.UTC)
+	wireNearest = time.Date(2026, time.September, 15, 0, 0, 0, 0, time.UTC)
+)
+
+// wireFeedItem is the one fixture row of the wire shape tests: the overdue
+// favorite with a stored next date.
+func wireFeedItem() application.GlobalPaymentItem {
+	slug := "insurance"
+	overdueDays := 10
+	nearest := wireNearest
+	return application.GlobalPaymentItem{
+		ID:            uuid.Must(uuid.NewV7()),
+		PropertyID:    uuid.Must(uuid.NewV7()),
+		PropertyName:  wirePropertyName,
+		Type:          "expense",
+		Title:         "Страхование",
+		AmountKopecks: 3200000,
+		Category:      defaultCategoryRef(slug),
+		IsFavorite:    true,
+		Today:         wireToday,
+		NearestDate:   &nearest,
+		OverdueCount:  2,
+		OverdueDays:   &overdueDays,
+	}
+}
+
+// fakeGlobalPaymentsManager is the func-backed GlobalPaymentsManager double
+// (ADR 0035 test doubles): an unset use case fails the test loudly.
+type fakeGlobalPaymentsManager struct {
+	list    func(ctx context.Context, actor uuid.UUID) (application.GlobalPaymentFeed, error)
+	search  func(ctx context.Context, actor uuid.UUID, query string) (application.GlobalPaymentSearch, error)
+	objects func(ctx context.Context, actor uuid.UUID, query string) ([]application.GlobalPaymentObjectCard, error)
+}
+
+func (f *fakeGlobalPaymentsManager) ListGlobalPayments(
+	ctx context.Context, actor uuid.UUID,
+) (application.GlobalPaymentFeed, error) {
+	if f.list == nil {
+		return application.GlobalPaymentFeed{}, errors.New("unexpected ListGlobalPayments call")
+	}
+	return f.list(ctx, actor)
+}
+
+func (f *fakeGlobalPaymentsManager) SearchGlobalPayments(
+	ctx context.Context, actor uuid.UUID, query string,
+) (application.GlobalPaymentSearch, error) {
+	if f.search == nil {
+		return application.GlobalPaymentSearch{}, errors.New("unexpected SearchGlobalPayments call")
+	}
+	return f.search(ctx, actor, query)
+}
+
+func (f *fakeGlobalPaymentsManager) ListGlobalPaymentObjects(
+	ctx context.Context, actor uuid.UUID, query string,
+) ([]application.GlobalPaymentObjectCard, error) {
+	if f.objects == nil {
+		return nil, errors.New("unexpected ListGlobalPaymentObjects call")
+	}
+	return f.objects(ctx, actor, query)
+}
+
+// globalRequest builds an authenticated request for the parameterless global
+// reads.
+func globalRequest(ctx context.Context, target string) *http.Request {
+	return httptest.NewRequestWithContext(
+		httpsupport.WithUserID(ctx, uuid.Must(uuid.NewV7())), http.MethodGet, target, nil,
+	)
+}
+
+func TestListGlobalPayments_WireShape(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeGlobalPaymentsManager{
+		list: func(_ context.Context, _ uuid.UUID) (application.GlobalPaymentFeed, error) {
+			return application.GlobalPaymentFeed{Items: []application.GlobalPaymentItem{wireFeedItem()}}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	h.ListGlobalPayments(w, globalRequest(t.Context(), "/payments"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body openapi.PaymentsGlobalResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(body.Items))
+	}
+	row := body.Items[0]
+	if row.PropertyName != wirePropertyName || row.AmountKopecks != 3200000 || !row.IsFavorite {
+		t.Errorf("row = (%q, %d, %v), want the label, the kopecks and the star", row.PropertyName, row.AmountKopecks, row.IsFavorite)
+	}
+	if row.Type != openapi.PaymentGlobalItemTypeExpense {
+		t.Errorf("type = %q, want expense", row.Type)
+	}
+	if !row.Today.Equal(wireToday) {
+		t.Errorf("today = %v, want %v", row.Today, wireToday)
+	}
+	if row.OverdueOperationCount != 2 || row.OverdueDays == nil || *row.OverdueDays != 10 {
+		t.Errorf("overdue = (%d, %v), want (2, 10)", row.OverdueOperationCount, row.OverdueDays)
+	}
+}
+
+// TestListGlobalPayments_WireCounters checks the main screen's two counters
+// and the schedule fields' wire shape — the «Все X (N)» cards' data and the
+// resolved category.
+func TestListGlobalPayments_WireCounters(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeGlobalPaymentsManager{
+		list: func(_ context.Context, _ uuid.UUID) (application.GlobalPaymentFeed, error) {
+			return application.GlobalPaymentFeed{
+				Items:                  []application.GlobalPaymentItem{wireFeedItem()},
+				FavoriteCount:          1,
+				OverdueOperationsCount: 7,
+			}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	h.ListGlobalPayments(w, globalRequest(t.Context(), "/payments"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body openapi.PaymentsGlobalResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.FavoriteCount != 1 || body.OverdueOperationsCount != 7 {
+		t.Errorf("counters = (%d, %d), want (1, 7)", body.FavoriteCount, body.OverdueOperationsCount)
+	}
+	row := body.Items[0]
+	if row.Category.Slug == nil || *row.Category.Slug != "insurance" || row.Category.Label != "Страхование" {
+		t.Errorf("category = %+v, want the resolved default catalog entry", row.Category)
+	}
+	if row.NearestDate == nil || !row.NearestDate.Equal(wireNearest) {
+		t.Errorf("nearest = %v, want %v", row.NearestDate, wireNearest)
+	}
+}
+
+func TestListGlobalPayments_NullNearestAndOverdueTravelAsNulls(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeGlobalPaymentsManager{
+		list: func(_ context.Context, _ uuid.UUID) (application.GlobalPaymentFeed, error) {
+			return application.GlobalPaymentFeed{
+				Items: []application.GlobalPaymentItem{{ID: uuid.Must(uuid.NewV7()), PropertyID: uuid.Must(uuid.NewV7()), Title: "Пауза"}},
+			}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	h.ListGlobalPayments(w, globalRequest(t.Context(), "/payments"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Items []openapi.PaymentGlobalItem `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Items[0].NearestDate != nil || body.Items[0].OverdueDays != nil {
+		t.Errorf("nullable fields = (%v, %v), want JSON nulls", body.Items[0].NearestDate, body.Items[0].OverdueDays)
+	}
+}
+
+func TestSearchGlobalPayments_FoldsQueryAndMapsChips(t *testing.T) {
+	t.Parallel()
+
+	var gotQuery string
+	svc := &fakeGlobalPaymentsManager{
+		search: func(_ context.Context, _ uuid.UUID, query string) (application.GlobalPaymentSearch, error) {
+			gotQuery = query
+			id := uuid.Must(uuid.NewV7())
+			return application.GlobalPaymentSearch{
+				MatchedCategories: []application.GlobalPaymentSearchCategory{{
+					Category:  customCategoryRef(id, "Кофейни"),
+					Type:      "income",
+					RuleCount: 3,
+				}},
+			}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	query := "кофе"
+	w := httptest.NewRecorder()
+	h.SearchGlobalPayments(w, globalRequest(t.Context(), "/payments/search?search=%D0%BA%D0%BE%D1%84%D0%B5"),
+		openapi.SearchGlobalPaymentsParams{Search: &query})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if gotQuery != "кофе" {
+		t.Errorf("search query = %q, want the decoded parameter", gotQuery)
+	}
+	var body openapi.PaymentsSearchGlobalResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.MatchedCategories) != 1 {
+		t.Fatalf("chips = %d, want 1", len(body.MatchedCategories))
+	}
+	chip := body.MatchedCategories[0]
+	if chip.Category.Source != openapi.CategoryViewSourceCustom || chip.Category.Label != "Кофейни" {
+		t.Errorf("chip category = %+v, want the custom identity", chip.Category)
+	}
+	if chip.Type != openapi.PaymentSearchCategoryTypeIncome || chip.Count != 3 {
+		t.Errorf("chip = (%q, %d), want (income, 3)", chip.Type, chip.Count)
+	}
+}
+
+func TestListGlobalPaymentObjects_WireStacks(t *testing.T) {
+	t.Parallel()
+
+	var gotQuery string
+	propertyID := uuid.Must(uuid.NewV7())
+	autoRule := uuid.Must(uuid.NewV7())
+	plainRule := uuid.Must(uuid.NewV7())
+	svc := &fakeGlobalPaymentsManager{
+		objects: func(_ context.Context, _ uuid.UUID, query string) ([]application.GlobalPaymentObjectCard, error) {
+			gotQuery = query
+			return []application.GlobalPaymentObjectCard{{
+				PropertyID:  propertyID,
+				Name:        wirePropertyName,
+				Address:     "Тверская 1",
+				AutoPayKeys: []application.GlobalPaymentObjectKey{{PaymentID: autoRule, HasOverdue: true}},
+				OtherKeys:   []application.GlobalPaymentObjectKey{{PaymentID: plainRule, HasOverdue: false}},
+			}}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	query := "квар"
+	w := httptest.NewRecorder()
+	h.ListGlobalPaymentObjects(w, globalRequest(t.Context(), "/payments/objects?search=%D0%BA%D0%B2%D0%B0%D1%80"),
+		openapi.ListGlobalPaymentObjectsParams{Search: &query})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if gotQuery != "квар" {
+		t.Errorf("search query = %q, want the decoded parameter", gotQuery)
+	}
+	var body openapi.PaymentObjectsGlobalResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 1 {
+		t.Fatalf("cards = %d, want 1", len(body.Items))
+	}
+	card := body.Items[0]
+	if card.PropertyId != propertyID || card.Name != "Моя квартира" || card.Address != "Тверская 1" {
+		t.Errorf("card = %+v, want the property card", card)
+	}
+	if len(card.AutoPayRules) != 1 || !card.AutoPayRules[0].HasOverdue || card.AutoPayRules[0].PaymentId != autoRule {
+		t.Errorf("auto-pay keys = %+v, want the overdue key", card.AutoPayRules)
+	}
+	if len(card.OtherRules) != 1 || card.OtherRules[0].HasOverdue {
+		t.Errorf("other keys = %+v, want the clean key", card.OtherRules)
+	}
+}
+
+// defaultCategoryRef builds a default-catalog category reference.
+func defaultCategoryRef(slug string) domain.CategoryRef {
+	return domain.CategoryRef{Slug: &slug}
+}
+
+// customCategoryRef builds a user-category reference with its current name.
+func customCategoryRef(id uuid.UUID, name string) domain.CategoryRef {
+	return domain.CategoryRef{UserCategoryID: &id, UserCategoryName: &name}
+}

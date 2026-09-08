@@ -228,3 +228,104 @@ type TickZone struct {
 type TickZoneDirectory interface {
 	ListTickZones(ctx context.Context) ([]TickZone, error)
 }
+
+// GlobalPaymentRulesQuery is the global payment rules read's request
+// (ticket #575): the search query plus the default-catalog slugs the
+// application layer expanded it into (the catalog's labels live in code,
+// not in the database — the store matches them as a set).
+type GlobalPaymentRulesQuery struct {
+	Search        string
+	CategorySlugs []string
+}
+
+// GlobalPaymentRuleRow is one raw row of the global payment rules read
+// (ticket #575): the rule's card fields plus the bound property's display
+// name, the owner's today the row's schedule math ran against (ADR 0048)
+// and the stored-operation aggregates. The application layer turns it into
+// a GlobalPaymentItem — the nearest-date fallback and the overdue age are
+// its business.
+type GlobalPaymentRuleRow struct {
+	ID            uuid.UUID
+	OwnerID       uuid.UUID
+	PropertyID    uuid.UUID
+	PropertyName  string
+	Type          domain.PaymentType
+	Title         string
+	AmountKopecks int64
+	AutoPay       bool
+	IsFavorite    bool
+	Category      domain.CategoryRef
+	Today         time.Time
+	// NextPlannedDate is the earliest stored planned operation on or after
+	// today; nil hands the nearest date to the projection fallback.
+	NextPlannedDate *time.Time
+	OverdueCount    int64
+	// OldestOverdueDate is the oldest overdue operation's date; nil unless
+	// the rule has overdue operations.
+	OldestOverdueDate *time.Time
+}
+
+// GlobalPaymentCounters are the main screen's two scope counters (ticket
+// #575): the «Все избранные (N)» and «Все просроченные (N)» cards. They
+// describe the whole visible scope — a search never narrows them.
+type GlobalPaymentCounters struct {
+	FavoriteCount          int64
+	OverdueOperationsCount int64
+}
+
+// GlobalPaymentSearchCategory is one matched category of the payment rules
+// search (ticket #575): the chip's identity plus the number of matched
+// rules behind it.
+type GlobalPaymentSearchCategory struct {
+	Category  domain.CategoryRef
+	Type      domain.PaymentType
+	RuleCount int64
+}
+
+// GlobalPaymentObject is one visible non-archived property of the «Объекты»
+// read (ticket #575); the service groups the feed's rows onto it.
+type GlobalPaymentObject struct {
+	PropertyID uuid.UUID
+	Name       string
+	Address    string
+}
+
+// GlobalPaymentReader is the persistence port of the global payment rules
+// read side (ticket #575). The visibility predicate lives in the store's
+// SQL — the actor-scoped cross-property read (the tasks global feed's
+// rule, ticket #521); the owner→today map is resolved by the application
+// layer (the owner calendar, ADR 0048) and threaded in for every per-row
+// schedule computation. Read-only: none of it ticks.
+type GlobalPaymentReader interface {
+	// ListGlobalPaymentOwnerTodays returns the distinct data owners of the
+	// actor's visible non-archived properties — the keys of the owner→today
+	// map.
+	ListGlobalPaymentOwnerTodays(ctx context.Context, actor uuid.UUID) ([]uuid.UUID, error)
+	// ListGlobalPaymentRules returns the actor's visible merged feed rows
+	// under the query's search; every row carries its owner's today.
+	ListGlobalPaymentRules(
+		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time, q GlobalPaymentRulesQuery,
+	) ([]GlobalPaymentRuleRow, error)
+	// SumGlobalPaymentCounters returns the scope counters over the whole
+	// visible feed, the search never narrowing them.
+	SumGlobalPaymentCounters(
+		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time,
+	) (GlobalPaymentCounters, error)
+	// SumGlobalPaymentSearchCategories returns the matched categories of the
+	// search — the chips' identities and their rule counts.
+	SumGlobalPaymentSearchCategories(
+		ctx context.Context, actor uuid.UUID, q GlobalPaymentRulesQuery,
+	) ([]GlobalPaymentSearchCategory, error)
+	// ListGlobalPaymentObjects returns the actor's visible non-archived
+	// properties under the object search — the «Объекты» screen's cards
+	// without their stacks.
+	ListGlobalPaymentObjects(ctx context.Context, actor uuid.UUID, search string) ([]GlobalPaymentObject, error)
+	// LastOperationDatesOfPayments returns the newest materialized date
+	// across planned and paid per listed rule — the projection cursor of the
+	// nearest-date fallback. Ids not present have no materialized facts.
+	LastOperationDatesOfPayments(ctx context.Context, paymentIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
+	// GetGlobalPaymentRule loads one rule with its pause intervals — the
+	// projection fallback's input. The boolean is false when the rule is
+	// gone (a deletion mid-read leaves the row's nearest date null).
+	GetGlobalPaymentRule(ctx context.Context, ownerID, propertyID, paymentID uuid.UUID) (domain.Payment, bool, error)
+}

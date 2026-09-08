@@ -11,6 +11,10 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 )
 
+// testProviderFake is the provider identity of the webhook fixtures; it
+// lives in the integration build — the only one that uses it.
+const testProviderFake = "fake"
+
 // paymentIntegrationHarness extends the shared integration harness with the
 // canonical tariff lookups of the payment scenarios.
 type paymentIntegrationHarness struct {
