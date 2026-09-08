@@ -1,8 +1,8 @@
--- Payments context queries: the global read side of the payment rules
--- (ticket #575) — the merged «Платежи» feed, the search with its
--- matched-category chips and the «Объекты» stacks. Rule CRUD lives in
--- payments_rules.sql, operations in payments_operations.sql, the tick in
--- payments_tick.sql.
+-- Payments context queries: the global surface of the payment rules
+-- (tickets #575, #576) — the merged «Платежи» feed, the search with its
+-- matched-category chips, the «Объекты» stacks and the favorites manual
+-- order save. Rule CRUD lives in payments_rules.sql, operations in
+-- payments_operations.sql, the tick in payments_tick.sql.
 --
 -- The visibility predicate is the global listings' (ticket #521): the
 -- actor's own rows plus the rows of the properties they share with an
@@ -56,6 +56,7 @@ SELECT pay.id,
        pay.amount_kopecks,
        pay.auto_pay,
        pay.is_favorite,
+       pay.favorite_order,
        pay.category_slug,
        pay.user_category_id,
        pc.name AS user_category_name,
@@ -199,3 +200,59 @@ FROM operations op
 WHERE op.status <> 'cancelled'
   AND op.payment_id = ANY(string_to_array(sqlc.arg('payment_ids')::text, ',')::uuid[])
 GROUP BY op.payment_id;
+
+-- name: LockGlobalPaymentFavorites :many
+-- The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
+-- on the submitted rules — the caller passes the ids sorted, the ORDER BY
+-- keeping the lock order deadlock-safe — restricted to the actor's visible
+-- non-archived rules (the feed's visibility predicate). An id that does not
+-- come back is unknown, foreign or invisible; the application layer folds
+-- the three into one privacy-preserving 404. Every row carries the actor's
+-- role on the rule's property — the save's write gate is the favorite
+-- star's (#461, Full Access+), resolved per row beside the data. Ids
+-- travel as the file's csv list; an empty list never reaches the query.
+SELECT pay.id,
+       pay.is_favorite,
+       CASE WHEN pay.owner_id = sqlc.arg('actor') THEN 'owner' ELSE pm.role END::text AS actor_role
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+LEFT JOIN property_members pm ON pm.property_id = pay.property_id
+     AND pm.user_id = sqlc.arg('actor')
+     AND pm.status = 'active'
+WHERE pay.id = ANY(string_to_array(sqlc.arg('ids')::text, ',')::uuid[])
+  AND (pay.owner_id = sqlc.arg('actor') OR pm.user_id IS NOT NULL)
+  AND p.status != 'archived'
+ORDER BY pay.id
+FOR UPDATE OF pay;
+
+-- name: ClearGlobalPaymentFavoriteOrders :execrows
+-- The favorites order save's full-replacement pass (ticket #576): the
+-- visible favorites OUTSIDE the submitted list lose their positions —
+-- they fall to the end of the reading order («новое избранное — в конец»),
+-- so duplicate positions never survive a save. '' keeps the empty list
+-- working (a save of nothing clears the whole visible order).
+UPDATE payments pay
+SET favorite_order = NULL
+FROM properties p
+WHERE pay.property_id = p.id
+  AND pay.is_favorite
+  AND pay.favorite_order IS NOT NULL
+  AND (sqlc.arg('keep_ids')::text = ''
+       OR pay.id <> ALL(string_to_array(sqlc.arg('keep_ids')::text, ',')::uuid[]))
+  AND (
+       pay.owner_id = sqlc.arg('actor')
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = pay.property_id
+              AND pm.user_id = sqlc.arg('actor')
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived';
+
+-- name: SetPaymentFavoriteOrder :execrows
+-- One rule's 1-based favorite position (ticket #576); the id match alone is
+-- the guard — the lock pass has already proven existence and visibility in
+-- the same transaction. :execrows keeps that ordering honest.
+UPDATE payments SET favorite_order = $2
+WHERE id = $1;

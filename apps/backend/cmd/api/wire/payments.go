@@ -40,6 +40,7 @@ func WirePayments(p platformDeps) (*Payments, error) {
 		paymentStore,
 		operationStore,
 		propertyStore,
+		globalPayments,
 		p.AuditRecorder,
 		p.UoW,
 	)
@@ -52,7 +53,7 @@ func WirePayments(p platformDeps) (*Payments, error) {
 	return &Payments{
 		PaymentService:   paymentsapp.NewPaymentService(factory, calendar, p.Policy),
 		OperationService: paymentsapp.NewOperationService(factory, calendar, p.Policy),
-		GlobalPayments:   paymentsapp.NewGlobalPaymentService(globalPayments, calendar),
+		GlobalPayments:   paymentsapp.NewGlobalPaymentService(globalPayments, calendar, factory),
 		TickService:      paymentsapp.NewTickService(factory, zones, calendar, metrics),
 	}, nil
 }

@@ -11,6 +11,45 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearGlobalPaymentFavoriteOrders = `-- name: ClearGlobalPaymentFavoriteOrders :execrows
+UPDATE payments pay
+SET favorite_order = NULL
+FROM properties p
+WHERE pay.property_id = p.id
+  AND pay.is_favorite
+  AND pay.favorite_order IS NOT NULL
+  AND ($1::text = ''
+       OR pay.id <> ALL(string_to_array($1::text, ',')::uuid[]))
+  AND (
+       pay.owner_id = $2
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = pay.property_id
+              AND pm.user_id = $2
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+`
+
+type ClearGlobalPaymentFavoriteOrdersParams struct {
+	KeepIds string      `json:"keep_ids"`
+	Actor   pgtype.UUID `json:"actor"`
+}
+
+// The favorites order save's full-replacement pass (ticket #576): the
+// visible favorites OUTSIDE the submitted list lose their positions —
+// they fall to the end of the reading order («новое избранное — в конец»),
+// so duplicate positions never survive a save. ” keeps the empty list
+// working (a save of nothing clears the whole visible order).
+func (q *Queries) ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearGlobalPaymentFavoriteOrders, arg.KeepIds, arg.Actor)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const lastOperationDatesOfPayments = `-- name: LastOperationDatesOfPayments :many
 SELECT op.payment_id,
        MAX(op.date)::date AS last_date
@@ -122,11 +161,11 @@ WHERE (
   AND p.status != 'archived'
 `
 
-// Payments context queries: the global read side of the payment rules
-// (ticket #575) — the merged «Платежи» feed, the search with its
-// matched-category chips and the «Объекты» stacks. Rule CRUD lives in
-// payments_rules.sql, operations in payments_operations.sql, the tick in
-// payments_tick.sql.
+// Payments context queries: the global surface of the payment rules
+// (tickets #575, #576) — the merged «Платежи» feed, the search with its
+// matched-category chips, the «Объекты» stacks and the favorites manual
+// order save. Rule CRUD lives in payments_rules.sql, operations in
+// payments_operations.sql, the tick in payments_tick.sql.
 //
 // The visibility predicate is the global listings' (ticket #521): the
 // actor's own rows plus the rows of the properties they share with an
@@ -173,6 +212,7 @@ SELECT pay.id,
        pay.amount_kopecks,
        pay.auto_pay,
        pay.is_favorite,
+       pay.favorite_order,
        pay.category_slug,
        pay.user_category_id,
        pc.name AS user_category_name,
@@ -231,6 +271,7 @@ type ListGlobalPaymentRulesRow struct {
 	AmountKopecks        int64       `json:"amount_kopecks"`
 	AutoPay              bool        `json:"auto_pay"`
 	IsFavorite           bool        `json:"is_favorite"`
+	FavoriteOrder        pgtype.Int8 `json:"favorite_order"`
 	CategorySlug         pgtype.Text `json:"category_slug"`
 	UserCategoryID       pgtype.UUID `json:"user_category_id"`
 	UserCategoryName     pgtype.Text `json:"user_category_name"`
@@ -277,6 +318,7 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 			&i.AmountKopecks,
 			&i.AutoPay,
 			&i.IsFavorite,
+			&i.FavoriteOrder,
 			&i.CategorySlug,
 			&i.UserCategoryID,
 			&i.UserCategoryName,
@@ -294,6 +336,83 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockGlobalPaymentFavorites = `-- name: LockGlobalPaymentFavorites :many
+SELECT pay.id,
+       pay.is_favorite,
+       CASE WHEN pay.owner_id = $1 THEN 'owner' ELSE pm.role END::text AS actor_role
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+LEFT JOIN property_members pm ON pm.property_id = pay.property_id
+     AND pm.user_id = $1
+     AND pm.status = 'active'
+WHERE pay.id = ANY(string_to_array($2::text, ',')::uuid[])
+  AND (pay.owner_id = $1 OR pm.user_id IS NOT NULL)
+  AND p.status != 'archived'
+ORDER BY pay.id
+FOR UPDATE OF pay
+`
+
+type LockGlobalPaymentFavoritesParams struct {
+	Actor pgtype.UUID `json:"actor"`
+	Ids   string      `json:"ids"`
+}
+
+type LockGlobalPaymentFavoritesRow struct {
+	ID         pgtype.UUID `json:"id"`
+	IsFavorite bool        `json:"is_favorite"`
+	ActorRole  string      `json:"actor_role"`
+}
+
+// The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
+// on the submitted rules — the caller passes the ids sorted, the ORDER BY
+// keeping the lock order deadlock-safe — restricted to the actor's visible
+// non-archived rules (the feed's visibility predicate). An id that does not
+// come back is unknown, foreign or invisible; the application layer folds
+// the three into one privacy-preserving 404. Every row carries the actor's
+// role on the rule's property — the save's write gate is the favorite
+// star's (#461, Full Access+), resolved per row beside the data. Ids
+// travel as the file's csv list; an empty list never reaches the query.
+func (q *Queries) LockGlobalPaymentFavorites(ctx context.Context, arg LockGlobalPaymentFavoritesParams) ([]LockGlobalPaymentFavoritesRow, error) {
+	rows, err := q.db.Query(ctx, lockGlobalPaymentFavorites, arg.Actor, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LockGlobalPaymentFavoritesRow{}
+	for rows.Next() {
+		var i LockGlobalPaymentFavoritesRow
+		if err := rows.Scan(&i.ID, &i.IsFavorite, &i.ActorRole); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setPaymentFavoriteOrder = `-- name: SetPaymentFavoriteOrder :execrows
+UPDATE payments SET favorite_order = $2
+WHERE id = $1
+`
+
+type SetPaymentFavoriteOrderParams struct {
+	ID            pgtype.UUID `json:"id"`
+	FavoriteOrder pgtype.Int8 `json:"favorite_order"`
+}
+
+// One rule's 1-based favorite position (ticket #576); the id match alone is
+// the guard — the lock pass has already proven existence and visibility in
+// the same transaction. :execrows keeps that ordering honest.
+func (q *Queries) SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPaymentFavoriteOrder, arg.ID, arg.FavoriteOrder)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const sumGlobalPaymentCounters = `-- name: SumGlobalPaymentCounters :one

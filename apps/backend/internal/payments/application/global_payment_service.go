@@ -3,11 +3,14 @@ package application
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
 // GlobalPaymentItem is one card of the global payment rules feed (ticket
@@ -24,6 +27,12 @@ type GlobalPaymentItem struct {
 	Category      domain.CategoryRef
 	AutoPay       bool
 	IsFavorite    bool
+	// FavoriteOrder is the rule's manual favorite order (ticket #576): the
+	// 1-based position the favorites edit mode's save assigned, nil when
+	// the rule has never been in a saved order — favorites sort by it with
+	// nulls last (the new-favorite-at-the-end rule); the feed's own order
+	// is unchanged.
+	FavoriteOrder *int64
 	// Today is the property owner's calendar date (ADR 0048) the row's
 	// schedule math ran against — the client renders «Сегодня»/«Завтра»
 	// against it without knowing the owner's timezone.
@@ -73,23 +82,29 @@ type GlobalPaymentObjectCard struct {
 	OtherKeys   []GlobalPaymentObjectKey
 }
 
-// GlobalPaymentService serves the global payment rules reads (ticket #575):
-// the merged «Платежи» feed with the main screen's counters, the search
-// with its matched-category chips and the «Объекты» stacks. A pure read
-// side — nothing ticks, nothing writes. The visibility predicate lives in
-// the reader's SQL (the actor-scoped cross-property read, ticket #521);
-// the owner→today map is resolved here (ADR 0048) and threaded into every
-// per-row schedule computation — the merged feed mixes owners.
+// GlobalPaymentService serves the global payment rules surface (tickets
+// #575, #576): the merged «Платежи» feed with the main screen's counters,
+// the search with its matched-category chips, the «Объекты» stacks — and
+// the favorites manual order, the surface's first cross-property mutation.
+// The visibility predicate lives in the SQL of both sides (the actor-scoped
+// cross-property read, ticket #521); the owner→today map is resolved here
+// (ADR 0048) and threaded into every per-row schedule computation — the
+// merged feed mixes owners. The reads never tick; the order save writes
+// positions only, so it never ticks either.
 type GlobalPaymentService struct {
 	reader   GlobalPaymentReader
 	calendar OwnerCalendar
+	factory  txStoreFactory
 }
 
-// NewGlobalPaymentService builds the global reads over the reader port and
-// the owner calendar. A nil calendar is a wiring mistake and fails on first
-// use (the shared ownerToday helper's contract).
-func NewGlobalPaymentService(reader GlobalPaymentReader, calendar OwnerCalendar) *GlobalPaymentService {
-	return &GlobalPaymentService{reader: reader, calendar: calendar}
+// NewGlobalPaymentService builds the global reads and the favorites order
+// save over the reader port, the owner calendar and the shared store
+// factory. A nil calendar is a wiring mistake and fails on first use (the
+// shared ownerToday helper's contract).
+func NewGlobalPaymentService(
+	reader GlobalPaymentReader, calendar OwnerCalendar, factory txStoreFactory,
+) *GlobalPaymentService {
+	return &GlobalPaymentService{reader: reader, calendar: calendar, factory: factory}
 }
 
 // ListGlobalPayments returns the actor's visible merged feed of payment
@@ -193,6 +208,75 @@ func (s *GlobalPaymentService) ListGlobalPaymentObjects(
 	return cards, nil
 }
 
+// SaveFavoriteOrder rebuilds the manual order of the actor's favorites
+// (PUT /payments/favorites/order, ticket #576): the submitted list is the
+// actor's visible favorite rules in their new order, and one transaction
+// locks the rows (the sorted ids being the deadlock-safe lock order) and
+// assigns dense 1-based positions in the list order. The save is a full
+// replacement: visible favorites OUTSIDE the list lose their positions and
+// fall to the end of the reading order — duplicate positions never survive
+// a save, an empty list resets the whole order. The visibility predicate
+// and the per-row role live in the lock's SQL: an unknown, foreign or
+// otherwise invisible id is the privacy-preserving ErrNotFound, a visible
+// non-favorite or a duplicate id is ErrInvalidInput, and the write
+// capability is the favorite star's (#461, Full Access+ via CanEdit) — a
+// viewer's ErrForbidden. A rule without a position (new and legacy
+// favorites, and whatever this save did not place) sorts last — the
+// new-favorite-at-the-end rule — and PUT favorite keeps that
+// null-when-unstarred invariant atomic. A pure order write: nothing
+// materializes, nothing ticks.
+func (s *GlobalPaymentService) SaveFavoriteOrder(ctx context.Context, actor uuid.UUID, orderedIDs []uuid.UUID) error {
+	seen := make(map[uuid.UUID]struct{}, len(orderedIDs))
+	for _, id := range orderedIDs {
+		if _, dup := seen[id]; dup {
+			return ErrInvalidInput
+		}
+		seen[id] = struct{}{}
+	}
+	sorted := slices.Clone(orderedIDs)
+	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+
+	return s.factory.runInTx(ctx, func(stores *txStores) error {
+		locked, err := stores.favoriteOrders.LockVisibleFavorites(ctx, actor, sorted)
+		if err != nil {
+			return fmt.Errorf("lock visible favorites: %w", err)
+		}
+		if len(locked) < len(sorted) {
+			return ErrNotFound
+		}
+		allOwner := true
+		for _, row := range locked {
+			if !row.IsFavorite {
+				return ErrInvalidInput
+			}
+			if !sharedpolicy.CanEdit(row.Role) {
+				return ErrForbidden
+			}
+			allOwner = allOwner && row.Role == sharedpolicy.RoleOwner
+		}
+		if err := stores.favoriteOrders.ClearFavoriteOrdersOutside(ctx, actor, sorted); err != nil {
+			return fmt.Errorf("clear favorite orders outside the save: %w", err)
+		}
+		for position, id := range orderedIDs {
+			if err := stores.favoriteOrders.SaveFavoritePosition(ctx, id, int64(position+1)); err != nil {
+				return fmt.Errorf("save favorite position of %s: %w", id, err)
+			}
+		}
+		// The save's audit role is the actor's own scope when every placed
+		// rule is theirs; any shared rule makes the acting role the
+		// membership's (Full Access — a viewer cannot reach here).
+		auditRole := sharedpolicy.RoleOwner
+		if !allOwner {
+			auditRole = sharedpolicy.RoleFullAccess
+		}
+		return recordAudit(ctx, stores, actor, auditRole, auditdomain.ActionPaymentUpdated,
+			auditdomain.EntityPayment, nil, map[string]any{
+				"fields": []string{"favorite_order"},
+				"count":  len(orderedIDs),
+			})
+	})
+}
+
 // ownerTodays resolves the calendar date per distinct data owner of the
 // actor's visible non-archived properties (ADR 0048): the merged feed's
 // schedule math runs against each row's own owner's today.
@@ -276,6 +360,7 @@ func (s *GlobalPaymentService) enrichItems(
 			Category:      row.Category,
 			AutoPay:       row.AutoPay,
 			IsFavorite:    row.IsFavorite,
+			FavoriteOrder: row.FavoriteOrder,
 			Today:         row.Today,
 			OverdueCount:  row.OverdueCount,
 		}

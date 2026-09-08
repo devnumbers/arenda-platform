@@ -87,6 +87,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		paymentspg.NewPaymentStore(pool),
 		paymentspg.NewOperationStore(pool),
 		paymentspg.NewPropertyStore(pool),
+		paymentspg.NewGlobalPaymentStore(pool),
 		audit,
 		pgdb.NewUoW(pool, logger),
 	)

@@ -1589,6 +1589,46 @@ paths:
                 $ref: '#/components/schemas/PaymentObjectsGlobalResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /payments/favorites/order:
+    put:
+      operationId: saveGlobalPaymentFavoritesOrder
+      summary: Save the manual order of the actor's favorite payment rules
+      description: >
+        The favorites edit mode's «Сохранить» (map #573, ticket #576): the
+        request lists the actor's visible favorite rules in their new order
+        and the server rebuilds the stored positions in one transaction —
+        dense 1-based positions in the list order. The save is a full
+        replacement: favorites outside the list lose their positions and
+        fall to the end of the reading order, so an empty list resets the
+        whole order. Every listed id must be a favorite rule visible to the
+        actor (own plus active-membership properties, archived excluded):
+        an unknown, foreign or otherwise invisible id is the
+        privacy-preserving 404, a visible non-favorite or a duplicate id is
+        a 400. The write capability is the favorite star's (PUT favorite,
+        Full Access and Owner) — a viewer's 403. A rule without a position
+        — new and legacy favorites, their favoriteOrder is null — sorts
+        last (new-favorite-at-the-end), and PUT favorite maintains that
+        invariant atomically: unfavoriting clears the position,
+        re-favoriting lands at the end. The manual order is the favorites
+        screens' sort key (the feed's own order is unchanged); a pure order
+        write — nothing ticks.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentsFavoriteOrderUpdate'
+      responses:
+        '204':
+          description: The order is saved.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/tasks:
     get:
       operationId: listPropertyTasks
@@ -5239,7 +5279,7 @@ components:
         the global «Платежи» card's data: the rule, its property label, the
         nearest schedule date and the overdue aggregates.
       type: object
-      required: [id, propertyId, propertyName, title, amountKopecks, type, category, autoPay, isFavorite, today, nearestDate, overdueOperationCount, overdueDays]
+      required: [id, propertyId, propertyName, title, amountKopecks, type, category, autoPay, isFavorite, favoriteOrder, today, nearestDate, overdueOperationCount, overdueDays]
       properties:
         id:
           type: string
@@ -5265,6 +5305,16 @@ components:
         isFavorite:
           type: boolean
           description: The rule's favorite star (PUT favorite).
+        favoriteOrder:
+          type: integer
+          nullable: true
+          description: >
+            The rule's manual favorite order (ticket #576): the 1-based
+            position the favorites edit mode's save assigned. Null when the
+            rule has never been in a saved order — the favorites screens
+            sort by favoriteOrder with nulls last (the
+            new-favorite-at-the-end rule); the feed's own order is
+            unchanged.
         today:
           type: string
           format: date
@@ -5315,6 +5365,23 @@ components:
           description: >
             The overdue operations summed across the whole visible scope —
             the «Все просроченные (N)» card; never narrowed by a search.
+
+    PaymentsFavoriteOrderUpdate:
+      description: >
+        The favorites edit mode's save request (ticket #576): the actor's
+        visible favorite rules in their new order — the complete list as
+        the edit screen shows it.
+      type: object
+      required: [paymentIds]
+      properties:
+        paymentIds:
+          type: array
+          description: >
+            The favorite rules in their new order; the server assigns dense
+            1-based positions in this order (ticket #576).
+          items:
+            type: string
+            format: uuid
 
     PaymentSearchCategory:
       description: >

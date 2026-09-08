@@ -393,7 +393,7 @@ func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsBy
 }
 
 const setPaymentFavorite = `-- name: SetPaymentFavorite :execrows
-UPDATE payments SET is_favorite = $3
+UPDATE payments SET is_favorite = $3, favorite_order = NULL
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -406,6 +406,9 @@ type SetPaymentFavoriteParams struct {
 // Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 // Existence is already proven inside the same transaction under the property
 // lock; :execrows keeps the store honest independently of that ordering.
+// Unfavoriting clears the manual order with the flag — the schema CHECK
+// (favorite_order IS NULL OR is_favorite) demands it, and re-favoriting
+// lands at the end (NULL, ticket #576).
 func (q *Queries) SetPaymentFavorite(ctx context.Context, arg SetPaymentFavoriteParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setPaymentFavorite, arg.ID, arg.OwnerID, arg.IsFavorite)
 	if err != nil {

@@ -11,12 +11,16 @@ package application_test
 
 import (
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 )
 
 // dateOf renders a row's calendar date the way the assertions read it.
@@ -31,7 +35,18 @@ const objectPropertyName = "Квартира"
 func (h *paymentsHarness) globalSvc() *paymentsapp.GlobalPaymentService {
 	h.t.Helper()
 	calendar := paymentspg.NewOwnerCalendar(h.pool, h.clock)
-	return paymentsapp.NewGlobalPaymentService(paymentspg.NewGlobalPaymentStore(h.pool), calendar)
+	store := paymentspg.NewGlobalPaymentStore(h.pool)
+	audit := auditapp.NewService(auditpg.NewWriter(h.pool), h.clock)
+	factory := paymentsapp.NewTxStoreFactory(
+		paymentspg.NewTickStore(h.pool),
+		paymentspg.NewPaymentStore(h.pool),
+		paymentspg.NewOperationStore(h.pool),
+		paymentspg.NewPropertyStore(h.pool),
+		store,
+		audit,
+		pgdb.NewUoW(h.pool, slog.New(slog.DiscardHandler)),
+	)
+	return paymentsapp.NewGlobalPaymentService(store, calendar, factory)
 }
 
 // seedGlobalRule inserts a payment rule on any property with any owner —

@@ -21,10 +21,14 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// GlobalPaymentStore implements application.GlobalPaymentReader over the
-// generated payments queries. Read-only: none of it ticks.
+// GlobalPaymentStore implements application.GlobalPaymentReader and the
+// favorites order save (application.GlobalPaymentOrderStore, ticket #576)
+// over the generated payments queries. The reads never tick; the order save
+// writes positions only.
 type GlobalPaymentStore struct {
 	db postgres.DBTX
 	// Payments reuses the CRUD read for the projection fallback's single
@@ -37,8 +41,11 @@ func NewGlobalPaymentStore(db postgres.DBTX) *GlobalPaymentStore {
 	return &GlobalPaymentStore{db: db, payments: NewPaymentStore(db)}
 }
 
-// Compile-time conformance of the adapter to the consumer-declared port.
-var _ application.GlobalPaymentReader = (*GlobalPaymentStore)(nil)
+// Compile-time conformance of the adapter to the consumer-declared ports.
+var (
+	_ application.GlobalPaymentReader     = (*GlobalPaymentStore)(nil)
+	_ application.GlobalPaymentOrderStore = (*GlobalPaymentStore)(nil)
+)
 
 func (s *GlobalPaymentStore) q() *postgres.Queries {
 	return postgres.New(s.db)
@@ -100,6 +107,7 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 			NextPlannedDate:   pgconv.DatePtrFromPgtype(row.AggNextPlannedDate),
 			OverdueCount:      row.OverdueCount,
 			OldestOverdueDate: pgconv.DatePtrFromPgtype(row.AggOldestOverdueDate),
+			FavoriteOrder:     pgconv.Int8ToPtr(row.FavoriteOrder),
 		})
 	}
 	return out, nil
@@ -216,6 +224,76 @@ func (s *GlobalPaymentStore) GetGlobalPaymentRule(
 		return domain.Payment{}, false, fmt.Errorf("get payment %s for projection: %w", paymentID, err)
 	}
 	return rule, true, nil
+}
+
+// LockVisibleFavorites takes the favorites order save's FOR UPDATE row
+// locks — the caller's ids arrive sorted and the SQL keeps that order, the
+// deadlock-safety — and returns the rows visible to the actor on
+// non-archived properties with the actor's per-row role (the SQL resolves
+// owner vs the active membership's role).
+func (s *GlobalPaymentStore) LockVisibleFavorites(
+	ctx context.Context, actor uuid.UUID, ids []uuid.UUID,
+) ([]application.GlobalPaymentFavoriteLock, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := s.q().LockGlobalPaymentFavorites(ctx, postgres.LockGlobalPaymentFavoritesParams{
+		Ids:   joinPropertyIDs(ids),
+		Actor: pgconv.UUIDToPgtype(actor),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("lock global payment favorites: %w", err)
+	}
+	out := make([]application.GlobalPaymentFavoriteLock, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, application.GlobalPaymentFavoriteLock{
+			ID:         pgconv.UUIDFromPgtype(row.ID),
+			IsFavorite: row.IsFavorite,
+			Role:       sharedpolicy.Role(row.ActorRole),
+		})
+	}
+	return out, nil
+}
+
+// SaveFavoritePosition writes one rule's 1-based favorite position and
+// requires exactly one affected row — the lock pass has already proven
+// existence and visibility inside the same transaction, so a mismatch is a
+// wiring defect, not a runtime condition.
+func (s *GlobalPaymentStore) SaveFavoritePosition(ctx context.Context, id uuid.UUID, position int64) error {
+	rows, err := s.q().SetPaymentFavoriteOrder(ctx, postgres.SetPaymentFavoriteOrderParams{
+		ID:            pgconv.UUIDToPgtype(id),
+		FavoriteOrder: pgconv.Int8PtrToPgtype(&position),
+	})
+	if err != nil {
+		return fmt.Errorf("set favorite order of payment %s: %w", id, err)
+	}
+	if rows != 1 {
+		return fmt.Errorf("set favorite order of payment %s: %d rows affected, want 1", id, rows)
+	}
+	return nil
+}
+
+// ClearFavoriteOrdersOutside drops the positions of the actor's visible
+// favorites outside the submitted list — the save's full-replacement pass;
+// an empty keep list clears the whole visible order.
+func (s *GlobalPaymentStore) ClearFavoriteOrdersOutside(ctx context.Context, actor uuid.UUID, keepIDs []uuid.UUID) error {
+	if _, err := s.q().ClearGlobalPaymentFavoriteOrders(ctx, postgres.ClearGlobalPaymentFavoriteOrdersParams{
+		KeepIds: joinPropertyIDs(keepIDs),
+		Actor:   pgconv.UUIDToPgtype(actor),
+	}); err != nil {
+		return fmt.Errorf("clear favorite orders outside the save: %w", err)
+	}
+	return nil
+}
+
+// WithTx binds the store to the caller's transaction — the favorites order
+// save's writes ride the same Unit-of-Work as every payments mutation.
+func (s *GlobalPaymentStore) WithTx(tx transaction.Tx) (application.GlobalPaymentOrderStore, error) {
+	dbtx, ok := tx.(postgres.DBTX)
+	if !ok {
+		return nil, fmt.Errorf("payments.GlobalPaymentStore.WithTx: %T is not a postgres.DBTX", tx)
+	}
+	return NewGlobalPaymentStore(dbtx), nil
 }
 
 // ownerTodaysCSV folds the owner→today map into the queries' parallel csv

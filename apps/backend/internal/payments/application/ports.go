@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -263,6 +264,11 @@ type GlobalPaymentRuleRow struct {
 	// OldestOverdueDate is the oldest overdue operation's date; nil unless
 	// the rule has overdue operations.
 	OldestOverdueDate *time.Time
+	// FavoriteOrder is the rule's manual favorite order — the 1-based
+	// position the favorites edit mode's save assigned (ticket #576); nil
+	// when the rule has never been in a saved order (new and legacy
+	// favorites sort last, the new-favorite-at-the-end rule).
+	FavoriteOrder *int64
 }
 
 // GlobalPaymentCounters are the main screen's two scope counters (ticket
@@ -328,4 +334,42 @@ type GlobalPaymentReader interface {
 	// projection fallback's input. The boolean is false when the rule is
 	// gone (a deletion mid-read leaves the row's nearest date null).
 	GetGlobalPaymentRule(ctx context.Context, ownerID, propertyID, paymentID uuid.UUID) (domain.Payment, bool, error)
+}
+
+// GlobalPaymentFavoriteLock is one locked row of the favorites order save
+// (ticket #576): the rule's id, its favorite flag at lock time and the
+// actor's role on the rule's property — the write gate's raw material (the
+// favorite star's matrix, #461: Full Access+).
+type GlobalPaymentFavoriteLock struct {
+	ID         uuid.UUID
+	IsFavorite bool
+	Role       sharedpolicy.Role
+}
+
+// GlobalPaymentOrderStore is the write side of the favorites manual order
+// (ticket #576) — the global payments' first cross-property mutation. The
+// visibility predicate and the per-row role live in the lock's SQL (the
+// global reads' rule, ticket #521): a submitted id the actor cannot see
+// never returns from the lock, which keeps the foreign case the
+// privacy-preserving 404; the write capability itself is the favorite
+// star's (#461, Full Access+) and is resolved per row beside the data.
+// Every method runs inside the caller's transaction.
+type GlobalPaymentOrderStore interface {
+	// LockVisibleFavorites takes FOR UPDATE row locks on the submitted
+	// rules — in the given order, the caller's sorted ids being the
+	// deadlock-safety — and returns the rows visible to the actor on
+	// non-archived properties with the actor's per-row role. A matched set
+	// smaller than the submission means an unknown, foreign or invisible
+	// id.
+	LockVisibleFavorites(ctx context.Context, actor uuid.UUID, ids []uuid.UUID) ([]GlobalPaymentFavoriteLock, error)
+	// SaveFavoritePosition writes one rule's 1-based order position and
+	// must affect exactly one row: the lock has already proven existence
+	// and visibility inside the same transaction.
+	SaveFavoritePosition(ctx context.Context, id uuid.UUID, position int64) error
+	// ClearFavoriteOrdersOutside drops the positions of the actor's visible
+	// favorites outside the submitted list (the save's full-replacement
+	// pass: what the save does not place falls to the end of the reading
+	// order). KeepIDs travels as the list of placed ids, '' meaning none.
+	ClearFavoriteOrdersOutside(ctx context.Context, actor uuid.UUID, keepIDs []uuid.UUID) error
+	WithTx(tx transaction.Tx) (GlobalPaymentOrderStore, error)
 }

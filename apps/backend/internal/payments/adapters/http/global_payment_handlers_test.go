@@ -57,6 +57,7 @@ type fakeGlobalPaymentsManager struct {
 	list    func(ctx context.Context, actor uuid.UUID) (application.GlobalPaymentFeed, error)
 	search  func(ctx context.Context, actor uuid.UUID, query string) (application.GlobalPaymentSearch, error)
 	objects func(ctx context.Context, actor uuid.UUID, query string) ([]application.GlobalPaymentObjectCard, error)
+	save    func(ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID) error
 }
 
 func (f *fakeGlobalPaymentsManager) ListGlobalPayments(
@@ -84,6 +85,15 @@ func (f *fakeGlobalPaymentsManager) ListGlobalPaymentObjects(
 		return nil, errors.New("unexpected ListGlobalPaymentObjects call")
 	}
 	return f.objects(ctx, actor, query)
+}
+
+func (f *fakeGlobalPaymentsManager) SaveFavoriteOrder(
+	ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID,
+) error {
+	if f.save == nil {
+		return errors.New("unexpected SaveFavoriteOrder call")
+	}
+	return f.save(ctx, actor, paymentIDs)
 }
 
 // globalRequest builds an authenticated request for the parameterless global
@@ -305,4 +315,142 @@ func defaultCategoryRef(slug string) domain.CategoryRef {
 // customCategoryRef builds a user-category reference with its current name.
 func customCategoryRef(id uuid.UUID, name string) domain.CategoryRef {
 	return domain.CategoryRef{UserCategoryID: &id, UserCategoryName: &name}
+}
+
+// The wire contract of the order save (ticket #576): the body's ids travel
+// to the use case in order under the actor; 204 with no content on success.
+func TestSaveGlobalPaymentFavoritesOrder_Wire(t *testing.T) {
+	t.Parallel()
+
+	var gotActor uuid.UUID
+	var gotIDs []uuid.UUID
+	svc := &fakeGlobalPaymentsManager{
+		save: func(ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID) error {
+			gotActor = actor
+			gotIDs = paymentIDs
+			return nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	idA := uuid.Must(uuid.NewV7())
+	idB := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+	body := `{"paymentIds":["` + idB.String() + `","` + idA.String() + `"]}`
+	w := httptest.NewRecorder()
+	h.SaveGlobalPaymentFavoritesOrder(w, paymentRequest(t, http.MethodPut, userID, body))
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204: %s", w.Code, w.Body.String())
+	}
+	if gotActor != userID {
+		t.Errorf("actor = %s, want %s", gotActor, userID)
+	}
+	if len(gotIDs) != 2 || gotIDs[0] != idB || gotIDs[1] != idA {
+		t.Errorf("ids = %v, want the submitted order [%s %s]", gotIDs, idB, idA)
+	}
+}
+
+// The use case's verdicts map onto the wire: the privacy 404 and the
+// invalid-list 400 (the payments problem table's statuses).
+func TestSaveGlobalPaymentFavoritesOrder_ErrorMapping(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{"foreign id is the privacy 404", application.ErrNotFound, http.StatusNotFound},
+		{"broken list is 400", application.ErrInvalidInput, http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			svc := &fakeGlobalPaymentsManager{
+				save: func(context.Context, uuid.UUID, []uuid.UUID) error { return tc.err },
+			}
+			h := NewGlobalPaymentHandlers(svc, nil)
+
+			body := `{"paymentIds":["` + uuid.Must(uuid.NewV7()).String() + `"]}`
+			w := httptest.NewRecorder()
+			h.SaveGlobalPaymentFavoritesOrder(w, paymentRequest(t, http.MethodPut, uuid.Must(uuid.NewV7()), body))
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", w.Code, tc.wantStatus, w.Body.String())
+			}
+		})
+	}
+}
+
+// A body without the required paymentIds is a 400 before the use case runs;
+// an empty array is a valid no-op save.
+func TestSaveGlobalPaymentFavoritesOrder_BodyValidation(t *testing.T) {
+	t.Parallel()
+
+	called := 0
+	svc := &fakeGlobalPaymentsManager{
+		save: func(context.Context, uuid.UUID, []uuid.UUID) error {
+			called++
+			return nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+	userID := uuid.Must(uuid.NewV7())
+
+	w := httptest.NewRecorder()
+	h.SaveGlobalPaymentFavoritesOrder(w, paymentRequest(t, http.MethodPut, userID, `{"other":1}`))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("missing paymentIds: status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	h.SaveGlobalPaymentFavoritesOrder(w, paymentRequest(t, http.MethodPut, userID, `{}`))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("empty body: status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	h.SaveGlobalPaymentFavoritesOrder(w, paymentRequest(t, http.MethodPut, userID, `{"paymentIds":[]}`))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("empty array: status = %d, want 204: %s", w.Code, w.Body.String())
+	}
+	if called != 1 {
+		t.Errorf("use case calls = %d, want 1 (the no-op save)", called)
+	}
+}
+
+// The feed row carries the manual favorite order onto the wire (ticket
+// #576): a saved position travels as favoriteOrder, a never-saved rule as
+// null.
+func TestListGlobalPayments_FavoriteOrderWire(t *testing.T) {
+	t.Parallel()
+
+	position := int64(2)
+	item := wireFeedItem()
+	item.FavoriteOrder = &position
+	nilItem := wireFeedItem()
+	svc := &fakeGlobalPaymentsManager{
+		list: func(_ context.Context, _ uuid.UUID) (application.GlobalPaymentFeed, error) {
+			return application.GlobalPaymentFeed{Items: []application.GlobalPaymentItem{item, nilItem}}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	h.ListGlobalPayments(w, globalRequest(t.Context(), "/payments"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body openapi.PaymentsGlobalResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Items[0].FavoriteOrder == nil || *body.Items[0].FavoriteOrder != 2 {
+		t.Errorf("favoriteOrder = %v, want 2", body.Items[0].FavoriteOrder)
+	}
+	if body.Items[1].FavoriteOrder != nil {
+		t.Errorf("nil favoriteOrder = %v, want null", body.Items[1].FavoriteOrder)
+	}
 }

@@ -135,7 +135,7 @@ func TestListGlobalPaymentsEnrichesRows(t *testing.T) {
 	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{
 		ownerA: todayA,
 		ownerB: todayB,
-	}})
+	}}, txStoreFactory{})
 
 	feed, err := service.ListGlobalPayments(t.Context(), uuid.Must(uuid.NewV7()))
 	if err != nil {
@@ -225,7 +225,7 @@ func TestListGlobalPaymentsNearestDateFallback(t *testing.T) {
 			pausedRule.ID:  pausedRule,
 		},
 	}
-	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}})
+	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}}, txStoreFactory{})
 
 	feed, err := service.ListGlobalPayments(t.Context(), uuid.Must(uuid.NewV7()))
 	if err != nil {
@@ -248,7 +248,7 @@ func TestSearchGlobalPaymentsExpandsCategorySlugs(t *testing.T) {
 	owner := uuid.Must(uuid.NewV7())
 	today := utcDate(2025, time.June, 1) // Arbitrary: the search never reads it.
 	reader := &fakeGlobalReader{owners: []uuid.UUID{owner}}
-	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}})
+	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}}, txStoreFactory{})
 	actor := uuid.Must(uuid.NewV7())
 
 	if _, err := service.SearchGlobalPayments(t.Context(), actor, "СТРАХОВ"); err != nil {
@@ -306,7 +306,7 @@ func TestListGlobalPaymentObjectsGroupsStacks(t *testing.T) {
 			{PropertyID: property, Name: "Моя квартира", Address: "Тверская 1"},
 		},
 	}
-	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}})
+	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}}, txStoreFactory{})
 
 	cards, err := service.ListGlobalPaymentObjects(t.Context(), uuid.Must(uuid.NewV7()), "квартира")
 	if err != nil {

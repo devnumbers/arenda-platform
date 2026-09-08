@@ -290,6 +290,7 @@ type Payment struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	IsFavorite     bool               `json:"is_favorite"`
+	FavoriteOrder  pgtype.Int8        `json:"favorite_order"`
 }
 
 type PaymentCategory struct {

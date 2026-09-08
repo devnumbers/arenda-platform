@@ -21,6 +21,12 @@ type Querier interface {
 	// прочие строки (включая уже отменённые) не трогаются — use case рапортует
 	// not-found: отменённая операция для всех чтений больше не существует.
 	CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error)
+	// The favorites order save's full-replacement pass (ticket #576): the
+	// visible favorites OUTSIDE the submitted list lose their positions —
+	// they fall to the end of the reading order («новое избранное — в конец»),
+	// so duplicate positions never survive a save. '' keeps the empty list
+	// working (a save of nothing clears the whole visible order).
+	ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error)
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)).
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
@@ -468,11 +474,11 @@ type Querier interface {
 	// is a case-insensitive substring over the name and the address — it
 	// filters the objects, never their stacks.
 	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
-	// Payments context queries: the global read side of the payment rules
-	// (ticket #575) — the merged «Платежи» feed, the search with its
-	// matched-category chips and the «Объекты» stacks. Rule CRUD lives in
-	// payments_rules.sql, operations in payments_operations.sql, the tick in
-	// payments_tick.sql.
+	// Payments context queries: the global surface of the payment rules
+	// (tickets #575, #576) — the merged «Платежи» feed, the search with its
+	// matched-category chips, the «Объекты» stacks and the favorites manual
+	// order save. Rule CRUD lives in payments_rules.sql, operations in
+	// payments_operations.sql, the tick in payments_tick.sql.
 	//
 	// The visibility predicate is the global listings' (ticket #521): the
 	// actor's own rows plus the rows of the properties they share with an
@@ -642,6 +648,16 @@ type Querier interface {
 	// run re-lists, no per-zone or per-owner tick state is kept.
 	ListTickZones(ctx context.Context) ([]ListTickZonesRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
+	// The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
+	// on the submitted rules — the caller passes the ids sorted, the ORDER BY
+	// keeping the lock order deadlock-safe — restricted to the actor's visible
+	// non-archived rules (the feed's visibility predicate). An id that does not
+	// come back is unknown, foreign or invisible; the application layer folds
+	// the three into one privacy-preserving 404. Every row carries the actor's
+	// role on the rule's property — the save's write gate is the favorite
+	// star's (#461, Full Access+), resolved per row beside the data. Ids
+	// travel as the file's csv list; an empty list never reaches the query.
+	LockGlobalPaymentFavorites(ctx context.Context, arg LockGlobalPaymentFavoritesParams) ([]LockGlobalPaymentFavoritesRow, error)
 	// Payments context queries: the materialization tick's persistence
 	// (ADR 0049 §3, ticket #458). The owner-level payment listing with pauses
 	// resolved, the operation dedup keys, the idempotent insert, the auto-pay day
@@ -696,7 +712,14 @@ type Querier interface {
 	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 	// Existence is already proven inside the same transaction under the property
 	// lock; :execrows keeps the store honest independently of that ordering.
+	// Unfavoriting clears the manual order with the flag — the schema CHECK
+	// (favorite_order IS NULL OR is_favorite) demands it, and re-favoriting
+	// lands at the end (NULL, ticket #576).
 	SetPaymentFavorite(ctx context.Context, arg SetPaymentFavoriteParams) (int64, error)
+	// One rule's 1-based favorite position (ticket #576); the id match alone is
+	// the guard — the lock pass has already proven existence and visibility in
+	// the same transaction. :execrows keeps that ordering honest.
+	SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error)
 	// The main screen's two counters over the whole visible scope (ticket
 	// #575): the favorite rules — the «Все избранные (N)» card — and the
 	// overdue operations summed across the feed's rules — the «Все

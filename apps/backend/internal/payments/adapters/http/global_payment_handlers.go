@@ -1,12 +1,16 @@
 package http
 
-// The global payment rules endpoints (ticket #575): the merged «Платежи»
-// feed with the main screen's counters, the search with its matched-category
-// chips and the «Объекты» stacks. The shared package doc lives in
-// payment_handlers.go.
+// The global payment rules endpoints (tickets #575, #576): the merged
+// «Платежи» feed with the main screen's counters, the search with its
+// matched-category chips, the «Объекты» stacks and the favorites manual
+// order save. The shared package doc lives in payment_handlers.go.
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -25,6 +29,7 @@ type GlobalPaymentsManager interface {
 	ListGlobalPayments(ctx context.Context, actor uuid.UUID) (application.GlobalPaymentFeed, error)
 	SearchGlobalPayments(ctx context.Context, actor uuid.UUID, search string) (application.GlobalPaymentSearch, error)
 	ListGlobalPaymentObjects(ctx context.Context, actor uuid.UUID, search string) ([]application.GlobalPaymentObjectCard, error)
+	SaveFavoriteOrder(ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID) error
 }
 
 // GlobalPaymentHandlers implements the generated global payment endpoints.
@@ -94,6 +99,63 @@ func (h *GlobalPaymentHandlers) ListGlobalPaymentObjects(
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, paymentObjectsGlobalResponse(cards))
+}
+
+// SaveGlobalPaymentFavoritesOrder implements PUT /payments/favorites/order
+// (ticket #576): the favorites edit mode's «Сохранить» — the submitted
+// list order becomes the rules' manual favorite order, atomically.
+func (h *GlobalPaymentHandlers) SaveGlobalPaymentFavoritesOrder(w http.ResponseWriter, r *http.Request) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	body, err := decodeFavoriteOrderBody(w, r)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode favorites order request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	if err := h.svc.SaveFavoriteOrder(r.Context(), actor, body.PaymentIds); err != nil {
+		if !writePaymentsError(r.Context(), w, err) {
+			h.logger.ErrorContext(r.Context(), "global payment favorites order save failed",
+				slog.String("error", httpsupport.SanitizeError(err)))
+			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError,
+				httpsupport.InternalError(r.Context(), err))
+		}
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusNoContent, nil)
+}
+
+// decodeFavoriteOrderBody reads the order save's body strictly — the same
+// shadow trick as decodeFavoriteBody: the required paymentIds array cannot
+// express its own absence in the generated struct, an empty array is a
+// valid save (it resets the order).
+func decodeFavoriteOrderBody(w http.ResponseWriter, r *http.Request) (openapi.PaymentsFavoriteOrderUpdate, error) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, httpsupport.MaxRequestBodySize))
+	if err != nil {
+		return openapi.PaymentsFavoriteOrderUpdate{}, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var body openapi.PaymentsFavoriteOrderUpdate
+	if err := dec.Decode(&body); err != nil {
+		return openapi.PaymentsFavoriteOrderUpdate{}, err
+	}
+	var shadow struct {
+		PaymentIds []*openapi_types.UUID `json:"paymentIds"`
+	}
+	if err := json.Unmarshal(raw, &shadow); err != nil {
+		return openapi.PaymentsFavoriteOrderUpdate{}, err
+	}
+	if shadow.PaymentIds == nil {
+		return openapi.PaymentsFavoriteOrderUpdate{}, errors.New("payments: paymentIds is required")
+	}
+	return body, nil
 }
 
 // handleGlobalPaymentError maps the global reads' failures: there is no
@@ -171,11 +233,22 @@ func paymentGlobalItem(item application.GlobalPaymentItem) openapi.PaymentGlobal
 		Category:              categoryView(item.Category),
 		AutoPay:               item.AutoPay,
 		IsFavorite:            item.IsFavorite,
+		FavoriteOrder:         orderWirePtr(item.FavoriteOrder),
 		Today:                 openapi_types.Date{Time: item.Today},
 		NearestDate:           dateWirePtr(item.NearestDate),
 		OverdueOperationCount: int(item.OverdueCount),
 		OverdueDays:           item.OverdueDays,
 	}
+}
+
+// orderWirePtr narrows the optional order position onto the wire's nullable
+// integer; nil is the contract's null (never in a saved order).
+func orderWirePtr(v *int64) *int {
+	if v == nil {
+		return nil
+	}
+	out := int(*v)
+	return &out
 }
 
 // dateWirePtr lifts an optional calendar date onto the wire's nullable date;
