@@ -39,7 +39,7 @@ Adding a new bounded context — checklist:
 
 ## Process lifetime
 
-- **Exit-политика: the process exits only in `cmd/`.** `os.Exit`/`log.Fatal*` live in the composition root (startup failures, signal-driven shutdown); everything under `internal/` returns errors upward so deferred cleanup and graceful shutdown stay possible (enforced by forbidigo in `.golangci.yml`, bar #323). The one adjacent idiom: `TestMain` relies on the Go 1.15+ test wrapper exiting with `m.Run`'s result — use `defer` for teardown, not `os.Exit(code)`.
+- **The exit policy: the process exits only in `cmd/`.** `os.Exit`/`log.Fatal*` live in the composition root (startup failures, signal-driven shutdown); everything under `internal/` returns errors upward so deferred cleanup and graceful shutdown stay possible (enforced by forbidigo in `.golangci.yml`). The one adjacent idiom: `TestMain` relies on the Go 1.15+ test wrapper exiting with `m.Run`'s result — use `defer` for teardown, not `os.Exit(code)`.
 
 ## Domain constructors and validation
 
@@ -48,7 +48,7 @@ Adding a new bounded context — checklist:
 
 ## Concurrency and workers
 
-- **Every goroutine has an owner responsible for its exit.** The owner passes the context that cancels it; "fire-and-forget" goroutines with no cancellation path fail review even when `contextcheck` stays quiet about them. The two long-lived scheduler test binaries (`platform/scheduler`, `identity/adapters/scheduler`) also fail their run on any goroutine that outlives the tests, via `goleak.VerifyTestMain` in `TestMain` (`docs/agents/tooling.md`, #352).
+- **Every goroutine has an owner responsible for its exit.** The owner passes the context that cancels it; "fire-and-forget" goroutines with no cancellation path fail review even when `contextcheck` stays quiet about them. The two long-lived scheduler test binaries (`platform/scheduler`, `identity/adapters/scheduler`) also fail their run on any goroutine that outlives the tests, via `goleak.VerifyTestMain` in `TestMain` (`docs/agents/tooling.md`).
 - Periodic work lives in `platform/scheduler` workers; contexts do not hand-roll their own tick loops.
 - Prefer ownership and channels over shared memory; a mutex is fine for a cache, not fine around an I/O call (see rubric).
 - `make test`'s `-race` integration runs are the backstop, not the design argument.
