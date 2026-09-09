@@ -22,6 +22,9 @@ const TAB_TRIGGER_CLASS =
   'flex min-w-0 flex-1 cursor-pointer items-stretch justify-center rounded-button outline-none focus-visible:ring-2 focus-visible:ring-primary';
 
 export type TabBarRowProps = {
+  /** Шит «Еще» открыт — в нижнем ряду шита «Еще» подсвечен активным
+   * независимо от страницы (Figma 1721:57140). */
+  readonly moreActive?: boolean;
   /** Шит открыт (обычный бар): состояние кнопки «Еще» для aria-expanded. */
   readonly moreExpanded?: boolean;
   /** Тап по «Еще»: в обычном баре открывает шит, в шите — закрывает его. */
@@ -30,23 +33,25 @@ export type TabBarRowProps = {
   readonly onNavigate?: () => void;
 };
 
-/** Ряд табов «Объекты / Уведомления / Еще» (Figma 1721:64793) реального
- * TabBar: высота 72px, иконка 24 + подпись 13/15; полная высота полосы
- * (72 + safe-area) — константа --tab-bar-total-height (globals.css), на неё
- * опирается шит «Еще» (решение владельца 2026-09-09: единая колонка без
- * ряда-дубля внутри шита). Активность — из нав-модели
- * (getActiveMobileTab): «Объекты» — объект и его внутренние страницы,
- * «Уведомления» — раздел уведомлений, «Еще» — всё остальное (тикет #560).
- * Цвет живёт на внутреннем span, а не на ссылке/кнопке: безслойный сброс
- * `a { color: inherit }` в globals.css перебивает цветовые утилиты на
- * самой ссылке (см. комментарий про HeroUI-normalize в globals.css). */
+/** Ряд табов «Объекты / Уведомления / Еще» (Figma 1721:64793): один и тот же
+ * компонент в реальном TabBar и нижним рядом шита «Еще» — идентичная
+ * внутренняя геометрия (высота 72px, иконка 24 + подпись 13/15) гарантирует
+ * отсутствие «прыжка» полосы при открытии шита; safe-area остаётся снаружи
+ * ряда (у бара — паддинг nav, у шита — паддинг листа). Активность — из
+ * нав-модели (getActiveMobileTab): «Объекты» — объект и его внутренние
+ * страницы, «Уведомления» — раздел уведомлений, «Еще» — всё остальное
+ * (тикет #560). Цвет живёт на внутреннем span, а не на ссылке/кнопке:
+ * безслойный сброс `a { color: inherit }` в globals.css перебивает цветовые
+ * утилиты на самой ссылке (см. комментарий про HeroUI-normalize в
+ * globals.css). */
 export function TabBarRow({
+  moreActive = false,
   moreExpanded = false,
   onMoreSelect,
   onNavigate,
 }: TabBarRowProps): JSX.Element {
   const pathname = usePathname();
-  const activeTab = getActiveMobileTab(pathname);
+  const activeTab = moreActive ? 'more' : getActiveMobileTab(pathname);
 
   return (
     <div className="mx-auto flex h-[72px] w-full items-stretch px-4">
@@ -61,7 +66,7 @@ export function TabBarRow({
       <button
         type="button"
         onClick={onMoreSelect}
-        aria-expanded={moreExpanded}
+        aria-expanded={moreActive || moreExpanded}
         className={TAB_TRIGGER_CLASS}
       >
         <TabLabel label="Еще" Icon={MenuLines} active={activeTab === 'more'} />

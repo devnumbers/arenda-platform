@@ -58,7 +58,6 @@ export {
   useTabBarSuppression,
 } from './tab-bar';
 export { MoreSheet, type MoreSheetProps } from './more-sheet';
-export { TabBarRow, TabNavLink, type TabBarRowProps } from './tab-bar-row';
 export { DesktopMenuButton, type DesktopMenuButtonProps } from './desktop-menu-button';
 export { DesktopSidebar } from './desktop-sidebar';
 export { DesktopNavPills } from './desktop-nav-pills';

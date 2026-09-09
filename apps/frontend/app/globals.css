@@ -339,18 +339,13 @@
     }
 }
 
-/* Полная высота TabBar: ряд 72px + safe-area (фолбэк 12px — от iOS-бага
-   env()=0 в standalone-PWA, research §4). Шит «Еще» опирается на бар этой
-   величиной — единая белая колонка без ряда-дубля (решение владельца
-   2026-09-09); меняется высота ряда — менять и здесь. */
-:root {
-    --tab-bar-total-height: calc(72px + max(12px, env(safe-area-inset-bottom)));
-}
-
 /* Шит «Еще» TabBar (Figma 1721:57140, #560; рецепт — docs/research/
    2026-09-08-sheet-eshche-animation.md): выезд 400ms, закрытие 300ms на
    канонной кривой vaul cubic-bezier(0.32,0.72,0,1), оверлей — канонный
    fade 250ms. Специфичность class+attr перебивает CSS-бейзлайн vaul
+   (animation/transition-duration 0.5s на [data-vaul-drawer]/[data-vaul-overlay])
+   независимо от порядка стилей; после drag-release vaul ставит duration
+   inline — флик закрывается по инерции, это канон (research §2). */
 .more-sheet-drawer[data-vaul-drawer] {
     animation-duration: 400ms;
     transition-duration: 400ms;
