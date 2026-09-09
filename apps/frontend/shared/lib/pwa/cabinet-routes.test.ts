@@ -20,6 +20,20 @@ describe('isCabinetRoute', () => {
     expect(isCabinetRoute('/profile/tariff/payments/abc')).toBe(true);
   });
 
+  it('returns true for the global sections of the unified chrome (#556)', () => {
+    // Топ-поверхность после сноса кабинета: лента задач/операций/контактов,
+    // заглушки «Платежи»/«Участники» — офлайн-навигация на них должна
+    // отдавать брендированный offline.html, а не системную ошибку.
+    expect(isCabinetRoute('/tasks')).toBe(true);
+    expect(isCabinetRoute('/tasks/new')).toBe(true);
+    expect(isCabinetRoute('/operations')).toBe(true);
+    expect(isCabinetRoute('/operations/expenses')).toBe(true);
+    expect(isCabinetRoute('/contacts')).toBe(true);
+    expect(isCabinetRoute('/contacts/search')).toBe(true);
+    expect(isCabinetRoute('/payments')).toBe(true);
+    expect(isCabinetRoute('/participants')).toBe(true);
+  });
+
   it('ignores query string and hash', () => {
     expect(isCabinetRoute('/dashboard?tab=overview')).toBe(true);
     expect(isCabinetRoute('/profile#settings')).toBe(true);

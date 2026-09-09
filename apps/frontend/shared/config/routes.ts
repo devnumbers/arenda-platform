@@ -102,7 +102,7 @@ export const ROUTES = {
    * тикет #559); сама фича шаринга доступа — вне карты. */
   participants: '/participants',
   /** Экран «Поддержка» (регистрирует единая нав-модель #558; страница живет
-   * в старом кабинете до сноса — карта #556). */
+   * до переезда на новый хром — карта #556). */
   support: '/support',
   profile: '/profile',
   profilePersonal: '/profile/personal',

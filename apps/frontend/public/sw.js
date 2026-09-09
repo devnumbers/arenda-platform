@@ -78,7 +78,7 @@ function readStandaloneFlag() {
   });
 }
 
-// Cabinet route prefixes — keep in sync with shared/lib/pwa/cabinet-routes.ts.
+// App route prefixes — keep in sync with shared/lib/pwa/cabinet-routes.ts.
 // /dashboard остаётся: это постоянный редирект на /properties, зашитый в
 // start_url манифеста PWA.
 const CABINET_ROUTE_PREFIXES = [
@@ -88,6 +88,11 @@ const CABINET_ROUTE_PREFIXES = [
   '/subscription',
   '/support',
   '/ui-kit',
+  '/tasks',
+  '/operations',
+  '/contacts',
+  '/payments',
+  '/participants',
   '/dashboard',
 ];
 

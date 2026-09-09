@@ -12,7 +12,7 @@ import { isPushSupported, readNotificationPermission } from './platform';
 /**
  * Background push-subscription synchronisation.
  *
- * On every cabinet mount (via {@link PushPermissionGate}) we check that an
+ * On every app mount (via {@link PushPermissionGate} in ScreenLayout) we check that an
  * active subscription still exists for the browser. If the browser revoked or
  * lost the subscription (storage wipe, browser-managed rotation) we silently
  * re-subscribe and re-POST it. This keeps push delivery alive without
