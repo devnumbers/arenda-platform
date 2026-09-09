@@ -22,6 +22,11 @@ export type PaymentRowButtonProps = {
    * списка (693:5546: «объект ★»); вложенную кнопку глушит от открытия
    * строки сам потребитель (stopPropagation). */
   readonly subtitleSuffix?: ReactNode;
+  /** Слот-колонка между текстом строки и колонкой суммы — звезда
+   * избранного страницы просрочки (706:15029: отдельная колонка, по
+   * вертикали центр строки); вложенную кнопку глушит от открытия строки
+   * сам потребитель (stopPropagation). */
+  readonly amountPrefix?: ReactNode;
   /** Ведущий слот перед контентным фреймом (кнопка-иконка и т.п.). */
   readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
@@ -47,6 +52,7 @@ export function PaymentRowButton({
   subtitle,
   subtitleIcon,
   subtitleSuffix,
+  amountPrefix,
   leading,
   trailing,
   amountKopecks,
@@ -94,6 +100,9 @@ export function PaymentRowButton({
                 </span>
               )}
             </span>
+            {amountPrefix !== undefined && (
+              <span className="flex shrink-0 items-center">{amountPrefix}</span>
+            )}
             {(amountKopecks !== undefined || description !== undefined) && (
               <span className="flex shrink-0 flex-col items-end gap-1">
                 {amountKopecks !== undefined && (

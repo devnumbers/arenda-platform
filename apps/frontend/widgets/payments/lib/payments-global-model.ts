@@ -9,6 +9,7 @@
 import { formatDayMonth, formatOverdueDays } from '@/shared/lib/date-format';
 import { pluralize } from '@/shared/lib/pluralize';
 import type { GlobalPayment, GlobalPaymentObject } from '@/entities/payment';
+import { globalOverdueList } from './overdue-global-model';
 
 /** Избранные правила: звезда, порядок — сохранённые позиции favoriteOrder
  * (#576), никогда не упорядочивавшиеся (null) — в конец («новое избранное —
@@ -27,14 +28,11 @@ export function globalFavoritePayments(
 
 /** Просроченные правила: накопленная просрочка — planned-вхождения в
  * прошлом. Порядок — по возрасту просрочки, старейшие первыми (решение
- * владельца 09.09); равный возраст сохраняет порядок фида (сортировка
- * стабильна). */
+ * владельца 09.09) — направление «Старые» страницы просрочки (#580). */
 export function globalOverduePayments(
   items: ReadonlyArray<GlobalPayment>,
 ): ReadonlyArray<GlobalPayment> {
-  return items
-    .filter((item) => item.overdueOperationCount > 0)
-    .sort((a, b) => (b.overdueDays ?? 0) - (a.overdueDays ?? 0));
+  return globalOverdueList(items, 'old');
 }
 
 /** Счётчик карточки «Все избранные»: «17 платежей». */
