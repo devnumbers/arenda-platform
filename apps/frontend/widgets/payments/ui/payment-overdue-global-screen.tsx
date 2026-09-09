@@ -3,14 +3,9 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  ChangeVertical,
-  StarOff,
-  StarOutline,
-} from "@/shared/assets/icons";
+import { ArrowLeft, ChangeVertical, Star } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
-import { useGlobalPayments, useSetPaymentFavorite } from "@/features/payments";
+import { useGlobalPayments } from "@/features/payments";
 import { CategoryIcon, categoryStyle } from "@/features/payment-categories";
 import type { GlobalPayment } from "@/entities/payment";
 import { PaymentRowButton } from "@/entities/payment";
@@ -25,27 +20,24 @@ import {
   TopNavTitle,
 } from "@/shared/ui/design";
 import { goBack } from "@/shared/lib/navigation";
-import { notify } from "@/shared/lib/notifications";
-import {
-  globalOverdueList,
-  type OverdueSort,
-} from "../lib/overdue-global-model";
+import { globalOverdueList, type OverdueSort } from "../lib/overdue-global-model";
 import { overdueDaysLine } from "../lib/payments-global-model";
 import { PaymentsStateCard } from "./payments-sections";
 
 /**
- * Экран «Просроченные платежи» (карта #573, тикет #580; вход — карточка
+ * Экран «Просроченные операции» (карта #573, тикет #580; вход — карточка
  * «Все просроченные» главного экрана #578). Список (706:14684): строки
  * канона PaymentRowButton — иконка категории с красным (!)-бейджем,
- * название, объект; справа звезда избранного отдельной колонкой, сумма и
- * срок «N дней» красным (склонение — formatOverdueDays). Сортировка по
+ * название, объект; справа сумма и срок «N дней» красным (склонение —
+ * formatOverdueDays). У платежей в избранном — звезда-индикатор рядом с
+ * названием объекта (как на «Избранных» 693:5546); управление избранным —
+ * только со страницы платежа, звезда ничего не тогглит. Сортировка по
  * возрасту просрочки — чип «Новые ⇅ / Старые ⇅» (706:15029), дефолт
  * «Новые»; выбор живёт в query строки (?sort=old, дефолт не пишется —
  * конвенция книги контактов) и переживает перезагрузку. Тап строке —
- * страница платежа; тап звезде переключает избранное на месте (PUT
- * favorite, фид перечитывается). Страница только читающая: оплата и
- * закрытие просрочки — на объектных экранах. Пустое состояние (885:18755)
- * — канон EmptyState с 3D-иллюстрацией.
+ * страница платежа. Страница только читающая: оплата и закрытие
+ * просрочки — на объектных экранах. Пустое состояние (885:18755) — канон
+ * EmptyState с 3D-иллюстрацией.
  */
 export function PaymentOverdueGlobalScreen({
   initialSort = "new",
@@ -56,7 +48,6 @@ export function PaymentOverdueGlobalScreen({
   const pathname = usePathname();
   const [sort, setSort] = useState<OverdueSort>(initialSort);
   const feedQuery = useGlobalPayments();
-  const setFavorite = useSetPaymentFavorite();
 
   // Скелетон — пока данных нет вовсе; ошибка без данных — карточка
   // повтора (канон состояний, как на соседних страницах карты).
@@ -75,18 +66,6 @@ export function PaymentOverdueGlobalScreen({
     });
   };
 
-  const toggleFavorite = (payment: GlobalPayment): void => {
-    void setFavorite
-      .mutateAsync({
-        propertyId: payment.propertyId,
-        paymentId: payment.id,
-        favorite: !payment.isFavorite,
-      })
-      .catch((error: unknown) =>
-        notify.scenarios.payments.favoriteError(error),
-      );
-  };
-
   return (
     <>
       <TopNav
@@ -98,7 +77,7 @@ export function PaymentOverdueGlobalScreen({
           />
         }
       >
-        <TopNavTitle title="Просроченные платежи" />
+        <TopNavTitle title="Просроченные операции" />
       </TopNav>
 
       <PageContent>
@@ -147,39 +126,14 @@ export function PaymentOverdueGlobalScreen({
                   categoryIcon={<OverdueRowIcon payment={payment} />}
                   title={payment.title}
                   subtitle={payment.propertyName}
+                  subtitleSuffix={
+                    payment.isFavorite ? (
+                      <Star className="h-4 w-4" aria-hidden />
+                    ) : undefined
+                  }
                   amountKopecks={payment.amountKopecks}
                   description={overdueDaysLine(payment)}
                   danger
-                  amountPrefix={
-                    <button
-                      type="button"
-                      data-testid={`overdue-row-star-${payment.id}`}
-                      aria-label={
-                        payment.isFavorite
-                          ? "Убрать из избранного"
-                          : "Добавить в избранное"
-                      }
-                      aria-pressed={payment.isFavorite}
-                      disabled={
-                        setFavorite.isPending &&
-                        setFavorite.variables.paymentId === payment.id
-                      }
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleFavorite(payment);
-                      }}
-                      className="-m-2 cursor-pointer p-2 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      {/* Состояния звезды — канон страницы платежа
-                          (1096:37795/1097:40757): не в избранном — контурная,
-                          в избранном — зачёркнутая заливная. */}
-                      {payment.isFavorite ? (
-                        <StarOff className="h-4 w-4" aria-hidden />
-                      ) : (
-                        <StarOutline className="h-4 w-4" aria-hidden />
-                      )}
-                    </button>
-                  }
                   onSelect={() =>
                     router.push(
                       ROUTES.propertyPayment(payment.propertyId, payment.id),
@@ -219,8 +173,8 @@ function OverdueEmpty(): JSX.Element {
     >
       <EmptyState
         imageSrc="/images/payments/overdue-empty.png"
-        title="У вас нет просроченных платежей"
-        description="Здесь будут платежи, которые не успели отметить вовремя"
+        title="У вас нет просроченных операций"
+        description="Здесь будут операции, которые не успели отметить вовремя"
         descriptionClassName="text-content"
       />
     </div>
