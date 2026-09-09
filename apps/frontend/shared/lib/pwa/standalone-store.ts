@@ -11,7 +11,7 @@
  * The DB name (`rentli-pwa`), object store (`pwa`), and key (`standalone`) are
  * duplicated inline in `public/sw.js` (a static script that cannot import TS).
  * The guard test `standalone-store marker sync with service worker` in
- * `cabinet-routes.test.ts` fails if any of the three markers drift between
+ * `app-routes.test.ts` fails if any of the three markers drift between
  * this file and the SW copy.
  */
 

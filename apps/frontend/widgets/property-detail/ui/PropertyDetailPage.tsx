@@ -16,7 +16,7 @@ import {
 } from '@/features/properties';
 import type {ApiError} from '@/shared/api/errors';
 import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
-import {PageContent, TopNav, TopNavBackButton, TopNavTitle} from '@/shared/ui/design';
+import {SubScreenShell} from '@/shared/ui/design';
 import {PropertyGallery} from './PropertyGallery';
 import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyInfoCard} from './PropertyInfoCard';
@@ -134,10 +134,11 @@ export function PropertyDetailPage(): JSX.Element {
 
     return (
         <>
-            {/* Единый хром подэкрана (карта #556, снос кабинета #568):
+            {/* Единый хром подэкрана (карта #556): каркас SubScreenShell,
                 меню действий — в слоте trailing, «Назад» — на список. */}
-            <TopNav
-                leading={<TopNavBackButton fallbackHref={ROUTES.properties} />}
+            <SubScreenShell
+                title="Мой объект"
+                fallbackHref={ROUTES.properties}
                 trailing={
                     <PropertyActionMenu
                         status={property?.status}
@@ -150,10 +151,6 @@ export function PropertyDetailPage(): JSX.Element {
                     />
                 }
             >
-                <TopNavTitle title="Мой объект" />
-            </TopNav>
-
-            <PageContent className="px-6">
                 <div className={styles.root}>
                     {property?.access && property.access.role !== 'owner' && (
                         <PropertySharedBanner access={property.access}/>
@@ -204,7 +201,7 @@ export function PropertyDetailPage(): JSX.Element {
                         </>
                     )}
                 </div>
-            </PageContent>
+            </SubScreenShell>
 
             <PropertyArchiveModal
                 isOpen={archiveOpen}

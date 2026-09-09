@@ -11,9 +11,9 @@
  *
  * The service worker (`public/sw.js`) keeps its own inline copy because a
  * static SW script cannot import TypeScript at runtime. The unit test
- * `cabinet-routes.test.ts` guards against drift between the two.
+ * `app-routes.test.ts` guards against drift between the two.
  */
-export const CABINET_ROUTE_PREFIXES: ReadonlyArray<string> = [
+export const APP_ROUTE_PREFIXES: ReadonlyArray<string> = [
     '/login',
     '/properties',
     '/profile',
@@ -35,10 +35,10 @@ export const CABINET_ROUTE_PREFIXES: ReadonlyArray<string> = [
 export const OFFLINE_URL = '/offline.html';
 
 /**
- * Returns true when `pathname` belongs to a cabinet route — i.e. it starts with
- * one of the registered cabinet prefixes. Query string and hash are ignored.
+ * Returns true when `pathname` belongs to an app route — i.e. it starts with
+ * one of the registered app prefixes. Query string and hash are ignored.
  */
-export function isCabinetRoute(pathname: string): boolean {
+export function isAppRoute(pathname: string): boolean {
     const cleanPath = pathname.split('?')[0]?.split('#')[0] ?? pathname;
-    return CABINET_ROUTE_PREFIXES.some((prefix) => cleanPath === prefix || cleanPath.startsWith(`${prefix}/`));
+    return APP_ROUTE_PREFIXES.some((prefix) => cleanPath === prefix || cleanPath.startsWith(`${prefix}/`));
 }

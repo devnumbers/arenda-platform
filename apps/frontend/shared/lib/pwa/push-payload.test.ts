@@ -184,7 +184,7 @@ describe('pickClickTargetClient', () => {
 describe('service worker handlers stay in sync', () => {
     // Guards against drift between the TS source of truth and the inline copy
     // kept in public/sw.js (which cannot import TS at runtime). Mirrors the
-    // cabinet-routes.test.ts sync guard.
+    // app-routes.test.ts sync guard.
     const swPath = resolve(process.cwd(), 'public/sw.js');
     const swSource = readFileSync(swPath, 'utf8');
 

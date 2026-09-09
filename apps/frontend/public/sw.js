@@ -1,18 +1,18 @@
 /*
- * Рентли cabinet service worker.
+ * Рентли app service worker.
  *
  * Scope: "/" (script lives at /sw.js, so the default scope is the origin root).
  * This means the SW becomes the active controller for the whole origin once
  * registered, including the landing pages. To stay safe, the fetch handler
- * strictly filters by path and only intercepts cabinet navigations — everything
+ * strictly filters by path and only intercepts app navigations — everything
  * else (landing routes, /api, /_next static, fonts, images) is passed through
  * to the network untouched. See docs/research/pwa-manifest-installability.md
  * §4 "Подводные камни scope на общем origin с лендингом".
  *
- * The cabinet route prefixes below mirror
- * `apps/frontend/shared/lib/pwa/cabinet-routes.ts` and the `@frontend path`
+ * The app route prefixes below mirror
+ * `apps/frontend/shared/lib/pwa/app-routes.ts` and the `@frontend path`
  * matcher in the Caddyfile (docs/deployment.md). The unit test
- * `cabinet-routes.test.ts` guards against drift between the TS source and this
+ * `app-routes.test.ts` guards against drift between the TS source and this
  * inline copy.
  */
 
@@ -78,10 +78,10 @@ function readStandaloneFlag() {
   });
 }
 
-// App route prefixes — keep in sync with shared/lib/pwa/cabinet-routes.ts.
+// App route prefixes — keep in sync with shared/lib/pwa/app-routes.ts.
 // /dashboard остаётся: это постоянный редирект на /properties, зашитый в
 // start_url манифеста PWA.
-const CABINET_ROUTE_PREFIXES = [
+const APP_ROUTE_PREFIXES = [
   '/login',
   '/properties',
   '/profile',
@@ -96,8 +96,8 @@ const CABINET_ROUTE_PREFIXES = [
   '/dashboard',
 ];
 
-function isCabinetPath(pathname) {
-  return CABINET_ROUTE_PREFIXES.some(function (prefix) {
+function isAppPath(pathname) {
+  return APP_ROUTE_PREFIXES.some(function (prefix) {
     return pathname === prefix || pathname.startsWith(prefix + '/');
   });
 }
@@ -156,13 +156,13 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // Only intercept navigations to cabinet routes; landing routes and other
+  // Only intercept navigations to app routes; landing routes and other
   // origins go straight to the network.
-  if (url.origin !== self.location.origin || !isCabinetPath(url.pathname)) {
+  if (url.origin !== self.location.origin || !isAppPath(url.pathname)) {
     return;
   }
 
-  // Network-first for cabinet navigations; on network failure (offline), serve
+  // Network-first for app navigations; on network failure (offline), serve
   // the branded offline page from cache.
   event.respondWith(
     fetch(request)
@@ -252,7 +252,7 @@ self.addEventListener('push', function (event) {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Focus an existing same-origin client that shows the cabinet, or open one.
+// Focus an existing same-origin client that shows the app, or open one.
 // postMessage lets the React app perform client-side navigation when a window
 // is already open on a different cabinet route. Mirrors pickClickTargetClient
 // in shared/lib/pwa/push-payload.ts.
