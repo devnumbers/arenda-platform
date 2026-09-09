@@ -20,7 +20,7 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from "@/features/payments";
-import { Button, HubTitle, PageContent, TopNav } from "@/shared/ui/design";
+import { Button, HubCollapseAnchor, HubTitle, PageContent, TopNav } from "@/shared/ui/design";
 import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
 import {
   LoadingMoreIndicator,
@@ -125,26 +125,35 @@ export function OperationsGlobalScreen(): JSX.Element {
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
        * стандартное — в потоке на мобайле, закреплена на планшете и ПК. */}
-      <TopNav mobileWings />
+      <TopNav
+        mobileWings
+        collapse={{
+          title: 'Операции',
+          search: { href: ROUTES.operationsSearch, label: 'Найти операцию' },
+        }}
+      />
 
       <PageContent>
-        <HubTitle>Операции</HubTitle>
-
-        {neverHad ? (
-          <OperationsNeverHad />
-        ) : (
-          <div className="mt-6 flex flex-col gap-6">
-            {/* Пилюля поиска (#543) — кнопка на отдельную страницу; «+» скрыта
-             * (решение владельца #539: создания разовой операции вне правила
-             * нет). */}
-            <div className="px-6">
+        <HubCollapseAnchor>
+          <HubTitle>Операции</HubTitle>
+          {!neverHad && (
+            <div className="mt-6 px-6">
+              {/* Пилюля поиска (#543) — кнопка на отдельную страницу; «+»
+               * скрыта (решение владельца #539: создания разовой операции
+               * вне правила нет). */}
               <OperationsSearchPill
                 onOpenSearch={() =>
                   router.push(filterHref(ROUTES.operationsSearch))
                 }
               />
             </div>
+          )}
+        </HubCollapseAnchor>
 
+        {neverHad ? (
+          <OperationsNeverHad />
+        ) : (
+          <div className="mt-6 flex flex-col gap-6">
             <OperationsFilterChips
               className="px-6"
               periodLabel={

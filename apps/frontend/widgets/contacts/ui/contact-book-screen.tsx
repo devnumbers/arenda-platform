@@ -18,6 +18,7 @@ import {
 } from '@/features/contacts';
 import {
   ChipButton,
+  HubCollapseAnchor,
   HubTitle,
   IconButton,
   PageContent,
@@ -94,10 +95,28 @@ export function ContactBookScreen({
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
        * стандартное — в потоке на мобайле, закреплена на планшете и ПК. */}
-      <TopNav mobileWings />
+      <TopNav
+        mobileWings
+        collapse={{
+          title: 'Контакты',
+          search: { href: ROUTES.contactSearch, label: 'Найти контакт' },
+        }}
+      />
 
       <PageContent>
-        <HubTitle>Контакты</HubTitle>
+        <HubCollapseAnchor>
+          <HubTitle>Контакты</HubTitle>
+          {contactsQuery.isSuccess && (
+            <div className="mt-6 mb-6 px-6">
+              {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
+               * по макету 1726:65083 согласован владельцем). */}
+              <BookSearchPill
+                onOpenSearch={() => router.push(ROUTES.contactSearch)}
+                onCreate={() => router.push(ROUTES.contactNew)}
+              />
+            </div>
+          )}
+        </HubCollapseAnchor>
 
         {contactsQuery.isPending ? (
           <ContactsSkeleton className="mt-6" />
@@ -105,15 +124,6 @@ export function ContactBookScreen({
           <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} className="mt-6" />
         ) : (
           <>
-            {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
-             * по макету 1726:65083 согласован владельцем). */}
-            <div className="mt-6 mb-6 px-6">
-              <BookSearchPill
-                onOpenSearch={() => router.push(ROUTES.contactSearch)}
-                onCreate={() => router.push(ROUTES.contactNew)}
-              />
-            </div>
-
             {contacts.length === 0 ? (
               <ContactsEmptyState />
             ) : (

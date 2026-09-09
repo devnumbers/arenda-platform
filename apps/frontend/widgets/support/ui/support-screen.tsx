@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { SmallArrowRight } from '@/shared/assets/icons';
-import { HubTitle, PageContent, TopNav } from '@/shared/ui/design';
+import { HubCollapseAnchor, HubTitle, PageContent, TopNav } from '@/shared/ui/design';
 
 type SupportContact = {
     readonly label: string;
@@ -34,9 +34,11 @@ const supportContacts: ReadonlyArray<SupportContact> = [
 export function SupportScreen(): JSX.Element {
     return (
         <>
-            <TopNav mobileWings />
+            <TopNav mobileWings collapse={{ title: 'Поддержка' }} />
             <PageContent>
-                <HubTitle>Поддержка</HubTitle>
+                <HubCollapseAnchor>
+                    <HubTitle>Поддержка</HubTitle>
+                </HubCollapseAnchor>
 
                 <section className="mx-6 mt-6 flex flex-col gap-3 rounded-card bg-surface-muted p-6">
                     <h2 className="text-base font-semibold leading-6 text-content">

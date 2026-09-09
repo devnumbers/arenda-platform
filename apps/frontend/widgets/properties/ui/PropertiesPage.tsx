@@ -6,7 +6,7 @@ import {useArchivedProperties, useProperties, usePropertiesWithMeta} from '@/fea
 import {useSubscription} from '@/features/subscription';
 import {Add, ArrowLeft} from '@/shared/assets/icons';
 import {goBack} from '@/shared/lib/navigation';
-import {IconButton, PageContent, TopNav, TopNavTitle} from '@/shared/ui/design';
+import {HubCollapseAnchor, IconButton, PageContent, TopNav, TopNavTitle} from '@/shared/ui/design';
 import {ROUTES} from '@/shared/config/routes';
 import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
 import {DEFAULT_PROPERTY_SORT} from '../lib/parse-property-search-params';
@@ -167,13 +167,18 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
         <>
             {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
              * стандартное — в потоке на мобайле, закреплена на десктопе. */}
-            <TopNav mobileWings/>
+            <TopNav
+                mobileWings
+                collapse={{ title: 'Объекты', trailing: createButton }}
+            />
 
             <PageContent>
-                <div className="flex items-center justify-between pr-3.5 pl-6">
-                    <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Объекты</h1>
-                    {createButton}
-                </div>
+                <HubCollapseAnchor>
+                    <div className="flex items-center justify-between pr-3.5 pl-6">
+                        <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Объекты</h1>
+                        {createButton}
+                    </div>
+                </HubCollapseAnchor>
 
                 {content}
             </PageContent>

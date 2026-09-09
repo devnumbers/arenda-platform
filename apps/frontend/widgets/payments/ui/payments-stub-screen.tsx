@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import {
   EmptyState,
+  HubCollapseAnchor,
   HubTitle,
   PageContent,
   TopNav,
@@ -18,10 +19,12 @@ import {
 export function PaymentsStubScreen(): JSX.Element {
   return (
     <>
-      <TopNav mobileWings />
+      <TopNav mobileWings collapse={{ title: 'Платежи' }} />
 
       <PageContent>
-        <HubTitle>Платежи</HubTitle>
+        <HubCollapseAnchor>
+          <HubTitle>Платежи</HubTitle>
+        </HubCollapseAnchor>
 
         <EmptyState
           className="mt-6"

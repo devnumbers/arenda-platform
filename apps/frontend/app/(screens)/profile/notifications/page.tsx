@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { HubTitle, PageContent, TopNav } from '@/shared/ui/design';
+import { HubCollapseAnchor, HubTitle, PageContent, TopNav } from '@/shared/ui/design';
 import { NotificationSettings } from '@/widgets/profile';
 
 export const metadata: Metadata = {
@@ -16,9 +16,11 @@ export const metadata: Metadata = {
 export default function NotificationsPage() {
   return (
     <>
-      <TopNav mobileWings />
+      <TopNav mobileWings collapse={{ title: 'Уведомления' }} />
       <PageContent>
-        <HubTitle>Уведомления</HubTitle>
+        <HubCollapseAnchor>
+          <HubTitle>Уведомления</HubTitle>
+        </HubCollapseAnchor>
         <NotificationSettings />
       </PageContent>
     </>

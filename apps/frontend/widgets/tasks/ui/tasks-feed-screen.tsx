@@ -34,6 +34,7 @@ import {
   ChipButton,
   CollapsibleSection,
   EmptyState,
+  HubCollapseAnchor,
   IconButton,
   Menu,
   MenuContent,
@@ -212,15 +213,16 @@ export function TasksFeedScreen(): JSX.Element {
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
        * стандартное — в потоке на мобайле, закреплена на десктопе. */}
-      <TopNav mobileWings />
+      <TopNav mobileWings collapse={{ title: 'Задачи', trailing: createButton }} />
 
       <PageContent>
-        <div className="flex items-center justify-between pr-3.5 pl-6">
-          <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Задачи</h1>
-          {createButton}
-        </div>
+        <HubCollapseAnchor>
+          <div className="flex items-center justify-between pr-3.5 pl-6">
+            <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Задачи</h1>
+            {createButton}
+          </div>
 
-        {!showEmpty && (
+          {!showEmpty && (
           <div className="mt-6 flex items-center justify-between pr-3.5 pl-6">
             <div className="flex items-center gap-2">
               <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
@@ -266,6 +268,7 @@ export function TasksFeedScreen(): JSX.Element {
             )}
           </div>
         )}
+        </HubCollapseAnchor>
 
         <div className="mt-6 flex flex-col gap-6 pb-6">
           {activeQuery.isPending || completedQuery.isPending ? (

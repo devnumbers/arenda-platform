@@ -361,6 +361,25 @@
     transition-duration: 250ms;
 }
 
+/* Компакт-бар хаба (решение владельца 2026-09-09, Figma 1603-93157 →
+   1733-93740): видимость управляется прогрессом прокрутки --hub-collapse
+   (0..1 — пишет HubCollapseAnchor на :root). Только opacity/transform —
+   без reflow; CSS-переходов нет, плавность даёт сам скролл. Класс
+   hub-collapse-on включает pointer-events, когда компакт уже виден. */
+.hub-compact {
+    opacity: var(--hub-collapse, 0);
+    pointer-events: none;
+}
+
+:root.hub-collapse-on .hub-compact {
+    pointer-events: auto;
+}
+
+/* Мобильный клон компакт-бара выезжает сверху вместе с прогрессом. */
+.hub-compact-bar {
+    transform: translateY(calc((1 - var(--hub-collapse, 0)) * -100%));
+}
+
 /* prefers-reduced-motion: анимацию не выключаем, а укорачиваем до ~150ms,
    fade сохраняем; drag-жесты не трогаем — это управление, не декор
    (research §9). */

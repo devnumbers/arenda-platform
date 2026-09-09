@@ -4,10 +4,28 @@ import type { JSX, ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ROUTES } from '@/shared/config/routes';
+import { Search } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { HeaderLogo } from './header-logo';
 import { UserButton } from './user-button';
 import { useTopNavUser } from './top-nav-user-context';
+
+/** Компакт-бар хаба (решение владельца 2026-09-09, Figma 1603-93157 →
+ * 1733-93740): при прокрутке хаб-шапки (заголовок + пилюля) бар показывает
+ * свёрнутый состав — лупа поиска слева (там, где у хаба есть пилюля),
+ * заголовок 16/18 по центру и «+» в правом слоте (где он есть в хаб-шапке).
+ * Видимость управляется прогрессом `--hub-collapse` (пишет
+ * HubCollapseAnchor), только opacity/transform. На планшете и ПК компакт
+ * живёт в самом закреплённом баре (лупа — рядом с заголовком, чтобы не
+ * спорить с крылом-лого); на мобайле, где бар в потоке и уезжает, поверх
+ * проявляется отдельный закреплённый клон (лупа у края — как в Figma). */
+export type TopNavCollapse = {
+  readonly title: ReactNode;
+  /** Поисковая пилюля хаба — в компакт-баре её роль играет лупа. */
+  readonly search?: { readonly href: string; readonly label: string };
+  /** «+» из хаб-шапки (Объекты, Задачи) — докится в правый слот. */
+  readonly trailing?: ReactNode;
+};
 
 /** Единый хедер новых экранов (Figma 1185:40818–19): одна белая полоса
  * 72 — центральная часть (Figma 948:48573 «Top Navigation») с слотами —
@@ -51,6 +69,9 @@ export type TopNavProps = {
    * (Figma 1733-27411 — глобальная лента «Задачи» #523): хаб-экраны без
    * leading-кнопки открываются шапкой хаба. */
   readonly mobileWings?: boolean;
+  /** Компакт-бар хаба: проявляется по прогрессу прокрутки хаб-шапки
+   * (HubCollapseAnchor пишет `--hub-collapse`). */
+  readonly collapse?: TopNavCollapse;
 };
 
 export function TopNav({
@@ -60,6 +81,7 @@ export function TopNav({
   className,
   variant = 'default',
   mobileWings = false,
+  collapse,
 }: TopNavProps): JSX.Element {
   const router = useRouter();
   const user = useTopNavUser();
@@ -116,10 +138,59 @@ export function TopNav({
           {leading !== undefined && (
             <div className="absolute left-0 top-0 flex h-full items-center pl-3.5">{leading}</div>
           )}
-          <div className="flex h-full w-full min-w-0 items-center justify-center gap-2 px-3">{children}</div>
-          {trailing !== undefined && (
-            <div className="absolute right-0 top-0 flex h-full items-center pr-3.5">{trailing}</div>
+          {collapse ? (
+            /* Компакт-бар на планшете и ПК — в самом закреплённом баре:
+             * лупа рядом с заголовком (крыло-лого остаётся у края). */
+            <div className="hub-compact hidden h-full w-full min-w-0 items-center justify-center gap-2 px-3 tablet:flex">
+              {collapse.search && (
+                <Link
+                  href={collapse.search.href}
+                  aria-label={collapse.search.label}
+                  className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-button outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <Search className="h-6 w-6 text-content" aria-hidden />
+                </Link>
+              )}
+              <TopNavTitle title={collapse.title} />
+            </div>
+          ) : (
+            <div className="flex h-full w-full min-w-0 items-center justify-center gap-2 px-3">{children}</div>
           )}
+          {(collapse?.trailing ?? trailing) !== undefined && (
+            <div
+              className={cn(
+                'absolute right-0 top-0 flex h-full items-center pr-3.5',
+                collapse && 'hub-compact',
+              )}
+            >
+              {collapse?.trailing ?? trailing}
+            </div>
+          )}
+        </div>
+      )}
+      {collapse && (
+        /* Мобайл: бар хаба в потоке и уезжает при прокрутке — компакт
+         * проявляется отдельным закреплённым клоном (Figma 1733:93740). */
+        <div className="hub-compact hub-compact-bar fixed inset-x-0 top-0 z-40 bg-white pt-[env(safe-area-inset-top)] font-sans tablet:hidden">
+          <div className="relative mx-auto h-[72px] w-full">
+            {collapse.search && (
+              <Link
+                href={collapse.search.href}
+                aria-label={collapse.search.label}
+                className="absolute left-0 top-0 flex h-full items-center pl-3.5 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Search className="h-6 w-6 text-content" aria-hidden />
+              </Link>
+            )}
+            <div className="flex h-full items-center justify-center px-14">
+              <TopNavTitle title={collapse.title} />
+            </div>
+            {collapse.trailing && (
+              <div className="absolute right-0 top-0 flex h-full items-center pr-3.5">
+                {collapse.trailing}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </header>
