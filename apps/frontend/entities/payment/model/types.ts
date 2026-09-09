@@ -166,6 +166,9 @@ export type GlobalPayment = {
   readonly nearestDate: IsoDate | null;
   readonly overdueOperationCount: number;
   readonly overdueDays: number | null;
+  /** Старейшая просроченная операция — цель ссылки просроченной карточки
+   * главного экрана (#578); null, если просроченных нет. */
+  readonly oldestOverdueOperationId: string | null;
 };
 
 /** Фид главного экрана «Платежи» (#575): все видимые правила плюс счётчики

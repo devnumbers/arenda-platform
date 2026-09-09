@@ -229,7 +229,8 @@ SELECT pay.id,
        t.today::date AS owner_today,
        agg.next_planned_date::date,
        agg.overdue_count,
-       agg.oldest_overdue_date::date
+       agg.oldest_overdue_date::date,
+       oldest.oldest_overdue_operation_id
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
 JOIN (
@@ -245,6 +246,15 @@ LEFT JOIN LATERAL (
     WHERE op.payment_id = pay.id
       AND op.status <> 'cancelled'
 ) agg ON true
+LEFT JOIN LATERAL (
+    SELECT op.id AS oldest_overdue_operation_id
+    FROM operations op
+    WHERE op.payment_id = pay.id
+      AND op.status = 'planned'
+      AND op.date < t.today
+    ORDER BY op.date ASC, op.id ASC
+    LIMIT 1
+) oldest ON true
 WHERE (
        pay.owner_id = $3
        OR EXISTS (
@@ -272,23 +282,24 @@ type ListGlobalPaymentRulesParams struct {
 }
 
 type ListGlobalPaymentRulesRow struct {
-	ID                   pgtype.UUID `json:"id"`
-	OwnerID              pgtype.UUID `json:"owner_id"`
-	PropertyID           pgtype.UUID `json:"property_id"`
-	Type                 string      `json:"type"`
-	Title                string      `json:"title"`
-	AmountKopecks        int64       `json:"amount_kopecks"`
-	AutoPay              bool        `json:"auto_pay"`
-	IsFavorite           bool        `json:"is_favorite"`
-	FavoriteOrder        pgtype.Int8 `json:"favorite_order"`
-	CategorySlug         pgtype.Text `json:"category_slug"`
-	UserCategoryID       pgtype.UUID `json:"user_category_id"`
-	UserCategoryName     pgtype.Text `json:"user_category_name"`
-	PropertyName         string      `json:"property_name"`
-	OwnerToday           pgtype.Date `json:"owner_today"`
-	AggNextPlannedDate   pgtype.Date `json:"agg_next_planned_date"`
-	OverdueCount         int64       `json:"overdue_count"`
-	AggOldestOverdueDate pgtype.Date `json:"agg_oldest_overdue_date"`
+	ID                       pgtype.UUID `json:"id"`
+	OwnerID                  pgtype.UUID `json:"owner_id"`
+	PropertyID               pgtype.UUID `json:"property_id"`
+	Type                     string      `json:"type"`
+	Title                    string      `json:"title"`
+	AmountKopecks            int64       `json:"amount_kopecks"`
+	AutoPay                  bool        `json:"auto_pay"`
+	IsFavorite               bool        `json:"is_favorite"`
+	FavoriteOrder            pgtype.Int8 `json:"favorite_order"`
+	CategorySlug             pgtype.Text `json:"category_slug"`
+	UserCategoryID           pgtype.UUID `json:"user_category_id"`
+	UserCategoryName         pgtype.Text `json:"user_category_name"`
+	PropertyName             string      `json:"property_name"`
+	OwnerToday               pgtype.Date `json:"owner_today"`
+	AggNextPlannedDate       pgtype.Date `json:"agg_next_planned_date"`
+	OverdueCount             int64       `json:"overdue_count"`
+	AggOldestOverdueDate     pgtype.Date `json:"agg_oldest_overdue_date"`
+	OldestOverdueOperationID pgtype.UUID `json:"oldest_overdue_operation_id"`
 }
 
 // The actor's visible merged feed of payment rules (ticket #575): one row
@@ -297,8 +308,9 @@ type ListGlobalPaymentRulesRow struct {
 // after today («Ближайший»; the application layer falls back to the pure
 // projection when the row has none, the pause and the settled rule being
 // the true nulls) and the overdue aggregates (planned with the date before
-// today): the count and the oldest date — «N дней». Cancelled tombstones
-// never exist for reads. The search (” = no filter) is a
+// today): the count, the oldest date — «N дней» — and the oldest
+// operation's id, the overdue card's link target (ticket #578). Cancelled
+// tombstones never exist for reads. The search (” = no filter) is a
 // case-insensitive substring over the title and the user category's name;
 // the default catalog's label is not in the database — the application
 // layer expands the query into the matching slugs (category_slugs, ” when
@@ -336,6 +348,7 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 			&i.AggNextPlannedDate,
 			&i.OverdueCount,
 			&i.AggOldestOverdueDate,
+			&i.OldestOverdueOperationID,
 		); err != nil {
 			return nil, err
 		}

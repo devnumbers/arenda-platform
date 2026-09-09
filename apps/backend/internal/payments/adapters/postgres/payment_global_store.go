@@ -103,11 +103,12 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 				UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
 				UserCategoryName: pgconv.TextToPtrString(row.UserCategoryName),
 			},
-			Today:             pgconv.DateFromPgtype(row.OwnerToday),
-			NextPlannedDate:   pgconv.DatePtrFromPgtype(row.AggNextPlannedDate),
-			OverdueCount:      row.OverdueCount,
-			OldestOverdueDate: pgconv.DatePtrFromPgtype(row.AggOldestOverdueDate),
-			FavoriteOrder:     pgconv.Int8ToPtr(row.FavoriteOrder),
+			Today:                    pgconv.DateFromPgtype(row.OwnerToday),
+			NextPlannedDate:          pgconv.DatePtrFromPgtype(row.AggNextPlannedDate),
+			OverdueCount:             row.OverdueCount,
+			OldestOverdueDate:        pgconv.DatePtrFromPgtype(row.AggOldestOverdueDate),
+			OldestOverdueOperationID: pgconv.UUIDFromPgtypePtr(row.OldestOverdueOperationID),
+			FavoriteOrder:            pgconv.Int8ToPtr(row.FavoriteOrder),
 		})
 	}
 	return out, nil

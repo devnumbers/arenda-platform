@@ -112,6 +112,7 @@ export function mapGlobalPayment(dto: GlobalPaymentDto): GlobalPayment {
     nearestDate: dto.nearestDate,
     overdueOperationCount: dto.overdueOperationCount,
     overdueDays: dto.overdueDays,
+    oldestOverdueOperationId: dto.oldestOverdueOperationId,
   };
 }
 

@@ -2340,6 +2340,11 @@ export interface components {
             overdueOperationCount: number;
             /** @description The age of the oldest overdue operation in days (today minus its date, at least 1) — the «N дней» line; null when the rule has no overdue operations. */
             overdueDays: number | null;
+            /**
+             * Format: uuid
+             * @description The oldest overdue operation's id (the same operation the overdueDays age speaks of) — the overdue card's link target on the global main screen (ticket #578); null when the rule has no overdue operations.
+             */
+            oldestOverdueOperationId: string | null;
         };
         /** @description The global «Платежи» feed (ticket #575) with the main screen's counters. Money is integer kopecks (ADR 0008). */
         PaymentsGlobalResponse: {

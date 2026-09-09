@@ -42,8 +42,9 @@ WHERE (
 -- after today («Ближайший»; the application layer falls back to the pure
 -- projection when the row has none, the pause and the settled rule being
 -- the true nulls) and the overdue aggregates (planned with the date before
--- today): the count and the oldest date — «N дней». Cancelled tombstones
--- never exist for reads. The search ('' = no filter) is a
+-- today): the count, the oldest date — «N дней» — and the oldest
+-- operation's id, the overdue card's link target (ticket #578). Cancelled
+-- tombstones never exist for reads. The search ('' = no filter) is a
 -- case-insensitive substring over the title and the user category's name;
 -- the default catalog's label is not in the database — the application
 -- layer expands the query into the matching slugs (category_slugs, '' when
@@ -64,7 +65,8 @@ SELECT pay.id,
        t.today::date AS owner_today,
        agg.next_planned_date::date,
        agg.overdue_count,
-       agg.oldest_overdue_date::date
+       agg.oldest_overdue_date::date,
+       oldest.oldest_overdue_operation_id
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
 JOIN (
@@ -80,6 +82,15 @@ LEFT JOIN LATERAL (
     WHERE op.payment_id = pay.id
       AND op.status <> 'cancelled'
 ) agg ON true
+LEFT JOIN LATERAL (
+    SELECT op.id AS oldest_overdue_operation_id
+    FROM operations op
+    WHERE op.payment_id = pay.id
+      AND op.status = 'planned'
+      AND op.date < t.today
+    ORDER BY op.date ASC, op.id ASC
+    LIMIT 1
+) oldest ON true
 WHERE (
        pay.owner_id = sqlc.arg('actor')
        OR EXISTS (

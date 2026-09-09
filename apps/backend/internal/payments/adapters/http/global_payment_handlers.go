@@ -225,20 +225,21 @@ func paymentObjectKeys(keys []application.GlobalPaymentObjectKey) []openapi.Paym
 
 func paymentGlobalItem(item application.GlobalPaymentItem) openapi.PaymentGlobalItem {
 	return openapi.PaymentGlobalItem{
-		Id:                    item.ID,
-		PropertyId:            item.PropertyID,
-		PropertyName:          item.PropertyName,
-		Title:                 item.Title,
-		AmountKopecks:         item.AmountKopecks,
-		Type:                  openapi.PaymentGlobalItemType(item.Type),
-		Category:              categoryView(item.Category),
-		AutoPay:               item.AutoPay,
-		IsFavorite:            item.IsFavorite,
-		FavoriteOrder:         orderWirePtr(item.FavoriteOrder),
-		Today:                 openapi_types.Date{Time: item.Today},
-		NearestDate:           dateWirePtr(item.NearestDate),
-		OverdueOperationCount: int(item.OverdueCount),
-		OverdueDays:           item.OverdueDays,
+		Id:                       item.ID,
+		PropertyId:               item.PropertyID,
+		PropertyName:             item.PropertyName,
+		Title:                    item.Title,
+		AmountKopecks:            item.AmountKopecks,
+		Type:                     openapi.PaymentGlobalItemType(item.Type),
+		Category:                 categoryView(item.Category),
+		AutoPay:                  item.AutoPay,
+		IsFavorite:               item.IsFavorite,
+		FavoriteOrder:            orderWirePtr(item.FavoriteOrder),
+		Today:                    openapi_types.Date{Time: item.Today},
+		NearestDate:              dateWirePtr(item.NearestDate),
+		OverdueOperationCount:    int(item.OverdueCount),
+		OverdueDays:              item.OverdueDays,
+		OldestOverdueOperationId: item.OldestOverdueOperationID,
 	}
 }
 

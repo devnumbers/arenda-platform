@@ -419,7 +419,9 @@ type Querier interface {
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
 	// The main list's order (ticket #577): the pinned first — among themselves
 	// by the pin time (the first pin stays on top, a re-pin never shifts the
-	// order), then the unpinned by updated_at DESC.
+	// order), then the unpinned by updated_at DESC. The application re-applies
+	// the same rule over the merged list (shared properties arrive appended),
+	// so keep the two passes in sync (PropertyService.pinnedFirst).
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	// The active tasks (uncompleted) of the property: the screen's main
 	// sections. Due order with the undated last — the client buckets sections
@@ -511,8 +513,9 @@ type Querier interface {
 	// after today («Ближайший»; the application layer falls back to the pure
 	// projection when the row has none, the pause and the settled rule being
 	// the true nulls) and the overdue aggregates (planned with the date before
-	// today): the count and the oldest date — «N дней». Cancelled tombstones
-	// never exist for reads. The search ('' = no filter) is a
+	// today): the count, the oldest date — «N дней» — and the oldest
+	// operation's id, the overdue card's link target (ticket #578). Cancelled
+	// tombstones never exist for reads. The search ('' = no filter) is a
 	// case-insensitive substring over the title and the user category's name;
 	// the default catalog's label is not in the database — the application
 	// layer expands the query into the matching slugs (category_slugs, '' when

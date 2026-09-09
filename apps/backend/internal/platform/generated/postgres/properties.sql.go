@@ -425,7 +425,9 @@ type ListActivePropertiesByOwnerRow struct {
 
 // The main list's order (ticket #577): the pinned first — among themselves
 // by the pin time (the first pin stays on top, a re-pin never shifts the
-// order), then the unpinned by updated_at DESC.
+// order), then the unpinned by updated_at DESC. The application re-applies
+// the same rule over the merged list (shared properties arrive appended),
+// so keep the two passes in sync (PropertyService.pinnedFirst).
 func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listActivePropertiesByOwner, ownerID)
 	if err != nil {

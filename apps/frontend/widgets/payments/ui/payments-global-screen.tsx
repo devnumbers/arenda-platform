@@ -38,6 +38,11 @@ import {
 } from "../lib/payments-global-model";
 import { PaymentsStateCard } from "./payments-sections";
 
+/** Максимум карточек в ленте секции главного экрана (решение владельца
+ * 09.09): четыре платежа, замыкающая «Все …» — пятая; остальное — на
+ * странице категории. */
+const SECTION_CARDS_LIMIT = 4;
+
 /**
  * Экран «Платежи» — глобальная страница платежей (карта #573, тикет #578;
  * состав — решения владельца #574, макеты 879:9679/880:17866/879:9399).
@@ -130,7 +135,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                       <FavoritesSectionBody
                         favorites={globalFavoritePayments(
                           feedQuery.data?.items ?? [],
-                        )}
+                        ).slice(0, SECTION_CARDS_LIMIT)}
                         favoriteCount={feedQuery.data?.favoriteCount ?? 0}
                         onSelectPayment={openPayment}
                         onOpenAll={() =>
@@ -147,9 +152,14 @@ export function PaymentsGlobalScreen(): JSX.Element {
                       <OverdueSectionBody
                         overdue={globalOverduePayments(
                           feedQuery.data?.items ?? [],
-                        )}
+                        ).slice(0, SECTION_CARDS_LIMIT)}
                         overdueOperationsCount={
                           feedQuery.data?.overdueOperationsCount ?? 0
+                        }
+                        onSelectOperation={(propertyId, operationId) =>
+                          router.push(
+                            ROUTES.propertyOperation(propertyId, operationId),
+                          )
                         }
                         onSelectPayment={openPayment}
                         onOpenAll={() => router.push(ROUTES.paymentsOverdue)}
@@ -162,11 +172,13 @@ export function PaymentsGlobalScreen(): JSX.Element {
                       onOpen={() => router.push(ROUTES.paymentsObjects)}
                     >
                       <ObjectsSectionBody
-                        objects={objects.map((object) => ({
-                          propertyId: object.propertyId,
-                          name: object.name,
-                          hasOverdue: globalPaymentObjectHasOverdue(object),
-                        }))}
+                        objects={objects
+                          .map((object) => ({
+                            propertyId: object.propertyId,
+                            name: object.name,
+                            hasOverdue: globalPaymentObjectHasOverdue(object),
+                          }))
+                          .slice(0, SECTION_CARDS_LIMIT)}
                         onSelectObject={(propertyId) =>
                           router.push(ROUTES.propertyPayments(propertyId))
                         }
@@ -269,7 +281,7 @@ function GlobalCardIcon({
       <span
         className={cn(
           "flex h-6 w-6 items-center justify-center [&>svg]:h-6 [&>svg]:w-6",
-          variant === "primary" ? "text-white" : "text-content",
+          variant === "primary" ? "text-white" : "text-[#D3D7D9]",
         )}
       >
         {children}
@@ -306,7 +318,7 @@ function FavoritesSectionBody({
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto px-6 pb-1">
+    <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {favorites.map((payment) => {
         const style = categoryStyle(
           payment.category.source,
@@ -348,16 +360,23 @@ function FavoritesSectionBody({
 }
 
 /** Тело секции «Просроченные»: карточки с красными суммой, сроком («N
- * дней») и (!) на иконке; замыкающая «Все просроченные» (879:9700) считает
- * просроченные операции целого скоупа (#575). */
+ * дней») и (!) на иконке; тап ведёт на страницу СТАРЕЙШЕЙ просроченной
+ * операции (решение владельца 09.09), не на правило; замыкающая «Все
+ * просроченные» (879:9700) считает просроченные операции целого скоупа
+ * (#575). */
 function OverdueSectionBody({
   overdue,
   overdueOperationsCount,
+  onSelectOperation,
   onSelectPayment,
   onOpenAll,
 }: {
   readonly overdue: ReadonlyArray<GlobalPayment>;
   readonly overdueOperationsCount: number;
+  readonly onSelectOperation: (
+    propertyId: string,
+    operationId: string,
+  ) => void;
   readonly onSelectPayment: (payment: GlobalPayment) => void;
   readonly onOpenAll: () => void;
 }): JSX.Element {
@@ -370,7 +389,7 @@ function OverdueSectionBody({
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto px-6 pb-1">
+    <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {overdue.map((payment) => {
         const style = categoryStyle(
           payment.category.source,
@@ -393,7 +412,14 @@ function OverdueSectionBody({
             amountKopecks={payment.amountKopecks}
             description={overdueDaysLine(payment)}
             danger
-            onSelect={() => onSelectPayment(payment)}
+            onSelect={() =>
+              payment.oldestOverdueOperationId !== null
+                ? onSelectOperation(
+                    payment.propertyId,
+                    payment.oldestOverdueOperationId,
+                  )
+                : onSelectPayment(payment)
+            }
           />
         );
       })}
@@ -428,7 +454,7 @@ function ObjectsSectionBody({
   readonly onOpenAll: () => void;
 }): JSX.Element {
   return (
-    <div className="flex gap-2 overflow-x-auto px-6 pb-1">
+    <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {objects.map((object) => (
         <PaymentCardButton
           key={object.propertyId}
@@ -517,7 +543,7 @@ function PaymentsGlobalSectionSkeleton(): JSX.Element {
   return (
     <section className="flex flex-col gap-4" aria-hidden>
       <Skeleton className="h-6 w-40" />
-      <div className="flex gap-2 px-6 pb-1">
+      <div className="flex gap-2">
         <Skeleton className="h-[132px] w-[168.5px] shrink-0" />
         <Skeleton className="h-[132px] w-[168.5px] shrink-0" />
       </div>

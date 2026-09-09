@@ -5322,7 +5322,7 @@ components:
         the global «Платежи» card's data: the rule, its property label, the
         nearest schedule date and the overdue aggregates.
       type: object
-      required: [id, propertyId, propertyName, title, amountKopecks, type, category, autoPay, isFavorite, favoriteOrder, today, nearestDate, overdueOperationCount, overdueDays]
+      required: [id, propertyId, propertyName, title, amountKopecks, type, category, autoPay, isFavorite, favoriteOrder, today, nearestDate, overdueOperationCount, overdueDays, oldestOverdueOperationId]
       properties:
         id:
           type: string
@@ -5385,6 +5385,15 @@ components:
           description: >
             The age of the oldest overdue operation in days (today minus its
             date, at least 1) — the «N дней» line; null when the rule has no
+            overdue operations.
+        oldestOverdueOperationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            The oldest overdue operation's id (the same operation the
+            overdueDays age speaks of) — the overdue card's link target on
+            the global main screen (ticket #578); null when the rule has no
             overdue operations.
 
     PaymentsGlobalResponse:

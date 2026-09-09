@@ -47,6 +47,10 @@ type GlobalPaymentItem struct {
 	// rule has no overdue operations.
 	OverdueCount int64
 	OverdueDays  *int
+	// OldestOverdueOperationID is the oldest overdue operation's id — the
+	// overdue card's link target on the main screen (ticket #578); nil
+	// when the rule has no overdue operations.
+	OldestOverdueOperationID *uuid.UUID
 }
 
 // GlobalPaymentFeed is the global «Платежи» feed (ticket #575) with the
@@ -377,6 +381,7 @@ func (s *GlobalPaymentService) enrichItems(
 		if row.OldestOverdueDate != nil && row.OverdueCount > 0 {
 			days := int(row.Today.Sub(*row.OldestOverdueDate).Hours() / 24)
 			item.OverdueDays = &days
+			item.OldestOverdueOperationID = row.OldestOverdueOperationID
 		}
 		items[i] = item
 	}

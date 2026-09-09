@@ -26,6 +26,7 @@ function item(overrides: Partial<GlobalPayment>): GlobalPayment {
     nearestDate: '2026-09-10',
     overdueOperationCount: 0,
     overdueDays: null,
+    oldestOverdueOperationId: null,
     ...overrides,
   };
 }
@@ -55,6 +56,16 @@ describe('globalOverduePayments', () => {
     const fresh = item({ id: 'fresh' });
 
     expect(globalOverduePayments([overdue, fresh])).toStrictEqual([overdue]);
+  });
+
+  it('сортирует по возрасту просрочки — старейшие первыми (решение владельца 09.09)', () => {
+    const freshOverdue = item({ id: 'fresh-overdue', overdueOperationCount: 1, overdueDays: 2 });
+    const oldest = item({ id: 'oldest', overdueOperationCount: 5, overdueDays: 60 });
+    const middle = item({ id: 'middle', overdueOperationCount: 3, overdueDays: 5 });
+
+    const result = globalOverduePayments([freshOverdue, oldest, middle]);
+
+    expect(result.map((row) => row.id)).toStrictEqual(['oldest', 'middle', 'fresh-overdue']);
   });
 });
 

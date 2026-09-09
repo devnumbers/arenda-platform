@@ -80,7 +80,7 @@ func (h *paymentsHarness) seedGlobalRule(
 // the scheduled history the feed's aggregates read.
 func (h *paymentsHarness) seedRuleOperation(
 	ruleID, propertyID, ownerID uuid.UUID, date, status, typ, title string, amountKopecks int64,
-) {
+) uuid.UUID {
 	h.t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -98,6 +98,7 @@ func (h *paymentsHarness) seedRuleOperation(
 	); err != nil {
 		h.t.Fatalf("seed rule operation %s (%s): %v", title, date, err)
 	}
+	return id
 }
 
 // seedGlobalUser seeds a user with the given timezone and returns the id —
@@ -147,10 +148,11 @@ func TestListGlobalPayments_MergedFeed(t *testing.T) {
 
 	favorite := h.seedGlobalRule(h.propID, h.owner, "Страхование", "expense", 3200000,
 		false, true, "insurance", nil)
-	h.seedRuleOperation(favorite, h.propID, h.owner, "2026-08-10", opCancelled, "expense", "Страхование", 3200000)
-	h.seedRuleOperation(favorite, h.propID, h.owner, "2026-08-15", opPlanned, "expense", "Страхование", 3200000)
+	tombstone := h.seedRuleOperation(favorite, h.propID, h.owner, "2026-08-10", opCancelled, "expense", "Страхование", 3200000)
+	oldestOverdue := h.seedRuleOperation(favorite, h.propID, h.owner, "2026-08-15", opPlanned, "expense", "Страхование", 3200000)
 	h.seedRuleOperation(favorite, h.propID, h.owner, "2026-08-20", opPlanned, "expense", "Страхование", 3200000)
 	h.seedRuleOperation(favorite, h.propID, h.owner, "2026-08-30", opPlanned, "expense", "Страхование", 3200000)
+	_ = tombstone
 
 	h.seedGlobalRule(h.propID, h.owner, "Клининг", "expense", 90000, true, false, "cleaning", nil)
 
@@ -180,7 +182,7 @@ func TestListGlobalPayments_MergedFeed(t *testing.T) {
 	for _, item := range feed.Items {
 		byTitle[item.Title] = item
 	}
-	assertFavoriteRow(t, byTitle["Страхование"])
+	assertFavoriteRow(t, byTitle["Страхование"], oldestOverdue)
 	assertProjectionRow(t, byTitle["Клининг"])
 	assertSharedRow(t, byTitle["Аренда"])
 
@@ -195,13 +197,16 @@ func TestListGlobalPayments_MergedFeed(t *testing.T) {
 // assertFavoriteRow checks the favorite fixture row: the label, the star,
 // the overdue aggregates (the tombstone never counts) and the stored next
 // date against the Moscow owner's today.
-func assertFavoriteRow(t *testing.T, fav paymentsapp.GlobalPaymentItem) {
+func assertFavoriteRow(t *testing.T, fav paymentsapp.GlobalPaymentItem, wantOldest uuid.UUID) {
 	t.Helper()
 	if fav.PropertyName != objectPropertyName || !fav.IsFavorite || fav.AutoPay {
 		t.Errorf("favorite = (%q, %v, %v), want the quarter, favorite, non-auto", fav.PropertyName, fav.IsFavorite, fav.AutoPay)
 	}
 	if fav.OverdueCount != 2 || fav.OverdueDays == nil || *fav.OverdueDays != 10 {
 		t.Errorf("favorite overdue = (%d, %v), want (2, 10) — the tombstone never counts", fav.OverdueCount, fav.OverdueDays)
+	}
+	if fav.OldestOverdueOperationID == nil || *fav.OldestOverdueOperationID != wantOldest {
+		t.Errorf("favorite oldest overdue operation = %v, want the 2026-08-15 planned one %v", fav.OldestOverdueOperationID, wantOldest)
 	}
 	if fav.NearestDate == nil || dateOf(*fav.NearestDate) != "2026-08-30" {
 		t.Errorf("favorite nearest = %v, want 2026-08-30", fav.NearestDate)
@@ -221,6 +226,9 @@ func assertProjectionRow(t *testing.T, plain paymentsapp.GlobalPaymentItem) {
 	}
 	if plain.OverdueCount != 0 || plain.OverdueDays != nil {
 		t.Errorf("projection overdue = (%d, %v), want (0, nil)", plain.OverdueCount, plain.OverdueDays)
+	}
+	if plain.OldestOverdueOperationID != nil {
+		t.Errorf("projection oldest overdue operation = %v, want nil", plain.OldestOverdueOperationID)
 	}
 }
 

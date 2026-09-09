@@ -264,6 +264,10 @@ type GlobalPaymentRuleRow struct {
 	// OldestOverdueDate is the oldest overdue operation's date; nil unless
 	// the rule has overdue operations.
 	OldestOverdueDate *time.Time
+	// OldestOverdueOperationID is that oldest operation's id — the overdue
+	// card's link target on the global main screen (ticket #578); nil
+	// unless the rule has overdue operations.
+	OldestOverdueOperationID *uuid.UUID
 	// FavoriteOrder is the rule's manual favorite order — the 1-based
 	// position the favorites edit mode's save assigned (ticket #576); nil
 	// when the rule has never been in a saved order (new and legacy
