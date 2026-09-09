@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ContactDetailScreen } from '@/widgets/contacts';
 
 /** Карточка контакта из книги (тот же экран #510; доступ по привязке
- * карточки). Оболочка кабинета — из layout группы (cabinet). */
+ * карточки). На едином хроме экранов (#565). */
 export const metadata: Metadata = {
   title: 'Контакт — Рентли',
 };

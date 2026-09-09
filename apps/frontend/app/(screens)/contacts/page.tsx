@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { ContactBookScreen, parseContactBookSortParams } from '@/widgets/contacts';
 
 /** Плоская книга контактов (глобальная страница, макеты 1726:65083/65136/
- * 85937). Оболочка кабинета (лого-хедер, TabBar/сайдбар) — из layout
- * группы (cabinet); точка входа — сайдбар десктопа. Сортировка живёт в
+ * 85937). На едином хроме экранов (#565): оболочка — ScreenLayout группы
+ * (screens), вход — «Контакты» сайдбара ПК и шита «Еще». Сортировка живёт в
  * query строки (?sort=&order=) — переживает перезагрузку. */
 export const metadata: Metadata = {
   title: 'Контакты — Рентли',

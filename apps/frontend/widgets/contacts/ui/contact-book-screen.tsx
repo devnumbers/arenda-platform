@@ -21,9 +21,9 @@ import {
   IconButton,
   PageContent,
   PickerMenu,
+  TopNav,
   type PickerMenuGroup,
 } from '@/shared/ui/design';
-import { PageHeader } from '@/shared/ui/page-header';
 import {
   contactBookRowSubtitle,
   groupBookByLetter,
@@ -34,16 +34,16 @@ import { ContactsEmptyState, ContactsErrorCard, ContactsSkeleton } from './conta
 
 /**
  * Экран «Контакты» — плоская книга владельца (глобальная страница контактов,
- * макеты 1726:65083/65136/85937): заголовок кабинета, поисковая пилюля с
- * «+» (создание контакта книги), чип сортировки и одна серая карточка с
- * группами. Сортировка — серверная: поле «Имя/Объект» × «Возрастание/
- * Убывание» (меню/шит «Сортировать», 1726:65136) уходит в ?sort/order
- * GET /contacts; выбор живёт в query строки (?sort=&order=, конвенция
- * страницы «Объекты») — переживает перезагрузку и назад/вперёд. При
- * сортировке по объекту группы — «Общие контакты» (без объекта; сервер
- * держит их первыми в обоих направлениях — решение владельца 2026-09-04) и
- * имена объектов, при сортировке по имени — алфавитные. Подзаголовок
- * строки — «Роль (Объект)» (1726:85937).
+ * макеты 1726:65083/65136/85937): хаб-шапка нового хрома (#565), заголовок
+ * раздела 28, поисковая пилюля с «+» (создание контакта книги), чип
+ * сортировки и одна серая карточка с группами. Сортировка — серверная:
+ * поле «Имя/Объект» × «Возрастание/Убывание» (меню/шит «Сортировать»,
+ * 1726:65136) уходит в ?sort/order GET /contacts; выбор живёт в query
+ * строки (?sort=&order=, конвенция страницы «Объекты») — переживает
+ * перезагрузку и назад/вперёд. При сортировке по объекту группы — «Общие
+ * контакты» (без объекта; сервер держит их первыми в обоих направлениях —
+ * решение владельца 2026-09-04) и имена объектов, при сортировке по имени —
+ * алфавитные. Подзаголовок строки — «Роль (Объект)» (1726:85937).
  *
  * Поиск — не здесь: пилюля — кнопка, тап открывает отдельную поисковую
  * страницу /contacts/search с поисковой шапкой 1:1 как у книги объекта
@@ -91,20 +91,24 @@ export function ContactBookScreen({
 
   return (
     <>
-      <PageHeader title="Контакты" />
+      {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
+       * стандартное — в потоке на мобайле, закреплена на планшете и ПК. */}
+      <TopNav mobileWings />
 
       <PageContent>
+        <h1 className="pl-6 text-[28px] font-semibold leading-8 text-content">
+          Контакты
+        </h1>
+
         {contactsQuery.isPending ? (
-          /* Отступы книги — единые с карточкой списка (решение владельца
-           * 2026-09-04: боковой отступ как у основного контента). */
-          <ContactsSkeleton className="mx-0" />
+          <ContactsSkeleton className="mt-6" />
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} className="mx-0" />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} className="mt-6" />
         ) : (
           <>
             {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
              * по макету 1726:65083 согласован владельцем). */}
-            <div className="mb-6">
+            <div className="mt-6 mb-6 px-6">
               <BookSearchPill
                 onOpenSearch={() => router.push(ROUTES.contactSearch)}
                 onCreate={() => router.push(ROUTES.contactNew)}
@@ -115,7 +119,7 @@ export function ContactBookScreen({
               <ContactsEmptyState />
             ) : (
               <>
-                <div className="mb-4">
+                <div className="mb-4 px-6">
                   <PickerMenu
                     title="Сортировать"
                     groups={sortPickerGroups(sortField, sortOrder, changeSort)}
@@ -126,7 +130,7 @@ export function ContactBookScreen({
 
                 {/* Книга (1726:65083/85937): одна серая карточка, группы —
                  * буквы или объекты над своими строками. */}
-                <section className="flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6">
+                <section className="mx-6 flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6">
                   {groups.map((group) => (
                     <div key={group.label} className="flex flex-col">
                       <span aria-hidden className="pl-2 text-base font-medium text-content-tertiary">
