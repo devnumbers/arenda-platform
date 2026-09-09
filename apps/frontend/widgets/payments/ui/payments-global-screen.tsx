@@ -318,7 +318,7 @@ function FavoritesSectionBody({
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {favorites.map((payment) => {
         const style = categoryStyle(
           payment.category.source,
@@ -328,6 +328,7 @@ function FavoritesSectionBody({
         return (
           <PaymentCardButton
             key={payment.id}
+            className="snap-start"
             leading={
               <CategoryIcon
                 icon={style.icon}
@@ -345,6 +346,7 @@ function FavoritesSectionBody({
         );
       })}
       <PaymentCardButton
+        className="snap-start"
         leading={
           <GlobalCardIcon>
             <BoldStar />
@@ -389,7 +391,7 @@ function OverdueSectionBody({
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {overdue.map((payment) => {
         const style = categoryStyle(
           payment.category.source,
@@ -399,6 +401,7 @@ function OverdueSectionBody({
         return (
           <PaymentCardButton
             key={payment.id}
+            className="snap-start"
             leading={
               <CategoryIcon
                 icon={style.icon}
@@ -424,6 +427,7 @@ function OverdueSectionBody({
         );
       })}
       <PaymentCardButton
+        className="snap-start"
         leading={
           <GlobalCardIcon>
             <BoldWarning />
@@ -454,10 +458,11 @@ function ObjectsSectionBody({
   readonly onOpenAll: () => void;
 }): JSX.Element {
   return (
-    <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {objects.map((object) => (
         <PaymentCardButton
           key={object.propertyId}
+          className="snap-start"
           leading={
             <GlobalCardIcon variant="white" hasNotification={object.hasOverdue}>
               <BoldHome />
@@ -469,6 +474,7 @@ function ObjectsSectionBody({
       ))}
       {objects.length > 1 && (
         <PaymentCardButton
+          className="snap-start"
           leading={
             <GlobalCardIcon>
               <BoldObjects />
