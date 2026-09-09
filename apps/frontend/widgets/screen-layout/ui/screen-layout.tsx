@@ -1,40 +1,57 @@
-import type { JSX, ReactNode } from 'react';
+'use client';
+
+import { useRef, type JSX, type ReactNode } from 'react';
 import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
 import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
+import { PullToRefresh } from '@/shared/ui/pull-to-refresh';
 import {
   DesktopNavPills,
   DesktopSidebar,
   TabBar,
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
+import { PushPermissionGate } from './push-permission-gate';
 import { TopNavUserProvider } from './top-nav-user-provider';
 
-/** Оболочка новых экранов (#460): хром собирают сами экраны своим TopNav —
- * он же единый хедер (Figma 1185:40818–19): мобайл (768 и уже) — полоса в
- * потоке страницы во всю ширину; десктоп (от 769) — закреплён над
- * прокруткой, центральная часть — колонка max-560, по краям лого и кнопка
- * профиля; высоту 72 компенсирует `tablet:pt-[72px]` (хедер закреплён
- * от 561). На ПК (от 1024, решение владельца 08.09 #561) хром дополняет
- * десктопная навигация (Figma 1603:89079): сайдбар из 6 разделов слева под
- * хедером (DesktopSidebar) и плавающие пилюли «Уведомления»/«Поддержка»
- * по нижним углам (DesktopNavPills) — оба компонента сами скрыты до ПК.
- * Снизу — TabBar (футер, мобайл и планшет 1023 и уже): экраны со
- * StickyBottomBar глушат его сами через TabBarVisibilityProvider/
- * useTabBarSuppression — вместе с ним глушатся и пилюли. TopNavUserProvider прокидывает имя собственника в «крыло»
- * профиля (граница shared/feature). Sidebar/BottomNav старого кабинета
- * здесь отсутствуют; PWA-инфраструктура (регистрация и обновление service
- * worker) общая с CabinetLayout. */
+/** Оболочка новых экранов (#460) — единственная оболочка приложения
+ * (карта #556: старый кабинет снесён в #568): хром собирают сами экраны
+ * своим TopNav — он же единый хедер (Figma 1185:40818–19): мобайл (560 и
+ * уже) — полоса в потоке страницы во всю ширину; планшет и ПК (от 561) —
+ * закреплён над прокруткой, центральная часть — колонка max-560, по краям
+ * лого и кнопка профиля; высоту 72 компенсирует `tablet:pt-[72px]` (хедер
+ * закреплён от 561). На ПК (от 1024, решение владельца 08.09 #561) хром
+ * дополняет десктопная навигация (Figma 1603:89079): сайдбар из 6 разделов
+ * слева под хедером (DesktopSidebar) и плавающие пилюли
+ * «Уведомления»/«Поддержка» по нижним углам (DesktopNavPills) — оба
+ * компонента сами скрыты до ПК. Снизу — TabBar (футер, мобайл и планшет
+ * 1023 и уже): экраны со StickyBottomBar глушат его сами через
+ * TabBarVisibilityProvider/useTabBarSuppression — вместе с ним глушатся
+ * и пилюли. TopNavUserProvider прокидывает имя собственника в «крыло»
+ * профиля (граница shared/feature). Здесь же живёт PWA-инфраструктура
+ * приложения (ADR 0031/0032): регистрация и тихое обновление service
+ * worker, pull-to-refresh (ADR 0031 — ref делится с узлом контента:
+ * жест двигает transform'ом именно его; сайдбар, пилюли и TabBar
+ * `position: fixed` и остаются на месте) и PushPermissionGate —
+ * фоновая синхронизация push-подписки без системного промпта. */
 export function ScreenLayout({ children }: { readonly children: ReactNode }): JSX.Element {
+  // PullToRefresh drives `transform` on the content node during the gesture,
+  // so the layout shares its ref with the component.
+  const contentRef = useRef<HTMLDivElement>(null);
+
   return (
     <TabBarVisibilityProvider>
       <TopNavUserProvider>
         <div className="flex min-h-screen flex-col tablet:pt-[72px]">
           <DesktopSidebar />
-          {children}
+          <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
+            {children}
+          </div>
           <DesktopNavPills />
           <TabBar />
           <ServiceWorkerRegister />
           <ServiceWorkerUpdater />
+          <PullToRefresh contentRef={contentRef} />
+          <PushPermissionGate />
         </div>
       </TopNavUserProvider>
     </TabBarVisibilityProvider>
