@@ -216,7 +216,7 @@ export function TasksFeedScreen(): JSX.Element {
 
       <PageContent>
         <div className="flex items-center justify-between pr-3.5 pl-6">
-          <h1 className="text-[28px] font-semibold leading-8 text-content">Задачи</h1>
+          <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Задачи</h1>
           {createButton}
         </div>
 

@@ -171,7 +171,7 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
 
             <PageContent>
                 <div className="flex items-center justify-between pr-3.5 pl-6">
-                    <h1 className="text-[28px] font-semibold leading-8 text-content">Объекты</h1>
+                    <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Объекты</h1>
                     {createButton}
                 </div>
 
