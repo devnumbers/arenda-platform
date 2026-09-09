@@ -53,6 +53,7 @@ import {
     StepsChip,
     StickyBottomBar,
     Switch,
+    TabBarRow,
     Textarea,
     TextField,
     TopNav,
@@ -948,16 +949,30 @@ export function DesignLayerShowcase(): JSX.Element {
                 <div className={styles.group}>
                     <h3 className={styles.groupTitle}>MoreSheet · шит «Еще» мобильного TabBar</h3>
                     <p className={styles.groupTitle}>
-                        Выезжающий снизу шит навигации: ручка 48×4, два ряда разделов из нав-модели,
-                        нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560). Выезд
-                        400ms на кривой vaul, оверлей — fade 250ms; закрытие — оверлей, свайп вниз,
-                        повторный тап «Еще». В продукте живёт в TabBar (мобайл/планшет ≤768), здесь —
-                        с ручным триггером.
+                        Выезжающий снизу шит навигации: ручка 48×4, два ряда разделов из нав-модели.
+                        Единая колонка с баром (решение владельца 2026-09-09): лист опирается на
+                        реальный TabBar (--tab-bar-total-height), ряд-дубль бара внутри шита убран
+                        (отклонение от Figma 1721:57140); бар при открытом шите над оверлеем —
+                        яркий «якорь». Выезд 400ms на кривой vaul, оверлей — fade 250ms; закрытие —
+                        оверлей, свайп вниз, Esc, повторный тап «Еще». В продукте живёт в TabBar
+                        (мобайл и планшет ≤1023), здесь — с ручным триггером и демо-баром.
                     </p>
                     <div className={styles.grid}>
                         <Button onClick={() => setMoreSheetOpen(true)}>Открыть шит «Еще»</Button>
                     </div>
                     <MoreSheet open={moreSheetOpen} onOpenChange={setMoreSheetOpen} />
+                    {moreSheetOpen && (
+                        <nav
+                            aria-label="Нижняя навигация"
+                            className="fixed inset-x-0 bottom-0 z-[60] bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans"
+                        >
+                            <TabBarRow
+                                moreExpanded
+                                onMoreSelect={() => setMoreSheetOpen(false)}
+                                onNavigate={() => setMoreSheetOpen(false)}
+                            />
+                        </nav>
+                    )}
                 </div>
 
                 <div className={styles.group}>

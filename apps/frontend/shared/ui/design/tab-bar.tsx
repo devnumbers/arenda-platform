@@ -11,6 +11,7 @@ import {
   type JSX,
   type ReactNode,
 } from 'react';
+import { cn } from '@/shared/lib/cn';
 import { MoreSheet } from './more-sheet';
 import { TabBarRow } from './tab-bar-row';
 
@@ -28,9 +29,12 @@ import { TabBarRow } from './tab-bar-row';
  * Показывается только на экранах без нижней кнопки действия: экраны со
  * StickyBottomBar глушат футер через useTabBarSuppression, поэтому выше по
  * дереву обязателен TabBarVisibilityProvider (ставит ScreenLayout) — вне
- * его (root layout, ui-kit) футер не рендерится вовсе. На время открытого
- * шита бар остаётся под оверлеем (затемнён), а нижний ряд шита — тот же
- * TabBarRow поверх: полоса «замещается» без прыжка (исследование #557). */
+ * его (root layout, ui-kit) футер не рендерится вовсе. Шит «Еще» — единая
+ * колонка с баром (решение владельца 2026-09-09): лист опирается на бар
+ * снизу (--tab-bar-total-height), а бар на время открытого шита поднимается
+ * над оверлеем и листом (z-[60]) — остаётся ярким «якорем», лист выезжает
+ * из-за него; «Еще» при этом тумблер (открывает/закрывает), тапы по
+ * табам-ссылкам закрывают шит перед переходом. */
 type TabBarSuppression = {
   /** Провайдер в дереве есть; без него TabBar считается неуместным. */
   readonly present: boolean;
@@ -87,13 +91,22 @@ export function TabBar(): JSX.Element | null {
     <>
       <nav
         aria-label="Нижняя навигация"
-        className="fixed inset-x-0 bottom-0 z-40 w-full bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans desktop:hidden"
+        className={cn(
+          'fixed inset-x-0 bottom-0 z-40 w-full bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans desktop:hidden',
+          // Шит открыт — бар над оверлеем (z-50) и листом: яркий «якорь»,
+          // лист выезжает/уезжает за ним (см. MoreSheet).
+          moreOpen && 'z-[60]',
+        )}
       >
         {/* Табы во всю ширину вьюпорта — футер существует только там, где
          * нет ПК-хрома (1023 и уже), кап-колонка не нужна. Фолбэк 12px в
          * safe-area — тот же, что у шита «Еще»: полоса и лист заканчиваются
          * на одной высоте (research §4). */}
-        <TabBarRow moreExpanded={moreOpen} onMoreSelect={() => setMoreOpen(true)} />
+        <TabBarRow
+          moreExpanded={moreOpen}
+          onMoreSelect={() => setMoreOpen((open) => !open)}
+          onNavigate={() => setMoreOpen(false)}
+        />
       </nav>
       <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} />
     </>
