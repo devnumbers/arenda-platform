@@ -10,13 +10,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -27,7 +30,9 @@ import (
 // it; the handler tests run against func-backed fakes.
 type GlobalPaymentsManager interface {
 	ListGlobalPayments(ctx context.Context, actor uuid.UUID) (application.GlobalPaymentFeed, error)
-	SearchGlobalPayments(ctx context.Context, actor uuid.UUID, search string) (application.GlobalPaymentSearch, error)
+	SearchGlobalPayments(
+		ctx context.Context, actor uuid.UUID, search string, page application.GlobalPaymentSearchPage,
+	) (application.GlobalPaymentSearch, error)
 	ListGlobalPaymentObjects(ctx context.Context, actor uuid.UUID, search string) ([]application.GlobalPaymentObjectCard, error)
 	SaveFavoriteOrder(ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID) error
 }
@@ -64,7 +69,8 @@ func (h *GlobalPaymentHandlers) ListGlobalPayments(w http.ResponseWriter, r *htt
 }
 
 // SearchGlobalPayments implements GET /payments/search — the feed narrowed
-// by the search query plus the matched categories (ticket #575).
+// by the search query plus the matched categories, in pages of 50 under the
+// chip's category/type filter (ticket #575, map #573 rework).
 func (h *GlobalPaymentHandlers) SearchGlobalPayments(
 	w http.ResponseWriter, r *http.Request, params openapi.SearchGlobalPaymentsParams,
 ) {
@@ -73,13 +79,48 @@ func (h *GlobalPaymentHandlers) SearchGlobalPayments(
 		return
 	}
 
-	search, err := h.svc.SearchGlobalPayments(r.Context(), actor, derefString(params.Search))
+	page, err := searchPageFromParams(params)
+	if err != nil {
+		h.handleGlobalPaymentError(w, r, err)
+		return
+	}
+
+	search, err := h.svc.SearchGlobalPayments(r.Context(), actor, derefString(params.Search), page)
 	if err != nil {
 		h.handleGlobalPaymentError(w, r, err)
 		return
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, paymentsSearchGlobalResponse(search))
+}
+
+// searchPageFromParams folds the search's query parameters onto the page
+// request: the chip's identity (category + direction, the generated enum
+// validated) plus the page window, bounded before the int32 narrowing —
+// the wire carries any int. Out-of-range numbers are ErrInvalidInput (the
+// contract's 400); the zero limit stays zero — the service applies its
+// default, one validation home for the page shape.
+func searchPageFromParams(params openapi.SearchGlobalPaymentsParams) (application.GlobalPaymentSearchPage, error) {
+	page := application.GlobalPaymentSearchPage{Category: derefString(params.Category)}
+	if params.Type != nil {
+		if !params.Type.Valid() {
+			return page, fmt.Errorf("type %q: %w", *params.Type, application.ErrInvalidInput)
+		}
+		page.Type = domain.PaymentType(*params.Type)
+	}
+	if params.Limit != nil {
+		if *params.Limit < 1 || *params.Limit > application.MaxPaymentRulesPageSize {
+			return page, fmt.Errorf("limit %d: %w", *params.Limit, application.ErrInvalidInput)
+		}
+		page.Limit = int32(*params.Limit)
+	}
+	if params.Offset != nil {
+		if *params.Offset < 0 || *params.Offset > math.MaxInt32 {
+			return page, fmt.Errorf("offset %d: %w", *params.Offset, application.ErrInvalidInput)
+		}
+		page.Offset = int32(*params.Offset)
+	}
+	return page, nil
 }
 
 // ListGlobalPaymentObjects implements GET /payments/objects — the visible
@@ -163,6 +204,11 @@ func decodeFavoriteOrderBody(w http.ResponseWriter, r *http.Request) (openapi.Pa
 // validation) — everything is either a session problem the middleware owns
 // or an internal failure. Logged once here, one problem out.
 func (h *GlobalPaymentHandlers) handleGlobalPaymentError(w http.ResponseWriter, r *http.Request, err error) {
+	// Invalid input (the search page's out-of-range numbers) is the
+	// contract's 400, not an opaque 500 — the shared payments table.
+	if writePaymentsError(r.Context(), w, err) {
+		return
+	}
 	h.logger.ErrorContext(r.Context(), "global payments read failed",
 		slog.String("error", httpsupport.SanitizeError(err)))
 	httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))

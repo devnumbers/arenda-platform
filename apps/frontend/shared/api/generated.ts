@@ -654,7 +654,7 @@ export interface paths {
         };
         /**
          * Search the actor's visible payment rules (the global «Платежи» search)
-         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per (category, direction), the largest count first. An empty query degenerates to the unfiltered feed with every category of the scope.
+         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per (category, direction), the largest count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
          */
         get: operations["searchGlobalPayments"];
         put?: never;
@@ -2962,6 +2962,12 @@ export interface components {
         PropertyId: string;
         /** @description Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter. */
         PaymentsSearchQuery: string;
+        /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
+        PaymentsCategoryFilter: string;
+        /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
+        PaymentsTypeFilter: "income" | "expense";
+        PaymentsLimit: number;
+        PaymentsOffset: number;
         /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
         OperationsStatusFilter: "planned" | "paid" | "overdue";
         /** @description Inclusive lower bound of the period on the operation date. */
@@ -4382,6 +4388,12 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter. */
                 search?: components["parameters"]["PaymentsSearchQuery"];
+                /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
+                category?: components["parameters"]["PaymentsCategoryFilter"];
+                /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
+                type?: components["parameters"]["PaymentsTypeFilter"];
+                limit?: components["parameters"]["PaymentsLimit"];
+                offset?: components["parameters"]["PaymentsOffset"];
             };
             header?: never;
             path?: never;

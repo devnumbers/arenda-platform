@@ -1,6 +1,6 @@
 import type {
-  GlobalPayment,
   PaymentSearchCategoryView,
+  PaymentType,
 } from '@/entities/payment';
 
 /**
@@ -21,19 +21,10 @@ export type SearchCategoryChip = {
   readonly selected: boolean;
 };
 
-/** Строки выдачи в свернутом списке (706:12649): три строки и «Показать
- * все»; раскрытое (706:13008) показывает всё с «Свернуть». */
-export const SEARCH_ROWS_COLLAPSED_LIMIT = 3;
-
 /** Идентичность чипа: дефолтная категория — по слагу каталога,
  * пользовательская — по id, плюс направление (доход/расход). */
 export function searchCategoryChipKey(chip: PaymentSearchCategoryView): string {
   return `${categoryIdentityKey(chip.category.source, chip.category.slug, chip.category.id)}:${chip.type}`;
-}
-
-/** Ключ категории строки выдачи — та же идентичность, что у чипа. */
-function paymentCategoryKey(payment: GlobalPayment): string {
-  return `${categoryIdentityKey(payment.category.source, payment.category.slug, payment.category.id)}:${payment.type}`;
 }
 
 function categoryIdentityKey(
@@ -67,25 +58,17 @@ export function effectiveChipKey(
   return known ? selectedKey : null;
 }
 
-/** Сужение выдачи выбранным чипом: пара (категория, направление). */
-export function filterPaymentsByChip(
-  items: ReadonlyArray<GlobalPayment>,
-  chip: PaymentSearchCategoryView,
-): ReadonlyArray<GlobalPayment> {
-  const key = searchCategoryChipKey(chip);
-  return items.filter((payment) => paymentCategoryKey(payment) === key);
-}
-
-/** Свернутый/раскрытый список «Платежей»: свернуто — первые три строки;
- * hasMore — показывать кнопку «Показать все»/«Свернуть» (только когда
- * выдача длиннее лимита). */
-export function searchResultRows(
-  items: ReadonlyArray<GlobalPayment>,
-  expanded: boolean,
-): { readonly rows: ReadonlyArray<GlobalPayment>; readonly hasMore: boolean } {
-  const hasMore = items.length > SEARCH_ROWS_COLLAPSED_LIMIT;
+/** Фильтр чипа для серверного запроса (#581, доработка: порции по 50 +
+ * догрузка скроллом): категория — слаг дефолтного каталога или id
+ * пользовательской, направление — часть идентичности чипа. Сужает только
+ * список «Платежей»; чипы сервер всегда считает по всему скоупу. */
+export function searchChipFilter(chip: PaymentSearchCategoryView): {
+  readonly category: string;
+  readonly type: PaymentType;
+} {
   return {
-    rows: expanded || !hasMore ? items : items.slice(0, SEARCH_ROWS_COLLAPSED_LIMIT),
-    hasMore,
+    category:
+      chip.category.source === 'default' ? (chip.category.slug ?? '') : (chip.category.id ?? ''),
+    type: chip.type,
   };
 }

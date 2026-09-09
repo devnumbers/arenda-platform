@@ -77,11 +77,15 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 		return nil, err
 	}
 	rows, err := s.q().ListGlobalPaymentRules(ctx, postgres.ListGlobalPaymentRulesParams{
-		OwnerIds:      ownerIDs,
-		Todays:        todaysCSV,
-		Actor:         pgconv.UUIDToPgtype(actor),
-		Search:        escapeLikePattern(q.Search),
-		CategorySlugs: strings.Join(q.CategorySlugs, ","),
+		OwnerIds:       ownerIDs,
+		Todays:         todaysCSV,
+		Actor:          pgconv.UUIDToPgtype(actor),
+		Search:         escapeLikePattern(q.Search),
+		CategorySlugs:  strings.Join(q.CategorySlugs, ","),
+		CategoryFilter: q.Category,
+		TypeFilter:     string(q.Type),
+		PageLimit:      q.Limit,
+		PageOffset:     int64(q.Offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list global payment rules: %w", err)

@@ -1583,11 +1583,19 @@ paths:
         distinct categories of the matched rules — the search screen's
         category chips — one row per (category, direction), the largest count
         first. An empty query degenerates to the unfiltered feed with every
-        category of the scope.
+        category of the scope. The list runs in pages of 50 the search
+        screen's infinite scroll walks (map #573 rework); under the
+        category/type chip filter the page narrows to the chip's rules while
+        matchedCategories always describe the whole matched scope — the
+        chips never shrink (the operations' canon).
       security:
         - sessionCookie: []
       parameters:
         - $ref: '#/components/parameters/PaymentsSearchQuery'
+        - $ref: '#/components/parameters/PaymentsCategoryFilter'
+        - $ref: '#/components/parameters/PaymentsTypeFilter'
+        - $ref: '#/components/parameters/PaymentsLimit'
+        - $ref: '#/components/parameters/PaymentsOffset'
       responses:
         '200':
           description: The matched rules with their matched-category chips.
@@ -3803,6 +3811,45 @@ components:
         filter.
       schema:
         type: string
+    PaymentsCategoryFilter:
+      name: category
+      in: query
+      required: false
+      description: >-
+        The search screen's chip filter (map #573 rework): the selected
+        chip's category — the default catalog's slug or the user category's
+        id — narrowing the matched rules to that category. Empty or missing
+        — no filter. It never narrows matchedCategories.
+      schema:
+        type: string
+    PaymentsTypeFilter:
+      name: type
+      in: query
+      required: false
+      description: >-
+        The chip filter's direction (map #573 rework): the chip is the pair
+        (category, direction), so the filter carries both. Missing — no
+        filter. It never narrows matchedCategories.
+      schema:
+        type: string
+        enum: [income, expense]
+    PaymentsLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 100
+    PaymentsOffset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
 
     OperationsStatusFilter:
       name: status

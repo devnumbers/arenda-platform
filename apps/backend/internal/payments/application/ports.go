@@ -237,6 +237,18 @@ type TickZoneDirectory interface {
 type GlobalPaymentRulesQuery struct {
 	Search        string
 	CategorySlugs []string
+	// The search screen's server-side chip filter (map #573 rework): the
+	// chip's identity — the default catalog's slug or the user category's
+	// id as text — plus the direction. '' = no filter. It narrows the rules
+	// list only; the matched-categories sum ignores it (the chips always
+	// show the query's every matched category — the operations' canon).
+	Category string
+	Type     domain.PaymentType
+	// The search screen's page (50 per page, infinite scroll). The zero
+	// limit means no window — the whole matched scope, the feed's and the
+	// stacks' reads.
+	Limit  int32
+	Offset int32
 }
 
 // GlobalPaymentRuleRow is one raw row of the global payment rules read

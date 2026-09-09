@@ -17,6 +17,8 @@ import (
 
 // The fixtures' recurring literals; goconst wants named constants.
 const (
+	parkingSlug = "parking"
+
 	feedPropertyName  = "Моя квартира"
 	feedInsuranceSlug = "insurance"
 )
@@ -43,6 +45,7 @@ type fakeGlobalReader struct {
 
 	gotTodays       map[uuid.UUID]time.Time
 	gotQuery        GlobalPaymentRulesQuery
+	gotSumQuery     GlobalPaymentRulesQuery
 	gotObjectSearch string
 }
 
@@ -67,6 +70,7 @@ func (f *fakeGlobalReader) SumGlobalPaymentCounters(
 func (f *fakeGlobalReader) SumGlobalPaymentSearchCategories(
 	_ context.Context, _ uuid.UUID, q GlobalPaymentRulesQuery,
 ) ([]GlobalPaymentSearchCategory, error) {
+	f.gotSumQuery = q
 	return f.categories, nil
 }
 
@@ -251,7 +255,7 @@ func TestSearchGlobalPaymentsExpandsCategorySlugs(t *testing.T) {
 	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}}, txStoreFactory{})
 	actor := uuid.Must(uuid.NewV7())
 
-	if _, err := service.SearchGlobalPayments(t.Context(), actor, "СТРАХОВ"); err != nil {
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "СТРАХОВ", GlobalPaymentSearchPage{}); err != nil {
 		t.Fatalf("SearchGlobalPayments: %v", err)
 	}
 	got := reader.gotQuery.CategorySlugs
@@ -259,25 +263,92 @@ func TestSearchGlobalPaymentsExpandsCategorySlugs(t *testing.T) {
 		t.Errorf("slugs for «СТРАХОВ» = %v, want [%s]", got, feedInsuranceSlug)
 	}
 
-	if _, err := service.SearchGlobalPayments(t.Context(), actor, "арендн"); err != nil {
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "арендн", GlobalPaymentSearchPage{}); err != nil {
 		t.Fatalf("SearchGlobalPayments: %v", err)
 	}
 	if got := reader.gotQuery.CategorySlugs; len(got) != 1 || got[0] != "rent" {
 		t.Errorf("slugs for «арендн» = %v, want [rent]", got)
 	}
 
-	if _, err := service.SearchGlobalPayments(t.Context(), actor, "нет такой категории в каталоге"); err != nil {
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "нет такой категории в каталоге", GlobalPaymentSearchPage{}); err != nil {
 		t.Fatalf("SearchGlobalPayments: %v", err)
 	}
 	if got := reader.gotQuery.CategorySlugs; got != nil {
 		t.Errorf("slugs for a label-less query = %v, want none", got)
 	}
 
-	if _, err := service.SearchGlobalPayments(t.Context(), actor, ""); err != nil {
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "", GlobalPaymentSearchPage{}); err != nil {
 		t.Fatalf("SearchGlobalPayments: %v", err)
 	}
 	if got := reader.gotQuery.CategorySlugs; got != nil {
 		t.Errorf("slugs for an empty query = %v, want none", got)
+	}
+}
+
+// newSearchPageService builds the search service over the reader with the
+// fixed owner's today — the page tests' common wiring.
+func newSearchPageService(reader *fakeGlobalReader, owner uuid.UUID) *GlobalPaymentService {
+	today := utcDate(2025, time.June, 1) // Arbitrary: the page never reads it.
+	return NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}}, txStoreFactory{})
+}
+
+// The search page (map #573, rework): the zero page degenerates to the
+// contract's default — the first 50-row page — and the chip filter travels
+// to the rules read beside the raw search query.
+func TestSearchGlobalPaymentsPage(t *testing.T) {
+	t.Parallel()
+
+	owner := uuid.Must(uuid.NewV7())
+	reader := &fakeGlobalReader{owners: []uuid.UUID{owner}}
+	service := newSearchPageService(reader, owner)
+	actor := uuid.Must(uuid.NewV7())
+
+	// The zero page (the contract's omitted params) is the default first
+	// page: 50 rows, no chip filter.
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "аренд", GlobalPaymentSearchPage{}); err != nil {
+		t.Fatalf("SearchGlobalPayments: %v", err)
+	}
+	if got := reader.gotQuery; got.Limit != DefaultPaymentRulesPageSize || got.Offset != 0 {
+		t.Errorf("zero page = limit %d offset %d, want limit %d offset 0", got.Limit, got.Offset, DefaultPaymentRulesPageSize)
+	}
+	if got := reader.gotQuery; got.Category != "" || got.Type != "" {
+		t.Errorf("zero page filter = %q/%q, want none", got.Category, got.Type)
+	}
+
+	// The explicit page carries the chip's identity and the window through.
+	page := GlobalPaymentSearchPage{Category: parkingSlug, Type: domain.TypeExpense, Limit: 50, Offset: 100}
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "", page); err != nil {
+		t.Fatalf("SearchGlobalPayments: %v", err)
+	}
+	got := reader.gotQuery
+	if got.Category != parkingSlug || got.Type != domain.TypeExpense {
+		t.Errorf("page filter = %q/%q, want parking/expense", got.Category, got.Type)
+	}
+	if got.Limit != 50 || got.Offset != 100 {
+		t.Errorf("page window = limit %d offset %d, want limit 50 offset 100", got.Limit, got.Offset)
+	}
+}
+
+// The matched categories (the chips) always describe the query's whole
+// matched scope: the category/type filter narrows the rules list only.
+func TestSearchGlobalPaymentsSumIgnoresChipFilter(t *testing.T) {
+	t.Parallel()
+
+	owner := uuid.Must(uuid.NewV7())
+	reader := &fakeGlobalReader{owners: []uuid.UUID{owner}}
+	service := newSearchPageService(reader, owner)
+	actor := uuid.Must(uuid.NewV7())
+
+	page := GlobalPaymentSearchPage{Category: parkingSlug, Type: domain.TypeExpense, Limit: 50}
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "аренд", page); err != nil {
+		t.Fatalf("SearchGlobalPayments: %v", err)
+	}
+	sum := reader.gotSumQuery
+	if sum.Category != "" || sum.Type != "" {
+		t.Errorf("sum query filter = %q/%q, want none — the chips stay whole", sum.Category, sum.Type)
+	}
+	if sum.Search != "аренд" {
+		t.Errorf("sum query search = %q, want «аренд»", sum.Search)
 	}
 }
 

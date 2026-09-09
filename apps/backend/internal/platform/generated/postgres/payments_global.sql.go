@@ -270,15 +270,27 @@ WHERE (
        OR pc.name ILIKE '%' || $4::text || '%' ESCAPE '\'
        OR ($5::text <> ''
            AND pay.category_slug = ANY(string_to_array($5::text, ','))))
+  AND ($6::text = ''
+       OR pay.category_slug = $6::text
+       OR pay.user_category_id::text = $6::text)
+  AND ($7::text = ''
+       OR pay.type = $7::text)
 ORDER BY p.name, pay.created_at, pay.id
+LIMIT CASE WHEN $9::int = 0 THEN NULL::bigint
+           ELSE $9::bigint END
+OFFSET COALESCE($8, 0)::bigint
 `
 
 type ListGlobalPaymentRulesParams struct {
-	OwnerIds      string      `json:"owner_ids"`
-	Todays        string      `json:"todays"`
-	Actor         pgtype.UUID `json:"actor"`
-	Search        string      `json:"search"`
-	CategorySlugs string      `json:"category_slugs"`
+	OwnerIds       string      `json:"owner_ids"`
+	Todays         string      `json:"todays"`
+	Actor          pgtype.UUID `json:"actor"`
+	Search         string      `json:"search"`
+	CategorySlugs  string      `json:"category_slugs"`
+	CategoryFilter string      `json:"category_filter"`
+	TypeFilter     string      `json:"type_filter"`
+	PageOffset     int64       `json:"page_offset"`
+	PageLimit      int32       `json:"page_limit"`
 }
 
 type ListGlobalPaymentRulesRow struct {
@@ -322,6 +334,10 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 		arg.Actor,
 		arg.Search,
 		arg.CategorySlugs,
+		arg.CategoryFilter,
+		arg.TypeFilter,
+		arg.PageOffset,
+		arg.PageLimit,
 	)
 	if err != nil {
 		return nil, err

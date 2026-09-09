@@ -95,6 +95,7 @@ export {
   useGlobalOperationsSummary,
   useGlobalPaymentObjects,
   useGlobalPaymentSearch,
+  useGlobalPaymentSearchCategories,
   useGlobalPayments,
   usePayment,
   usePaymentOperationsByStatus,

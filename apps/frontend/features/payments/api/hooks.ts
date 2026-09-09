@@ -18,9 +18,11 @@ import type {
   GlobalPaymentObject,
   GlobalPaymentSearch,
   OperationsSummary,
+  PaymentSearchCategoryView,
   Payment,
   PaymentCreateCommand,
   PaymentOperation,
+  PaymentType,
   PaymentUpdateCommand,
 } from '@/entities/payment';
 import {
@@ -694,25 +696,72 @@ export function useGlobalPaymentObjects(
 }
 
 /**
- * Поиск глобальных платежей (GET /payments/search, #575; экран #581):
- * совпавшие строки — состав фида без счётчиков — и чипы совпавших
- * категорий (по числу совпадений убывание). query — часть ключа;
- * keepPreviousData держит прежнюю выдачу, пока едет новый запрос
- * (правка запроса не мигает); пустой запрос экран не выполняет.
+ * Чипы поиска платежей (matchedCategories, GET /payments/search #575):
+ * сервер считает их по всему скоупу поискового запроса, поэтому лёгкий
+ * отдельный запрос с limit=1 — строки списку не нужны. Выбранный чип
+ * сужает только список (useGlobalPaymentSearch) — канон сводки операций
+ * #543.
  */
-export function useGlobalPaymentSearch(
+export function useGlobalPaymentSearchCategories(
   query: string,
   options: { readonly enabled?: boolean } = {},
-): UseQueryResult<GlobalPaymentSearch, ApiError> {
+): UseQueryResult<ReadonlyArray<PaymentSearchCategoryView>, ApiError> {
   return useQuery({
-    queryKey: globalPaymentKeys.search(query),
+    queryKey: globalPaymentKeys.searchCategories(query),
     queryFn: async () => {
-      const suffix = query ? `?search=${encodeURIComponent(query)}` : '';
+      const suffix = query ? `?search=${encodeURIComponent(query)}&limit=1` : '?limit=1';
       const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
         `/payments/search${suffix}`,
       );
+      return mapGlobalPaymentSearch(response).matchedCategories;
+    },
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/** Порция поиска платежей (правило платформы #452): 50 строк на страницу,
+ * догрузка при скролле; серверный максимум — те же 100. */
+export const PAYMENT_SEARCH_PAGE_SIZE = 50;
+
+/**
+ * Поиск глобальных платежей (GET /payments/search, #575; экран #581):
+ * бесконечный запрос порциями по PAYMENT_SEARCH_PAGE_SIZE — offset это
+ * pageParam; фильтр чипа (category + направление) сужает список серверно.
+ * matchedCategories сервер считает по всему скоупу запроса, поэтому в
+ * результате они берутся с первой страницы. query и фильтр — части ключа;
+ * keepPreviousData держит прежнюю выдачу, пока едет новый запрос (правка
+ * запроса не мигает); пустой запрос экран не выполняет.
+ */
+export function useGlobalPaymentSearch(
+  query: string,
+  filter: { readonly category?: string; readonly type?: PaymentType } = {},
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<GlobalPaymentSearch, ApiError> {
+  const { category = '', type = '' } = filter;
+  return useInfiniteQuery({
+    queryKey: globalPaymentKeys.search(query, category, type),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (query) params.set('search', query);
+      if (category) params.set('category', category);
+      if (type) params.set('type', type);
+      params.set('limit', String(PAYMENT_SEARCH_PAGE_SIZE));
+      params.set('offset', String(pageParam));
+      const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
+        `/payments/search?${params.toString()}`,
+      );
       return mapGlobalPaymentSearch(response);
     },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.items.length < PAYMENT_SEARCH_PAGE_SIZE
+        ? undefined
+        : allPages.length * PAYMENT_SEARCH_PAGE_SIZE,
+    select: (data): GlobalPaymentSearch => ({
+      items: data.pages.flatMap((page) => page.items),
+      matchedCategories: data.pages[0]?.matchedCategories ?? [],
+    }),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });

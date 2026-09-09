@@ -106,7 +106,15 @@ WHERE (
        OR pc.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR (sqlc.arg('category_slugs')::text <> ''
            AND pay.category_slug = ANY(string_to_array(sqlc.arg('category_slugs')::text, ','))))
-ORDER BY p.name, pay.created_at, pay.id;
+  AND (sqlc.arg('category_filter')::text = ''
+       OR pay.category_slug = sqlc.arg('category_filter')::text
+       OR pay.user_category_id::text = sqlc.arg('category_filter')::text)
+  AND (sqlc.arg('type_filter')::text = ''
+       OR pay.type = sqlc.arg('type_filter')::text)
+ORDER BY p.name, pay.created_at, pay.id
+LIMIT CASE WHEN sqlc.arg('page_limit')::int = 0 THEN NULL::bigint
+           ELSE sqlc.arg('page_limit')::bigint END
+OFFSET COALESCE(sqlc.arg('page_offset'), 0)::bigint;
 
 -- name: SumGlobalPaymentCounters :one
 -- The main screen's two counters over the whole visible scope (ticket

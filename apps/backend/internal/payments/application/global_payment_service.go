@@ -123,7 +123,10 @@ func (s *GlobalPaymentService) ListGlobalPayments(ctx context.Context, actor uui
 	if err != nil {
 		return GlobalPaymentFeed{}, err
 	}
-	items, err := s.feedItems(ctx, actor, todays, "")
+	items, err := s.feedItems(ctx, actor, todays, GlobalPaymentRulesQuery{
+		Search:        "",
+		CategorySlugs: defaultCategorySlugsMatching(""),
+	})
 	if err != nil {
 		return GlobalPaymentFeed{}, err
 	}
@@ -138,22 +141,65 @@ func (s *GlobalPaymentService) ListGlobalPayments(ctx context.Context, actor uui
 	}, nil
 }
 
+// GlobalPaymentSearchPage is the search list's page request (map #573
+// rework): the server-side chip filter plus the 50-per-page window the
+// search screen's infinite scroll walks. The zero limit means the
+// contract's default page. The filter narrows the rules list only — the
+// matched categories always describe the query's whole matched scope.
+type GlobalPaymentSearchPage struct {
+	Category string
+	Type     domain.PaymentType
+	Limit    int32
+	Offset   int32
+}
+
+const (
+	DefaultPaymentRulesPageSize = 50
+	MaxPaymentRulesPageSize     = 100
+)
+
+// prepareGlobalPaymentSearchPage applies the page-size default and rejects
+// the out-of-range numbers with ErrInvalidInput (the operations' canon).
+func prepareGlobalPaymentSearchPage(page *GlobalPaymentSearchPage) error {
+	if page.Limit == 0 {
+		page.Limit = DefaultPaymentRulesPageSize
+	}
+	if page.Limit < 1 || page.Limit > MaxPaymentRulesPageSize || page.Offset < 0 {
+		return ErrInvalidInput
+	}
+	return nil
+}
+
 // SearchGlobalPayments narrows the feed by the search query — a
 // case-insensitive substring over the title and the category (the default
 // catalog label of the rule's slug or the user category's name) — and
-// returns the matched categories of the matched rules: the chips. The
-// counters are not part of the search contract.
+// returns the matched categories of the matched rules: the chips. The list
+// runs in pages of 50 under the chip's category/type filter (the search
+// screen's infinite scroll); the counters are not part of the search
+// contract.
 func (s *GlobalPaymentService) SearchGlobalPayments(
-	ctx context.Context, actor uuid.UUID, search string,
+	ctx context.Context, actor uuid.UUID, search string, page GlobalPaymentSearchPage,
 ) (GlobalPaymentSearch, error) {
+	if err := prepareGlobalPaymentSearchPage(&page); err != nil {
+		return GlobalPaymentSearch{}, err
+	}
 	todays, err := s.ownerTodays(ctx, actor)
 	if err != nil {
 		return GlobalPaymentSearch{}, err
 	}
-	items, err := s.feedItems(ctx, actor, todays, search)
+	items, err := s.feedItems(ctx, actor, todays, GlobalPaymentRulesQuery{
+		Search:        search,
+		CategorySlugs: defaultCategorySlugsMatching(search),
+		Category:      page.Category,
+		Type:          page.Type,
+		Limit:         page.Limit,
+		Offset:        page.Offset,
+	})
 	if err != nil {
 		return GlobalPaymentSearch{}, err
 	}
+	// The chips are the whole scope's: the chip filter narrows the list,
+	// never the matched categories (the operations' canon).
 	categories, err := s.reader.SumGlobalPaymentSearchCategories(ctx, actor, GlobalPaymentRulesQuery{
 		Search:        search,
 		CategorySlugs: defaultCategorySlugsMatching(search),
@@ -304,18 +350,15 @@ func (s *GlobalPaymentService) ownerTodays(ctx context.Context, actor uuid.UUID)
 	return todays, nil
 }
 
-// feedItems runs the feed query and enriches the rows: the nearest-date
+// feedItems runs the rules query and enriches the rows: the nearest-date
 // fallback and the overdue age are the application layer's business.
 func (s *GlobalPaymentService) feedItems(
-	ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time, search string,
+	ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time, q GlobalPaymentRulesQuery,
 ) ([]GlobalPaymentItem, error) {
 	if len(todays) == 0 {
 		return []GlobalPaymentItem{}, nil
 	}
-	rows, err := s.reader.ListGlobalPaymentRules(ctx, actor, todays, GlobalPaymentRulesQuery{
-		Search:        search,
-		CategorySlugs: defaultCategorySlugsMatching(search),
-	})
+	rows, err := s.reader.ListGlobalPaymentRules(ctx, actor, todays, q)
 	if err != nil {
 		return nil, fmt.Errorf("list global payment rules: %w", err)
 	}

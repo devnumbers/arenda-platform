@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, SmallArrowDown, Star } from '@/shared/assets/icons';
+import { ArrowLeft, Star } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
-import { useGlobalPaymentSearch } from '@/features/payments';
+import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
+import { useGlobalPaymentSearch, useGlobalPaymentSearchCategories } from '@/features/payments';
 import type { GlobalPayment } from '@/entities/payment';
 import { PaymentRowButton } from '@/entities/payment';
 import {
@@ -17,30 +18,32 @@ import {
   PageContent,
   SearchField,
 } from '@/shared/ui/design';
+import { LoadingMoreIndicator } from './operations-list';
 import { GlobalPaymentRuleIcon, PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import { nearestDateLine } from '../lib/payments-global-model';
 import {
   effectiveChipKey,
-  filterPaymentsByChip,
   searchCategoryChipKey,
   searchCategoryChips,
-  searchResultRows,
+  searchChipFilter,
 } from '../lib/payments-search-model';
 
 /**
- * Поиск платежей (#581, Figma 706:12168/12649/13008, 862:24128,
- * 860:22842) — поисковая шапка соседей (контакты #508, операции #543):
- * «назад» + поле «Поиск платежа». Старт — «Введите название платежа»,
- * пустой результат — «Такого платежа нет» (одна иллюстрация). Результаты:
- * чипы совпавших категорий (серверные matchedCategories #575; тап сужает
- * список, повторный снимает — выбранная синяя заливка) и «Платежи»
- * строками канона PaymentRowButton — как в списках карты (звезда-индикатор
- * только у избранных, пассивная — решение владельца #580); свернуто — три
- * строки и «Показать все», раскрыто — всё и «Свернуть». Тап строке —
- * страница платежа. Серверная область — GET /payments/search (#575);
- * ввод живёт в адресе (?q=) и догоняется дебаунсом — useSearchQueryState.
- * Каркас кабинетный, как поиск операций: шапка в потоке страницы, «назад»
- * возвращает на главный «Платежи».
+ * Поиск платежей (#581, Figma 706:12168/12649, 862:24128, 860:22842) —
+ * поисковая шапка соседей (контакты #508, операции #543): «назад» + поле
+ * «Поиск платежа». Старт — «Введите название платежа», пустой результат —
+ * «Такого платежа нет» (одна иллюстрация). Результаты: чипы совпавших
+ * категорий (серверные matchedCategories #575; тап сужает список
+ * серверным фильтром категории/направления, повторный снимает — выбранная
+ * синяя заливка; чипы при выборе не сужаются — канон операций) и
+ * «Платежи» строками канона PaymentRowButton — как в списках карты
+ * (звезда-индикатор только у избранных, пассивная — решение владельца
+ * #580). Список — порциями по 50 с догрузкой при скролле, как во всех
+ * лентах операций (доработка #581: «Показать все» снято владельцем). Тап
+ * строке — страница платежа. Серверная область — GET /payments/search
+ * (#575); ввод живёт в адресе (?q=) и догоняется дебаунсом —
+ * useSearchQueryState. Каркас кабинетный, как поиск операций: шапка в
+ * потоке страницы, «назад» возвращает на главный «Платежи».
  */
 export function PaymentsGlobalSearchScreen(): JSX.Element {
   const router = useRouter();
@@ -54,39 +57,47 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
     inputRef.current?.focus();
   }, []);
 
-  const searchQuery = useGlobalPaymentSearch(debounced, {
+  // Чипы — из лёгкого отдельного запроса (сервер считает matchedCategories
+  // по всему скоупу), список — из бесконечного с серверным фильтром чипа:
+  // разрыв цикла «фильтр нужен до запроса, чипы — из его ответа».
+  const categoriesQuery = useGlobalPaymentSearchCategories(debounced, {
     enabled: debounced.trim() !== '',
   });
 
-  const matched = searchQuery.data?.matchedCategories ?? [];
+  const matched = categoriesQuery.data ?? [];
   const chips = searchCategoryChips(matched, selectedKey);
-  // Выбор валиден, только пока чип есть в выдаче текущего запроса.
+  // Выбор валиден, только пока чип есть в выдаче текущего запроса; фильтр
+  // уезжает на сервер парой (категория, направление).
   const activeKey = effectiveChipKey(matched, selectedKey);
   const activeChip =
     activeKey !== null
       ? matched.find((chip) => searchCategoryChipKey(chip) === activeKey)
       : undefined;
 
-  // Раскрытие привязано к ключу выдачи (запрос + чип): новая выдача снова
-  // свернута без setState в эффекте — сравнение происходит при рендере.
-  const resultKey = `${debounced}|${activeKey ?? ''}`;
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const expanded = expandedKey === resultKey;
-  const toggleExpanded = (): void =>
-    setExpandedKey(expanded ? null : resultKey);
+  const searchQuery = useGlobalPaymentSearch(
+    debounced,
+    activeChip !== undefined ? searchChipFilter(activeChip) : {},
+    { enabled: debounced.trim() !== '' },
+  );
+
+  const sentinelRef = useInfiniteScroll(() => {
+    if (searchQuery.hasNextPage && !searchQuery.isFetchingNextPage) {
+      void searchQuery.fetchNextPage();
+    }
+  }, searchQuery.hasNextPage === true);
 
   const items = searchQuery.data?.items ?? [];
-  const filtered =
-    activeChip !== undefined ? filterPaymentsByChip(items, activeChip) : items;
-  const { rows, hasMore } = searchResultRows(filtered, expanded);
 
   const emptyQuery = value.trim() === '';
   // Скелетон — только пока данных нет вовсе (первый запрос): правка запроса
   // держит прежние результаты (keepPreviousData) и не дёргает экран; ошибка
   // без данных показывает карточку повтора, не скелетон.
   const pending =
-    !emptyQuery && searchQuery.data === undefined && !searchQuery.isError;
-  const showResults = !emptyQuery && !pending && !searchQuery.isError;
+    !emptyQuery
+    && (searchQuery.data === undefined || categoriesQuery.data === undefined)
+    && !searchQuery.isError
+    && !categoriesQuery.isError;
+  const showResults = !emptyQuery && !pending && !searchQuery.isError && !categoriesQuery.isError;
 
   const toggleChip = (key: string): void =>
     setSelectedKey((current) => (current === key ? null : key));
@@ -123,7 +134,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
           />
         )}
 
-        {!emptyQuery && searchQuery.isError && (
+        {!emptyQuery && (searchQuery.isError || categoriesQuery.isError) && (
           <PaymentsStateCard
             title="Не удалось загрузить результаты"
             hint="Проверьте подключение и попробуйте еще раз"
@@ -177,7 +188,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
               <section aria-label="Платежи">
                 <PaymentsHeading inset={false}>Платежи</PaymentsHeading>
                 <div className="flex flex-col pt-2">
-                  {rows.map((payment) => (
+                  {items.map((payment) => (
                     <PaymentRowButton
                       key={payment.id}
                       className="-mx-3 px-0"
@@ -199,22 +210,8 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
                     />
                   ))}
 
-                  {hasMore && (
-                    <Button
-                      variant="secondary"
-                      size="small"
-                      className="mt-2 w-full"
-                      data-testid="payments-search-toggle"
-                      aria-expanded={expanded}
-                      onClick={toggleExpanded}
-                    >
-                      {expanded ? 'Свернуть' : 'Показать все'}
-                      <SmallArrowDown
-                        className={expanded ? 'rotate-180' : undefined}
-                        aria-hidden
-                      />
-                    </Button>
-                  )}
+                  {searchQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
+                  {searchQuery.isFetchingNextPage && <LoadingMoreIndicator />}
                 </div>
               </section>
             </div>

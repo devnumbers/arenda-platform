@@ -26,6 +26,14 @@ import (
 // dateOf renders a row's calendar date the way the assertions read it.
 func dateOf(t time.Time) string { return t.Format("2006-01-02") }
 
+// Recurring literals of the search-page test (goconst).
+const (
+	parkingSlug  = "parking"
+	typeExpense  = "expense"
+	typeIncome   = "income"
+	mirrorsTitle = "Зеркала"
+)
+
 // objectPropertyName is the harness's own property label in the fixtures;
 // goconst wants the recurring literal named.
 const objectPropertyName = "Квартира"
@@ -258,7 +266,7 @@ func TestSearchGlobalPayments(t *testing.T) {
 	h.seedGlobalRule(h.propID, h.owner, "Интернет", "expense", 700000,
 		false, false, "utilities", nil)
 	category := h.seedUserCategory(h.owner, "Кофейни")
-	h.seedGlobalRule(h.propID, h.owner, "Зеркала", "income", 150000,
+	h.seedGlobalRule(h.propID, h.owner, mirrorsTitle, "income", 150000,
 		false, false, "", &category)
 
 	cases := []struct {
@@ -269,13 +277,13 @@ func TestSearchGlobalPayments(t *testing.T) {
 	}{
 		{"the title matches", "страх", []string{"Страхование квартиры"}, map[string]int64{"insurance": 1}},
 		{"the default catalog label matches", "коммунал", []string{"Интернет"}, map[string]int64{"utilities": 1}},
-		{"the user category name matches", "кофейн", []string{"Зеркала"}, map[string]int64{"Кофейни": 1}},
+		{"the user category name matches", "кофейн", []string{mirrorsTitle}, map[string]int64{"Кофейни": 1}},
 		{"the chips carry the matched rules' categories", "терне", []string{"Интернет"}, map[string]int64{"utilities": 1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			search, err := svc.SearchGlobalPayments(h.ctx(), h.owner, tc.query)
+			search, err := svc.SearchGlobalPayments(h.ctx(), h.owner, tc.query, paymentsapp.GlobalPaymentSearchPage{})
 			if err != nil {
 				t.Fatalf("search: %v", err)
 			}
@@ -283,6 +291,87 @@ func TestSearchGlobalPayments(t *testing.T) {
 			assertSearchChips(t, search, tc.wantChips)
 		})
 	}
+}
+
+// The chip filter and the page (map #573 rework): the category+type
+// identity narrows the rules list while matchedCategories keep describing
+// the whole query scope; the window walks the matched rows by the feed's
+// stable order.
+func TestSearchGlobalPaymentsChipFilterAndPage(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	svc := h.globalSvc()
+
+	h.seedGlobalRule(h.propID, h.owner, "Парковка", typeExpense, 20000, false, false, "parking", nil)
+	h.seedGlobalRule(h.propID, h.owner, "Аренда машиноместа", typeIncome, 200000, false, false, "parking", nil)
+	category := h.seedUserCategory(h.owner, "Кофейни")
+	h.seedGlobalRule(h.propID, h.owner, mirrorsTitle, typeIncome, 150000, false, false, "", &category)
+	h.seedGlobalRule(h.propID, h.owner, "Страхование квартиры", typeExpense, 3200000, false, false, "insurance", nil)
+
+	// The default-catalog chip (parking, expense): only the expense parking
+	// rule; the chips still describe the whole query scope. The scope's
+	// chips are the (category, direction) pairs — parking carries both
+	// directions here, one rule each.
+	search, err := svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{
+		Category: parkingSlug, Type: typeExpense, Limit: 50,
+	})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	assertSearchTitles(t, search, []string{"Парковка"})
+	// The chips are the (category, direction) pairs: parking carries both
+	// directions here, one rule each; Кофейни is the user category's chip.
+	type chipKey struct {
+		identity string
+		typ      string
+	}
+	got := make(map[chipKey]int64, len(search.MatchedCategories))
+	for _, chip := range search.MatchedCategories {
+		identity := ""
+		switch {
+		case chip.Category.Slug != nil:
+			identity = *chip.Category.Slug
+		case chip.Category.UserCategoryName != nil:
+			identity = *chip.Category.UserCategoryName
+		}
+		got[chipKey{identity, string(chip.Type)}] = chip.RuleCount
+	}
+	want := map[chipKey]int64{
+		{parkingSlug, typeExpense}: 1,
+		{parkingSlug, typeIncome}:  1,
+		{"insurance", typeExpense}: 1,
+		{"Кофейни", typeIncome}:    1,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("chips = %+v, want %v", got, want)
+	}
+	for key, count := range want {
+		if got[key] != count {
+			t.Errorf("chip %v count = %d, want %d", key, got[key], count)
+		}
+	}
+
+	// The user category chip matches by the category's id, not its name.
+	search, err = svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{
+		Category: category.String(), Type: typeIncome, Limit: 50,
+	})
+	if err != nil {
+		t.Fatalf("search by user category: %v", err)
+	}
+	assertSearchTitles(t, search, []string{mirrorsTitle})
+
+	// The window walks the matched rows in the feed's stable order: two per
+	// page, the offset resumes where the first page stopped.
+	search, err = svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{Limit: 2})
+	if err != nil {
+		t.Fatalf("search page one: %v", err)
+	}
+	assertSearchTitles(t, search, []string{"Парковка", "Аренда машиноместа"})
+	search, err = svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{Limit: 2, Offset: 2})
+	if err != nil {
+		t.Fatalf("search page two: %v", err)
+	}
+	assertSearchTitles(t, search, []string{mirrorsTitle, "Страхование квартиры"})
 }
 
 // assertSearchTitles checks the matched rows' titles in order.
@@ -332,23 +421,23 @@ func TestListGlobalPaymentObjects(t *testing.T) {
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	svc := h.globalSvc()
 
-	autoOverdue := h.seedGlobalRule(h.propID, h.owner, "ЖКУ", "expense", 500000, true, false, "utilities", nil)
-	h.seedRuleOperation(autoOverdue, h.propID, h.owner, "2026-08-01", opPlanned, "expense", "ЖКУ", 500000)
-	h.seedGlobalRule(h.propID, h.owner, "Интернет", "expense", 700000, true, false, "utilities", nil)
-	plainOverdue := h.seedGlobalRule(h.propID, h.owner, "Страхование", "expense", 3200000, false, false, "insurance", nil)
-	h.seedRuleOperation(plainOverdue, h.propID, h.owner, "2026-08-10", opPlanned, "expense", "Страхование", 3200000)
-	h.seedGlobalRule(h.propID, h.owner, "Клининг", "expense", 90000, false, false, "cleaning", nil)
+	autoOverdue := h.seedGlobalRule(h.propID, h.owner, "ЖКУ", typeExpense, 500000, true, false, "utilities", nil)
+	h.seedRuleOperation(autoOverdue, h.propID, h.owner, "2026-08-01", opPlanned, typeExpense, "ЖКУ", 500000)
+	h.seedGlobalRule(h.propID, h.owner, "Интернет", typeExpense, 700000, true, false, "utilities", nil)
+	plainOverdue := h.seedGlobalRule(h.propID, h.owner, "Страхование", typeExpense, 3200000, false, false, "insurance", nil)
+	h.seedRuleOperation(plainOverdue, h.propID, h.owner, "2026-08-10", opPlanned, typeExpense, "Страхование", 3200000)
+	h.seedGlobalRule(h.propID, h.owner, "Клининг", typeExpense, 90000, false, false, "cleaning", nil)
 
 	h.seedGlobalProperty(h.owner, "Дом", "active") // No rules: empty groups.
 
 	partner := h.seedGlobalUser("Europe/Moscow")
 	dacha := h.seedGlobalProperty(partner, "Чужая дача", "active")
 	h.seedMembership(dacha, h.owner, partner, "viewer", "active")
-	dachaRule := h.seedGlobalRule(dacha, partner, "Аренда", "income", 6000000, false, false, "rent", nil)
-	h.seedRuleOperation(dachaRule, dacha, partner, "2026-08-01", opPlanned, "income", "Аренда", 6000000)
+	dachaRule := h.seedGlobalRule(dacha, partner, "Аренда", typeIncome, 6000000, false, false, "rent", nil)
+	h.seedRuleOperation(dachaRule, dacha, partner, "2026-08-01", opPlanned, typeIncome, "Аренда", 6000000)
 
 	archived := h.seedGlobalProperty(h.owner, "Старый объект", "archived")
-	h.seedGlobalRule(archived, h.owner, "ЖКУ архива", "expense", 100000, false, false, "utilities", nil)
+	h.seedGlobalRule(archived, h.owner, "ЖКУ архива", typeExpense, 100000, false, false, "utilities", nil)
 
 	cards, err := svc.ListGlobalPaymentObjects(h.ctx(), h.owner, "")
 	if err != nil {

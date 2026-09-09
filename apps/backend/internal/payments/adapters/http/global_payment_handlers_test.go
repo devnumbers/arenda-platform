@@ -54,8 +54,10 @@ func wireFeedItem() application.GlobalPaymentItem {
 // fakeGlobalPaymentsManager is the func-backed GlobalPaymentsManager double
 // (ADR 0035 test doubles): an unset use case fails the test loudly.
 type fakeGlobalPaymentsManager struct {
-	list    func(ctx context.Context, actor uuid.UUID) (application.GlobalPaymentFeed, error)
-	search  func(ctx context.Context, actor uuid.UUID, query string) (application.GlobalPaymentSearch, error)
+	list   func(ctx context.Context, actor uuid.UUID) (application.GlobalPaymentFeed, error)
+	search func(
+		ctx context.Context, actor uuid.UUID, query string, page application.GlobalPaymentSearchPage,
+	) (application.GlobalPaymentSearch, error)
 	objects func(ctx context.Context, actor uuid.UUID, query string) ([]application.GlobalPaymentObjectCard, error)
 	save    func(ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID) error
 }
@@ -70,12 +72,12 @@ func (f *fakeGlobalPaymentsManager) ListGlobalPayments(
 }
 
 func (f *fakeGlobalPaymentsManager) SearchGlobalPayments(
-	ctx context.Context, actor uuid.UUID, query string,
+	ctx context.Context, actor uuid.UUID, query string, page application.GlobalPaymentSearchPage,
 ) (application.GlobalPaymentSearch, error) {
 	if f.search == nil {
 		return application.GlobalPaymentSearch{}, errors.New("unexpected SearchGlobalPayments call")
 	}
-	return f.search(ctx, actor, query)
+	return f.search(ctx, actor, query, page)
 }
 
 func (f *fakeGlobalPaymentsManager) ListGlobalPaymentObjects(
@@ -214,9 +216,13 @@ func TestSearchGlobalPayments_FoldsQueryAndMapsChips(t *testing.T) {
 	t.Parallel()
 
 	var gotQuery string
+	var gotPage application.GlobalPaymentSearchPage
 	svc := &fakeGlobalPaymentsManager{
-		search: func(_ context.Context, _ uuid.UUID, query string) (application.GlobalPaymentSearch, error) {
+		search: func(
+			_ context.Context, _ uuid.UUID, query string, page application.GlobalPaymentSearchPage,
+		) (application.GlobalPaymentSearch, error) {
 			gotQuery = query
+			gotPage = page
 			id := uuid.Must(uuid.NewV7())
 			return application.GlobalPaymentSearch{
 				MatchedCategories: []application.GlobalPaymentSearchCategory{{
@@ -240,6 +246,9 @@ func TestSearchGlobalPayments_FoldsQueryAndMapsChips(t *testing.T) {
 	if gotQuery != "кофе" {
 		t.Errorf("search query = %q, want the decoded parameter", gotQuery)
 	}
+	if gotPage.Category != "" || gotPage.Type != "" || gotPage.Limit != 0 {
+		t.Errorf("page = %+v, want the zero page (the contract's defaults)", gotPage)
+	}
 	var body openapi.PaymentsSearchGlobalResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -253,6 +262,82 @@ func TestSearchGlobalPayments_FoldsQueryAndMapsChips(t *testing.T) {
 	}
 	if chip.Type != openapi.PaymentSearchCategoryTypeIncome || chip.Count != 3 {
 		t.Errorf("chip = (%q, %d), want (income, 3)", chip.Type, chip.Count)
+	}
+}
+
+// The chip filter and the page window ride the query parameters into the
+// use case (map #573 rework): category + type + limit/offset.
+func TestSearchGlobalPayments_CarriesChipFilterAndPage(t *testing.T) {
+	t.Parallel()
+
+	var gotPage application.GlobalPaymentSearchPage
+	svc := &fakeGlobalPaymentsManager{
+		search: func(
+			_ context.Context, _ uuid.UUID, _ string, page application.GlobalPaymentSearchPage,
+		) (application.GlobalPaymentSearch, error) {
+			gotPage = page
+			return application.GlobalPaymentSearch{}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	limit, offset := 50, 100
+	category := "parking"
+	paymentType := openapi.SearchGlobalPaymentsParamsTypeExpense
+	w := httptest.NewRecorder()
+	h.SearchGlobalPayments(w, globalRequest(t.Context(), "/payments/search?search=&category=parking&type=expense&limit=50&offset=100"),
+		openapi.SearchGlobalPaymentsParams{
+			Search:   nil,
+			Category: &category,
+			Type:     &paymentType,
+			Limit:    &limit,
+			Offset:   &offset,
+		})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if gotPage.Category != "parking" || gotPage.Type != domain.TypeExpense {
+		t.Errorf("page filter = %q/%q, want parking/expense", gotPage.Category, gotPage.Type)
+	}
+	if gotPage.Limit != 50 || gotPage.Offset != 100 {
+		t.Errorf("page window = %d/%d, want 50/100", gotPage.Limit, gotPage.Offset)
+	}
+}
+
+// The out-of-range page numbers and the unknown direction are the
+// contract's 400 (the shared payments table), not an opaque 500 — the
+// openapi bounds (minimum/maximum, the enum) are enforced on the wire.
+func TestSearchGlobalPayments_RejectsInvalidPage(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeGlobalPaymentsManager{
+		search: func(_ context.Context, _ uuid.UUID, _ string, _ application.GlobalPaymentSearchPage) (application.GlobalPaymentSearch, error) {
+			return application.GlobalPaymentSearch{}, errors.New("must not be called")
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	limit0, limit101, offsetNeg := 0, 101, -1
+	unknownType := openapi.SearchGlobalPaymentsParamsType("foobar")
+	cases := []struct {
+		name   string
+		params openapi.SearchGlobalPaymentsParams
+	}{
+		{"limit below the minimum", openapi.SearchGlobalPaymentsParams{Limit: &limit0}},
+		{"limit above the maximum", openapi.SearchGlobalPaymentsParams{Limit: &limit101}},
+		{"negative offset", openapi.SearchGlobalPaymentsParams{Offset: &offsetNeg}},
+		{"unknown direction", openapi.SearchGlobalPaymentsParams{Type: &unknownType}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w := httptest.NewRecorder()
+			h.SearchGlobalPayments(w, globalRequest(t.Context(), "/payments/search"), tc.params)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400: %s", w.Code, w.Body.String())
+			}
+		})
 	}
 }
 
