@@ -17,7 +17,6 @@ import {
   useSaveFavoritesOrder,
   useSetPaymentFavorite,
 } from "@/features/payments";
-import { CategoryIcon, categoryStyle } from "@/features/payment-categories";
 import type { GlobalPayment } from "@/entities/payment";
 import { PaymentRowButton } from "@/entities/payment";
 import {
@@ -45,7 +44,7 @@ import {
   moveFavorite,
   remainingFavoriteIds,
 } from "../lib/favorites-edit-model";
-import { PaymentsStateCard } from "./payments-sections";
+import { GlobalPaymentRuleIcon, PaymentsStateCard } from "./payments-sections";
 
 /**
  * Экран «Избранные платежи» (карта #573, тикет #579; вход — карточка
@@ -225,7 +224,7 @@ export function PaymentFavoritesScreen(): JSX.Element {
                 <PaymentRowButton
                   key={payment.id}
                   className="px-6"
-                  categoryIcon={<FavoritesRowIcon payment={payment} />}
+                  categoryIcon={<GlobalPaymentRuleIcon payment={payment} />}
                   title={payment.title}
                   subtitle={payment.propertyName}
                   subtitleSuffix={
@@ -338,28 +337,6 @@ export function PaymentFavoritesScreen(): JSX.Element {
   );
 }
 
-/** Иконка категории строки избранного: красная точка при накопленной
- * просрочке (как в стопках главного экрана), опциональная галочка пометки
- * на удаление (режим правки). */
-function FavoritesRowIcon({
-  payment,
-  check = false,
-}: {
-  readonly payment: GlobalPayment;
-  readonly check?: boolean;
-}): JSX.Element {
-  const style = categoryStyle(payment.category.source, payment.category.slug);
-  return (
-    <CategoryIcon
-      icon={style.icon}
-      color={style.color}
-      badge={
-        payment.overdueOperationCount > 0 ? "notification" : undefined
-      }
-      check={check}
-    />
-  );
-}
 
 /** Пустое состояние (889:28111): иллюстрация favorites-empty.png 128 и
  * две тёмные подписи — заголовок и подсказка (оба #171A1C в макете).
@@ -431,7 +408,7 @@ function FavoritesEditList({
         return (
           <PaymentRowButton
             key={payment.id}
-            categoryIcon={<FavoritesRowIcon payment={payment} check={marked} />}
+            categoryIcon={<GlobalPaymentRuleIcon payment={payment} check={marked} />}
             title={payment.title}
             subtitle={payment.propertyName}
             amountKopecks={payment.amountKopecks}

@@ -12,10 +12,11 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapGlobalPaymentFeed, mapGlobalPaymentObject, mapPayment, mapPaymentOperation, mapOperationsSummary } from '@/entities/payment';
+import { mapGlobalPaymentFeed, mapGlobalPaymentObject, mapGlobalPaymentSearch, mapPayment, mapPaymentOperation, mapOperationsSummary } from '@/entities/payment';
 import type {
   GlobalPaymentFeed,
   GlobalPaymentObject,
+  GlobalPaymentSearch,
   OperationsSummary,
   Payment,
   PaymentCreateCommand,
@@ -689,5 +690,30 @@ export function useGlobalPaymentObjects(
       return response.items.map(mapGlobalPaymentObject);
     },
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Поиск глобальных платежей (GET /payments/search, #575; экран #581):
+ * совпавшие строки — состав фида без счётчиков — и чипы совпавших
+ * категорий (по числу совпадений убывание). query — часть ключа;
+ * keepPreviousData держит прежнюю выдачу, пока едет новый запрос
+ * (правка запроса не мигает); пустой запрос экран не выполняет.
+ */
+export function useGlobalPaymentSearch(
+  query: string,
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<GlobalPaymentSearch, ApiError> {
+  return useQuery({
+    queryKey: globalPaymentKeys.search(query),
+    queryFn: async () => {
+      const suffix = query ? `?search=${encodeURIComponent(query)}` : '';
+      const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
+        `/payments/search${suffix}`,
+      );
+      return mapGlobalPaymentSearch(response);
+    },
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
   });
 }

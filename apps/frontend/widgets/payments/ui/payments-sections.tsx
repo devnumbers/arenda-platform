@@ -7,10 +7,37 @@ import {
   PaymentRowButton,
 } from '@/entities/payment';
 import { EmptyState, Skeleton } from '@/shared/ui/design';
-import type { IsoDate, Payment, PaymentOperation } from '@/entities/payment';
-import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
+import type { GlobalPayment, IsoDate, Payment, PaymentOperation } from '@/entities/payment';
+import { CategoryIcon, categoryStyle, type CategoryIconSurface } from '@/features/payment-categories';
 import { daysOverdue } from '../lib/overdue-days';
 import { paymentRowSubtitle } from '../lib/payment-row-subtitle';
+
+/**
+ * Иконка категории строки правила глобальных платежей (#575): красная
+ * точка при накопленной просрочке правила (overdueOperationCount фида),
+ * галочка пометки — в правке избранного (#579). Поверхность канта: white —
+ * строки на белом, muted — карточки на серых лентах главного экрана.
+ */
+export function GlobalPaymentRuleIcon({
+  payment,
+  check = false,
+  surface = 'white',
+}: {
+  readonly payment: Pick<GlobalPayment, 'category' | 'overdueOperationCount'>;
+  readonly check?: boolean;
+  readonly surface?: CategoryIconSurface;
+}): JSX.Element {
+  const style = categoryStyle(payment.category.source, payment.category.slug);
+  return (
+    <CategoryIcon
+      icon={style.icon}
+      color={style.color}
+      badge={payment.overdueOperationCount > 0 ? 'notification' : undefined}
+      check={check}
+      surface={surface}
+    />
+  );
+}
 
 /**
  * Секции экрана «Платежи объекта» (Figma 1043:57610/1043:62920): серые

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GlobalPayment, GlobalPaymentObject } from '@/entities/payment';
+import type { GlobalPaymentObject } from '@/entities/payment';
 import {
   globalFavoritePayments,
   globalOverduePayments,
@@ -9,27 +9,7 @@ import {
   overdueOperationsCountLabel,
   paymentsCountLabel,
 } from './payments-global-model';
-
-function item(overrides: Partial<GlobalPayment>): GlobalPayment {
-  return {
-    id: 'payment-1',
-    propertyId: 'property-1',
-    propertyName: 'Моя квартира',
-    title: 'Страхование',
-    amountKopecks: 3_200_000,
-    type: 'expense',
-    category: { source: 'default', slug: 'insurance', label: 'Страхование' },
-    autoPay: false,
-    isFavorite: false,
-    favoriteOrder: null,
-    today: '2026-09-08',
-    nearestDate: '2026-09-10',
-    overdueOperationCount: 0,
-    overdueDays: null,
-    oldestOverdueOperationId: null,
-    ...overrides,
-  };
-}
+import { makeGlobalPayment as item } from './global-payment-fixtures';
 
 describe('globalFavoritePayments', () => {
   it('оставляет только избранные', () => {

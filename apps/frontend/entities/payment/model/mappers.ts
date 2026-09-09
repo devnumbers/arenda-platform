@@ -9,6 +9,7 @@ import type {
   GlobalPayment,
   GlobalPaymentFeed,
   GlobalPaymentObject,
+  GlobalPaymentSearch,
   OperationsSummary,
   Payment,
   PaymentOperation,
@@ -20,6 +21,7 @@ type OperationsSummaryDto = components['schemas']['OperationsSummaryResponse'];
 type GlobalPaymentDto = components['schemas']['PaymentGlobalItem'];
 type GlobalPaymentFeedDto = components['schemas']['PaymentsGlobalResponse'];
 type GlobalPaymentObjectDto = components['schemas']['PaymentObjectItem'];
+type GlobalPaymentSearchDto = components['schemas']['PaymentsSearchGlobalResponse'];
 
 export function mapPayment(dto: PaymentDto): Payment {
   return {
@@ -121,6 +123,22 @@ export function mapGlobalPaymentFeed(dto: GlobalPaymentFeedDto): GlobalPaymentFe
     items: dto.items.map(mapGlobalPayment),
     favoriteCount: dto.favoriteCount,
     overdueOperationsCount: dto.overdueOperationsCount,
+  };
+}
+
+export function mapGlobalPaymentSearch(dto: GlobalPaymentSearchDto): GlobalPaymentSearch {
+  return {
+    items: dto.items.map(mapGlobalPayment),
+    matchedCategories: dto.matchedCategories.map((chip) => ({
+      category: {
+        source: chip.category.source,
+        slug: chip.category.slug ?? undefined,
+        id: chip.category.id ?? undefined,
+        label: chip.category.label,
+      },
+      type: chip.type,
+      count: chip.count,
+    })),
   };
 }
 

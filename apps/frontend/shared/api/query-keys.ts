@@ -253,6 +253,9 @@ export const globalPaymentKeys = {
   /** Стопки объектов GET /payments/objects (#575): поисковый фильтр —
    * часть ключа ('' = без фильтра). */
   objects: (search = '') => [...globalPaymentKeys.all, 'objects', search] as const,
+  /** Поиск GET /payments/search (#575, экран #581): запрос — часть ключа.
+   * Пустой запрос экран не выполняет (стартовое состояние). */
+  search: (query = '') => [...globalPaymentKeys.all, 'search', query] as const,
 };
 
 // features/subscription

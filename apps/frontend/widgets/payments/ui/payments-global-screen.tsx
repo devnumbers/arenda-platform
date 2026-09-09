@@ -36,7 +36,10 @@ import {
   overdueOperationsCountLabel,
   paymentsCountLabel,
 } from "../lib/payments-global-model";
-import { PaymentsStateCard } from "./payments-sections";
+import {
+  GlobalPaymentRuleIcon,
+  PaymentsStateCard,
+} from "./payments-sections";
 
 /** Максимум карточек в ленте секции главного экрана (решение владельца
  * 09.09): четыре платежа, замыкающая «Все …» — пятая; остальное — на
@@ -320,23 +323,11 @@ function FavoritesSectionBody({
   return (
     <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {favorites.map((payment) => {
-        const style = categoryStyle(
-          payment.category.source,
-          payment.category.slug,
-        );
-
         return (
           <PaymentCardButton
             key={payment.id}
             className="snap-start"
-            leading={
-              <CategoryIcon
-                icon={style.icon}
-                color={style.color}
-                badge={payment.overdueOperationCount > 0 ? "notification" : undefined}
-                surface="muted"
-              />
-            }
+            leading={<GlobalPaymentRuleIcon payment={payment} surface="muted" />}
             title={payment.title}
             subtitle={payment.propertyName}
             amountKopecks={payment.amountKopecks}

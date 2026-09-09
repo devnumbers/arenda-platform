@@ -174,6 +174,21 @@ export type GlobalPaymentFeed = {
   readonly overdueOperationsCount: number;
 };
 
+/** Чип категорий поиска платежей (#575, экран #581): категория с
+ * направлением и числом совпавших правил; порядок отдаёт сервер. */
+export type PaymentSearchCategoryView = {
+  readonly category: PaymentCategoryView;
+  readonly type: PaymentType;
+  readonly count: number;
+};
+
+/** Ответ поиска глобальных платежей (#575): совпавшие строки — состав
+ * фида без счётчиков — и чипы совпавших категорий. */
+export type GlobalPaymentSearch = {
+  readonly items: ReadonlyArray<GlobalPayment>;
+  readonly matchedCategories: ReadonlyArray<PaymentSearchCategoryView>;
+};
+
 /** Ключ стопки объекта (#575): правило за карточкой стека и его флаг
  * просрочки — красная точка на карточке объекта. */
 export type GlobalPaymentObjectKey = {
