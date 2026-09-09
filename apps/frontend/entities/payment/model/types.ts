@@ -114,11 +114,6 @@ export type PaymentUpdateCommand = Partial<Omit<PaymentCreateCommand, 'endDate'>
   readonly endDate?: IsoDate | null;
 };
 
-/** Тело атомарного toggle избранного (PUT favorite). */
-export type PaymentFavoriteCommand = {
-  readonly favorite: boolean;
-};
-
 /** Строка категории в сводке периода (#473): слаг для иконки и стиля,
  * подпись-снапшот для текста, сумма по категории в копейках. */
 export type OperationsCategorySummary = {

@@ -18,7 +18,6 @@ export type {
   Payment,
   PaymentCategoryView,
   PaymentCreateCommand,
-  PaymentFavoriteCommand,
   PaymentOperation,
   PaymentOperationStatus,
   PaymentSchedule,

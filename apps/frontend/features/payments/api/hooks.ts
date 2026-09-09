@@ -19,7 +19,6 @@ import type {
   OperationsSummary,
   Payment,
   PaymentCreateCommand,
-  PaymentFavoriteCommand,
   PaymentOperation,
   PaymentUpdateCommand,
 } from '@/entities/payment';
@@ -432,6 +431,32 @@ export function useGlobalOperationsPaged(
 }
 
 /**
+ * Сохранение ручного порядка избранного (карта #573, #576; кнопка
+ * «Сохранить» режима правки #579): полный список видимых избранных правил
+ * в новом порядке — сервер в одной транзакции строит плотные 1-based
+ * позиции (полное замещение). Чистая запись порядка — ничего не тикает;
+ * инвалидируется глобальный фид, из которого читают оба экрана избранного.
+ */
+export function useSaveFavoritesOrder(): UseMutationResult<
+  void,
+  ApiError,
+  readonly string[]
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (paymentIds: readonly string[]) => {
+      await apiClient<void>('/payments/favorites/order', {
+        method: 'PUT',
+        body: JSON.stringify({ paymentIds: [...paymentIds] }),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
  * Глобальная сводка периода (#540) за карточками «Расходы/Доходы» и чипом
  * «Категория»: итоги всегда оба направления; категорийный фильтр сводку не
  * сужает (решение владельца #539) — в запрос уходят только объекты, период,
@@ -547,24 +572,30 @@ export function useResumePayment(
 }
 
 /**
- * Атомарный toggle избранного (PUT favorite c телом `{favorite}`,
- * резолюция #452) — без read-modify-write через PATCH.
+ * Атомарный toggle избранного (PUT favorite c телом `{favorite}` —
+ * резолюция #452, без read-modify-write через PATCH). Правило и команда
+ * приходят переменными мутации: один инстанс обслуживает и звезду
+ * страницы платежа, и пачку удалений режима правки избранного (#579).
  */
-export function useSetPaymentFavorite(
-  propertyId: string,
-  paymentId: string,
-): UseMutationResult<Payment, ApiError, PaymentFavoriteCommand> {
+export function useSetPaymentFavorite(): UseMutationResult<
+  Payment,
+  ApiError,
+  { readonly propertyId: string; readonly paymentId: string; readonly favorite: boolean }
+> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (command: PaymentFavoriteCommand) => {
+    mutationFn: async ({ propertyId, paymentId, favorite }) => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/favorite`,
-        { method: 'PUT', body: JSON.stringify(command) },
+        { method: 'PUT', body: JSON.stringify({ favorite }) },
       );
       return mapPayment(response);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      // Строка избранного живёт и в глобальном фиде (карта #573): звезда
+      // на месте — фид перечитывается, строка исчезает/появляется сразу.
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
 }
