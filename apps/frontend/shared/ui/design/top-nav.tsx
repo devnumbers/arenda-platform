@@ -12,13 +12,15 @@ import { useTopNavUser } from './top-nav-user-context';
 
 /** Компакт-бар хаба (решение владельца 2026-09-09, Figma 1603-93157 →
  * 1733-93740): при прокрутке хаб-шапки (заголовок + пилюля) бар показывает
- * свёрнутый состав — лупа поиска слева (там, где у хаба есть пилюля),
- * заголовок 16/18 по центру и «+» в правом слоте (где он есть в хаб-шапке).
- * Видимость управляется прогрессом `--hub-collapse` (пишет
+ * свёрнутый состав — заголовок 16/18 по центру, лупа поиска в левом слоте
+ * (там, где у хаба есть пилюля), «+» в правом слоте (где он есть в
+ * хаб-шапке). Видимость управляется прогрессом `--hub-collapse` (пишет
  * HubCollapseAnchor), только opacity/transform. На планшете и ПК компакт
- * живёт в самом закреплённом баре (лупа — рядом с заголовком, чтобы не
- * спорить с крылом-лого); на мобайле, где бар в потоке и уезжает, поверх
- * проявляется отдельный закреплённый клон (лупа у края — как в Figma). */
+ * живёт в самом закреплённом баре, слоты — края центральной колонки 560,
+ * «крылья» остаются по краям бара; на 561–800px лупа скрыта — её место
+ * занято крылом-лого (решение владельца 2026-09-09). На мобайле, где бар
+ * в потоке и уезжает, поверх проявляется отдельный закреплённый клон
+ * (лупа у края — как в Figma). */
 export type TopNavCollapse = {
   readonly title: ReactNode;
   /** Поисковая пилюля хаба — в компакт-баре её роль играет лупа. */
@@ -140,19 +142,24 @@ export function TopNav({
           )}
           {collapse ? (
             /* Компакт-бар на планшете и ПК — в самом закреплённом баре:
-             * лупа рядом с заголовком (крыло-лого остаётся у края). */
-            <div className="hub-compact hidden h-full w-full min-w-0 items-center justify-center gap-2 px-3 tablet:flex">
+             * заголовок строго по центру колонки, лупа в левом слоте
+             * (скрыта на 561–800px — место занято крылом-лого). */
+            <>
               {collapse.search && (
-                <Link
-                  href={collapse.search.href}
-                  aria-label={collapse.search.label}
-                  className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-button outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <Search className="h-6 w-6 text-content" aria-hidden />
-                </Link>
+                <div className="hub-compact absolute left-0 top-0 hidden h-full items-center pl-3.5 min-[800px]:flex">
+                  <Link
+                    href={collapse.search.href}
+                    aria-label={collapse.search.label}
+                    className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-button outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <Search className="h-6 w-6 text-content" aria-hidden />
+                  </Link>
+                </div>
               )}
-              <TopNavTitle title={collapse.title} />
-            </div>
+              <div className="hub-compact flex h-full w-full min-w-0 items-center justify-center px-3">
+                <TopNavTitle title={collapse.title} />
+              </div>
+            </>
           ) : (
             <div className="flex h-full w-full min-w-0 items-center justify-center gap-2 px-3">{children}</div>
           )}
