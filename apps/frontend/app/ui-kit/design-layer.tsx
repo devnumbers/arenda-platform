@@ -31,6 +31,7 @@ import {
     DesktopMenuButton,
     EmptyState,
     HubTitle,
+    SubScreenShell,
     IconButton,
     ListRow,
     Modal,
@@ -885,6 +886,30 @@ export function DesignLayerShowcase(): JSX.Element {
                         <div className="rounded-button bg-surface-muted p-4">
                             <HubTitle>Уведомления</HubTitle>
                         </div>
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>SubScreenShell · каркас подэкрана (#568)</h3>
+                    <p className={styles.groupTitle}>
+                        Один компонент вместо ручной сборки подэкранной шапки: TopNav с
+                        ведущим «Назад» (TopNavBackButton), TopNavTitle в центре и
+                        PageContent с боковым паддингом 24. trailing — действия экрана
+                        (кебаб объекта), contentClassName переопределяет паддинг контента.
+                        Шапка в этой сборке — fixed на планшете и ПК, поэтому вживую она
+                        видна на любом подэкране (дерево профиля, детализация и правка
+                        объекта); ниже — контентная колонка каркаса.
+                    </p>
+                    <div className={styles.column} style={{ maxWidth: 480 }}>
+                        <SubScreenShell
+                            title="Информация об объекте"
+                            fallbackHref="/ui-kit"
+                            contentClassName="pt-4 pb-4"
+                        >
+                            <p className="text-sm text-content-secondary">
+                                Контент подэкрана в колонке 560.
+                            </p>
+                        </SubScreenShell>
                     </div>
                 </div>
 

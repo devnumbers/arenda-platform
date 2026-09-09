@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
+import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { PersonalDataForm } from '@/widgets/profile';
 
@@ -11,12 +11,9 @@ export const metadata: Metadata = {
 export default function PersonalDataPage() {
   return (
     <>
-      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.profile} />}>
-        <TopNavTitle title="Мои данные" />
-      </TopNav>
-      <PageContent className="px-6">
+      <SubScreenShell title="Мои данные" fallbackHref={ROUTES.profile}>
         <PersonalDataForm />
-      </PageContent>
+      </SubScreenShell>
     </>
   );
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
+import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { MarkdownContent } from '@/shared/ui/markdown-content';
 import styles from './page.module.css';
@@ -19,14 +19,11 @@ export default function PrivacyPage() {
 
   return (
     <>
-      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.profileInfo} />}>
-        <TopNavTitle title="Политика конфиденциальности" />
-      </TopNav>
-      <PageContent className="px-6">
+      <SubScreenShell title="Политика конфиденциальности" fallbackHref={ROUTES.profileInfo}>
         <section className={styles.section}>
           <MarkdownContent>{content}</MarkdownContent>
         </section>
-      </PageContent>
+      </SubScreenShell>
     </>
   );
 }

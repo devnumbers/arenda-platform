@@ -3,12 +3,7 @@
 import { useCallback, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/shared/lib/notifications';
-import {
-  PageContent,
-  TopNav,
-  TopNavBackButton,
-  TopNavTitle,
-} from '@/shared/ui/design';
+import { SubScreenShell } from '@/shared/ui/design';
 import { Button } from '@/shared/ui/button';
 import { useAddPaymentMethod } from '@/features/billing';
 import { ROUTES } from '@/shared/config/routes';
@@ -43,10 +38,7 @@ export default function AddPaymentMethodPage(): JSX.Element {
 
   return (
     <>
-      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.profilePaymentMethods} />}>
-        <TopNavTitle title="Добавить карту" />
-      </TopNav>
-      <PageContent className="px-6">
+      <SubScreenShell title="Добавить карту" fallbackHref={ROUTES.profilePaymentMethods}>
         <section className={styles.section}>
           {add.isError ? (
             <div className={styles.error}>
@@ -76,7 +68,7 @@ export default function AddPaymentMethodPage(): JSX.Element {
             </Button>
           )}
         </section>
-      </PageContent>
+      </SubScreenShell>
     </>
   );
 }

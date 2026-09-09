@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
+import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { PaymentMethodList } from '@/widgets/profile';
 
@@ -21,12 +21,9 @@ export default async function PaymentMethodsPage({
 
   return (
     <>
-      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.profileTariff} />}>
-        <TopNavTitle title="Способы оплаты" />
-      </TopNav>
-      <PageContent className="px-6">
+      <SubScreenShell title="Способы оплаты" fallbackHref={ROUTES.profileTariff}>
         <PaymentMethodList addCardResult={addCardResult} />
-      </PageContent>
+      </SubScreenShell>
     </>
   );
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import NextLink from 'next/link';
 import { Card } from '@heroui/react/card';
-import { PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
+import { SubScreenShell } from '@/shared/ui/design';
 import { Icon } from '@/shared/ui/icon';
 import { SmallArrowRight } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -31,10 +31,7 @@ const infoItems: InfoItem[] = [
 export default function InfoPage() {
   return (
     <>
-      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.profile} />}>
-        <TopNavTitle title="Информация" />
-      </TopNav>
-      <PageContent className="px-6">
+      <SubScreenShell title="Информация" fallbackHref={ROUTES.profile}>
         <nav className={styles.list} aria-label="Правовая информация">
           {infoItems.map((item) => (
             <NextLink
@@ -52,7 +49,7 @@ export default function InfoPage() {
             </NextLink>
           ))}
         </nav>
-      </PageContent>
+      </SubScreenShell>
     </>
   );
 }

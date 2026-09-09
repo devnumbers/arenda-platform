@@ -45,6 +45,7 @@ export { PageContent, type PageContentProps } from './page-content';
 export { TopNav, type TopNavProps, TopNavTitle, type TopNavTitleProps } from './top-nav';
 export { TopNavBackButton, type TopNavBackButtonProps } from './top-nav-back-button';
 export { HubTitle, type HubTitleProps } from './hub-title';
+export { SubScreenShell, type SubScreenShellProps } from './sub-screen-shell';
 export {
   TopNavUserContext,
   TopNavUserContextProvider,
