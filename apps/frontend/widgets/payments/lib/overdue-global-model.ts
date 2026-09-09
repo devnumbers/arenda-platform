@@ -11,11 +11,12 @@ import type { GlobalPayment } from '@/entities/payment';
 export type OverdueSort = 'new' | 'old';
 
 /** Разбор ?sort= строки страницы (конвенция книги контактов):
- * неизвестное и отсутствующее значения — дефолт «Новые». */
+ * неизвестное и отсутствующее значения — дефолт «Старые» (решение
+ * владельца 09.09 — самые старые просрочки первыми). */
 export function parseOverdueSortParams(
   sort: string | string[] | undefined,
 ): OverdueSort {
-  return typeof sort === 'string' && sort === 'old' ? 'old' : 'new';
+  return typeof sort === 'string' && sort === 'new' ? 'new' : 'old';
 }
 
 /** Просроченные правила скоупа в направлении сортировки страницы.

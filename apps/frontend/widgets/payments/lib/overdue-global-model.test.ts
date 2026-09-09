@@ -24,10 +24,10 @@ function item(overrides: Partial<GlobalPayment>): GlobalPayment {
 }
 
 describe('parseOverdueSortParams', () => {
-  it('отсутствующее, пустое и неизвестное значение — дефолт «Новые» (конвенция книги контактов)', () => {
-    expect(parseOverdueSortParams(undefined)).toBe('new');
-    expect(parseOverdueSortParams('')).toBe('new');
-    expect(parseOverdueSortParams('garbage')).toBe('new');
+  it('отсутствующее, пустое и неизвестное значение — дефолт «Старые» (решение владельца 09.09)', () => {
+    expect(parseOverdueSortParams(undefined)).toBe('old');
+    expect(parseOverdueSortParams('')).toBe('old');
+    expect(parseOverdueSortParams('garbage')).toBe('old');
   });
 
   it('читает ?sort=new|old строки запроса', () => {

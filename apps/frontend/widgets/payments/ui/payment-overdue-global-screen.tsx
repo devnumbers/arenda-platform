@@ -33,15 +33,16 @@ import { PaymentsStateCard } from "./payments-sections";
  * индикатор рядом с названием объекта (как на «Избранных» 693:5546);
  * управление избранным — только со страницы платежа, звезда ничего не
  * тогглит. Сортировка по возрасту просрочки — чип «Новые ⇅ / Старые ⇅»
- * (706:15029), дефолт «Новые»; выбор живёт в query строки (?sort=old,
- * дефолт не пишется — конвенция книги контактов) и переживает
- * перезагрузку. Тап строке — СТАРЕЙШАЯ просроченная операция правила
+ * (706:15029), дефолт «Старые» (решение владельца 09.09); выбор живёт в
+ * query строки (?sort=new, дефолт не пишется — конвенция книги
+ * контактов) и переживает перезагрузку. Тап строке — СТАРЕЙШАЯ
+ * просроченная операция правила
  * (тот же принцип, что у карточек главного экрана #578); страница только
  * читающая: оплата и закрытие просрочки — на объектных экранах. Пустое
  * состояние (885:18755) — канон EmptyState с 3D-иллюстрацией.
  */
 export function PaymentOverdueGlobalScreen({
-  initialSort = "new",
+  initialSort = "old",
 }: {
   readonly initialSort?: OverdueSort;
 }): JSX.Element {
@@ -57,11 +58,11 @@ export function PaymentOverdueGlobalScreen({
   const listReady = !pending && !feedQuery.isError;
 
   // Смена направления синхронно переписывает query строки (дефолтное
-  // «Новые» не пишется — как в книге контактов).
+  // «Старые» не пишется — как в книге контактов).
   const toggleSort = (): void => {
-    const next: OverdueSort = sort === "new" ? "old" : "new";
+    const next: OverdueSort = sort === "old" ? "new" : "old";
     setSort(next);
-    const query = next === "old" ? "?sort=old" : "";
+    const query = next === "new" ? "?sort=new" : "";
     router.replace(query !== "" ? `${pathname}${query}` : pathname, {
       scroll: false,
     });
@@ -117,7 +118,7 @@ export function PaymentOverdueGlobalScreen({
                   trailingIcon={<ChangeVertical />}
                   onClick={toggleSort}
                 >
-                  {sort === "new" ? "Новые" : "Старые"}
+                  {sort === "old" ? "Старые" : "Новые"}
                 </ChipButton>
               </div>
               {overdue.map((payment) => (
