@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { PageHeader } from '@/shared/ui/page-header';
-import { PageShell } from '@/shared/ui/page-shell';
+import { PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { PaymentDetail } from '@/widgets/profile';
 
@@ -17,9 +16,13 @@ export default async function PaymentDetailPage({
   const { id } = await params;
 
   return (
-    <PageShell>
-      <PageHeader title="Платёж" backHref={ROUTES.profilePayments} />
-      <PaymentDetail id={id} />
-    </PageShell>
+    <>
+      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.profilePayments} />}>
+        <TopNavTitle title="Платёж" />
+      </TopNav>
+      <PageContent className="px-6">
+        <PaymentDetail id={id} />
+      </PageContent>
+    </>
   );
 }

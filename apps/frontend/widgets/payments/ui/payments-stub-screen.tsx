@@ -1,5 +1,10 @@
 import type { JSX } from 'react';
-import { EmptyState, PageContent, TopNav } from '@/shared/ui/design';
+import {
+  EmptyState,
+  HubTitle,
+  PageContent,
+  TopNav,
+} from '@/shared/ui/design';
 
 /**
  * Страница-заглушка «Платежи» (карта #556, тикет #559): пункт «Платежи»
@@ -16,7 +21,7 @@ export function PaymentsStubScreen(): JSX.Element {
       <TopNav mobileWings />
 
       <PageContent>
-        <h1 className="pl-6 text-[28px] font-semibold leading-8 text-content">Платежи</h1>
+        <HubTitle>Платежи</HubTitle>
 
         <EmptyState
           className="mt-6"

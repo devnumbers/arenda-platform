@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { PageHeader } from '@/shared/ui/page-header';
-import { PageShell } from '@/shared/ui/page-shell';
+import { PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { PaymentMethodList } from '@/widgets/profile';
 
@@ -21,9 +20,13 @@ export default async function PaymentMethodsPage({
     typeof params.addCard === 'string' ? params.addCard : undefined;
 
   return (
-    <PageShell>
-      <PageHeader title="Способы оплаты" backHref={ROUTES.profileTariff} />
-      <PaymentMethodList addCardResult={addCardResult} />
-    </PageShell>
+    <>
+      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.profileTariff} />}>
+        <TopNavTitle title="Способы оплаты" />
+      </TopNav>
+      <PageContent className="px-6">
+        <PaymentMethodList addCardResult={addCardResult} />
+      </PageContent>
+    </>
   );
 }

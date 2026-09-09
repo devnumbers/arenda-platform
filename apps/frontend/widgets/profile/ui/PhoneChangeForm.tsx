@@ -13,7 +13,6 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
-import { PageHeader } from '@/shared/ui/page-header';
 import { useMe } from '@/features/auth';
 import {
   useChangePhone,
@@ -214,7 +213,6 @@ export function PhoneChangeForm(): JSX.Element {
 
   return (
     <>
-      <PageHeader title="Изменение телефона" backHref={ROUTES.profileAccount} />
       {isMeError && (
         <div className={styles.error}>
           <p className={styles.errorText}>Не удалось загрузить данные</p>

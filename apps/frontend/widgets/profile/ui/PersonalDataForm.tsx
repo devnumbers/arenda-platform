@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type JSX, type SubmitEvent } from 'react';
 import { notify } from '@/shared/lib/notifications';
-import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
 import { TextField } from '@/shared/ui/text-field';
-import { PageHeader } from '@/shared/ui/page-header';
 import { useMe } from '@/features/auth';
 import { useUpdateMe } from '@/features/profile';
 import type { User, UserUpdateCommand } from '@/entities/user';
@@ -190,7 +188,6 @@ export function PersonalDataForm(): JSX.Element {
 
   return (
     <>
-      <PageHeader title="Мои данные" backHref={ROUTES.profile} />
       {isError && (
         <div className={styles.error}>
           <p className={styles.errorText}>Не удалось загрузить данные</p>

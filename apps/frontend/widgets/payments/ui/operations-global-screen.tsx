@@ -20,7 +20,7 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from "@/features/payments";
-import { Button, PageContent, TopNav } from "@/shared/ui/design";
+import { Button, HubTitle, PageContent, TopNav } from "@/shared/ui/design";
 import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
 import {
   LoadingMoreIndicator,
@@ -128,9 +128,7 @@ export function OperationsGlobalScreen(): JSX.Element {
       <TopNav mobileWings />
 
       <PageContent>
-        <h1 className="pl-6 text-[28px] font-semibold leading-8 text-content">
-          Операции
-        </h1>
+        <HubTitle>Операции</HubTitle>
 
         {neverHad ? (
           <OperationsNeverHad />

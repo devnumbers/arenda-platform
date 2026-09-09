@@ -43,6 +43,8 @@ export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar'
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';
 export { PageContent, type PageContentProps } from './page-content';
 export { TopNav, type TopNavProps, TopNavTitle, type TopNavTitleProps } from './top-nav';
+export { TopNavBackButton, type TopNavBackButtonProps } from './top-nav-back-button';
+export { HubTitle, type HubTitleProps } from './hub-title';
 export {
   TopNavUserContext,
   TopNavUserContextProvider,

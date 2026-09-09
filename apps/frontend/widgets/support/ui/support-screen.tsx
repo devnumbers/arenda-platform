@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { SmallArrowRight } from '@/shared/assets/icons';
-import { PageContent, TopNav } from '@/shared/ui/design';
+import { HubTitle, PageContent, TopNav } from '@/shared/ui/design';
 
 type SupportContact = {
     readonly label: string;
@@ -36,9 +36,7 @@ export function SupportScreen(): JSX.Element {
         <>
             <TopNav mobileWings />
             <PageContent>
-                <h1 className="pl-6 text-[28px] font-semibold leading-8 text-content">
-                    Поддержка
-                </h1>
+                <HubTitle>Поддержка</HubTitle>
 
                 <section className="mx-6 mt-6 flex flex-col gap-3 rounded-card bg-surface-muted p-6">
                     <h2 className="text-base font-semibold leading-6 text-content">

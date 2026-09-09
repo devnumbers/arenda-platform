@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { PageHeader } from '@/shared/ui/page-header';
-import { PageShell } from '@/shared/ui/page-shell';
+import { PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { PaymentList } from '@/widgets/profile';
 
@@ -11,9 +10,13 @@ export const metadata: Metadata = {
 
 export default function PaymentsPage() {
   return (
-    <PageShell>
-      <PageHeader title="История платежей" backHref={ROUTES.profileTariff} />
-      <PaymentList />
-    </PageShell>
+    <>
+      <TopNav leading={<TopNavBackButton fallbackHref={ROUTES.profileTariff} />}>
+        <TopNavTitle title="История платежей" />
+      </TopNav>
+      <PageContent className="px-6">
+        <PaymentList />
+      </PageContent>
+    </>
   );
 }

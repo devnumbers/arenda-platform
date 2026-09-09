@@ -30,6 +30,7 @@ import {
     ConfirmDialog,
     DesktopMenuButton,
     EmptyState,
+    HubTitle,
     IconButton,
     ListRow,
     Modal,
@@ -54,6 +55,7 @@ import {
     Textarea,
     TextField,
     TopNav,
+    TopNavBackButton,
     TopNavTitle,
     WheelPicker,
     WheelPickerSheet,
@@ -863,6 +865,26 @@ export function DesignLayerShowcase(): JSX.Element {
                          * скрываются — наложение на колонку 560 (аудит #563),
                          * на ПК ≥1024 — всегда. */}
                         <TopNav mobileWings />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>TopNavBackButton · HubTitle · анатомия подэкрана и хаба (#566)</h3>
+                    <p className={styles.groupTitle}>
+                        Канонические куски хаб-шапки и подэкранного хедера: TopNavBackButton —
+                        ведущая кнопка «Назад» (history-first goBack с фолбэком, сериализуемые
+                        пропы — страницу-серверный компонент можно не делать клиентской);
+                        HubTitle — заголовок раздела хаба 28/32 со своим паддингом 24
+                        (PageContent горизонталей не вкладывает). Вживую: любой подэкран
+                        дерева профиля и хаб «Уведомления» (/profile/notifications).
+                    </p>
+                    <div className={styles.column} style={{ maxWidth: 480 }}>
+                        <TopNav leading={<TopNavBackButton fallbackHref="/ui-kit" />}>
+                            <TopNavTitle title="Профиль" />
+                        </TopNav>
+                        <div className="rounded-button bg-surface-muted p-4">
+                            <HubTitle>Уведомления</HubTitle>
+                        </div>
                     </div>
                 </div>
 

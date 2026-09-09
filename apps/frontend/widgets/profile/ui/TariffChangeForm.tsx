@@ -13,7 +13,6 @@ import { Card } from '@heroui/react/card';
 import { Skeleton } from '@heroui/react/skeleton';
 import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
-import { PageHeader } from '@/shared/ui/page-header';
 import {
   PAYMENT_STALE_MS,
   useTariffs,
@@ -293,7 +292,6 @@ export function TariffChangeForm(): JSX.Element {
 
   return (
     <>
-      <PageHeader title="Сменить тариф" backHref={ROUTES.profileTariff} />
       {isError && (
         <div className={styles.error}>
           <p className={styles.errorText}>Не удалось загрузить данные тарифов</p>

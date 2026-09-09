@@ -18,6 +18,7 @@ import {
 } from '@/features/contacts';
 import {
   ChipButton,
+  HubTitle,
   IconButton,
   PageContent,
   PickerMenu,
@@ -96,9 +97,7 @@ export function ContactBookScreen({
       <TopNav mobileWings />
 
       <PageContent>
-        <h1 className="pl-6 text-[28px] font-semibold leading-8 text-content">
-          Контакты
-        </h1>
+        <HubTitle>Контакты</HubTitle>
 
         {contactsQuery.isPending ? (
           <ContactsSkeleton className="mt-6" />
