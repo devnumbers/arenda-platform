@@ -45,6 +45,11 @@ import {
     PickerMenu,
     PickerField,
     Skeleton,
+    SkeletonButton,
+    SkeletonCard,
+    SkeletonListRow,
+    SkeletonMedia,
+    SkeletonSection,
     RadioGroup,
     RadioGroupItem,
     SearchField,
@@ -1125,6 +1130,56 @@ export function DesignLayerShowcase(): JSX.Element {
                             <Skeleton className="h-11 w-3/5 bg-surface-muted-hover" />
                             <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
                             <Skeleton className="h-11 w-2/5 bg-surface-muted-hover" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>
+                        Skeleton-примитивы · составные заглушки загрузки
+                    </h3>
+                    <p className={styles.groupTitle}>
+                        Композиции канона Skeleton под анатомию реальных блоков (#604,
+                        паритет — §7 DESIGN.md): контент занимает место скелетона без
+                        сдвига. Имена и API финализируются на первом реальном экране
+                        карты #603 (#605).
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonListRow · строка списка</h4>
+                            <div className="rounded-card border border-dashed border-content-tertiary">
+                                <SkeletonListRow widths={{title: 'w-2/5', subtitle: 'w-3/5'}} />
+                                <SkeletonListRow
+                                    value
+                                    widths={{title: 'w-1/2', subtitle: 'w-2/5'}}
+                                />
+                                <SkeletonListRow leading={false} widths={{title: 'w-3/5', subtitle: 'w-1/2'}} />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonSection · серая секция</h4>
+                            <SkeletonSection rows={3} />
+                            <SkeletonSection rows={2} className="mx-6" />
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonCard · карточка-плитка</h4>
+                            <div className="flex gap-2 overflow-hidden">
+                                <SkeletonCard />
+                                <SkeletonCard className="w-40" />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonMedia · фото/баннер</h4>
+                            <SkeletonMedia />
+                            <div className="flex items-center gap-2">
+                                <SkeletonMedia className="h-20 w-20 rounded-full" />
+                                <SkeletonMedia className="h-20 flex-1" />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonButton · CTA-кнопка</h4>
+                            <SkeletonButton />
+                            <SkeletonButton className="w-2/3" />
                         </div>
                     </div>
                 </div>
