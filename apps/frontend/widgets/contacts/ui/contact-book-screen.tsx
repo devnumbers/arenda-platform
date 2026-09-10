@@ -107,7 +107,7 @@ export function ContactBookScreen({
         <HubCollapseAnchor>
           <HubTitle>Контакты</HubTitle>
           {contactsQuery.isSuccess && (
-            <div className="mt-6 mb-6 px-6">
+            <div className="mt-4 mb-6 px-6">
               {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
                * по макету 1726:65083 согласован владельцем). */}
               <BookSearchPill

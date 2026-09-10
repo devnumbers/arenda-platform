@@ -223,7 +223,7 @@ export function TasksFeedScreen(): JSX.Element {
           </div>
 
           {!showEmpty && (
-          <div className="mt-6 flex items-center justify-between pr-3.5 pl-6">
+          <div className="mt-4 flex items-center justify-between pr-3.5 pl-6">
             <div className="flex items-center gap-2">
               <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
                 <SortChip sort={sort} />

@@ -115,7 +115,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
             onAddProperty={() => router.push(ROUTES.propertyNew)}
           />
         ) : (
-          <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
+          <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-4">
             {/* Ритм страницы — ровно 24px по бокам, как на «Операциях»:
              * контент кабинета даёт 20px до 1200px, страница выравнивает
              * себя до 24 сама. */}

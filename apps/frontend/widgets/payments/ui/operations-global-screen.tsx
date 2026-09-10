@@ -157,7 +157,7 @@ export function OperationsGlobalScreen(): JSX.Element {
             {!neverHad && addButton}
           </div>
           {!neverHad && (
-            <div className="mt-6 px-6">
+            <div className="mt-4 px-6">
               {/* Пилюля поиска (#543) — кнопка на отдельную страницу. */}
               <OperationsSearchPill
                 onOpenSearch={() =>
@@ -177,7 +177,7 @@ export function OperationsGlobalScreen(): JSX.Element {
             }
           />
         ) : (
-          <div className="mt-6 flex flex-col gap-6">
+          <div className="mt-4 flex flex-col gap-6">
             <OperationsFilterChips
               className="px-6"
               periodLabel={
