@@ -18,5 +18,13 @@ export function mapPropertyResponse(
       ? { role: dto.access.role, ownerName: dto.access.owner_name }
       : undefined,
     members_count: dto.members_count,
+    occupancy: dto.occupancy
+      ? {
+          status: dto.occupancy.status,
+          start_date: dto.occupancy.start_date,
+          planned_end_date: dto.occupancy.planned_end_date,
+        }
+      : undefined,
+    has_overdue_operations: dto.has_overdue_operations,
   };
 }

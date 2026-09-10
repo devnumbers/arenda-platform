@@ -52,6 +52,34 @@ type SuspendedSharedCounter interface {
 	CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
+// PropertyOwners maps the property ids of one list read onto their data
+// owners (the projections resolve «today» and scope per data owner, ADR
+// 0048); the rows carry the owner already, so the service passes it instead
+// of every adapter re-reading the properties.
+type PropertyOwners map[uuid.UUID]uuid.UUID
+
+// RentalOccupancyReader reports the per-property occupancy projection
+// («Занятость объекта», резолюция #584, ticket #585) computed from each
+// property's single unfinished rental against the data owner's today (ADR
+// 0048). Implemented by the rentals bounded context; injected optionally —
+// when nil, the list reads report no occupancy. Every listed property must
+// be present in the result: without an unfinished rental it reports
+// OccupancyNone.
+type RentalOccupancyReader interface {
+	OccupancyByProperty(ctx context.Context, owners PropertyOwners) (map[uuid.UUID]domain.Occupancy, error)
+}
+
+// OverdueOperationsReader reports which of the given properties have overdue
+// planned operations — stored planned rows dated before the data owner's
+// today (ADR 0048), the same predicate the payments listings resolve as the
+// overdue view status (резолюция #584: the red dot never duplicates the
+// computation). Implemented by the payments bounded context; injected
+// optionally — when nil, the list reads report no overdue flags. Properties
+// without overdue operations may miss from the result.
+type OverdueOperationsReader interface {
+	OverdueByProperty(ctx context.Context, owners PropertyOwners) (map[uuid.UUID]bool, error)
+}
+
 // RecipientSlotPolicy enforces the recipient tariff slot invariant for the
 // shared-access memberships of a single property. It is implemented by the
 // access bounded context's SlotCoordinator and injected optionally: when nil,

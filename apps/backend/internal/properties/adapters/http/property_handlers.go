@@ -565,6 +565,27 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 		PinnedAt:     property.PinnedAt,
 	}
 	resp.Attributes = propertyAttributesResponse(property.Attributes)
+	// The list projections ride the list reads only (ticket #585): nil
+	// occupancy means the row was not enriched, and neither field is
+	// reported. The service fills both together, so the overdue flag
+	// serializes under the same guard — an unwired overdue port would
+	// silence it, which only the partial wiring of tests can produce.
+	if property.Occupancy != nil {
+		occupancy := &openapi.PropertyOccupancy{
+			Status: openapi.PropertyOccupancyStatus(property.Occupancy.Status),
+		}
+		if property.Occupancy.StartDate != nil {
+			start := openapi_types.Date{Time: *property.Occupancy.StartDate}
+			occupancy.StartDate = &start
+		}
+		if property.Occupancy.PlannedEndDate != nil {
+			end := openapi_types.Date{Time: *property.Occupancy.PlannedEndDate}
+			occupancy.PlannedEndDate = &end
+		}
+		resp.Occupancy = occupancy
+		overdue := property.HasOverdueOperations
+		resp.HasOverdueOperations = &overdue
+	}
 	if property.AccessRole != "" {
 		resp.Access = &openapi.PropertyAccessContext{
 			Role: openapi.PropertyAccessContextRole(property.AccessRole),

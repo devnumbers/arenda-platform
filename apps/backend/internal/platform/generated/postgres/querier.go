@@ -574,6 +574,13 @@ type Querier interface {
 	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
+	// The payments half of the list red dot (ticket #585, резолюция #584): the
+	// subset of the given properties holding at least one overdue planned
+	// operation — a stored planned row dated before the owner's today, the same
+	// predicate ListOperations resolves as the overdue view status in exactly
+	// one place. One batched read per data owner; cancelled tombstones are not
+	// planned rows and never match.
+	ListPropertyIDsWithOverdueOperations(ctx context.Context, arg ListPropertyIDsWithOverdueOperationsParams) ([]pgtype.UUID, error)
 	ListPropertyMemberInvitations(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMemberInvitation, error)
 	ListPropertyMembers(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMember, error)
 	ListPropertyMembersByUser(ctx context.Context, userID pgtype.UUID) ([]ListPropertyMembersByUserRow, error)
@@ -666,6 +673,13 @@ type Querier interface {
 	// without rules on such properties are not sweep targets. Stateless — every
 	// run re-lists, no per-zone or per-owner tick state is kept.
 	ListTickZones(ctx context.Context) ([]ListTickZonesRow, error)
+	// The occupancy projection of the properties list (ticket #585, резолюция
+	// #584): the unfinished rentals of the given properties in one batched read
+	// — exactly one per property (invariant №12), so the result over a listed
+	// property is either one row or none. The status itself computes in Go
+	// against the data owner's today (ADR 0048), from the same dates the
+	// rentals responses report.
+	ListUnfinishedRentalsByPropertyIDs(ctx context.Context, propertyIds []pgtype.UUID) ([]ListUnfinishedRentalsByPropertyIDsRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
 	// The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
 	// on the submitted rules — the caller passes the ids sorted, the ORDER BY

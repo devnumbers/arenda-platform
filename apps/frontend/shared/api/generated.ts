@@ -2126,9 +2126,30 @@ export interface components {
             updated_at: string;
             /**
              * Format: date-time
-             * @description The global pin (ticket #577): null — not pinned, a moment — pinned since then. The lists order the pinned first, among themselves by this time. Archiving clears the pin.
+             * @description The global pin (ticket #577): null — not pinned, a moment — pinned since then. The lists order the pinned first, among themselves by this time. Archiving clears the pin. The domain language calls the concept «основной объект / primary property» (резолюция #584); the contract keeps the pin name.
              */
             pinned_at: string | null;
+            occupancy?: components["schemas"]["PropertyOccupancy"];
+            /** @description The payments half of the card's red dot (резолюция #584): the property holds at least one overdue planned operation — a stored planned row dated before the data owner's today (ADR 0048), the same predicate the payments listings report as the overdue view status. Red dot = needs_attention occupancy OR this flag. Populated by the list endpoints only (ticket #585); omitted elsewhere. */
+            has_overdue_operations?: boolean;
+        };
+        /** @description Занятость объекта (property occupancy, резолюция #584, ticket #585): the property's computed state from its single unfinished rental against the data owner's today (ADR 0048) — the canon for the «По статусу» grouping, the card's rental badges and the red dot. The property lifecycle status (active/maintenance) is a different concept: a rental property under maintenance stays in its rental group. Populated by the list endpoints only; omitted on the write and detail responses. */
+        PropertyOccupancy: {
+            /**
+             * @description The unfinished rental's status in the rentals vocabulary (rentals/CONTEXT.md): upcoming — the start has not come yet («Аренда с DD.MM» badge); active — the rental runs; needs_attention — the planned end has passed and the rental is not completed (the «Аренда завершена» badge, a red dot reason); none — no unfinished rental (an explicitly completed rental is history and reports none).
+             * @enum {string}
+             */
+            status: "upcoming" | "active" | "needs_attention" | "none";
+            /**
+             * Format: date
+             * @description The unfinished rental's start date; null without one.
+             */
+            start_date?: string | null;
+            /**
+             * Format: date
+             * @description The unfinished rental's planned end date («Осталось N месяцев» — the client counts the full months from today); null for an open-ended rental or without one.
+             */
+            planned_end_date?: string | null;
         };
         PropertyPhoto: {
             /** Format: uuid */

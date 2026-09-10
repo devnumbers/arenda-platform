@@ -314,6 +314,51 @@ func (q *Queries) ListRentalsByProperty(ctx context.Context, arg ListRentalsByPr
 	return items, nil
 }
 
+const listUnfinishedRentalsByPropertyIDs = `-- name: ListUnfinishedRentalsByPropertyIDs :many
+SELECT property_id, owner_id, start_date, planned_end_date
+FROM rentals
+WHERE completed_date IS NULL
+  AND property_id = ANY($1::uuid[])
+`
+
+type ListUnfinishedRentalsByPropertyIDsRow struct {
+	PropertyID     pgtype.UUID `json:"property_id"`
+	OwnerID        pgtype.UUID `json:"owner_id"`
+	StartDate      pgtype.Date `json:"start_date"`
+	PlannedEndDate pgtype.Date `json:"planned_end_date"`
+}
+
+// The occupancy projection of the properties list (ticket #585, резолюция
+// #584): the unfinished rentals of the given properties in one batched read
+// — exactly one per property (invariant №12), so the result over a listed
+// property is either one row or none. The status itself computes in Go
+// against the data owner's today (ADR 0048), from the same dates the
+// rentals responses report.
+func (q *Queries) ListUnfinishedRentalsByPropertyIDs(ctx context.Context, propertyIds []pgtype.UUID) ([]ListUnfinishedRentalsByPropertyIDsRow, error) {
+	rows, err := q.db.Query(ctx, listUnfinishedRentalsByPropertyIDs, propertyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnfinishedRentalsByPropertyIDsRow{}
+	for rows.Next() {
+		var i ListUnfinishedRentalsByPropertyIDsRow
+		if err := rows.Scan(
+			&i.PropertyID,
+			&i.OwnerID,
+			&i.StartDate,
+			&i.PlannedEndDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateRental = `-- name: UpdateRental :exec
 UPDATE rentals
 SET contact_id = $3,

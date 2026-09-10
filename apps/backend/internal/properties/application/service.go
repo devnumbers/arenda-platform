@@ -68,6 +68,8 @@ type PropertyService struct {
 	suspendedCounter   SuspendedSharedCounter
 	slots              RecipientSlotPolicy
 	sharedDeleteMailer SharedMembersDeleteMailer
+	rentalOccupancy    RentalOccupancyReader
+	overdueOperations  OverdueOperationsReader
 	logger             *slog.Logger
 }
 
@@ -124,6 +126,60 @@ func (s *PropertyService) SetRecipientSlotPolicy(slots RecipientSlotPolicy) {
 // T6). Optional: when not set, deleting a property sends no such emails.
 func (s *PropertyService) SetSharedMembersDeleteMailer(mailer SharedMembersDeleteMailer) {
 	s.sharedDeleteMailer = mailer
+}
+
+// SetRentalOccupancyReader injects the rentals-context adapter that resolves
+// the per-property occupancy («Занятость», резолюция #584) for the list
+// reads. Optional: when not set, the lists report no occupancy (ticket #585).
+func (s *PropertyService) SetRentalOccupancyReader(reader RentalOccupancyReader) {
+	s.rentalOccupancy = reader
+}
+
+// SetOverdueOperationsReader injects the payments-context adapter that
+// resolves which properties have overdue planned operations (the payments
+// half of the red dot, резолюция #584). Optional: when not set, the lists
+// report no overdue flags (ticket #585).
+func (s *PropertyService) SetOverdueOperationsReader(reader OverdueOperationsReader) {
+	s.overdueOperations = reader
+}
+
+// enrichListProjections fills the per-property occupancy and the overdue flag
+// over the merged list (own + shared rows alike; ticket #585): one batched
+// read per projection, the owners resolved from the rows themselves. The
+// readers are optional: an unwired projection stays unreported. Every listed
+// property gets an occupancy — the reader reports OccupancyNone for a
+// property without an unfinished rental.
+func (s *PropertyService) enrichListProjections(ctx context.Context, properties []domain.Property) error {
+	if len(properties) == 0 {
+		return nil
+	}
+	owners := make(PropertyOwners, len(properties))
+	for i := range properties {
+		owners[properties[i].ID] = properties[i].OwnerID
+	}
+	if s.rentalOccupancy != nil {
+		occupancy, err := s.rentalOccupancy.OccupancyByProperty(ctx, owners)
+		if err != nil {
+			return fmt.Errorf("read property occupancy: %w", err)
+		}
+		for i := range properties {
+			if o, ok := occupancy[properties[i].ID]; ok {
+				properties[i].Occupancy = &o
+				continue
+			}
+			properties[i].Occupancy = &domain.Occupancy{Status: domain.OccupancyNone}
+		}
+	}
+	if s.overdueOperations != nil {
+		overdue, err := s.overdueOperations.OverdueByProperty(ctx, owners)
+		if err != nil {
+			return fmt.Errorf("read property overdue operations: %w", err)
+		}
+		for i := range properties {
+			properties[i].HasOverdueOperations = overdue[properties[i].ID]
+		}
+	}
+	return nil
 }
 
 // NewPropertyService creates a PropertyService. Persistence, the audit
@@ -234,6 +290,10 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return nil, err
 	}
 
+	if err := s.enrichListProjections(ctx, properties); err != nil {
+		return nil, err
+	}
+
 	return s.withPhotos(ctx, s.pinnedFirst(properties)...)
 }
 
@@ -332,6 +392,10 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 	// The archive list carries archived objects only.
 	properties, err = s.appendSharedProperties(ctx, actor, properties, domain.PropertyStatusArchived)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := s.enrichListProjections(ctx, properties); err != nil {
 		return nil, err
 	}
 
