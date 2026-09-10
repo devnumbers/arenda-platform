@@ -41,8 +41,8 @@ describe('profileFieldPatch', () => {
     expect(profileFieldPatch(me, 'name', '  Иван  ')).toEqual({ name: 'Иван' });
   });
 
-  it('пустая строка превращается в null', () => {
-    expect(profileFieldPatch(me, 'name', '')).toEqual({ name: null });
+  it('пустая строка очищает поле — уходит "", а не null (контракт бэка: null = «не менять»)', () => {
+    expect(profileFieldPatch(me, 'name', '')).toEqual({ name: '' });
   });
 
   it('пробельная строка при пустом сохранённом значении не даёт патча', () => {
@@ -55,7 +55,7 @@ describe('profileFieldPatch', () => {
     });
   });
 
-  it('очищенная почта даёт патч email: null', () => {
-    expect(profileFieldPatch(me, 'email', '')).toEqual({ email: null });
+  it('очищенная почта даёт патч email: "" (бэк очистку почты отклоняет — см. AccountScreen)', () => {
+    expect(profileFieldPatch(me, 'email', '')).toEqual({ email: '' });
   });
 });

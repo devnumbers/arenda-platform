@@ -124,13 +124,24 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   const [emailError, setEmailError] = useState<string | undefined>(undefined);
 
   /** Тихое автосохранение (макет без кнопки «Сохранить»): поле коммитится
-   * на blur и крестиком очистки — патч только этого поля; пустое значение
-   * сохраняется как null. Невалидная почта не отправляется. */
+   * на blur и крестиком очистки — патч только этого поля; пустая строка
+   * очищает значение (контракт бэка: null = «не менять»). Невалидная почта
+   * не отправляется. */
   const commitField = useCallback(
     (field: ProfileTextField, rawValue: string) => {
-      if (field === 'email' && !isEmailValid(rawValue.trim())) {
-        setEmailError('Введите корректный email');
-        return;
+      if (field === 'email') {
+        const value = rawValue.trim();
+        if (value === '') {
+          // Бэк очистку почты не принимает (NewEmail('') → 400, адрес —
+          // канал входа и уведомлений): черновик откатывается к сохранённому.
+          setEmail(me.email ?? '');
+          setEmailError(undefined);
+          return;
+        }
+        if (!isEmailValid(value)) {
+          setEmailError('Введите корректный email');
+          return;
+        }
       }
       setEmailError(undefined);
       const patch = profileFieldPatch(me, field, rawValue);
@@ -253,7 +264,9 @@ export function AccountScreen(): JSX.Element {
       return;
     }
     autoTzSent.current = true;
-    updateMe.mutate({ timezone: detectedTz });
+    updateMe.mutate({ timezone: detectedTz }, {
+      onError: (error) => notify.scenarios.profile.personalDataSaveError(error),
+    });
   }, [me, updateMe]);
 
   if (isError) {
