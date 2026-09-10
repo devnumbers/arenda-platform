@@ -781,6 +781,11 @@ export function DesignLayerShowcase(): JSX.Element {
                             subtitle="2 дня"
                             value="32 000 ₽"
                         />
+                        <ListRow
+                            title="Екатеринбург (UTC+5)"
+                            titleClassName="text-primary"
+                            onSelect={() => undefined}
+                        />
                     </div>
                 </div>
 

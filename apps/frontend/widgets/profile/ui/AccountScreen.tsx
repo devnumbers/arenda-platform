@@ -71,13 +71,20 @@ function PhoneFieldRow({ phone }: { readonly phone: string }): JSX.Element {
 }
 
 /** Строка «Часовой пояс» (Figma 1789-99036): значение + SmallArrowDown.
- * Пока только показывает сохранённую зону — пикер откроется в тикете
- * #594 (тут станет PickerField), поэтому строка неинтерактивна. */
+ * Вся строка — одна ссылка на пикер часового пояса (#594, Figma
+ * 1869-70821), светлый глиф в зоне 44 — как решено при «Телефоне»
+ * (10.09.2026): строка и так одна ссылка. */
 function TimezoneFieldRow({ label }: { readonly label: string }): JSX.Element {
   return (
     <div className="flex flex-col gap-2">
       <FieldTitle>Часовой пояс</FieldTitle>
-      <div className={fieldBoxClass}>
+      <NextLink
+        href={ROUTES.profileAccountTimezone}
+        className={cn(
+          fieldBoxClass,
+          'cursor-pointer transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
+        )}
+      >
         <span
           className={cn(
             'min-w-0 flex-1 truncate text-base leading-[18px]',
@@ -89,7 +96,7 @@ function TimezoneFieldRow({ label }: { readonly label: string }): JSX.Element {
         <FieldTailIcon>
           <SmallArrowDown className="h-6 w-6" />
         </FieldTailIcon>
-      </div>
+      </NextLink>
     </div>
   );
 }
@@ -242,7 +249,8 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
  * 1789-99036): аватар-плейсхолдер 96 без «Добавить фото» (аватар отложен),
  * поля имени (titleIn) с автосохранением PATCH /me по blur/очистке —
  * макет без кнопки «Сохранить», телефон строкой на /profile/account/phone,
- * почта полем с валидацией, часовой пояс строкой (пикер — #594). Поглотил
+ * почта полем с валидацией, часовой пояс строкой на пикер
+ * /profile/account/timezone (#594). Поглотил
  * легаси PersonalDataForm (/profile/personal снесён) и AccountOverview.
  * Тихое автосохранение браузерной таймзоны перенесено из PersonalDataForm
  * как было: один раз, только если зона ещё не сохранена. */

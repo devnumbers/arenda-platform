@@ -3,12 +3,14 @@ export type TimezoneOption = {
   readonly label: string;
 };
 
-/** Все 22 IANA-зоны территории РФ, отсортированы по смещению UTC (запад →
- * восток). Пара: канонический IANA-идентификатор (хранится в /me) и
- * подпись «Город (UTC±N)». Справочник переехал из легаси TimezoneSelect
- * (снесён в #593); экспорт опций появится у пикера #594 — пока список
- * нужен только подписи строки «Часовой пояс». */
-const TIMEZONE_OPTIONS: readonly TimezoneOption[] = [
+/** Все 22 IANA-зоны территории РФ (полный набор UTC+2…+12 — решение по
+ * открытому вопросу приёмки #594: полный список вместо фрагмента макета
+ * UTC+2…+7), отсортированы по смещению UTC (запад → восток). Пара:
+ * канонический IANA-идентификатор (хранится в /me) и подпись
+ * «Город (UTC±N)». Справочник переехал из легаси TimezoneSelect
+ * (снесён в #593); потребители — подпись строки «Часовой пояс»
+ * (formatTimezoneLabel) и пикер часового пояса #594. */
+export const timezoneOptions: readonly TimezoneOption[] = [
   { value: 'Europe/Kaliningrad', label: 'Калининград (UTC+2)' },
   { value: 'Europe/Moscow', label: 'Москва (UTC+3)' },
   { value: 'Europe/Samara', label: 'Самара (UTC+4)' },
@@ -40,5 +42,5 @@ export function formatTimezoneLabel(timezone: string | null | undefined): string
   if (!timezone) {
     return '';
   }
-  return TIMEZONE_OPTIONS.find((option) => option.value === timezone)?.label ?? timezone;
+  return timezoneOptions.find((option) => option.value === timezone)?.label ?? timezone;
 }
