@@ -17,6 +17,7 @@ import {
   IconButton,
   PageContent,
   SearchField,
+  TopNav,
 } from '@/shared/ui/design';
 import { LoadingMoreIndicator } from './operations-list';
 import { GlobalPaymentRuleIcon, PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
@@ -42,8 +43,9 @@ import {
  * лентах операций (доработка #581: «Показать все» снято владельцем). Тап
  * строке — страница платежа. Серверная область — GET /payments/search
  * (#575); ввод живёт в адресе (?q=) и догоняется дебаунсом —
- * useSearchQueryState. Каркас кабинетный, как поиск операций: шапка в
- * потоке страницы, «назад» возвращает на главный «Платежи».
+ * useSearchQueryState. Шапка — канон поиска TopNav variant="search" на
+ * едином хроме экранов (#565), как у операций (#543) и контактов (#508);
+ * «назад» возвращает на главный «Платежи».
  */
 export function PaymentsGlobalSearchScreen(): JSX.Element {
   const router = useRouter();
@@ -106,26 +108,24 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
     router.push(ROUTES.propertyPayment(payment.propertyId, payment.id));
 
   return (
-    <PageContent>
-      {/* Ритм страницы — ровно 24px по бокам, как на главном «Платежи» и
-       * поиске операций: шапка, секции и строки прижаты к этому краю. */}
-      <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
-        <div className="flex items-center gap-1">
-          <IconButton
-            icon={<ArrowLeft />}
-            label="Назад"
-            onClick={() => goBack(router, ROUTES.payments)}
-          />
-          <SearchField
-            ref={inputRef}
-            placeholder="Поиск платежа"
-            aria-label="Поиск платежа"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            onClear={clear}
-          />
-        </div>
+    <>
+      {/* Канон поиска (TopNav варианта search): «Назад» — goBack на главный
+       * «Платежи»; хедер-хром (лого/профиль) приносят крылья TopNav. */}
+      <TopNav
+        variant="search"
+        leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={() => goBack(router, ROUTES.payments)} />}
+      >
+        <SearchField
+          ref={inputRef}
+          placeholder="Поиск платежа"
+          aria-label="Поиск платежа"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onClear={clear}
+        />
+      </TopNav>
 
+      <PageContent>
         {emptyQuery && (
           <EmptyState
             imageSrc="/images/payments/payments-search.png"
@@ -165,11 +165,11 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
               description="Такого платежа нет"
             />
           ) : (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-6 pt-4">
               {chips.length > 0 && (
                 <section aria-label="Категории">
-                  <PaymentsHeading inset={false}>Категории</PaymentsHeading>
-                  <div className="flex flex-wrap gap-1.5 pt-2">
+                  <PaymentsHeading>Категории</PaymentsHeading>
+                  <div className="flex flex-wrap gap-1.5 px-6 pt-2">
                     {chips.map((chip) => (
                       <ChipButton
                         key={chip.key}
@@ -186,12 +186,11 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
               )}
 
               <section aria-label="Платежи">
-                <PaymentsHeading inset={false}>Платежи</PaymentsHeading>
+                <PaymentsHeading>Платежи</PaymentsHeading>
                 <div className="flex flex-col pt-2">
                   {items.map((payment) => (
                     <PaymentRowButton
                       key={payment.id}
-                      className="-mx-3 px-0"
                       categoryIcon={<GlobalPaymentRuleIcon payment={payment} />}
                       title={payment.title}
                       subtitle={payment.propertyName}
@@ -216,7 +215,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
               </section>
             </div>
           ))}
-      </div>
-    </PageContent>
+      </PageContent>
+    </>
   );
 }
