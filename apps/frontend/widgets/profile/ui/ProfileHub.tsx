@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AccountSetting,
-  BoldUser,
   Exit,
   Info,
   NotificationSettings,
@@ -24,6 +23,7 @@ import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation'
 import { formatPhoneDisplay } from '@/shared/lib/phone';
 import { notify } from '@/shared/lib/notifications';
 import { getProfileDisplayName } from '../lib/profile-display';
+import { AvatarPlaceholder } from './AvatarPlaceholder';
 
 type HubRow = {
   readonly title: string;
@@ -144,12 +144,7 @@ export function ProfileHub(): JSX.Element {
   return (
     <div className="flex flex-col gap-8 px-6 pb-6">
       <div className="flex flex-col items-center gap-4">
-        <span
-          aria-hidden
-          className="flex h-24 w-24 items-center justify-center rounded-pill bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-        >
-          <BoldUser className="h-[52px] w-[52px]" />
-        </span>
+        <AvatarPlaceholder />
         <div className="flex flex-col items-center gap-2">
           <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">
             {getProfileDisplayName(me)}

@@ -1,9 +1,8 @@
-export { AccountOverview } from './ui/AccountOverview';
+export { AccountScreen } from './ui/AccountScreen';
 export { NotificationSettings } from './ui/NotificationSettings';
 export { PaymentDetail } from './ui/PaymentDetail';
 export { PaymentList } from './ui/PaymentList';
 export { PaymentMethodList } from './ui/PaymentMethodList';
-export { PersonalDataForm } from './ui/PersonalDataForm';
 export { PhoneChangeForm } from './ui/PhoneChangeForm';
 export { ProfileHub } from './ui/ProfileHub';
 export { TariffChangeForm } from './ui/TariffChangeForm';

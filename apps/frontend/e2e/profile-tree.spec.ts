@@ -11,11 +11,12 @@ import {
 // /profile/notifications — хаб-страница таба «Уведомления» (анатомия #567),
 // активность — по нав-модели #558 без правок.
 
-/** Подэкраны дерева: путь → заголовок в шапке. /profile/tariff/payments/[id]
- * не входит — требует id платежа, канон его шапки совпадает со списком. */
+/** Подэкраны дерева: путь → заголовок в шапке. /profile и
+ * /profile/notifications — хабы (без «Назад», крылья), в таблицу не входят.
+ * /profile/tariff/payments/[id] не входит — требует id платежа, канон его
+ * шапки совпадает со списком. /profile/personal снесён в #593 — поглощён
+ * экраном /profile/account. */
 const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
-  ['/profile', 'Профиль'],
-  ['/profile/personal', 'Мои данные'],
   ['/profile/account', 'Аккаунт'],
   ['/profile/account/phone', 'Изменение телефона'],
   ['/profile/info', 'Информация'],
@@ -68,23 +69,23 @@ test.describe('дерево профиля — хром #566', () => {
     await captureScreen(page, testInfo, 'profile-notifications-hub-mobile');
   });
 
-  test('подэкраны: «Назад» по истории, заголовок в шапке, вход из меню', async ({
+  test('дерево: хаб без «Назад», строка «Аккаунт» вглубь, «Назад» по истории', async ({
     page,
     seededUser,
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/profile');
 
-    // Подэкран: «Назад» есть, крыльев на мобайле нет, заголовок в TopNav.
+    // Хаб профиля (#592): крылья на мобайле, ведущего «Назад» нет.
     const header = page.locator(SCREEN_HEADER);
-    await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
-    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
     await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
 
-    // Вглубь дерева по меню профиля; «Назад» возвращается по истории.
-    await page.getByRole('link', { name: 'Перейти в раздел «Мои данные»' }).click();
-    await expect(page).toHaveURL(/\/profile\/personal$/);
-    await expect(header.getByText('Мои данные', { exact: true })).toBeVisible();
+    // Вглубь дерева строкой «Аккаунт» (#593); «Назад» возвращается по истории.
+    await page.getByRole('button', { name: 'Аккаунт' }).click();
+    await expect(page).toHaveURL(/\/profile\/account$/);
+    await expect(header.getByText('Аккаунт', { exact: true })).toBeVisible();
     await header.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(/\/profile$/);
   });
@@ -111,11 +112,10 @@ test.describe('дерево профиля — хром #566', () => {
     await page.setViewportSize({ width: 561, height: 900 });
     const header = page.locator(SCREEN_HEADER);
 
-    // Подэкран с «Назад»: крыльев нет и на планшете — колонка 560 начинается
-    // там же, где кончается лого, крыло наложилось бы на неё (аудит #563).
+    // Хаб профиля: крылья и на планшете (канон хаб-экранов), без «Назад».
     await page.goto('/profile');
-    await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
-    await expect(header.getByRole('link', { name: 'Объекты' })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(header.getByRole('button', { name: 'Назад' })).toHaveCount(0);
 
     // Хаб «Уведомления»: крылья и на планшете (канон хаб-экранов).
     await page.goto('/profile/notifications');

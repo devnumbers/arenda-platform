@@ -145,7 +145,6 @@ export const ROUTES = {
    * до переезда на новый хром — карта #556). */
   support: '/support',
   profile: '/profile',
-  profilePersonal: '/profile/personal',
   profileNotifications: '/profile/notifications',
   profileAccount: '/profile/account',
   profileChangePhone: '/profile/account/phone',
