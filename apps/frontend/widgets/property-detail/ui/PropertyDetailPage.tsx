@@ -196,8 +196,6 @@ export function PropertyDetailPage(): JSX.Element {
                                 isArchived={property.status === 'archived'}
                             />
 
-                            <PropertyPaymentsSection propertyId={id}/>
-
                             <PropertyRentalsSection propertyId={id}/>
 
                             <PropertyPaymentsSection propertyId={id}/>
