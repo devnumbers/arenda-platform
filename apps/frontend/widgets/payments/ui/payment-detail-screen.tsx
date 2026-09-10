@@ -589,11 +589,15 @@ function FavoriteStarButton({
   readonly payment: Payment;
   readonly enabled: boolean;
 }): JSX.Element {
-  const setFavorite = useSetPaymentFavorite(propertyId, payment.id);
+  const setFavorite = useSetPaymentFavorite();
 
   const toggle = async (): Promise<void> => {
     try {
-      await setFavorite.mutateAsync({ favorite: !payment.isFavorite });
+      await setFavorite.mutateAsync({
+        propertyId,
+        paymentId: payment.id,
+        favorite: !payment.isFavorite,
+      });
       if (!payment.isFavorite) {
         notify.scenarios.payments.favoriteAdded();
       } else {

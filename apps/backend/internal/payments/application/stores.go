@@ -15,11 +15,12 @@ import (
 // WithTx, to write outside the transaction or to record audit outside it
 // (ADR 0033, ADR 0020).
 type txStores struct {
-	tick       TickStore
-	payments   PaymentStore
-	operations OperationStore
-	properties PropertyStore
-	audit      auditapp.Recorder
+	tick           TickStore
+	payments       PaymentStore
+	operations     OperationStore
+	properties     PropertyStore
+	favoriteOrders GlobalPaymentOrderStore
+	audit          auditapp.Recorder
 }
 
 // txStoreFactory holds the non-transactional payments repositories plus the
@@ -29,12 +30,13 @@ type txStores struct {
 // repository is a change to one constructor call. The non-transactional
 // stores also serve the read side of the use cases.
 type txStoreFactory struct {
-	tick       TickStore
-	payments   PaymentStore
-	operations OperationStore
-	properties PropertyStore
-	audit      auditapp.Recorder
-	uow        transaction.UoW
+	tick           TickStore
+	payments       PaymentStore
+	operations     OperationStore
+	properties     PropertyStore
+	favoriteOrders GlobalPaymentOrderStore
+	audit          auditapp.Recorder
+	uow            transaction.UoW
 }
 
 // NewTxStoreFactory bundles the payments repositories, the audit recorder and
@@ -45,18 +47,20 @@ type txStoreFactory struct {
 // unexported type).
 func NewTxStoreFactory(
 	tick TickStore, payments PaymentStore, operations OperationStore,
-	properties PropertyStore, audit auditapp.Recorder, uow transaction.UoW,
+	properties PropertyStore, favoriteOrders GlobalPaymentOrderStore,
+	audit auditapp.Recorder, uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
 		audit = auditapp.Noop{}
 	}
 	return txStoreFactory{
-		tick:       tick,
-		payments:   payments,
-		operations: operations,
-		properties: properties,
-		audit:      audit,
-		uow:        uow,
+		tick:           tick,
+		payments:       payments,
+		operations:     operations,
+		properties:     properties,
+		favoriteOrders: favoriteOrders,
+		audit:          audit,
+		uow:            uow,
 	}
 }
 
@@ -85,12 +89,17 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind property store to tx: %w", err)
 		}
+		favoriteOrders, err := f.favoriteOrders.WithTx(tx)
+		if err != nil {
+			return fmt.Errorf("bind favorite order store to tx: %w", err)
+		}
 		return work(&txStores{
-			tick:       tick,
-			payments:   payments,
-			operations: operations,
-			properties: properties,
-			audit:      f.audit.WithTx(tx),
+			tick:           tick,
+			payments:       payments,
+			operations:     operations,
+			properties:     properties,
+			favoriteOrders: favoriteOrders,
+			audit:          f.audit.WithTx(tx),
 		})
 	})
 }

@@ -14,6 +14,9 @@ type Querier interface {
 	// The transition log is append-only (enforced by trigger, ADR 0037); the first
 	// transition of a subscription has no prior status or tariff.
 	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
+	// Archiving clears the pin in the same UPDATE: the schema CHECK
+	// (properties_pinned_at_check) demands it, and an unarchived object returns
+	// unpinned (ticket #577).
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
 	// «Удалить операцию» (решение владельца): tombstone-статус cancelled —
 	// строка остаётся с ключом (payment_id, date) и не воскресает на тике,
@@ -21,6 +24,12 @@ type Querier interface {
 	// прочие строки (включая уже отменённые) не трогаются — use case рапортует
 	// not-found: отменённая операция для всех чтений больше не существует.
 	CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error)
+	// The favorites order save's full-replacement pass (ticket #576): the
+	// visible favorites OUTSIDE the submitted list lose their positions —
+	// they fall to the end of the reading order («новое избранное — в конец»),
+	// so duplicate positions never survive a save. '' keeps the empty list
+	// working (a save of nothing clears the whole visible order).
+	ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error)
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)).
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
@@ -398,11 +407,21 @@ type Querier interface {
 	// scope owner, the gateway-minted rent payment).
 	InsertRental(ctx context.Context, arg InsertRentalParams) error
 	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
+	// The newest materialized date across planned and paid per listed rule —
+	// the projection cursor of the nearest-date fallback (the tick has not
+	// stood the single future planned up yet; CONTEXT.md «Материализация»).
+	// Cancelled tombstones are not materialized facts.
+	LastOperationDatesOfPayments(ctx context.Context, paymentIds string) ([]LastOperationDatesOfPaymentsRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
 	// archived properties are excluded: an archived object does not occupy a
 	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
+	// The main list's order (ticket #577): the pinned first — among themselves
+	// by the pin time (the first pin stays on top, a re-pin never shifts the
+	// order), then the unpinned by updated_at DESC. The application re-applies
+	// the same rule over the merged list (shared properties arrive appended),
+	// so keep the two passes in sync (PropertyService.pinnedFirst).
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	// The active tasks (uncompleted) of the property: the screen's main
 	// sections. Due order with the undated last — the client buckets sections
@@ -457,6 +476,53 @@ type Querier interface {
 	// The admin read of one property's contacts (ADR 0054 consequences): the
 	// bound cards only — an unbound contact belongs to no property card.
 	ListContactsAdmin(ctx context.Context, arg ListContactsAdminParams) ([]Contact, error)
+	// The actor's visible non-archived properties — the «Объекты» screen's
+	// stacks (ticket #575); the rules of each stack arrive on the feed query's
+	// rows and the application layer groups them. The search ('' = no filter)
+	// is a case-insensitive substring over the name and the address — it
+	// filters the objects, never their stacks. The order is the global pin's
+	// (ticket #577): the pinned first — among themselves by the pin time —
+	// then the rest by name. pinned_at travels to the cards for the pin mark,
+	// photo_url is the card avatar's photo — the object's first (oldest) one
+	// or NULL without photos (ticket #582).
+	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
+	// Payments context queries: the global surface of the payment rules
+	// (tickets #575, #576) — the merged «Платежи» feed, the search with its
+	// matched-category chips, the «Объекты» stacks and the favorites manual
+	// order save. Rule CRUD lives in payments_rules.sql, operations in
+	// payments_operations.sql, the tick in payments_tick.sql.
+	//
+	// The visibility predicate is the global listings' (ticket #521): the
+	// actor's own rows plus the rows of the properties they share with an
+	// active membership (ADR 0028 read scope); a suspended membership grants
+	// no read. The rules of archived properties are out of every read (map
+	// #573). No single scope exists to resolve through the policy port — the
+	// actor-scoped read carries its visibility predicate here, beside the data.
+	//
+	// Every per-row schedule computation (nearest date, overdue) runs against
+	// the property owner's calendar date (ADR 0048): the merged feed mixes
+	// owners, so the reads take the owner→today map as parallel csv lists —
+	// uuids and ISO dates hold no commas — joined by owner_id (payments
+	// always carry owner_id of the property's owner; there is no re-binding).
+	// The distinct data owners of the actor's visible non-archived properties
+	// — the keys of the owner→today map the feed and the counters join on.
+	// Objects without rules contribute their owner too: the «Объекты» read
+	// lists them all the same.
+	ListGlobalPaymentOwnerTodays(ctx context.Context, actor pgtype.UUID) ([]pgtype.UUID, error)
+	// The actor's visible merged feed of payment rules (ticket #575): one row
+	// per rule with the property's display name, the owner's today and the
+	// rule's schedule aggregates — the earliest stored planned operation on or
+	// after today («Ближайший»; the application layer falls back to the pure
+	// projection when the row has none, the pause and the settled rule being
+	// the true nulls) and the overdue aggregates (planned with the date before
+	// today): the count, the oldest date — «N дней» — and the oldest
+	// operation's id, the overdue card's link target (ticket #578). Cancelled
+	// tombstones never exist for reads. The search ('' = no filter) is a
+	// case-insensitive substring over the title and the user category's name;
+	// the default catalog's label is not in the database — the application
+	// layer expands the query into the matching slugs (category_slugs, '' when
+	// none) and they match as a set.
+	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
 	// The operations of one scope with pagination (limit/offset), the view status
@@ -595,6 +661,16 @@ type Querier interface {
 	// run re-lists, no per-zone or per-owner tick state is kept.
 	ListTickZones(ctx context.Context) ([]ListTickZonesRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
+	// The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
+	// on the submitted rules — the caller passes the ids sorted, the ORDER BY
+	// keeping the lock order deadlock-safe — restricted to the actor's visible
+	// non-archived rules (the feed's visibility predicate). An id that does not
+	// come back is unknown, foreign or invisible; the application layer folds
+	// the three into one privacy-preserving 404. Every row carries the actor's
+	// role on the rule's property — the save's write gate is the favorite
+	// star's (#461, Full Access+), resolved per row beside the data. Ids
+	// travel as the file's csv list; an empty list never reaches the query.
+	LockGlobalPaymentFavorites(ctx context.Context, arg LockGlobalPaymentFavoritesParams) ([]LockGlobalPaymentFavoritesRow, error)
 	// Payments context queries: the materialization tick's persistence
 	// (ADR 0049 §3, ticket #458). The owner-level payment listing with pauses
 	// resolved, the operation dedup keys, the idempotent insert, the auto-pay day
@@ -649,7 +725,35 @@ type Querier interface {
 	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 	// Existence is already proven inside the same transaction under the property
 	// lock; :execrows keeps the store honest independently of that ordering.
+	// Unfavoriting clears the manual order with the flag — the schema CHECK
+	// (favorite_order IS NULL OR is_favorite) demands it, and re-favoriting
+	// lands at the end (NULL, ticket #576).
 	SetPaymentFavorite(ctx context.Context, arg SetPaymentFavoriteParams) (int64, error)
+	// One rule's 1-based favorite position (ticket #576); the id match alone is
+	// the guard — the lock pass has already proven existence and visibility in
+	// the same transaction. :execrows keeps that ordering honest.
+	SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error)
+	// Atomic PUT pin (ticket #577, the PUT favorite's canon #461: no
+	// read-modify-write). The value — a moment or NULL — is resolved by the
+	// application under the row lock (a re-pin keeps the original pin time);
+	// existence and the edit capability are proven there too. The scope is the
+	// property's owner: the actor may be the full-access member. The updated
+	// row travels back for the response.
+	SetPropertyPin(ctx context.Context, arg SetPropertyPinParams) (Property, error)
+	// The main screen's two counters over the whole visible scope (ticket
+	// #575): the favorite rules — the «Все избранные (N)» card — and the
+	// overdue operations summed across the feed's rules — the «Все
+	// просроченные (N)» card. Neither is narrowed by a search: the counters
+	// describe the scope, the search screens' rows are the feed query's.
+	SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPaymentCountersParams) (SumGlobalPaymentCountersRow, error)
+	// The matched categories of the payment rules search (ticket #575): one
+	// row per (category, direction) present among the matched rules — the
+	// search screen's chips — the largest count first. The identity is the
+	// rule's category reference resolved: a default catalog slug or the user
+	// category. Rules without any category reference cannot appear (the XOR
+	// is a durable schema invariant; no such rules exist today). The search
+	// predicate is the feed query's.
+	SumGlobalPaymentSearchCategories(ctx context.Context, arg SumGlobalPaymentSearchCategoriesParams) ([]SumGlobalPaymentSearchCategoriesRow, error)
 	// The period totals of one property's operations by direction (ticket #473):
 	// the same status/period predicate as ListOperations, aggregated in SQL so
 	// the summary cards never re-add a paginated listing client-side. The

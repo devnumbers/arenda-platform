@@ -12,17 +12,22 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
-import { mapPayment, mapPaymentOperation, mapOperationsSummary } from '@/entities/payment';
+import { mapGlobalPaymentFeed, mapGlobalPaymentObject, mapGlobalPaymentSearch, mapPayment, mapPaymentOperation, mapOperationsSummary } from '@/entities/payment';
 import type {
+  GlobalPaymentFeed,
+  GlobalPaymentObject,
+  GlobalPaymentSearch,
   OperationsSummary,
+  PaymentSearchCategoryView,
   Payment,
   PaymentCreateCommand,
-  PaymentFavoriteCommand,
   PaymentOperation,
+  PaymentType,
   PaymentUpdateCommand,
 } from '@/entities/payment';
 import {
   globalOperationKeys,
+  globalPaymentKeys,
   paymentKeys,
   paymentOperationKeys,
   type GlobalOperationScope,
@@ -429,6 +434,32 @@ export function useGlobalOperationsPaged(
 }
 
 /**
+ * Сохранение ручного порядка избранного (карта #573, #576; кнопка
+ * «Сохранить» режима правки #579): полный список видимых избранных правил
+ * в новом порядке — сервер в одной транзакции строит плотные 1-based
+ * позиции (полное замещение). Чистая запись порядка — ничего не тикает;
+ * инвалидируется глобальный фид, из которого читают оба экрана избранного.
+ */
+export function useSaveFavoritesOrder(): UseMutationResult<
+  void,
+  ApiError,
+  readonly string[]
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (paymentIds: readonly string[]) => {
+      await apiClient<void>('/payments/favorites/order', {
+        method: 'PUT',
+        body: JSON.stringify({ paymentIds: [...paymentIds] }),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
  * Глобальная сводка периода (#540) за карточками «Расходы/Доходы» и чипом
  * «Категория»: итоги всегда оба направления; категорийный фильтр сводку не
  * сужает (решение владельца #539) — в запрос уходят только объекты, период,
@@ -544,24 +575,30 @@ export function useResumePayment(
 }
 
 /**
- * Атомарный toggle избранного (PUT favorite c телом `{favorite}`,
- * резолюция #452) — без read-modify-write через PATCH.
+ * Атомарный toggle избранного (PUT favorite c телом `{favorite}` —
+ * резолюция #452, без read-modify-write через PATCH). Правило и команда
+ * приходят переменными мутации: один инстанс обслуживает и звезду
+ * страницы платежа, и пачку удалений режима правки избранного (#579).
  */
-export function useSetPaymentFavorite(
-  propertyId: string,
-  paymentId: string,
-): UseMutationResult<Payment, ApiError, PaymentFavoriteCommand> {
+export function useSetPaymentFavorite(): UseMutationResult<
+  Payment,
+  ApiError,
+  { readonly propertyId: string; readonly paymentId: string; readonly favorite: boolean }
+> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (command: PaymentFavoriteCommand) => {
+    mutationFn: async ({ propertyId, paymentId, favorite }) => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/favorite`,
-        { method: 'PUT', body: JSON.stringify(command) },
+        { method: 'PUT', body: JSON.stringify({ favorite }) },
       );
       return mapPayment(response);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      // Строка избранного живёт и в глобальном фиде (карта #573): звезда
+      // на месте — фид перечитывается, строка исчезает/появляется сразу.
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
 }
@@ -613,5 +650,122 @@ export function usePayOperation(
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
     },
+  });
+}
+
+/**
+ * Фид главного экрана «Платежи» (карта #573, #575): все правила видимой
+ * книги целиком (пагинации нет) плюс счётчики целого скоупа — карточки
+ * «Все избранные»/«Все просроченные» читают их; поиск счётчики не сужает.
+ * Секции (избранные/просроченные) из фида режет виджет — в том числе
+ * сортировку избранного по favoriteOrder (#576).
+ */
+export function useGlobalPayments(): UseQueryResult<GlobalPaymentFeed, ApiError> {
+  return useQuery({
+    queryKey: globalPaymentKeys.feed,
+    queryFn: async () => {
+      const response = await apiClient<components['schemas']['PaymentsGlobalResponse']>(
+        '/payments',
+      );
+      return mapGlobalPaymentFeed(response);
+    },
+  });
+}
+
+/**
+ * Стопки объектов для секции «Платежи объектов» и страницы «Объекты»
+ * (#575, #582): видимые объекты с группами правил и флагами просрочки;
+ * закреплённые (#577) сервер отдаёт первыми. search — серверный фильтр
+ * по названию/адресу ('' = без фильтра); keepPreviousData держит список,
+ * пока едет новый запрос. enabled=false держит запрос спящим — поиск
+ * объектов (#582) включает его только при непустом запросе.
+ */
+export function useGlobalPaymentObjects(
+  search = '',
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<ReadonlyArray<GlobalPaymentObject>, ApiError> {
+  return useQuery({
+    queryKey: globalPaymentKeys.objects(search),
+    queryFn: async () => {
+      const query = search ? `?search=${encodeURIComponent(search)}` : '';
+      const response = await apiClient<components['schemas']['PaymentObjectsGlobalResponse']>(
+        `/payments/objects${query}`,
+      );
+      return response.items.map(mapGlobalPaymentObject);
+    },
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/**
+ * Чипы поиска платежей (matchedCategories, GET /payments/search #575):
+ * сервер считает их по всему скоупу поискового запроса, поэтому лёгкий
+ * отдельный запрос с limit=1 — строки списку не нужны. Выбранный чип
+ * сужает только список (useGlobalPaymentSearch) — канон сводки операций
+ * #543.
+ */
+export function useGlobalPaymentSearchCategories(
+  query: string,
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<ReadonlyArray<PaymentSearchCategoryView>, ApiError> {
+  return useQuery({
+    queryKey: globalPaymentKeys.searchCategories(query),
+    queryFn: async () => {
+      const suffix = query ? `?search=${encodeURIComponent(query)}&limit=1` : '?limit=1';
+      const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
+        `/payments/search${suffix}`,
+      );
+      return mapGlobalPaymentSearch(response).matchedCategories;
+    },
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/** Порция поиска платежей (правило платформы #452): 50 строк на страницу,
+ * догрузка при скролле; серверный максимум — те же 100. */
+export const PAYMENT_SEARCH_PAGE_SIZE = 50;
+
+/**
+ * Поиск глобальных платежей (GET /payments/search, #575; экран #581):
+ * бесконечный запрос порциями по PAYMENT_SEARCH_PAGE_SIZE — offset это
+ * pageParam; фильтр чипа (category + направление) сужает список серверно.
+ * matchedCategories сервер считает по всему скоупу запроса, поэтому в
+ * результате они берутся с первой страницы. query и фильтр — части ключа;
+ * keepPreviousData держит прежнюю выдачу, пока едет новый запрос (правка
+ * запроса не мигает); пустой запрос экран не выполняет.
+ */
+export function useGlobalPaymentSearch(
+  query: string,
+  filter: { readonly category?: string; readonly type?: PaymentType } = {},
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<GlobalPaymentSearch, ApiError> {
+  const { category = '', type = '' } = filter;
+  return useInfiniteQuery({
+    queryKey: globalPaymentKeys.search(query, category, type),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (query) params.set('search', query);
+      if (category) params.set('category', category);
+      if (type) params.set('type', type);
+      params.set('limit', String(PAYMENT_SEARCH_PAGE_SIZE));
+      params.set('offset', String(pageParam));
+      const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
+        `/payments/search?${params.toString()}`,
+      );
+      return mapGlobalPaymentSearch(response);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.items.length < PAYMENT_SEARCH_PAGE_SIZE
+        ? undefined
+        : allPages.length * PAYMENT_SEARCH_PAGE_SIZE,
+    select: (data): GlobalPaymentSearch => ({
+      items: data.pages.flatMap((page) => page.items),
+      matchedCategories: data.pages[0]?.matchedCategories ?? [],
+    }),
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
   });
 }

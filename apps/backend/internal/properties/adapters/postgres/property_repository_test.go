@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -234,5 +235,94 @@ func TestPropertyRepository_Attributes_NilAttributesStoredAsEmpty(t *testing.T) 
 	}
 	if len(got.Attributes) != 0 {
 		t.Fatalf("expected 0 attributes, got %d (%v)", len(got.Attributes), got.Attributes)
+	}
+}
+
+// Pin tests (ticket #577): the pinned rise above the unpinned — among
+// themselves by the pin time; archiving clears the pin (the schema CHECK
+// keeps the invariant).
+
+func TestPropertyRepository_Pin_OrderAndClear(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+
+	pinnedFirst := sampleProperty(ownerID, nil)
+	pinnedSecond := sampleProperty(ownerID, nil)
+	unpinned := sampleProperty(ownerID, nil)
+	for _, p := range []domain.Property{pinnedFirst, pinnedSecond, unpinned} {
+		if _, err := repo.Create(ctx, ownerID, p); err != nil {
+			t.Fatalf("create property: %v", err)
+		}
+	}
+
+	pinA := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	pinB := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	if _, err := repo.SetPin(ctx, pinnedSecond.ID, ownerID, &pinB); err != nil {
+		t.Fatalf("set pin B: %v", err)
+	}
+	if _, err := repo.SetPin(ctx, pinnedFirst.ID, ownerID, &pinA); err != nil {
+		t.Fatalf("set pin A: %v", err)
+	}
+
+	list, err := repo.ListActiveByOwner(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	want := []uuid.UUID{pinnedFirst.ID, pinnedSecond.ID, unpinned.ID}
+	if len(list) != len(want) {
+		t.Fatalf("list len = %d, want %d", len(list), len(want))
+	}
+	for i, id := range want {
+		if list[i].ID != id {
+			t.Errorf("list[%d] = %s, want %s", i, list[i].ID, id)
+		}
+	}
+
+	// Unpinning returns the property to the unpinned tail (updated_at DESC).
+	if _, err := repo.SetPin(ctx, pinnedFirst.ID, ownerID, nil); err != nil {
+		t.Fatalf("clear pin: %v", err)
+	}
+	got, err := repo.GetByIDAndOwner(ctx, pinnedFirst.ID, ownerID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.PinnedAt != nil {
+		t.Errorf("pinnedAt after clear = %v, want nil", got.PinnedAt)
+	}
+}
+
+func TestPropertyRepository_ArchiveClearsPin(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+
+	property := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, property); err != nil {
+		t.Fatalf("create property: %v", err)
+	}
+	pin := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	if _, err := repo.SetPin(ctx, property.ID, ownerID, &pin); err != nil {
+		t.Fatalf("set pin: %v", err)
+	}
+
+	if err := repo.Archive(ctx, property.ID, ownerID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	got, err := repo.GetByIDAndOwner(ctx, property.ID, ownerID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.Status != domain.PropertyStatusArchived {
+		t.Errorf("status = %q, want archived", got.Status)
+	}
+	if got.PinnedAt != nil {
+		t.Errorf("pinnedAt after archive = %v, want nil (the schema CHECK invariant)", got.PinnedAt)
 	}
 }

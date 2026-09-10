@@ -76,6 +76,7 @@ type paymentsHarness struct {
 	tick   *paymentsapp.TickService
 	svc    *paymentsapp.PaymentService
 	ops    *paymentsapp.OperationService
+	global *paymentsapp.GlobalPaymentService
 	owner  uuid.UUID
 	propID uuid.UUID
 }
@@ -96,21 +97,23 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 	paymentStore := paymentspg.NewPaymentStore(pool)
 	operationStore := paymentspg.NewOperationStore(pool)
 	propertyStore := paymentspg.NewPropertyStore(pool)
+	favoriteOrders := paymentspg.NewGlobalPaymentStore(pool)
 	audit := auditapp.NewService(auditpg.NewWriter(pool), clk)
 	uow := pgdb.NewUoW(pool, logger)
 	calendar := paymentspg.NewOwnerCalendar(pool, clk)
 	zones := paymentspg.NewTickZoneDirectory(pool)
 	factory := paymentsapp.NewTxStoreFactory(
-		tickStore, paymentStore, operationStore, propertyStore, audit, uow,
+		tickStore, paymentStore, operationStore, propertyStore, favoriteOrders, audit, uow,
 	)
 
 	return &paymentsHarness{
-		t:     t,
-		pool:  pool,
-		clock: clk,
-		tick:  paymentsapp.NewTickService(factory, zones, calendar, nil),
-		svc:   paymentsapp.NewPaymentService(factory, calendar, policy),
-		ops:   paymentsapp.NewOperationService(factory, calendar, policy),
+		t:      t,
+		pool:   pool,
+		clock:  clk,
+		tick:   paymentsapp.NewTickService(factory, zones, calendar, nil),
+		svc:    paymentsapp.NewPaymentService(factory, calendar, policy),
+		ops:    paymentsapp.NewOperationService(factory, calendar, policy),
+		global: paymentsapp.NewGlobalPaymentService(favoriteOrders, calendar, factory),
 	}
 }
 
@@ -133,6 +136,7 @@ func newPaymentsHarnessWithRealPolicy(t *testing.T) *paymentsHarness {
 		paymentspg.NewPaymentStore(h.pool),
 		paymentspg.NewOperationStore(h.pool),
 		paymentspg.NewPropertyStore(h.pool),
+		paymentspg.NewGlobalPaymentStore(h.pool),
 		auditapp.NewService(auditpg.NewWriter(h.pool), clk),
 		pgdb.NewUoW(h.pool, logger),
 	)
@@ -140,6 +144,7 @@ func newPaymentsHarnessWithRealPolicy(t *testing.T) *paymentsHarness {
 	h.tick = paymentsapp.NewTickService(factory, paymentspg.NewTickZoneDirectory(h.pool), calendar, nil)
 	h.svc = paymentsapp.NewPaymentService(factory, calendar, policy)
 	h.ops = paymentsapp.NewOperationService(factory, calendar, policy)
+	h.global = paymentsapp.NewGlobalPaymentService(paymentspg.NewGlobalPaymentStore(h.pool), calendar, factory)
 	return h
 }
 

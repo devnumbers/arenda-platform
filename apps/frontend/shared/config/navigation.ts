@@ -33,8 +33,8 @@ export type NavSection = {
 };
 
 /** 6 главных разделов — верхний блок десктопного сайдбара, порядок как в
- * Figma 1675:54051. «Платежи» и «Участники» — страницы-заглушки (#559):
- * содержание придет отдельными усилиями. */
+ * Figma 1675:54051. «Участники» — страница-заглушка (#559); содержание
+ * приедет отдельным усилием. «Платежи» — живой раздел (карта #573). */
 export const mainNavSections: ReadonlyArray<NavSection> = [
   { id: 'properties', label: 'Объекты', href: ROUTES.properties, Icon: HomeMain },
   { id: 'payments', label: 'Платежи', href: ROUTES.payments, Icon: Wallet },

@@ -5,26 +5,12 @@ import {
   test,
 } from './fixtures';
 
-// Страницы-заглушки единой навигации хрома (карта #556, тикет #559): пункты
-// меню «Платежи» и «Участники» ведут на живые маршруты — 404 под пунктом
-// меню и есть баг, который гасит тикет. Макетов у заглушек нет: каждая —
-// канон хаба (TopNav с «крыльями» #523, заголовок раздела 28, канонный
-// EmptyState на PageContent); настоящие экраны приедут отдельными усилиями
-// владельца.
-
-test('заглушка «Платежи»: хаб-шапка и EmptyState, не 404', async ({ page, seededUser }, testInfo) => {
-  await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/payments');
-
-  // Хаб-шапка с «крыльями» и на мобайле (лого — ссылка на объекты).
-  // Скоуп по хедеру: на десктопе «Объекты» есть и в сайдбаре (#561).
-  const header = page.locator('header[aria-label="Навигация экрана"]');
-  await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1, name: 'Платежи', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Платежи появятся здесь' })).toBeVisible();
-
-  await captureScreen(page, testInfo, 'payments-stub');
-});
+// Страница-заглушка единой навигации хрома (карта #556, тикет #559): пункт
+// меню «Участники» ведёт на живой маршрут — 404 под пунктом меню и есть баг,
+// который гасит тикет. Макета у заглушки нет: это канон хаба (TopNav с
+// «крыльями» #523, заголовок раздела 28, канонный EmptyState на PageContent).
+// Заглушка «Платежи» заменена настоящим разделом (карта #573) — её покрытие
+// переехало в payments.spec.ts.
 
 test('заглушка «Участники»: хаб-шапка и EmptyState, не 404', async ({ page, seededUser }, testInfo) => {
   await openCabinetWithSeededSession(page, seededUser);

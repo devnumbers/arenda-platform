@@ -5,11 +5,23 @@
  */
 
 import type { components } from '@/shared/api/dto';
-import type { OperationsSummary, Payment, PaymentOperation } from './types';
+import type {
+  GlobalPayment,
+  GlobalPaymentFeed,
+  GlobalPaymentObject,
+  GlobalPaymentSearch,
+  OperationsSummary,
+  Payment,
+  PaymentOperation,
+} from './types';
 
 type PaymentDto = components['schemas']['PaymentResponse'];
 type OperationDto = components['schemas']['OperationResponse'];
 type OperationsSummaryDto = components['schemas']['OperationsSummaryResponse'];
+type GlobalPaymentDto = components['schemas']['PaymentGlobalItem'];
+type GlobalPaymentFeedDto = components['schemas']['PaymentsGlobalResponse'];
+type GlobalPaymentObjectDto = components['schemas']['PaymentObjectItem'];
+type GlobalPaymentSearchDto = components['schemas']['PaymentsSearchGlobalResponse'];
 
 export function mapPayment(dto: PaymentDto): Payment {
   return {
@@ -75,5 +87,74 @@ export function mapOperationsSummary(dto: OperationsSummaryDto): OperationsSumma
       type: category.type,
       totalKopecks: category.totalKopecks,
     })),
+  };
+}
+
+/** Строка глобального фида (#575): nullable-поля остаются nullable —
+ * «нет значения» здесь часть семантики (нет вхождения / нет просрочки /
+ * нет позиции избранного), не опциональность. */
+export function mapGlobalPayment(dto: GlobalPaymentDto): GlobalPayment {
+  return {
+    id: dto.id,
+    propertyId: dto.propertyId,
+    propertyName: dto.propertyName,
+    title: dto.title,
+    amountKopecks: dto.amountKopecks,
+    type: dto.type,
+    category: {
+      source: dto.category.source,
+      slug: dto.category.slug ?? undefined,
+      id: dto.category.id ?? undefined,
+      label: dto.category.label,
+    },
+    autoPay: dto.autoPay,
+    isFavorite: dto.isFavorite,
+    favoriteOrder: dto.favoriteOrder,
+    today: dto.today,
+    nearestDate: dto.nearestDate,
+    overdueOperationCount: dto.overdueOperationCount,
+    overdueDays: dto.overdueDays,
+    oldestOverdueOperationId: dto.oldestOverdueOperationId,
+  };
+}
+
+export function mapGlobalPaymentFeed(dto: GlobalPaymentFeedDto): GlobalPaymentFeed {
+  return {
+    items: dto.items.map(mapGlobalPayment),
+    favoriteCount: dto.favoriteCount,
+    overdueOperationsCount: dto.overdueOperationsCount,
+  };
+}
+
+export function mapGlobalPaymentSearch(dto: GlobalPaymentSearchDto): GlobalPaymentSearch {
+  return {
+    items: dto.items.map(mapGlobalPayment),
+    matchedCategories: dto.matchedCategories.map((chip) => ({
+      category: {
+        source: chip.category.source,
+        slug: chip.category.slug ?? undefined,
+        id: chip.category.id ?? undefined,
+        label: chip.category.label,
+      },
+      type: chip.type,
+      count: chip.count,
+    })),
+  };
+}
+
+export function mapGlobalPaymentObject(dto: GlobalPaymentObjectDto): GlobalPaymentObject {
+  const toKey = (key: GlobalPaymentObjectDto['autoPayRules'][number]) => ({
+    paymentId: key.paymentId,
+    hasOverdue: key.hasOverdue,
+  });
+
+  return {
+    propertyId: dto.propertyId,
+    name: dto.name,
+    address: dto.address,
+    pinnedAt: dto.pinnedAt,
+    photoUrl: dto.photoUrl,
+    autoPayRules: dto.autoPayRules.map(toKey),
+    otherRules: dto.otherRules.map(toKey),
   };
 }

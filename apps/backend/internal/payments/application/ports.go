@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -227,4 +228,170 @@ type TickZone struct {
 // per-zone or per-owner tick state is kept.
 type TickZoneDirectory interface {
 	ListTickZones(ctx context.Context) ([]TickZone, error)
+}
+
+// GlobalPaymentRulesQuery is the global payment rules read's request
+// (ticket #575): the search query plus the default-catalog slugs the
+// application layer expanded it into (the catalog's labels live in code,
+// not in the database — the store matches them as a set).
+type GlobalPaymentRulesQuery struct {
+	Search        string
+	CategorySlugs []string
+	// The search screen's server-side chip filter (map #573 rework): the
+	// chip's identity — the default catalog's slug or the user category's
+	// id as text — plus the direction. '' = no filter. It narrows the rules
+	// list only; the matched-categories sum ignores it (the chips always
+	// show the query's every matched category — the operations' canon).
+	Category string
+	Type     domain.PaymentType
+	// The search screen's page (50 per page, infinite scroll). The zero
+	// limit means no window — the whole matched scope, the feed's and the
+	// stacks' reads.
+	Limit  int32
+	Offset int32
+}
+
+// GlobalPaymentRuleRow is one raw row of the global payment rules read
+// (ticket #575): the rule's card fields plus the bound property's display
+// name, the owner's today the row's schedule math ran against (ADR 0048)
+// and the stored-operation aggregates. The application layer turns it into
+// a GlobalPaymentItem — the nearest-date fallback and the overdue age are
+// its business.
+type GlobalPaymentRuleRow struct {
+	ID            uuid.UUID
+	OwnerID       uuid.UUID
+	PropertyID    uuid.UUID
+	PropertyName  string
+	Type          domain.PaymentType
+	Title         string
+	AmountKopecks int64
+	AutoPay       bool
+	IsFavorite    bool
+	Category      domain.CategoryRef
+	Today         time.Time
+	// NextPlannedDate is the earliest stored planned operation on or after
+	// today; nil hands the nearest date to the projection fallback.
+	NextPlannedDate *time.Time
+	OverdueCount    int64
+	// OldestOverdueDate is the oldest overdue operation's date; nil unless
+	// the rule has overdue operations.
+	OldestOverdueDate *time.Time
+	// OldestOverdueOperationID is that oldest operation's id — the overdue
+	// card's link target on the global main screen (ticket #578); nil
+	// unless the rule has overdue operations.
+	OldestOverdueOperationID *uuid.UUID
+	// FavoriteOrder is the rule's manual favorite order — the 1-based
+	// position the favorites edit mode's save assigned (ticket #576); nil
+	// when the rule has never been in a saved order (new and legacy
+	// favorites sort last, the new-favorite-at-the-end rule).
+	FavoriteOrder *int64
+}
+
+// GlobalPaymentCounters are the main screen's two scope counters (ticket
+// #575): the «Все избранные (N)» and «Все просроченные (N)» cards. They
+// describe the whole visible scope — a search never narrows them.
+type GlobalPaymentCounters struct {
+	FavoriteCount          int64
+	OverdueOperationsCount int64
+}
+
+// GlobalPaymentSearchCategory is one matched category of the payment rules
+// search (ticket #575): the chip's identity plus the number of matched
+// rules behind it.
+type GlobalPaymentSearchCategory struct {
+	Category  domain.CategoryRef
+	Type      domain.PaymentType
+	RuleCount int64
+}
+
+// GlobalPaymentObject is one visible non-archived property of the «Объекты»
+// read (ticket #575); the service groups the feed's rows onto it. PinnedAt is
+// the property's global pin (ticket #577): nil — not pinned, a moment —
+// pinned since then; the SQL order carries the pinned first. PhotoURL is the
+// card avatar's photo — the object's first (oldest) one (ticket #582); nil
+// when the object has no photos.
+type GlobalPaymentObject struct {
+	PropertyID uuid.UUID
+	Name       string
+	Address    string
+	PinnedAt   *time.Time
+	PhotoURL   *string
+}
+
+// GlobalPaymentReader is the persistence port of the global payment rules
+// read side (ticket #575). The visibility predicate lives in the store's
+// SQL — the actor-scoped cross-property read (the tasks global feed's
+// rule, ticket #521); the owner→today map is resolved by the application
+// layer (the owner calendar, ADR 0048) and threaded in for every per-row
+// schedule computation. Read-only: none of it ticks.
+type GlobalPaymentReader interface {
+	// ListGlobalPaymentOwnerTodays returns the distinct data owners of the
+	// actor's visible non-archived properties — the keys of the owner→today
+	// map.
+	ListGlobalPaymentOwnerTodays(ctx context.Context, actor uuid.UUID) ([]uuid.UUID, error)
+	// ListGlobalPaymentRules returns the actor's visible merged feed rows
+	// under the query's search; every row carries its owner's today.
+	ListGlobalPaymentRules(
+		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time, q GlobalPaymentRulesQuery,
+	) ([]GlobalPaymentRuleRow, error)
+	// SumGlobalPaymentCounters returns the scope counters over the whole
+	// visible feed, the search never narrowing them.
+	SumGlobalPaymentCounters(
+		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time,
+	) (GlobalPaymentCounters, error)
+	// SumGlobalPaymentSearchCategories returns the matched categories of the
+	// search — the chips' identities and their rule counts.
+	SumGlobalPaymentSearchCategories(
+		ctx context.Context, actor uuid.UUID, q GlobalPaymentRulesQuery,
+	) ([]GlobalPaymentSearchCategory, error)
+	// ListGlobalPaymentObjects returns the actor's visible non-archived
+	// properties under the object search — the «Объекты» screen's cards
+	// without their stacks.
+	ListGlobalPaymentObjects(ctx context.Context, actor uuid.UUID, search string) ([]GlobalPaymentObject, error)
+	// LastOperationDatesOfPayments returns the newest materialized date
+	// across planned and paid per listed rule — the projection cursor of the
+	// nearest-date fallback. Ids not present have no materialized facts.
+	LastOperationDatesOfPayments(ctx context.Context, paymentIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
+	// GetGlobalPaymentRule loads one rule with its pause intervals — the
+	// projection fallback's input. The boolean is false when the rule is
+	// gone (a deletion mid-read leaves the row's nearest date null).
+	GetGlobalPaymentRule(ctx context.Context, ownerID, propertyID, paymentID uuid.UUID) (domain.Payment, bool, error)
+}
+
+// GlobalPaymentFavoriteLock is one locked row of the favorites order save
+// (ticket #576): the rule's id, its favorite flag at lock time and the
+// actor's role on the rule's property — the write gate's raw material (the
+// favorite star's matrix, #461: Full Access+).
+type GlobalPaymentFavoriteLock struct {
+	ID         uuid.UUID
+	IsFavorite bool
+	Role       sharedpolicy.Role
+}
+
+// GlobalPaymentOrderStore is the write side of the favorites manual order
+// (ticket #576) — the global payments' first cross-property mutation. The
+// visibility predicate and the per-row role live in the lock's SQL (the
+// global reads' rule, ticket #521): a submitted id the actor cannot see
+// never returns from the lock, which keeps the foreign case the
+// privacy-preserving 404; the write capability itself is the favorite
+// star's (#461, Full Access+) and is resolved per row beside the data.
+// Every method runs inside the caller's transaction.
+type GlobalPaymentOrderStore interface {
+	// LockVisibleFavorites takes FOR UPDATE row locks on the submitted
+	// rules — in the given order, the caller's sorted ids being the
+	// deadlock-safety — and returns the rows visible to the actor on
+	// non-archived properties with the actor's per-row role. A matched set
+	// smaller than the submission means an unknown, foreign or invisible
+	// id.
+	LockVisibleFavorites(ctx context.Context, actor uuid.UUID, ids []uuid.UUID) ([]GlobalPaymentFavoriteLock, error)
+	// SaveFavoritePosition writes one rule's 1-based order position and
+	// must affect exactly one row: the lock has already proven existence
+	// and visibility inside the same transaction.
+	SaveFavoritePosition(ctx context.Context, id uuid.UUID, position int64) error
+	// ClearFavoriteOrdersOutside drops the positions of the actor's visible
+	// favorites outside the submitted list (the save's full-replacement
+	// pass: what the save does not place falls to the end of the reading
+	// order). KeepIDs travels as the list of placed ids, '' meaning none.
+	ClearFavoriteOrdersOutside(ctx context.Context, actor uuid.UUID, keepIDs []uuid.UUID) error
+	WithTx(tx transaction.Tx) (GlobalPaymentOrderStore, error)
 }

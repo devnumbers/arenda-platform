@@ -114,11 +114,6 @@ export type PaymentUpdateCommand = Partial<Omit<PaymentCreateCommand, 'endDate'>
   readonly endDate?: IsoDate | null;
 };
 
-/** Тело атомарного toggle избранного (PUT favorite). */
-export type PaymentFavoriteCommand = {
-  readonly favorite: boolean;
-};
-
 /** Строка категории в сводке периода (#473): слаг для иконки и стиля,
  * подпись-снапшот для текста, сумма по категории в копейках. */
 export type OperationsCategorySummary = {
@@ -139,4 +134,78 @@ export type OperationsSummary = {
   readonly incomeTotalKopecks: number;
   readonly expenseTotalKopecks: number;
   readonly categories: ReadonlyArray<OperationsCategorySummary>;
+};
+
+/**
+ * Строка глобального фида платежей (карта #573, #575): правило в разрезе
+ * всей видимой книги — с именем объекта для подписи карточки. «Ближайший»
+ * (`nearestDate`) — просто дата графика без статуса: ранняя хранёная
+ * planned от сегодня, иначе проекция правила; null — следующего вхождения
+ * нет (открытая пауза или завершённое правило). Просрочка правила — счёт
+ * накопленных planned-вхождений в прошлом и возраст старейшего из них
+ * (в днях); `today` — календарное «сегодня» владельца объекта (ADR 0048).
+ */
+export type GlobalPayment = {
+  readonly id: string;
+  readonly propertyId: string;
+  readonly propertyName: string;
+  readonly title: string;
+  readonly amountKopecks: number;
+  readonly type: PaymentType;
+  readonly category: PaymentCategoryView;
+  readonly autoPay: boolean;
+  readonly isFavorite: boolean;
+  /** Позиция из сохранённого порядка избранного (#576); null — «в конец». */
+  readonly favoriteOrder: number | null;
+  readonly today: IsoDate;
+  readonly nearestDate: IsoDate | null;
+  readonly overdueOperationCount: number;
+  readonly overdueDays: number | null;
+  /** Старейшая просроченная операция — цель ссылки просроченной карточки
+   * главного экрана (#578); null, если просроченных нет. */
+  readonly oldestOverdueOperationId: string | null;
+};
+
+/** Фид главного экрана «Платежи» (#575): все видимые правила плюс счётчики
+ * целого скоупа для карточек «Все избранные»/«Все просроченные». */
+export type GlobalPaymentFeed = {
+  readonly items: ReadonlyArray<GlobalPayment>;
+  readonly favoriteCount: number;
+  readonly overdueOperationsCount: number;
+};
+
+/** Чип категорий поиска платежей (#575, экран #581): категория с
+ * направлением и числом совпавших правил; порядок отдаёт сервер. */
+export type PaymentSearchCategoryView = {
+  readonly category: PaymentCategoryView;
+  readonly type: PaymentType;
+  readonly count: number;
+};
+
+/** Ответ поиска глобальных платежей (#575): совпавшие строки — состав
+ * фида без счётчиков — и чипы совпавших категорий. */
+export type GlobalPaymentSearch = {
+  readonly items: ReadonlyArray<GlobalPayment>;
+  readonly matchedCategories: ReadonlyArray<PaymentSearchCategoryView>;
+};
+
+/** Ключ стопки объекта (#575): правило за карточкой стека и его флаг
+ * просрочки — красная точка на карточке объекта. */
+export type GlobalPaymentObjectKey = {
+  readonly paymentId: string;
+  readonly hasOverdue: boolean;
+};
+
+/** Объект в глобальных платежах (#575): имя и адрес для карточки, стопки
+ * правил («Автоплатежи»/«Платежи») и момент закрепления (#577; null — не
+ * закреплён, сервер отдаёт закреплённые первыми). photoUrl — первое (самое
+ * старое) фото для аватара карточки (#582); null — фото нет. */
+export type GlobalPaymentObject = {
+  readonly propertyId: string;
+  readonly name: string;
+  readonly address: string;
+  readonly pinnedAt: string | null;
+  readonly photoUrl: string | null;
+  readonly autoPayRules: ReadonlyArray<GlobalPaymentObjectKey>;
+  readonly otherRules: ReadonlyArray<GlobalPaymentObjectKey>;
 };

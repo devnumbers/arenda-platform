@@ -201,6 +201,7 @@ func run() error {
 		AddressSuggester:         propertiesMod.DadataClient,
 		PropertyPayments:         paymentsMod.PaymentService,
 		PropertyOperations:       paymentsMod.OperationService,
+		GlobalPayments:           paymentsMod.GlobalPayments,
 		PropertyRentals:          rentalsMod.RentalService,
 		PropertyTaskRules:        tasksMod.RuleService,
 		PropertyTasks:            tasksMod.TaskService,

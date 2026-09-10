@@ -373,6 +373,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setPropertyPin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/operations": {
         parameters: {
             query?: never;
@@ -602,6 +618,86 @@ export interface paths {
          */
         get: operations["summarizeOperations"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible payment rules (the global «Платежи» screen)
+         * @description The global read side of the payment rules (ticket #575). The response is the actor's visible merged feed: every rule of their own properties plus the rules of the properties they can view with an active membership (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule, ticket #521). The rules of archived properties are not in the feed. Every row carries the bound property's display name, the nearest schedule date («Ближайший»: the earliest stored planned operation on or after the owner's today, else the rule's projection — a bare schedule order, no view status) and the overdue aggregates: the count of the rule's overdue operations and the age of the oldest one in days, both computed against the property owner's today (ADR 0048) and carried in today so the client renders «Сегодня»/«Завтра» without knowing the owner's timezone. favoriteCount counts the favorite rules of the whole visible scope and overdueOperationsCount sums the overdue operations across it — the «Все избранные (N)» and «Все просроченные (N)» cards of the main screen; neither depends on a search. Reminders and «На оплату» do not exist in this contract (out of scope of map #573). Reads never tick.
+         */
+        get: operations["listGlobalPayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the actor's visible payment rules (the global «Платежи» search)
+         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per (category, direction), the largest count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
+         */
+        get: operations["searchGlobalPayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/objects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible properties with their payment stacks (the global «Объекты» screen)
+         * @description The object cut of the global payments read (ticket #575): the actor's visible non-archived properties — own plus shared with an active membership — each with its rules grouped into the two stack groups, the auto-pay group first, then the rest, every key carrying the group's rule id and its overdue flag (the red dot; the property owner's today, ADR 0048). The search query filters the objects by a case-insensitive substring over the name or the address; the stacks always carry the object's every rule whatever the query matched. An object without rules yields empty groups. Reads never tick.
+         */
+        get: operations["listGlobalPaymentObjects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/favorites/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the manual order of the actor's favorite payment rules
+         * @description The favorites edit mode's «Сохранить» (map #573, ticket #576): the request lists the actor's visible favorite rules in their new order and the server rebuilds the stored positions in one transaction — dense 1-based positions in the list order. The save is a full replacement: favorites outside the list lose their positions and fall to the end of the reading order, so an empty list resets the whole order. Every listed id must be a favorite rule visible to the actor (own plus active-membership properties, archived excluded): an unknown, foreign or otherwise invisible id is the privacy-preserving 404, a visible non-favorite or a duplicate id is a 400. The write capability is the favorite star's (PUT favorite, Full Access and Owner) — a viewer's 403. A rule without a position — new and legacy favorites, their favoriteOrder is null — sorts last (new-favorite-at-the-end), and PUT favorite maintains that invariant atomically: unfavoriting clears the position, re-favoriting lands at the end. The manual order is the favorites screens' sort key (the feed's own order is unchanged); a pure order write — nothing ticks.
+         */
+        put: operations["saveGlobalPaymentFavoritesOrder"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2024,6 +2120,11 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /**
+             * Format: date-time
+             * @description The global pin (ticket #577): null — not pinned, a moment — pinned since then. The lists order the pinned first, among themselves by this time. Archiving clears the pin.
+             */
+            pinned_at: string | null;
         };
         PropertyPhoto: {
             /** Format: uuid */
@@ -2206,9 +2307,106 @@ export interface components {
         PaymentsResponse: {
             items: components["schemas"]["PaymentResponse"][];
         };
+        /** @description One payment rule of the actor's visible merged feed (ticket #575) — the global «Платежи» card's data: the rule, its property label, the nearest schedule date and the overdue aggregates. */
+        PaymentGlobalItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** @description The display name of the bound property — the global screen's row label. */
+            propertyName: string;
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /** @enum {string} */
+            type: "income" | "expense";
+            category: components["schemas"]["CategoryView"];
+            autoPay: boolean;
+            /** @description The rule's favorite star (PUT favorite). */
+            isFavorite: boolean;
+            /** @description The rule's manual favorite order (ticket #576): the 1-based position the favorites edit mode's save assigned. Null when the rule has never been in a saved order — the favorites screens sort by favoriteOrder with nulls last (the new-favorite-at-the-end rule); the feed's own order is unchanged. */
+            favoriteOrder: number | null;
+            /**
+             * Format: date
+             * @description The property owner's calendar date (ADR 0048) the row's schedule math ran against — the client renders «Сегодня»/«Завтра» against it instead of knowing the owner's timezone.
+             */
+            today: string;
+            /**
+             * Format: date
+             * @description «Ближайший»: the earliest stored planned operation on or after today, else the rule's projection — a bare schedule order without a view status. Null when the schedule has no next occurrence (an open pause or a settled rule).
+             */
+            nearestDate: string | null;
+            /** @description The rule's overdue operations (planned with the date before today); 0 when the rule has none. */
+            overdueOperationCount: number;
+            /** @description The age of the oldest overdue operation in days (today minus its date, at least 1) — the «N дней» line; null when the rule has no overdue operations. */
+            overdueDays: number | null;
+            /**
+             * Format: uuid
+             * @description The oldest overdue operation's id (the same operation the overdueDays age speaks of) — the overdue card's link target on the global main screen (ticket #578); null when the rule has no overdue operations.
+             */
+            oldestOverdueOperationId: string | null;
+        };
+        /** @description The global «Платежи» feed (ticket #575) with the main screen's counters. Money is integer kopecks (ADR 0008). */
+        PaymentsGlobalResponse: {
+            items: components["schemas"]["PaymentGlobalItem"][];
+            /** @description The favorite rules of the whole visible scope — the «Все избранные (N)» card; never narrowed by a search. */
+            favoriteCount: number;
+            /** @description The overdue operations summed across the whole visible scope — the «Все просроченные (N)» card; never narrowed by a search. */
+            overdueOperationsCount: number;
+        };
+        /** @description The favorites edit mode's save request (ticket #576): the actor's visible favorite rules in their new order — the complete list as the edit screen shows it. */
+        PaymentsFavoriteOrderUpdate: {
+            /** @description The favorite rules in their new order; the server assigns dense 1-based positions in this order (ticket #576). */
+            paymentIds: string[];
+        };
+        /** @description One matched category of the payment rules search (ticket #575) — the chip's identity plus the number of matched rules behind it. */
+        PaymentSearchCategory: {
+            category: components["schemas"]["CategoryView"];
+            /** @enum {string} */
+            type: "income" | "expense";
+            /** @description The matched rules of this category and direction. */
+            count: number;
+        };
+        /** @description The global payment rules search (ticket #575): the matched rows plus the matched-category chips. */
+        PaymentsSearchGlobalResponse: {
+            items: components["schemas"]["PaymentGlobalItem"][];
+            matchedCategories: components["schemas"]["PaymentSearchCategory"][];
+        };
+        /** @description One key of a property's stack (ticket #575): the rule behind it and its overdue flag — the red dot. */
+        PaymentObjectKey: {
+            /** Format: uuid */
+            paymentId: string;
+            hasOverdue: boolean;
+        };
+        /** @description One visible property with its payment stacks (ticket #575): the keys grouped into the auto-pay group and the rest. */
+        PaymentObjectItem: {
+            /** Format: uuid */
+            propertyId: string;
+            name: string;
+            address: string;
+            /**
+             * Format: date-time
+             * @description The object's global pin (ticket #577): null — not pinned, a moment — pinned since then. The cards order the pinned first.
+             */
+            pinnedAt: string | null;
+            /** @description The card avatar's photo — the object's first (oldest) photo (ticket #582); null when the object has no photos. */
+            photoUrl: string | null;
+            /** @description The «Автоплатежи» group — the object's auto-pay rules. */
+            autoPayRules: components["schemas"]["PaymentObjectKey"][];
+            /** @description The «Платежи» group — the object's non-auto-pay rules. */
+            otherRules: components["schemas"]["PaymentObjectKey"][];
+        };
+        /** @description The global «Объекты» screen of the payments map (ticket */
+        PaymentObjectsGlobalResponse: {
+            items: components["schemas"]["PaymentObjectItem"][];
+        };
         /** @description The favorite toggle body of PUT favorite (an atomic UPDATE on the server — never a read-modify-write PATCH). */
         FavoriteUpdateRequest: {
             favorite: boolean;
+        };
+        /** @description The pin toggle body of PUT pin (ticket #577, the favorite toggle's canon): an atomic UPDATE on the server — never a read-modify-write PATCH. Pinning an already-pinned object keeps its original pin time (the PUT's idempotency — the order among the pinned never shifts). */
+        PinnedUpdateRequest: {
+            pinned: boolean;
         };
         /** @description One operation of the Payments context: a payment occurrence or a manual fact. status carries overdue as a server-computed view status (planned with the date already past in the property owner's timezone). */
         OperationResponse: {
@@ -2764,6 +2962,14 @@ export interface components {
     };
     parameters: {
         PropertyId: string;
+        /** @description Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter. */
+        PaymentsSearchQuery: string;
+        /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
+        PaymentsCategoryFilter: string;
+        /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
+        PaymentsTypeFilter: "income" | "expense";
+        PaymentsLimit: number;
+        PaymentsOffset: number;
         /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
         OperationsStatusFilter: "planned" | "paid" | "overdue";
         /** @description Inclusive lower bound of the period on the operation date. */
@@ -3688,6 +3894,37 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    setPropertyPin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinnedUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Property pin state set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     listPropertyOperations: {
         parameters: {
             query?: {
@@ -4121,6 +4358,106 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OperationsSummaryResponse"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listGlobalPayments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The visible rules feed with the main screen's counters. Paused or settled rules travel with a null nearestDate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentsGlobalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    searchGlobalPayments: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter. */
+                search?: components["parameters"]["PaymentsSearchQuery"];
+                /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
+                category?: components["parameters"]["PaymentsCategoryFilter"];
+                /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
+                type?: components["parameters"]["PaymentsTypeFilter"];
+                limit?: components["parameters"]["PaymentsLimit"];
+                offset?: components["parameters"]["PaymentsOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matched rules with their matched-category chips. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentsSearchGlobalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listGlobalPaymentObjects: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter. */
+                search?: components["parameters"]["PaymentsSearchQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The visible properties with their rule stacks. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentObjectsGlobalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    saveGlobalPaymentFavoritesOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentsFavoriteOrderUpdate"];
+            };
+        };
+        responses: {
+            /** @description The order is saved. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

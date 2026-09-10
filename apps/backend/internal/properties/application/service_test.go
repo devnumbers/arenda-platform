@@ -128,6 +128,17 @@ func (r *lockingFakePropertyRepo) Update(_ context.Context, _ uuid.UUID, propert
 	return property, nil
 }
 
+func (r *lockingFakePropertyRepo) SetPin(_ context.Context, id, _ uuid.UUID, pinnedAt *time.Time) (domain.Property, error) {
+	// The caller already holds the lock via GetByIDForUpdate.
+	p, ok := r.data[id]
+	if !ok {
+		return domain.Property{}, ErrNotFound
+	}
+	p.PinnedAt = pinnedAt
+	r.data[id] = p
+	return p, nil
+}
+
 func (r *lockingFakePropertyRepo) Archive(_ context.Context, id, _ uuid.UUID) error {
 	// The caller already holds the lock via GetByIDAndOwnerForUpdate.
 	p, ok := r.data[id]
@@ -584,6 +595,16 @@ func (r *fakePropertyRepo) Update(_ context.Context, _ uuid.UUID, property domai
 	}
 	r.data[property.ID] = property
 	return property, nil
+}
+
+func (r *fakePropertyRepo) SetPin(_ context.Context, id, _ uuid.UUID, pinnedAt *time.Time) (domain.Property, error) {
+	p, ok := r.data[id]
+	if !ok {
+		return domain.Property{}, ErrNotFound
+	}
+	p.PinnedAt = pinnedAt
+	r.data[id] = p
+	return p, nil
 }
 
 func (r *fakePropertyRepo) Archive(_ context.Context, id, _ uuid.UUID) error {

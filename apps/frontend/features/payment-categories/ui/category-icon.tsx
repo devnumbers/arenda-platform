@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { BoldOther, StatusIconDanger } from '@/shared/assets/icons';
+import { BoldOther, StatusIconCheck, StatusIconDanger } from '@/shared/assets/icons';
 import { categoryIconComponents } from '@/features/payment-categories/lib/icon-registry';
 import { cn } from '@/shared/lib/cn';
 
@@ -10,7 +10,10 @@ import { cn } from '@/shared/lib/cn';
  * Бейдж `danger` — красный глиф просрочки на верхнем левом углу иконки
  * (операции, резолюция #452). Бейдж `notification` — красная точка 10×10
  * в углу (651:6759): у ПЛАТЕЖА с накопленной просрочкой (1323:61133,
- * State=Expired — в обеих поверхностях).
+ * State=Expired — в обеих поверхностях). Проп `check` — синяя галочка
+ * CheckWhite 24×24 в правом нижнем углу круга (889:25528, Show Check:
+ * выступает на 8px за край, как Notification Dot в своём): пометка
+ * платежа на удаление из избранного в режиме правки (тикет #579).
  */
 
 export type CategoryIconBadge = 'danger' | 'notification';
@@ -25,6 +28,8 @@ export type CategoryIconProps = {
   readonly color: string;
   readonly badge?: CategoryIconBadge;
   readonly surface?: CategoryIconSurface;
+  /** Пометка на удаление из избранного (889:25528, тикет #579). */
+  readonly check?: boolean;
   readonly className?: string;
 };
 
@@ -33,6 +38,7 @@ export function CategoryIcon({
   color,
   badge,
   surface = 'white',
+  check = false,
   className,
 }: CategoryIconProps): JSX.Element {
   const Icon = categoryIconComponents[icon] ?? BoldOther;
@@ -68,6 +74,12 @@ export function CategoryIcon({
               ? 'shadow-[0_0_0_2.5px_var(--dl-surface-muted)]'
               : 'shadow-[0_0_0_2.5px_var(--dl-surface)]',
           )}
+          aria-hidden
+        />
+      )}
+      {check && (
+        <StatusIconCheck
+          className="absolute -bottom-2 -right-2 h-6 w-6"
           aria-hidden
         />
       )}

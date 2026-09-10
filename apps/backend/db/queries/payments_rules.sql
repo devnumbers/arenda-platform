@@ -93,7 +93,10 @@ DELETE FROM payments WHERE id = $1 AND owner_id = $2;
 -- Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 -- Existence is already proven inside the same transaction under the property
 -- lock; :execrows keeps the store honest independently of that ordering.
-UPDATE payments SET is_favorite = $3
+-- Unfavoriting clears the manual order with the flag — the schema CHECK
+-- (favorite_order IS NULL OR is_favorite) demands it, and re-favoriting
+-- lands at the end (NULL, ticket #576).
+UPDATE payments SET is_favorite = $3, favorite_order = NULL
 WHERE id = $1 AND owner_id = $2;
 
 -- name: InsertPaymentPause :exec

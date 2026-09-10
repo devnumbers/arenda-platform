@@ -18,6 +18,10 @@ export type PaymentRowButtonProps = {
   /** Подзаголовок, например название объекта рядом с избранной звездой. */
   readonly subtitle?: ReactNode;
   readonly subtitleIcon?: ReactNode;
+  /** Слот после текста подзаголовка в его же строке — звезда избранного
+   * списка (693:5546: «объект ★»); вложенную кнопку глушит от открытия
+   * строки сам потребитель (stopPropagation). */
+  readonly subtitleSuffix?: ReactNode;
   /** Ведущий слот перед контентным фреймом (кнопка-иконка и т.п.). */
   readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
@@ -42,6 +46,7 @@ export function PaymentRowButton({
   title,
   subtitle,
   subtitleIcon,
+  subtitleSuffix,
   leading,
   trailing,
   amountKopecks,
@@ -83,6 +88,9 @@ export function PaymentRowButton({
                     </span>
                   )}
                   <span className="truncate">{subtitle}</span>
+                  {subtitleSuffix !== undefined && (
+                    <span className="flex shrink-0 items-center">{subtitleSuffix}</span>
+                  )}
                 </span>
               )}
             </span>

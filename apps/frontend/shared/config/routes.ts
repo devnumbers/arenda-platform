@@ -55,6 +55,17 @@ export const ROUTES = {
    * выбранного скоупа за период; вход — карточки сводки на главной. */
   operationsExpenses: '/operations/expenses',
   operationsIncomes: '/operations/incomes',
+  /** Экран «Платежи» — глобальная страница платежей (карта #573, тикет
+   * #578): вход — меню «Ещё» и ПК-сайдбар. */
+  payments: '/payments',
+  /** Поиск по платежам (#575, экран #581): вход — пилюля на главной. */
+  paymentsSearch: '/payments/search',
+  /** Страницы категорий главного экрана: избранные (#579), просроченные
+   * (#580), объекты и поиск объектов (#582). */
+  paymentsFavorites: '/payments/favorites',
+  paymentsOverdue: '/payments/overdue',
+  paymentsObjects: '/payments/objects',
+  paymentsObjectsSearch: '/payments/objects/search',
   /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
   propertyOperations: (id: string) => `/properties/${id}/operations`,
   /** Экраны «Доходы объекта»/«Расходы объекта» (#475): список одного
@@ -95,9 +106,6 @@ export const ROUTES = {
   contact: (contactId: string) => `/contacts/${contactId}`,
   /** Правка контакта из книги. */
   contactEdit: (contactId: string) => `/contacts/${contactId}/edit`,
-  /** Глобальные «Платежи» — страница-заглушка единого хрома (карта #556,
-   * тикет #559): пункт навигации есть, содержание придет отдельным усилием. */
-  payments: '/payments',
   /** Глобальные «Участники» — страница-заглушка единого хрома (карта #556,
    * тикет #559); сама фича шаринга доступа — вне карты. */
   participants: '/participants',

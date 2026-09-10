@@ -1,0 +1,290 @@
+"use client";
+
+import type { JSX } from "react";
+import { useRouter } from "next/navigation";
+import { Archive, ArrowLeft, Pin, Search } from "@/shared/assets/icons";
+import { ROUTES } from "@/shared/config/routes";
+import {
+  useGlobalPaymentObjects,
+  useGlobalPayments,
+} from "@/features/payments";
+import { CategoryIcon } from "@/features/payment-categories";
+import type {
+  GlobalPayment,
+  GlobalPaymentObject,
+} from "@/entities/payment";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  PageContent,
+  Skeleton,
+  TopNav,
+  TopNavTitle,
+} from "@/shared/ui/design";
+import { LinkButton } from "@/shared/ui/link-button";
+import { goBack } from "@/shared/lib/navigation";
+import {
+  isPaymentlessObject,
+  paymentObjectStacks,
+} from "../lib/payments-objects-model";
+import {
+  PaymentObjectAvatar,
+  PaymentsStateCard,
+} from "./payments-sections";
+
+/**
+ * Страница «Объекты» — ленд секции «Платежи объектов» (карта #573, тикет
+ * #582; макет 654:7558): карточки видимых объектов (#575) со стопками
+ * правил («Автоплатежи»/«Платежи», красная точка — просрочка правила).
+ * Обрезка стопки — решение владельца 10.09: обе группы — по 4 иконки, одна
+ * — 7, без счётчика; пустые группы не показываются. Булавка — пассивный
+ * индикатор глобального скрепления (#577; закрепление живёт на странице
+ * объекта, карточка только отображает), закреплённые сверху (порядок
+ * сервера). Кликается вся карточка — платежи объекта. Объект без платежей
+ * (решения владельца 10.09, вечер): при нескольких объектах — компактная
+ * карточка-шапка (890:29967); единственный объект без платежей —
+ * полноэкранное пустое состояние (879:9399) с CTA «Добавить платёж» в
+ * визард этого объекта. Лупа в шапке — поиск объектов; карандаша макета
+ * нет (решение владельца 10.09). Внизу — «Архивные объекты» во всю ширину
+ * карточек (существующий архив; архивные в карточках и поиске не
+ * участвуют).
+ */
+export function PaymentsObjectsScreen(): JSX.Element {
+  const router = useRouter();
+  const feedQuery = useGlobalPayments();
+  const objectsQuery = useGlobalPaymentObjects();
+
+  const pending =
+    (feedQuery.data === undefined || objectsQuery.data === undefined) &&
+    !feedQuery.isError &&
+    !objectsQuery.isError;
+  const error = feedQuery.isError || objectsQuery.isError;
+  const objects = objectsQuery.data ?? [];
+  const [singleObject] = objects;
+  // Единственный объект книги без платежей — полноэкранное пустое
+  // состояние вместо списка (решение владельца 10.09).
+  const singleEmpty =
+    !pending &&
+    !error &&
+    objects.length === 1 &&
+    singleObject !== undefined &&
+    isPaymentlessObject(singleObject);
+  const showEmptyState = !pending && !error && singleEmpty;
+
+  // Иконки стопок — категории правил фида (#575): объектный ответ ключей
+  // категорий не несёт, джойн по paymentId.
+  const paymentsById = new Map(
+    (feedQuery.data?.items ?? []).map((payment) => [payment.id, payment]),
+  );
+
+  const retry = (): void => {
+    void feedQuery.refetch();
+    void objectsQuery.refetch();
+  };
+
+  return (
+    <>
+      <TopNav
+        leading={
+          <IconButton
+            icon={<ArrowLeft />}
+            label="Назад"
+            onClick={() => goBack(router, ROUTES.payments)}
+          />
+        }
+        trailing={
+          <IconButton
+            icon={<Search />}
+            label="Поиск объектов"
+            onClick={() => router.push(ROUTES.paymentsObjectsSearch)}
+          />
+        }
+      >
+        <TopNavTitle title="Объекты" />
+      </TopNav>
+
+      <PageContent>
+        {showEmptyState && (
+          <PaymentsObjectsEmpty
+            onAddPayment={() =>
+              router.push(
+                ROUTES.propertyPaymentNew(singleObject.propertyId, "payment"),
+              )
+            }
+          />
+        )}
+
+        {!showEmptyState && (
+          <>
+            {/* Ритм страницы — канон #578: обёртка гасит вставку кабинета и
+             * держит 24px сама; детям списка вставки не нужны (margin-утилиты
+             * на <button> всё равно глушит безслойный normalize HeroUI). */}
+            <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-4 px-6 pt-1">
+              {pending && (
+                <>
+                  <Skeleton className="h-[120px] rounded-card" />
+                  <Skeleton className="h-[120px] rounded-card" />
+                </>
+              )}
+
+              {!pending && error && (
+                <PaymentsStateCard
+                  title="Не удалось загрузить объекты"
+                  hint="Проверьте подключение и попробуйте еще раз"
+                  action={
+                    <Button variant="secondary" size="small" onClick={retry}>
+                      Повторить
+                    </Button>
+                  }
+                />
+              )}
+
+              {!pending && !error && objects.length === 0 && (
+                <EmptyState
+                  imageSrc="/images/payments/payments-empty.png"
+                  title="Объектов пока нет"
+                  description="Создайте объект, чтобы добавлять платежи"
+                  className="py-16"
+                />
+              )}
+
+              {!pending &&
+                !error &&
+                objects.map((object) => (
+                  <PaymentObjectCard
+                    key={object.propertyId}
+                    object={object}
+                    paymentsById={paymentsById}
+                    onSelect={() =>
+                      router.push(ROUTES.propertyPayments(object.propertyId))
+                    }
+                  />
+                ))}
+
+              {!pending && !error && objects.length > 0 && (
+                <ArchivedObjectsButton />
+              )}
+            </div>
+          </>
+        )}
+      </PageContent>
+    </>
+  );
+}
+
+/** Пустое состояние единственного объекта без платежей (879:9399,
+ * решение владельца 10.09): иллюстрация с текстами по центру, CTA
+ * «Добавить платёж» под ними — в визард платежа этого объекта; списка и
+ * кнопки архива нет. */
+function PaymentsObjectsEmpty({
+  onAddPayment,
+}: {
+  readonly onAddPayment: () => void;
+}): JSX.Element {
+  return (
+    <div
+      data-testid="payments-objects-empty"
+      className="-mx-5 flex min-h-[calc(100dvh-216px)] min-[1200px]:mx-0 flex-col px-6"
+    >
+      <div className="flex flex-1 items-center justify-center">
+        <EmptyState
+          imageSrc="/images/payments/object-empty.png"
+          title="Вы пока не добавляли платежи"
+          description="Добавьте платежи, чтобы не терять их из виду"
+          descriptionClassName="text-content"
+          className="pt-0"
+        />
+      </div>
+      <Button onClick={onAddPayment}>Добавить платёж</Button>
+    </div>
+  );
+}
+
+/** Кнопка «Архивные объекты» (654:7558): серая, с иконкой архива, на
+ * существующую страницу архива; во всю ширину карточек. */
+function ArchivedObjectsButton(): JSX.Element {
+  return (
+    <LinkButton
+      href={ROUTES.propertyArchive}
+      variant="secondary"
+      size="large"
+      fullWidth
+      leftIcon={<Archive />}
+    >
+      Архивные объекты
+    </LinkButton>
+  );
+}
+
+/** Карточка объекта (654:7558): серый блок rounded-24, шапка — аватар
+ * (фото или белый круг с домом), название, адрес, булавка-индикатор у
+ * закреплённых; стопки правил под шапкой. Кликается вся карточка. */
+function PaymentObjectCard({
+  object,
+  paymentsById,
+  onSelect,
+}: {
+  readonly object: GlobalPaymentObject;
+  readonly paymentsById: ReadonlyMap<string, GlobalPayment>;
+  readonly onSelect: () => void;
+}): JSX.Element {
+  const stacks = paymentObjectStacks(object, paymentsById);
+
+  return (
+    <button
+      type="button"
+      data-testid={`payments-object-card-${object.propertyId}`}
+      onClick={onSelect}
+      className="flex cursor-pointer flex-col gap-3 rounded-card bg-surface-muted p-6 text-left outline-none transition-opacity hover:opacity-90 active:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
+    >
+      <div className="flex items-center gap-3">
+        <PaymentObjectAvatar photoUrl={object.photoUrl} surface="card" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-base font-medium leading-[18px] text-content">
+            {object.name}
+          </span>
+          <span className="truncate text-sm leading-4 text-content-tertiary">
+            {object.address}
+          </span>
+        </span>
+        {object.pinnedAt !== null && (
+          // Индикатор глобального скрепления (#577): пассивен — закрепление
+          // живёт на странице объекта (решение владельца 10.09).
+          <span className="flex shrink-0" aria-hidden>
+            <Pin className="h-6 w-6 text-content" />
+          </span>
+        )}
+      </div>
+
+      {stacks.length > 0 && (
+        <div className="flex gap-4">
+          {stacks.map((stack) => (
+            <div
+              key={stack.label}
+              className="flex min-w-0 flex-1 flex-col gap-3"
+            >
+              <span className="text-sm leading-4 text-content">
+                {stack.label}
+              </span>
+              <div className="flex">
+                {stack.keys.map((rule) => (
+                  <CategoryIcon
+                    key={rule.paymentId}
+                    icon={rule.icon}
+                    color={rule.color}
+                    badge={rule.hasOverdue ? "notification" : undefined}
+                    surface="muted"
+                    // Нахлёст стопки 654:7558 (gap -12): каждый следующий
+                    // ключ ложится на правый край предыдущего.
+                    className="-ml-3 first:ml-0"
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </button>
+  );
+}

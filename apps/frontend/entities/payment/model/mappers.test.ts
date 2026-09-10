@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/shared/api/dto';
-import { mapPayment, mapPaymentOperation } from './mappers';
+import { mapGlobalPaymentSearch, mapPayment, mapPaymentOperation } from './mappers';
 
 type PaymentDto = components['schemas']['PaymentResponse'];
 type OperationDto = components['schemas']['OperationResponse'];
@@ -109,5 +109,80 @@ describe('mapPaymentOperation — DTO → entity', () => {
     expect(mapped.paidDate).toBe('2026-08-25');
     expect(mapped.paymentForm).toBe('cash');
     expect(mapped.categorySlug).toBe('utilities');
+  });
+});
+
+const globalItemDto: components['schemas']['PaymentGlobalItem'] = {
+  id: '0198b6a7-rule',
+  propertyId: '0198b6a7-1000-7000-8000-00000000prop',
+  propertyName: 'Моя квартира',
+  title: 'Арендная плата',
+  amountKopecks: 5_600_000,
+  type: 'expense',
+  category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
+  autoPay: true,
+  isFavorite: true,
+  favoriteOrder: 1,
+  today: '2026-09-09',
+  nearestDate: '2026-09-15',
+  overdueOperationCount: 0,
+  overdueDays: null,
+  oldestOverdueOperationId: null,
+};
+
+describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581)', () => {
+  const searchDto: components['schemas']['PaymentsSearchGlobalResponse'] = {
+    items: [globalItemDto],
+    matchedCategories: [
+      {
+        category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
+        type: 'expense',
+        count: 2,
+      },
+      {
+        category: { source: 'custom', id: '0198b6a7-user', label: 'Своя категория' },
+        type: 'income',
+        count: 1,
+      },
+    ],
+  };
+
+  const search = mapGlobalPaymentSearch(searchDto);
+
+  it('строки — тот же маппер, что у фида главного экрана', () => {
+    expect(search.items).toHaveLength(1);
+    expect(search.items[0]?.id).toBe('0198b6a7-rule');
+    expect(search.items[0]?.favoriteOrder).toBe(1);
+    expect(search.items[0]?.category).toStrictEqual({
+      source: 'default',
+      slug: 'rent',
+      id: undefined,
+      label: 'Арендная плата',
+    });
+  });
+
+  it('чипы несут категорию, направление и число совпавших правил', () => {
+    expect(search.matchedCategories).toStrictEqual([
+      {
+        category: {
+          source: 'default',
+          slug: 'rent',
+          id: undefined,
+          label: 'Арендная плата',
+        },
+        type: 'expense',
+        count: 2,
+      },
+      {
+        category: {
+          source: 'custom',
+          slug: undefined,
+          id: '0198b6a7-user',
+          label: 'Своя категория',
+        },
+        type: 'income',
+        count: 1,
+      },
+    ]);
   });
 });

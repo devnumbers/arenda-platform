@@ -1,5 +1,19 @@
-export { mapPayment, mapPaymentOperation, mapOperationsSummary } from './model/mappers';
+export {
+  mapGlobalPayment,
+  mapGlobalPaymentFeed,
+  mapGlobalPaymentObject,
+  mapGlobalPaymentSearch,
+  mapPayment,
+  mapPaymentOperation,
+  mapOperationsSummary,
+} from './model/mappers';
 export type {
+  GlobalPayment,
+  GlobalPaymentFeed,
+  GlobalPaymentObject,
+  GlobalPaymentObjectKey,
+  GlobalPaymentSearch,
+  PaymentSearchCategoryView,
   IsoDate,
   OperationsCategorySummary,
   OperationsSummary,
@@ -7,7 +21,6 @@ export type {
   Payment,
   PaymentCategoryView,
   PaymentCreateCommand,
-  PaymentFavoriteCommand,
   PaymentOperation,
   PaymentOperationStatus,
   PaymentSchedule,

@@ -12,6 +12,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
@@ -233,7 +234,31 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return nil, err
 	}
 
-	return s.withPhotos(ctx, properties...)
+	return s.withPhotos(ctx, s.pinnedFirst(properties)...)
+}
+
+// pinnedFirst lifts the pinned properties above the unpinned ones (ticket
+// #577): among themselves by the pin time — the first pin stays on top, a
+// re-pin never shifts the order; the unpinned keep the incoming order
+// (the repository's updated_at DESC, the shared properties at their end).
+// Stable so equal pins never swap. The SQL list already orders by the pin
+// (ListActivePropertiesByOwner); this re-sort extends the same rule over
+// the merged list, whose shared rows were appended after the SQL pass.
+func (s *PropertyService) pinnedFirst(properties []domain.Property) []domain.Property {
+	slices.SortStableFunc(properties, func(a, b domain.Property) int {
+		switch {
+		case a.PinnedAt == nil && b.PinnedAt != nil:
+			return 1
+		case a.PinnedAt != nil && b.PinnedAt == nil:
+			return -1
+		case a.PinnedAt != nil && b.PinnedAt != nil && a.PinnedAt.Before(*b.PinnedAt):
+			return -1
+		case a.PinnedAt != nil && b.PinnedAt != nil && b.PinnedAt.Before(*a.PinnedAt):
+			return 1
+		}
+		return 0
+	})
+	return properties
 }
 
 // appendSharedProperties appends the properties shared with the actor to the
@@ -393,7 +418,70 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 			Action:     auditdomain.ActionPropertyUpdated,
 			EntityType: auditdomain.EntityProperty,
 			EntityID:   &id,
-			Context:    map[string]any{"fields": updatedPropertyFields(cmd)},
+			Context:    map[string]any{auditFieldsKey: updatedPropertyFields(cmd)},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Property{}, err
+	}
+
+	properties, err := s.withPhotos(ctx, updated)
+	if err != nil {
+		return domain.Property{}, err
+	}
+	properties[0].AccessRole = role
+	return properties[0], nil
+}
+
+// SetPropertyPin writes the global pin atomically (PUT pin, ticket #577, the
+// PUT favorite's canon #461): one UPDATE inside the transaction under the
+// edit capability — Owner and Full Access (ADR 0028 CanEdit), a viewer is
+// ErrForbidden, no access is ErrNotFound, an archived property is
+// ErrArchivedProperty. A re-pin keeps the original pin time (the PUT's
+// idempotency — the order among the pinned never shifts); unpinning clears
+// it. The pin is a pure read-order flag: no re-read is asked for — the row
+// resolved under the property lock travels out through the response.
+func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUID, pinned bool) (domain.Property, error) {
+	role, err := s.resolveEditableProperty(ctx, actor, id)
+	if err != nil {
+		return domain.Property{}, err
+	}
+
+	var updated domain.Property
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		property, err := lockEditableProperty(ctx, stores.repo, id)
+		if err != nil {
+			return err
+		}
+
+		var pinnedAt *time.Time
+		if pinned {
+			if property.PinnedAt != nil {
+				pinnedAt = property.PinnedAt
+			} else {
+				now := s.clock.Now()
+				pinnedAt = &now
+			}
+		}
+
+		updated, err = stores.repo.SetPin(ctx, id, property.OwnerID, pinnedAt)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("set property pin: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  sharedpolicy.AuditActorRole(role),
+			Action:     auditdomain.ActionPropertyUpdated,
+			EntityType: auditdomain.EntityProperty,
+			EntityID:   &id,
+			Context:    map[string]any{auditFieldsKey: []string{"pinnedAt"}},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
@@ -1106,6 +1194,9 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 
 	return nil
 }
+
+// auditFieldsKey is the audit context key listing the mutated fields.
+const auditFieldsKey = "fields"
 
 func sanitizeError(err error) string {
 	return sanitize.Error(err)
