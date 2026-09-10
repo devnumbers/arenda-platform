@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { categoryStyle } from '@/features/payment-categories';
 import type { GlobalPayment, GlobalPaymentObject } from '@/entities/payment';
 import { makeGlobalPayment } from './global-payment-fixtures';
-import { paymentObjectStacks } from './payments-objects-model';
+import { isPaymentlessObject, paymentObjectStacks } from './payments-objects-model';
 
 /** Фабрика объекта «Объектов» (#582): канонический базовый экземпляр. */
 function makeObject(
@@ -127,6 +127,17 @@ describe('paymentObjectStacks — обрезка (решение владель�
     expect(
       stacks.map((stack) => stack.keys.map((rule) => rule.paymentId)),
     ).toEqual([['a-1'], ['p-1', 'p-2', 'p-3', 'p-4']]);
+  });
+});
+
+describe('isPaymentlessObject', () => {
+  it('обе группы пусты — объект без платежей', () => {
+    expect(isPaymentlessObject(makeObject())).toBe(true);
+  });
+
+  it('правило в любой группе — платёжный объект', () => {
+    expect(isPaymentlessObject(makeObject({ autoPayRules: [key('a-1')] }))).toBe(false);
+    expect(isPaymentlessObject(makeObject({ otherRules: [key('p-1')] }))).toBe(false);
   });
 });
 

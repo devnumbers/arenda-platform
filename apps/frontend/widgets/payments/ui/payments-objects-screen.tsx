@@ -1,7 +1,6 @@
 "use client";
 
 import type { JSX } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Archive, Pin, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
@@ -23,7 +22,10 @@ import {
 } from "@/shared/ui/design";
 import { LinkButton } from "@/shared/ui/link-button";
 import { PageHeader } from "@/shared/ui/page-header";
-import { paymentObjectStacks } from "../lib/payments-objects-model";
+import {
+  isPaymentlessObject,
+  paymentObjectStacks,
+} from "../lib/payments-objects-model";
 import {
   PaymentObjectAvatar,
   PaymentsStateCard,
@@ -31,17 +33,20 @@ import {
 
 /**
  * Страница «Объекты» — ленд секции «Платежи объектов» (карта #573, тикет
- * #582; макеты 654:7558/880:17866): карточки видимых объектов (#575) со
- * стопками правил («Автоплатежи»/«Платежи», красная точка — просрочка
- * правила). Обрезка стопки — решение владельца 10.09: обе группы — по 4
- * иконки, одна — 7, без счётчика; пустые группы не показываются. Булавка —
- * пассивный индикатор глобального скрепления (#577; закрепление живёт на
- * странице объекта, карточка только отображает), закреплённые сверху
- * (порядок сервера). Кликается вся карточка — платежи объекта; объект без
- * платежей показывает «Вы еще не добавили ни одного платежа» с подписью
- * «Добавить» (не кнопка; 880:17866). Лупа в шапке — поиск объектов;
- * карандаша макета нет (решение владельца 10.09). Внизу — «Архивные
- * объекты» (существующий архив; архивные в карточках и поиске не участвуют).
+ * #582; макет 654:7558): карточки видимых объектов (#575) со стопками
+ * правил («Автоплатежи»/«Платежи», красная точка — просрочка правила).
+ * Обрезка стопки — решение владельца 10.09: обе группы — по 4 иконки, одна
+ * — 7, без счётчика; пустые группы не показываются. Булавка — пассивный
+ * индикатор глобального скрепления (#577; закрепление живёт на странице
+ * объекта, карточка только отображает), закреплённые сверху (порядок
+ * сервера). Кликается вся карточка — платежи объекта. Объект без платежей
+ * (решения владельца 10.09, вечер): при нескольких объектах — компактная
+ * карточка-шапка (890:29967); единственный объект без платежей —
+ * полноэкранное пустое состояние (879:9399) с CTA «Добавить платёж» в
+ * визард этого объекта. Лупа в шапке — поиск объектов; карандаша макета
+ * нет (решение владельца 10.09). Внизу — «Архивные объекты» во всю ширину
+ * карточек (существующий архив; архивные в карточках и поиске не
+ * участвуют).
  */
 export function PaymentsObjectsScreen(): JSX.Element {
   const router = useRouter();
@@ -54,6 +59,16 @@ export function PaymentsObjectsScreen(): JSX.Element {
     !objectsQuery.isError;
   const error = feedQuery.isError || objectsQuery.isError;
   const objects = objectsQuery.data ?? [];
+  const [singleObject] = objects;
+  // Единственный объект книги без платежей — полноэкранное пустое
+  // состояние вместо списка (решение владельца 10.09).
+  const singleEmpty =
+    !pending &&
+    !error &&
+    objects.length === 1 &&
+    singleObject !== undefined &&
+    isPaymentlessObject(singleObject);
+  const showEmptyState = !pending && !error && singleEmpty;
 
   // Иконки стопок — категории правил фида (#575): объектный ответ ключей
   // категорий не несёт, джойн по paymentId.
@@ -81,44 +96,53 @@ export function PaymentsObjectsScreen(): JSX.Element {
       />
 
       <PageContent>
-        {/* Ритм 24px несут сами элементы (mx-6, как секции payments-
-         * sections): обёртка только гасит вставку PageContent — карточка
-         * состояния со своим mx-6 не задваивается. */}
-        <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-4 pt-1">
-          {pending && (
-            <>
-              <Skeleton className="mx-6 h-[176px] rounded-card" />
-              <Skeleton className="mx-6 h-[176px] rounded-card" />
-            </>
-          )}
+        {showEmptyState && (
+          <PaymentsObjectsEmpty
+            onAddPayment={() =>
+              router.push(
+                ROUTES.propertyPaymentNew(singleObject.propertyId, "payment"),
+              )
+            }
+          />
+        )}
 
-          {!pending &&
-            (error ? (
-              <PaymentsStateCard
-                title="Не удалось загрузить объекты"
-                hint="Проверьте подключение и попробуйте еще раз"
-                action={
-                  <Button
-                    variant="secondary"
-                    size="small"
-                    onClick={retry}
-                  >
-                    Повторить
-                  </Button>
-                }
-              />
-            ) : (
-              <>
-                {objects.length === 0 && (
-                  <EmptyState
-                    imageSrc="/images/payments/payments-empty.png"
-                    title="Объектов пока нет"
-                    description="Создайте объект, чтобы добавлять платежи"
-                    className="py-16"
-                  />
-                )}
+        {!showEmptyState && (
+          <>
+            {/* Ритм страницы — канон #578: обёртка гасит вставку кабинета и
+             * держит 24px сама; детям списка вставки не нужны (margin-утилиты
+             * на <button> всё равно глушит безслойный normalize HeroUI). */}
+            <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-4 px-6 pt-1">
+              {pending && (
+                <>
+                  <Skeleton className="h-[120px] rounded-card" />
+                  <Skeleton className="h-[120px] rounded-card" />
+                </>
+              )}
 
-                {objects.map((object) => (
+              {!pending && error && (
+                <PaymentsStateCard
+                  title="Не удалось загрузить объекты"
+                  hint="Проверьте подключение и попробуйте еще раз"
+                  action={
+                    <Button variant="secondary" size="small" onClick={retry}>
+                      Повторить
+                    </Button>
+                  }
+                />
+              )}
+
+              {!pending && !error && objects.length === 0 && (
+                <EmptyState
+                  imageSrc="/images/payments/payments-empty.png"
+                  title="Объектов пока нет"
+                  description="Создайте объект, чтобы добавлять платежи"
+                  className="py-16"
+                />
+              )}
+
+              {!pending &&
+                !error &&
+                objects.map((object) => (
                   <PaymentObjectCard
                     key={object.propertyId}
                     object={object}
@@ -129,30 +153,58 @@ export function PaymentsObjectsScreen(): JSX.Element {
                   />
                 ))}
 
+              {!pending && !error && objects.length > 0 && (
                 <ArchivedObjectsButton />
-              </>
-            ))}
-        </div>
+              )}
+            </div>
+          </>
+        )}
       </PageContent>
     </>
   );
 }
 
+/** Пустое состояние единственного объекта без платежей (879:9399,
+ * решение владельца 10.09): иллюстрация с текстами по центру, CTA
+ * «Добавить платёж» под ними — в визард платежа этого объекта; списка и
+ * кнопки архива нет. */
+function PaymentsObjectsEmpty({
+  onAddPayment,
+}: {
+  readonly onAddPayment: () => void;
+}): JSX.Element {
+  return (
+    <div
+      data-testid="payments-objects-empty"
+      className="-mx-5 flex min-h-[calc(100dvh-216px)] min-[1200px]:mx-0 flex-col px-6"
+    >
+      <div className="flex flex-1 items-center justify-center">
+        <EmptyState
+          imageSrc="/images/payments/object-empty.png"
+          title="Вы пока не добавляли платежи"
+          description="Добавьте платежи, чтобы не терять их из виду"
+          descriptionClassName="text-content"
+          className="pt-0"
+        />
+      </div>
+      <Button onClick={onAddPayment}>Добавить платёж</Button>
+    </div>
+  );
+}
+
 /** Кнопка «Архивные объекты» (654:7558): серая, с иконкой архива, на
- * существующую страницу архива. */
+ * существующую страницу архива; во всю ширину карточек. */
 function ArchivedObjectsButton(): JSX.Element {
   return (
-    <div className="mx-6">
-      <LinkButton
-        href={ROUTES.propertyArchive}
-        variant="secondary"
-        size="large"
-        fullWidth
-        leftIcon={<Archive />}
-      >
-        Архивные объекты
-      </LinkButton>
-    </div>
+    <LinkButton
+      href={ROUTES.propertyArchive}
+      variant="secondary"
+      size="large"
+      fullWidth
+      leftIcon={<Archive />}
+    >
+      Архивные объекты
+    </LinkButton>
   );
 }
 
@@ -175,7 +227,7 @@ function PaymentObjectCard({
       type="button"
       data-testid={`payments-object-card-${object.propertyId}`}
       onClick={onSelect}
-      className="mx-6 flex cursor-pointer flex-col gap-3 rounded-card bg-surface-muted p-6 text-left outline-none transition-opacity hover:opacity-90 active:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
+      className="flex cursor-pointer flex-col gap-3 rounded-card bg-surface-muted p-6 text-left outline-none transition-opacity hover:opacity-90 active:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
     >
       <div className="flex items-center gap-3">
         <PaymentObjectAvatar photoUrl={object.photoUrl} surface="card" />
@@ -196,25 +248,7 @@ function PaymentObjectCard({
         )}
       </div>
 
-      {stacks.length === 0 ? (
-        <div className="flex items-center gap-6">
-          <span className="flex min-w-0 flex-1 flex-col gap-2">
-            <span className="text-base leading-[18px] text-content-secondary">
-              Вы еще не добавили ни одного платежа
-            </span>
-            <span className="text-sm font-medium leading-4 text-primary">
-              Добавить
-            </span>
-          </span>
-          <Image
-            src="/images/payments/object-empty.png"
-            alt=""
-            width={64}
-            height={64}
-            className="h-16 w-16 shrink-0"
-          />
-        </div>
-      ) : (
+      {stacks.length > 0 && (
         <div className="flex gap-4">
           {stacks.map((stack) => (
             <div

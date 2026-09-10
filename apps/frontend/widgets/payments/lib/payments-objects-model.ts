@@ -32,6 +32,14 @@ export type PaymentObjectStack = {
 const STACK_LIMIT_BOTH = 4;
 const STACK_LIMIT_SINGLE = 7;
 
+/** У объекта нет ни одного правила — серверная истина (пустые группы
+ * ответа #575). Решает вид карточки на «Объектах» (решение владельца
+ * 10.09): при нескольких объектах — компактная карточка, у единственного —
+ * полноэкранное пустое состояние 879:9399. */
+export function isPaymentlessObject(object: GlobalPaymentObject): boolean {
+  return object.autoPayRules.length === 0 && object.otherRules.length === 0;
+}
+
 /** Стопки карточки объекта: только непустые группы, ключи с иконками
  * категорий фида (нет строки в фиде — дефолт пользовательских), порядок
  * серверный. */
