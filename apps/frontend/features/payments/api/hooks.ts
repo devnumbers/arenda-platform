@@ -17,6 +17,7 @@ import type {
   GlobalPaymentFeed,
   GlobalPaymentObject,
   GlobalPaymentSearch,
+  OperationCreateCommand,
   OperationsSummary,
   PaymentSearchCategoryView,
   Payment,
@@ -41,6 +42,7 @@ type PaymentsResponse = components['schemas']['PaymentsResponse'];
 type OperationsResponse = components['schemas']['OperationsResponse'];
 type OperationsSummaryResponse = components['schemas']['OperationsSummaryResponse'];
 type PaymentResponseDto = components['schemas']['PaymentResponse'];
+type OperationResponseDto = components['schemas']['OperationResponse'];
 
 /** Список платежей объекта — правил с флагом автоплатежа и избранным
  * (ADR 0049): без пагинации, порядок — серверный (по дате заведения).
@@ -138,6 +140,35 @@ export function useCreatePayment(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+    },
+  });
+}
+
+/**
+ * Создание ручной операции (#570, контракт POST из #569): факт рождается
+ * paid с датой «сегодня владельца» — команда уходит телом без
+ * переупаковки. Объект — часть переменных мутации: у глобального входа
+ * он выбирается на шаге «Выбрать объект», когда хук уже смонтирован.
+ * Инвалидация операций объекта (списки, просрочка, сводка) и глобальной
+ * ленты со сводками.
+ */
+export function useCreateOperation(): UseMutationResult<
+  PaymentOperation,
+  ApiError,
+  { readonly propertyId: string; readonly command: OperationCreateCommand }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ propertyId, command }) => {
+      const response = await apiClient<OperationResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/operations`,
+        { method: 'POST', body: JSON.stringify(command) },
+      );
+      return mapPaymentOperation(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalOperationKeys.all });
     },
   });
 }

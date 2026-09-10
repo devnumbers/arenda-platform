@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,10 @@ import (
 // port's methods one to one; the field order is alphabetical, unlike the
 // port.
 type fakeOperationsManager struct {
+	create func(
+		ctx context.Context, actor, propertyID uuid.UUID,
+		cmd application.CreateOperationCommand,
+	) (application.OperationListItem, error)
 	byPay func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID,
 		cmd application.OperationsListQuery,
@@ -49,6 +54,15 @@ type fakeOperationsManager struct {
 		ctx context.Context, actor, propertyID uuid.UUID,
 		cmd application.OperationsSummaryQuery,
 	) (application.OperationsSummary, error)
+}
+
+func (f *fakeOperationsManager) CreateOperation(
+	ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreateOperationCommand,
+) (application.OperationListItem, error) {
+	if f.create == nil {
+		return application.OperationListItem{}, errors.New("unexpected CreateOperation call")
+	}
+	return f.create(ctx, actor, propertyID, cmd)
 }
 
 func (f *fakeOperationsManager) DeleteOperation(
@@ -158,6 +172,9 @@ func TestOperationsHandlers_RequireAuth(t *testing.T) {
 		name string
 		call func(w http.ResponseWriter, r *http.Request)
 	}{
+		{"create", func(w http.ResponseWriter, r *http.Request) {
+			h.CreateOperation(w, r, propertyID)
+		}},
 		{"get", func(w http.ResponseWriter, r *http.Request) {
 			h.GetOperation(w, r, propertyID, otherID)
 		}},
@@ -1172,6 +1189,110 @@ func TestSummarizeOperations_FoldsParamsAndMapsPrivacy(t *testing.T) {
 		h.SummarizeOperations(w, req, openapi.SummarizeOperationsParams{})
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want the privacy 404", w.Code)
+		}
+	})
+}
+
+func TestCreateOperation_FoldsBodyIntoCommandAndReturns201(t *testing.T) {
+	t.Parallel()
+
+	created := fixtureOperation(domain.StatusPaid)
+	created.Origin = domain.OriginManual
+	created.PaymentID = nil
+	created.PaymentForm = nil
+
+	var gotCmd application.CreateOperationCommand
+	var gotProperty uuid.UUID
+	svc := &fakeOperationsManager{
+		create: func(
+			_ context.Context, _, propertyID uuid.UUID, cmd application.CreateOperationCommand,
+		) (application.OperationListItem, error) {
+			gotCmd = cmd
+			gotProperty = propertyID
+			return application.OperationListItem{Operation: created, ViewStatus: domain.ViewStatusPaid}, nil
+		},
+	}
+	h := NewOperationsHandlers(svc, nil)
+	propertyID := uuid.Must(uuid.NewV7())
+	actor := uuid.Must(uuid.NewV7())
+
+	body := `{"type":"expense","title":"Ремонт крана","amountKopecks":150000,"categorySlug":"utilities"}`
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), actor), http.MethodPost, "/operations", strings.NewReader(body),
+	)
+	w := httptest.NewRecorder()
+	h.CreateOperation(w, req, propertyID)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: %s", w.Code, w.Body.String())
+	}
+	if gotProperty != propertyID {
+		t.Errorf("property id = %s, want %s", gotProperty, propertyID)
+	}
+	want := application.CreateOperationCommand{
+		Type: domain.TypeExpense, Title: "Ремонт крана", AmountKopecks: 150000, CategorySlug: testSlugUtilities,
+	}
+	if gotCmd != want {
+		t.Errorf("command = %+v, want %+v", gotCmd, want)
+	}
+	var resp openapi.OperationResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Status != openapi.OperationResponseStatusPaid {
+		t.Errorf("status = %q, want the born-paid fact", resp.Status)
+	}
+	if resp.PaymentId != nil || resp.PaymentForm != nil {
+		t.Errorf("paymentId/paymentForm = %v/%v, want both null behind a manual fact", resp.PaymentId, resp.PaymentForm)
+	}
+}
+
+func TestCreateOperation_ErrorMapping(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	payload := `{"type":"expense","title":"ЖКУ","amountKopecks":500000,"categorySlug":"utilities"}`
+
+	cases := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{"invalid input is the contract 400", application.ErrInvalidInput, http.StatusBadRequest},
+		{"a viewer is the 403", application.ErrForbidden, http.StatusForbidden},
+		{"a stranger is the privacy 404", application.ErrNotFound, http.StatusNotFound},
+		{"an archived property is the 409", application.ErrArchivedProperty, http.StatusConflict},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			svc := &fakeOperationsManager{
+				create: func(context.Context, uuid.UUID, uuid.UUID, application.CreateOperationCommand) (application.OperationListItem, error) {
+					return application.OperationListItem{}, tc.err
+				},
+			}
+			h := NewOperationsHandlers(svc, nil)
+			req := httptest.NewRequestWithContext(
+				httpsupport.WithUserID(t.Context(), actor), http.MethodPost, "/operations", strings.NewReader(payload),
+			)
+			w := httptest.NewRecorder()
+			h.CreateOperation(w, req, propertyID)
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", w.Code, tc.wantStatus, w.Body.String())
+			}
+		})
+	}
+
+	t.Run("a broken body is the 400", func(t *testing.T) {
+		t.Parallel()
+		h := NewOperationsHandlers(&fakeOperationsManager{}, nil)
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodPost, "/operations", strings.NewReader("{not json"),
+		)
+		w := httptest.NewRecorder()
+		h.CreateOperation(w, req, propertyID)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", w.Code)
 		}
 	})
 }

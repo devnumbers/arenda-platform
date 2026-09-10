@@ -15,6 +15,7 @@ export type {
   GlobalPaymentSearch,
   PaymentSearchCategoryView,
   IsoDate,
+  OperationCreateCommand,
   OperationsCategorySummary,
   OperationsSummary,
   PauseInterval,

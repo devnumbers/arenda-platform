@@ -121,6 +121,11 @@ type OperationStore interface {
 	// a foreign row or an already-cancelled one — surfaces as ErrNotFound
 	// (cancelled operations are gone for every read).
 	Cancel(ctx context.Context, id, scope, propertyID uuid.UUID) error
+	// Create inserts the manual one-off operation (ticket #569): the fact is
+	// born paid — status='paid' and date=paid_date=today travel app-side —
+	// with no rule behind it: the query writes origin='manual' and leaves
+	// payment_id and payment_form NULL.
+	Create(ctx context.Context, op domain.Operation) error
 	// ListByPayment returns one rule's operations ordered per the query.
 	ListByPayment(
 		ctx context.Context, scope, propertyID, paymentID uuid.UUID, q OperationsListQuery,

@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "@/shared/assets/icons";
+import { Add, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
@@ -20,7 +20,7 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from "@/features/payments";
-import { Button, HubCollapseAnchor, HubTitle, PageContent, TopNav } from "@/shared/ui/design";
+import { Button, HubCollapseAnchor, HubTitle, IconButton, PageContent, TopNav } from "@/shared/ui/design";
 import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
 import {
   LoadingMoreIndicator,
@@ -46,11 +46,13 @@ import { summaryBarSegments } from "../lib/summary-bar";
  * категорийный фильтр не принимает, объектный и период — принимают.
  * Фильтры живут в адресе (?from=&to=&property=&category= — шарабельно).
  * Порции по 50 с бесконечным скроллом; строка ведёт на страницу операции
- * своего объекта. Поиск — пилюля «Найти операцию» (#543), кнопка «+»
- * скрыта (решение владельца #539). Совсем пустая книга (all-time сводка
- * выбранного скоупа без операций) вместо контента — «Операций еще не
- * было», как на объектном экране (#478). Вход — «Операции» в сайдбаре
- * ПК и в шите «Еще» на мобайле и планшете (единый хром, #564).
+ * своего объекта. Поиск — пилюля «Найти операцию» (#543); «+» в хаб-шапке
+ * ведёт в визард одиночной операции (#570; решение владельца 2026-09-08
+ * #571 отменяет решение #539 о скрытой «+»). Совсем пустая книга (all-time
+ * сводка выбранного скоупа без операций) вместо контента — «Операций еще
+ * не было» с CTA «Добавить операцию» (#571), как на объектном экране
+ * (#478). Вход — «Операции» в сайдбаре ПК и в шите «Еще» на мобайле и
+ * планшете (единый хром, #564).
  */
 export function OperationsGlobalScreen(): JSX.Element {
   const router = useRouter();
@@ -121,26 +123,42 @@ export function OperationsGlobalScreen(): JSX.Element {
     return query.length > 0 ? `${base}?${query}` : base;
   };
 
+  // «+» — в визард одиночной операции (#571, решение владельца 2026-09-08):
+  // в ряду заголовка хаба и в правом слоте компакт-бара; в neverHad
+  // скрыта — действие там CTA пустого состояния.
+  const addButton = (
+    <IconButton
+      icon={<Add />}
+      label="Добавить операцию"
+      onClick={() => router.push(ROUTES.operationsNew)}
+    />
+  );
+
   return (
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
-       * стандартное — в потоке на мобайле, закреплена на планшете и ПК. */}
+       * стандартное — в потоке на мобайле, закреплена на планшете и ПК.
+       * «+» — в визард одиночной операции (#571, решение владельца
+       * 2026-09-08); в neverHad вместе с поиском скрыта, действие —
+       * CTA пустого состояния. */}
       <TopNav
         mobileWings
         collapse={{
           title: 'Операции',
           search: { href: ROUTES.operationsSearch, label: 'Найти операцию' },
+          trailing: neverHad ? undefined : addButton,
         }}
       />
 
       <PageContent>
         <HubCollapseAnchor>
-          <HubTitle>Операции</HubTitle>
+          <div className="flex items-center justify-between pr-3.5">
+            <HubTitle>Операции</HubTitle>
+            {!neverHad && addButton}
+          </div>
           {!neverHad && (
             <div className="mt-6 px-6">
-              {/* Пилюля поиска (#543) — кнопка на отдельную страницу; «+»
-               * скрыта (решение владельца #539: создания разовой операции
-               * вне правила нет). */}
+              {/* Пилюля поиска (#543) — кнопка на отдельную страницу. */}
               <OperationsSearchPill
                 onOpenSearch={() =>
                   router.push(filterHref(ROUTES.operationsSearch))
@@ -151,7 +169,13 @@ export function OperationsGlobalScreen(): JSX.Element {
         </HubCollapseAnchor>
 
         {neverHad ? (
-          <OperationsNeverHad />
+          <OperationsNeverHad
+            action={
+              <Button onClick={() => router.push(ROUTES.operationsNew)}>
+                Добавить операцию
+              </Button>
+            }
+          />
         ) : (
           <div className="mt-6 flex flex-col gap-6">
             <OperationsFilterChips
@@ -285,7 +309,8 @@ export function OperationsGlobalScreen(): JSX.Element {
 
 /** Пилюля поиска (макет 1726-90017): серый rounded-pill на всю ширину,
  * лупа и подпись «Найти операцию»; тап открывает страницу поиска #543.
- * Кнопка «+» из макета скрыта (решение владельца #539). */
+ * Кнопка «+» рядом с пилюлей переехала в шапку страницы (решение
+ * владельца 2026-09-08 #571 — отмена решения #539). */
 function OperationsSearchPill({
   onOpenSearch,
 }: {

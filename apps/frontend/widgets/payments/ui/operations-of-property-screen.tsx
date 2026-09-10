@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Search } from "@/shared/assets/icons";
+import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import { useInfiniteScroll } from "@/shared/lib/hooks/useInfiniteScroll";
@@ -19,6 +19,7 @@ import {
   usePropertyOperationsScopedPaged,
   usePropertyOperationsSummary,
 } from "@/features/payments";
+import { canMutateProperty, useProperty } from "@/features/properties";
 import {
   Button,
   IconButton,
@@ -53,9 +54,14 @@ import { OperationsSummaryCard } from "./operations-summary-card";
  * в адресе (?from=&to=&category= — шарабельно, назад возвращает к
  * списку), пересчёт сводки при смене периода — ключ react-query. Порции
  * по 50 с бесконечным скроллом; строка ведёт на страницу операции. Поиск —
- * иконка в хедере (экран поиска — тикет #476). Совсем пустой объект
+ * иконка в хедере (экран поиска — тикет #476). «+» в хедере ведёт в визард
+ * одиночной операции без шага объекта (#570/#571, макет 1492-41825;
+ * решение владельца 2026-09-08 отменяет решение #539 о скрытой «+») —
+ * только у того, кто может создавать операции (CanEdit, не архив —
+ * контракт #569; зритель кнопки не видит). Совсем пустой объект
  * (all-time сводка без операций, #478) вместо всего контента показывает
- * «Операций еще не было» (Figma 1518-92899) — без чипов, сводки и поиска.
+ * «Операций еще не было» (Figma 1518-92899) — без чипов, сводки, поиска
+ * и «+», но с CTA «Добавить операцию» (#571).
  */
 export function OperationsOfPropertyScreen({
   propertyId,
@@ -65,6 +71,13 @@ export function OperationsOfPropertyScreen({
   const router = useRouter();
   const pathname = usePathname();
   const { filters } = useOperationsFilters();
+
+  // Доступ к объекту — для кнопки создания (#571): общий мутационный
+  // предикат (зритель — только чтение, архив read-only, контракт #569).
+  const propertyQuery = useProperty(propertyId);
+  const canMutate = canMutateProperty(
+    propertyQuery.isSuccess ? propertyQuery.data : undefined,
+  );
 
   const today = clientTodayIso();
   const period = filters.period ?? defaultOperationsPeriod(today);
@@ -149,15 +162,27 @@ export function OperationsOfPropertyScreen({
         }
         trailing={
           // Совсем пустому объекту поиск не нужен (Figma 1518-92899 —
-          // правая кнопка хедера скрыта).
+          // правая кнопка хедера скрыта), действие — CTA пустого
+          // состояния; «+» (#571) — только у того, кто может создавать.
           neverHad ? undefined : (
-            <IconButton
-              icon={<Search />}
-              label="Поиск операций"
-              onClick={() =>
-                router.push(ROUTES.propertyOperationsSearch(propertyId))
-              }
-            />
+            <>
+              <IconButton
+                icon={<Search />}
+                label="Поиск операций"
+                onClick={() =>
+                  router.push(ROUTES.propertyOperationsSearch(propertyId))
+                }
+              />
+              {canMutate && (
+                <IconButton
+                  icon={<Add />}
+                  label="Добавить операцию"
+                  onClick={() =>
+                    router.push(ROUTES.propertyOperationsNew(propertyId))
+                  }
+                />
+              )}
+            </>
           )
         }
       >
@@ -166,7 +191,19 @@ export function OperationsOfPropertyScreen({
 
       <PageContent>
         {neverHad ? (
-          <OperationsNeverHad />
+          <OperationsNeverHad
+            action={
+              canMutate ? (
+                <Button
+                  onClick={() =>
+                    router.push(ROUTES.propertyOperationsNew(propertyId))
+                  }
+                >
+                  Добавить операцию
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="flex flex-col gap-6 pt-4">
             {/* Чипы фильтров (Figma 1492:59532): период выбран — синий; категории

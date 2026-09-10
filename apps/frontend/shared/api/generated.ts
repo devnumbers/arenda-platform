@@ -398,7 +398,11 @@ export interface paths {
         };
         get: operations["listPropertyOperations"];
         put?: never;
-        post?: never;
+        /**
+         * Create a manual operation (the one-off paid fact)
+         * @description The manual one-off income/expense fact on the property (ticket #569). It is born paid: date = paidDate = today in the property owner's timezone (ADR 0048), no originating rule behind it (paymentId null) and no payment form (paymentForm null). The category travels as the default-catalog slug and freezes as the snapshot with its label. Full Access and above may create; on an archived property the mutation is the conflict.
+         */
+        post: operations["createOperation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2408,6 +2412,16 @@ export interface components {
         PinnedUpdateRequest: {
             pinned: boolean;
         };
+        /** @description The body of the manual operation creation (ticket #569). The date is server-set — today in the property owner's timezone — and the fact is born paid; no payment form exists behind a manual fact. */
+        CreateOperationRequest: {
+            /** @enum {string} */
+            type: "income" | "expense";
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /** @description Slug of the default category catalog; frozen as the operation's snapshot. */
+            categorySlug: string;
+        };
         /** @description One operation of the Payments context: a payment occurrence or a manual fact. status carries overdue as a server-computed view status (planned with the date already past in the property owner's timezone). */
         OperationResponse: {
             /** Format: uuid */
@@ -3965,6 +3979,37 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    createOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Operation created (status is paid, paidDate = today in the owner's timezone) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     summarizePropertyOperations: {

@@ -112,6 +112,12 @@ type Querier interface {
 	// is measured on this timestamp against the service clock.
 	CreateCardBindingSession(ctx context.Context, arg CreateCardBindingSessionParams) (CardBindingSession, error)
 	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error
+	// Ручная разовая операция (тикет #569): рождается оплаченной в «сегодня»
+	// владельца — приложение передаёт одну дату, обе колонки берут её. Правила
+	// за фактом нет: origin='manual', payment_id NULL (partial unique
+	// (payment_id, date) накрывает только платёжные строки и не применяется),
+	// payment_form NULL — ручной факт снапшота формы не несёт.
+	CreateManualOperation(ctx context.Context, arg CreateManualOperationParams) error
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreatePropertyMember(ctx context.Context, arg CreatePropertyMemberParams) (PropertyMember, error)
 	// Pending property member invitations by email (T5, issue #161). Emails are

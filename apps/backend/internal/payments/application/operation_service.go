@@ -3,7 +3,9 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
@@ -115,6 +117,18 @@ type OperationListItem struct {
 	PropertyName string
 }
 
+// CreateOperationCommand is the create payload of a manual operation (ticket
+// #569): a one-off income/expense fact. The date is not part of it — the
+// server sets it to the owner's today like the rule's since — and no payment
+// form exists behind a manual fact: the schema keeps payment_form NULL. The
+// category travels as the default-catalog slug and freezes as the snapshot.
+type CreateOperationCommand struct {
+	Type          domain.PaymentType
+	Title         string
+	AmountKopecks int64
+	CategorySlug  string
+}
+
 // OperationService carries the operation use cases of the second contracts
 // slice (ticket #461): «Оплатить сейчас» and the two paginated listings (of
 // one rule and of the whole property). It runs through the same serialization
@@ -186,6 +200,65 @@ func (s *OperationService) PayOperation(
 	return OperationListItem{
 		Operation:  paidOp,
 		ViewStatus: domain.OperationView(paidOp, *paidOp.PaidDate),
+	}, nil
+}
+
+// CreateOperation implements the manual «+ операция» (POST
+// …/operations, ticket #569): the one-off fact is born paid with
+// date = paid_date = today in the owner's timezone (ADR 0048), origin
+// manual, no rule behind it — payment_id and payment_form stay NULL. The
+// category freezes as the snapshot right here: the label resolves from the
+// catalog (the validator guarantees the slug resolves), the slug travels.
+// Full Access and Owner may create; a viewer gets ErrForbidden, a stranger
+// the privacy ErrNotFound, an archived property ErrArchivedProperty. The
+// verdict keeps Tick=true — the mutation canon of the context.
+func (s *OperationService) CreateOperation(
+	ctx context.Context, actor, propertyID uuid.UUID, cmd CreateOperationCommand,
+) (OperationListItem, error) {
+	conveyor := s.conveyor()
+	op, err := runMutation(conveyor, ctx, actor, propertyID, uuid.Nil, s.writeGate,
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Operation], error) {
+			slug := cmd.CategorySlug
+			draft := domain.Operation{
+				OwnerID:       scope,
+				PropertyID:    propertyID,
+				Origin:        domain.OriginManual,
+				Date:          today,
+				PaidDate:      &today,
+				Status:        domain.StatusPaid,
+				Type:          cmd.Type,
+				Title:         strings.TrimSpace(cmd.Title),
+				AmountKopecks: cmd.AmountKopecks,
+				CategoryLabel: domain.CategoryRef{Slug: &slug}.SnapshotLabel(),
+				CategorySlug:  &slug,
+			}
+			if err := validateManualOperation(draft); err != nil {
+				return mutationOutcome[domain.Operation]{}, err
+			}
+			id, err := uuid.NewV7()
+			if err != nil {
+				return mutationOutcome[domain.Operation]{}, fmt.Errorf("mint operation id: %w", err)
+			}
+			draft.ID = id
+			if err := stores.operations.Create(ctx, draft); err != nil {
+				return mutationOutcome[domain.Operation]{}, fmt.Errorf("create manual operation: %w", err)
+			}
+			return mutationOutcome[domain.Operation]{
+				Response:      draft,
+				Audit:         auditdomain.ActionOperationCreated,
+				AuditEntity:   auditdomain.EntityOperation,
+				AuditEntityID: &draft.ID,
+				Tick:          true,
+			}, nil
+		})
+	if err != nil {
+		return OperationListItem{}, err
+	}
+	return OperationListItem{
+		Operation:  op,
+		ViewStatus: domain.OperationView(op, *op.PaidDate),
 	}, nil
 }
 
@@ -462,4 +535,25 @@ func (s *OperationService) listScoped(
 // mutation conveyor.
 func (s *OperationService) conveyor() mutationGates {
 	return mutationGates{factory: s.txStoreFactory, calendar: s.calendar}
+}
+
+// validateManualOperation is the single validator of the manual-operation
+// create contract (ticket #569): the rule's create vocabulary (validateRule)
+// minus the rule-only parts — a manual fact carries no recurrence and no
+// payment form, and its category reference is the default-catalog slug only.
+// The transport decodes and delegates here, so the rules cannot drift
+// between layers: the direction enum, a non-empty title within
+// MaxTitleLength characters (counted in runes), kopecks within 1..10⁹ and a
+// resolvable catalog slug.
+func validateManualOperation(op domain.Operation) error {
+	if op.Type != domain.TypeIncome && op.Type != domain.TypeExpense {
+		return ErrInvalidInput
+	}
+	if title := strings.TrimSpace(op.Title); title == "" || utf8.RuneCountInString(title) > MaxTitleLength {
+		return ErrInvalidInput
+	}
+	if op.AmountKopecks < 1 || op.AmountKopecks > MaxAmountKopecks {
+		return ErrInvalidInput
+	}
+	return validateCategory(domain.CategoryRef{Slug: op.CategorySlug})
 }

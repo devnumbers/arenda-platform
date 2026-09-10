@@ -7,6 +7,19 @@ export {
   type PaymentDraftType,
   type PaymentWizardDraft,
 } from './lib/use-payment-wizard-draft';
+export {
+  useOperationWizardDraft,
+  type OperationWizardDraft,
+} from './lib/use-operation-wizard-draft';
+export {
+  buildOperationCreateCommand,
+  effectiveOperationType,
+  initialOperationWizardStep,
+  operationPresetFromQueryParam,
+  operationWizardStepReady,
+  type OperationWizardMode,
+  type OperationWizardStep,
+} from './lib/operation-wizard-model';
 export { matchesTitleSearch } from './lib/title-search';
 export {
   FORM_OF_PAYMENT_LABELS,
@@ -88,6 +101,7 @@ export {
 } from './lib/update-model';
 export {
   OPERATIONS_PAGE_SIZE,
+  useCreateOperation,
   useCreatePayment,
   useDeleteOperation,
   useDeletePayment,

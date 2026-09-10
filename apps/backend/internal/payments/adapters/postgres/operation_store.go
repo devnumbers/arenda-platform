@@ -108,6 +108,27 @@ func (s *OperationStore) Cancel(ctx context.Context, id, scope, propertyID uuid.
 	return nil
 }
 
+// Create inserts the manual one-off operation (ticket #569). The born-paid
+// invariants — origin='manual', status='paid', date=paid_date, the NULL
+// payment link and the NULL payment form — are the query's, not the
+// caller's: the manual fact cannot be inserted in any other shape.
+func (s *OperationStore) Create(ctx context.Context, op domain.Operation) error {
+	if err := s.q().CreateManualOperation(ctx, postgres.CreateManualOperationParams{
+		ID:            pgconv.UUIDToPgtype(op.ID),
+		OwnerID:       pgconv.UUIDToPgtype(op.OwnerID),
+		PropertyID:    pgconv.UUIDToPgtype(op.PropertyID),
+		Date:          pgconv.DateToPgtype(op.Date),
+		Type:          string(op.Type),
+		Title:         op.Title,
+		AmountKopecks: op.AmountKopecks,
+		CategoryLabel: op.CategoryLabel,
+		CategorySlug:  pgconv.StringPtrToPgtype(op.CategorySlug),
+	}); err != nil {
+		return fmt.Errorf("create manual operation %s: %w", op.ID, err)
+	}
+	return nil
+}
+
 // ListByPayment returns one rule's operations in the query's order.
 func (s *OperationStore) ListByPayment(
 	ctx context.Context, scope, propertyID, paymentID uuid.UUID, q application.OperationsListQuery,

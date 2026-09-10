@@ -73,9 +73,14 @@ export function OperationsEmptyPeriod(): JSX.Element {
  * и списка — иллюстрация 128 через 64px после хедера (pt-10 поверх
  * встроенных pt-6 PageContent), заголовок 16/500 и подпись 14/400 серым
  * (320 по ширине). Иконка поиска в хедере вместе с этим состоянием
- * скрывается — искать нечего.
+ * скрывается — искать нечего. Опциональный CTA под подписью (#571,
+ * решение владельца 2026-09-08) — «Добавить операцию» ведёт в визард.
  */
-export function OperationsNeverHad(): JSX.Element {
+export function OperationsNeverHad({
+  action,
+}: {
+  readonly action?: ReactNode;
+}): JSX.Element {
   return (
     <div className="flex flex-col items-center px-6 pt-10">
       <Image
@@ -93,6 +98,7 @@ export function OperationsNeverHad(): JSX.Element {
           Добавьте аренду, другие платежи и начните отмечать оплату
         </p>
       </div>
+      {action !== undefined && <div className="mt-6">{action}</div>}
     </div>
   );
 }

@@ -63,6 +63,46 @@ func (q *Queries) CountPaidOperationsByPayment(ctx context.Context, arg CountPai
 	return column_1, err
 }
 
+const createManualOperation = `-- name: CreateManualOperation :exec
+INSERT INTO operations (
+    id, owner_id, property_id, payment_id, origin, date, paid_date, status,
+    type, title, amount_kopecks, payment_form, category_label, category_slug
+)
+VALUES ($1, $2, $3, NULL, 'manual', $4, $4, 'paid', $5, $6, $7, NULL, $8, $9)
+`
+
+type CreateManualOperationParams struct {
+	ID            pgtype.UUID `json:"id"`
+	OwnerID       pgtype.UUID `json:"owner_id"`
+	PropertyID    pgtype.UUID `json:"property_id"`
+	Date          pgtype.Date `json:"date"`
+	Type          string      `json:"type"`
+	Title         string      `json:"title"`
+	AmountKopecks int64       `json:"amount_kopecks"`
+	CategoryLabel string      `json:"category_label"`
+	CategorySlug  pgtype.Text `json:"category_slug"`
+}
+
+// Ручная разовая операция (тикет #569): рождается оплаченной в «сегодня»
+// владельца — приложение передаёт одну дату, обе колонки берут её. Правила
+// за фактом нет: origin='manual', payment_id NULL (partial unique
+// (payment_id, date) накрывает только платёжные строки и не применяется),
+// payment_form NULL — ручной факт снапшота формы не несёт.
+func (q *Queries) CreateManualOperation(ctx context.Context, arg CreateManualOperationParams) error {
+	_, err := q.db.Exec(ctx, createManualOperation,
+		arg.ID,
+		arg.OwnerID,
+		arg.PropertyID,
+		arg.Date,
+		arg.Type,
+		arg.Title,
+		arg.AmountKopecks,
+		arg.CategoryLabel,
+		arg.CategorySlug,
+	)
+	return err
+}
+
 const getOperationByID = `-- name: GetOperationByID :one
 
 SELECT op.id,

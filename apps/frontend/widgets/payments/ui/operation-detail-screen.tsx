@@ -19,7 +19,7 @@ import {
   categoryIconComponents,
   categoryStyle,
 } from '@/features/payment-categories';
-import { useProperty } from '@/features/properties';
+import { canMutateProperty, useProperty } from '@/features/properties';
 import {
   isOperationPayable,
   useDeleteOperation,
@@ -40,7 +40,7 @@ import {
 } from '@/shared/ui/design';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import {
-  operationDelayRow,
+  operationDetailRows,
   operationHeroAmount,
   operationSubtitle,
 } from '../lib/operation-page-model';
@@ -57,6 +57,12 @@ import {
  * читают без кнопок. Корзина в шапке (1386:67731) удаляет оплаченные и
  * просроченные операции через шторку 1510:77505 — tombstone cancelled
  * стирает факт и долг; плановые и проекции не удаляются.
+ *
+ * Manual-операция (#569/#571, макет 1858-105181): та же страница при
+ * paymentId = null — в «Данных операции» только строка «Объект», кнопки
+ * оплаты нет (факт рождается оплаченным), в «Подробнее» — «Дата операции»
+ * и статус без строк сравнения с правилом; корзина работает как у
+ * оплаченных (удаляет факт целиком).
  */
 export function OperationDetailScreen({
   propertyId,
@@ -78,10 +84,7 @@ export function OperationDetailScreen({
 
 
   // Единый предикат мутационного входа страницы платежа (ADR 0028, #446).
-  const canMutate =
-    property !== undefined
-    && property.access?.role !== 'viewer'
-    && property.status !== 'archived';
+  const canMutate = canMutateProperty(property);
 
   const loading = operationQuery.isPending || propertyQuery.isPending;
   const failed = operationQuery.isError || propertyQuery.isError;
@@ -301,7 +304,7 @@ export function OperationView({
   const router = useRouter();
   const subtitle = operationSubtitle(operation, today);
   const amount = operationHeroAmount(operation);
-  const delay = operationDelayRow(operation, today);
+  const details = operationDetailRows(operation, today);
   const category = categoryStyle('default', operation.categorySlug);
   const amountTone =
     amount.tone === 'success'
@@ -344,18 +347,18 @@ export function OperationView({
       </OperationSection>
 
       {/* Подробнее (1386:67731): статичные строки «лейбл — значение» 14px
-       * прямо на белом, без карточки и без hover-подсветки. */}
+       * прямо на белом, без карточки и без hover-подсветки; состав строк —
+       * operationDetailRows (у manual-операции — «Дата операции» + статус,
+       * 1858-105181). */}
       <OperationSection title="Подробнее">
-        {operation.paidDate !== undefined && (
-          <DetailRow label="Фактическая оплата" value={formatDayMonthWithYear(operation.paidDate, today)} />
-        )}
-        <DetailRow label="Плановая оплата" value={formatDayMonthWithYear(operation.date, today)} />
-        {delay !== null && <DetailRow label={delay.label} value={delay.text} />}
-        <DetailRow
-          label="Статус"
-          value={operation.status === 'overdue' ? 'Просрочена' : operation.status === 'paid' ? 'Выполнена' : 'Запланирована'}
-          danger={operation.status === 'overdue'}
-        />
+        {details.map((row) => (
+          <DetailRow
+            key={row.label}
+            label={row.label}
+            value={row.text}
+            danger={row.danger}
+          />
+        ))}
       </OperationSection>
 
       {payBar !== undefined && (

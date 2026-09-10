@@ -18,10 +18,13 @@ import (
 )
 
 // OperationsManager is the consumer-side port of the operation endpoints
-// (ADR 0035): the pay-now use case, the two listings, the period summary and
-// their global twins. The concrete application service satisfies it; the
-// handler tests run against func-backed fakes.
+// (ADR 0035): the manual creation, the pay-now use case, the two listings,
+// the period summary and their global twins. The concrete application
+// service satisfies it; the handler tests run against func-backed fakes.
 type OperationsManager interface {
+	CreateOperation(
+		ctx context.Context, actor, propertyID uuid.UUID, cmd application.CreateOperationCommand,
+	) (application.OperationListItem, error)
 	GetOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
 	DeleteOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) error
 	PayOperation(ctx context.Context, actor, propertyID, operationID uuid.UUID) (application.OperationListItem, error)
@@ -186,6 +189,39 @@ func (h *OperationsHandlers) SummarizeOperations(w http.ResponseWriter, r *http.
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, operationsSummaryResponse(summary))
+}
+
+// CreateOperation implements POST /properties/{propertyId}/operations
+// (ticket #569): the manual one-off fact born paid on the owner's today.
+// The contract rules — enums, amount bounds, title length, the catalog
+// slug — are the application validator's; the transport only folds the body.
+func (h *OperationsHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	var body openapi.CreateOperationRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
+		h.logger.ErrorContext(r.Context(), "failed to decode create operation request",
+			slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	item, err := h.svc.CreateOperation(r.Context(), actor, propertyID, application.CreateOperationCommand{
+		Type:          domain.PaymentType(body.Type),
+		Title:         body.Title,
+		AmountKopecks: body.AmountKopecks,
+		CategorySlug:  body.CategorySlug,
+	})
+	if err != nil {
+		h.handleOperationError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, operationResponse(item))
 }
 
 // GetOperation implements GET /properties/{propertyId}/operations/{operationId}

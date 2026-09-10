@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Search } from '@/shared/assets/icons';
+import { Add, ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
@@ -49,10 +49,12 @@ export type OperationsGlobalDirectionScreenProps = {
  * #540), некликабельна, полоса разбивки та же. Лента — контракт `type`
  * списка /operations, порции по 50 с бесконечным скроллом; строка ведёт
  * на страницу операции своего объекта. Совсем пустая книга направления —
- * «Операций еще не было», как на главной (#478). В шапке — лупа на
- * существующий поиск #543 (без типа направления — решение владельца);
- * «+» из макета не делаем (решение #539). Единый хром экранов (#564):
- * шапка — канон подэкрана (TopNav с «Назад» на ленту и лупой в trailing).
+ * «Операций еще не было» с CTA «Добавить операцию» (#571), как на главной
+ * (#478). В шапке — лупа на существующий поиск #543 (без типа направления
+ * — решение владельца) и «+» в визард с пресетом направления (макет
+ * 1858-104152; решение владельца 2026-09-08 #571 отменяет решение #539).
+ * Единый хром экранов (#564): шапка — канон подэкрана (TopNav с «Назад»
+ * на ленту, лупой и «+» в trailing).
  */
 export function OperationsGlobalDirectionScreen({
   type,
@@ -109,6 +111,10 @@ export function OperationsGlobalDirectionScreen({
     readonly id: string;
   }): void => router.push(ROUTES.propertyOperation(operation.propertyId, operation.id));
 
+  // Визард с пресетом направления от точки входа (#571): с «Доходов» —
+  // Доход, с «Расходов» — Расход (маршрут распознаёт ?type=).
+  const newOperationHref = `${ROUTES.operationsNew}?type=${type}`;
+
   const filterHref = (base: string, extra?: Record<string, string>): string => {
     const params = new URLSearchParams(globalOperationsFiltersParams(filters));
     for (const [name, value] of Object.entries(extra ?? {})) {
@@ -121,9 +127,11 @@ export function OperationsGlobalDirectionScreen({
   return (
     <>
       {/* Шапка направления — канон подэкрана: «Назад» на ленту (goBack
-       * сохраняет фильтры прямой загрузки) и лупа на существующий поиск
-       * (#543) с текущими фильтрами; в neverHad-состоянии лупа скрыта —
-       * конвенция зоны (#478). */}
+       * сохраняет фильтры прямой загрузки), лупа на существующий поиск
+       * (#543) с текущими фильтрами и «+» в визард с пресетом направления
+       * (#571, решение владельца 2026-09-08 — отмена решения #539); в
+       * neverHad-состоянии иконки скрыты — конвенция зоны (#478),
+       * действие — CTA пустого состояния. */}
       <TopNav
         leading={
           <IconButton
@@ -134,11 +142,18 @@ export function OperationsGlobalDirectionScreen({
         }
         trailing={
           neverHad ? undefined : (
-            <IconButton
-              icon={<Search />}
-              label="Найти операцию"
-              onClick={() => router.push(filterHref(ROUTES.operationsSearch))}
-            />
+            <>
+              <IconButton
+                icon={<Search />}
+                label="Найти операцию"
+                onClick={() => router.push(filterHref(ROUTES.operationsSearch))}
+              />
+              <IconButton
+                icon={<Add />}
+                label="Добавить операцию"
+                onClick={() => router.push(newOperationHref)}
+              />
+            </>
           )
         }
       >
@@ -147,7 +162,13 @@ export function OperationsGlobalDirectionScreen({
 
       <PageContent>
         {neverHad ? (
-          <OperationsNeverHad />
+          <OperationsNeverHad
+            action={
+              <Button onClick={() => router.push(newOperationHref)}>
+                Добавить операцию
+              </Button>
+            }
+          />
         ) : (
           <div className="flex flex-col gap-6 pt-4">
             <OperationsFilterChips
