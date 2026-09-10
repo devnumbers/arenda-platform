@@ -1,6 +1,13 @@
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
-import { Button, EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
+import {
+  Button,
+  EmptyState,
+  Skeleton,
+  SkeletonListRow,
+  skeletonBlockClass,
+  skeletonRowWidths,
+} from '@/shared/ui/design';
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
 /** Пояснение состояния (16/18, серый #6F787C — макет 1527:74479). */
@@ -33,7 +40,7 @@ function ContactsBookGroupSkeleton({ rows }: { readonly rows: number }): JSX.Ele
   return (
     <div className="flex flex-col" aria-hidden>
       <div className="pl-2">
-        <Skeleton className="h-6 w-16 bg-surface-muted-hover" />
+        <Skeleton className={`h-6 w-16 ${skeletonBlockClass('muted')}`} />
       </div>
       <div className="flex flex-col">
         {widths.map((rowWidths, index) => (

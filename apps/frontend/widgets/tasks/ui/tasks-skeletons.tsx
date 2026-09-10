@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { Skeleton, skeletonRowWidths } from '@/shared/ui/design';
+import { Skeleton, skeletonBlockClass, skeletonRowWidths, type SkeletonRowWidths } from '@/shared/ui/design';
 
 /**
  * Скелетоны-архетипы ленты задач (#605, паритет — §7 DESIGN.md):
@@ -9,8 +9,8 @@ import { Skeleton, skeletonRowWidths } from '@/shared/ui/design';
  * Шапки (заголовок, чипы сортировки/фильтра) рендерятся вне фазы загрузки.
  */
 
-/** Приглушённый тон блоков внутри серых секций (§7). */
-const MUTED = 'bg-surface-muted-hover';
+/** Приглушённый тон блоков внутри серых секций (§7, skeletonBlockClass). */
+const MUTED = skeletonBlockClass('muted');
 
 /** Строка задачи-заглушка: каркас TaskRow — кружок-чекбокс 24, колонка
  * «название 16/18 + строка объекта 14/16 + строка времени 14/16» с зазором
@@ -18,7 +18,7 @@ const MUTED = 'bg-surface-muted-hover';
 function SkeletonTaskRow({
   widths,
 }: {
-  readonly widths: { readonly title: string; readonly subtitle: string };
+  readonly widths: SkeletonRowWidths;
 }): JSX.Element {
   return (
     <div aria-hidden className="flex w-full items-start gap-4 px-6 py-3">

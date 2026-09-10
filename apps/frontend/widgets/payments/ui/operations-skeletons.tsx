@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import {
   Skeleton,
   SkeletonListRow,
+  skeletonBlockClass,
   skeletonRowWidths,
 } from '@/shared/ui/design';
 
@@ -12,17 +13,19 @@ import {
  * чипы) рендерятся вне фазы загрузки и скелетоном не подменяются.
  */
 
+/** Приглушённый тон блоков внутри серых карточек (§7, skeletonBlockClass). */
+const MUTED = skeletonBlockClass('muted');
+
 /** Сводная карточка-заглушка: серая карточка OperationsSummaryCard
  * (Figma 1510-77101) — сумма 16/24, подпись 14/20, полоса разбивки 6px. */
 function SkeletonSummaryCard(): JSX.Element {
-  const block = 'bg-surface-muted-hover';
   return (
     <div aria-hidden className="min-w-0 flex-1 rounded-card bg-surface-muted px-6 pb-6 pt-5">
       <span className="flex flex-col gap-0.5">
-        <Skeleton className={`h-6 w-20 ${block}`} />
-        <Skeleton className={`h-5 w-16 ${block}`} />
+        <Skeleton className={`h-6 w-20 ${MUTED}`} />
+        <Skeleton className={`h-5 w-16 ${MUTED}`} />
       </span>
-      <Skeleton className={`mt-4 h-1.5 w-full ${block}`} />
+      <Skeleton className={`mt-4 h-1.5 w-full ${MUTED}`} />
     </div>
   );
 }
@@ -51,8 +54,9 @@ export function OperationsSummarySkeleton({
   );
 }
 
-/** Группа дат-заглушка: заголовок даты (PaymentsHeading 20/24) и строки
- * операций (PaymentRowButton px-3+px-3 py-3 → вставка 24/12). */
+/** Группа дат-заглушка: заголовок даты (PaymentsHeading 20/24, на белом —
+ * базовый тон) и строки операций (PaymentRowButton px-3+px-3 py-3 →
+ * вставка 24/12). */
 function SkeletonDateGroup({
   rows,
 }: {
@@ -62,7 +66,7 @@ function SkeletonDateGroup({
   return (
     <section aria-hidden className="flex flex-col">
       <div className="px-6">
-        <Skeleton className="h-6 w-24 bg-surface-muted" />
+        <Skeleton className={`h-6 w-24 ${skeletonBlockClass('base')}`} />
       </div>
       {widths.map((rowWidths, index) => (
         <SkeletonListRow
@@ -92,14 +96,21 @@ export function OperationsDateFeedSkeleton(): JSX.Element {
 
 /**
  * Строки выборщика категорий-заглушка (#544): ListRow «иконка + название +
- * сумма периода + чекбокс» — канон строки с правой суммой и чекбоксом.
+ * сумма периода + чекбокс» — однострочные (без подзаголовка), как реальные
+ * строки, чтобы высота совпадала.
  */
 export function OperationsCategoriesSkeleton(): JSX.Element {
   const widths = skeletonRowWidths(8);
   return (
     <div aria-hidden className="flex flex-col">
       {widths.map((rowWidths, index) => (
-        <SkeletonListRow key={index} value trailing widths={rowWidths} />
+        <SkeletonListRow
+          key={index}
+          subtitle={false}
+          value
+          trailing
+          widths={rowWidths}
+        />
       ))}
     </div>
   );

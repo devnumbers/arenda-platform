@@ -21,6 +21,9 @@ import { SKELETON_ROW_WIDTHS_DEFAULT, skeletonBlockClass, type SkeletonRowWidths
 export type SkeletonListRowProps = {
   /** Круг-плейсхолдер ведущей иконки/аватара 44×44. */
   readonly leading?: boolean;
+  /** Подзаголовок-плейсхолдер; однострочные строки выборщиков (#544)
+   * передают false — высота строки совпадает с реальной. */
+  readonly subtitle?: boolean;
   /** Правая колонка, верхняя строка — значение (сумма). */
   readonly value?: boolean;
   /** Правая колонка, нижняя строка — описание (дата, срок). */
@@ -36,6 +39,7 @@ export type SkeletonListRowProps = {
 
 export function SkeletonListRow({
   leading = true,
+  subtitle: withSubtitle = true,
   value = false,
   description = false,
   trailing = false,
@@ -49,7 +53,7 @@ export function SkeletonListRow({
       {leading && <Skeleton className={cn('h-11 w-11 shrink-0', block)} />}
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <Skeleton className={cn('h-6', widths.title, block)} />
-        <Skeleton className={cn('h-5', widths.subtitle, block)} />
+        {withSubtitle && <Skeleton className={cn('h-5', widths.subtitle, block)} />}
       </span>
       {(value || description) && (
         <span className="flex shrink-0 flex-col items-end gap-1">

@@ -1160,6 +1160,12 @@ export function DesignLayerShowcase(): JSX.Element {
                                     leading={false}
                                     widths={{title: 'w-2/5', subtitle: 'w-3/5'}}
                                 />
+                                <SkeletonListRow
+                                    subtitle={false}
+                                    value
+                                    trailing
+                                    widths={{title: 'w-2/5', subtitle: 'w-3/5'}}
+                                />
                             </div>
                         </div>
                         <div className="flex w-full flex-col gap-2">

@@ -23,7 +23,6 @@ import {
   IconButton,
   PageContent,
   PickerMenu,
-  Skeleton,
   TopNav,
   type PickerMenuGroup,
 } from '@/shared/ui/design';
@@ -120,11 +119,16 @@ export function ContactBookScreen({
 
         {contactsQuery.isPending ? (
           <>
-            {/* Паритет §7: чип сортировки и карточка книги со строками;
-             * чип прячется вместе с пустым списком, из загрузки его место
-             * уже занято. */}
-            <div className="mb-4 px-6" aria-hidden>
-              <Skeleton className="h-11 w-32" />
+            {/* Паритет §7: чип сортировки реальный — вне фазы загрузки
+             * (переключение сортировки во время загрузки безвредно: запрос
+             * уходит с новым ключом); прячется вместе с пустым списком. */}
+            <div className="mb-4 px-6">
+              <PickerMenu
+                title="Сортировать"
+                groups={sortPickerGroups(sortField, sortOrder, changeSort)}
+              >
+                <BookSortChip field={sortField} order={sortOrder} />
+              </PickerMenu>
             </div>
             <ContactsBookSkeleton />
           </>

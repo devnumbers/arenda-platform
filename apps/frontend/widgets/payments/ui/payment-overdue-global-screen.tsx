@@ -15,7 +15,6 @@ import {
   EmptyState,
   IconButton,
   PageContent,
-  Skeleton,
   TopNav,
   TopNavTitle,
 } from "@/shared/ui/design";
@@ -86,11 +85,18 @@ export function PaymentOverdueGlobalScreen({
         <div data-testid="payments-overdue-screen" className="flex flex-col">
           {pending && (
             <>
-              {/* Паритет §7: чип сортировки — вне фазы загрузки (в непустой
-               * книге он стоит над списком), строки канона PaymentRowButton
-               * — иконка, название, объект, сумма и срок. */}
-              <div className="px-6 pb-3" aria-hidden>
-                <Skeleton className="h-11 w-24" />
+              {/* Паритет §7: чип сортировки реальный — вне фазы загрузки
+               * (в непустой книге он стоит над списком, тап до данных лишь
+               * меняет направление); строки канона PaymentRowButton —
+               * иконка, название, объект, сумма и срок. */}
+              <div className="px-6 pb-3">
+                <ChipButton
+                  data-testid="overdue-sort-chip"
+                  trailingIcon={<ChangeVertical />}
+                  onClick={toggleSort}
+                >
+                  {sort === "old" ? "Старые" : "Новые"}
+                </ChipButton>
               </div>
               <PaymentsRowsSkeleton />
             </>
