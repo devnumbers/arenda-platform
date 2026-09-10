@@ -27,7 +27,8 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsStateCard } from './payments-sections';
+import { OperationsCategoriesSkeleton } from './operations-skeletons';
 import { globalCategoriesSummaryScope } from '../lib/operations-global-categories-model';
 
 /**
@@ -109,7 +110,9 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
           </div>
 
           {summaryQuery.isPending ? (
-            <PaymentsSkeleton withHeading />
+            // Паритет §7: строки «иконка + название + сумма + чекбокс»;
+            // чипы контекста выше — вне фазы загрузки.
+            <OperationsCategoriesSkeleton />
           ) : summaryQuery.isError ? (
             <PaymentsStateCard
               title="Не удалось загрузить категории"

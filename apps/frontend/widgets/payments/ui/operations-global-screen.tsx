@@ -21,7 +21,8 @@ import {
   useGlobalOperationsSummary,
 } from "@/features/payments";
 import { Button, HubCollapseAnchor, HubTitle, IconButton, PageContent, TopNav } from "@/shared/ui/design";
-import { PaymentsSkeleton, PaymentsStateCard } from "./payments-sections";
+import { PaymentsStateCard } from "./payments-sections";
+import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from "./operations-skeletons";
 import {
   LoadingMoreIndicator,
   OperationsDateList,
@@ -211,8 +212,10 @@ export function OperationsGlobalScreen(): JSX.Element {
 
             {pending && (
               <>
-                <PaymentsSkeleton withHeading />
-                <PaymentsSkeleton withHeading />
+                {/* Паритет §7: копия контента — ряд карточек сводки и
+                 * группы дат со строками; чипы выше — вне фазы загрузки. */}
+                <OperationsSummarySkeleton cards={2} />
+                <OperationsDateFeedSkeleton />
               </>
             )}
 

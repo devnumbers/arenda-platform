@@ -27,7 +27,6 @@ import {
   Modal,
   ModalContent,
   PageContent,
-  Skeleton,
   StatusIcon,
   StickyBottomBar,
   TopNav,
@@ -44,7 +43,7 @@ import {
   moveFavorite,
   remainingFavoriteIds,
 } from "../lib/favorites-edit-model";
-import { GlobalPaymentRuleIcon, PaymentsStateCard } from "./payments-sections";
+import { GlobalPaymentRuleIcon, PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
 
 /**
  * Экран «Избранные платежи» (карта #573, тикет #579; вход — карточка
@@ -193,11 +192,9 @@ export function PaymentFavoritesScreen(): JSX.Element {
       <PageContent>
         <div data-testid="payments-favorites-screen" className="flex flex-col">
           {pending && (
-            <div className="flex flex-col" aria-hidden>
-              {Array.from({ length: 5 }, (_, index) => (
-                <Skeleton key={index} className="mb-1 h-[60px] w-full" />
-              ))}
-            </div>
+            // Паритет §7: строки канона PaymentRowButton (иконка, название,
+            // объект, сумма и дата) — контент встаёт на место без сдвига.
+            <PaymentsRowsSkeleton />
           )}
 
           {feedQuery.isError && (

@@ -1141,8 +1141,7 @@ export function DesignLayerShowcase(): JSX.Element {
                     <p className={styles.groupTitle}>
                         Композиции канона Skeleton под анатомию реальных блоков (#604,
                         паритет — §7 DESIGN.md): контент занимает место скелетона без
-                        сдвига. Имена и API финализируются на первом реальном экране
-                        карты #603 (#605).
+                        сдвига. API финализирован на хабах карты #603 (#605).
                     </p>
                     <div className={styles.grid}>
                         <div className="flex w-full flex-col gap-2">
@@ -1151,9 +1150,16 @@ export function DesignLayerShowcase(): JSX.Element {
                                 <SkeletonListRow widths={{title: 'w-2/5', subtitle: 'w-3/5'}} />
                                 <SkeletonListRow
                                     value
+                                    description
                                     widths={{title: 'w-1/2', subtitle: 'w-2/5'}}
                                 />
-                                <SkeletonListRow leading={false} widths={{title: 'w-3/5', subtitle: 'w-1/2'}} />
+                                <SkeletonListRow value widths={{title: 'w-3/5', subtitle: 'w-1/2'}} />
+                                <SkeletonListRow
+                                    value
+                                    trailing
+                                    leading={false}
+                                    widths={{title: 'w-2/5', subtitle: 'w-3/5'}}
+                                />
                             </div>
                         </div>
                         <div className="flex w-full flex-col gap-2">

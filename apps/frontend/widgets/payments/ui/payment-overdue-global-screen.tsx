@@ -22,7 +22,7 @@ import {
 import { goBack } from "@/shared/lib/navigation";
 import { globalOverdueList, type OverdueSort } from "../lib/overdue-global-model";
 import { overdueDaysLine } from "../lib/payments-global-model";
-import { PaymentsStateCard } from "./payments-sections";
+import { PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
 
 /**
  * Экран «Просроченные операции» (карта #573, тикет #580; вход — карточка
@@ -85,11 +85,15 @@ export function PaymentOverdueGlobalScreen({
       <PageContent>
         <div data-testid="payments-overdue-screen" className="flex flex-col">
           {pending && (
-            <div className="flex flex-col" aria-hidden>
-              {Array.from({ length: 5 }, (_, index) => (
-                <Skeleton key={index} className="mb-1 h-[60px] w-full" />
-              ))}
-            </div>
+            <>
+              {/* Паритет §7: чип сортировки — вне фазы загрузки (в непустой
+               * книге он стоит над списком), строки канона PaymentRowButton
+               * — иконка, название, объект, сумма и срок. */}
+              <div className="px-6 pb-3" aria-hidden>
+                <Skeleton className="h-11 w-24" />
+              </div>
+              <PaymentsRowsSkeleton />
+            </>
           )}
 
           {feedQuery.isError && (

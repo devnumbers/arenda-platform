@@ -23,6 +23,7 @@ import {
   IconButton,
   PageContent,
   PickerMenu,
+  Skeleton,
   TopNav,
   type PickerMenuGroup,
 } from '@/shared/ui/design';
@@ -32,7 +33,7 @@ import {
   groupBookByProperty,
 } from '../lib/contact-book-model';
 import { ContactRowButton } from '@/entities/contact';
-import { ContactsEmptyState, ContactsErrorCard, ContactsSkeleton } from './contacts-states';
+import { ContactsBookSkeleton, ContactsEmptyState, ContactsErrorCard } from './contacts-states';
 
 /**
  * Экран «Контакты» — плоская книга владельца (глобальная страница контактов,
@@ -106,22 +107,29 @@ export function ContactBookScreen({
       <PageContent>
         <HubCollapseAnchor>
           <HubTitle>Контакты</HubTitle>
-          {contactsQuery.isSuccess && (
-            <div className="mt-4 mb-6 px-6">
-              {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
-               * по макету 1726:65083 согласован владельцем). */}
-              <BookSearchPill
-                onOpenSearch={() => router.push(ROUTES.contactSearch)}
-                onCreate={() => router.push(ROUTES.contactNew)}
-              />
-            </div>
-          )}
+          <div className="mt-4 mb-6 px-6">
+            {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
+             * по макету 1726:65083 согласован владельцем); вне фазы
+             * загрузки — контент встаёт на её место без сдвига (§7). */}
+            <BookSearchPill
+              onOpenSearch={() => router.push(ROUTES.contactSearch)}
+              onCreate={() => router.push(ROUTES.contactNew)}
+            />
+          </div>
         </HubCollapseAnchor>
 
         {contactsQuery.isPending ? (
-          <ContactsSkeleton className="mt-6" />
+          <>
+            {/* Паритет §7: чип сортировки и карточка книги со строками;
+             * чип прячется вместе с пустым списком, из загрузки его место
+             * уже занято. */}
+            <div className="mb-4 px-6" aria-hidden>
+              <Skeleton className="h-11 w-32" />
+            </div>
+            <ContactsBookSkeleton />
+          </>
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} className="mt-6" />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
         ) : (
           <>
             {contacts.length === 0 ? (

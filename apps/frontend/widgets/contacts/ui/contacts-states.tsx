@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
-import { Button, EmptyState, Skeleton } from '@/shared/ui/design';
+import { Button, EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
 
 const headingClass = 'text-xl font-semibold leading-6 text-content';
 /** Пояснение состояния (16/18, серый #6F787C — макет 1527:74479). */
@@ -22,6 +22,48 @@ export function ContactsSkeleton({ className }: { readonly className?: string })
         <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
         <Skeleton className="h-11 w-3/5 bg-surface-muted-hover" />
       </div>
+    </section>
+  );
+}
+
+/** Группа книги-заглушка: метка буквы/объекта (16/500, pl-2) и строки
+ * контактов без своей вставки — поля приносит карточка (pl-5 pr-4). */
+function ContactsBookGroupSkeleton({ rows }: { readonly rows: number }): JSX.Element {
+  const widths = skeletonRowWidths(rows);
+  return (
+    <div className="flex flex-col" aria-hidden>
+      <div className="pl-2">
+        <Skeleton className="h-6 w-16 bg-surface-muted-hover" />
+      </div>
+      <div className="flex flex-col">
+        {widths.map((rowWidths, index) => (
+          <SkeletonListRow
+            key={index}
+            tone="muted"
+            widths={rowWidths}
+            className="px-0 py-2"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Скелетон книги контактов (#605, паритет — §7 DESIGN.md): каркас карточки
+ * книги (1726:65083 — одна серая карточка, группы с зазором 16) со
+ * строками канона ContactRowButton (аватар 44, имя + подзаголовок).
+ * Пилюля поиска и чип сортировки — вне фазы загрузки, скелетоном не
+ * подменяются.
+ */
+export function ContactsBookSkeleton(): JSX.Element {
+  return (
+    <section
+      aria-hidden
+      className="mx-6 flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6"
+    >
+      <ContactsBookGroupSkeleton rows={2} />
+      <ContactsBookGroupSkeleton rows={3} />
     </section>
   );
 }

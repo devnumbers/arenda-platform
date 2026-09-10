@@ -13,8 +13,8 @@ import { SkeletonListRow } from './skeleton-list-row';
  * `SkeletonListRow` в приглушённом тоне. Каркас повторяет секцию: карточка
  * `rounded-card bg-surface-muted`, заголовок с вставкой 24, снизу баланс
  * 24; горизонтальные поля экрана (mx-6) приносит потребитель через
- * className — как у CollapsibleSection. Имена и API окончательно решаются
- * на первом реальном экране карты #603 (тикет #605).
+ * className — как у CollapsibleSection. API финализирован на хабах
+ * карты #603 (#605).
  */
 export type SkeletonSectionProps = {
   /** Число строк-заглушек внутри секции. */
