@@ -5,7 +5,7 @@ export { PaymentList } from './ui/PaymentList';
 export { PaymentMethodList } from './ui/PaymentMethodList';
 export { PersonalDataForm } from './ui/PersonalDataForm';
 export { PhoneChangeForm } from './ui/PhoneChangeForm';
-export { ProfileOverview } from './ui/ProfileOverview';
+export { ProfileHub } from './ui/ProfileHub';
 export { TariffChangeForm } from './ui/TariffChangeForm';
 export { TariffChangeSuccess } from './ui/TariffChangeSuccess';
 export { TariffOverview } from './ui/TariffOverview';

@@ -1,23 +1,25 @@
 import type { Metadata } from 'next';
-import { SubScreenShell } from '@/shared/ui/design';
-import { ROUTES } from '@/shared/config/routes';
-import { ProfileOverview } from '@/widgets/profile';
+import { PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { ProfileHub } from '@/widgets/profile';
 
 export const metadata: Metadata = {
   title: 'Профиль — Рентли',
   description: 'Страница профиля пользователя',
 };
 
-/** Корень дерева профиля на едином хроме (карта #556, тикет #566): вход —
- * кнопка юзера в хедере («крыло» UserButton), выход — ведущее «Назад»
- * (goBack, фолбэк — дом приложения). Каркас — SubScreenShell (экстракция
- * #568), состав прежний (редизайн карточки и меню — отдельное усилие). */
+/** Хаб профиля в новом дизайне (карта #591, тикет #592; Figma 1903-38340 /
+ * 1786-31288): хаб-экран без ведущего «Назад» — вход «крылом» UserButton,
+ * заголовок «Профиль» 16/18 в баре по центру (макет), крылья и на мобайле.
+ * Подэкраны /profile* ссылаются на него фолбэком «Назад». */
 export default function ProfilePage() {
   return (
     <>
-      <SubScreenShell title="Профиль" fallbackHref={ROUTES.properties}>
-        <ProfileOverview />
-      </SubScreenShell>
+      <TopNav mobileWings>
+        <TopNavTitle title="Профиль" />
+      </TopNav>
+      <PageContent>
+        <ProfileHub />
+      </PageContent>
     </>
   );
 }
