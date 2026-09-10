@@ -82,7 +82,8 @@ function TimezoneFieldRow({ label }: { readonly label: string }): JSX.Element {
         href={ROUTES.profileAccountTimezone}
         className={cn(
           fieldBoxClass,
-          'cursor-pointer transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
+          'cursor-pointer outline-none transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
+          'focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
         )}
       >
         <span

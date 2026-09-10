@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -40,21 +40,19 @@ export function TimezonePickerScreen(): JSX.Element {
     searchInputRef.current?.focus();
   }, []);
 
-  const visible = useMemo(
-    () => filterPickerOptions(timezoneOptions, search),
-    [search],
-  );
+  const visible = filterPickerOptions(timezoneOptions, search);
   const selected = me?.timezone ?? null;
+  const closePicker = (): void => goBack(router, ROUTES.profileAccount);
 
   const handleSelect = (value: string): void => {
     if (value === selected) {
-      goBack(router, ROUTES.profileAccount);
+      closePicker();
       return;
     }
     updateMe.mutate({ timezone: value }, {
       onSuccess: () => {
         notify.scenarios.profile.personalDataSaved();
-        goBack(router, ROUTES.profileAccount);
+        closePicker();
       },
       onError: (error) => notify.scenarios.profile.personalDataSaveError(error),
     });
@@ -68,7 +66,7 @@ export function TimezonePickerScreen(): JSX.Element {
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            onClick={() => goBack(router, ROUTES.profileAccount)}
+            onClick={closePicker}
           />
         }
       >
@@ -84,11 +82,14 @@ export function TimezonePickerScreen(): JSX.Element {
 
       <PageContent>
         <div className="flex flex-col">
+          {/* me не нужен для работы списка — только для подсветки выбора;
+           * пока /me в полёте, строки гасятся (защита от двойного PATCH). */}
           {visible.map((option) => (
             <ListRow
               key={option.value}
               title={option.label}
               titleClassName={option.value === selected ? 'text-primary' : undefined}
+              disabled={updateMe.isPending}
               onSelect={() => handleSelect(option.value)}
             />
           ))}
