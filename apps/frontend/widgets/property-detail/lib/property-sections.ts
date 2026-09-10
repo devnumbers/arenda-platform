@@ -25,6 +25,18 @@ export type PropertySectionEmptyCopy = {
   readonly ctaLabel: string | null;
 };
 
+/** Иллюстрации пустых состояний секций (64): переиспользуем иллюстрации
+ * пустых карт аренды/платежей/контактов/задач — совпадение с макетом 1:1;
+ * характеристики — из шаблона «Об объекте» (1550:97124, нода 1550:97390). */
+export const propertySectionImages: Record<PropertyDetailSectionKey, string> = {
+  rental: '/images/rentals/empty-rental.png',
+  payments: '/images/payments/object-empty.png',
+  operations: '/images/payments/operations-empty.png',
+  contacts: '/images/contacts/empty-contacts.png',
+  tasks: '/images/tasks/empty-tasks.png',
+  about: '/images/properties/characteristics-empty.png',
+};
+
 /** Набор пустых состояний страницы: единственный активный объект —
  * приветственный (Figma: «первый объект»), остальные — обычные
  * («второй объект»). */

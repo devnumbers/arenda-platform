@@ -37,14 +37,29 @@ export function propertyStatusSubtitle(status: PropertyStatus): string | null {
   return null;
 }
 
-/** Кебаб (Figma 1186:44996 — активный, 1581:52407 — архивный). */
+/** Кебаб (Figma 1186:44996 — активный, 1581:52407 — архивный). Смотрящему
+ * (canMutate=false) статусные мутирующие пункты недоступны — остаются
+ * чтение и совместный доступ. */
 export function buildPropertyKebabItems(
   status: PropertyStatus,
-): ReadonlyArray<{ readonly key: PropertyDetailActionKey }> {
+  canMutate: boolean,
+): ReadonlyArray<PropertyDetailAction> {
   if (status === 'archived') {
-    return [{ key: 'about' }, { key: 'unarchive' }, { key: 'access' }];
+    return canMutate
+      ? [
+          action('about', 'Об объекте', false),
+          action('unarchive', 'Вернуть из архива', false),
+          action('access', 'Совместный доступ', false),
+        ]
+      : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
   }
-  return [{ key: 'about' }, { key: 'change-status' }, { key: 'access' }];
+  return canMutate
+    ? [
+        action('about', 'Об объекте', false),
+        action('change-status', 'Изменить статус', false),
+        action('access', 'Совместный доступ', false),
+      ]
+    : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
 }
 
 /**

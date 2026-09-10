@@ -16,9 +16,9 @@ import {
   useSetPropertyPin,
   useUnarchiveProperty,
   useUpdateProperty,
-  useArchivedProperties,
   type DeletePropertyMode,
 } from '@/features/properties';
+import {useRentals} from '@/features/rentals';
 import {useSubscription} from '@/features/subscription';
 import {isPaidTariff} from '@/entities/user';
 import type {ApiError} from '@/shared/api/errors';
@@ -30,6 +30,7 @@ import {
   type PropertyDetailActionKey,
 } from '../lib/property-detail-status';
 import {
+  propertySectionImages,
   resolvePropertyDetailEmptySet,
   resolvePropertySectionEmpty,
   type PropertyDetailSectionKey,
@@ -53,19 +54,6 @@ import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
 import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
 import {PropertySuspendedScreen} from './PropertySuspendedScreen';
-
-/** Иллюстрации пустых состояний секций (64): переиспользуем иллюстрации
- * пустых карт аренды/платежей/контактов/задач — совпадение с макетом
- * 1:1; характеристики — из шаблона «Об объекте» (1550:97124, нода
- * 1550:97390). */
-const SECTION_IMAGES: Record<PropertyDetailSectionKey, string> = {
-  rental: '/images/rentals/empty-rental.png',
-  payments: '/images/payments/object-empty.png',
-  operations: '/images/payments/operations-empty.png',
-  contacts: '/images/contacts/empty-contacts.png',
-  tasks: '/images/tasks/empty-tasks.png',
-  about: '/images/properties/characteristics-empty.png',
-};
 
 function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
@@ -91,13 +79,12 @@ export function PropertyDetailPage(): JSX.Element {
 
     const propertyQuery = useProperty(id);
 
-    // Занятость и количество активных объектов живут только в списочных
-    // ответах (#584) — читаем из общего кэша хаба/лендинга; для архивного
-    // объекта — из кэша экрана архива.
+    // Количество активных объектов живёт только в списочном ответе (#584) —
+    // читаем из общего кэша хаба/лендинга ради выбора набора пустых.
     const listQuery = usePropertiesWithMeta();
-    const archivedListQuery = useArchivedProperties({
-        enabled: propertyQuery.data?.status === 'archived',
-    });
+    // Незавершённая аренда для свитча «Начать ↔ Завершить» — из аренд
+    // самого объекта: точный источник, не зависящий от кэша списка.
+    const rentalsQuery = useRentals(id);
     const subscriptionQuery = useSubscription();
 
     const updateProperty = useUpdateProperty();
@@ -113,12 +100,8 @@ export function PropertyDetailPage(): JSX.Element {
 
     const property = propertyQuery.data;
 
-    const listedProperty =
-        listQuery.data?.items.find((item) => item.id === id)
-        ?? archivedListQuery.data?.find((item) => item.id === id);
     const hasRental =
-        listedProperty?.occupancy !== undefined
-        && listedProperty.occupancy.status !== 'none';
+        rentalsQuery.data?.some((rental) => rental.status !== 'completed') ?? false;
     // Пока список не загружен, считаем объект единственным — приветственный
     // набор (первый объект); правило переключения наборов — на приёмке.
     const emptySet = resolvePropertyDetailEmptySet(listQuery.data?.items.length ?? 1);
@@ -276,7 +259,7 @@ export function PropertyDetailPage(): JSX.Element {
                     status !== undefined && propertyErrorKind === null ? (
                         <PropertyDetailKebab
                             status={status}
-                            disabled={isLoading}
+                            canMutate={roleCanMutate}
                             onAction={handleAction}
                         />
                     ) : undefined
@@ -323,7 +306,7 @@ export function PropertyDetailPage(): JSX.Element {
                             className="mt-20"
                         >
                             <PropertySectionEmpty
-                                imageSrc={SECTION_IMAGES.rental}
+                                imageSrc={propertySectionImages.rental}
                                 copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
                                 onCta={sectionCTAs.rental}
                                 ctaDisabled={!canMutate}
@@ -335,7 +318,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyPayments(id)}
                         >
                             <PropertySectionEmpty
-                                imageSrc={SECTION_IMAGES.payments}
+                                imageSrc={propertySectionImages.payments}
                                 copy={resolvePropertySectionEmpty('payments', emptySet, property.status)}
                                 onCta={sectionCTAs.payments}
                                 ctaDisabled={!canMutate}
@@ -347,7 +330,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyOperations(id)}
                         >
                             <PropertySectionEmpty
-                                imageSrc={SECTION_IMAGES.operations}
+                                imageSrc={propertySectionImages.operations}
                                 copy={resolvePropertySectionEmpty('operations', emptySet, property.status)}
                             />
                         </PropertySectionCard>
@@ -357,7 +340,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyContacts(id)}
                         >
                             <PropertySectionEmpty
-                                imageSrc={SECTION_IMAGES.contacts}
+                                imageSrc={propertySectionImages.contacts}
                                 copy={resolvePropertySectionEmpty('contacts', emptySet, property.status)}
                                 onCta={sectionCTAs.contacts}
                                 ctaDisabled={!canMutate}
@@ -369,7 +352,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyTasks(id)}
                         >
                             <PropertySectionEmpty
-                                imageSrc={SECTION_IMAGES.tasks}
+                                imageSrc={propertySectionImages.tasks}
                                 copy={resolvePropertySectionEmpty('tasks', emptySet, property.status)}
                                 onCta={sectionCTAs.tasks}
                                 ctaDisabled={!canMutate}
@@ -381,7 +364,7 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyAbout(id)}
                         >
                             <PropertySectionEmpty
-                                imageSrc={SECTION_IMAGES.about}
+                                imageSrc={propertySectionImages.about}
                                 copy={resolvePropertySectionEmpty('about', emptySet, property.status)}
                                 onCta={sectionCTAs.about}
                                 ctaDisabled={!canMutate}

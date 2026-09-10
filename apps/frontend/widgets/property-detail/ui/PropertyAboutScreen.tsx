@@ -13,6 +13,7 @@ import {
 } from '@/shared/ui/design';
 import {Edit} from '@/shared/assets/icons';
 import {Button} from '@/shared/ui/design';
+import {propertySectionImages} from '../lib/property-sections';
 import {PropertySectionCard} from './PropertySectionCard';
 
 type DataField = {
@@ -114,16 +115,18 @@ export function PropertyAboutScreen(): JSX.Element {
                             </div>
                         ))}
                         <div>
-                            <dt className="text-sm text-content-secondary">Описание</dt>
-                            <dd className="mt-1 text-base leading-4 text-content">
-                                {property.description ?? 'Не указано'}
-                            </dd>
+                            <dl>
+                                <dt className="text-sm text-content-secondary">Описание</dt>
+                                <dd className="mt-1 text-base leading-4 text-content">
+                                    {property.description ?? 'Не указано'}
+                                </dd>
+                            </dl>
                         </div>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center px-6 pt-10 pb-2 text-center">
                         <Image
-                            src="/images/properties/characteristics-empty.png"
+                            src={propertySectionImages.about}
                             alt=""
                             width={64}
                             height={64}

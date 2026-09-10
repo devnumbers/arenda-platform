@@ -23,26 +23,37 @@ describe('propertyStatusSubtitle (подзаголовок шапки детал
 
 describe('buildPropertyKebabItems (кебаб-меню детали)', () => {
   it('активный объект: об объекте, изменить статус, совместный доступ', () => {
-    expect(buildPropertyKebabItems('active')).toEqual([
-      { key: 'about' },
-      { key: 'change-status' },
-      { key: 'access' },
+    expect(buildPropertyKebabItems('active', true)).toEqual([
+      { key: 'about', label: 'Об объекте', danger: false },
+      { key: 'change-status', label: 'Изменить статус', danger: false },
+      { key: 'access', label: 'Совместный доступ', danger: false },
     ]);
   });
 
   it('объект на ремонте: тот же набор', () => {
-    expect(buildPropertyKebabItems('maintenance')).toEqual([
-      { key: 'about' },
-      { key: 'change-status' },
-      { key: 'access' },
+    expect(buildPropertyKebabItems('maintenance', true).map((item) => item.key)).toEqual([
+      'about',
+      'change-status',
+      'access',
     ]);
   });
 
   it('архивный: об объекте, вернуть из архива, совместный доступ', () => {
-    expect(buildPropertyKebabItems('archived')).toEqual([
-      { key: 'about' },
-      { key: 'unarchive' },
-      { key: 'access' },
+    expect(buildPropertyKebabItems('archived', true).map((item) => item.key)).toEqual([
+      'about',
+      'unarchive',
+      'access',
+    ]);
+  });
+
+  it('смотрящему: без статусных мутаций', () => {
+    expect(buildPropertyKebabItems('active', false).map((item) => item.key)).toEqual([
+      'about',
+      'access',
+    ]);
+    expect(buildPropertyKebabItems('archived', false).map((item) => item.key)).toEqual([
+      'about',
+      'access',
     ]);
   });
 });
