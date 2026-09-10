@@ -13,6 +13,12 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import {
+  ContactRowButton,
+  contactSortByName,
+  groupContactsByLetter,
+  type ContactSortOrder,
+} from '@/entities/contact';
 import { useContacts } from '@/features/contacts';
 import { canMutateProperty, useProperty } from '@/features/properties';
 import {
@@ -27,9 +33,6 @@ import {
   TopNavTitle,
   type PickerMenuGroup,
 } from '@/shared/ui/design';
-import { contactSortByName, groupContactsByLetter } from '../lib/contact-list-model';
-import type { ContactSortOrder } from '../lib/contact-list-model';
-import { ContactRowButton } from './contact-row-button';
 import {
   ContactsEmptyState,
   ContactsErrorCard,

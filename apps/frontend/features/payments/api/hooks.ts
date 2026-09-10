@@ -32,6 +32,7 @@ import {
   paymentKeys,
   paymentOperationKeys,
   type GlobalOperationScope,
+  rentalKeys,
   type PaymentOperationOrder,
   type PaymentOperationScope,
   type PaymentOperationStatusFilter,
@@ -662,7 +663,8 @@ export function useOperation(
  * вхождения, дата оплаты — серверная, расписание не сдвигается. Какая
  * операция гасится («старейшее неоплаченное»), решает виджет по спискам
  * операций; сервер подтверждает контрактной ошибкой 409 на повторную
- * оплату.
+ * оплату. Гашение операции арендной платы двигает прогресс аренды
+ * (#531) — инвалидируется и срез rentals.
  */
 export function usePayOperation(
   propertyId: string,
@@ -680,6 +682,7 @@ export function usePayOperation(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: rentalKeys.all });
     },
   });
 }

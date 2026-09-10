@@ -4,7 +4,8 @@ import type { JSX } from 'react';
 import { BoldUser } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
-import { contactFullName, type Contact } from '@/entities/contact';
+import { contactFullName } from '../lib/full-name';
+import type { Contact } from '../model/types';
 
 /** Поверхность, на которой лежит строка: аватар инвертируется относительно
  * неё (макет 1527:74139 — белый круг на серой карточке; 1527:74837 — серый
@@ -27,6 +28,9 @@ export type ContactRowButtonProps = {
  * Строка контакта (компонент Figma «Row Button», 936:39348): аватар-круг 44
  * с BoldUser, заголовок — полное имя, подзаголовок — роль; телефона в строке
  * нет (макет 1527:74139, решение владельца). Hover/press приглушают строку.
+ * Каноническая строка списков контактов (DESIGN.md, «Строки списков»):
+ * живёт в срезе сущности — нужна и книге объекта (#508), и шагу «Контакт
+ * арендатора» визарда аренды (#530).
  */
 export function ContactRowButton({
   contact,

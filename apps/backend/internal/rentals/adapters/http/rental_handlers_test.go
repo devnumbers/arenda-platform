@@ -131,12 +131,13 @@ func wireDate(s string) openapi_types.Date {
 func viewFixture(t *testing.T) rentalsapp.RentalView {
 	t.Helper()
 	day := rentalsdomain.MustPaymentDay(15)
+	paymentID := uuid.Must(uuid.NewV7())
 	return rentalsapp.RentalView{
 		Rental: rentalsdomain.Rental{
 			ID:         uuid.Must(uuid.NewV7()),
 			OwnerID:    uuid.Must(uuid.NewV7()),
 			PropertyID: uuid.Must(uuid.NewV7()),
-			PaymentID:  uuid.Must(uuid.NewV7()),
+			PaymentID:  paymentID,
 			StartDate:  wireDate("2026-09-01").Time,
 			PlannedEndDate: func() *time.Time {
 				d := wireDate("2027-09-01").Time
@@ -153,6 +154,7 @@ func viewFixture(t *testing.T) rentalsapp.RentalView {
 		},
 		Status: rentalsdomain.StatusActive,
 		Payment: rentalsapp.RentPaymentState{
+			PaymentID:     paymentID,
 			AmountKopecks: 5_000_000,
 			PaymentDay:    day,
 			AutoPay:       true,
@@ -215,6 +217,7 @@ func TestCreateRental_Created(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
 	assert.Equal(t, view.Rental.ID, response.Id)
 	assert.Equal(t, openapi.RentalResponseStatus(rentalsdomain.StatusActive), response.Status)
+	assert.Equal(t, view.Rental.PaymentID, response.RentPayment.PaymentId)
 	assert.Equal(t, int64(5_000_000), response.RentPayment.AmountKopecks)
 	assert.Equal(t, "2026-09-15", response.RentPayment.NextPayment.Date.Format(time.DateOnly))
 	assert.Equal(t, 11, response.RentPayment.NextPayment.DaysUntil)

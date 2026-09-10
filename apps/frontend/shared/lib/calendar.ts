@@ -74,6 +74,20 @@ export function isoDateOf(year: number, month0: number, day: number): IsoDate {
   return new Date(Date.UTC(year, month0, day)).toISOString().slice(0, 10);
 }
 
+/** Полных календарных месяцев от `from` до `to` (прошло времени, «бессрочная
+ * аренда» #531): 10 мая → 7 сентября — 3, по 10-е число — уже 4. Граница
+ * месяца прижимается к длине месяца (31 января + месяц = 28 февраля — к
+ * 28-му полный месяц); интервал короче месяца и обратный — ноль. */
+export function fullMonthsBetween(from: IsoDate, to: IsoDate): number {
+  const months
+    = (isoYear(to) - isoYear(from)) * 12 + (isoMonthNumber(to) - isoMonthNumber(from));
+  const boundaryDay = Math.min(
+    isoDayOfMonth(from),
+    lastDayOfMonth(isoYear(to), isoMonthNumber(to) - 1),
+  );
+  return Math.max(0, months - (isoDayOfMonth(to) < boundaryDay ? 1 : 0));
+}
+
 /** Блок месяца ленты; month0 — 0..11, как у Date. */
 export type CalendarMonthRef = {
   readonly year: number;

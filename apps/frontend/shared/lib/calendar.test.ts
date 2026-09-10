@@ -11,6 +11,7 @@ import {
   dateToIso,
   daysOverdue,
   fromIso,
+  fullMonthsBetween,
   inclusiveDays,
   isoDateOf,
   isoDayOfMonth,
@@ -200,5 +201,28 @@ describe('calendar: отрезки подложки недели диапазо�
     expect(booleanRunSegments([true, true, true, true, true, true, true])).toEqual([[0, 6]]);
     expect(booleanRunSegments([false, false, false, false, false, false, false])).toEqual([]);
     expect(booleanRunSegments([false, false, true, false, false, false, false])).toEqual([[2, 2]]);
+  });
+});
+
+describe('calendar: полных месяцев между датами', () => {
+  it('считает целые календарные месяцы по дню начала', () => {
+    expect(fullMonthsBetween('2026-05-10', '2026-09-07')).toBe(3);
+    expect(fullMonthsBetween('2026-05-10', '2026-09-10')).toBe(4);
+    expect(fullMonthsBetween('2025-09-07', '2026-09-07')).toBe(12);
+  });
+
+  it('меньше месяца и та же дата — ноль', () => {
+    expect(fullMonthsBetween('2026-09-05', '2026-09-07')).toBe(0);
+    expect(fullMonthsBetween('2026-09-07', '2026-09-07')).toBe(0);
+  });
+
+  it('границы месяцев прижимаются к коротким месяцам', () => {
+    // 31 января + 1 месяц = 28 февраля (не високосный) — полный месяц прошёл.
+    expect(fullMonthsBetween('2026-01-31', '2026-02-28')).toBe(1);
+    expect(fullMonthsBetween('2026-01-31', '2026-02-27')).toBe(0);
+  });
+
+  it('обратный интервал не уходит в минус', () => {
+    expect(fullMonthsBetween('2026-09-07', '2026-05-10')).toBe(0);
   });
 });

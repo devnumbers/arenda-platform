@@ -349,6 +349,19 @@ func TestCreateRental_HappyPath(t *testing.T) {
 	assert.Equal(t, today, view.Today)
 }
 
+// The read path names the managed payment (#531): the client navigates to the
+// payment screen by rentPayment.paymentId — the identity comes from the
+// rental (1:1), not from the gateway's render state.
+func TestGetRental_ViewCarriesPaymentID(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(nil)
+
+	view, err := h.svc.GetRental(t.Context(), h.owner, h.property, rentalID)
+	require.NoError(t, err)
+	assert.Equal(t, h.store.rentals[rentalID].PaymentID, view.Payment.PaymentID)
+}
+
 func TestCreateRental_TodayStartIsActive(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

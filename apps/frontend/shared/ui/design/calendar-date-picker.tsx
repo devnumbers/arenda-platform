@@ -61,8 +61,23 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  *
  * Обязательная дата (проп required, решение владельца 2026-09-04): у
  * правила «без даты» не существует — повторный тап по выбранному дню
- * выбор не снимает, «Выбрать» с пустым черновиком неактивна (годовая
- * ветка периодичности платежей).
+ * выбор не снимает, «Выбрать» с пустым черновиком не подтверждает.
+ *
+ * Кнопки действия пикера скрыты, пока действия нет (решение владельца
+ * 2026-09-05, визард аренды): «Выбрать» с пустым черновиком обязательной
+ * даты не рисуется вместе с панелью — вместо погашенной кнопки.
+ *
+ * Минимальная дата (проп minDate, решение владельца 2026-09-05, визард
+ * аренды): minDate — первый доступный день, дни раньше недоступны —
+ * окончание аренды строго позже начала (ADR 0053, потребитель передаёт
+ * начало + 1); значение раньше минимума в пикер не попадает — потребитель
+ * чистит его при смене начала. Пустой черновик стартует с первого
+ * доступного дня (сегодня либо minDate, если он позже).
+ *
+ * Максимальная дата (проп maxDate, #534): дни позже недоступны — дата
+ * завершения аренды не бывает будущей (ADR 0053 §3, потребитель передаёт
+ * «сегодня» собственника). Симметрично минимуму: пустой черновик
+ * прижимается к границе, если «сегодня» за ней.
  *
  * Планшет (561–768, решение владельца 2026-09-04): TopNav и белый шит
  * футера тянутся во всю ширину — кнопка «Выбрать» тоже (StickyBottomBar
@@ -86,10 +101,33 @@ export type CalendarDatePickerProps = {
   readonly value: IsoDate | null;
   /** Дата обязательна: пустой черновик «Выбрать» не подтверждает. */
   readonly required?: boolean;
+  /** Первый доступный день; дни раньше недоступны (окончание аренды —
+   * строго позже начала). */
+  readonly minDate?: IsoDate;
+  /** Последний доступный день; дни позже недоступны (дата завершения
+   * аренды — не будущее, ADR 0053 §3). */
+  readonly maxDate?: IsoDate;
   readonly onClose: () => void;
   /** «Выбрать»: коммитит черновик; null — дата снята («без срока»). */
   readonly onConfirm: (date: IsoDate | null) => void;
 };
+
+/** Пустой черновик стартует с первого доступного дня: сегодня, прижатое в
+ * границы [minDate, maxDate], если «сегодня» за ними. */
+function initialDraft(
+  today: IsoDate,
+  minDate: IsoDate | undefined,
+  maxDate: IsoDate | undefined,
+): IsoDate {
+  let draft = today;
+  if (maxDate !== undefined && draft > maxDate) {
+    draft = maxDate;
+  }
+  if (minDate !== undefined && draft < minDate) {
+    draft = minDate;
+  }
+  return draft;
+}
 
 export function CalendarDatePicker({
   title = 'Выбрать дату',
@@ -97,6 +135,8 @@ export function CalendarDatePicker({
   today,
   value,
   required,
+  minDate,
+  maxDate,
   onClose,
   onConfirm,
 }: CalendarDatePickerProps): JSX.Element {
@@ -108,7 +148,9 @@ export function CalendarDatePicker({
   const valueIndex =
     value !== null ? calendarMonthIndex(calendarMonthOf(value)) - startIndex : -1;
   const [monthsCount, setMonthsCount] = useState(() => Math.max(FEED_MONTHS, valueIndex + 1));
-  const [draft, setDraft] = useState<IsoDate | null>(value ?? today);
+  const [draft, setDraft] = useState<IsoDate | null>(
+    value ?? initialDraft(today, minDate, maxDate),
+  );
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const months = listCalendarMonths(feedStart, monthsCount);
   const monthRefs = useRef(new Map<string, HTMLElement>());
@@ -269,8 +311,16 @@ export function CalendarDatePicker({
                         // Прошлые дни недоступны — задним числом даты не
                         // создаются (контракт #498); исключение — текущее
                         // значение-якорь в прошлом (правка #502): оно остаётся
-                        // тапабельным, повторный тап снимает дату.
-                        disabled={iso < today && iso !== value}
+                        // тапабельным, повторный тап снимает дату. Дни раньше
+                        // minDate недоступны без исключений (minDate — первый
+                        // доступный: окончание аренды строго позже начала,
+                        // ADR 0053); дни позже maxDate — тоже (дата
+                        // завершения не бывает будущей, #534).
+                        disabled={
+                          (iso < today && iso !== value)
+                          || (minDate !== undefined && iso < minDate)
+                          || (maxDate !== undefined && iso > maxDate)
+                        }
                         // Повторный тап по выбранному дню снимает выбор
                         // (решение владельца 2026-09-03); с required дата
                         // обязательна — тап её держит.
@@ -287,19 +337,20 @@ export function CalendarDatePicker({
         </div>
       </div>
 
-      <StickyBottomBar fullWidthContent>
-        {/* Без required активна всегда: с пустым черновиком подтверждает
-            «без даты»; с required — пустого подтверждения нет. Футер тянется
-            вместе с шитом в планшетном диапазоне 561–768 (решение владельца
-            2026-09-04: хедер и шит на планшете во всю ширину — кнопка тоже). */}
-        <Button
-          className="w-full"
-          disabled={required === true && draft === null}
-          onClick={() => onConfirm(draft)}
-        >
-          {confirmLabel}
-        </Button>
-      </StickyBottomBar>
+      {/* Кнопка скрыта, пока нечего подтвердить (обязательная дата без
+          черновика) — решение владельца 2026-09-05: скрытие вместо
+          погашенной кнопки, у пикерных «Выбрать» так же. Без required
+          активна всегда: с пустым черновиком подтверждает «без даты».
+          Футер тянется вместе с шитом в планшетном диапазоне 561–768
+          (решение владельца 2026-09-04: хедер и шит на планшете во всю
+          ширину — кнопка тоже). */}
+      {!(required === true && draft === null) && (
+        <StickyBottomBar fullWidthContent>
+          <Button className="w-full" onClick={() => onConfirm(draft)}>
+            {confirmLabel}
+          </Button>
+        </StickyBottomBar>
+      )}
 
       {/* Шит месяца и года — самостоятельный WheelPickerSheet (общий
           компонент), монтируется только в открытом состоянии. */}

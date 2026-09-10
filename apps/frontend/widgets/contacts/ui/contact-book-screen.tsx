@@ -31,7 +31,7 @@ import {
   groupBookByLetter,
   groupBookByProperty,
 } from '../lib/contact-book-model';
-import { ContactRowButton } from './contact-row-button';
+import { ContactRowButton } from '@/entities/contact';
 import { ContactsEmptyState, ContactsErrorCard, ContactsSkeleton } from './contacts-states';
 
 /**

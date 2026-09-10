@@ -66,7 +66,7 @@ import {
     type WheelPickerItem,
 } from '@/shared/ui/design';
 import { navSectionById } from '@/shared/config/navigation';
-import { dateToIso } from '@/shared/lib/calendar';
+import { addDays, dateToIso } from '@/shared/lib/calendar';
 import {
     CategoryIcon,
     categoryStyle,
@@ -167,6 +167,10 @@ export function DesignLayerShowcase(): JSX.Element {
     const [datePickerValue, setDatePickerValue] = useState<string | null>(null);
     const [datePickerRequiredOpen, setDatePickerRequiredOpen] = useState(false);
     const [datePickerRequiredValue, setDatePickerRequiredValue] = useState<string | null>(null);
+    const [datePickerMinOpen, setDatePickerMinOpen] = useState(false);
+    const [datePickerMinValue, setDatePickerMinValue] = useState<string | null>(null);
+    const [datePickerMaxOpen, setDatePickerMaxOpen] = useState(false);
+    const [datePickerMaxValue, setDatePickerMaxValue] = useState<string | null>(null);
     const [rangePickerOpen, setRangePickerOpen] = useState(false);
     const [rangePickerValue, setRangePickerValue] = useState<IsoRange | null>(null);
     const [monthDays, setMonthDays] = useState<ReadonlySet<number>>(new Set([10]));
@@ -237,6 +241,7 @@ export function DesignLayerShowcase(): JSX.Element {
                     <div className={styles.textFields}>
                         <TextField
                             title="Название платежа"
+                            required
                             placeholder="Название платежа"
                             description="Необязательно"
                             maxLength={256}
@@ -269,6 +274,7 @@ export function DesignLayerShowcase(): JSX.Element {
                         <TextField
                             variant="titleIn"
                             title="Название платежа"
+                            required
                             maxLength={256}
                             value={titleInValue}
                             onChange={(event) => setTitleInValue(event.target.value)}
@@ -544,6 +550,8 @@ export function DesignLayerShowcase(): JSX.Element {
                     <p className={styles.groupTitle}>
                         Полноэкранный: чип месяца и дни недели закреплены над прокруткой, лента месяцев
                         бесконечно вперёд без подвисаний (общий компонент из пикера задач #500).
+                        «Выбрать» скрыта, пока нечего подтвердить, проп minDate гасит дни ≤ минимума —
+                        решение владельца 2026-09-05.
                     </p>
                     <div className={styles.column}>
                         <Button onClick={() => setDatePickerOpen(true)}>Открыть пикер даты</Button>
@@ -583,6 +591,50 @@ export function DesignLayerShowcase(): JSX.Element {
                             onConfirm={(date) => {
                                 setDatePickerRequiredValue(date);
                                 setDatePickerRequiredOpen(false);
+                            }}
+                        />
+                    )}
+                    <div className={styles.column}>
+                        <Button onClick={() => setDatePickerMinOpen(true)}>
+                            Открыть пикер (minDate: +10 дней)
+                        </Button>
+                        {datePickerMinValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: {datePickerMinValue}
+                            </p>
+                        )}
+                    </div>
+                    {datePickerMinOpen && (
+                        <CalendarDatePicker
+                            minDate={addDays(dateToIso(new Date()), 10)}
+                            today={dateToIso(new Date())}
+                            value={datePickerMinValue}
+                            onClose={() => setDatePickerMinOpen(false)}
+                            onConfirm={(date) => {
+                                setDatePickerMinValue(date);
+                                setDatePickerMinOpen(false);
+                            }}
+                        />
+                    )}
+                    <div className={styles.column}>
+                        <Button onClick={() => setDatePickerMaxOpen(true)}>
+                            Открыть пикер (maxDate: −10 дней)
+                        </Button>
+                        {datePickerMaxValue !== null && (
+                            <p className="px-6 text-base text-content-secondary">
+                                Выбрано: {datePickerMaxValue}
+                            </p>
+                        )}
+                    </div>
+                    {datePickerMaxOpen && (
+                        <CalendarDatePicker
+                            maxDate={addDays(dateToIso(new Date()), -10)}
+                            today={dateToIso(new Date())}
+                            value={datePickerMaxValue}
+                            onClose={() => setDatePickerMaxOpen(false)}
+                            onConfirm={(date) => {
+                                setDatePickerMaxValue(date);
+                                setDatePickerMaxOpen(false);
                             }}
                         />
                     )}

@@ -92,6 +92,32 @@ export const ROUTES = {
   /** Визард создания платежа; тип выбирается в шите выбора «Платёж / Автоплатёж». */
   propertyPaymentNew: (id: string, type: 'payment' | 'autopayment') =>
     `/properties/${id}/payments/new?type=${type}`,
+  /** Визард создания аренды (#530): 4 шага на одном маршруте. */
+  propertyRentalNew: (id: string) => `/properties/${id}/rentals/new`,
+  /** Экран «Аренда» (#531): пустое состояние или детализация текущей аренды. */
+  propertyRental: (id: string) => `/properties/${id}/rentals`,
+  /** «Условия аренды» read-only (#531) — полный просмотр условий текущей аренды. */
+  propertyRentalTerms: (id: string) => `/properties/${id}/rentals/terms`,
+  /** Правка условий аренды (#532): форма поверх условий, начало read-only. */
+  propertyRentalTermsEdit: (id: string) => `/properties/${id}/rentals/terms/edit`,
+  /** Продление аренды (#533): новая дата окончания поверх PATCH plannedEndDate. */
+  propertyRentalExtend: (id: string) => `/properties/${id}/rentals/extend`,
+  /** Завершение аренды (#534): мастер из подтверждения, даты, залога и итогов. */
+  propertyRentalComplete: (id: string) => `/properties/${id}/rentals/complete`,
+  /** «Прошлые аренды» (#535): список завершённых аренд объекта. */
+  propertyRentalPast: (id: string) => `/properties/${id}/rentals/past`,
+  /** Завершённая детализация (#535): карточка прошлой аренды по id. */
+  propertyRentalCompleted: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}`,
+  /** «История операций» завершённой аренды (#535): paid-вхождения платежа. */
+  propertyRentalCompletedHistory: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}/history`,
+  /** «Итоги аренды» завершённой (#535): read-only повтор шага итогов мастера. */
+  propertyRentalCompletedSummary: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}/summary`,
+  /** «Условия аренды» завершённой (#535): тот же экран условий с ?rental=. */
+  propertyRentalCompletedTerms: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/terms?rental=${rentalId}`,
   /** Экран «Контакты объекта» (#508) — новый хром, книга контактов (ADR 0054). */
   propertyContacts: (id: string) => `/properties/${id}/contacts`,
   /** Создание контакта (#509); до тикета путь ведёт на 404. */

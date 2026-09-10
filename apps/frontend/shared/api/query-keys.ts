@@ -103,6 +103,10 @@ export const paymentOperationKeys = {
     paymentId: string,
     status: PaymentOperationStatusFilter,
   ) => [...paymentOperationKeys.all, 'by-payment', propertyId, paymentId, status] as const,
+  /** Префикс всех статусных списков операций платежа — снять кэш удалённого
+   * платежа (#535). */
+  byPaymentPrefix: (propertyId: string, paymentId: string) =>
+    [...paymentOperationKeys.all, 'by-payment', propertyId, paymentId] as const,
   /** Порции операций платежа (подэкраны #466): статус и направление — часть ключа. */
   byPaymentPaged: (
     propertyId: string,
@@ -118,6 +122,9 @@ export const paymentOperationKeys = {
       status,
       order,
     ] as const,
+  /** Префикс всех порций операций платежа — снять кэш удалённого платежа (#535). */
+  byPaymentPagedPrefix: (propertyId: string, paymentId: string) =>
+    [...paymentOperationKeys.all, 'by-payment-paged', propertyId, paymentId] as const,
   /** Порции операций объекта: статус, направление и поиск — часть ключа. */
   byPropertyPaged: (
     propertyId: string,
@@ -263,6 +270,17 @@ export const globalPaymentKeys = {
    * сервер считает их по всему скоупу, выбранный чип сужает только список
    * (канон сводки операций #543). */
   searchCategories: (query = '') => [...globalPaymentKeys.all, 'search-categories', query] as const,
+};
+
+// features/rentals
+export const rentalKeys = {
+  all: ['rentals'] as const,
+  /** Список аренд объекта: незавершённая первая, далее завершённые (#531). */
+  list: (propertyId: string) => [...rentalKeys.all, 'list', propertyId] as const,
+  /** Итоги аренды за [начало, until] — превью мастера завершения (#534);
+   * until в ключе: выбранная дата меняет расчёт. */
+  summary: (propertyId: string, rentalId: string, until: string) =>
+    [...rentalKeys.all, 'summary', propertyId, rentalId, until] as const,
 };
 
 // features/subscription

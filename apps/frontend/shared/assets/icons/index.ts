@@ -57,6 +57,10 @@ export { default as BoldWrench } from './bold-wrench.svg';
 // градиентных статус-бейджей 24×24 (цвета запечены в SVG).
 export { default as Check } from './check.svg';
 export { default as Edit } from './edit.svg';
+// Строчный ключ секций аренды (круглая кнопка «Посмотреть итоги» #535,
+// строка «Завершить аренду»): канонный Icon/R/Key 119:1104 из выгрузки
+// Figma — контур подменил собою стилистическую заглушку (currentColor).
+export { default as Key } from './key.svg';
 export { default as ArrowDown } from './arrow-down.svg';
 // Направление сортировки: SortingSmallBig 418:4608 — возрастание (от
 // меньшего к большему), SortingBigSmall 418:4607 — убывание; SmallArrowDown
@@ -84,6 +88,15 @@ export { default as StatusIconInfo } from './status-icon-info.svg';
 
 // Дизайн-слой платежей, тикет #459: «смена направления» чипов суммы —
 // канонный ChangeVertical (Figma 858:20998) из блока канона ниже (07.09).
+
+// «История операций» аренды (#535): вертикальная «смена направления»
+// чипа сортировки «Сначала новые» — Icon/R/ChangeVertical 858:20998
+// (currentColor).
+export { default as ChangeVertical } from './change-vertical.svg';
+
+// Строка «Удалить аренду» (#535, макет 1232:61686) использует канонный
+// Icon/R/TrashBin 24×24 — после канона иконок (07.09) это файл trash-bin.svg,
+// экспорт TrashBin; отдельного TrashBinOutline больше нет.
 
 // Экран «Платежи объекта» (#463): «создать новый» в шите выбора — Figma 189:2436.
 export { default as Add } from './add.svg';
@@ -155,13 +168,11 @@ export { default as AccountSetting } from './account-setting.svg';
 export { default as Archive } from './archive.svg';
 export { default as Block } from './block.svg';
 export { default as Change } from './change.svg';
-export { default as ChangeVertical } from './change-vertical.svg';
 export { default as CheckmarkCircle } from './checkmark-circle.svg';
 export { default as Computer } from './computer.svg';
 export { default as Download } from './download.svg';
 export { default as Exit } from './exit.svg';
 export { default as Info } from './info.svg';
-export { default as Key } from './key.svg';
 export { default as Minus } from './minus.svg';
 export { default as PaintBrush } from './paint-brush.svg';
 export { default as Phone } from './phone.svg';

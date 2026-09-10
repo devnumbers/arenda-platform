@@ -9,7 +9,7 @@ import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { useContactBook } from '@/features/contacts';
 import { IconButton, PageContent, SearchField, TopNav } from '@/shared/ui/design';
 import { contactBookRowSubtitle } from '../lib/contact-book-model';
-import { ContactRowButton } from './contact-row-button';
+import { ContactRowButton } from '@/entities/contact';
 import {
   ContactsErrorCard,
   ContactsNoResults,

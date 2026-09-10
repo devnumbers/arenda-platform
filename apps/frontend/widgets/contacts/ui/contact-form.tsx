@@ -70,7 +70,8 @@ export function ContactForm({
         <div className="flex flex-col gap-2">
           <TextField
             variant="titleIn"
-            title="Имя *"
+            title="Имя"
+            required
             value={form.firstName}
             error={errorOf('firstName')}
             onClear={() => onFieldChange('firstName', '')}
