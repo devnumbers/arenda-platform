@@ -16,9 +16,10 @@ export type PropertyBadgeKey =
   | 'rental-completed'
   | 'rental-months'
   | 'rental-upcoming'
-  | 'maintenance';
+  | 'maintenance'
+  | 'archived';
 
-export type PropertyBadgeTone = 'accent' | 'accent-filled' | 'warning';
+export type PropertyBadgeTone = 'accent' | 'accent-filled' | 'warning' | 'neutral';
 
 export type PropertyBadge = {
   readonly key: PropertyBadgeKey;
@@ -84,6 +85,15 @@ export function propertyBadges(property: Property, today?: IsoDate): PropertyBad
   }
   return badges;
 }
+
+/** Единственный бейдж карточки архива (экран #587, макет 1603:92102):
+ * белая пилюля с иконкой архива, смысловые бейджи занятости в архиве
+ * не рендерятся. */
+export const archivedPropertyBadge: PropertyBadge = {
+  key: 'archived',
+  label: 'В архиве',
+  tone: 'neutral',
+};
 
 /** Красная точка карточки (резолюция #584): просроченная плановая операция
  * ИЛИ аренда «подошла к концу». Ничто другое точку не ставит. */

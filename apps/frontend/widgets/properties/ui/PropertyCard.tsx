@@ -6,6 +6,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { PinSmall, SmallArrowRight } from '@/shared/assets/icons';
 import type { IsoDate } from '@/shared/lib/calendar';
 import {
+  archivedPropertyBadge,
   hasPropertyAttentionDot,
   propertyBadges,
   PropertyStatusBadge,
@@ -17,24 +18,34 @@ import styles from './PropertyCard.module.css';
 
 /**
  * Карточка объекта в списке-хабе (Figma 1590:88756 — мобайл, 1603:88972 —
- * планшет; тикет #586): серая карточка radius 24, круг-фото 64 (мобайл ≤560
- * над текстом, 561+ — слева вровень), имя 20/24 до трёх строк, адрес с
+ * планшет; тикет #586) и в архиве (вариант archived, Figma 1603:92102,
+ * тикет #587): серая карточка radius 24, круг-фото 64 (мобайл ≤560 над
+ * текстом, 561+ — слева вровень), имя 20/24 до трёх строк, адрес со
  * скрепкой у основного объекта (Icon/S/Pin), красная точка на круге
  * (резолюция #584), бейдж роли доступа у чужого объекта, арендный бейдж +
  * «на ремонте», шеврон у правого верхнего края. Вся карточка — ссылка на
  * объект (оверлей). «Сегодня владельца» (ADR 0048) нужно только бейджу
  * «Осталось N месяцев» — остальные бейджи рендерятся, не дожидаясь его.
+ *
+ * Вариант archived — карточка архива: та же анатомия, но смысловая
+ * начинка архивная — единственный бейдж «В архиве», без точки, скрепки
+ * и бейджа роли (макет 1603:92102).
  */
 export type PropertyCardProps = {
   readonly property: Property;
   /** «Сегодня владельца» (ADR 0048) — бейдж «Осталось N месяцев». */
   readonly today?: IsoDate;
+  /** archived — карточка экрана «Архивные объекты» (#587). */
+  readonly variant?: 'list' | 'archived';
 };
 
-export function PropertyCard({ property, today }: PropertyCardProps): JSX.Element {
-  const isPrimary = property.pinned_at !== null;
-  const badges: readonly PropertyBadge[] = propertyBadges(property, today);
-  const accessRole = property.access && property.access.role !== 'owner'
+export function PropertyCard({ property, today, variant = 'list' }: PropertyCardProps): JSX.Element {
+  const isArchived = variant === 'archived';
+  const isPrimary = !isArchived && property.pinned_at !== null;
+  const badges: readonly PropertyBadge[] = isArchived
+    ? [archivedPropertyBadge]
+    : propertyBadges(property, today);
+  const accessRole = !isArchived && property.access && property.access.role !== 'owner'
     ? property.access.role
     : null;
 
@@ -48,7 +59,7 @@ export function PropertyCard({ property, today }: PropertyCardProps): JSX.Elemen
       <div className={styles.body}>
         <PropertyAvatar
           photoUrl={property.photos?.[0]?.url ?? null}
-          withAttentionDot={hasPropertyAttentionDot(property)}
+          withAttentionDot={!isArchived && hasPropertyAttentionDot(property)}
         />
         <div className={styles.info}>
           <h3 className={styles.title}>{property.name}</h3>

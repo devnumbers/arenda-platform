@@ -5,6 +5,7 @@ export type { DeletePropertyMode, PropertiesListResult } from './api/hooks';
 export { canMutateProperty } from './lib/can-mutate-property';
 export { propertyTypeLabels, propertyTypeOptions } from './lib/property-types';
 export {
+  archivedPropertyBadge,
   hasPropertyAttentionDot,
   propertyBadges,
   type PropertyBadge,

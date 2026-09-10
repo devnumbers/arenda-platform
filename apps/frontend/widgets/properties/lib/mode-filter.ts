@@ -1,12 +1,8 @@
-/** Режим списочного экрана объектов: активная книга или архив (#586). */
-export type PropertiesViewMode = 'active' | 'archived';
-
-/** Срез списка по режиму: активные без архивных, архив — только архивные. */
-export function filterPropertiesByMode<T extends { readonly status: string }>(
+/** Страховочный срез клиентского поиска объектов (#586): без архивных —
+ * бэк /properties их не возвращает (сервис #585), а архив с #587 живёт на
+ * отдельном экране со своим запросом /properties/archive. */
+export function filterActiveProperties<T extends { readonly status: string }>(
   items: readonly T[],
-  mode: PropertiesViewMode,
 ): T[] {
-  return items.filter((property) =>
-    mode === 'archived' ? property.status === 'archived' : property.status !== 'archived',
-  );
+  return items.filter((property) => property.status !== 'archived');
 }

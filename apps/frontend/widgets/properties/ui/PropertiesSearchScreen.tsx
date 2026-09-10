@@ -8,7 +8,7 @@ import { goBack } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
 import { useProperties } from '@/features/properties';
 import { filterPropertiesByQuery } from '../lib/property-sort';
-import { filterPropertiesByMode } from '../lib/mode-filter';
+import { filterActiveProperties } from '../lib/mode-filter';
 import {
   Button,
   EmptyState,
@@ -41,7 +41,7 @@ export function PropertiesSearchScreen(): JSX.Element {
     inputRef.current?.focus();
   }, []);
 
-  const active = filterPropertiesByMode(propertiesQuery.data ?? [], 'active');
+  const active = filterActiveProperties(propertiesQuery.data ?? []);
   const items = filterPropertiesByQuery(active, value);
 
   const emptyQuery = value.trim() === '';

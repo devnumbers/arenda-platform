@@ -3,13 +3,11 @@
 import {type JSX, useCallback, useMemo, useState} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
 import {
-  useArchivedProperties,
   useProperties,
   usePropertiesWithMeta,
 } from '@/features/properties';
 import {useSubscription} from '@/features/subscription';
-import {Add, Archive, ArrowLeft, Search, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
-import {goBack} from '@/shared/lib/navigation';
+import {Add, Archive, Search, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
 import {useKeyboardActivation} from '@/shared/lib/hooks/useKeyboardActivation';
 import {
   Button,
@@ -20,7 +18,6 @@ import {
   PickerMenu,
   type PickerMenuGroup,
   TopNav,
-  TopNavTitle,
 } from '@/shared/ui/design';
 import {ROUTES} from '@/shared/config/routes';
 import {
@@ -33,7 +30,6 @@ import {
   type PropertySortDirection,
   type PropertySortField,
 } from '../lib/property-sort';
-import {filterPropertiesByMode, type PropertiesViewMode} from '../lib/mode-filter';
 import {formatHiddenSharedFootnote} from '../lib/format-hidden-shared-footnote';
 import {PropertyCard} from './PropertyCard';
 import {PropertiesEmptyState} from './PropertiesEmptyState';
@@ -42,7 +38,6 @@ import {PropertiesErrorState} from './PropertiesErrorState';
 import styles from './PropertiesPage.module.css';
 
 export type PropertiesPageProps = {
-  readonly mode?: PropertiesViewMode;
   readonly initialSort?: PropertySort;
 };
 
@@ -50,24 +45,22 @@ export type PropertiesPageProps = {
  * Экран-хаб «Объекты» (карта #583, тикет #586; Figma 1603:89079 — ПК,
  * 1603:88972 — планшет, 1590:88756 — мобайл, 1603:90604 — пустое): заголовок
  * хаба, поисковая пилюля с «+» создания, ряд сортировки (чип PickerMenu +
- * ссылка «Архив»; пустой список прячет ряд — DESIGN.md §7), список карточек,
- * сноска скрытых шаренных объектов, «+ Создать объект» под списком.
- * Компакт-бар — канон хаба: лупа на поиск, заголовок, «+». Сортировки —
- * резолюция #584 (4 поля × возрастание/убывание, основной всегда первый),
- * персистентность в URL (?sort=&order=). Фильтров по типу/статусу в новом
- * хабе нет — остался клиентский поиск на отдельной странице.
+ * ссылка «Архив» → экран архива #587; пустой список прячет ряд — DESIGN.md
+ * §7), список карточек, сноска скрытых шаренных объектов, «+ Создать объект»
+ * под списком. Компакт-бар — канон хаба: лупа на поиск, заголовок, «+».
+ * Сортировки — резолюция #584 (4 поля × возрастание/убывание, основной
+ * всегда первый), персистентность в URL (?sort=&order=). Фильтров по
+ * типу/статусу в новом хабе нет — остался клиентский поиск на отдельной
+ * странице. Архивные объекты живут на отдельном экране /properties/archive
+ * (#587); бэк /properties возвращает только активные (сервис #585).
  */
-export function PropertiesPage({mode = 'active', initialSort}: PropertiesPageProps): JSX.Element {
-  const propertiesQuery = useProperties({enabled: mode === 'active'});
-  const archivedPropertiesQuery = useArchivedProperties({enabled: mode === 'archived'});
-  const listQuery = mode === 'archived' ? archivedPropertiesQuery : propertiesQuery;
-  const {data, isLoading, isFetching, isError, refetch} = listQuery;
-  const {data: activeProperties} = useProperties();
+export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element {
+  const {data, isLoading, isFetching, isError, refetch} = useProperties();
   // Shares the /properties request with useProperties via the shared
   // propertyKeys.list prefix; surfaces how many shared objects are hidden
   // from the recipient by a tariff slot shortage and the actor's today
   // (ADR 0048) for the rental badges.
-  const metaQuery = usePropertiesWithMeta({enabled: mode === 'active'});
+  const metaQuery = usePropertiesWithMeta();
   const subscriptionQuery = useSubscription();
   const router = useRouter();
   const pathname = usePathname();
@@ -75,8 +68,8 @@ export function PropertiesPage({mode = 'active', initialSort}: PropertiesPagePro
   const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
 
   const visible = useMemo(
-    () => sortProperties(filterPropertiesByMode(data ?? [], mode), sort),
-    [data, mode, sort],
+    () => sortProperties(data ?? [], sort),
+    [data, sort],
   );
 
   const changeSort = useCallback(
@@ -94,20 +87,19 @@ export function PropertiesPage({mode = 'active', initialSort}: PropertiesPagePro
 
   const hiddenSharedCount = metaQuery.data?.hiddenSharedCount ?? 0;
   const showHiddenSharedNote =
-    mode === 'active'
-    && showControls
+    showControls
     && !metaQuery.isLoading
     && !metaQuery.isError
     && hiddenSharedCount > 0;
 
-  const isActionLoading = subscriptionQuery.isPending || activeProperties === undefined;
+  const isActionLoading = subscriptionQuery.isPending || data === undefined;
 
   const canAdd = useMemo(() => {
-    if (!subscriptionQuery.data || activeProperties === undefined) return false;
+    if (!subscriptionQuery.data || data === undefined) return false;
     const limit = subscriptionQuery.data.tariff.activePropertyLimit;
     if (limit < 0) return true;
-    return activeProperties.filter((property) => property.status !== 'archived').length < limit;
-  }, [subscriptionQuery.data, activeProperties]);
+    return data.length < limit;
+  }, [subscriptionQuery.data, data]);
 
   const openCreate = useCallback(() => {
     if (isActionLoading) return;
@@ -126,9 +118,7 @@ export function PropertiesPage({mode = 'active', initialSort}: PropertiesPagePro
 
   const content = (
     <div className="flex flex-col gap-4 px-6 pt-6">
-      {mode === 'active' && (
-        <PropertiesSearchPill onCreate={openCreate} createLabel={createLabel} createDisabled={isActionLoading}/>
-      )}
+      <PropertiesSearchPill onCreate={openCreate} createLabel={createLabel} createDisabled={isActionLoading}/>
 
       {isLoading && <PropertiesLoading/>}
 
@@ -140,13 +130,13 @@ export function PropertiesPage({mode = 'active', initialSort}: PropertiesPagePro
 
       {showControls && (
         <>
-          <PropertiesSortRow mode={mode} sort={sort} onChange={changeSort}/>
+          <PropertiesSortRow sort={sort} onChange={changeSort}/>
           <ul className={styles.list} data-testid="properties-list">
             {visible.map((property) => (
               <li key={property.id}>
                 <PropertyCard
                   property={property}
-                  today={mode === 'active' ? metaQuery.data?.today : undefined}
+                  today={metaQuery.data?.today}
                 />
               </li>
             ))}
@@ -160,7 +150,7 @@ export function PropertiesPage({mode = 'active', initialSort}: PropertiesPagePro
         </p>
       )}
 
-      {showControls && mode === 'active' && (
+      {showControls && (
         <Button
           variant="white"
           size="small"
@@ -174,27 +164,6 @@ export function PropertiesPage({mode = 'active', initialSort}: PropertiesPagePro
       )}
     </div>
   );
-
-  if (mode === 'archived') {
-    return (
-      <>
-        <TopNav
-          leading={
-            <IconButton
-              icon={<ArrowLeft/>}
-              label="Назад"
-              onClick={() => goBack(router, ROUTES.properties)}
-            />
-          }
-          trailing={createButton}
-        >
-          <TopNavTitle title="Архивные объекты"/>
-        </TopNav>
-
-        <PageContent>{content}</PageContent>
-      </>
-    );
-  }
 
   return (
     <>
@@ -260,13 +229,11 @@ function PropertiesSearchPill({
 }
 
 /** Ряд сортировки (1590:88756): чип PickerMenu слева и «Архив» справа
- * (только в активном режиме; в архиве — один чип). */
+ * (ведёт на экран архива, #587). */
 function PropertiesSortRow({
-  mode,
   sort,
   onChange,
 }: {
-  readonly mode: PropertiesViewMode;
   readonly sort: PropertySort;
   readonly onChange: (sort: PropertySort) => void;
 }): JSX.Element {
@@ -274,16 +241,14 @@ function PropertiesSortRow({
   return (
     <div className="flex items-center justify-between" data-testid="properties-sort-row">
       <PropertiesSortMenu sort={sort} onChange={onChange}/>
-      {mode === 'active' && (
-        <Button
-          variant="clear"
-          size="small"
-          leadingIcon={<Archive/>}
-          onClick={() => router.push(ROUTES.propertyArchive)}
-        >
-          Архив
-        </Button>
-      )}
+      <Button
+        variant="clear"
+        size="small"
+        leadingIcon={<Archive/>}
+        onClick={() => router.push(ROUTES.propertyArchive)}
+      >
+        Архив
+      </Button>
     </div>
   );
 }

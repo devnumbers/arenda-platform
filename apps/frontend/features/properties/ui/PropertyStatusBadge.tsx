@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import clsx from 'clsx';
-import { CalendarSmall, KeySmall, PaintBrushSmall } from '@/shared/assets/icons';
+import { ArchiveSmall, CalendarSmall, KeySmall, PaintBrushSmall } from '@/shared/assets/icons';
 import type { PropertyBadge, PropertyBadgeTone } from '@/features/properties/lib/property-badges';
 import styles from './PropertyStatusBadge.module.css';
 
@@ -9,14 +9,16 @@ import styles from './PropertyStatusBadge.module.css';
  * пересобран по резолюции #584 в тикете #586): иконка S 16 + текст 14/16
  * Medium. Тоны: accent — белая пилюля с голубым текстом (занятость),
  * accent-filled — залитая синим «Аренда завершена», warning — белая с
- * жёлтым «на ремонте» (цвет макета #FFB900). Иконка по смыслу бейджа:
- * календарь (осталось N / аренда с), ключ (период подошёл к концу),
- * кисть (ремонт).
+ * жёлтым «на ремонте» (цвет макета #FFB900), neutral — белая с тёмным
+ * текстом («В архиве», экран архива #587, 1603:92102). Иконка по смыслу
+ * бейджа: календарь (осталось N / аренда с), ключ (период подошёл к концу),
+ * кисть (ремонт), архив (в архиве).
  */
 const toneClass: Record<PropertyBadgeTone, string> = {
   accent: styles.accent ?? '',
   'accent-filled': styles.accentFilled ?? '',
   warning: styles.warning ?? '',
+  neutral: styles.neutral ?? '',
 };
 
 const badgeIcon: Record<PropertyBadge['key'], JSX.Element> = {
@@ -24,6 +26,7 @@ const badgeIcon: Record<PropertyBadge['key'], JSX.Element> = {
   'rental-completed': <KeySmall />,
   'rental-upcoming': <CalendarSmall />,
   maintenance: <PaintBrushSmall />,
+  archived: <ArchiveSmall />,
 };
 
 export function PropertyStatusBadge({ badge }: { readonly badge: PropertyBadge }): JSX.Element {
