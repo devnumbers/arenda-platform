@@ -97,5 +97,6 @@ export {
   skeletonBlockClass,
   skeletonRowWidths,
   type SkeletonTone,
+  type SkeletonWidthClass,
   type SkeletonRowWidths,
 } from './skeleton-parts';

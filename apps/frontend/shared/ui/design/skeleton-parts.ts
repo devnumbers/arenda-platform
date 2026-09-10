@@ -18,10 +18,14 @@ export function skeletonBlockClass(tone: SkeletonTone): string {
   return TONE_CLASSES[tone];
 }
 
+/** Канонические ширины полей-заглушек (Tailwind-доли колонки): whitelist
+ * вместо сырых строк — опечатка потребителя ловится компиляцией. */
+export type SkeletonWidthClass = 'w-1/2' | 'w-2/5' | 'w-3/5';
+
 /** Ширины полей-заглушек одной строки списка: заголовок и подзаголовок. */
 export type SkeletonRowWidths = {
-  readonly title: string;
-  readonly subtitle: string;
+  readonly title: SkeletonWidthClass;
+  readonly subtitle: SkeletonWidthClass;
 };
 
 /** Ширины первой строки цикла — дефолт одиночной строки-заглушки. */

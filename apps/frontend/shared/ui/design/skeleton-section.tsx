@@ -3,7 +3,7 @@
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { Skeleton } from './skeleton';
-import { skeletonRowWidths } from './skeleton-parts';
+import { skeletonBlockClass, skeletonRowWidths } from './skeleton-parts';
 import { SkeletonListRow } from './skeleton-list-row';
 
 /**
@@ -27,7 +27,7 @@ export function SkeletonSection({ rows = 2, className }: SkeletonSectionProps): 
   return (
     <section aria-hidden className={cn('rounded-card bg-surface-muted pb-6', className)}>
       <div className="px-6 pb-3 pt-6">
-        <Skeleton className="h-6 w-40 bg-surface-muted-hover" />
+        <Skeleton className={`h-6 w-40 ${skeletonBlockClass('muted')}`} />
       </div>
       <div>
         {widths.map((rowWidths, index) => (
