@@ -26,9 +26,39 @@ Work through five steps. Testing is **black-box** while it runs: interact only w
 
 3. **Open and log in** — `browser_navigate` to the frontend URL; the user watches the session's own browser window. Log in through the real login screen: type the seeded phone, take the code from the backend log (`.tmp/e2e-frontend/backend.log`, pattern «Код для входа в Рентли» — parse the 6 digits from the log line's `text` field, not from anywhere else in the line: its timestamp also contains six-digit runs), type it. Re-requesting a code too soon hits the product's resend cooldown (429; the button shows «Отправить новый код MM:SS») — wait out the timer. The in-memory profile holds no state between browser closes, so every walkthrough logs in fresh; `--storage-state` (a per-session config override, not the committed one) is the optional shortcut when a storage-state file exists. Done when the cabinet's «Мои объекты» is on screen.
 
-4. **Walk the plan** — one action per observation cycle: act, then capture the cheapest proof (`browser_snapshot` for state and locators; `browser_take_screenshot` whenever vision decides the verdict — pass the full artifacts path as the filename, `.playwright-mcp/artifacts/<ticket>-NN-<slug>.png`: a bare filename is written to the session cwd, not the artifacts dir (0.0.80 behavior, #517) — and view it before judging the check passed; copying a per-ticket bundle to `.scratch/ui-walkthroughs/<ticket>/` is an optional extra, never the primary location). A blocked path gets recorded and skipped, never forced. Width-varying checks from the P3 tier go through «Adaptive widths» below. Done when every numbered check carries a viewed screenshot and a verdict.
+4. **Walk the plan** — one action per observation cycle: act, then capture the cheapest proof (`browser_snapshot` for state and locators; `browser_take_screenshot` whenever vision decides the verdict — pass the full artifacts path as the filename, `.playwright-mcp/artifacts/<ticket>-NN-<slug>.png`: a bare filename is written to the session cwd, not the artifacts dir (0.0.80 behavior, #517) — and view it before judging the check passed; copying a per-ticket bundle to `.scratch/ui-walkthroughs/<ticket>/` is an optional extra, never the primary location). A blocked path gets recorded and skipped, never forced. Width-varying checks from the P3 tier go through «Adaptive widths» below. Every screen that renders query data additionally carries the loading-stability checks of «Loading stability» below. Done when every numbered check carries a viewed screenshot and a verdict.
 
-5. **Report and gate** — post the checklist to chat: per tier, passed/failed/blocked, each item linked to its screenshot; failed items become Issues. Acceptance gate: the ticket ships only with **P0 + P1 green**; P2/P3 findings report without blocking. Close with `make frontend-e2e-live-down`. Done when the commit message can honestly carry «живая приёмка N/N».
+5. **Report and gate** — post the checklist to chat: per tier, passed/failed/blocked, each item linked to its screenshot; failed items become Issues. Acceptance gate: the ticket ships only with **P0 + P1 green**; P2/P3 findings report without blocking. Loading-stability failures are **P1** (blocking) — a page that jumps when data arrives does not ship. Close with `make frontend-e2e-live-down`. Done when the commit message can honestly carry «живая приёмка N/N».
+
+## Loading stability (скелетоны и layout shift)
+
+Data surfaces are judged not only on their loaded state but on the **transition** into it. A walkthrough check group (P1, blocking) for every screen with query data — and for every navigation leading to it:
+
+1. **No blank frame**: navigating to the screen shows its skeleton/loading state immediately — not a white/empty flash before the skeleton mounts.
+2. **Skeleton parity**: the skeleton mirrors the final layout — same blocks, heights, spacing; when data arrives it occupies the skeleton's place instead of pushing content around. Judge by a screenshot pair (loading frame vs loaded frame), not by eyeballing one frame.
+3. **No naked data surface**: every query has a loading state at all (CODING_STANDARDS «Naked data surface») — nothing pops in unannounced.
+4. **In-place updates stay in place**: typing in search, switching filter chips or period keeps previous results on screen (keepPreviousData) — a skeleton flash per keystroke or per chip is a failure.
+
+Mechanics: local stacks answer in tens of milliseconds — too fast to judge a skeleton honestly, so slow the API down and meter the shifts:
+
+```js
+// 1) Delay every API response (~1.2 s) for the transition under test:
+await page.route('**/api/**', async (route) => {
+  const end = Date.now() + 1200;           // busy-wait: no timers in the sandbox
+  while (Date.now() < end) {}
+  await route.continue();
+});
+// … navigate, screenshot the loading frame, wait for data, screenshot loaded, then:
+await page.unroute('**/api/**');
+
+// 2) Shift meter (install before the transition, read after):
+window.__cls = 0;
+new PerformanceObserver((list) => {
+  for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
+}).observe({ type: 'layout-shift', buffered: false });
+```
+
+Caveat: on a fast local stack a swap can land inside the platform's 500 ms `hadRecentInput` window after the click and be filtered out of the score — the screenshot pair (loading vs loaded) is the primary evidence, the CLS number is corroborating. Record per check: pass / fail with both screenshots; a fail is a P1 finding and blocks the ticket (step 5).
 
 ## Adaptive widths
 
