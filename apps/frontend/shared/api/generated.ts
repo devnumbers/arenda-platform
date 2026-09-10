@@ -2389,6 +2389,8 @@ export interface components {
              * @description The object's global pin (ticket #577): null — not pinned, a moment — pinned since then. The cards order the pinned first.
              */
             pinnedAt: string | null;
+            /** @description The card avatar's photo — the object's first (oldest) photo (ticket #582); null when the object has no photos. */
+            photoUrl: string | null;
             /** @description The «Автоплатежи» group — the object's auto-pay rules. */
             autoPayRules: components["schemas"]["PaymentObjectKey"][];
             /** @description The «Платежи» group — the object's non-auto-pay rules. */

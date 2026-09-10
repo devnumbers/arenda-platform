@@ -25,7 +25,6 @@ import type { GlobalPayment } from "@/entities/payment";
 import { PaymentCardButton } from "@/entities/payment";
 import { Button, EmptyState, PageContent, Skeleton } from "@/shared/ui/design";
 import { PageHeader } from "@/shared/ui/page-header";
-import { cn } from "@/shared/lib/cn";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
 import {
   globalFavoritePayments,
@@ -37,6 +36,7 @@ import {
   paymentsCountLabel,
 } from "../lib/payments-global-model";
 import {
+  GlobalCardIcon,
   GlobalPaymentRuleIcon,
   PaymentsStateCard,
 } from "./payments-sections";
@@ -256,46 +256,6 @@ function PaymentsGlobalSection({
       </h2>
       {children}
     </section>
-  );
-}
-
-/** Круглый слот иконки карточки (44) для служебных глифов канона —
- * замыкающие «Все …»/«Показать все» (879:17555: синий круг, белая иконка)
- * и карточки объектов (879:9712: белый круг, тёмная иконка); красная точка
- * просрочки — как у CategoryIcon. Иконки категорий идут через CategoryIcon,
- * это — только для не-категорийных глифов. */
-function GlobalCardIcon({
-  children,
-  variant = "primary",
-  hasNotification = false,
-}: {
-  readonly children: ReactNode;
-  readonly variant?: "primary" | "white";
-  readonly hasNotification?: boolean;
-}): JSX.Element {
-  return (
-    <span
-      className={cn(
-        "relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill",
-        "shadow-[0_0_0_2.5px_var(--dl-surface-muted)]",
-        variant === "primary" ? "bg-primary" : "bg-surface",
-      )}
-    >
-      <span
-        className={cn(
-          "flex h-6 w-6 items-center justify-center [&>svg]:h-6 [&>svg]:w-6",
-          variant === "primary" ? "text-white" : "text-[#D3D7D9]",
-        )}
-      >
-        {children}
-      </span>
-      {hasNotification && (
-        <span
-          className="absolute left-0 top-0 h-2.5 w-2.5 rounded-full bg-danger shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
-          aria-hidden
-        />
-      )}
-    </span>
   );
 }
 

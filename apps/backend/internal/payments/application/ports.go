@@ -307,12 +307,15 @@ type GlobalPaymentSearchCategory struct {
 // GlobalPaymentObject is one visible non-archived property of the «Объекты»
 // read (ticket #575); the service groups the feed's rows onto it. PinnedAt is
 // the property's global pin (ticket #577): nil — not pinned, a moment —
-// pinned since then; the SQL order carries the pinned first.
+// pinned since then; the SQL order carries the pinned first. PhotoURL is the
+// card avatar's photo — the object's first (oldest) one (ticket #582); nil
+// when the object has no photos.
 type GlobalPaymentObject struct {
 	PropertyID uuid.UUID
 	Name       string
 	Address    string
 	PinnedAt   *time.Time
+	PhotoURL   *string
 }
 
 // GlobalPaymentReader is the persistence port of the global payment rules

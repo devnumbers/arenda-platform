@@ -1,5 +1,5 @@
 import type { JSX, ReactNode } from 'react';
-import { SmallArrowDown, Star } from '@/shared/assets/icons';
+import { BoldHome, SmallArrowDown, Star } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
   formatDayMonth,
@@ -36,6 +36,80 @@ export function GlobalPaymentRuleIcon({
       check={check}
       surface={surface}
     />
+  );
+}
+
+/**
+ * Круглый слот иконки карточки (44) для служебных глифов канона —
+ * замыкающие «Все …»/«Показать все» (879:17555: синий круг, белая иконка),
+ * карточки объектов (879:9712, аватар «Объектов» #582: белый круг, тёмная
+ * иконка); красная точка просрочки — как у CategoryIcon. Иконки категорий
+ * идут через CategoryIcon, это — только для не-категорийных глифов.
+ */
+export function GlobalCardIcon({
+  children,
+  variant = 'primary',
+  hasNotification = false,
+}: {
+  readonly children: ReactNode;
+  readonly variant?: 'primary' | 'white';
+  readonly hasNotification?: boolean;
+}): JSX.Element {
+  return (
+    <span
+      className={cn(
+        'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill',
+        'shadow-[0_0_0_2.5px_var(--dl-surface-muted)]',
+        variant === 'primary' ? 'bg-primary' : 'bg-surface',
+      )}
+    >
+      <span
+        className={cn(
+          'flex h-6 w-6 items-center justify-center [&>svg]:h-6 [&>svg]:w-6',
+          variant === 'primary' ? 'text-white' : 'text-[#D3D7D9]',
+        )}
+      >
+        {children}
+      </span>
+      {hasNotification && (
+        <span
+          className="absolute left-0 top-0 h-2.5 w-2.5 rounded-full bg-danger shadow-[0_0_0_2.5px_var(--dl-surface-muted)]"
+          aria-hidden
+        />
+      )}
+    </span>
+  );
+}
+
+/**
+ * Аватар объекта в глобальных платежах (#582): фото в круге 44 или дом-
+ * плейсхолдер #D3D7D9. Поверхность card — на серой карточке «Объектов»
+ * (белый круг, кант серого — 890:29696); row — на белой странице поиска
+ * (серый круг #F3F4F6, кант белого — 888:19370, паттерн SelectAvatar).
+ */
+export function PaymentObjectAvatar({
+  photoUrl,
+  surface,
+}: {
+  readonly photoUrl: string | null;
+  readonly surface: 'card' | 'row';
+}): JSX.Element {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full',
+        surface === 'card'
+          ? 'bg-surface shadow-[0_0_0_2.5px_var(--dl-surface-muted)]'
+          : 'bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]',
+      )}
+    >
+      {photoUrl !== null ? (
+        <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <BoldHome className="h-6 w-6 text-[#D3D7D9]" />
+      )}
+    </span>
   );
 }
 

@@ -482,7 +482,9 @@ type Querier interface {
 	// is a case-insensitive substring over the name and the address — it
 	// filters the objects, never their stacks. The order is the global pin's
 	// (ticket #577): the pinned first — among themselves by the pin time —
-	// then the rest by name. pinned_at travels to the cards for the pin mark.
+	// then the rest by name. pinned_at travels to the cards for the pin mark,
+	// photo_url is the card avatar's photo — the object's first (oldest) one
+	// or NULL without photos (ticket #582).
 	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
 	// Payments context queries: the global surface of the payment rules
 	// (tickets #575, #576) — the merged «Платежи» feed, the search with its

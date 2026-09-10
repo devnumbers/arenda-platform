@@ -2,6 +2,8 @@ export { PaymentsGlobalScreen } from './ui/payments-global-screen';
 export { PaymentFavoritesScreen } from './ui/payments-favorites-screen';
 export { PaymentOverdueGlobalScreen } from './ui/payment-overdue-global-screen';
 export { PaymentsGlobalSearchScreen } from './ui/payments-global-search-screen';
+export { PaymentsObjectsScreen } from './ui/payments-objects-screen';
+export { PaymentsObjectsSearchScreen } from './ui/payments-objects-search-screen';
 export { parseOverdueSortParams } from './lib/overdue-global-model';
 export { PaymentsOfPropertyScreen } from './ui/payments-of-property-screen';
 export { OperationsOfPropertyScreen } from './ui/operations-of-property-screen';

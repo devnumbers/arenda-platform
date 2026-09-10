@@ -5532,7 +5532,7 @@ components:
         One visible property with its payment stacks (ticket #575): the keys
         grouped into the auto-pay group and the rest.
       type: object
-      required: [propertyId, name, address, autoPayRules, otherRules, pinnedAt]
+      required: [propertyId, name, address, autoPayRules, otherRules, pinnedAt, photoUrl]
       properties:
         propertyId:
           type: string
@@ -5548,6 +5548,12 @@ components:
           description: >
             The object's global pin (ticket #577): null — not pinned, a
             moment — pinned since then. The cards order the pinned first.
+        photoUrl:
+          type: string
+          nullable: true
+          description: >
+            The card avatar's photo — the object's first (oldest) photo
+            (ticket #582); null when the object has no photos.
         autoPayRules:
           type: array
           description: The «Автоплатежи» group — the object's auto-pay rules.

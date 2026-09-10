@@ -183,11 +183,19 @@ func (s *GlobalPaymentStore) ListGlobalPaymentObjects(
 	}
 	out := make([]application.GlobalPaymentObject, 0, len(rows))
 	for _, row := range rows {
+		// The SQL hands '' for «no photo» (the lateral join's COALESCE — an
+		// object without photos must not scan-fail), the port speaks nil.
+		var photoURL *string
+		if row.PhotoUrl != "" {
+			url := row.PhotoUrl
+			photoURL = &url
+		}
 		out = append(out, application.GlobalPaymentObject{
 			PropertyID: pgconv.UUIDFromPgtype(row.ID),
 			Name:       row.Name,
 			Address:    row.Address,
 			PinnedAt:   pgconv.TimestamptzToPtrTime(row.PinnedAt),
+			PhotoURL:   photoURL,
 		})
 	}
 	return out, nil

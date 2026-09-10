@@ -677,10 +677,12 @@ export function useGlobalPayments(): UseQueryResult<GlobalPaymentFeed, ApiError>
  * (#575, #582): видимые объекты с группами правил и флагами просрочки;
  * закреплённые (#577) сервер отдаёт первыми. search — серверный фильтр
  * по названию/адресу ('' = без фильтра); keepPreviousData держит список,
- * пока едет новый запрос.
+ * пока едет новый запрос. enabled=false держит запрос спящим — поиск
+ * объектов (#582) включает его только при непустом запросе.
  */
 export function useGlobalPaymentObjects(
   search = '',
+  options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<ReadonlyArray<GlobalPaymentObject>, ApiError> {
   return useQuery({
     queryKey: globalPaymentKeys.objects(search),
@@ -692,6 +694,7 @@ export function useGlobalPaymentObjects(
       return response.items.map(mapGlobalPaymentObject);
     },
     placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
   });
 }
 

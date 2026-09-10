@@ -153,6 +153,7 @@ export function mapGlobalPaymentObject(dto: GlobalPaymentObjectDto): GlobalPayme
     name: dto.name,
     address: dto.address,
     pinnedAt: dto.pinnedAt,
+    photoUrl: dto.photoUrl,
     autoPayRules: dto.autoPayRules.map(toKey),
     otherRules: dto.otherRules.map(toKey),
   };

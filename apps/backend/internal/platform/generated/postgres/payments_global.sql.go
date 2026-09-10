@@ -92,8 +92,19 @@ const listGlobalPaymentObjects = `-- name: ListGlobalPaymentObjects :many
 SELECT p.id,
        p.name,
        p.address,
-       p.pinned_at
+       p.pinned_at,
+       -- COALESCE, not the bare column: sqlc trusts the column's NOT NULL
+       -- and emits a string, while the lateral LEFT JOIN misses into NULL —
+       -- an object without photos would fail the scan. '' = no photo.
+       COALESCE(ph.url, '') AS photo_url
 FROM properties p
+LEFT JOIN LATERAL (
+    SELECT pp.url
+    FROM property_photos pp
+    WHERE pp.property_id = p.id
+    ORDER BY pp.created_at, pp.id
+    LIMIT 1
+) ph ON true
 WHERE (
        p.owner_id = $1
        OR EXISTS (
@@ -120,6 +131,7 @@ type ListGlobalPaymentObjectsRow struct {
 	Name     string             `json:"name"`
 	Address  string             `json:"address"`
 	PinnedAt pgtype.Timestamptz `json:"pinned_at"`
+	PhotoUrl string             `json:"photo_url"`
 }
 
 // The actor's visible non-archived properties — the «Объекты» screen's
@@ -128,7 +140,9 @@ type ListGlobalPaymentObjectsRow struct {
 // is a case-insensitive substring over the name and the address — it
 // filters the objects, never their stacks. The order is the global pin's
 // (ticket #577): the pinned first — among themselves by the pin time —
-// then the rest by name. pinned_at travels to the cards for the pin mark.
+// then the rest by name. pinned_at travels to the cards for the pin mark,
+// photo_url is the card avatar's photo — the object's first (oldest) one
+// or NULL without photos (ticket #582).
 func (q *Queries) ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listGlobalPaymentObjects, arg.Actor, arg.Search)
 	if err != nil {
@@ -143,6 +157,7 @@ func (q *Queries) ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPa
 			&i.Name,
 			&i.Address,
 			&i.PinnedAt,
+			&i.PhotoUrl,
 		); err != nil {
 			return nil, err
 		}

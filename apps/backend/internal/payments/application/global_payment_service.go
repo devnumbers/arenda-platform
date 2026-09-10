@@ -84,7 +84,10 @@ type GlobalPaymentObjectCard struct {
 	Address    string
 	// PinnedAt is the property's global pin (ticket #577): nil — not pinned,
 	// a moment — pinned since then; the objects read orders the pinned first.
-	PinnedAt    *time.Time
+	PinnedAt *time.Time
+	// PhotoURL is the card avatar's photo — the object's first (oldest) one
+	// (ticket #582); nil when the object has no photos.
+	PhotoURL    *string
 	AutoPayKeys []GlobalPaymentObjectKey
 	OtherKeys   []GlobalPaymentObjectKey
 }
@@ -246,6 +249,7 @@ func (s *GlobalPaymentService) ListGlobalPaymentObjects(
 			Name:        object.Name,
 			Address:     object.Address,
 			PinnedAt:    object.PinnedAt,
+			PhotoURL:    object.PhotoURL,
 			AutoPayKeys: []GlobalPaymentObjectKey{},
 			OtherKeys:   []GlobalPaymentObjectKey{},
 		}

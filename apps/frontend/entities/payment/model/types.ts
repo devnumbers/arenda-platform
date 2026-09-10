@@ -198,12 +198,14 @@ export type GlobalPaymentObjectKey = {
 
 /** Объект в глобальных платежах (#575): имя и адрес для карточки, стопки
  * правил («Автоплатежи»/«Платежи») и момент закрепления (#577; null — не
- * закреплён, сервер отдаёт закреплённые первыми). */
+ * закреплён, сервер отдаёт закреплённые первыми). photoUrl — первое (самое
+ * старое) фото для аватара карточки (#582); null — фото нет. */
 export type GlobalPaymentObject = {
   readonly propertyId: string;
   readonly name: string;
   readonly address: string;
   readonly pinnedAt: string | null;
+  readonly photoUrl: string | null;
   readonly autoPayRules: ReadonlyArray<GlobalPaymentObjectKey>;
   readonly otherRules: ReadonlyArray<GlobalPaymentObjectKey>;
 };

@@ -351,10 +351,12 @@ func TestListGlobalPaymentObjects_WireStacks(t *testing.T) {
 	svc := &fakeGlobalPaymentsManager{
 		objects: func(_ context.Context, _ uuid.UUID, query string) ([]application.GlobalPaymentObjectCard, error) {
 			gotQuery = query
+			photo := "/uploads/first.jpg"
 			return []application.GlobalPaymentObjectCard{{
 				PropertyID:  propertyID,
 				Name:        wirePropertyName,
 				Address:     "Тверская 1",
+				PhotoURL:    &photo,
 				AutoPayKeys: []application.GlobalPaymentObjectKey{{PaymentID: autoRule, HasOverdue: true}},
 				OtherKeys:   []application.GlobalPaymentObjectKey{{PaymentID: plainRule, HasOverdue: false}},
 			}}, nil
@@ -389,6 +391,9 @@ func TestListGlobalPaymentObjects_WireStacks(t *testing.T) {
 	}
 	if len(card.OtherRules) != 1 || card.OtherRules[0].HasOverdue {
 		t.Errorf("other keys = %+v, want the clean key", card.OtherRules)
+	}
+	if card.PhotoUrl == nil || *card.PhotoUrl != "/uploads/first.jpg" {
+		t.Errorf("photoUrl = %v, want the card's avatar photo", card.PhotoUrl)
 	}
 }
 

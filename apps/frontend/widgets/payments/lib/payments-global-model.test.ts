@@ -95,6 +95,7 @@ describe('globalPaymentObjectHasOverdue', () => {
     name: 'Моя квартира',
     address: 'Новатарова, 8',
     pinnedAt: null,
+    photoUrl: null,
     autoPayRules: [],
     otherRules: [],
     ...overrides,

@@ -61,10 +61,11 @@ export const ROUTES = {
   /** Поиск по платежам (#575, экран #581): вход — пилюля на главной. */
   paymentsSearch: '/payments/search',
   /** Страницы категорий главного экрана: избранные (#579), просроченные
-   * (#580), объекты (#582); до своих тикетов пути ведут на 404. */
+   * (#580), объекты и поиск объектов (#582). */
   paymentsFavorites: '/payments/favorites',
   paymentsOverdue: '/payments/overdue',
   paymentsObjects: '/payments/objects',
+  paymentsObjectsSearch: '/payments/objects/search',
   /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
   propertyOperations: (id: string) => `/properties/${id}/operations`,
   /** Экраны «Доходы объекта»/«Расходы объекта» (#475): список одного
