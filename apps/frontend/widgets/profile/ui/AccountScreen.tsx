@@ -39,8 +39,12 @@ function FieldTailIcon({ children }: { readonly children: JSX.Element }): JSX.El
   );
 }
 
-/** Строка «Телефон» (Figma 1789-99036): значение + SmallArrowRight, ведёт
- * на флоу смены телефона (переработка — тикет #595). */
+/** Строка «Телефон» (Figma 1789-99037): значение + SmallArrowRight, ведёт
+ * на флоу смены телефона (переработка — тикет #595). Хвост — Icon Button
+ * Primary, как в макете: тёмный глиф (text-content), прижат к краю бокса
+ * (его паддинг 8px), без зоны 44 (решение владельца 10.09.2026 — только
+ * телефон; у «Часового пояса» остался светлый глиф в зоне 44, вся строка
+ * и так одна ссылка). */
 function PhoneFieldRow({ phone }: { readonly phone: string }): JSX.Element {
   return (
     <div className="flex flex-col gap-2">
@@ -55,9 +59,12 @@ function PhoneFieldRow({ phone }: { readonly phone: string }): JSX.Element {
         <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
           {phone}
         </span>
-        <FieldTailIcon>
+        <span
+          aria-hidden
+          className="flex shrink-0 items-center justify-center text-content"
+        >
           <SmallArrowRight className="h-6 w-6" />
-        </FieldTailIcon>
+        </span>
       </NextLink>
     </div>
   );
