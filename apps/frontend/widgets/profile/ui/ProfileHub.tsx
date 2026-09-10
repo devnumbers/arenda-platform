@@ -39,11 +39,12 @@ const navigationRows: readonly HubRow[] = [
   { title: 'Информация', href: ROUTES.profileInfo, Icon: Info },
 ];
 
-/** Строка меню хаба (Figma «Row Button» 936:39348, Gray-вариант): белый
- * круг 44 с иконкой 24 слева, заголовок 16/18, стрелка справа; фон строки
- * прозрачный — сквозит серый контейнер (Figma 1786-31288, тикет #592).
- * Строка — div с useKeyboardActivation: ведущая/ведомая иконки декоративны,
- * действие одно на строку. Hover/press приглушают строку (канон §6). */
+/** Строка меню хаба (Figma «Row Button» 936:39348, Gray-вариант): ведущая
+ * иконка 24 — канонный Icon Button Primary (934:19122): прозрачная зона
+ * 44 без подложки, глиф сразу на сером контейнере (Figma 1903-38341,
+ * правка владельца 10.09.2026); заголовок 16/18, стрелка справа. Строка —
+ * div с useKeyboardActivation: иконки декоративны, действие одно на
+ * строку. Hover/press приглушают строку (канон §6). */
 function HubRowButton({
   title,
   Icon,
@@ -64,10 +65,7 @@ function HubRowButton({
         'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
       )}
     >
-      <span
-        aria-hidden
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-surface text-content"
-      >
+      <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center text-content">
         <Icon className="h-6 w-6" />
       </span>
       <span className="min-w-0 flex-1 truncate px-3 text-base font-medium text-content">{title}</span>
@@ -94,9 +92,9 @@ function ProfileHubSkeleton(): JSX.Element {
       <div className="flex flex-col rounded-3xl bg-surface-muted py-2">
         {navigationRows.map((row) => (
           <div key={row.href} className="flex items-center px-3 py-1">
-            <Skeleton className="h-11 w-11 shrink-0 rounded-pill bg-surface" />
-            <Skeleton className="ml-3 h-5 w-32 flex-1 bg-surface-muted-hover" />
-            <Skeleton className="ml-3 h-11 w-11 shrink-0 bg-surface-muted-hover" />
+            <Skeleton className="h-6 w-6 shrink-0 bg-surface-muted-hover" />
+            <Skeleton className="ml-[22px] h-5 w-32 flex-1 bg-surface-muted-hover" />
+            <Skeleton className="ml-3 h-6 w-6 shrink-0 bg-surface-muted-hover" />
           </div>
         ))}
       </div>
