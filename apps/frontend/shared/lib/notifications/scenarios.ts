@@ -1,5 +1,4 @@
 import { ApiError } from '@/shared/api/errors';
-import { ROUTES } from '@/shared/config/routes';
 import { notify } from './base';
 import type {
   ErrorScenarioFn,
@@ -96,15 +95,16 @@ const property = {
     notify.error('Не удалось загрузить объект', options)) satisfies ScenarioFn,
   movedToMaintenance: ((options?) =>
     notify.success('Объект переведён на ремонт', options)) satisfies ScenarioFn,
-  returnedToWork: ((options?) =>
-    notify.success('Объект возвращён в работу', options)) satisfies ScenarioFn,
+  /** Завершение ремонта (деталь объекта #588, Figma 1581:54666). */
+  maintenanceFinished: ((options?) =>
+    notify.success('Ремонт завершен. Объект готов к аренде', options)) satisfies ScenarioFn,
+  /** Возврат из архива (деталь объекта #588, Figma 1581:55041). */
   returnedFromArchive: ((options?) =>
-    notify.success('Объект возвращён из архива', options)) satisfies ScenarioFn,
+    notify.success('Объект возвращен из архива', options)) satisfies ScenarioFn,
+  /** Архивация (деталь объекта #588, Figma 1581:55564) — тост без
+   * действия, как в макете. */
   movedToArchive: ((options?) =>
-    notify.success('Объект переведён в архив', {
-      action: {label: 'В архив', href: ROUTES.propertyArchive},
-      ...options,
-    })) satisfies ScenarioFn,
+    notify.success('Объект переведен в архив', options)) satisfies ScenarioFn,
   updated: ((options?) =>
     notify.success('Объект обновлён', options)) satisfies ScenarioFn,
   saveError: ((options?) =>

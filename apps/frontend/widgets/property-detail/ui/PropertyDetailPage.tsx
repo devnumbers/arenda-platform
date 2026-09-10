@@ -7,25 +7,45 @@ import {notify} from '@/shared/lib/notifications';
 import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import {
-    type DeletePropertyMode,
-    useArchiveProperty,
-    useDeleteProperty,
-    useProperty,
-    useUnarchiveProperty,
-    useUpdateProperty
+  canMutateProperty,
+  propertyTypeLabels,
+  useArchiveProperty,
+  useDeleteProperty,
+  usePropertiesWithMeta,
+  useProperty,
+  useSetPropertyPin,
+  useUnarchiveProperty,
+  useUpdateProperty,
+  useArchivedProperties,
+  type DeletePropertyMode,
 } from '@/features/properties';
+import {useSubscription} from '@/features/subscription';
+import {isPaidTariff} from '@/entities/user';
 import type {ApiError} from '@/shared/api/errors';
 import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
-import {SubScreenShell} from '@/shared/ui/design';
-import {PropertyGallery} from './PropertyGallery';
-import {PropertyStatusSection} from './PropertyStatusSection';
-import {PropertyInfoCard} from './PropertyInfoCard';
-import {PropertyAttributesSection} from './PropertyAttributesSection';
-import {PropertyPaymentsSection} from './PropertyPaymentsSection';
-import {PropertyRentalsSection} from './PropertyRentalsSection';
-import {PropertyContactsSection} from './PropertyContactsSection';
-import {PropertyActionMenu} from './PropertyActionMenu';
-import {PropertyArchiveModal} from './PropertyArchiveModal';
+import {
+  buildPropertyManageActions,
+  buildPropertyStatusSheetItems,
+  propertyStatusSubtitle,
+  type PropertyDetailActionKey,
+} from '../lib/property-detail-status';
+import {
+  resolvePropertyDetailEmptySet,
+  resolvePropertySectionEmpty,
+  type PropertyDetailSectionKey,
+} from '../lib/property-sections';
+import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog} from '@/shared/ui/design';
+import {StarOutline} from '@/shared/assets/icons';
+import {PropertyMediaBlock} from './PropertyMediaBlock';
+import {
+  PropertySectionCard,
+  PropertySectionEmpty,
+} from './PropertySectionCard';
+import {
+  PropertyManageSection,
+  PropertyStatusSheet,
+} from './PropertyDetailActions';
+import {PropertyDetailKebab} from './PropertyDetailKebab';
 import {PropertyDeleteModal} from './PropertyDeleteModal';
 import {PropertySharingModal} from './PropertySharingModal';
 import {PropertySharedBanner} from './PropertySharedBanner';
@@ -33,12 +53,37 @@ import {PropertyDetailLoading} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
 import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
 import {PropertySuspendedScreen} from './PropertySuspendedScreen';
-import styles from './PropertyDetailPage.module.css';
+
+/** Иллюстрации пустых состояний секций (64): переиспользуем иллюстрации
+ * пустых карт аренды/платежей/контактов/задач — совпадение с макетом
+ * 1:1; характеристики — из шаблона «Об объекте» (1550:97124, нода
+ * 1550:97390). */
+const SECTION_IMAGES: Record<PropertyDetailSectionKey, string> = {
+  rental: '/images/rentals/empty-rental.png',
+  payments: '/images/payments/object-empty.png',
+  operations: '/images/payments/operations-empty.png',
+  contacts: '/images/contacts/empty-contacts.png',
+  tasks: '/images/tasks/empty-tasks.png',
+  about: '/images/properties/characteristics-empty.png',
+};
 
 function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
 }
 
+/**
+ * Детализация объекта — новый каркас карты #583 (тикет #588; Figma
+ * 1554:98469 — приветственные пустые, 1554:100751 — обычные, 1186:44996 —
+ * ПК, 1186:44992 — планшет): шапка «Объект» со звездой базового тарифа
+ * или «Назад», кебаб справа (1186:44996); медиа-блок (плейсхолдер-круг —
+ * рендер фото решается на приёмке); секции-карточки с пустыми
+ * состояниями — наполнение в #589; «Управление» — контекстные действия;
+ * шиты смены статуса и подтверждение архивации (1581:55389); тосты
+ * результатов (1581:55564 / 1581:54666 / 1581:55041). «Объект» = кебаб
+ * «Изменить статус» — секция «Управление» дублирует те же действия.
+ * Занятость (Начать ↔ Завершить аренду) приходит из списочного кэша
+ * (occupancy — резолюция #584, на детали её нет).
+ */
 export function PropertyDetailPage(): JSX.Element {
     const params = useParams<{ id: string }>();
     const id = params.id;
@@ -46,49 +91,63 @@ export function PropertyDetailPage(): JSX.Element {
 
     const propertyQuery = useProperty(id);
 
+    // Занятость и количество активных объектов живут только в списочных
+    // ответах (#584) — читаем из общего кэша хаба/лендинга; для архивного
+    // объекта — из кэша экрана архива.
+    const listQuery = usePropertiesWithMeta();
+    const archivedListQuery = useArchivedProperties({
+        enabled: propertyQuery.data?.status === 'archived',
+    });
+    const subscriptionQuery = useSubscription();
+
     const updateProperty = useUpdateProperty();
     const archiveProperty = useArchiveProperty();
     const unarchiveProperty = useUnarchiveProperty();
+    const setPin = useSetPropertyPin();
     const deleteProperty = useDeleteProperty();
 
+    const [statusSheetOpen, setStatusSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
     const [sharingOpen, setSharingOpen] = React.useState(false);
 
     const property = propertyQuery.data;
 
-    const handleToggleMaintenance = useCallback(() => {
-        if (!property) return;
-        if (property.status === 'active') {
-            updateProperty.mutate(
-                {id, data: {status: 'maintenance'}},
-                {
-                    onSuccess: () => notify.scenarios.property.movedToMaintenance(),
-                    onError: showMutationError,
-                },
-            );
-        } else {
-            updateProperty.mutate(
-                {id, data: {status: 'active'}},
-                {
-                    onSuccess: () => notify.scenarios.property.returnedToWork(),
-                    onError: showMutationError,
-                },
-            );
-        }
-    }, [property, id, updateProperty]);
+    const listedProperty =
+        listQuery.data?.items.find((item) => item.id === id)
+        ?? archivedListQuery.data?.find((item) => item.id === id);
+    const hasRental =
+        listedProperty?.occupancy !== undefined
+        && listedProperty.occupancy.status !== 'none';
+    // Пока список не загружен, считаем объект единственным — приветственный
+    // набор (первый объект); правило переключения наборов — на приёмке.
+    const emptySet = resolvePropertyDetailEmptySet(listQuery.data?.items.length ?? 1);
 
-    const handleToggleArchive = useCallback(() => {
-        if (!property) return;
-        if (property.status === 'archived') {
-            unarchiveProperty.mutate(id, {
-                onSuccess: () => notify.scenarios.property.returnedFromArchive(),
-                onError: showMutationError,
-            });
-        } else {
-            setArchiveOpen(true);
-        }
-    }, [property, id, unarchiveProperty]);
+    const canMutate = canMutateProperty(propertyQuery.isSuccess ? property : undefined);
+    // Для «Управления» роль важна без статуса: архивный владелец видит
+    // «Вернуть из архива» и удаление (canMutateProperty гасит и архив —
+    // его смысл для CTA-кнопок секций, не для этого списка).
+    const roleCanMutate =
+        property?.access !== undefined && property.access.role !== 'viewer';
+    // «Основной объект» — платная возможность: базовому тарифу в шапке
+    // звезда апселла, строк пина в «Управлении» нет.
+    const isPaid = subscriptionQuery.data
+        ? isPaidTariff(subscriptionQuery.data.tariff.name)
+        : true;
+    const isPinned = property?.pinned_at != null;
+
+    const manageActions = property
+        ? buildPropertyManageActions({
+            status: property.status,
+            hasRental,
+            isPinned,
+            canMutate: roleCanMutate,
+            canPin: isPaid && roleCanMutate,
+        })
+        : [];
+    const statusSheetItems = property
+        ? buildPropertyStatusSheetItems(property.status, hasRental)
+        : [];
 
     const handleArchive = useCallback(() => {
         archiveProperty.mutate(id, {
@@ -100,13 +159,65 @@ export function PropertyDetailPage(): JSX.Element {
         });
     }, [archiveProperty, id]);
 
-    const handleEdit = useCallback(() => {
-        router.push(ROUTES.propertyEdit(id));
-    }, [id, router]);
-
-    const handleAccess = useCallback(() => {
-        setSharingOpen(true);
-    }, []);
+    const handleAction = useCallback((key: PropertyDetailActionKey) => {
+        switch (key) {
+            case 'about':
+                router.push(ROUTES.propertyAbout(id));
+                break;
+            case 'change-status':
+                setStatusSheetOpen(true);
+                break;
+            case 'edit':
+                router.push(ROUTES.propertyEdit(id));
+                break;
+            case 'pin':
+            case 'unpin':
+                setPin.mutate(
+                    {id, pinned: key === 'pin'},
+                    {onError: showMutationError},
+                );
+                break;
+            case 'start-rental':
+                router.push(ROUTES.propertyRentalNew(id));
+                break;
+            case 'complete-rental':
+                router.push(ROUTES.propertyRentalComplete(id));
+                break;
+            case 'start-maintenance':
+                updateProperty.mutate(
+                    {id, data: {status: 'maintenance'}},
+                    {
+                        onSuccess: () => notify.scenarios.property.movedToMaintenance(),
+                        onError: showMutationError,
+                    },
+                );
+                break;
+            case 'finish-maintenance':
+                updateProperty.mutate(
+                    {id, data: {status: 'active'}},
+                    {
+                        onSuccess: () => notify.scenarios.property.maintenanceFinished(),
+                        onError: showMutationError,
+                    },
+                );
+                break;
+            case 'archive':
+                setArchiveOpen(true);
+                break;
+            case 'unarchive':
+                unarchiveProperty.mutate(id, {
+                    onSuccess: () => notify.scenarios.property.returnedFromArchive(),
+                    onError: showMutationError,
+                });
+                break;
+            case 'access':
+                setSharingOpen(true);
+                break;
+            case 'delete':
+                setDeleteOpen(true);
+                break;
+        }
+    }, [id, router, setPin, unarchiveProperty, updateProperty]);
 
     const handleDelete = useCallback((mode: DeletePropertyMode) => {
         deleteProperty.mutate(
@@ -132,86 +243,176 @@ export function PropertyDetailPage(): JSX.Element {
         : null;
 
     const isLoading = propertyQuery.isPending;
+    const status = property?.status;
+
+    const sectionCTAs: Record<PropertyDetailSectionKey, (() => void) | undefined> = {
+        rental: () => router.push(ROUTES.propertyRentalNew(id)),
+        payments: () => router.push(ROUTES.propertyPaymentNew(id, 'payment')),
+        operations: undefined,
+        contacts: () => router.push(ROUTES.propertyContactNew(id)),
+        tasks: () => router.push(ROUTES.propertyTaskCreate(id)),
+        about: () => router.push(ROUTES.propertyEdit(id)),
+    };
 
     return (
         <>
-            {/* Единый хром подэкрана (карта #556): каркас SubScreenShell,
-                меню действий — в слоте trailing, «Назад» — на список. */}
-            <SubScreenShell
-                title="Мой объект"
-                fallbackHref={ROUTES.properties}
+            {/* Особая анатомия шапки (DESIGN.md §2): слот ведущей кнопки
+             * зависит от тарифа — звезда апселла у базового (тап → смена
+             * тарифа), «Назад» у платных, включая режим «деталь = лендинг
+             * таба» (решение владельца 10.09). Кебаб — в trailing. */}
+            <TopNav
+                leading={
+                    isPaid ? (
+                        <TopNavBackButton fallbackHref={ROUTES.properties}/>
+                    ) : (
+                        <IconButton
+                            icon={<StarOutline className="h-6 w-6"/>}
+                            label="Сменить тариф"
+                            onClick={() => router.push(ROUTES.profileTariffChange)}
+                        />
+                    )
+                }
                 trailing={
-                    <PropertyActionMenu
-                        status={property?.status}
-                        disabled={isLoading || propertyQuery.isError || !property}
-                        onEdit={handleEdit}
-                        onAccess={handleAccess}
-                        onToggleMaintenance={handleToggleMaintenance}
-                        onToggleArchive={handleToggleArchive}
-                        onDelete={() => setDeleteOpen(true)}
-                    />
+                    status !== undefined && propertyErrorKind === null ? (
+                        <PropertyDetailKebab
+                            status={status}
+                            disabled={isLoading}
+                            onAction={handleAction}
+                        />
+                    ) : undefined
                 }
             >
-                <div className={styles.root}>
-                    {property?.access && property.access.role !== 'owner' && (
-                        <PropertySharedBanner access={property.access}/>
-                    )}
+                <TopNavTitle
+                    title="Объект"
+                    subtitle={property ? propertyStatusSubtitle(property.status) : undefined}
+                />
+            </TopNav>
 
-                    {isLoading && <PropertyDetailLoading/>}
+            <PageContent className="px-6">
+                {property?.access && property.access.role !== 'owner' && (
+                    <PropertySharedBanner access={property.access}/>
+                )}
 
-                    {!isLoading && propertyErrorKind === 'not_found' && (
-                        <PropertyNotFoundScreen/>
-                    )}
+                {isLoading && <PropertyDetailLoading/>}
 
-                    {!isLoading && propertyErrorKind === 'suspended' && (
-                        <PropertySuspendedScreen/>
-                    )}
+                {!isLoading && propertyErrorKind === 'not_found' && (
+                    <PropertyNotFoundScreen/>
+                )}
 
-                    {!isLoading && (propertyErrorKind === null || propertyErrorKind === 'generic') &&
-                        (propertyQuery.isError || !property) && (
-                        <PropertyDetailError
-                            onRetry={() => {
-                                void propertyQuery.refetch();
-                            }}
-                            isLoading={propertyQuery.isFetching}
-                        />
-                    )}
+                {!isLoading && propertyErrorKind === 'suspended' && (
+                    <PropertySuspendedScreen/>
+                )}
 
-                    {!isLoading && !propertyQuery.isError && property && (
-                        <>
-                            <PropertyGallery/>
+                {!isLoading && (propertyErrorKind === null || propertyErrorKind === 'generic') &&
+                    (propertyQuery.isError || !property) && (
+                    <PropertyDetailError
+                        onRetry={() => {
+                            void propertyQuery.refetch();
+                        }}
+                        isLoading={propertyQuery.isFetching}
+                    />
+                )}
 
-                            <PropertyStatusSection property={property}/>
+                {!isLoading && !propertyQuery.isError && property && (
+                    <>
+                        <PropertyMediaBlock name={property.name} address={property.address}/>
 
-                            <PropertyInfoCard
-                                description={property.description}
-                                propertyId={id}
-                                isArchived={property.status === 'archived'}
+                        <PropertySectionCard
+                            title="Аренда"
+                            href={ROUTES.propertyRental(id)}
+                            className="mt-20"
+                        >
+                            <PropertySectionEmpty
+                                imageSrc={SECTION_IMAGES.rental}
+                                copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
+                                onCta={sectionCTAs.rental}
+                                ctaDisabled={!canMutate}
                             />
+                        </PropertySectionCard>
 
-                            <PropertyAttributesSection
-                                type={property.type}
-                                attributes={property.attributes}
-                                propertyId={id}
-                                isArchived={property.status === 'archived'}
+                        <PropertySectionCard
+                            title="Регулярные платежи"
+                            href={ROUTES.propertyPayments(id)}
+                        >
+                            <PropertySectionEmpty
+                                imageSrc={SECTION_IMAGES.payments}
+                                copy={resolvePropertySectionEmpty('payments', emptySet, property.status)}
+                                onCta={sectionCTAs.payments}
+                                ctaDisabled={!canMutate}
                             />
+                        </PropertySectionCard>
 
-                            <PropertyRentalsSection propertyId={id}/>
+                        <PropertySectionCard
+                            title="Операции"
+                            href={ROUTES.propertyOperations(id)}
+                        >
+                            <PropertySectionEmpty
+                                imageSrc={SECTION_IMAGES.operations}
+                                copy={resolvePropertySectionEmpty('operations', emptySet, property.status)}
+                            />
+                        </PropertySectionCard>
 
-                            <PropertyPaymentsSection propertyId={id}/>
+                        <PropertySectionCard
+                            title="Контакты"
+                            href={ROUTES.propertyContacts(id)}
+                        >
+                            <PropertySectionEmpty
+                                imageSrc={SECTION_IMAGES.contacts}
+                                copy={resolvePropertySectionEmpty('contacts', emptySet, property.status)}
+                                onCta={sectionCTAs.contacts}
+                                ctaDisabled={!canMutate}
+                            />
+                        </PropertySectionCard>
 
-                            <PropertyContactsSection propertyId={id}/>
-                        </>
-                    )}
-                </div>
-            </SubScreenShell>
+                        <PropertySectionCard
+                            title="Задачи"
+                            href={ROUTES.propertyTasks(id)}
+                        >
+                            <PropertySectionEmpty
+                                imageSrc={SECTION_IMAGES.tasks}
+                                copy={resolvePropertySectionEmpty('tasks', emptySet, property.status)}
+                                onCta={sectionCTAs.tasks}
+                                ctaDisabled={!canMutate}
+                            />
+                        </PropertySectionCard>
 
-            <PropertyArchiveModal
-                isOpen={archiveOpen}
-                onClose={() => setArchiveOpen(false)}
-                onArchive={handleArchive}
-                membersCount={property?.members_count ?? 0}
-                isArchiving={archiveProperty.isPending}
+                        <PropertySectionCard
+                            title={propertyTypeLabels[property.type]}
+                            href={ROUTES.propertyAbout(id)}
+                        >
+                            <PropertySectionEmpty
+                                imageSrc={SECTION_IMAGES.about}
+                                copy={resolvePropertySectionEmpty('about', emptySet, property.status)}
+                                onCta={sectionCTAs.about}
+                                ctaDisabled={!canMutate}
+                            />
+                        </PropertySectionCard>
+
+                        <PropertySectionCard title="Управление">
+                            <PropertyManageSection
+                                items={manageActions}
+                                onAction={handleAction}
+                            />
+                        </PropertySectionCard>
+                    </>
+                )}
+            </PageContent>
+
+            <PropertyStatusSheet
+                open={statusSheetOpen}
+                onOpenChange={setStatusSheetOpen}
+                items={statusSheetItems}
+                onAction={handleAction}
+            />
+
+            <ConfirmDialog
+                open={archiveOpen}
+                onOpenChange={setArchiveOpen}
+                title="Перевести объект в архив?"
+                description="Объектом нельзя будет управлять, он будет доступен только для просмотра. Все данные будут сохранены. Вы сможете вернуть объект в работу в любой момент"
+                confirmLabel="Архивировать"
+                pending={archiveProperty.isPending}
+                onConfirm={handleArchive}
             />
 
             <PropertyDeleteModal

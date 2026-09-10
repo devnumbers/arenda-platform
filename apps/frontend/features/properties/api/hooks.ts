@@ -173,6 +173,30 @@ export function useUnarchiveProperty(): UseMutationResult<
   });
 }
 
+/**
+ * «Сделать основным / Убрать из основных» (деталь объекта #588): атомарный
+ * PUT pin (канон favorite-toggle, #577) — не read-modify-write PATCH.
+ * Инвалидит список и деталь — порядок карточек держит сервер.
+ */
+export function useSetPropertyPin(): UseMutationResult<
+  PropertyResponse,
+  ApiError,
+  { id: string; pinned: boolean }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pinned }) =>
+      apiClient<PropertyResponse>(`/properties/${id}/pin`, {
+        method: 'PUT',
+        body: JSON.stringify({ pinned }),
+      }),
+    onSuccess: (_, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+    },
+  });
+}
+
 export function useAddressSuggestions(
   query: string,
 ): UseQueryResult<AddressSuggestion[], ApiError> {

@@ -7,6 +7,7 @@ export {
   useUpdateProperty,
   useArchiveProperty,
   useUnarchiveProperty,
+  useSetPropertyPin,
   useAddressSuggestions,
   useUploadPropertyPhoto,
   useDeletePropertyPhoto,
