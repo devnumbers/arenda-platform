@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { useCallback, useState, type JSX } from 'react';
 import NextLink from 'next/link';
 import { SmallArrowDown, SmallArrowRight } from '@/shared/assets/icons';
 import { Button, Skeleton, TextField } from '@/shared/ui/design';
@@ -253,37 +253,11 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
  * почта полем с валидацией, часовой пояс строкой на пикер
  * /profile/account/timezone (#594). Поглотил
  * легаси PersonalDataForm (/profile/personal снесён) и AccountOverview.
- * Тихое автосохранение браузерной таймзоны перенесено из PersonalDataForm
- * как было: один раз, только если зона ещё не сохранена. */
+ * Тихий автосейв браузерной зоны снесён (#451): колонка users.timezone
+ * NOT NULL DEFAULT 'Europe/Moscow' делала условие «если пусто» всегда
+ * ложным, а зона устройства теперь фиксируется один раз — при регистрации. */
 export function AccountScreen(): JSX.Element {
   const { data: me, isError, refetch } = useMe();
-  const updateMe = useUpdateMe();
-  const autoTzSent = useRef(false);
-
-  // Auto-detect the browser timezone and save it to the profile silently,
-  // but only when there is no saved timezone yet (don't override manual
-  // settings during trips). Runs once per mount.
-  useEffect(() => {
-    if (!me || autoTzSent.current) {
-      return;
-    }
-    if (me.timezone) {
-      autoTzSent.current = true;
-      return;
-    }
-    if (updateMe.isPending) {
-      return;
-    }
-    const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (!detectedTz) {
-      autoTzSent.current = true;
-      return;
-    }
-    autoTzSent.current = true;
-    updateMe.mutate({ timezone: detectedTz }, {
-      onError: (error) => notify.scenarios.profile.personalDataSaveError(error),
-    });
-  }, [me, updateMe]);
 
   if (isError) {
     return (
