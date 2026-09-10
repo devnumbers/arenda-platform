@@ -9,7 +9,8 @@ import { clientTodayIso, formatDayMonth, type IsoDate } from '@/entities/payment
 import { useProperty } from '@/features/properties';
 import { projectedOperation, usePayment } from '@/features/payments';
 import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
-import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsStateCard } from './payments-sections';
+import { OperationDetailSkeleton } from './payments-skeletons';
 import { OperationView } from './operation-detail-screen';
 
 /**
@@ -60,12 +61,7 @@ export function ProjectedOperationScreen({
 
       <PageContent>
         <div className="flex flex-col gap-6">
-          {loading && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
-          )}
+          {loading && <OperationDetailSkeleton />}
 
           {failed && (
             <PaymentsStateCard

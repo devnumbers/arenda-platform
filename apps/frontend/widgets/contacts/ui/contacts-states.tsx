@@ -14,6 +14,8 @@ const headingClass = 'text-xl font-semibold leading-6 text-content';
 const hintClass = 'text-base leading-[18px] text-content-secondary';
 /** Подсказка поиска и пустого результата — те же кегль и цвет (1527:74813/74825). */
 const searchNoteClass = 'text-base leading-[18px] text-content-secondary';
+/** Приглушённый тон блоков внутри серых карточек (§7, skeletonBlockClass). */
+const MUTED = skeletonBlockClass('muted');
 
 /**
  * Состояния экрана «Контакты объекта» (#508): скелет загрузки, ошибка с
@@ -107,6 +109,64 @@ export function ContactsEmptyState(): JSX.Element {
       title="Контактов нет"
       description="Добавьте контакты арендатора, мастеров и других специалистов"
     />
+  );
+}
+
+/** Секция «Заметка»-заглушка: подпись 16/18 и серый бокс 92 с текстом. */
+function SkeletonNoteSection(): JSX.Element {
+  return (
+    <section aria-hidden className="flex flex-col gap-2">
+      <Skeleton className="h-[18px] w-16" />
+      <Skeleton className="h-[92px] rounded-2xl" />
+    </section>
+  );
+}
+
+/**
+ * Скелетон карточки контакта (#606, паритет — §7 DESIGN.md): каркас
+ * ContactCardBody (1285:55112) — аватар 96, карточка «имя + роль» со
+ * строками значений (py-3, кнопка копирования справа), карточка «Объект»
+ * со строкой привязки и «Заметка». Кебаб шапки — вне фазы загрузки.
+ */
+export function ContactDetailSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-6 px-6 pb-8 pt-2">
+      <div className="flex justify-center">
+        <Skeleton className="h-24 w-24 rounded-full" />
+      </div>
+
+      <section className="rounded-card bg-surface-muted px-6 py-4">
+        <div className="pb-6">
+          <Skeleton className={`h-6 w-2/5 ${MUTED}`} />
+          <Skeleton className={cn('mt-2 h-4 w-1/4', MUTED)} />
+        </div>
+        <div className="flex flex-col">
+          <span className="flex items-center gap-2 py-3">
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <Skeleton className={`h-[18px] w-3/5 ${MUTED}`} />
+              <Skeleton className={`h-4 w-2/5 ${MUTED}`} />
+            </span>
+            <Skeleton className={`h-6 w-6 shrink-0 ${MUTED}`} />
+          </span>
+        </div>
+      </section>
+
+      <section className="rounded-card bg-surface-muted px-6 py-4">
+        <span className="flex w-full items-center gap-2">
+          <Skeleton className={`h-6 w-1/3 ${MUTED}`} />
+          <Skeleton className={`h-6 w-6 shrink-0 ${MUTED}`} />
+        </span>
+        <span className="flex items-center gap-3 pt-2">
+          <Skeleton className={cn('h-11 w-11 shrink-0 rounded-full', MUTED)} />
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <Skeleton className={`h-[18px] w-2/5 ${MUTED}`} />
+            <Skeleton className={`h-4 w-3/5 ${MUTED}`} />
+          </span>
+        </span>
+      </section>
+
+      <SkeletonNoteSection />
+    </div>
   );
 }
 

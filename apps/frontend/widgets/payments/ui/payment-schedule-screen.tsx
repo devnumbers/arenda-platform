@@ -26,7 +26,8 @@ import {
   type ScheduleEntry,
 } from '@/features/payments';
 import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
-import { PaymentsEmptyCard, PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsEmptyCard, PaymentsHeading, PaymentsStateCard } from './payments-sections';
+import { PaymentGroupedListSkeleton } from './payments-skeletons';
 
 /**
  * Подэкран «График платежей» (#466, Figma 671:7358): «Ближайший» —
@@ -74,12 +75,7 @@ export function PaymentScheduleScreen({
 
       <PageContent>
         <div className="flex flex-col gap-6">
-          {loading && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
-          )}
+          {loading && <PaymentGroupedListSkeleton groups={[1, 2]} />}
 
           {failed && (
             <PaymentsStateCard

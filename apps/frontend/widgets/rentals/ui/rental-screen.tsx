@@ -12,12 +12,12 @@ import {
   EmptyState,
   IconButton,
   PageContent,
-  Skeleton,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
 import { RentalDetailBody } from './rental-detail-body';
+import { RentalDetailSkeleton } from './rental-skeletons';
 
 /**
  * Экран «Аренда» (#531, Figma 1425:55656/1232:61259): маршрут
@@ -59,11 +59,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
 
       {loading && (
         <PageContent>
-          <div className="flex flex-col gap-4 pt-6">
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-          </div>
+          <RentalDetailSkeleton />
         </PageContent>
       )}
 

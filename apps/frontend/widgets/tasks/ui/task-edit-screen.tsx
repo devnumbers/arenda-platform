@@ -36,7 +36,8 @@ import {
 } from '@/shared/ui/design';
 import { TaskFieldButton } from './task-create-screen';
 import { TaskTimePicker } from './task-time-picker';
-import { TasksSkeleton, TasksStateCard } from './tasks-of-property-screen';
+import { TasksStateCard } from './tasks-of-property-screen';
+import { TaskEditFormSkeleton } from './tasks-skeletons';
 
 /** Лимиты контракта PATCH /tasks/rules/{ruleId} (#498): название 1..255,
  * комментарий до 1000. Ввод обрезается молча — счётчиков на макете нет. */
@@ -189,12 +190,7 @@ function TaskEditBody({
 
       <PageContent>
         <div className="flex flex-col gap-8">
-          {loading && (
-            <>
-              <TasksSkeleton />
-              <TasksSkeleton />
-            </>
-          )}
+          {loading && <TaskEditFormSkeleton />}
 
           {!loading && failed && (
             <TasksStateCard title="Не удалось загрузить задачу" onRetry={onRetry} />
