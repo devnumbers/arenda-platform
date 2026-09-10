@@ -3,7 +3,7 @@ export { NotificationSettings } from './ui/NotificationSettings';
 export { PaymentDetail } from './ui/PaymentDetail';
 export { PaymentList } from './ui/PaymentList';
 export { PaymentMethodList } from './ui/PaymentMethodList';
-export { PhoneChangeForm } from './ui/PhoneChangeForm';
+export { PhoneChangeScreen } from './ui/PhoneChangeScreen';
 export { ProfileHub } from './ui/ProfileHub';
 export { TariffChangeForm } from './ui/TariffChangeForm';
 export { TariffChangeSuccess } from './ui/TariffChangeSuccess';
