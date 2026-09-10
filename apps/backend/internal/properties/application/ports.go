@@ -58,6 +58,24 @@ type SuspendedSharedCounter interface {
 // of every adapter re-reading the properties.
 type PropertyOwners map[uuid.UUID]uuid.UUID
 
+// OwnerCalendar resolves a user's calendar date (ADR 0048) — the list reads
+// report the reading actor's «today» so the client counts the «Осталось
+// N месяцев» rental badge against the right day boundary (ticket #586; the
+// tasks feed's today rule, #521). Implemented by the calendar adapter shared
+// with rentals/payments; optional — when nil, the lists fall back to the
+// server clock's UTC date.
+type OwnerCalendar interface {
+	Today(ctx context.Context, userID uuid.UUID) (time.Time, error)
+}
+
+// PropertiesPage is one listing read: the merged rows (own + shared, the
+// pinned first) plus the reading actor's calendar date (ADR 0048) the client
+// renders the rental badges against (ticket #586).
+type PropertiesPage struct {
+	Items []domain.Property
+	Today time.Time
+}
+
 // RentalOccupancyReader reports the per-property occupancy projection
 // («Занятость объекта», резолюция #584, ticket #585) computed from each
 // property's single unfinished rental against the data owner's today (ADR

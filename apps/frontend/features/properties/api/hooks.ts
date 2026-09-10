@@ -9,9 +9,11 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
+import type { IsoDate } from '@/shared/lib/calendar';
 import { mapPropertyResponse } from '@/entities/property';
 import type { Property } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
+import { resolvePropertiesLandingHref } from '../lib/property-landing';
 import type { components, operations } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -27,7 +29,7 @@ export type DeletePropertyMode =
   operations['deleteProperty']['parameters']['query']['mode'];
 
 export function useProperties(
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; staleTime?: number } = {},
 ): UseQueryResult<Property[], ApiError> {
   return useQuery({
     queryKey: propertyKeys.list,
@@ -36,19 +38,23 @@ export function useProperties(
       return response.items.map(mapPropertyResponse);
     },
     enabled: options.enabled,
+    staleTime: options.staleTime,
   });
 }
 
 export type PropertiesListResult = {
   readonly items: Property[];
   readonly hiddenSharedCount: number;
+  /** «Сегодня владельца» (ADR 0048) — граница бейджа «Осталось N месяцев» (#586). */
+  readonly today: IsoDate;
 };
 
 // Same /properties endpoint as useProperties, but also surfaces
 // hidden_shared_count (shared objects hidden from the recipient due to a
-// tariff slot shortage). Use this only where the count is needed — the rest
-// of the app keeps useProperties for the plain list. Shares the
-// propertyKeys.list prefix so mutations invalidate both queries together.
+// tariff slot shortage) and the actor's today (ADR 0048) the rental badges
+// count against. Use this only where the extras are needed — the rest of the
+// app keeps useProperties for the plain list. Shares the propertyKeys.list
+// prefix so mutations invalidate both queries together.
 export function usePropertiesWithMeta(
   options: { enabled?: boolean } = {},
 ): UseQueryResult<PropertiesListResult, ApiError> {
@@ -59,6 +65,7 @@ export function usePropertiesWithMeta(
       return {
         items: response.items.map(mapPropertyResponse),
         hiddenSharedCount: response.hidden_shared_count,
+        today: response.today,
       };
     },
     enabled: options.enabled,
@@ -233,4 +240,16 @@ export function useDeleteProperty(): UseMutationResult<
       queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
+}
+
+/**
+ * Адрес, куда ведёт таб «Объекты» (лендинг таба, карта #583): основной
+ * объект → его страница; основного нет, но активный один → его страница;
+ * иначе список. Пока список не загружен — список (безопасный фолбэк).
+ * Хромовые поверхности (ScreenLayout → TabBar/DesktopSidebar) держат
+ * кэш тёплым с коротким staleTime, чтобы ссылка жила без шторма запросов.
+ */
+export function usePropertiesLandingHref(): string {
+  const { data } = useProperties({ staleTime: 60_000 });
+  return resolvePropertiesLandingHref(data);
 }

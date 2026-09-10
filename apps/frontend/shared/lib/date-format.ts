@@ -42,6 +42,11 @@ export function formatDottedDate(iso: IsoDate): string {
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 }
 
+/** Короткая точечная дата «01.01» без года — бейдж «Аренда с DD.MM» (#586). */
+export function formatDayMonthDotted(iso: IsoDate): string {
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+}
+
 /** Подпись границы диапазона в пикере периода: текущий год — «1 ноября»
  * (склонённый месяц, как в строках списков), другой год — «01.01.2025». */
 export function formatRangeBound(bound: IsoDate, today: IsoDate): string {

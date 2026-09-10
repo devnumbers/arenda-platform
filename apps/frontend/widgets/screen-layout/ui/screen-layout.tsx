@@ -10,6 +10,7 @@ import {
   TabBar,
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
+import { usePropertiesLandingHref } from '@/features/properties';
 import { PushPermissionGate } from './push-permission-gate';
 import { TopNavUserProvider } from './top-nav-user-provider';
 
@@ -37,17 +38,21 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
   // PullToRefresh drives `transform` on the content node during the gesture,
   // so the layout shares its ref with the component.
   const contentRef = useRef<HTMLDivElement>(null);
+  // Лендинг таба «Объекты» (карта #583): основной объект / единственный
+  // активный / список — пока список не загружен, обе поверхности ведут
+  // на список (безопасный фолбэк хука).
+  const propertiesHref = usePropertiesLandingHref();
 
   return (
     <TabBarVisibilityProvider>
       <TopNavUserProvider>
         <div className="flex min-h-screen flex-col tablet:pt-[72px]">
-          <DesktopSidebar />
+          <DesktopSidebar propertiesHref={propertiesHref} />
           <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
             {children}
           </div>
           <DesktopNavPills />
-          <TabBar />
+          <TabBar propertiesHref={propertiesHref} />
           <ServiceWorkerRegister />
           <ServiceWorkerUpdater />
           <PullToRefresh contentRef={contentRef} />

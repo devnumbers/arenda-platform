@@ -31,6 +31,10 @@ export type TabBarRowProps = {
   readonly onMoreSelect: () => void;
   /** Тап по табу-ссылке; внутри шита закрывает его перед переходом. */
   readonly onNavigate?: () => void;
+  /** Лендинг таба «Объекты» (карта #583): основной объект / единственный
+   * активный / список — решает ScreenLayout (usePropertiesLandingHref);
+   * undefined — базовый href нав-модели (список). */
+  readonly propertiesHref?: string;
 };
 
 /** Ряд табов «Объекты / Уведомления / Еще» (Figma 1721:64793): один и тот же
@@ -49,6 +53,7 @@ export function TabBarRow({
   moreExpanded = false,
   onMoreSelect,
   onNavigate,
+  propertiesHref,
 }: TabBarRowProps): JSX.Element {
   const pathname = usePathname();
   const activeTab = moreActive ? 'more' : getActiveMobileTab(pathname);
@@ -59,6 +64,7 @@ export function TabBarRow({
         <TabNavLink
           key={section.id}
           section={section}
+          href={section.id === 'properties' && propertiesHref !== undefined ? propertiesHref : section.href}
           active={activeTab === section.id}
           onClick={onNavigate}
         />
@@ -79,16 +85,19 @@ export function TabBarRow({
  * (MoreSheet рендерит те же 6 разделов нав-модели этим компонентом). */
 export function TabNavLink({
   section,
+  href,
   active,
   onClick,
 }: {
   readonly section: NavSection;
+  /** Переопределение адреса (лендинг «Объектов»); по умолчанию — нав-модель. */
+  readonly href?: string;
   readonly active: boolean;
   readonly onClick?: () => void;
 }): JSX.Element {
   return (
     <Link
-      href={section.href}
+      href={href ?? section.href}
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
       className={TAB_TRIGGER_CLASS}

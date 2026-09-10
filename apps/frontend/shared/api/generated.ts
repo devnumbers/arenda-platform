@@ -2663,6 +2663,11 @@ export interface components {
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
             /**
+             * Format: date
+             * @description The reading actor's calendar date (ADR 0048) — the «today» the client counts the «Осталось N месяцев» rental badge against (ticket #586; the tasks feed's today rule, #521).
+             */
+            today: string;
+            /**
              * @description Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
              * @default 0
              */

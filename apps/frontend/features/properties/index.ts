@@ -1,11 +1,17 @@
 export * from './api';
 
-export { usePropertiesWithMeta } from './api/hooks';
-export type { DeletePropertyMode } from './api/hooks';
-export { getDisplayStatus, statusFilterOptions } from './lib/property-statuses';
+export { usePropertiesWithMeta, usePropertiesLandingHref } from './api/hooks';
+export type { DeletePropertyMode, PropertiesListResult } from './api/hooks';
 export { canMutateProperty } from './lib/can-mutate-property';
-export type { StatusFilterValue } from './lib/property-statuses';
 export { propertyTypeLabels, propertyTypeOptions } from './lib/property-types';
+export {
+  hasPropertyAttentionDot,
+  propertyBadges,
+  type PropertyBadge,
+  type PropertyBadgeKey,
+  type PropertyBadgeTone,
+} from './lib/property-badges';
+export { resolvePropertiesLandingHref } from './lib/property-landing';
 export {
   initialPropertyCreateStep,
   isApartmentCategory,

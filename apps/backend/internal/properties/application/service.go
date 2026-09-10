@@ -70,6 +70,7 @@ type PropertyService struct {
 	sharedDeleteMailer SharedMembersDeleteMailer
 	rentalOccupancy    RentalOccupancyReader
 	overdueOperations  OverdueOperationsReader
+	ownerCalendar      OwnerCalendar
 	logger             *slog.Logger
 }
 
@@ -141,6 +142,13 @@ func (s *PropertyService) SetRentalOccupancyReader(reader RentalOccupancyReader)
 // report no overdue flags (ticket #585).
 func (s *PropertyService) SetOverdueOperationsReader(reader OverdueOperationsReader) {
 	s.overdueOperations = reader
+}
+
+// SetOwnerCalendar injects the calendar adapter that resolves the reading
+// actor's calendar date (ADR 0048) for the list responses (ticket #586).
+// Optional: when not set, the lists fall back to the server clock's UTC date.
+func (s *PropertyService) SetOwnerCalendar(calendar OwnerCalendar) {
+	s.ownerCalendar = calendar
 }
 
 // enrichListProjections fills the per-property occupancy and the overdue flag
@@ -272,10 +280,15 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 	return created, nil
 }
 
-func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) ([]domain.Property, error) {
+func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (PropertiesPage, error) {
+	today, err := s.listToday(ctx, actor)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+
 	properties, err := s.repo.ListActiveByOwner(ctx, actor)
 	if err != nil {
-		return nil, fmt.Errorf("list properties: %w", err)
+		return PropertiesPage{}, fmt.Errorf("list properties: %w", err)
 	}
 
 	// Own properties are read with the owner role (issue T11).
@@ -287,14 +300,18 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 	properties, err = s.appendSharedProperties(ctx, actor, properties,
 		domain.PropertyStatusActive, domain.PropertyStatusMaintenance)
 	if err != nil {
-		return nil, err
+		return PropertiesPage{}, err
 	}
 
 	if err := s.enrichListProjections(ctx, properties); err != nil {
-		return nil, err
+		return PropertiesPage{}, err
 	}
 
-	return s.withPhotos(ctx, s.pinnedFirst(properties)...)
+	items, err := s.withPhotos(ctx, s.pinnedFirst(properties)...)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+	return PropertiesPage{Items: items, Today: today}, nil
 }
 
 // pinnedFirst lifts the pinned properties above the unpinned ones (ticket
@@ -378,10 +395,15 @@ func isSharedAccessRole(role sharedpolicy.Role) bool {
 	return role == sharedpolicy.RoleFullAccess || role == sharedpolicy.RoleViewer
 }
 
-func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid.UUID) ([]domain.Property, error) {
+func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid.UUID) (PropertiesPage, error) {
+	today, err := s.listToday(ctx, actor)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+
 	properties, err := s.repo.ListArchivedByOwner(ctx, actor)
 	if err != nil {
-		return nil, fmt.Errorf("list archived properties: %w", err)
+		return PropertiesPage{}, fmt.Errorf("list archived properties: %w", err)
 	}
 
 	// Own properties are read with the owner role (issue T11).
@@ -392,14 +414,33 @@ func (s *PropertyService) ListArchivedProperties(ctx context.Context, actor uuid
 	// The archive list carries archived objects only.
 	properties, err = s.appendSharedProperties(ctx, actor, properties, domain.PropertyStatusArchived)
 	if err != nil {
-		return nil, err
+		return PropertiesPage{}, err
 	}
 
 	if err := s.enrichListProjections(ctx, properties); err != nil {
-		return nil, err
+		return PropertiesPage{}, err
 	}
 
-	return s.withPhotos(ctx, properties...)
+	items, err := s.withPhotos(ctx, properties...)
+	if err != nil {
+		return PropertiesPage{}, err
+	}
+	return PropertiesPage{Items: items, Today: today}, nil
+}
+
+// listToday resolves the reading actor's calendar date (ADR 0048) for the
+// list responses (ticket #586). The calendar port is optional: unwired (unit
+// tests), the server clock's UTC date stands in.
+func (s *PropertyService) listToday(ctx context.Context, actor uuid.UUID) (time.Time, error) {
+	if s.ownerCalendar != nil {
+		today, err := s.ownerCalendar.Today(ctx, actor)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("resolve actor today: %w", err)
+		}
+		return today, nil
+	}
+	now := s.clock.Now().UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), nil
 }
 
 func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {

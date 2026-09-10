@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { PropertiesPage } from '@/widgets/properties';
-import { parseFiltersFromParams, parseSortFromParams } from '@/widgets/properties';
+import { PropertiesPage, parseSortFromParams } from '@/widgets/properties';
 
 export const metadata: Metadata = {
   title: 'Архивные объекты — Рентли',
@@ -13,8 +12,7 @@ type PropertiesArchivePageProps = {
 
 export default async function PropertiesArchivePage({ searchParams }: PropertiesArchivePageProps) {
   const resolved = searchParams ? await searchParams : {};
-  const initialFilters = parseFiltersFromParams(resolved);
   const initialSort = parseSortFromParams(resolved);
 
-  return <PropertiesPage mode="archived" initialFilters={initialFilters} initialSort={initialSort} />;
+  return <PropertiesPage mode="archived" initialSort={initialSort} />;
 }

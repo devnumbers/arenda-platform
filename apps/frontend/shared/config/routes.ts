@@ -4,6 +4,8 @@ export const ROUTES = {
   property: (id: string) => `/properties/${id}`,
   propertyArchive: '/properties/archive',
   propertyNew: '/properties/new',
+  /** Поиск по объектам (#586): вход — пилюля на хабе «Объекты». */
+  propertySearch: '/properties/search',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
   /** Экран «Платежи объекта» — новый хром (#463). */
   propertyPayments: (id: string) => `/properties/${id}/payments`,

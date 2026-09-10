@@ -1,17 +1,10 @@
-.root {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  /* Горизонтальный отступ строк канона PageContent (24px) — в модуле,
-   * не tailwind-утилитой: unlayered CSS перебивает слоёные утилиты.
-   * Вертикальные отступы (pt-6/pb-136) приносит сам PageContent. */
-  padding: 0 24px;
-}
-
+/* Список-хаб «Объектов» (#586): карточки с зазором 16 (макет 1590:88756),
+ * сноска скрытых шаренных объектов под списком. Горизонтальный отступ
+ * контента (24px) несёт обёртка экрана в PropertiesPage. */
 .list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -19,13 +12,9 @@
 
 .hiddenSharedNote {
   margin: 0;
-  color: var(--color-text-muted, #6b7280);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-@media (min-width: 768px) {
-  .root {
-    gap: 32px;
-  }
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 15px;
+  color: var(--dl-text-secondary);
+  text-align: center;
 }

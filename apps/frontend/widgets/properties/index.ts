@@ -1,4 +1,5 @@
-export { parseFiltersFromParams, parseSortFromParams } from './lib/parse-property-search-params';
+export { parseSortFromParams } from './lib/property-sort';
 export { PropertiesPage } from './ui/PropertiesPage';
 export { PropertyCreateWizardScreen } from './ui/property-create-wizard/property-create-wizard-screen';
 export { PropertyEditForm } from './ui/PropertyEditForm';
+export { PropertiesSearchScreen } from './ui/PropertiesSearchScreen';

@@ -7,6 +7,9 @@ import { cn } from '@/shared/lib/cn';
 
 export type DesktopMenuButtonProps = {
   readonly section: NavSection;
+  /** Переопределение адреса (лендинг «Объектов», карта #583);
+   * undefined — href нав-модели. */
+  readonly href?: string;
   readonly active?: boolean;
   readonly className?: string;
 };
@@ -25,12 +28,13 @@ export type DesktopMenuButtonProps = {
  * TabBarRow). */
 export function DesktopMenuButton({
   section,
+  href,
   active = false,
   className,
 }: DesktopMenuButtonProps): JSX.Element {
   return (
     <Link
-      href={section.href}
+      href={href ?? section.href}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'flex h-11 w-[200px] cursor-pointer overflow-clip rounded-button font-sans outline-none',

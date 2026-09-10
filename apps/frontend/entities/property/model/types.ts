@@ -57,6 +57,14 @@ export type Property = {
   readonly photos?: PropertyPhoto[];
   readonly access?: PropertyAccess;
   readonly members_count: number;
+  /** Момент создания (ISO date-time) — сортировка «По дате создания» (#586). */
+  readonly created_at: string;
+  /**
+   * Основной объект (канон резолюции #584): null — обычный объект, момент —
+   * основной с этого времени; среди основных первый отмеченный выше.
+   * Контракт API держит имя pin (#577), домен — «основной объект».
+   */
+  readonly pinned_at: string | null;
   /** Занятость: только списочные рендеры (GET /properties, /properties/archive). */
   readonly occupancy?: PropertyOccupancy;
   /** Просроченные плановые операции — вторая причина красной точки (резолюция #584). */

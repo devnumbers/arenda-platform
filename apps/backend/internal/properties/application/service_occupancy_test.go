@@ -66,8 +66,8 @@ func listByIDs(t *testing.T, svc *PropertyService, actor uuid.UUID) map[uuid.UUI
 	if err != nil {
 		t.Fatalf("ListProperties failed: %v", err)
 	}
-	byID := make(map[uuid.UUID]domain.Property, len(result))
-	for _, p := range result {
+	byID := make(map[uuid.UUID]domain.Property, len(result.Items))
+	for _, p := range result.Items {
 		byID[p.ID] = p
 	}
 	return byID
@@ -187,13 +187,13 @@ func TestListProperties_OccupancyNotWired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProperties failed: %v", err)
 	}
-	if len(result) != 1 {
-		t.Fatalf("expected 1 property, got %d", len(result))
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 property, got %d", len(result.Items))
 	}
-	if result[0].Occupancy != nil {
-		t.Errorf("occupancy = %v, want unreported (nil)", result[0].Occupancy)
+	if result.Items[0].Occupancy != nil {
+		t.Errorf("occupancy = %v, want unreported (nil)", result.Items[0].Occupancy)
 	}
-	if result[0].HasOverdueOperations {
+	if result.Items[0].HasOverdueOperations {
 		t.Errorf("HasOverdueOperations = true, want false")
 	}
 }
@@ -222,13 +222,13 @@ func TestListArchivedProperties_OccupancyProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListArchivedProperties failed: %v", err)
 	}
-	if len(result) != 1 {
-		t.Fatalf("expected 1 property, got %d", len(result))
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 property, got %d", len(result.Items))
 	}
-	if got := result[0].Occupancy; got == nil || got.Status != domain.OccupancyNeedsAttention {
+	if got := result.Items[0].Occupancy; got == nil || got.Status != domain.OccupancyNeedsAttention {
 		t.Errorf("archived occupancy = %v, want needs_attention", got)
 	}
-	if !result[0].HasOverdueOperations {
+	if !result.Items[0].HasOverdueOperations {
 		t.Errorf("archived HasOverdueOperations = false, want true")
 	}
 }
@@ -257,5 +257,57 @@ func TestListProperties_OccupancyReadError(t *testing.T) {
 	svc2.SetOverdueOperationsReader(&fakeOverdueOps{err: errors.New("boom")})
 	if _, err := svc2.ListProperties(context.Background(), ownerID); err == nil {
 		t.Fatalf("ListProperties must fail when the overdue read fails")
+	}
+}
+
+// fakeOwnerCalendar returns a fixed calendar date and records the user it was
+// asked about (ticket #586).
+type fakeOwnerCalendar struct {
+	today time.Time
+	got   uuid.UUID
+}
+
+func (f *fakeOwnerCalendar) Today(_ context.Context, userID uuid.UUID) (time.Time, error) {
+	f.got = userID
+	return f.today, nil
+}
+
+// TestListProperties_CarriesActorToday verifies the list response carries the
+// reading actor's calendar date (ADR 0048) for the client's badge math —
+// asked for the actor, not for a property's data owner (ticket #586).
+func TestListProperties_CarriesActorToday(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	ownID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	repo := scopedPropertyRepo{newFakePropertyRepo(
+		domain.Property{
+			ID: ownID, OwnerID: ownerID, Name: testPropertyName, Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
+	)}
+	svc := occupancyTestService(t, repo)
+
+	today := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	calendar := &fakeOwnerCalendar{today: today}
+	svc.SetOwnerCalendar(calendar)
+
+	page, err := svc.ListProperties(context.Background(), ownerID)
+	if err != nil {
+		t.Fatalf("ListProperties failed: %v", err)
+	}
+	if !page.Today.Equal(today) {
+		t.Errorf("page.Today = %v, want %v", page.Today, today)
+	}
+	if calendar.got != ownerID {
+		t.Errorf("calendar asked for %v, want the reading actor %v", calendar.got, ownerID)
+	}
+
+	archived, err := svc.ListArchivedProperties(context.Background(), ownerID)
+	if err != nil {
+		t.Fatalf("ListArchivedProperties failed: %v", err)
+	}
+	if !archived.Today.Equal(today) {
+		t.Errorf("archived page.Today = %v, want %v", archived.Today, today)
 	}
 }

@@ -6122,12 +6122,19 @@ components:
 
     PropertiesResponse:
       type: object
-      required: [items]
+      required: [items, today]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/PropertyResponse'
+        today:
+          type: string
+          format: date
+          description: >
+            The reading actor's calendar date (ADR 0048) — the «today» the
+            client counts the «Осталось N месяцев» rental badge against
+            (ticket #586; the tasks feed's today rule, #521).
         hidden_shared_count:
           type: integer
           description: >

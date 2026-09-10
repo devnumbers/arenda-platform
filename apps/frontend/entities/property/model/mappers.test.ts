@@ -42,6 +42,24 @@ describe('mapPropertyResponse access', () => {
   });
 });
 
+describe('mapPropertyResponse list projections (#586)', () => {
+  it('maps created_at and pinned_at as-is', () => {
+    const property = mapPropertyResponse(
+      makeDto({
+        created_at: '2025-06-15T10:30:00Z',
+        pinned_at: '2026-09-01T08:00:00Z',
+      }),
+    );
+
+    expect(property.created_at).toBe('2025-06-15T10:30:00Z');
+    expect(property.pinned_at).toBe('2026-09-01T08:00:00Z');
+  });
+
+  it('keeps pinned_at null for a regular property', () => {
+    expect(mapPropertyResponse(makeDto()).pinned_at).toBeNull();
+  });
+});
+
 describe('mapPropertyResponse occupancy', () => {
   it('maps occupancy and has_overdue_operations', () => {
     const property = mapPropertyResponse(

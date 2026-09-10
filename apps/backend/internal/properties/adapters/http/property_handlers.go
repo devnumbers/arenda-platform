@@ -193,14 +193,14 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	properties, err := h.svc.ListProperties(r.Context(), actor)
+	page, err := h.svc.ListProperties(r.Context(), actor)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	items := make([]openapi.PropertyResponse, 0, len(properties))
-	for _, property := range properties {
+	items := make([]openapi.PropertyResponse, 0, len(page.Items))
+	for _, property := range page.Items {
 		items = append(items, h.propertyResponse(property))
 	}
 
@@ -217,6 +217,7 @@ func (h *PropertyHandlers) ListProperties(w http.ResponseWriter, r *http.Request
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{
 		Items:             items,
+		Today:             openapi_types.Date{Time: page.Today},
 		HiddenSharedCount: &hiddenSharedCount,
 	})
 }
@@ -230,18 +231,21 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 		return
 	}
 
-	properties, err := h.svc.ListArchivedProperties(r.Context(), actor)
+	page, err := h.svc.ListArchivedProperties(r.Context(), actor)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 
-	items := make([]openapi.PropertyResponse, 0, len(properties))
-	for _, property := range properties {
+	items := make([]openapi.PropertyResponse, 0, len(page.Items))
+	for _, property := range page.Items {
 		items = append(items, h.propertyResponse(property))
 	}
 
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{Items: items})
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{
+		Items: items,
+		Today: openapi_types.Date{Time: page.Today},
+	})
 }
 
 // GetProperty implements GET /properties/{id}.
