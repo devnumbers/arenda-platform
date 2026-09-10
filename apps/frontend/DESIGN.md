@@ -276,8 +276,10 @@ leading-слот, заголовок + подзаголовок, значени�
   `SkeletonSection` — серая секция с заголовком и строками; `SkeletonCard`
   — карточка-плитка 168.5; `SkeletonMedia` — блок фото/баннера (размер
   через className); `SkeletonButton` — строка CTA-кнопки (h-14, как Button
-  large). Тон блоков: на белом `bg-surface-muted`, внутри серой карточки
-  `bg-surface-muted-hover` (`skeletonBlockClass`).
+  large); `SkeletonRoundAction` — круглая кнопка действия (#606: круг 56 +
+  подпись 13/15, как RoundActionButton). Тон блоков: на белом
+  `bg-surface-muted`, внутри серой карточки `bg-surface-muted-hover`
+  (`skeletonBlockClass`).
 - Пустой список прячет служебные чипы (сортировка/фильтры) вместе с собой.
 - Совсем пустая книга (neverHad, #478) прячет и иконки шапки; создание —
   CTA-кнопкой в самом состоянии (#571, решение владельца 2026-09-08).

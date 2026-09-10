@@ -99,7 +99,9 @@ export function PaymentHistoryScreen({
             </div>
           )}
 
-          {historyQuery.isPending && <PaymentGroupedListSkeleton groups={[1, 1, 1]} />}
+          {historyQuery.isPending && (
+            <PaymentGroupedListSkeleton rowsPerGroup={[1, 1, 1]} />
+          )}
 
           {historyQuery.isError && (
             <PaymentsStateCard

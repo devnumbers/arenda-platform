@@ -1,5 +1,10 @@
 import type { JSX } from 'react';
-import { Skeleton, SkeletonListRow, skeletonBlockClass } from '@/shared/ui/design';
+import {
+  Skeleton,
+  SkeletonListRow,
+  SkeletonRoundAction,
+  skeletonBlockClass,
+} from '@/shared/ui/design';
 
 /**
  * Скелетон экрана «Аренда» (#606, паритет — §7 DESIGN.md): композиция
@@ -22,16 +27,6 @@ function SkeletonGroupHeader({ titleWidth, arrow = true }: {
     <span className="flex items-center gap-3">
       <Skeleton className={`h-6 ${titleWidth} ${MUTED}`} />
       {arrow && <Skeleton className={`h-6 w-6 shrink-0 ${MUTED}`} />}
-    </span>
-  );
-}
-
-/** Круглая кнопка-заглушка: круг 56 и подпись 13/15 с зазором 8. */
-function SkeletonRoundAction(): JSX.Element {
-  return (
-    <span aria-hidden className="flex flex-col items-center gap-2">
-      <Skeleton className="h-14 w-14 rounded-pill" />
-      <Skeleton className="h-[15px] w-12" />
     </span>
   );
 }

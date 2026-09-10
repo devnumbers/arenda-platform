@@ -1,5 +1,11 @@
 import type { JSX, ReactNode } from 'react';
-import { Skeleton, SkeletonListRow, skeletonBlockClass, skeletonRowWidths } from '@/shared/ui/design';
+import {
+  Skeleton,
+  SkeletonListRow,
+  SkeletonRoundAction,
+  skeletonBlockClass,
+  skeletonRowWidths,
+} from '@/shared/ui/design';
 
 /**
  * Скелетоны-архетипы детализаций платежей (#606, паритет — §7 DESIGN.md):
@@ -38,17 +44,6 @@ function SkeletonOperationSection({ children }: { readonly children: ReactNode }
       </div>
       <div className="flex flex-col">{children}</div>
     </section>
-  );
-}
-
-/** Круглая кнопка-заглушка: каркас RoundActionButton — круг 56 и подпись
- * 13/15 с зазором 8; тон базовый — реальный круг secondary сам серый. */
-function SkeletonRoundAction(): JSX.Element {
-  return (
-    <span className="flex flex-col items-center gap-2">
-      <Skeleton className="h-14 w-14 rounded-pill" />
-      <Skeleton className="h-[15px] w-12" />
-    </span>
   );
 }
 
@@ -176,13 +171,13 @@ export function OperationDetailSkeleton(): JSX.Element {
  * срез контента (первая порция).
  */
 export function PaymentGroupedListSkeleton({
-  groups,
+  rowsPerGroup,
 }: {
-  readonly groups: ReadonlyArray<number>;
+  readonly rowsPerGroup: ReadonlyArray<number>;
 }): JSX.Element {
   return (
     <>
-      {groups.map((rows, groupIndex) => (
+      {rowsPerGroup.map((rows, groupIndex) => (
         <section key={groupIndex} aria-hidden className="flex flex-col">
           <Skeleton className="mx-6 h-6 w-24" />
           {skeletonRowWidths(rows).map((rowWidths, index) => (
