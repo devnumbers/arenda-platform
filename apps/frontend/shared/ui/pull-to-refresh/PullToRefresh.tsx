@@ -15,7 +15,7 @@ import { useStandalone } from '@/shared/lib/hooks/useStandalone';
 import styles from './PullToRefresh.module.css';
 
 /**
- * Native-feel pull-to-refresh for the standalone cabinet PWA.
+ * Native-feel pull-to-refresh for the standalone app PWA.
  *
  * Native pull-to-refresh is disabled by the OS in PWA standalone mode on iOS
  * (and not shown on Android either). This component reproduces the iOS
@@ -30,10 +30,12 @@ import styles from './PullToRefresh.module.css';
  *
  * See `docs/adr/0031-pwa-pull-to-refresh.md` for the full decision record.
  *
- * The component needs to drive `transform` on the cabinet content node, so it
- * accepts a `contentRef` that the layout attaches to its `.content` element.
- * `Sidebar` and `BottomNav` are `position: fixed` and deliberately stay put —
- * exactly like native apps, where the status bar and tab bar do not move.
+ * The component needs to drive `transform` on the app content node, so it
+ * accepts a `contentRef` that the layout attaches to its content wrapper
+ * (ScreenLayout since #568, ex-CabinetLayout). Fixed chrome (TabBar,
+ * desktop sidebar and pills) is `position: fixed` and deliberately stays
+ * put — exactly like native apps, where the status bar and tab bar do not
+ * move.
  */
 
 /** Real drag distance (after resistance) that arms the refresh. */
@@ -55,7 +57,7 @@ const OVERSCROLL_SUPPRESS_CLASS = 'ptr-suppress-overscroll';
 type Phase = 'idle' | 'pulling' | 'armed' | 'refreshing';
 
 export type PullToRefreshProps = {
-    /** Ref to the cabinet content node that the gesture translates. */
+    /** Ref to the app content node that the gesture translates. */
     readonly contentRef: RefObject<HTMLDivElement | null>;
 };
 

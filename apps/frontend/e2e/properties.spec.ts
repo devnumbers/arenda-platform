@@ -16,10 +16,24 @@ test('список объектов: карточки сид-объектов и
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/properties');
 
-  await expect(page.getByRole('heading', { name: 'Мои объекты' })).toBeVisible();
+  // Хаб нового хрома (карта #556, тикет #562): заголовок 28, «+» создания.
+  await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Создать объект' })).toBeVisible();
   for (const name of SEEDED_PROPERTIES) {
     await expect(page.getByText(name, { exact: true })).toBeVisible();
   }
 
   await captureScreen(page, testInfo, 'properties');
+});
+
+test('архив объектов: шапка подэкрана с «Назад», не 404', async ({ page, seededUser }, testInfo) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/properties/archive');
+
+  // Подэкран: ведущая «Назад» на список, заголовок в хедере, «+» в trailing.
+  await expect(page.getByRole('button', { name: 'Назад' })).toBeVisible();
+  await expect(page.getByText('Архивные объекты')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Создать объект' })).toBeVisible();
+
+  await captureScreen(page, testInfo, 'properties-archive');
 });

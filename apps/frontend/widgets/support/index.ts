@@ -1,1 +1,1 @@
-export { SupportPage } from './ui/SupportPage';
+export { SupportScreen } from './ui/support-screen';

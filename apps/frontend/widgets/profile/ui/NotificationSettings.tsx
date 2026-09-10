@@ -3,9 +3,7 @@
 import { useCallback, useMemo, useRef, useState, type JSX } from 'react';
 import { Checkbox } from '@heroui/react';
 import { notify } from '@/shared/lib/notifications';
-import { ROUTES } from '@/shared/config/routes';
 import { Button } from '@/shared/ui/button';
-import { PageHeader } from '@/shared/ui/page-header';
 import {
   useNotificationPreferences,
   useUpdateNotificationPreferences,
@@ -234,7 +232,6 @@ export function NotificationSettings(): JSX.Element {
 
   return (
     <>
-      <PageHeader title="Уведомления" backHref={ROUTES.profile} />
       {isError && (
         <div className={styles.error}>
           <p className={styles.errorText}>Не удалось загрузить данные</p>

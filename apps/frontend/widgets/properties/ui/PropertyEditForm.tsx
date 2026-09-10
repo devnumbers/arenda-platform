@@ -8,7 +8,6 @@ import {goBack} from '@/shared/lib/navigation';
 import {useProperty, useUpdateProperty} from '@/features/properties';
 import {TextField} from '@/shared/ui/text-field';
 import {Button} from '@/shared/ui/button';
-import {PageHeader} from '@/shared/ui/page-header';
 import type {PropertyAttributes, PropertyType} from '@/entities/property';
 import {coerceAttributes} from '@/entities/property';
 import {
@@ -209,7 +208,6 @@ export function PropertyEditForm({
 
     return (
         <form className={styles.root} onSubmit={(event) => void handleSubmit(event)}>
-            <PageHeader title="Информация об объекте" backHref={ROUTES.property(propertyId)}/>
 
             <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Данные</h2>

@@ -2,7 +2,10 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 0 0 96px;
+  /* Горизонтальный отступ строк канона PageContent (24px) — в модуле,
+   * не tailwind-утилитой: unlayered CSS перебивает слоёные утилиты.
+   * Вертикальные отступы (pt-6/pb-136) приносит сам PageContent. */
+  padding: 0 24px;
 }
 
 .list {

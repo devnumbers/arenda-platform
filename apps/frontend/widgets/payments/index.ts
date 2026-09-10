@@ -1,4 +1,5 @@
 export { PaymentsOfPropertyScreen } from './ui/payments-of-property-screen';
+export { PaymentsStubScreen } from './ui/payments-stub-screen';
 export { OperationsOfPropertyScreen } from './ui/operations-of-property-screen';
 export { OperationsGlobalScreen } from './ui/operations-global-screen';
 export { OperationsObjectsSelectScreen } from './ui/operations-objects-select-screen';

@@ -6,10 +6,10 @@ import { isStandaloneMode } from './standalone';
 import { markStandaloneClient } from './standalone-store';
 
 /**
- * Registers the cabinet service worker (`/sw.js`) with scope `/`.
+ * Registers the app service worker (`/sw.js`) with scope `/`.
  *
- * The SW is registered on every cabinet route (this component is mounted inside
- * the cabinet layout) and deliberately not registered on landing routes to
+ * The SW is registered on every app route (this component is mounted inside
+ * the app-wide ScreenLayout) and deliberately not registered on landing routes to
  * avoid waking it up unnecessarily. The scope is still `/` (the origin root),
  * and the SW's fetch handler filters cabinet paths itself — see `public/sw.js`.
  *
@@ -23,7 +23,7 @@ import { markStandaloneClient } from './standalone-store';
  * for `/sw.js` in `next.config.ts` and at the Caddy layer.
  *
  * A `message` listener forwards push-notification click targets (posted by the
- * SW `notificationclick` handler when an existing cabinet window is already
+ * SW `notificationclick` handler when an existing app window is already
  * open) to Next.js App Router, so tapping a notification navigates the focused
  * tab instead of opening a duplicate.
  */

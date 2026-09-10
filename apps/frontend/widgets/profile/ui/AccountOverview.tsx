@@ -5,7 +5,6 @@ import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
 import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
-import {PageHeader} from '@/shared/ui/page-header';
 import {SmallArrowRight} from '@/shared/assets/icons';
 import {useMe} from '@/features/auth';
 import {ROUTES} from '@/shared/config/routes';
@@ -24,8 +23,7 @@ export function AccountOverview(): JSX.Element {
 
     return (
         <>
-            <PageHeader title="Аккаунт" backHref={ROUTES.profile}/>
-            {isError && (
+          {isError && (
                 <div className={styles.error}>
                     <p className={styles.errorText}>Не удалось загрузить данные</p>
                     <Button onClick={() => void refetch()} variant="secondary">

@@ -43,6 +43,9 @@ export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar'
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';
 export { PageContent, type PageContentProps } from './page-content';
 export { TopNav, type TopNavProps, TopNavTitle, type TopNavTitleProps } from './top-nav';
+export { TopNavBackButton, type TopNavBackButtonProps } from './top-nav-back-button';
+export { HubTitle, type HubTitleProps } from './hub-title';
+export { SubScreenShell, type SubScreenShellProps } from './sub-screen-shell';
 export {
   TopNavUserContext,
   TopNavUserContextProvider,
@@ -54,6 +57,12 @@ export {
   TabBarVisibilityProvider,
   useTabBarSuppression,
 } from './tab-bar';
+export { MoreSheet, type MoreSheetProps } from './more-sheet';
+export { HubCollapseAnchor } from './hub-collapse';
+export type { TopNavCollapse } from './top-nav';
+export { DesktopMenuButton, type DesktopMenuButtonProps } from './desktop-menu-button';
+export { DesktopSidebar } from './desktop-sidebar';
+export { DesktopNavPills } from './desktop-nav-pills';
 export { HeaderLogo, type HeaderLogoProps } from './header-logo';
 export {
   Modal,

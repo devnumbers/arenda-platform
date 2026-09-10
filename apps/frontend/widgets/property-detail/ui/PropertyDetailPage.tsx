@@ -16,7 +16,7 @@ import {
 } from '@/features/properties';
 import type {ApiError} from '@/shared/api/errors';
 import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
-import {PropertyDetailHeader} from './PropertyDetailHeader';
+import {SubScreenShell} from '@/shared/ui/design';
 import {PropertyGallery} from './PropertyGallery';
 import {PropertyStatusSection} from './PropertyStatusSection';
 import {PropertyInfoCard} from './PropertyInfoCard';
@@ -133,10 +133,13 @@ export function PropertyDetailPage(): JSX.Element {
     const isLoading = propertyQuery.isPending;
 
     return (
-        <div className={styles.root}>
-            <PropertyDetailHeader
+        <>
+            {/* Единый хром подэкрана (карта #556): каркас SubScreenShell,
+                меню действий — в слоте trailing, «Назад» — на список. */}
+            <SubScreenShell
                 title="Мой объект"
-                actions={
+                fallbackHref={ROUTES.properties}
+                trailing={
                     <PropertyActionMenu
                         status={property?.status}
                         disabled={isLoading || propertyQuery.isError || !property}
@@ -147,56 +150,58 @@ export function PropertyDetailPage(): JSX.Element {
                         onDelete={() => setDeleteOpen(true)}
                     />
                 }
-            />
+            >
+                <div className={styles.root}>
+                    {property?.access && property.access.role !== 'owner' && (
+                        <PropertySharedBanner access={property.access}/>
+                    )}
 
-            {property?.access && property.access.role !== 'owner' && (
-                <PropertySharedBanner access={property.access}/>
-            )}
+                    {isLoading && <PropertyDetailLoading/>}
 
-            {isLoading && <PropertyDetailLoading/>}
+                    {!isLoading && propertyErrorKind === 'not_found' && (
+                        <PropertyNotFoundScreen/>
+                    )}
 
-            {!isLoading && propertyErrorKind === 'not_found' && (
-                <PropertyNotFoundScreen/>
-            )}
+                    {!isLoading && propertyErrorKind === 'suspended' && (
+                        <PropertySuspendedScreen/>
+                    )}
 
-            {!isLoading && propertyErrorKind === 'suspended' && (
-                <PropertySuspendedScreen/>
-            )}
+                    {!isLoading && (propertyErrorKind === null || propertyErrorKind === 'generic') &&
+                        (propertyQuery.isError || !property) && (
+                        <PropertyDetailError
+                            onRetry={() => {
+                                void propertyQuery.refetch();
+                            }}
+                            isLoading={propertyQuery.isFetching}
+                        />
+                    )}
 
-            {!isLoading && (propertyErrorKind === null || propertyErrorKind === 'generic') &&
-                (propertyQuery.isError || !property) && (
-                <PropertyDetailError
-                    onRetry={() => {
-                        void propertyQuery.refetch();
-                    }}
-                    isLoading={propertyQuery.isFetching}
-                />
-            )}
+                    {!isLoading && !propertyQuery.isError && property && (
+                        <>
+                            <PropertyGallery/>
 
-            {!isLoading && !propertyQuery.isError && property && (
-                <>
-                    <PropertyGallery/>
+                            <PropertyStatusSection property={property}/>
 
-                    <PropertyStatusSection property={property}/>
+                            <PropertyInfoCard
+                                description={property.description}
+                                propertyId={id}
+                                isArchived={property.status === 'archived'}
+                            />
 
-                    <PropertyInfoCard
-                        description={property.description}
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
+                            <PropertyAttributesSection
+                                type={property.type}
+                                attributes={property.attributes}
+                                propertyId={id}
+                                isArchived={property.status === 'archived'}
+                            />
 
-                    <PropertyAttributesSection
-                        type={property.type}
-                        attributes={property.attributes}
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
+                            <PropertyPaymentsSection propertyId={id}/>
 
-                    <PropertyPaymentsSection propertyId={id}/>
-
-                    <PropertyContactsSection propertyId={id}/>
-                </>
-            )}
+                            <PropertyContactsSection propertyId={id}/>
+                        </>
+                    )}
+                </div>
+            </SubScreenShell>
 
             <PropertyArchiveModal
                 isOpen={archiveOpen}
@@ -224,6 +229,6 @@ export function PropertyDetailPage(): JSX.Element {
                 onClose={() => setSharingOpen(false)}
                 isArchived={property?.status === 'archived'}
             />
-        </div>
+        </>
     );
 }

@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 /**
- * Web App Manifest for the cabinet PWA.
+ * Web App Manifest for the app PWA.
  *
  * Served at `/manifest.webmanifest`; `<link rel="manifest">` is added by Next.js
  * automatically. Decisions are documented in issue #179 and the research note

@@ -22,6 +22,7 @@ import {
   IconButton,
   PageContent,
   SearchField,
+  TopNav,
 } from '@/shared/ui/design';
 import { LoadingMoreIndicator, OperationRow } from './operations-list';
 import { PaymentsHeading, PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
@@ -42,9 +43,9 @@ import {
  * с фильтрами из адреса: объекты (#542) и период (дефолт — текущий месяц,
  * как на ленте #541). Пустые состояния и скелетоны — как объектный поиск.
  * Ввод живёт в адресе (?q=) и догоняется дебаунсом — useSearchQueryState.
- * Каркас кабинетный (решение #542: зона /operations без TopNav — конфликт
- * с сайдбаром): шапка в потоке страницы, «назад» закрывает поиск возвратом
- * на ленту, фильтры ленты при этом сохраняются.
+ * Шапка — канон поиска: TopNav варианта search (#564), «Назад» закрывает
+ * поиск возвратом на ленту, фильтры ленты при этом сохраняются, поле
+ * получает программный фокус.
  */
 export function OperationsGlobalSearchScreen(): JSX.Element {
   const router = useRouter();
@@ -122,22 +123,25 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
   const showResults = !emptyQuery && !pending && !listQuery.isError;
 
   return (
-    <PageContent>
-      {/* Ритм страницы — ровно 24px по бокам, как на ленте (#541): шапка,
-       * чипы, состояния и строки прижаты к этому краю без своих вставок. */}
-      <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
-        <div className="flex items-center gap-1">
-          <IconButton icon={<ArrowLeft />} label="Назад" onClick={closeSearch} />
-          <SearchField
-            ref={inputRef}
-            placeholder="Найти операцию"
-            aria-label="Найти операцию"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            onClear={clear}
-          />
-        </div>
+    <>
+      {/* Канон поиска (TopNav варианта search): «Назад» на ленту — goBack
+       * по истории, прямой загрузке — на ленту с фильтрами из адреса поиска
+       * (buildReturnUrl мержит без коллизии «?»). */}
+      <TopNav
+        variant="search"
+        leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={closeSearch} />}
+      >
+        <SearchField
+          ref={inputRef}
+          placeholder="Найти операцию"
+          aria-label="Найти операцию"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onClear={clear}
+        />
+      </TopNav>
 
+      <PageContent>
         {emptyQuery && (
           <EmptyState
             imageSrc="/images/payments/operations-search.png"
@@ -147,19 +151,21 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
         )}
 
         {!emptyQuery && listQuery.isError && (
-          <PaymentsStateCard
-            title="Не удалось загрузить результаты"
-            hint="Проверьте подключение и попробуйте еще раз"
-            action={
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={() => void listQuery.refetch()}
-              >
-                Повторить
-              </Button>
-            }
-          />
+          <div className="pt-4">
+            <PaymentsStateCard
+              title="Не удалось загрузить результаты"
+              hint="Проверьте подключение и попробуйте еще раз"
+              action={
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => void listQuery.refetch()}
+                >
+                  Повторить
+                </Button>
+              }
+            />
+          </div>
         )}
 
         {pending && (
@@ -177,11 +183,11 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
               description="Такой операции нет"
             />
           ) : (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-6 pt-4">
               {chips.length > 0 && (
                 <section aria-label="Категории">
-                  <PaymentsHeading inset={false}>Категории</PaymentsHeading>
-                  <div className="flex flex-wrap gap-1.5 pt-2">
+                  <PaymentsHeading>Категории</PaymentsHeading>
+                  <div className="flex flex-wrap gap-1.5 px-6 pt-2">
                     {chips.map((chip) => (
                       <ChipButton
                         key={chip.slug}
@@ -197,7 +203,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
               )}
 
               <section aria-label="Операции">
-                <PaymentsHeading inset={false}>Операции</PaymentsHeading>
+                <PaymentsHeading>Операции</PaymentsHeading>
                 <div className="flex flex-col pt-2">
                   {operations.map((operation) => (
                     <OperationRow
@@ -205,7 +211,6 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
                       operation={operation}
                       subtitle={operation.propertyName}
                       description={formatDayMonthWithYear(operation.date, today)}
-                      className="-mx-3 px-0 py-3"
                       onSelect={() => openOperation(operation)}
                     />
                   ))}
@@ -215,7 +220,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
               </section>
             </div>
           ))}
-      </div>
-    </PageContent>
+      </PageContent>
+    </>
   );
 }

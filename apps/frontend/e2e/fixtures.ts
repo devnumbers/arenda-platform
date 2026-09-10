@@ -175,5 +175,5 @@ export async function loginViaUi(page: Page, user: SeededUser): Promise<void> {
   await page.getByRole('textbox', { name: '6-значный код' }).fill(code);
 
   await page.waitForURL('**/properties');
-  await expect(page.getByRole('heading', { name: 'Мои объекты' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Объекты' })).toBeVisible();
 }

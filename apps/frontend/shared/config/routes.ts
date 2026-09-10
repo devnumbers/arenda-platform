@@ -95,6 +95,15 @@ export const ROUTES = {
   contact: (contactId: string) => `/contacts/${contactId}`,
   /** Правка контакта из книги. */
   contactEdit: (contactId: string) => `/contacts/${contactId}/edit`,
+  /** Глобальные «Платежи» — страница-заглушка единого хрома (карта #556,
+   * тикет #559): пункт навигации есть, содержание придет отдельным усилием. */
+  payments: '/payments',
+  /** Глобальные «Участники» — страница-заглушка единого хрома (карта #556,
+   * тикет #559); сама фича шаринга доступа — вне карты. */
+  participants: '/participants',
+  /** Экран «Поддержка» (регистрирует единая нав-модель #558; страница живет
+   * до переезда на новый хром — карта #556). */
+  support: '/support',
   profile: '/profile',
   profilePersonal: '/profile/personal',
   profileNotifications: '/profile/notifications',

@@ -198,7 +198,7 @@ export function CalendarDatePicker({
           (требование владельца к бесконечному календарю); на десктопе TopNav
           зафиксирован над экраном — шапка встаёт под ним, лента скроллится
           между шапкой и нижней панелью. */}
-      <div className="shrink-0 desktop:mt-[72px]">
+      <div className="shrink-0 tablet:mt-[72px]">
         <div className="mx-auto w-full max-w-[560px]">
           <div className="px-6 pt-6">
             <MonthJumpChip
@@ -505,7 +505,7 @@ export function CalendarRangePicker({
       {/* Закреплённая шапка: поля границ «с …/по …» (следуют за тапами
           вживую), чип месяца для прыжка и строка дней недели над
           прокруткой; на десктопе TopNav зафиксирован над экраном. */}
-      <div className="shrink-0 desktop:mt-[72px]">
+      <div className="shrink-0 tablet:mt-[72px]">
         <div className="mx-auto w-full max-w-[560px]">
           <div aria-live="polite" className="grid grid-cols-2 gap-2 px-6 pt-6">
             <span className="flex h-12 items-center rounded-2xl bg-surface-muted px-4 text-base font-medium leading-[18px] text-content">

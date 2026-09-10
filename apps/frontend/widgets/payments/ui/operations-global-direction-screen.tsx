@@ -2,8 +2,9 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search } from '@/shared/assets/icons';
+import { ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { clientTodayIso, type PaymentType } from '@/entities/payment';
 import {
@@ -19,8 +20,7 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from '@/features/payments';
-import { Button, IconButton, PageContent } from '@/shared/ui/design';
-import { PageHeader } from '@/shared/ui/page-header';
+import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
 import { LoadingMoreIndicator, OperationsDateList, OperationsNeverHad } from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
@@ -51,8 +51,8 @@ export type OperationsGlobalDirectionScreenProps = {
  * на страницу операции своего объекта. Совсем пустая книга направления —
  * «Операций еще не было», как на главной (#478). В шапке — лупа на
  * существующий поиск #543 (без типа направления — решение владельца);
- * «+» из макета не делаем (решение #539). Каркас кабинетный (решение
- * #542), ритм 24px всей страницей (#541).
+ * «+» из макета не делаем (решение #539). Единый хром экранов (#564):
+ * шапка — канон подэкрана (TopNav с «Назад» на ленту и лупой в trailing).
  */
 export function OperationsGlobalDirectionScreen({
   type,
@@ -120,13 +120,19 @@ export function OperationsGlobalDirectionScreen({
 
   return (
     <>
-      {/* Шапка направления: «назад» на ленту (filterHref сохраняет фильтры)
-       * и лупа на существующий поиск (#543) с текущими фильтрами; в
-       * neverHad-состоянии лупа скрыта — конвенция зоны (#478). */}
-      <PageHeader
-        title={title}
-        backHref={filterHref(ROUTES.operations)}
-        actions={
+      {/* Шапка направления — канон подэкрана: «Назад» на ленту (goBack
+       * сохраняет фильтры прямой загрузки) и лупа на существующий поиск
+       * (#543) с текущими фильтрами; в neverHad-состоянии лупа скрыта —
+       * конвенция зоны (#478). */}
+      <TopNav
+        leading={
+          <IconButton
+            icon={<ArrowLeft />}
+            label="Назад"
+            onClick={() => goBack(router, filterHref(ROUTES.operations))}
+          />
+        }
+        trailing={
           neverHad ? undefined : (
             <IconButton
               icon={<Search />}
@@ -135,16 +141,17 @@ export function OperationsGlobalDirectionScreen({
             />
           )
         }
-      />
+      >
+        <TopNavTitle title={title} />
+      </TopNav>
 
       <PageContent>
         {neverHad ? (
           <OperationsNeverHad />
         ) : (
-          <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
-            {/* Ритм страницы — ровно 24px по бокам (#541): чипы, карточка
-             * и лента прижаты к краю контента без своих вставок. */}
+          <div className="flex flex-col gap-6 pt-4">
             <OperationsFilterChips
+              className="px-6"
               periodLabel={
                 filters.period !== null
                   ? operationsPeriodRangeChipLabel(period)
@@ -191,20 +198,21 @@ export function OperationsGlobalDirectionScreen({
                     {/* Карточка направления (Figma 1858-104152): одна, из
                      * сводки с type=, некликабельна — вход на направление
                      * только с главной (#548). */}
-                    <OperationsSummaryCard
-                      label={title}
-                      totalKopecks={
-                        type === 'expense'
-                          ? summaryQuery.data?.expenseTotalKopecks
-                          : summaryQuery.data?.incomeTotalKopecks
-                      }
-                      segments={summaryBarSegments(summaryQuery.data, type)}
-                    />
+                    <div className="px-6">
+                      <OperationsSummaryCard
+                        label={title}
+                        totalKopecks={
+                          type === 'expense'
+                            ? summaryQuery.data?.expenseTotalKopecks
+                            : summaryQuery.data?.incomeTotalKopecks
+                        }
+                        segments={summaryBarSegments(summaryQuery.data, type)}
+                      />
+                    </div>
 
                     <OperationsDateList
                       groups={groups}
                       onSelectOperation={openOperation}
-                      inset={false}
                       renderSubtitle={(operation) => operation.propertyName}
                       tail={
                         <>

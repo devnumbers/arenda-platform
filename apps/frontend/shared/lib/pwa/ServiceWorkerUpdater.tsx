@@ -23,13 +23,13 @@ import { reportClientError } from '@/shared/lib/error-reporting/report-client-er
  *   SW is only being registered now, there is nothing to update — bail out so
  *   we never reload a freshly-opened app in the user's face.
  * - `isReloading` ref prevents a double reload when `controllerchange` fires
- *   in multiple cabinet tabs simultaneously.
+ *   in multiple app tabs simultaneously.
  *
  * This component is independent of `ServiceWorkerRegister`: it obtains the
  * registration via `navigator.serviceWorker.ready`, so it does not matter who
- * performed the registration. It must be mounted on every cabinet route (it
- * lives in `CabinetLayout` next to `ServiceWorkerRegister`) so the route-change
- * trigger fires across the whole cabinet.
+ * performed the registration. It must be mounted app-wide (it lives in
+ * `ScreenLayout` next to `ServiceWorkerRegister`) so the route-change
+ * trigger fires across the whole app.
  */
 export function ServiceWorkerUpdater(): JSX.Element | null {
     const pathname = usePathname();
@@ -54,7 +54,7 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
         pendingSkipWaiting.current = false;
     };
 
-    // Trigger: route change. When the user navigates between cabinet screens
+    // Trigger: route change. When the user navigates between app screens
     // (so is not mid-form), activate the waiting SW if one is ready. pathname
     // is an effect dependency, so this runs on every navigation. The first run
     // (mount) is skipped — it is not a real route change.
@@ -140,7 +140,7 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
             registrationRef.current = registration;
 
             // A SW may already be waiting at mount time (installed before this
-            // component mounted, e.g. after a re-navigation within the cabinet).
+            // component mounted, e.g. after a re-navigation within the app).
             if (registration.waiting) {
                 pendingSkipWaiting.current = true;
             }

@@ -28,13 +28,17 @@ import {
     Checkbox,
     ChipButton,
     ConfirmDialog,
+    DesktopMenuButton,
     EmptyState,
+    HubTitle,
+    SubScreenShell,
     IconButton,
     ListRow,
     Modal,
     ModalClose,
     ModalContent,
     ModalTrigger,
+    MoreSheet,
     MonthDaysGrid,
     MonthYearPicker,
     PageContent,
@@ -52,6 +56,7 @@ import {
     Textarea,
     TextField,
     TopNav,
+    TopNavBackButton,
     TopNavTitle,
     WheelPicker,
     WheelPickerSheet,
@@ -60,6 +65,7 @@ import {
     type PickerOption,
     type WheelPickerItem,
 } from '@/shared/ui/design';
+import { navSectionById } from '@/shared/config/navigation';
 import { dateToIso } from '@/shared/lib/calendar';
 import {
     CategoryIcon,
@@ -174,6 +180,7 @@ export function DesignLayerShowcase(): JSX.Element {
     const [pickerEmpty, setPickerEmpty] = useState<string | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
     return (
         <>
@@ -854,8 +861,55 @@ export function DesignLayerShowcase(): JSX.Element {
                             </div>
                         </TopNav>
                         {/* Хаб-вариант (#523): «крылья» и на мобайле; вживую
-                         * смотрится на экране «Задачи» (/tasks). */}
+                         * смотрится на экране «Задачи» (/tasks). У подэкранов
+                         * с leading-кнопкой крылья на планшете (561–1023)
+                         * скрываются — наложение на колонку 560 (аудит #563),
+                         * на ПК ≥1024 — всегда. */}
                         <TopNav mobileWings />
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>TopNavBackButton · HubTitle · анатомия подэкрана и хаба (#566)</h3>
+                    <p className={styles.groupTitle}>
+                        Канонические куски хаб-шапки и подэкранного хедера: TopNavBackButton —
+                        ведущая кнопка «Назад» (history-first goBack с фолбэком, сериализуемые
+                        пропы — страницу-серверный компонент можно не делать клиентской);
+                        HubTitle — заголовок раздела хаба 28/32 со своим паддингом 24
+                        (PageContent горизонталей не вкладывает). Вживую: любой подэкран
+                        дерева профиля и хаб «Уведомления» (/profile/notifications).
+                    </p>
+                    <div className={styles.column} style={{ maxWidth: 480 }}>
+                        <TopNav leading={<TopNavBackButton fallbackHref="/ui-kit" />}>
+                            <TopNavTitle title="Профиль" />
+                        </TopNav>
+                        <div className="rounded-button bg-surface-muted p-4">
+                            <HubTitle>Уведомления</HubTitle>
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>SubScreenShell · каркас подэкрана (#568)</h3>
+                    <p className={styles.groupTitle}>
+                        Один компонент вместо ручной сборки подэкранной шапки: TopNav с
+                        ведущим «Назад» (TopNavBackButton), TopNavTitle в центре и
+                        PageContent с боковым паддингом 24. trailing — действия экрана
+                        (кебаб объекта), contentClassName переопределяет паддинг контента.
+                        Шапка в этой сборке — fixed на планшете и ПК, поэтому вживую она
+                        видна на любом подэкране (дерево профиля, детализация и правка
+                        объекта); ниже — контентная колонка каркаса.
+                    </p>
+                    <div className={styles.column} style={{ maxWidth: 480 }}>
+                        <SubScreenShell
+                            title="Информация об объекте"
+                            fallbackHref="/ui-kit"
+                            contentClassName="pt-4 pb-4"
+                        >
+                            <p className="text-sm text-content-secondary">
+                                Контент подэкрана в колонке 560.
+                            </p>
+                        </SubScreenShell>
                     </div>
                 </div>
 
@@ -888,6 +942,46 @@ export function DesignLayerShowcase(): JSX.Element {
                                 </div>
                             </ModalContent>
                         </Modal>
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>MoreSheet · шит «Еще» мобильного TabBar</h3>
+                    <p className={styles.groupTitle}>
+                        Выезжающий снизу шит навигации: ручка 48×4, два ряда разделов из нав-модели,
+                        нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560). Выезд
+                        400ms на кривой vaul, оверлей — fade 250ms; закрытие — оверлей, свайп вниз,
+                        повторный тап «Еще». В продукте живёт в TabBar (мобайл/планшет ≤768), здесь —
+                        с ручным триггером.
+                    </p>
+                    <div className={styles.grid}>
+                        <Button onClick={() => setMoreSheetOpen(true)}>Открыть шит «Еще»</Button>
+                    </div>
+                    <MoreSheet open={moreSheetOpen} onOpenChange={setMoreSheetOpen} />
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>DesktopMenuButton · десктопная навигация (#561)</h3>
+                    <p className={styles.groupTitle}>
+                        Кнопка десктопного хрома (Figma 1675:54051): 200×44, radius 16, иконка 24 +
+                        подпись 14/16; активная — серая плашка bg-surface-muted, hover-фона нет.
+                        В продукте ScreenLayout рендерит из них DesktopSidebar (6 разделов слева под
+                        хедером, Figma 1675:54050) и DesktopNavPills («Уведомления» — левый-низ 200,
+                        «Поддержка» — правый-низ авто, Figma 1675:54098/54096) — только на ПК ≥1024
+                        (561–1023 — планшетный хром с TabBar); пилюли глушатся вместе с TabBar,
+                        пока открыт StickyBottomBar. Живой вид — на любом экране продукта при
+                        ширине ≥1024.
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex flex-col gap-0.5">
+                            <DesktopMenuButton section={navSectionById('properties')} active />
+                            <DesktopMenuButton section={navSectionById('payments')} />
+                            <DesktopMenuButton section={navSectionById('operations')} />
+                        </div>
+                        <div className="flex flex-col items-start gap-2">
+                            <DesktopMenuButton section={navSectionById('notifications')} active />
+                            <DesktopMenuButton section={navSectionById('support')} className="w-fit" />
+                        </div>
                     </div>
                 </div>
 

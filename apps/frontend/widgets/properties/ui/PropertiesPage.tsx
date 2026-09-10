@@ -4,13 +4,14 @@ import {type JSX, useCallback, useMemo, useState} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
 import {useArchivedProperties, useProperties, usePropertiesWithMeta} from '@/features/properties';
 import {useSubscription} from '@/features/subscription';
-import {PageHeader} from '@/shared/ui/page-header';
+import {Add, ArrowLeft} from '@/shared/assets/icons';
+import {goBack} from '@/shared/lib/navigation';
+import {HubCollapseAnchor, IconButton, PageContent, TopNav, TopNavTitle} from '@/shared/ui/design';
 import {ROUTES} from '@/shared/config/routes';
 import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
 import {DEFAULT_PROPERTY_SORT} from '../lib/parse-property-search-params';
 import {formatHiddenSharedFootnote} from '../lib/format-hidden-shared-footnote';
 import {PropertiesToolbar} from './PropertiesToolbar';
-import {PropertyCreateButton} from './PropertyCreateButton';
 import {PropertyCard} from './PropertyCard';
 import {PropertiesEmptyState} from './PropertiesEmptyState';
 import {PropertiesLoading} from './PropertiesLoading';
@@ -97,14 +98,22 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
         return activeProperties.length < limit;
     }, [subscriptionQuery.data, activeProperties]);
 
-    return (
-        <div className={styles.root}>
-            <PageHeader
-                title={mode === 'archived' ? 'Архивные объекты' : 'Мои объекты'}
-                backHref={mode === 'archived' ? ROUTES.properties : undefined}
-                actions={<PropertyCreateButton canAdd={canAdd} isLoading={isActionLoading}/>}
-            />
+    // Кнопка создания на каноне хаба (как «Создать задачу» #525): «+» в
+    // ряду заголовка на списке и в trailing-слоте хедера на архиве. При
+    // исчерпанном лимите тарифа ведёт на смену тарифа (объяснение — в
+    // имени для screen reader и пустом состоянии списка).
+    const createButton = isActionLoading
+        ? <IconButton icon={<Add/>} label="Создать объект" disabled/>
+        : canAdd
+            ? <IconButton icon={<Add/>} label="Создать объект" onClick={() => router.push(ROUTES.propertyNew)}/>
+            : <IconButton
+                icon={<Add/>}
+                label="Достигнут лимит объектов по тарифу — сменить тариф"
+                onClick={() => router.push(ROUTES.profileTariffChange)}
+            />;
 
+    const content = (
+        <div className={styles.root}>
             <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange}/>
 
             {isLoading && <PropertiesLoading/>}
@@ -131,5 +140,48 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
 
             {mode === 'active' && !isLoading && !isError && <PropertiesArchiveLink/>}
         </div>
+    );
+
+    if (mode === 'archived') {
+        return (
+            <>
+                <TopNav
+                    leading={
+                        <IconButton
+                            icon={<ArrowLeft/>}
+                            label="Назад"
+                            onClick={() => goBack(router, ROUTES.properties)}
+                        />
+                    }
+                    trailing={createButton}
+                >
+                    <TopNavTitle title="Архивные объекты"/>
+                </TopNav>
+
+                <PageContent>{content}</PageContent>
+            </>
+        );
+    }
+
+    return (
+        <>
+            {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
+             * стандартное — в потоке на мобайле, закреплена на десктопе. */}
+            <TopNav
+                mobileWings
+                collapse={{ title: 'Объекты', trailing: createButton }}
+            />
+
+            <PageContent>
+                <HubCollapseAnchor>
+                    <div className="flex items-center justify-between pr-3.5 pl-6">
+                        <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Объекты</h1>
+                        {createButton}
+                    </div>
+                </HubCollapseAnchor>
+
+                {content}
+            </PageContent>
+        </>
     );
 }

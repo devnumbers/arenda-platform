@@ -175,14 +175,16 @@
     font-display: swap;
 }
 
-/* Брейкпоинты хрома (хедер/футер, Figma 1185:40813–19): мобайл — 768 и
-   уже (центральная часть хедера + футер во всю ширину), десктоп — от 769
-   (единая полоса с лого и профилем по краям). tablet: 768 остаётся точкой
-   переключения модалок шит→центр. Легаси-кабинет границу 1200 держит в
-   своих CSS-модулях и от этого токена не зависит. */
+/* Ярусы ширины (решение владельца 08.09, #561): мобайл 320–560, планшет
+   561–1023, ПК от 1024. Префиксы Tailwind: tablet: — начало планшетного
+   яруса (закреплённый хедер с крыльями и центральной колонкой 560,
+   компенсация pt-72), desktop: — ПК-хром (сайдбар + плавающие пилюли,
+   TabBar скрыт). Минимум поддержки — 320. Канва модалок (шит ↔ карточка)
+   — отдельная, переключение на 768 через useIsDesktop/литерал min-[768px],
+   к ярусам хрома не привязана. */
 @theme {
-    --breakpoint-tablet: 768px;
-    --breakpoint-desktop: 769px;
+    --breakpoint-tablet: 561px;
+    --breakpoint-desktop: 1024px;
 }
 
 /* Дизайн-слой новых экранов (ADR 0050): Tailwind-утилиты поверх токенов
@@ -334,6 +336,59 @@
 
     to {
         height: 0;
+    }
+}
+
+/* Шит «Еще» TabBar (Figma 1721:57140, #560; рецепт — docs/research/
+   2026-09-08-sheet-eshche-animation.md): выезд 400ms, закрытие 300ms на
+   канонной кривой vaul cubic-bezier(0.32,0.72,0,1), оверлей — канонный
+   fade 250ms. Специфичность class+attr перебивает CSS-бейзлайн vaul
+   (animation/transition-duration 0.5s на [data-vaul-drawer]/[data-vaul-overlay])
+   независимо от порядка стилей; после drag-release vaul ставит duration
+   inline — флик закрывается по инерции, это канон (research §2). */
+.more-sheet-drawer[data-vaul-drawer] {
+    animation-duration: 400ms;
+    transition-duration: 400ms;
+}
+
+.more-sheet-drawer[data-vaul-drawer][data-state='closed'] {
+    animation-duration: 300ms;
+    transition-duration: 300ms;
+}
+
+.more-sheet-overlay[data-vaul-overlay][data-vaul-snap-points='false'] {
+    animation-duration: 250ms;
+    transition-duration: 250ms;
+}
+
+/* Компакт-бар хаба (решение владельца 2026-09-09, Figma 1603-93157 →
+   1733-93740): видимость управляется прогрессом прокрутки --hub-collapse
+   (0..1 — пишет HubCollapseAnchor на :root). Только opacity/transform —
+   без reflow; CSS-переходов нет, плавность даёт сам скролл. Класс
+   hub-collapse-on включает pointer-events, когда компакт уже виден. */
+.hub-compact {
+    opacity: var(--hub-collapse, 0);
+    pointer-events: none;
+}
+
+:root.hub-collapse-on .hub-compact {
+    pointer-events: auto;
+}
+
+/* Мобильный клон компакт-бара выезжает сверху вместе с прогрессом. */
+.hub-compact-bar {
+    transform: translateY(calc((1 - var(--hub-collapse, 0)) * -100%));
+}
+
+/* prefers-reduced-motion: анимацию не выключаем, а укорачиваем до ~150ms,
+   fade сохраняем; drag-жесты не трогаем — это управление, не декор
+   (research §9). */
+@media (prefers-reduced-motion: reduce) {
+    .more-sheet-drawer[data-vaul-drawer],
+    .more-sheet-drawer[data-vaul-drawer][data-state='closed'],
+    .more-sheet-overlay[data-vaul-overlay][data-vaul-snap-points='false'] {
+        animation-duration: 150ms;
+        transition-duration: 150ms;
     }
 }
 

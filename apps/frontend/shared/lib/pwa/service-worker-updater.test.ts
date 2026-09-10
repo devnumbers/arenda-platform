@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
  * matching message handler that calls `self.skipWaiting()`. This is the exact
  * seam that was broken before ADR 0032 — the handler existed but was never
  * triggered. If either side drifts, the update lifecycle silently stops
- * working again. Mirrors the cabinet-routes.test.ts sync guard.
+ * working again. Mirrors the app-routes.test.ts sync guard.
  */
 describe('SKIP_WAITING handler sync between page and service worker', () => {
     const swPath = resolve(process.cwd(), 'public/sw.js');

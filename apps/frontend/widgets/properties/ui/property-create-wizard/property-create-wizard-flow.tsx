@@ -117,7 +117,7 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
       <PageContent
         className={
           step === 1
-            ? 'min-h-[calc(100dvh-72px)] justify-end pt-0 desktop:min-h-0 desktop:justify-start'
+            ? 'min-h-[calc(100dvh-72px)] justify-end pt-0 tablet:min-h-0 tablet:justify-start'
             : 'pt-0'
         }
       >
