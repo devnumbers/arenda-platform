@@ -126,6 +126,44 @@ ORDER BY pay.created_at, pay.id
 LIMIT CASE WHEN sqlc.arg('page_limit')::int = 0 THEN NULL::bigint
            ELSE sqlc.arg('page_limit')::bigint END;
 
+-- name: CountGlobalPaymentRules :one
+-- The search's whole-scope match count (ticket #599): the list query's
+-- predicate — the visibility, the search over title/user category/catalog
+-- slugs, the chip's category+type filter — without the per-row schedule
+-- aggregates, the ordering, the window and the keyset key. The count is the
+-- scope's own, identical on every walked page; the search screen shows it
+-- as «найдено N». The owner→today join travels with the predicate: the map
+-- covers every visible owner (ListGlobalPaymentOwnerTodays), so its rows
+-- are the list's rows.
+SELECT COUNT(*)
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+JOIN (
+       SELECT unnest(string_to_array(sqlc.arg('owner_ids')::text, ',')::uuid[]) AS owner_id,
+              unnest(string_to_array(sqlc.arg('todays')::text, ',')::date[]) AS today
+     ) AS t ON t.owner_id = pay.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE (
+       pay.owner_id = sqlc.arg('actor')
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = pay.property_id
+              AND pm.user_id = sqlc.arg('actor')
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND (sqlc.arg('search')::text = ''
+       OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR pc.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('category_slugs')::text <> ''
+           AND pay.category_slug = ANY(string_to_array(sqlc.arg('category_slugs')::text, ','))))
+  AND (sqlc.arg('category_filter')::text = ''
+       OR pay.category_slug = sqlc.arg('category_filter')::text
+       OR pay.user_category_id::text = sqlc.arg('category_filter')::text)
+  AND (sqlc.arg('type_filter')::text = ''
+       OR pay.type = sqlc.arg('type_filter')::text);
+
 -- name: SumGlobalPaymentCounters :one
 -- The main screen's two counters over the whole visible scope (ticket
 -- #575): the favorite rules — the «Все избранные (N)» card — and the

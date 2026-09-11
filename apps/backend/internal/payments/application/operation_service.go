@@ -416,10 +416,13 @@ type GlobalOperationsListQuery struct {
 
 // GlobalOperationsPage is one walked window of the global feed (ticket
 // #597): the listed rows plus the keyset continuation — the next page's
-// opaque cursor, ” when the feed is exhausted.
+// opaque cursor, ” when the feed is exhausted. Total is the whole scope's
+// paid count under the query's filters (ticket #599) — «найдено N», the
+// same on every walked page.
 type GlobalOperationsPage struct {
 	Items      []OperationListItem
 	NextCursor string
+	Total      int64
 }
 
 // GlobalOperationsSummaryQuery is the global summary's request (ticket
@@ -504,7 +507,20 @@ func (s *OperationService) ListGlobalOperations(
 		last := rows[len(rows)-1]
 		nextCursor = encodeOperationCursor(last.Operation.Date, last.Operation.ID)
 	}
-	return GlobalOperationsPage{Items: items, NextCursor: nextCursor}, nil
+	// The total counts the whole scope under the query's filters (ticket
+	// #599): the same predicate as the rows with the keyset key aside —
+	// the cursor only positions the window, the count is the same on every
+	// walked page. The count query has no limit arg, the copy's window
+	// fields are dead weight for it.
+	countQuery := q
+	countQuery.Cursor = ""
+	countQuery.AfterDate = nil
+	countQuery.AfterID = nil
+	total, err := s.operations.CountGlobal(ctx, actor, countQuery)
+	if err != nil {
+		return GlobalOperationsPage{}, fmt.Errorf("count global operations: %w", err)
+	}
+	return GlobalOperationsPage{Items: items, NextCursor: nextCursor, Total: total}, nil
 }
 
 // SummarizeGlobalOperations returns the period aggregate of the actor's

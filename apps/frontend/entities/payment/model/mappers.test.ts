@@ -130,7 +130,7 @@ const globalItemDto: components['schemas']['PaymentGlobalItem'] = {
   oldestOverdueOperationId: null,
 };
 
-describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581, курсор #597)', () => {
+describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581, курсор #597, total #599)', () => {
   const searchDto: components['schemas']['PaymentsSearchGlobalResponse'] = {
     items: [globalItemDto],
     matchedCategories: [
@@ -146,6 +146,7 @@ describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #
       },
     ],
     nextCursor: 'cursor-of-page-two',
+    total: 2,
   };
 
   const search = mapGlobalPaymentSearch(searchDto);

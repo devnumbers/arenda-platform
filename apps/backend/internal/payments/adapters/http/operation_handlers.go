@@ -168,7 +168,7 @@ func (h *OperationsHandlers) ListOperations(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeOperations(w, r, page.Items, page.NextCursor)
+	writeOperationsWithTotal(w, r, page.Items, page.NextCursor, &page.Total)
 }
 
 // SummarizeOperations implements GET /operations/summary — the global twin
@@ -572,6 +572,15 @@ func operationsSummaryResponse(summary application.OperationsSummary) openapi.Op
 // keyset continuation (ticket #597) travels on the global feed's pages — the
 // offset-based property listings pass ” and the wire's nextCursor is null.
 func writeOperations(w http.ResponseWriter, r *http.Request, items []application.OperationListItem, nextCursor string) {
+	writeOperationsWithTotal(w, r, items, nextCursor, nil)
+}
+
+// writeOperationsWithTotal is writeOperations with the scope's match count
+// (ticket #599): the global feed's «найдено N» — the property-scoped
+// listings sharing the schema pass nil and the wire omits the field.
+func writeOperationsWithTotal(
+	w http.ResponseWriter, r *http.Request, items []application.OperationListItem, nextCursor string, total *int64,
+) {
 	out := make([]openapi.OperationResponse, 0, len(items))
 	for _, item := range items {
 		out = append(out, operationResponse(item))
@@ -579,6 +588,7 @@ func writeOperations(w http.ResponseWriter, r *http.Request, items []application
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.OperationsResponse{
 		Items:      out,
 		NextCursor: httpsupport.StringPtr(nextCursor),
+		Total:      total,
 	})
 }
 

@@ -150,6 +150,11 @@ type OperationStore interface {
 	// precedent), the propertyIds entries have already been resolved through
 	// the view gate by the service. Read-only — never ticks.
 	ListGlobal(ctx context.Context, actor uuid.UUID, q GlobalOperationsListQuery) ([]GlobalOperationRow, error)
+	// CountGlobal counts the actor's visible paid operations over the same
+	// visibility and filters as ListGlobal — the whole scope with the
+	// keyset key and the window aside (ticket #599): the feed's «найдено
+	// N». Read-only — never ticks.
+	CountGlobal(ctx context.Context, actor uuid.UUID, q GlobalOperationsListQuery) (int64, error)
 	// SummarizeGlobal returns the period aggregate of the actor's visible
 	// paid operations (ticket #540) over the same visibility as ListGlobal:
 	// the totals by direction and the per-category breakdown. Read-only.
@@ -356,6 +361,13 @@ type GlobalPaymentReader interface {
 	SumGlobalPaymentSearchCategories(
 		ctx context.Context, actor uuid.UUID, q GlobalPaymentRulesQuery,
 	) ([]GlobalPaymentSearchCategory, error)
+	// CountGlobalPaymentRules counts the search's whole-scope matches under
+	// the query's search and chip filters — the list's predicate with the
+	// window and the keyset key aside (ticket #599): the search screen's
+	// «найдено N», the same on every walked page.
+	CountGlobalPaymentRules(
+		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time, q GlobalPaymentRulesQuery,
+	) (int64, error)
 	// ListGlobalPaymentObjects returns the actor's visible non-archived
 	// properties under the object search — the «Объекты» screen's cards
 	// without their stacks.

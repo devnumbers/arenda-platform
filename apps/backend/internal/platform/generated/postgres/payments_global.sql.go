@@ -50,6 +50,70 @@ func (q *Queries) ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg Clea
 	return result.RowsAffected(), nil
 }
 
+const countGlobalPaymentRules = `-- name: CountGlobalPaymentRules :one
+SELECT COUNT(*)
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+JOIN (
+       SELECT unnest(string_to_array($1::text, ',')::uuid[]) AS owner_id,
+              unnest(string_to_array($2::text, ',')::date[]) AS today
+     ) AS t ON t.owner_id = pay.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE (
+       pay.owner_id = $3
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = pay.property_id
+              AND pm.user_id = $3
+              AND pm.status = 'active'
+          )
+      )
+  AND p.status != 'archived'
+  AND ($4::text = ''
+       OR pay.title ILIKE '%' || $4::text || '%' ESCAPE '\'
+       OR pc.name ILIKE '%' || $4::text || '%' ESCAPE '\'
+       OR ($5::text <> ''
+           AND pay.category_slug = ANY(string_to_array($5::text, ','))))
+  AND ($6::text = ''
+       OR pay.category_slug = $6::text
+       OR pay.user_category_id::text = $6::text)
+  AND ($7::text = ''
+       OR pay.type = $7::text)
+`
+
+type CountGlobalPaymentRulesParams struct {
+	OwnerIds       string      `json:"owner_ids"`
+	Todays         string      `json:"todays"`
+	Actor          pgtype.UUID `json:"actor"`
+	Search         string      `json:"search"`
+	CategorySlugs  string      `json:"category_slugs"`
+	CategoryFilter string      `json:"category_filter"`
+	TypeFilter     string      `json:"type_filter"`
+}
+
+// The search's whole-scope match count (ticket #599): the list query's
+// predicate — the visibility, the search over title/user category/catalog
+// slugs, the chip's category+type filter — without the per-row schedule
+// aggregates, the ordering, the window and the keyset key. The count is the
+// scope's own, identical on every walked page; the search screen shows it
+// as «найдено N». The owner→today join travels with the predicate: the map
+// covers every visible owner (ListGlobalPaymentOwnerTodays), so its rows
+// are the list's rows.
+func (q *Queries) CountGlobalPaymentRules(ctx context.Context, arg CountGlobalPaymentRulesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countGlobalPaymentRules,
+		arg.OwnerIds,
+		arg.Todays,
+		arg.Actor,
+		arg.Search,
+		arg.CategorySlugs,
+		arg.CategoryFilter,
+		arg.TypeFilter,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const lastOperationDatesOfPayments = `-- name: LastOperationDatesOfPayments :many
 SELECT op.payment_id,
        MAX(op.date)::date AS last_date

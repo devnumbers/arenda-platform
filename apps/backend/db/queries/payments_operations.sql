@@ -281,6 +281,41 @@ ORDER BY
   op.id DESC
 LIMIT sqlc.arg('limit');
 
+-- name: CountPaidOperationsGlobal :one
+-- The global feed's whole-scope count (ticket #599): the list query's
+-- predicate — paid, the visibility, the archive cut, the propertyIds
+-- multi-select, the period, the search over title/category label/amount
+-- digits, the direction and category filters — without the keyset key, the
+-- ordering and the window. The count is the scope's own, identical on every
+-- walked page; the search screen shows it as «найдено N».
+SELECT COUNT(*)
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = sqlc.arg('actor')
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = sqlc.arg('actor')
+              AND pm.status = 'active'
+          )
+      )
+  AND (sqlc.arg('include_archived')::bool OR p.status != 'archived')
+  AND (sqlc.arg('property_ids')::text = ''
+       OR op.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+       OR (sqlc.arg('include_archived')::bool AND p.status = 'archived'))
+  AND (sqlc.narg('date_from')::date IS NULL OR op.date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to')::date IS NULL OR op.date <= sqlc.narg('date_to'))
+  AND (sqlc.arg('search')::text = ''
+       OR op.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR (sqlc.arg('search_digits')::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || sqlc.arg('search_digits')::text || '%'))
+  AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
+  AND (sqlc.arg('categories')::text = ''
+       OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')));
+
 -- name: SumPaidOperationTotalsGlobal :many
 -- The period totals by direction of the actor's visible merged feed (ticket
 -- #540): the propertyIds filter and the period narrow the totals, the type

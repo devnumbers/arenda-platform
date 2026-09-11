@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -69,4 +70,8 @@ func TestPrepareGlobalOperationsQuery(t *testing.T) {
 	if q.AfterDate != nil || q.AfterID != nil {
 		t.Errorf("after key = %v/%v, want nil/nil", q.AfterDate, q.AfterID)
 	}
+}
+
+func (noopOperationStore) CountGlobal(context.Context, uuid.UUID, GlobalOperationsListQuery) (int64, error) {
+	panic("unused")
 }

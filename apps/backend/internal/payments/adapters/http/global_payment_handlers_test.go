@@ -550,3 +550,31 @@ func TestListGlobalPayments_FavoriteOrderWire(t *testing.T) {
 		t.Errorf("nil favoriteOrder = %v, want null", body.Items[1].FavoriteOrder)
 	}
 }
+
+// The search wire's total (ticket #599): the scope's match count travels on
+// every page — the contract's required field.
+func TestSearchGlobalPayments_CarriesScopeTotal(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeGlobalPaymentsManager{
+		search: func(
+			_ context.Context, _ uuid.UUID, _ string, _ application.GlobalPaymentSearchPage,
+		) (application.GlobalPaymentSearch, error) {
+			return application.GlobalPaymentSearch{Total: 7}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	h.SearchGlobalPayments(w, globalRequest(t.Context(), "/payments/search"), openapi.SearchGlobalPaymentsParams{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if total, ok := body["total"].(float64); !ok || total != 7 {
+		t.Fatalf("total = %v, want 7 on the wire", body["total"])
+	}
+}

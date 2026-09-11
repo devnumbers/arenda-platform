@@ -242,6 +242,9 @@ func paymentsSearchGlobalResponse(search application.GlobalPaymentSearch) openap
 		// The keyset continuation (ticket #597): '' is the wire's null — the
 		// matches are exhausted.
 		NextCursor: httpsupport.StringPtr(search.NextCursor),
+		// The scope's match count (ticket #599): the same on every walked
+		// page.
+		Total: search.Total,
 	}
 }
 

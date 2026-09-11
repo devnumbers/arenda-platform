@@ -2373,12 +2373,17 @@ export interface components {
             /** @description The matched rules of this category and direction. */
             count: number;
         };
-        /** @description The global payment rules search (ticket #575): the matched rows plus the matched-category chips. */
+        /** @description The global payment rules search (ticket #575): the matched rows plus the matched-category chips and the whole scope's match count. */
         PaymentsSearchGlobalResponse: {
             items: components["schemas"]["PaymentGlobalItem"][];
             matchedCategories: components["schemas"]["PaymentSearchCategory"][];
             /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
             nextCursor: string | null;
+            /**
+             * Format: int64
+             * @description The whole scope's match count under the query and the chip filter (ticket #599) — «найдено N»: the same predicate as the rows, independent of the window, identical on every walked page.
+             */
+            total: number;
         };
         /** @description One key of a property's stack (ticket #575): the rule behind it and its overdue flag — the red dot. */
         PaymentObjectKey: {
@@ -2464,6 +2469,11 @@ export interface components {
             items: components["schemas"]["OperationResponse"][];
             /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the feed is exhausted. */
             nextCursor: string | null;
+            /**
+             * Format: int64
+             * @description The whole scope's paid count under the query's filters (ticket #599) — «найдено N»: the same predicate as the rows, independent of the window, identical on every walked page. The global feed's field (GET /operations): the property-scoped listings sharing this schema omit it.
+             */
+            total?: number;
         };
         /** @description One category's total over the summarized scope. Rows without a category snapshot never appear here — their amounts still count in the totals. */
         OperationsSummaryCategory: {

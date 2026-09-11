@@ -852,3 +852,66 @@ func TestSearchGlobalPaymentsKeyset_DeletedRowsBetweenPages(t *testing.T) {
 		t.Error("unwalked deleted row 'Правило 030' came back")
 	}
 }
+
+// The search's total (ticket #599): the whole scope's match count under the
+// query and the chip filter — the same predicate as the rows — constant
+// across the keyset pages.
+func TestSearchGlobalPayments_TotalMatchesPredicate(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	svc := h.globalSvc()
+
+	h.seedGlobalRule(h.propID, h.owner, "Парковка", typeExpense, 20000, false, false, parkingSlug, nil)
+	h.seedGlobalRule(h.propID, h.owner, "Аренда машиноместа", typeIncome, 200000, false, false, parkingSlug, nil)
+	h.seedGlobalRule(h.propID, h.owner, "Страхование квартиры", typeExpense, 3200000, false, false, "insurance", nil)
+	h.seedGlobalRule(h.propID, h.owner, "Интернет", typeExpense, 700000, false, false, "utilities", nil)
+
+	totalOf := func(t *testing.T, query string, page paymentsapp.GlobalPaymentSearchPage) int64 {
+		t.Helper()
+		search, err := svc.SearchGlobalPayments(h.ctx(), h.owner, query, page)
+		if err != nil {
+			t.Fatalf("search %q: %v", query, err)
+		}
+		return search.Total
+	}
+
+	// The empty query sees the whole visible book: the four seeded rules.
+	if got := totalOf(t, "", paymentsapp.GlobalPaymentSearchPage{}); got != 4 {
+		t.Fatalf("empty-query total = %d, want 4", got)
+	}
+	// The chip's identity narrows the total with the rows: parking, both directions.
+	if got := totalOf(t, "", paymentsapp.GlobalPaymentSearchPage{Category: parkingSlug}); got != 2 {
+		t.Fatalf("parking total = %d, want 2", got)
+	}
+	// Chip + direction: one.
+	if got := totalOf(t, "", paymentsapp.GlobalPaymentSearchPage{Category: parkingSlug, Type: typeExpense}); got != 1 {
+		t.Fatalf("parking expense total = %d, want 1", got)
+	}
+	// The title search matches the one insurance rule.
+	if got := totalOf(t, "страх", paymentsapp.GlobalPaymentSearchPage{}); got != 1 {
+		t.Fatalf("страх total = %d, want 1", got)
+	}
+	// A query nothing matches counts zero.
+	if got := totalOf(t, "бассейн", paymentsapp.GlobalPaymentSearchPage{}); got != 0 {
+		t.Fatalf("бассейн total = %d, want 0", got)
+	}
+
+	// The total is the scope's, not the window's: two pages over the same
+	// query answer the same count.
+	pageOne, err := svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{Limit: 2})
+	if err != nil {
+		t.Fatalf("page one: %v", err)
+	}
+	if pageOne.NextCursor == "" {
+		t.Fatal("page one nextCursor = '', want the continuation of the four-row scope")
+	}
+	pageTwo, err := svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{
+		Limit: 2, Cursor: pageOne.NextCursor,
+	})
+	if err != nil {
+		t.Fatalf("page two: %v", err)
+	}
+	if pageOne.Total != 4 || pageTwo.Total != 4 {
+		t.Fatalf("totals = %d/%d, want 4/4 — the scope's count on every page", pageOne.Total, pageTwo.Total)
+	}
+}
