@@ -223,6 +223,16 @@ export function DesignLayerShowcase(): JSX.Element {
         <Button size="small" disabled>
             disabled
         </Button>
+        {/* Радиус m (12px, токен Figma radius/m) — CTA пустых состояний
+         * секций объекта (#588, решение владельца 11.09). */}
+        {dlButtonVariants.map((variant) => (
+            <Button key={`m-${variant}`} variant={variant} size="small" radius="m">
+                small · m
+            </Button>
+        ))}
+        <Button variant="primary" radius="m">
+            default · m
+        </Button>
     </div>
                 </div>
 

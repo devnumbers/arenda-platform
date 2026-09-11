@@ -83,11 +83,13 @@ export function PropertyAboutScreen(): JSX.Element {
             }
         >
             <PropertySectionCard title="Данные" className="mt-6">
-                <dl className="flex flex-col gap-4 px-6 pt-1">
+                {/* Figma 1550:97130: содержимое px-24 pt-16, строки с зазором
+                 * 24 — метка 14/16 серым, значение 14/16 тёмным через 4. */}
+                <dl className="flex flex-col gap-6 px-6 pb-6 pt-4">
                     {dataFields.map((field) => (
-                        <div key={field.label}>
-                            <dt className="text-sm text-content-secondary">{field.label}</dt>
-                            <dd className="mt-1 text-base leading-4 text-content">{field.value}</dd>
+                        <div key={field.label} className="flex flex-col gap-1">
+                            <dt className="text-sm leading-4 text-content-secondary">{field.label}</dt>
+                            <dd className="text-sm leading-4 text-content">{field.value}</dd>
                         </div>
                     ))}
                 </dl>
@@ -95,7 +97,7 @@ export function PropertyAboutScreen(): JSX.Element {
 
             <PropertySectionCard title="Характеристики">
                 {hasAttributes ? (
-                    <div className="flex flex-col gap-4 px-6 pt-1">
+                    <div className="flex flex-col gap-4 px-6 pb-6 pt-4">
                         {groups.map((group, index) => (
                             <div key={group.group ?? `group-${index}`}>
                                 {group.label !== null && (
@@ -116,15 +118,18 @@ export function PropertyAboutScreen(): JSX.Element {
                         ))}
                         <div>
                             <dl>
-                                <dt className="text-sm text-content-secondary">Описание</dt>
-                                <dd className="mt-1 text-base leading-4 text-content">
+                                <dt className="text-sm leading-4 text-content-secondary">Описание</dt>
+                                <dd className="mt-1 text-sm leading-4 text-content">
                                     {property.description ?? 'Не указано'}
                                 </dd>
                             </dl>
                         </div>
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center px-6 pt-10 pb-2 text-center">
+                    // Figma 1550:97388/97392: контент px-32, иллюстрация →
+                    // 12 → серый текст 14/16, через 24 кнопка default
+                    // (56/16px); нижний паддинг карточки 32.
+                    <div className="flex flex-col items-center px-8 pb-8 pt-4 text-center">
                         <Image
                             src={propertySectionImages.about}
                             alt=""
@@ -132,13 +137,12 @@ export function PropertyAboutScreen(): JSX.Element {
                             height={64}
                             className="h-16 w-16"
                         />
-                        <p className="mt-4 max-w-[281px] text-sm leading-5 text-content-secondary">
+                        <p className="mt-3 max-w-[281px] text-sm leading-4 text-content-secondary">
                             Не добавлены. Укажите площадь, этаж и другие параметры объекта
                         </p>
                         {canMutate && (
                             <Button
                                 variant="primary"
-                                size="small"
                                 className="mt-6"
                                 onClick={() => router.push(ROUTES.propertyEdit(id))}
                             >

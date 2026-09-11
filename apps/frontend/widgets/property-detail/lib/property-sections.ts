@@ -20,7 +20,11 @@ export type PropertyDetailSectionKey =
 export type PropertyEmptySet = 'welcome' | 'regular';
 
 export type PropertySectionEmptyCopy = {
+  /** Текст состояния: в полной анатомии — тёмный тайтл 20/24, в коротком
+   * (description: null) — единственная серая строка 14/16. */
   readonly title: string;
+  /** Описание: онбординг-текст у первого объекта и статусный у аренды
+   * (ремонт/архив); null — короткая анатомия без описания. */
   readonly description: string | null;
   readonly ctaLabel: string | null;
 };
@@ -49,10 +53,15 @@ export function resolvePropertySectionEmpty(
   set: PropertyEmptySet,
   status: PropertyStatus,
 ): PropertySectionEmptyCopy {
+  // Аренда — единственный блок со статусными описаниями: у ремонта и
+  // архива полная анатомия с описанием независимо от набора (решение
+  // владельца 11.09, Figma 1581:53679 / 1581:52407).
   if (key === 'rental') {
     const description =
       status === 'active'
-        ? 'Укажите арендную ставку и сроки действия договора'
+        ? set === 'welcome'
+          ? 'Укажите арендную ставку и сроки действия договора'
+          : null
         : 'Добавьте условия аренды и настройте платеж';
     return { title: 'Аренда не добавлена', description, ctaLabel: 'Добавить' };
   }
@@ -60,7 +69,10 @@ export function resolvePropertySectionEmpty(
   if (key === 'payments') {
     return {
       title: 'Платежи не добавлены',
-      description: 'Добавьте регулярные платежи: коммунальные услуги, кредит или взносы',
+      description:
+        set === 'welcome'
+          ? 'Добавьте регулярные платежи: коммунальные услуги, кредит или взносы'
+          : null,
       ctaLabel: 'Добавить',
     };
   }
@@ -68,7 +80,10 @@ export function resolvePropertySectionEmpty(
   if (key === 'operations') {
     return {
       title: 'Операций еще не было',
-      description: 'Здесь появятся записи об оплате, ремонте и других операциях',
+      description:
+        set === 'welcome'
+          ? 'Здесь появятся записи об оплате, ремонте и других операциях'
+          : null,
       ctaLabel: null,
     };
   }
@@ -76,7 +91,10 @@ export function resolvePropertySectionEmpty(
   if (key === 'contacts') {
     return {
       title: 'Контакты не добавлены',
-      description: 'Добавьте контакты арендаторов, мастеров и других специалистов',
+      description:
+        set === 'welcome'
+          ? 'Добавьте контакты арендаторов, мастеров и других специалистов'
+          : null,
       ctaLabel: 'Добавить',
     };
   }
@@ -84,19 +102,20 @@ export function resolvePropertySectionEmpty(
   if (key === 'tasks') {
     return {
       title: 'Задач нет',
-      description: 'Добавьте задачу — напоминание, звонок или вызов мастера',
+      description:
+        set === 'welcome'
+          ? 'Добавьте задачу — напоминание, звонок или вызов мастера'
+          : null,
       ctaLabel: 'Добавить',
     };
   }
 
-  // about (секция «Квартира»): приветственное — с онбординг-описанием
-  // (98469), обычное — короткое, без описания (канон 1550:97124).
-  if (set === 'welcome') {
-    return {
-      title: 'Характеристики не добавлены',
-      description: 'Укажите площадь, этаж и другие параметры объекта',
-      ctaLabel: 'Добавить',
-    };
-  }
-  return { title: 'Характеристики не добавлены', description: null, ctaLabel: 'Добавить' };
+  // about (секция «Квартира»): у первого объекта — с онбординг-описанием
+  // (98469), у второго и далее — короткая (1550:97124).
+  return {
+    title: 'Характеристики не добавлены',
+    description:
+      set === 'welcome' ? 'Укажите площадь, этаж и другие параметры объекта' : null,
+    ctaLabel: 'Добавить',
+  };
 }

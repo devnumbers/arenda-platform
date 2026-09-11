@@ -24,7 +24,8 @@ describe('resolvePropertySectionEmpty (копирайт пустых секци�
     PropertyStatus,
     { title: string; description: string | null; ctaLabel: string | null },
   ]> = [
-    // Figma 1554:98469 — приветственные; 1554:100751 — обычные.
+    // Приветственные (первый объект) — титул + онбординг-описание
+    // (Figma 1554:98470/98481).
     [
       'rental',
       'welcome',
@@ -32,37 +33,6 @@ describe('resolvePropertySectionEmpty (копирайт пустых секци�
       {
         title: 'Аренда не добавлена',
         description: 'Укажите арендную ставку и сроки действия договора',
-        ctaLabel: 'Добавить',
-      },
-    ],
-    [
-      'rental',
-      'regular',
-      'active',
-      {
-        title: 'Аренда не добавлена',
-        description: 'Укажите арендную ставку и сроки действия договора',
-        ctaLabel: 'Добавить',
-      },
-    ],
-    // Figma 1581:53679 (ремонт) и 1581:52407 (архив).
-    [
-      'rental',
-      'regular',
-      'maintenance',
-      {
-        title: 'Аренда не добавлена',
-        description: 'Добавьте условия аренды и настройте платеж',
-        ctaLabel: 'Добавить',
-      },
-    ],
-    [
-      'rental',
-      'regular',
-      'archived',
-      {
-        title: 'Аренда не добавлена',
-        description: 'Добавьте условия аренды и настройте платеж',
         ctaLabel: 'Добавить',
       },
     ],
@@ -106,7 +76,6 @@ describe('resolvePropertySectionEmpty (копирайт пустых секци�
         ctaLabel: 'Добавить',
       },
     ],
-    // Figma 1554:98469 — с описанием; 1550:97124 — короткое, без описания.
     [
       'about',
       'welcome',
@@ -117,11 +86,65 @@ describe('resolvePropertySectionEmpty (копирайт пустых секци�
         ctaLabel: 'Добавить',
       },
     ],
+    // Обычные (второй и далее) — только серая строка, без описаний
+    // (решение владельца 11.09, Figma 1554:99550/99561).
+    [
+      'rental',
+      'regular',
+      'active',
+      { title: 'Аренда не добавлена', description: null, ctaLabel: 'Добавить' },
+    ],
+    [
+      'payments',
+      'regular',
+      'active',
+      { title: 'Платежи не добавлены', description: null, ctaLabel: 'Добавить' },
+    ],
+    [
+      'operations',
+      'regular',
+      'active',
+      { title: 'Операций еще не было', description: null, ctaLabel: null },
+    ],
+    [
+      'contacts',
+      'regular',
+      'active',
+      { title: 'Контакты не добавлены', description: null, ctaLabel: 'Добавить' },
+    ],
+    [
+      'tasks',
+      'regular',
+      'active',
+      { title: 'Задач нет', description: null, ctaLabel: 'Добавить' },
+    ],
     [
       'about',
       'regular',
       'active',
       { title: 'Характеристики не добавлены', description: null, ctaLabel: 'Добавить' },
+    ],
+    // Статусные состояния аренды — полная анатомия со статусным описанием
+    // в любом наборе (решение владельца 11.09, Figma 1581:53679 / 1581:52407).
+    [
+      'rental',
+      'regular',
+      'maintenance',
+      {
+        title: 'Аренда не добавлена',
+        description: 'Добавьте условия аренды и настройте платеж',
+        ctaLabel: 'Добавить',
+      },
+    ],
+    [
+      'rental',
+      'regular',
+      'archived',
+      {
+        title: 'Аренда не добавлена',
+        description: 'Добавьте условия аренды и настройте платеж',
+        ctaLabel: 'Добавить',
+      },
     ],
   ];
 
@@ -131,5 +154,6 @@ describe('resolvePropertySectionEmpty (копирайт пустых секци�
 
   it('у операций нет CTA в любом наборе', () => {
     expect(resolvePropertySectionEmpty('operations', 'regular', 'active').ctaLabel).toBeNull();
+    expect(resolvePropertySectionEmpty('operations', 'welcome', 'active').ctaLabel).toBeNull();
   });
 });

@@ -54,13 +54,14 @@ type PropertyManageSectionProps = {
 
 /** Секция «Управление» (Figma 1554:98469): строки действий 52 на серой
  * карточке — иконка в слоте 44 и подпись 16/18; деструктивное — красным.
- * Заголовок без шеврона: это действия, а не переход. */
+ * Заголовок без шеврона: это действия, а не переход. Нижний паддинг 12 —
+ * нижний отступ карточки по макету. */
 export function PropertyManageSection({
   items,
   onAction,
 }: PropertyManageSectionProps): JSX.Element {
   return (
-    <div className="flex flex-col px-3 pb-1.5" data-testid="property-manage-list">
+    <div className="flex flex-col px-3 pb-3" data-testid="property-manage-list">
       {items.map((item) => (
         <button
           key={item.key}

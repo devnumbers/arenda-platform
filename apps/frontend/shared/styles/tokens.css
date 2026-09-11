@@ -34,6 +34,8 @@
   /* Radius */
   --radius-button: 16px;
   --radius-button-small: 10px;
+  /* Radius/m из Figma — CTA пустых состояний секций (#588). */
+  --radius-m: 12px;
   --radius-input: 16px;
   --radius-round: 100px;
 
