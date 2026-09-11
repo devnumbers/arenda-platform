@@ -28,11 +28,14 @@ function FieldTitle({ children }: { readonly children: string }): JSX.Element {
   );
 }
 
+/** Хвост-иконка строки-поля (зона 44): тёмный глиф text-content — как у
+ * «Телефона» (решение владельца 11.09.2026 — только цвет, форма и зона
+ * прежние). */
 function FieldTailIcon({ children }: { readonly children: JSX.Element }): JSX.Element {
   return (
     <span
       aria-hidden
-      className="flex h-11 w-11 shrink-0 items-center justify-center text-content-tertiary"
+      className="flex h-11 w-11 shrink-0 items-center justify-center text-content"
     >
       {children}
     </span>
@@ -42,9 +45,7 @@ function FieldTailIcon({ children }: { readonly children: JSX.Element }): JSX.El
 /** Строка «Телефон» (Figma 1789-99037): значение + SmallArrowRight, ведёт
  * на флоу смены телефона (переработка — тикет #595). Хвост — Icon Button
  * Primary, как в макете: тёмный глиф (text-content), прижат к краю бокса
- * (его паддинг 8px), без зоны 44 (решение владельца 10.09.2026 — только
- * телефон; у «Часового пояса» остался светлый глиф в зоне 44, вся строка
- * и так одна ссылка). */
+ * (его паддинг 8px), без зоны 44 (решение владельца 10.09.2026). */
 function PhoneFieldRow({ phone }: { readonly phone: string }): JSX.Element {
   return (
     <div className="flex flex-col gap-2">
@@ -72,8 +73,8 @@ function PhoneFieldRow({ phone }: { readonly phone: string }): JSX.Element {
 
 /** Строка «Часовой пояс» (Figma 1789-99036): значение + SmallArrowDown.
  * Вся строка — одна ссылка на пикер часового пояса (#594, Figma
- * 1869-70821), светлый глиф в зоне 44 — как решено при «Телефоне»
- * (10.09.2026): строка и так одна ссылка. */
+ * 1869-70821); глиф тёмный, как у «Телефона» (решение владельца
+ * 11.09.2026 — только цвет, зона 44 и форма прежние). */
 function TimezoneFieldRow({ label }: { readonly label: string }): JSX.Element {
   return (
     <div className="flex flex-col gap-2">
