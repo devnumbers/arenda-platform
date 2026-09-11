@@ -68,6 +68,28 @@ type Subscription struct {
 	// reminded this grace window (issue #253). Nil means the current window
 	// has not been reminded yet; entering a new grace window resets it.
 	GraceRemindedAt *time.Time
+	// GraceArchivedPropertyIDs is the snapshot of the properties billing
+	// archived when this subscription entered its grace window (grace v2,
+	// ADR 0055): grace keeps one active property, and the owner is owed the
+	// restoration of these ids on the next successful payment. The order is
+	// the restoration priority — the newest archived property first. The debt
+	// is settled by the payment that restores them (the application seam
+	// clears the field) and dropped when the subscription falls to basic or
+	// is overwritten by a service assignment.
+	GraceArchivedPropertyIDs []uuid.UUID
+}
+
+// SetGraceArchive records the ids the grace entry archived, replacing any
+// previous snapshot: a fresh grace window owes a fresh restoration.
+func (s *Subscription) SetGraceArchive(ids []uuid.UUID) {
+	s.GraceArchivedPropertyIDs = ids
+}
+
+// ClearGraceArchive drops the restoration debt: the snapshot ids were restored
+// (or the subscription state they belonged to is gone), so a later payment
+// must not restore them again.
+func (s *Subscription) ClearGraceArchive() {
+	s.GraceArchivedPropertyIDs = nil
 }
 
 // NewBasicSubscription creates the free basic subscription for a
@@ -399,6 +421,9 @@ func (s *Subscription) AssignService(tariffID uuid.UUID, validUntil time.Time) {
 	s.PendingPeriod = nil
 	s.CurrentPeriod = nil
 	s.GraceRemindedAt = nil
+	// The overwrite discards the previous subscription's state, the grace
+	// restoration debt with it (issue #255).
+	s.ClearGraceArchive()
 }
 
 // ForceApplyTariffChange switches the subscription to the given tariff
@@ -464,6 +489,10 @@ func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
 	s.CurrentPeriod = nil
+	// The fall to basic ends the grace window without payment: the
+	// restoration debt is dropped, the grace archive stays archived
+	// (grace v2, ADR 0055).
+	s.ClearGraceArchive()
 }
 
 // FailedRenewalIsCurrent reports whether a failed renewal charge with the

@@ -693,7 +693,7 @@ func TestPropertyService_ArchiveExcessProperties_ArchivesExcess(t *testing.T) {
 		nil,
 	)
 
-	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
+	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
 		t.Fatalf("ArchiveExcessProperties failed: %v", err)
 	}
 
@@ -745,7 +745,7 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 		nil,
 	)
 
-	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
+	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
 		t.Fatalf("ArchiveExcessProperties failed: %v", err)
 	}
 	for _, id := range []uuid.UUID{propertyAID, propertyBID} {
@@ -826,6 +826,7 @@ func TestGetProperty_AccessOutcomes(t *testing.T) {
 type recordingSlotPolicy struct {
 	recovered           []uuid.UUID
 	recoveredRecipients []uuid.UUID
+	enforcedOnUnarchive []uuid.UUID
 }
 
 func (p *recordingSlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
@@ -833,7 +834,8 @@ func (p *recordingSlotPolicy) RecoverSuspendedForProperty(_ context.Context, _ t
 	return nil
 }
 
-func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(context.Context, transaction.Tx, uuid.UUID) error {
+func (p *recordingSlotPolicy) EnforceOnUnarchiveForProperty(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) error {
+	p.enforcedOnUnarchive = append(p.enforcedOnUnarchive, propertyID)
 	return nil
 }
 
@@ -896,7 +898,7 @@ func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *tes
 	)
 	svc.SetRecipientSlotPolicy(slots)
 
-	if err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 1); err != nil {
+	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 1); err != nil {
 		t.Fatalf("ArchiveExcessProperties failed: %v", err)
 	}
 

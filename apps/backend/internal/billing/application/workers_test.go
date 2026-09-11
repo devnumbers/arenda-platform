@@ -143,14 +143,25 @@ func (l *scriptedLifecycle) resolutions() []refundResolution {
 }
 
 // fakeArchiverSource records archive calls for the lifecycle-bridge tests.
+// ArchiveIDs is what ArchiveExcess returns as the archived ids; RemainingAs is
+// what RestoreGraceArchive returns as the debt remainder.
 type fakeArchiverSource struct {
-	mu    sync.Mutex
-	calls []archiveCall
-	err   error
+	mu          sync.Mutex
+	calls       []archiveCall
+	restores    []restoreCall
+	err         error
+	archiveIDs  []uuid.UUID
+	remainingAs []uuid.UUID
 }
 
 type archiveCall struct {
 	ownerID uuid.UUID
+	limit   int
+}
+
+type restoreCall struct {
+	ownerID uuid.UUID
+	ids     []uuid.UUID
 	limit   int
 }
 
@@ -160,17 +171,30 @@ func (s *fakeArchiverSource) WithTx(transaction.Tx) (ExcessPropertyArchiver, err
 
 type fakeArchiver struct{ src *fakeArchiverSource }
 
-func (a fakeArchiver) ArchiveExcess(_ context.Context, ownerID uuid.UUID, limit int) error {
+func (a fakeArchiver) ArchiveExcess(_ context.Context, ownerID uuid.UUID, limit int) ([]uuid.UUID, error) {
 	a.src.mu.Lock()
 	defer a.src.mu.Unlock()
 	a.src.calls = append(a.src.calls, archiveCall{ownerID: ownerID, limit: limit})
-	return a.src.err
+	return a.src.archiveIDs, a.src.err
+}
+
+func (a fakeArchiver) RestoreGraceArchive(_ context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error) {
+	a.src.mu.Lock()
+	defer a.src.mu.Unlock()
+	a.src.restores = append(a.src.restores, restoreCall{ownerID: ownerID, ids: ids, limit: limit})
+	return a.src.remainingAs, a.src.err
 }
 
 func (s *fakeArchiverSource) recorded() []archiveCall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]archiveCall(nil), s.calls...)
+}
+
+func (s *fakeArchiverSource) restoreCalls() []restoreCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]restoreCall(nil), s.restores...)
 }
 
 // fakeSlotSource records enforce calls for the lifecycle-bridge tests.

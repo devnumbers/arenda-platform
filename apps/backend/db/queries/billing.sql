@@ -58,9 +58,10 @@ INSERT INTO user_subscriptions (
     pending_period,
     active_payment_method_id,
     last_applied_payment_id,
-    current_period
+    current_period,
+    grace_archived_property_ids
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING *;
 
@@ -90,7 +91,8 @@ SET
     active_payment_method_id = $10,
     last_applied_payment_id = $11,
     current_period = $12,
-    grace_reminded_at = $13
+    grace_reminded_at = $13,
+    grace_archived_property_ids = $14
 WHERE id = $1
 RETURNING *;
 

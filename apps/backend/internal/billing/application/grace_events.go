@@ -70,10 +70,22 @@ func (g *graceEvents) run(
 // of the failed renewal charge of ADR 0008 arrives here — the webhook
 // finalization, the worker's failed charge and the no-chargeable-method
 // planning exit.
+//
+// Grace v2 (ADR 0055): the entry also keeps one active property — the
+// properties bridge archives the excess (the survivor is the most recently
+// updated), the recipient slots are enforced, and the archived ids become the
+// subscription's restoration snapshot, committed with the transition. The
+// caller must run the lifecycle bridges (runLifecycleTx) — without a wired
+// archiver the snapshot stays empty and the excess waits.
 func (g *graceEvents) enterGrace(ctx context.Context, stores *txStores, sub domain.Subscription, now time.Time, grace time.Duration) error {
 	if sub.Status == domain.SubscriptionStatusGrace && sub.IsInGrace(now) {
 		return nil
 	}
+	archived, err := stores.archiveExcessForGraceEntry(ctx, sub.UserID)
+	if err != nil {
+		return fmt.Errorf("archive excess properties on grace entry: %w", err)
+	}
+	sub.SetGraceArchive(archived)
 	if _, err := stores.applyTransition(ctx, &sub,
 		func(s *domain.Subscription) error { s.EnterGrace(now, grace); return nil },
 		transitionSpec{

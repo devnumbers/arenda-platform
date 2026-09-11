@@ -112,6 +112,25 @@ func TestSubscriptionPropertyLimiter_ActivePropertyLimit(t *testing.T) {
 			tariffs:   []domain.Tariff{unlimitedTariff},
 			wantLimit: math.MaxInt32,
 		},
+		{
+			// Grace v2 (ADR 0055): the grace window keeps data mutations open
+			// but the effective limit is one active property, whatever the
+			// tariff says — create and restore count against it.
+			name: "grace with finite tariff returns one",
+			sub: &domain.Subscription{
+				UserID: uuid.Must(uuid.NewV7()), TariffID: finiteTariff.ID, Status: domain.SubscriptionStatusGrace, ValidUntil: &validUntilFuture,
+			},
+			tariffs:   []domain.Tariff{finiteTariff},
+			wantLimit: 1,
+		},
+		{
+			name: "grace with unlimited tariff returns one",
+			sub: &domain.Subscription{
+				UserID: uuid.Must(uuid.NewV7()), TariffID: unlimitedTariff.ID, Status: domain.SubscriptionStatusGrace, ValidUntil: &validUntilFuture,
+			},
+			tariffs:   []domain.Tariff{unlimitedTariff},
+			wantLimit: 1,
+		},
 	}
 
 	for _, tt := range tests {

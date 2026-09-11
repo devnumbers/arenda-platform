@@ -578,8 +578,28 @@ func applySucceededPayment(
 		return domain.Transition{}, fmt.Errorf("get payment tariff: %w", err)
 	}
 
+	// Grace v2 (ADR 0055): an applied payment settles the restoration debt of
+	// the grace window — the properties archived at the grace entry restore
+	// under the (possibly changed) tariff limit, newest-first. The bridge
+	// returns what did not fit: the debt remainder that stays on the
+	// subscription for the next applied payment (the fall to basic drops it).
+	// A bridge failure fails the application, so the provider redelivers and
+	// the seam retries. Only an actually applied payment restores: the no-op
+	// paths above return early.
+	graceSnapshot := sub.GraceArchivedPropertyIDs
+	graceRemaining := graceSnapshot
+	if len(graceSnapshot) > 0 {
+		graceRemaining, err = stores.restoreGraceArchive(ctx, payment.UserID, graceSnapshot, paymentTariff.ActivePropertyLimit)
+		if err != nil {
+			return domain.Transition{}, fmt.Errorf("restore grace archive after payment: %w", err)
+		}
+	}
+
 	applied, err := stores.applyTransition(ctx, &sub,
 		func(s *domain.Subscription) error {
+			// The settled snapshot (or its remainder) commits with the
+			// transition — the aggregate is persisted once, by the seam.
+			s.SetGraceArchive(graceRemaining)
 			if s.TariffID == payment.TariffID {
 				return s.ApplyRenewal(payment.ID, payment.Period, now)
 			}

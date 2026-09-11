@@ -847,16 +847,17 @@ func (s *PropertyService) archivePropertyInTx(
 
 // ArchiveExcessProperties archives active properties beyond the given limit,
 // keeping the most recently updated properties, so the tariff limit is always
-// enforced.
-func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, scope uuid.UUID, limit int) error {
+// enforced. It returns the archived ids in restoration-priority order — the
+// newest archived property first (the grace snapshot of ADR 0055).
+func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, scope uuid.UUID, limit int) ([]uuid.UUID, error) {
 	if limit < 0 {
-		return nil
+		return nil, nil
 	}
 
 	txRepo := s.repo.WithTx(tx)
 	properties, err := txRepo.ListActiveByOwner(ctx, scope)
 	if err != nil {
-		return fmt.Errorf("list active properties: %w", err)
+		return nil, fmt.Errorf("list active properties: %w", err)
 	}
 
 	// Keep the most recently updated properties; archive the rest.
@@ -865,11 +866,12 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 	})
 
 	if len(properties) <= limit {
-		return nil
+		return nil, nil
 	}
 
 	txAudit := s.audit.WithTx(tx)
 
+	var archived []uuid.UUID
 	for _, p := range properties[limit:] {
 		_, err := s.archivePropertyInTx(ctx, txRepo, scope, p.ID)
 		if err != nil {
@@ -880,8 +882,9 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 					"error", err.Error())
 				continue
 			}
-			return fmt.Errorf("archive property %s: %w", p.ID, err)
+			return nil, fmt.Errorf("archive property %s: %w", p.ID, err)
 		}
+		archived = append(archived, p.ID)
 		// Fail-safe: an audit failure aborts the billing operation that
 		// triggered the auto-archive.
 		if err := txAudit.Record(ctx, auditdomain.Entry{
@@ -892,7 +895,7 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 			EntityID:   &p.ID,
 			Context:    map[string]any{"trigger": "billing_limit"},
 		}); err != nil {
-			return fmt.Errorf("record audit: %w", err)
+			return nil, fmt.Errorf("record audit: %w", err)
 		}
 
 		// Same as a manual archive (issue #163): archiving freed one tariff slot
@@ -900,17 +903,82 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 		// in the same transaction.
 		if s.slots != nil {
 			if err := s.slots.RecoverSuspendedForProperty(ctx, tx, p.ID); err != nil {
-				return fmt.Errorf("recover suspended memberships after auto-archive: %w", err)
+				return nil, fmt.Errorf("recover suspended memberships after auto-archive: %w", err)
 			}
 			// Same as a manual archive: archiving one of the owner's OWN objects
 			// also freed one of the owner's own tariff slots, so recover their own
 			// suspended shared queue FIFO in the same transaction.
 			if err := s.slots.RecoverSuspended(ctx, tx, scope); err != nil {
-				return fmt.Errorf("recover owner suspended memberships after auto-archive: %w", err)
+				return nil, fmt.Errorf("recover owner suspended memberships after auto-archive: %w", err)
 			}
 		}
 	}
-	return nil
+	return archived, nil
+}
+
+// RestoreGraceArchivedProperties unarchives the given properties of the owner
+// — the ids billing archived at its grace entry and owes to restore (ADR
+// 0055) — while the owner's active count stays under the limit; a negative
+// limit is unlimited. The ids restore in the given (restoration-priority)
+// order; an id gone or already active since the snapshot is skipped as
+// settled. Every restoration mirrors a manual unarchive: the audit entry
+// names the grace_restore trigger and the recipient slots are re-enforced for
+// the property. Returns the ids it could not restore — the debt remainder
+// still archived beyond the limit, in the given order (nil when everything
+// settled).
+func (s *PropertyService) RestoreGraceArchivedProperties(
+	ctx context.Context, tx transaction.Tx, scope uuid.UUID, ids []uuid.UUID, limit int,
+) ([]uuid.UUID, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	txRepo := s.repo.WithTx(tx)
+	txAudit := s.audit.WithTx(tx)
+	count, err := txRepo.CountActiveByOwner(ctx, scope)
+	if err != nil {
+		return nil, fmt.Errorf("count active properties: %w", err)
+	}
+
+	for i, id := range ids {
+		if limit >= 0 && count >= limit {
+			// The limit is spent: the tail stays archived — the debt remainder.
+			return ids[i:], nil
+		}
+		property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, scope)
+		if errors.Is(err, ErrNotFound) {
+			// Deleted since the snapshot: nothing to restore.
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("get property %s: %w", id, err)
+		}
+		if property.Status != domain.PropertyStatusArchived {
+			// Active again (restored manually since the snapshot): settled.
+			continue
+		}
+		if err := txRepo.Unarchive(ctx, id, scope); err != nil {
+			return nil, fmt.Errorf("unarchive property %s: %w", id, err)
+		}
+		count++
+		if err := txAudit.Record(ctx, auditdomain.Entry{
+			ActorID:    &scope,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionPropertyUnarchived,
+			EntityType: auditdomain.EntityProperty,
+			EntityID:   &id,
+			Context:    map[string]any{"trigger": "grace_restore"},
+		}); err != nil {
+			return nil, fmt.Errorf("record audit: %w", err)
+		}
+		// Same as a manual unarchive: the object re-enters every recipient's
+		// tariff pool, so suspend any recipient already at their limit.
+		if s.slots != nil {
+			if err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
+				return nil, fmt.Errorf("enforce recipient slot on grace restore: %w", err)
+			}
+		}
+	}
+	return nil, nil
 }
 
 func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {

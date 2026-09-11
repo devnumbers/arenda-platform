@@ -30,6 +30,19 @@ func UUIDSliceToPgtype(ids []uuid.UUID) []pgtype.UUID {
 	return out
 }
 
+// UUIDSliceFromPgtype converts a slice of pgtype.UUID (a uuid[] column scan)
+// back to uuid.UUID values; nil stays nil.
+func UUIDSliceFromPgtype(ids []pgtype.UUID) []uuid.UUID {
+	if ids == nil {
+		return nil
+	}
+	out := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = UUIDFromPgtype(id)
+	}
+	return out
+}
+
 // UUIDToPgtypePtr converts a *uuid.UUID to pgtype.UUID.
 func UUIDToPgtypePtr(u *uuid.UUID) pgtype.UUID {
 	if u == nil {

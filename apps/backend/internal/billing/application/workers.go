@@ -20,12 +20,24 @@ import (
 // thin: every decision lives here, behind the module's stores and provider
 // port.
 
-// ExcessPropertyArchiver archives the owner's active properties beyond a tariff
-// limit inside the caller's transaction. Declared here, at the consumer (the
-// worker phases), per ADR 0035; the composition root adapts the properties
-// context to it.
+// ExcessPropertyArchiver is the properties-context bridge of the billing
+// lifecycle inside the caller's transaction: it archives the owner's active
+// properties beyond a tariff limit — keeping the most recently updated — and
+// restores the properties a grace entry archived (ADR 0055). Declared here,
+// at the consumer (the worker phases and the payment application seam), per
+// ADR 0035; the composition root adapts the properties context to it.
 type ExcessPropertyArchiver interface {
-	ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int) error
+	// ArchiveExcess archives the owner's active properties beyond the limit
+	// and returns their ids in restoration-priority order — the newest
+	// archived property first.
+	ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int) ([]uuid.UUID, error)
+	// RestoreGraceArchive unarchives the given owner's properties — the ids
+	// snapshot taken at the grace entry — while the owner's active count
+	// stays under the limit (a negative limit is unlimited); already-active
+	// and missing properties are skipped as settled. Returns the ids it
+	// could not restore — the debt remainder still archived beyond the
+	// limit, in the given order.
+	RestoreGraceArchive(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error)
 }
 
 // ExcessPropertyArchiverSource produces transaction-bound archivers.
@@ -165,6 +177,7 @@ const (
 	triggerFreeDowngrade      = "free_downgrade"
 	triggerRenewalDowngrade   = "renewal_downgrade"
 	triggerGraceExpired       = "grace_expired"
+	triggerGraceEntry         = "grace_entry"
 	triggerNonRenewingExpired = "non_renewing_expired"
 	triggerCancelledExpired   = "cancelled_expired"
 	triggerRefund             = "refund"
@@ -800,17 +813,20 @@ func (w *Workers) mitInitRequest(payment domain.SubscriptionPayment, tariff doma
 
 // failRenewalPayment finalizes a definitively failed renewal charge and moves
 // the subscription into grace in the same transaction: the pending window for
-// the user to fix the payment method (ADR 0008). The freshness guard of issue
-// #426 keeps a superseded charge out of grace: a subscription renewed or
-// upgraded by a newer payment while this charge was in flight stays active,
-// and the failure is recorded on the payment alone. A payment finalized by
-// another flow first is a no-op. The grace-entered event is captured by the
-// grace-events module inside the transaction and published strictly after the
-// commit — best-effort, a publication failure is logged and never fails the
-// finalized payment (issue #284).
+// the user to fix the payment method (ADR 0008). Grace v2 (ADR 0055) makes
+// the entry archive excess properties, so the transaction carries the
+// lifecycle bridges — the archiving and the snapshot commit with the grace
+// transition. The freshness guard of issue #426 keeps a superseded charge out
+// of grace: a subscription renewed or upgraded by a newer payment while this
+// charge was in flight stays active, and the failure is recorded on the
+// payment alone. A payment finalized by another flow first is a no-op. The
+// grace-entered event is captured by the grace-events module inside the
+// transaction and published strictly after the commit — best-effort, a
+// publication failure is logged and never fails the finalized payment
+// (issue #284).
 func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, errorCode *string, now time.Time) error {
 	grace := newGraceEvents(w.publisher, w.log)
-	return grace.run(ctx, w.runInTx, func(stores *txStores) error {
+	return grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, paymentID)
 		if err != nil {
 			return err

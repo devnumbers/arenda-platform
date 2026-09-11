@@ -21,15 +21,27 @@ import (
 // expiry, deferred changes, the shared expiry path and the lost-webhook
 // reconciliation.
 
-// capturingArchiver records the archive calls of a worker phase.
+// capturingArchiver records the archive and restore calls of a worker phase
+// or the payment application seam. ArchiveIDs, when set, is what ArchiveExcess
+// reports as the archived ids; RemainingAs is the debt remainder the restore
+// reports.
 type capturingArchiver struct {
-	mu    sync.Mutex
-	calls []capturedArchive
-	err   error
+	mu          sync.Mutex
+	calls       []capturedArchive
+	restores    []capturedRestore
+	err         error
+	archiveIDs  []uuid.UUID
+	remainingAs []uuid.UUID
 }
 
 type capturedArchive struct {
 	ownerID uuid.UUID
+	limit   int
+}
+
+type capturedRestore struct {
+	ownerID uuid.UUID
+	ids     []uuid.UUID
 	limit   int
 }
 
@@ -39,17 +51,30 @@ func (s *capturingArchiver) WithTx(transaction.Tx) (billingapp.ExcessPropertyArc
 
 type boundArchiver struct{ src *capturingArchiver }
 
-func (a boundArchiver) ArchiveExcess(_ context.Context, ownerID uuid.UUID, limit int) error {
+func (a boundArchiver) ArchiveExcess(_ context.Context, ownerID uuid.UUID, limit int) ([]uuid.UUID, error) {
 	a.src.mu.Lock()
 	defer a.src.mu.Unlock()
 	a.src.calls = append(a.src.calls, capturedArchive{ownerID: ownerID, limit: limit})
-	return a.src.err
+	return a.src.archiveIDs, a.src.err
+}
+
+func (a boundArchiver) RestoreGraceArchive(_ context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error) {
+	a.src.mu.Lock()
+	defer a.src.mu.Unlock()
+	a.src.restores = append(a.src.restores, capturedRestore{ownerID: ownerID, ids: ids, limit: limit})
+	return a.src.remainingAs, a.src.err
 }
 
 func (s *capturingArchiver) recorded() []capturedArchive {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]capturedArchive(nil), s.calls...)
+}
+
+func (s *capturingArchiver) restoreCalls() []capturedRestore {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]capturedRestore(nil), s.restores...)
 }
 
 // capturingSlots records the enforce calls of a worker phase.
@@ -261,11 +286,16 @@ func TestWorkers_Integration_FailedChargeGraceThenBasic(t *testing.T) {
 	}
 
 	basic := requireBasicDowngrade(t, h, userID)
-	if got := archiver.recorded(); len(got) != 1 || got[0].limit != basic.ActivePropertyLimit || got[0].ownerID != userID {
-		t.Errorf("archive calls = %+v, want one at the basic limit for the user", got)
+	// Grace v2 (ADR 0055): the entry archived at the grace limit, and the
+	// expiry downgrade enforces the basic limit — two archive calls, both at
+	// one property.
+	entry := capturedArchive{ownerID: userID, limit: 1}
+	expiry := capturedArchive{ownerID: userID, limit: basic.ActivePropertyLimit}
+	if got := archiver.recorded(); len(got) != 2 || got[0] != entry || got[1] != expiry {
+		t.Errorf("archive calls = %+v, want %+v then %+v", got, entry, expiry)
 	}
-	if got := slots.recorded(); len(got) != 1 || got[0] != "grace_expired" {
-		t.Errorf("slot calls = %v, want one grace_expired", got)
+	if got := slots.recorded(); len(got) != 2 || got[0] != "grace_entry" || got[1] != "grace_expired" {
+		t.Errorf("slot calls = %v, want grace_entry then grace_expired", got)
 	}
 	if got := h.countRows(
 		`SELECT count(*) FROM subscription_transitions WHERE subscription_id = $1 AND reason = 'expired'`,

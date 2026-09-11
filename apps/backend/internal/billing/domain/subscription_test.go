@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -531,6 +532,9 @@ func TestSubscriptionDowngradeToBasic(t *testing.T) {
 		PendingChangeAt:  &pendingAt,
 		PendingPeriod:    &period,
 		CurrentPeriod:    &period,
+		GraceArchivedPropertyIDs: []uuid.UUID{
+			uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16"),
+		},
 	}
 
 	sub.DowngradeToBasic(basicID)
@@ -552,6 +556,11 @@ func TestSubscriptionDowngradeToBasic(t *testing.T) {
 	}
 	if sub.CurrentPeriod != nil {
 		t.Errorf("CurrentPeriod = %v, want nil", sub.CurrentPeriod)
+	}
+	// The fall to basic ends the grace window without payment: the restoration
+	// debt is dropped (ADR 0055).
+	if sub.GraceArchivedPropertyIDs != nil {
+		t.Errorf("GraceArchivedPropertyIDs = %v, want nil", sub.GraceArchivedPropertyIDs)
 	}
 }
 
@@ -927,7 +936,7 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 	if err := subInvalid.ApplyScheduledDowngrade(basic, SubscriptionPeriod("weekly"), now); !errors.Is(err, ErrInvalidPeriod) {
 		t.Errorf("ApplyScheduledDowngrade invalid period error = %v, want ErrInvalidPeriod", err)
 	}
-	if subInvalid != baseline {
+	if !reflect.DeepEqual(subInvalid, baseline) {
 		t.Errorf("ApplyScheduledDowngrade mutated fields on invalid period: got %+v, want %+v", subInvalid, baseline)
 	}
 
@@ -939,7 +948,7 @@ func TestSubscriptionApplyScheduledDowngrade(t *testing.T) {
 	if err := subSame.ApplyScheduledDowngrade(pro, PeriodMonth, now); !errors.Is(err, ErrAlreadyOnTariff) {
 		t.Errorf("ApplyScheduledDowngrade same tariff error = %v, want ErrAlreadyOnTariff", err)
 	}
-	if subSame != baseline {
+	if !reflect.DeepEqual(subSame, baseline) {
 		t.Errorf("ApplyScheduledDowngrade mutated fields on same tariff: got %+v, want %+v", subSame, baseline)
 	}
 }
@@ -977,7 +986,7 @@ func TestSubscriptionClearPendingChange(t *testing.T) {
 	baseline.PendingTariffID = nil
 	baseline.PendingChangeAt = nil
 	baseline.PendingPeriod = nil
-	if sub != baseline {
+	if !reflect.DeepEqual(sub, baseline) {
 		t.Errorf("ClearPendingChange mutated non-pending fields: got %+v, want %+v", sub, baseline)
 	}
 }
@@ -1036,7 +1045,7 @@ func TestSubscriptionApplyScheduledDowngradePreconditions(t *testing.T) {
 			if err := sub.ApplyScheduledDowngrade(basic, PeriodMonth, now); !errors.Is(err, ErrInvalidSubscriptionState) {
 				t.Errorf("ApplyScheduledDowngrade() error = %v, want ErrInvalidSubscriptionState", err)
 			}
-			if sub != before {
+			if !reflect.DeepEqual(sub, before) {
 				t.Errorf("ApplyScheduledDowngrade mutated fields on precondition failure: got %+v, want %+v", sub, before)
 			}
 		})
@@ -1071,7 +1080,7 @@ func TestReconstituteSubscription(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReconstituteSubscription() error = %v", err)
 		}
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("ReconstituteSubscription() = %+v, want %+v", got, want)
 		}
 	})
@@ -1164,6 +1173,9 @@ func TestSubscriptionAssignService(t *testing.T) {
 		PendingPeriod:    &pendingPeriod,
 		CurrentPeriod:    &pendingPeriod,
 		GraceRemindedAt:  &remindedAt,
+		GraceArchivedPropertyIDs: []uuid.UUID{
+			uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17"),
+		},
 	}
 	sub.SetActivePaymentMethod(methodID)
 
@@ -1192,6 +1204,11 @@ func TestSubscriptionAssignService(t *testing.T) {
 	}
 	if sub.GraceRemindedAt != nil {
 		t.Errorf("GraceRemindedAt = %v, want nil", sub.GraceRemindedAt)
+	}
+	// The overwrite discards the previous subscription's state, the grace
+	// restoration debt with it (ADR 0055).
+	if sub.GraceArchivedPropertyIDs != nil {
+		t.Errorf("GraceArchivedPropertyIDs = %v, want nil", sub.GraceArchivedPropertyIDs)
 	}
 	if sub.ActivePaymentMethodID == nil || *sub.ActivePaymentMethodID != methodID {
 		t.Errorf("ActivePaymentMethodID = %v, want the surviving method", sub.ActivePaymentMethodID)
