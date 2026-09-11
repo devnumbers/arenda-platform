@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { PaymentsObjectsSearchScreen } from '@/widgets/payments';
+import { PaymentsObjectsSearchScreen, PaymentsObjectsSearchLoading } from '@/widgets/payments';
 
 /**
  * Страница поиска объектов (карта #573, тикет #582, Figma 888:19356/19364):
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function PaymentsObjectsSearchRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PaymentsObjectsSearchLoading />}>
       <PaymentsObjectsSearchScreen />
     </Suspense>
   );

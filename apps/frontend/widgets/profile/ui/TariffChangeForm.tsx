@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import NextLink from 'next/link';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
-import { Skeleton } from '@heroui/react/skeleton';
+import { Skeleton } from '@/shared/ui/design';
 import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
 import {
@@ -91,15 +91,16 @@ function PeriodSelector({
   );
 }
 
-function TariffChangeSkeleton(): JSX.Element {
+/** Скелетон формы смены тарифа — экспорт для route-loading (#609). */
+export function TariffChangeSkeleton(): JSX.Element {
   return (
     <div className={styles.list}>
       {[1, 2, 3].map((key) => (
         <Card key={key} className={styles.card}>
-          <Skeleton className={styles.nameSkeleton} />
-          <Skeleton className={styles.priceSkeleton} />
-          <Skeleton className={styles.limitSkeleton} />
-          <Skeleton className={styles.buttonSkeleton} />
+          <Skeleton className="h-6 w-2/5 rounded-lg" />
+          <Skeleton className="h-5 w-3/5 rounded-md" />
+          <Skeleton className="h-[18px] w-1/2 rounded-md" />
+          <Skeleton className="h-12 w-full rounded-button" />
         </Card>
       ))}
     </div>

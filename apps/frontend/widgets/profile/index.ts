@@ -9,3 +9,11 @@ export { TariffChangeForm } from './ui/TariffChangeForm';
 export { TariffChangeSuccess } from './ui/TariffChangeSuccess';
 export { TariffOverview } from './ui/TariffOverview';
 export { TimezonePickerScreen } from './ui/TimezonePickerScreen';
+
+/* Скелетоны route-loading (#609). */
+export { NotificationSettingsSkeleton } from './ui/NotificationSettings';
+export { PaymentDetailSkeleton } from './ui/PaymentDetail';
+export { PaymentListSkeleton } from './ui/PaymentList';
+export { PaymentMethodListSkeleton } from './ui/PaymentMethodList';
+export { TariffChangeSkeleton } from './ui/TariffChangeForm';
+export { TariffOverviewSkeleton } from './ui/TariffOverview';

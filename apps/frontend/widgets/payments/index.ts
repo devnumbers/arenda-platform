@@ -26,3 +26,20 @@ export { PaymentScheduleScreen } from './ui/payment-schedule-screen';
 export { PaymentHistoryScreen } from './ui/payment-history-screen';
 export { PaymentOverdueScreen } from './ui/payment-overdue-screen';
 export { OperationCreateWizardScreen } from './ui/operation-create-wizard/operation-create-wizard-screen';
+/* Route-loading (#609). */
+export {
+  OperationCreateLoading,
+  OperationsCategoriesLoading,
+  OperationsDirectionLoading,
+  OperationsLoading,
+  OperationsObjectsLoading,
+  OperationsSearchLoading,
+} from './ui/operations-loading';
+export {
+  PaymentsFavoritesLoading,
+  PaymentsLoading,
+  PaymentsObjectsLoading,
+  PaymentsObjectsSearchLoading,
+  PaymentsOverdueLoading,
+  PaymentsSearchLoading,
+} from './ui/payments-loading';

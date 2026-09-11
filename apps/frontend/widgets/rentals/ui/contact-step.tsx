@@ -28,8 +28,8 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
-  Skeleton,
 } from '@/shared/ui/design';
+import { RentalContactBookSkeleton } from './rental-skeletons';
 import { WizardHeading } from './wizard-chrome';
 
 /**
@@ -186,13 +186,9 @@ function BookList({
   const contacts = query.data ?? [];
 
   if (query.isPending) {
-    return (
-      <div className="flex flex-col gap-4 pt-2">
-        <Skeleton className="h-14 w-full" />
-        <Skeleton className="h-14 w-full" />
-        <Skeleton className="h-14 w-full" />
-      </div>
-    );
+    // Паритет книги (#607): та же карточка с группами, без своей вставки —
+    // контейнер шага приносит px-6.
+    return <RentalContactBookSkeleton />;
   }
   if (query.isError) {
     return (

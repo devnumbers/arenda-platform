@@ -4,6 +4,7 @@ import type { JSX } from 'react';
 import Link from 'next/link';
 import type { NavSection } from '@/shared/config/navigation';
 import { cn } from '@/shared/lib/cn';
+import { useNavIntentLink } from './nav-intent';
 
 export type DesktopMenuButtonProps = {
   readonly section: NavSection;
@@ -28,10 +29,15 @@ export function DesktopMenuButton({
   active = false,
   className,
 }: DesktopMenuButtonProps): JSX.Element {
+  const intent = useNavIntentLink();
   return (
     <Link
       href={section.href}
+      prefetch={intent.prefetch}
       aria-current={active ? 'page' : undefined}
+      onPointerEnter={intent.onIntent}
+      onPointerDown={intent.onIntent}
+      onFocus={intent.onIntent}
       className={cn(
         'flex h-11 w-[200px] cursor-pointer overflow-clip rounded-button font-sans outline-none',
         'focus-visible:ring-2 focus-visible:ring-primary',

@@ -21,7 +21,8 @@ import {
   useGlobalOperationsSummary,
 } from '@/features/payments';
 import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
-import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsStateCard } from './payments-sections';
+import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from './operations-skeletons';
 import { LoadingMoreIndicator, OperationsDateList, OperationsNeverHad } from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
 import { OperationsGlobalPeriodPickerDialog } from './operations-period-picker';
@@ -193,8 +194,10 @@ export function OperationsGlobalDirectionScreen({
 
             {pending && (
               <>
-                <PaymentsSkeleton withHeading />
-                <PaymentsSkeleton withHeading />
+                {/* Паритет §7: одна карточка направления во всю ширину и
+                 * группы дат со строками; чипы выше — вне фазы загрузки. */}
+                <OperationsSummarySkeleton cards={1} />
+                <OperationsDateFeedSkeleton />
               </>
             )}
 

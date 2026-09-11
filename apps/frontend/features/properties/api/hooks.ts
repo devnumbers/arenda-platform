@@ -26,15 +26,19 @@ type AddressSuggestion = components['schemas']['AddressSuggestion'];
 export type DeletePropertyMode =
   operations['deleteProperty']['parameters']['query']['mode'];
 
+/** Чистый fetch списка объектов — общее горло хука и прогрева хабов
+ * #626 (кэш прогревается тем же кодом, что читает экран). */
+export async function fetchProperties(): Promise<Property[]> {
+  const response = await apiClient<PropertiesResponse>('/properties');
+  return response.items.map(mapPropertyResponse);
+}
+
 export function useProperties(
   options: { enabled?: boolean } = {},
 ): UseQueryResult<Property[], ApiError> {
   return useQuery({
     queryKey: propertyKeys.list,
-    queryFn: async () => {
-      const response = await apiClient<PropertiesResponse>('/properties');
-      return response.items.map(mapPropertyResponse);
-    },
+    queryFn: fetchProperties,
     enabled: options.enabled,
   });
 }

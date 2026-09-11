@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
-import { Skeleton } from '@heroui/react/skeleton';
+import { Skeleton } from '@/shared/ui/design';
 import { Button } from '@/shared/ui/button';
 import {
   PAYMENT_STALE_MS,
@@ -19,13 +19,14 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatDate } from '@/shared/lib/format-date';
 import styles from './PaymentDetail.module.css';
 
-function PaymentDetailSkeleton(): JSX.Element {
+/** Скелетон карточки платежа — экспорт для route-loading (#609). */
+export function PaymentDetailSkeleton(): JSX.Element {
   return (
     <Card className={styles.card}>
-      <Skeleton className={styles.rowSkeleton} />
-      <Skeleton className={styles.rowSkeleton} />
-      <Skeleton className={styles.rowSkeleton} />
-      <Skeleton className={styles.rowSkeleton} />
+      <Skeleton className="h-[18px] w-full rounded-md" />
+      <Skeleton className="h-[18px] w-full rounded-md" />
+      <Skeleton className="h-[18px] w-[70%] rounded-md" />
+      <Skeleton className="h-[18px] w-[80%] rounded-md" />
     </Card>
   );
 }

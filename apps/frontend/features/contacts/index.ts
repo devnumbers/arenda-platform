@@ -1,4 +1,5 @@
 export {
+  fetchContactBook,
   useContacts,
   useContactBook,
   useCreateContact,

@@ -1,5 +1,6 @@
 export { propertyKeys } from '@/shared/api/query-keys';
 export {
+  fetchProperties,
   useProperties,
   useArchivedProperties,
   useProperty,

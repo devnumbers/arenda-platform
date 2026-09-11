@@ -39,23 +39,30 @@ Data surfaces are judged not only on their loaded state but on the **transition*
 3. **No naked data surface**: every query has a loading state at all (CODING_STANDARDS «Naked data surface») — nothing pops in unannounced.
 4. **In-place updates stay in place**: typing in search, switching filter chips or period keeps previous results on screen (keepPreviousData) — a skeleton flash per keystroke or per chip is a failure.
 
-Mechanics: local stacks answer in tens of milliseconds — too fast to judge a skeleton honestly, so slow the API down and meter the shifts:
+Mechanics: local stacks answer in tens of milliseconds — too fast to judge a skeleton honestly, so slow the API down and meter the shifts. Pitfalls verified live on #605 (2026-09-10):
+
+- **Never busy-wait inside a `page.route` handler** — it blocks the runner's event loop, so goto/timers/screenshots all stall until the wait is over and the "loading" frame is shot after data has already arrived. Delay with `page.waitForTimeout` inside the handler (there is no `setTimeout` in the JS sandbox, but Playwright's own timer works).
+- **Neutralize the service worker first**: the PWA `sw.js` intercepts navigations and its controlled fetches bypass `page.route` («route.continue: already handled»). Fix: `page.route('**/sw.js', r => r.fulfill({ body: '', contentType: 'application/javascript' }))` + unregister existing registrations, then reload.
+- **Never `unroute` mid-flight** — requests parked in a removed handler hang forever. Release by time (release-at deadline inside the handler) and unroute only after the loaded screenshot.
+- **SPA navigation can be legitimately instant** (react-query `staleTime`), so shoot the loading frame on a cold hard `goto`, not an in-app click.
 
 ```js
-// 1) Delay every API response (~1.2 s) for the transition under test:
+// Delay every API response (~4 s release deadline) for the transition under test:
+await page.route('**/sw.js', (r) => r.fulfill({ body: '', contentType: 'application/javascript' }));
+const releaseAt = Date.now() + 4000;
 await page.route('**/api/**', async (route) => {
-  const end = Date.now() + 1200;           // busy-wait: no timers in the sandbox
-  while (Date.now() < end) {}
+  const wait = releaseAt - Date.now();
+  if (wait > 0) await page.waitForTimeout(wait);
   await route.continue();
 });
-// … navigate, screenshot the loading frame, wait for data, screenshot loaded, then:
-await page.unroute('**/api/**');
+// … goto (hard load), screenshot the loading frame at ~700 ms, waitForTimeout past
+// the deadline, screenshot loaded, then: await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-// 2) Shift meter (install before the transition, read after):
+// Shift meter (install before the transition, read after; buffered replays earlier shifts):
 window.__cls = 0;
 new PerformanceObserver((list) => {
   for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
-}).observe({ type: 'layout-shift', buffered: false });
+}).observe({ type: 'layout-shift', buffered: true });
 ```
 
 Caveat: on a fast local stack a swap can land inside the platform's 500 ms `hadRecentInput` window after the click and be filtered out of the score — the screenshot pair (loading vs loaded) is the primary evidence, the CLS number is corroborating. Record per check: pass / fail with both screenshots; a fail is a P1 finding and blocks the ticket (step 5).

@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -27,6 +28,10 @@ type ContactResponse = components['schemas']['ContactResponse'];
  * имени, телефону, почте, имени пользователя мессенджера и роли ('' = без
  * фильтра). Чтение через view-гейт объекта: участник с ролью CanView видит
  * привязанные к объекту контакты (403 — проблема Forbidden).
+ * keepPreviousData — прежний срез держится на экране, пока едет запрос
+ * с новым ?search= (набор не мигает скелетоном, канон платежей #609);
+ * смена propertyId держит список прежнего объекта до прихода нового —
+ * осознанно, как у платежей.
  */
 export function useContacts(
   propertyId: string,
@@ -41,6 +46,7 @@ export function useContacts(
       );
       return response.items.map(mapContact);
     },
+    placeholderData: keepPreviousData,
     enabled: Boolean(propertyId),
   });
 }
@@ -51,6 +57,30 @@ export type ContactBookSort = 'name' | 'property';
 
 /** Направление сортировки плоской книги. */
 export type ContactBookOrder = 'asc' | 'desc';
+
+/** Чистый fetch плоской книги — общее горло хука и прогрева хабов
+ * #626 (кэш прогревается тем же кодом, что читает экран). */
+export async function fetchContactBook(
+  search = '',
+  sort: ContactBookSort = 'name',
+  order: ContactBookOrder = 'asc',
+): Promise<Contact[]> {
+  const params = new URLSearchParams();
+  if (search !== '') {
+    params.set('search', search);
+  }
+  if (sort !== 'name') {
+    params.set('sort', sort);
+  }
+  if (order !== 'asc') {
+    params.set('order', order);
+  }
+  const query = params.toString();
+  const response = await apiClient<ContactsResponse>(
+    `/contacts${query !== '' ? `?${query}` : ''}`,
+  );
+  return response.items.map(mapContact);
+}
 
 /**
  * Плоский список всей видимой книги (глобальная страница контактов, макет
@@ -66,23 +96,11 @@ export function useContactBook(
 ): UseQueryResult<Contact[], ApiError> {
   return useQuery({
     queryKey: contactKeys.list(null, search, sort, order),
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (search !== '') {
-        params.set('search', search);
-      }
-      if (sort !== 'name') {
-        params.set('sort', sort);
-      }
-      if (order !== 'asc') {
-        params.set('order', order);
-      }
-      const query = params.toString();
-      const response = await apiClient<ContactsResponse>(
-        `/contacts${query !== '' ? `?${query}` : ''}`,
-      );
-      return response.items.map(mapContact);
-    },
+    queryFn: () => fetchContactBook(search, sort, order),
+    // Набор в поиске и смена сортировки держат прежнюю выдачу, пока едет
+    // новый запрос (#609, канон платежей): скелетон — только когда данных
+    // нет вовсе.
+    placeholderData: keepPreviousData,
   });
 }
 

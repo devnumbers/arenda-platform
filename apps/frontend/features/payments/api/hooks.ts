@@ -418,51 +418,92 @@ export function usePropertyOperationsSummary(
  * запрос (поиск #543 не стреляет, пока запрос не введён);
  * keepPreviousData держит прежнюю страницу, пока едет новая.
  */
+/** Скоуп глобальной ленты → общая часть query-параметров (объекты, период,
+ * направление, архив, поиск); пагинация и порядок — у порции, сводка их не
+ * принимает. Общее горло хуков и прогрева хабов #626. */
+function operationsScopeParams(scope: GlobalOperationScope): URLSearchParams {
+  const params = new URLSearchParams();
+  if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
+    params.set('propertyIds', scope.propertyIds.join(','));
+  }
+  if (scope.categories !== undefined && scope.categories.length > 0) {
+    params.set('category', scope.categories.join(','));
+  }
+  if (scope.type !== undefined) {
+    params.set('type', scope.type);
+  }
+  if (scope.includeArchived) {
+    params.set('includeArchived', 'true');
+  }
+  if (scope.dateFrom !== undefined) {
+    params.set('date_from', scope.dateFrom);
+  }
+  if (scope.dateTo !== undefined) {
+    params.set('date_to', scope.dateTo);
+  }
+  if (scope.search !== undefined && scope.search !== '') {
+    params.set('search', scope.search);
+  }
+  return params;
+}
+
+/** Чистый fetch порции глобальной ленты — общее горло хука и прогрева
+ * хабов #626. */
+export async function fetchGlobalOperationsPage(
+  scope: GlobalOperationScope,
+  pageParam: number,
+): Promise<ReadonlyArray<PaymentOperation>> {
+  const params = operationsScopeParams(scope);
+  params.set('order', scope.order);
+  params.set('limit', String(OPERATIONS_PAGE_SIZE));
+  params.set('offset', String(pageParam));
+  const response = await apiClient<OperationsResponse>(`/operations?${params.toString()}`);
+  return response.items.map(mapPaymentOperation);
+}
+
+/** Есть ли следующая порция: пока текущая полная (контракт листингов). */
+export function operationsNextPageParam(
+  lastPage: ReadonlyArray<PaymentOperation>,
+  allPages: ReadonlyArray<ReadonlyArray<PaymentOperation>>,
+): number | undefined {
+  return lastPage.length < OPERATIONS_PAGE_SIZE
+    ? undefined
+    : allPages.length * OPERATIONS_PAGE_SIZE;
+}
+
+/**
+ * Глобальная лента операций (карта #540, #541): платёжные факты видимой
+ * книги (ADR 0028), архивные исключены сервером; лента paid-only. Тот же
+ * пагинационный контракт, что у объектных списков: pageParam — offset,
+ * следующая страница есть, пока порция полная. `options.enabled` глушит
+ * запрос (поиск #543 не стреляет, пока запрос не введён);
+ * keepPreviousData держит прежнюю страницу, пока едет новая.
+ */
 export function useGlobalOperationsPaged(
   scope: GlobalOperationScope,
   options: { readonly enabled?: boolean } = {},
 ): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
   return useInfiniteQuery({
     queryKey: globalOperationKeys.listPaged(scope),
-    queryFn: async ({ pageParam }) => {
-      const params = new URLSearchParams({
-        order: scope.order,
-        limit: String(OPERATIONS_PAGE_SIZE),
-        offset: String(pageParam),
-      });
-      if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
-        params.set('propertyIds', scope.propertyIds.join(','));
-      }
-      if (scope.categories !== undefined && scope.categories.length > 0) {
-        params.set('category', scope.categories.join(','));
-      }
-      if (scope.type !== undefined) {
-        params.set('type', scope.type);
-      }
-      if (scope.includeArchived) {
-        params.set('includeArchived', 'true');
-      }
-      if (scope.dateFrom !== undefined) {
-        params.set('date_from', scope.dateFrom);
-      }
-      if (scope.dateTo !== undefined) {
-        params.set('date_to', scope.dateTo);
-      }
-      if (scope.search !== undefined && scope.search !== '') {
-        params.set('search', scope.search);
-      }
-      const response = await apiClient<OperationsResponse>(`/operations?${params.toString()}`);
-      return response.items.map(mapPaymentOperation);
-    },
+    queryFn: ({ pageParam }) => fetchGlobalOperationsPage(scope, pageParam),
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < OPERATIONS_PAGE_SIZE
-        ? undefined
-        : allPages.length * OPERATIONS_PAGE_SIZE,
+    getNextPageParam: operationsNextPageParam,
     select: (data) => data.pages.flat(),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });
+}
+
+/** Чистый fetch сводки операций — общее горло хука и прогрева хабов #626. */
+export async function fetchGlobalOperationsSummary(
+  scope: GlobalOperationScope,
+): Promise<OperationsSummary> {
+  const params = operationsScopeParams(scope);
+  const query = params.toString();
+  const response = await apiClient<OperationsSummaryResponse>(
+    `/operations/summary${query.length > 0 ? `?${query}` : ''}`,
+  );
+  return mapOperationsSummary(response);
 }
 
 /**
@@ -505,32 +546,7 @@ export function useGlobalOperationsSummary(
 ): UseQueryResult<OperationsSummary, ApiError> {
   return useQuery({
     queryKey: globalOperationKeys.summary(scope),
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
-        params.set('propertyIds', scope.propertyIds.join(','));
-      }
-      if (scope.type !== undefined) {
-        params.set('type', scope.type);
-      }
-      if (scope.includeArchived) {
-        params.set('includeArchived', 'true');
-      }
-      if (scope.dateFrom !== undefined) {
-        params.set('date_from', scope.dateFrom);
-      }
-      if (scope.dateTo !== undefined) {
-        params.set('date_to', scope.dateTo);
-      }
-      if (scope.search !== undefined && scope.search !== '') {
-        params.set('search', scope.search);
-      }
-      const query = params.toString();
-      const response = await apiClient<OperationsSummaryResponse>(
-        `/operations/summary${query.length > 0 ? `?${query}` : ''}`,
-      );
-      return mapOperationsSummary(response);
-    },
+    queryFn: () => fetchGlobalOperationsSummary(scope),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });
@@ -687,6 +703,15 @@ export function usePayOperation(
   });
 }
 
+/** Чистый fetch фида «Платежей» — общее горло хука и прогрева хабов
+ * #626 (кэш прогревается тем же кодом, что читает экран). */
+export async function fetchGlobalPaymentsFeed(): Promise<GlobalPaymentFeed> {
+  const response = await apiClient<components['schemas']['PaymentsGlobalResponse']>(
+    '/payments',
+  );
+  return mapGlobalPaymentFeed(response);
+}
+
 /**
  * Фид главного экрана «Платежи» (карта #573, #575): все правила видимой
  * книги целиком (пагинации нет) плюс счётчики целого скоупа — карточки
@@ -697,13 +722,19 @@ export function usePayOperation(
 export function useGlobalPayments(): UseQueryResult<GlobalPaymentFeed, ApiError> {
   return useQuery({
     queryKey: globalPaymentKeys.feed,
-    queryFn: async () => {
-      const response = await apiClient<components['schemas']['PaymentsGlobalResponse']>(
-        '/payments',
-      );
-      return mapGlobalPaymentFeed(response);
-    },
+    queryFn: fetchGlobalPaymentsFeed,
   });
+}
+
+/** Чистый fetch стопок объектов «Платежей» — общее горло хука и prefetch. */
+export async function fetchGlobalPaymentObjects(
+  search = '',
+): Promise<ReadonlyArray<GlobalPaymentObject>> {
+  const query = search ? `?search=${encodeURIComponent(search)}` : '';
+  const response = await apiClient<components['schemas']['PaymentObjectsGlobalResponse']>(
+    `/payments/objects${query}`,
+  );
+  return response.items.map(mapGlobalPaymentObject);
 }
 
 /**
@@ -720,13 +751,7 @@ export function useGlobalPaymentObjects(
 ): UseQueryResult<ReadonlyArray<GlobalPaymentObject>, ApiError> {
   return useQuery({
     queryKey: globalPaymentKeys.objects(search),
-    queryFn: async () => {
-      const query = search ? `?search=${encodeURIComponent(search)}` : '';
-      const response = await apiClient<components['schemas']['PaymentObjectsGlobalResponse']>(
-        `/payments/objects${query}`,
-      );
-      return response.items.map(mapGlobalPaymentObject);
-    },
+    queryFn: () => fetchGlobalPaymentObjects(search),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });

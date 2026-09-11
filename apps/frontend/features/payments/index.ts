@@ -101,6 +101,11 @@ export {
 } from './lib/update-model';
 export {
   OPERATIONS_PAGE_SIZE,
+  operationsNextPageParam,
+  fetchGlobalOperationsPage,
+  fetchGlobalOperationsSummary,
+  fetchGlobalPaymentObjects,
+  fetchGlobalPaymentsFeed,
   useCreateOperation,
   useCreatePayment,
   useDeleteOperation,
