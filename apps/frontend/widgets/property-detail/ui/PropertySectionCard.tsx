@@ -29,7 +29,9 @@ export function PropertySectionCard({
   className = 'mt-4',
 }: PropertySectionCardProps): JSX.Element {
   const header = (
-    <div className="flex items-center gap-3 px-6 pt-6">
+    // w-full обязателен: внутри flex-ссылки (или секции) иначе div сжимается
+    // до контента и шеврон прижимается к заголовку.
+    <div className="flex w-full items-center gap-3 px-6 pt-6">
       <span className="min-w-0 flex-1 text-xl font-semibold leading-6 text-content">
         {title}
       </span>
@@ -66,11 +68,14 @@ export type PropertySectionEmptyProps = {
 
 /** Пустое состояние внутри секции (Figma 1554:98481 / 1554:99561,
  * решение владельца 11.09): контент px-48 py-24 — иллюстрация 64, через
- * 16 текст, через 24 кнопка (radius m, 44px). Две анатомии: с описанием
- * (первый объект и статусные состояния аренды) — тёмный тайтл 20/24
- * SemiBold + серое описание 14/16; короткая (второй и далее) — одна
- * серая строка 14/16 с текстом тайтла. Анатомия буквальна по макетам;
- * канонный полноэкранный EmptyState (§7) сюда не подходит по размеру. */
+ * 16 текстовый блок, внутри него 24 до кнопки (зазор держит gap
+ * родителя: маргины на кнопках глушит безслойный normalize — globals
+ * `button { margin: 0 }`). Две анатомии: с описанием (первый объект и
+ * статусные состояния аренды) — тёмный тайтл 20/24 SemiBold + серое
+ * описание 14/16 через 8; короткая (второй и далее) — одна серая строка
+ * 14/16 с текстом тайтла. Кнопка — radius m, 44px. Анатомия буквальна
+ * по макетам; канонный полноэкранный EmptyState (§7) сюда не подходит
+ * по размеру. */
 export function PropertySectionEmpty({
   imageSrc,
   copy,
@@ -80,26 +85,27 @@ export function PropertySectionEmpty({
   return (
     <div className="flex flex-col items-center px-12 py-6 text-center">
       <Image src={imageSrc} alt="" width={64} height={64} className="h-16 w-16" />
-      {copy.description !== null ? (
-        <div className="mt-4 flex flex-col items-center gap-2">
-          <h3 className="text-xl font-semibold leading-6 text-content">{copy.title}</h3>
-          <p className="text-sm leading-4 text-content-secondary">{copy.description}</p>
-        </div>
-      ) : (
-        <p className="mt-4 text-sm leading-4 text-content-secondary">{copy.title}</p>
-      )}
-      {copy.ctaLabel !== null && onCta !== undefined && (
-        <Button
-          variant="primary"
-          size="small"
-          radius="m"
-          className="mt-6"
-          disabled={ctaDisabled}
-          onClick={onCta}
-        >
-          {copy.ctaLabel}
-        </Button>
-      )}
+      <div className="mt-4 flex w-full flex-col items-center gap-6">
+        {copy.description !== null ? (
+          <div className="flex flex-col items-center gap-2">
+            <h3 className="text-xl font-semibold leading-6 text-content">{copy.title}</h3>
+            <p className="text-sm leading-4 text-content-secondary">{copy.description}</p>
+          </div>
+        ) : (
+          <p className="text-sm leading-4 text-content-secondary">{copy.title}</p>
+        )}
+        {copy.ctaLabel !== null && onCta !== undefined && (
+          <Button
+            variant="primary"
+            size="small"
+            radius="m"
+            disabled={ctaDisabled}
+            onClick={onCta}
+          >
+            {copy.ctaLabel}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

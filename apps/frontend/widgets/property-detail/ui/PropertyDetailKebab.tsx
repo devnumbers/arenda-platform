@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import type { PropertyStatus } from '@/entities/property';
-import { Archive, ChangeVertical, Info, Kebab, Team } from '@/shared/assets/icons';
+import { Archive, Filter, Info, Kebab, Team } from '@/shared/assets/icons';
 import { Menu, MenuContent, MenuItem, MenuTrigger, IconButton } from '@/shared/ui/design';
 import {
   buildPropertyKebabItems,
@@ -8,10 +8,11 @@ import {
 } from '../lib/property-detail-status';
 
 /** Иконки пунктов кебаба; мутации статуса недоступны смотрящему и в меню
- * не попадают (фильтрует buildPropertyKebabItems). */
+ * не попадают (фильтрует buildPropertyKebabItems). «Изменить статус» —
+ * Icon/R/Filter (решение владельца 11.09, Figma 1554:100736). */
 const KEBAB_ICONS: Partial<Record<PropertyDetailActionKey, JSX.Element>> = {
   about: <Info className="h-6 w-6" />,
-  'change-status': <ChangeVertical className="h-6 w-6" />,
+  'change-status': <Filter className="h-6 w-6" />,
   unarchive: <Archive className="h-6 w-6" />,
   access: <Team className="h-6 w-6" />,
 };
