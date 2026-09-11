@@ -472,8 +472,10 @@ type Querier interface {
 	// move), and the service has already gated the actor's view capability on
 	// the property. property_id must be set for the property scope.
 	// search ('' = no filter) is a case-insensitive substring match over the
-	// name fields, role, phone, email and messenger username; the application
-	// layer escapes the ILIKE metacharacters (ESCAPE '\').
+	// name fields, role, phone, email and messenger username, glued by
+	// contacts_search_text — the same IMMUTABLE expression the trigram index
+	// (migration 000124) is built on; the application layer escapes the ILIKE
+	// metacharacters (ESCAPE '\').
 	// sort 'name' orders by the display name; 'property' — by the bound
 	// property's name, unbound cards first in both directions («Общие
 	// контакты»), contact name ordering inside the groups. Both keys use the
