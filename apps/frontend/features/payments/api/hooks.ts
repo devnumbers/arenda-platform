@@ -420,7 +420,7 @@ export function usePropertyOperationsSummary(
  */
 /** Скоуп глобальной ленты → общая часть query-параметров (объекты, период,
  * направление, архив, поиск); пагинация и порядок — у порции, сводка их не
- * принимает. Общее горло хуков и prefetch-прототипа #610. */
+ * принимает. Общее горло хуков и прогрева хабов #626. */
 function operationsScopeParams(scope: GlobalOperationScope): URLSearchParams {
   const params = new URLSearchParams();
   if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
@@ -447,7 +447,8 @@ function operationsScopeParams(scope: GlobalOperationScope): URLSearchParams {
   return params;
 }
 
-/** Чистый fetch порции глобальной ленты — общее горло хука и prefetch #610. */
+/** Чистый fetch порции глобальной ленты — общее горло хука и прогрева
+ * хабов #626. */
 export async function fetchGlobalOperationsPage(
   scope: GlobalOperationScope,
   pageParam: number,
@@ -493,7 +494,7 @@ export function useGlobalOperationsPaged(
   });
 }
 
-/** Чистый fetch сводки операций — общее горло хука и prefetch #610. */
+/** Чистый fetch сводки операций — общее горло хука и прогрева хабов #626. */
 export async function fetchGlobalOperationsSummary(
   scope: GlobalOperationScope,
 ): Promise<OperationsSummary> {
@@ -702,8 +703,8 @@ export function usePayOperation(
   });
 }
 
-/** Чистый fetch фида «Платежей» — общее горло хука и prefetch-прототипа
- * #610 (кэш прогревается тем же кодом, что читает экран). */
+/** Чистый fetch фида «Платежей» — общее горло хука и прогрева хабов
+ * #626 (кэш прогревается тем же кодом, что читает экран). */
 export async function fetchGlobalPaymentsFeed(): Promise<GlobalPaymentFeed> {
   const response = await apiClient<components['schemas']['PaymentsGlobalResponse']>(
     '/payments',

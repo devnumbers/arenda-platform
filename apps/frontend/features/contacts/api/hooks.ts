@@ -58,8 +58,8 @@ export type ContactBookSort = 'name' | 'property';
 /** Направление сортировки плоской книги. */
 export type ContactBookOrder = 'asc' | 'desc';
 
-/** Чистый fetch плоской книги — общее горло хука и prefetch-прототипа
- * #610 (кэш прогревается тем же кодом, что читает экран). */
+/** Чистый fetch плоской книги — общее горло хука и прогрева хабов
+ * #626 (кэш прогревается тем же кодом, что читает экран). */
 export async function fetchContactBook(
   search = '',
   sort: ContactBookSort = 'name',

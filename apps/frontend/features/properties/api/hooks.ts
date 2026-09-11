@@ -26,8 +26,8 @@ type AddressSuggestion = components['schemas']['AddressSuggestion'];
 export type DeletePropertyMode =
   operations['deleteProperty']['parameters']['query']['mode'];
 
-/** Чистый fetch списка объектов — общее горло хука и prefetch-прототипа
- * #610 (кэш прогревается тем же кодом, что читает экран). */
+/** Чистый fetch списка объектов — общее горло хука и прогрева хабов
+ * #626 (кэш прогревается тем же кодом, что читает экран). */
 export async function fetchProperties(): Promise<Property[]> {
   const response = await apiClient<PropertiesResponse>('/properties');
   return response.items.map(mapPropertyResponse);

@@ -29,7 +29,7 @@ export function DesktopMenuButton({
   active = false,
   className,
 }: DesktopMenuButtonProps): JSX.Element {
-  const intent = useNavIntentLink(section.href);
+  const intent = useNavIntentLink();
   return (
     <Link
       href={section.href}

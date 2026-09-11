@@ -87,7 +87,7 @@ export function TabNavLink({
   readonly active: boolean;
   readonly onClick?: () => void;
 }): JSX.Element {
-  const intent = useNavIntentLink(section.href);
+  const intent = useNavIntentLink();
   return (
     <Link
       href={section.href}
