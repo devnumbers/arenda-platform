@@ -429,6 +429,12 @@ func (r *fakePaymentRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (d
 func (r *fakePaymentRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.listByUserIDLocked(userID), nil
+}
+
+// listByUserIDLocked collects the user's payments newest-first; r.mu must be
+// held.
+func (r *fakePaymentRepo) listByUserIDLocked(userID uuid.UUID) []domain.SubscriptionPayment {
 	result := make([]domain.SubscriptionPayment, 0, len(r.payments))
 	for _, p := range r.payments {
 		if p.UserID == userID {
@@ -442,6 +448,17 @@ func (r *fakePaymentRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]d
 		}
 		return bytes.Compare(b.ID[:], a.ID[:])
 	})
+	return result
+}
+
+func (r *fakePaymentRepo) ListByUserIDWithCard(_ context.Context, userID uuid.UUID) ([]SubscriptionPaymentWithCard, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	payments := r.listByUserIDLocked(userID)
+	result := make([]SubscriptionPaymentWithCard, 0, len(payments))
+	for _, p := range payments {
+		result = append(result, SubscriptionPaymentWithCard{Payment: p, ResolvedCardMask: p.CardMask})
+	}
 	return result, nil
 }
 

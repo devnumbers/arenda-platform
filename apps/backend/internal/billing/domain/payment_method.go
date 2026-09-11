@@ -7,6 +7,47 @@ import (
 	"github.com/google/uuid"
 )
 
+// CardSystem is the payment system of a card, derived from the BIN prefix of
+// its masked number (issue #619): the vocabulary the contract exposes on
+// payment methods and payment history. The provider reports no issuer data,
+// so this derivation is all the card identification there is.
+type CardSystem string
+
+const (
+	// CardSystemMir marks a Mir card (BIN prefix 2).
+	CardSystemMir CardSystem = "mir"
+	// CardSystemVisa marks a Visa card (BIN prefix 4).
+	CardSystemVisa CardSystem = "visa"
+	// CardSystemMastercard marks a Mastercard card (BIN prefix 5).
+	CardSystemMastercard CardSystem = "mastercard"
+	// CardSystemUnknown marks a card whose BIN prefix maps to no contract
+	// value — old or unrecognized cards (including UnionPay BINs: the
+	// contract enum has no value for them).
+	CardSystemUnknown CardSystem = "unknown"
+)
+
+// CardSystemFromMask derives the card system from the leading digit of a
+// masked card number. Everything it cannot classify is unknown, never an
+// error: the field is display metadata, not identity.
+func CardSystemFromMask(displayMask string) CardSystem {
+	for _, c := range []byte(displayMask) {
+		if c < '0' || c > '9' {
+			break
+		}
+		switch c {
+		case '2':
+			return CardSystemMir
+		case '4':
+			return CardSystemVisa
+		case '5':
+			return CardSystemMastercard
+		default:
+			return CardSystemUnknown
+		}
+	}
+	return CardSystemUnknown
+}
+
 // PaymentMethod is a saved payment instrument of a user (a bound card,
 // billing CONTEXT.md): the provider's charge token with display fields for the
 // method list. A user may have several methods but at most one active — the

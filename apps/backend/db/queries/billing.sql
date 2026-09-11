@@ -212,9 +212,10 @@ INSERT INTO subscription_payments (
     charge_attempts,
     error_code,
     succeeded_at,
-    expires_at
+    expires_at,
+    card_mask
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING *;
 
 -- name: GetSubscriptionPaymentByID :one
@@ -223,10 +224,18 @@ SELECT * FROM subscription_payments WHERE id = $1;
 -- name: GetSubscriptionPaymentByIDForUpdate :one
 SELECT * FROM subscription_payments WHERE id = $1 FOR UPDATE;
 
--- name: ListSubscriptionPaymentsByUserID :many
-SELECT * FROM subscription_payments
-WHERE user_id = $1
-ORDER BY created_at DESC, id DESC;
+-- name: ListSubscriptionPaymentsWithCardByUserID :many
+-- The user's payment history (issues #250, #619): newest first, with the card
+-- the payment was charged with resolved for display — the payment's own
+-- snapshot first, the bound method's mask as the fallback for payments
+-- created before the snapshot existed. A method deleted after the snapshot
+-- was taken changes nothing; a deleted method behind a snapshot-less payment
+-- resolves to NULL.
+SELECT sp.*, COALESCE(sp.card_mask, pm.display_mask) AS resolved_card_mask
+FROM subscription_payments sp
+LEFT JOIN payment_methods pm ON pm.id = sp.payment_method_id
+WHERE sp.user_id = $1
+ORDER BY sp.created_at DESC, sp.id DESC;
 
 -- name: ListPendingSubscriptionPaymentsByUserID :many
 SELECT * FROM subscription_payments
@@ -244,7 +253,8 @@ SET
     charge_attempts = $7,
     error_code = $8,
     succeeded_at = $9,
-    expires_at = $10
+    expires_at = $10,
+    card_mask = $11
 WHERE id = $1
 RETURNING *;
 
@@ -294,7 +304,7 @@ LIMIT sqlc.arg('batch_limit');
 SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
-       sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at,
+       sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at, sp.card_mask,
        u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
@@ -328,7 +338,7 @@ WHERE (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id'))
 SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
-       sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at,
+       sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at, sp.card_mask,
        u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id

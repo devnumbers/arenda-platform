@@ -415,7 +415,8 @@ func (h *BillingHandlers) ChangeTariff(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListSubscriptionPayments implements GET /subscription/payments (issue #250):
-// the user's own subscription payments with their tariffs, newest first.
+// the user's own subscription payments with their tariffs and charged cards,
+// newest first (issue #619).
 func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
@@ -440,6 +441,8 @@ func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *htt
 			AmountKopecks: v.Payment.AmountKopecks,
 			Provider:      string(v.Payment.Provider),
 			CreatedAt:     v.Payment.CreatedAt,
+			PaymentMethod: httpsupport.SubscriptionPaymentCardResponse(v.CardMask),
+			SucceededAt:   v.Payment.SucceededAt,
 		}
 		if v.Payment.HasPaymentURL() {
 			url := *v.Payment.PaymentURL

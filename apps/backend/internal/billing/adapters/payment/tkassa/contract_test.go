@@ -354,6 +354,7 @@ func TestProviderGetStateContract(t *testing.T) {
 			fieldStatus:      statusAuthorized,
 			fieldPaymentID:   "999",
 			fieldOrderID:     "21050",
+			fieldPan:         testMaskedPan,
 			"Params": []map[string]any{
 				{fieldKey: "Route", fieldValue: "ACQ"},
 				{fieldKey: "Source", fieldValue: "cards"},
@@ -374,6 +375,9 @@ func TestProviderGetStateContract(t *testing.T) {
 	}
 	if status.ErrorCode != "" {
 		t.Errorf("ErrorCode: got %q, want empty on success", status.ErrorCode)
+	}
+	if status.CardMask != testMaskedPan {
+		t.Errorf("CardMask: got %q, want %q (the card snapshot source of the reconciliation path, issue #619)", status.CardMask, testMaskedPan)
 	}
 	if captured == nil {
 		t.Fatalf("request was not captured")

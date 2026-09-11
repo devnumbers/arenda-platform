@@ -368,6 +368,104 @@ func TestNewAppliedPaymentTransition(t *testing.T) {
 	}
 }
 
+// snapshotMethodAttachesIDAndMask proves the charged-method snapshot of a
+// merchant-initiated payment records the method and the card mask together
+// (issue #619).
+func snapshotMethodAttachesIDAndMask(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	if err := payment.AttachMethodSnapshot(methodID, testMaskVisa, paymentNow); err != nil {
+		t.Fatalf("AttachMethodSnapshot() error = %v", err)
+	}
+	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != methodID {
+		t.Errorf("PaymentMethodID = %v, want %v", payment.PaymentMethodID, methodID)
+	}
+	if payment.CardMask == nil || *payment.CardMask != testMaskVisa {
+		t.Errorf("CardMask = %v, want the charged card mask", payment.CardMask)
+	}
+}
+
+// rePointedPaymentFollowsTheChargedCard proves a recovered pending payment
+// pointed at a switched card carries the new card's mask: the snapshot must
+// describe the card actually charged, not the one planned first.
+func rePointedPaymentFollowsTheChargedCard(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	first := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	if err := payment.AttachMethodSnapshot(first, testMaskVisa, paymentNow); err != nil {
+		t.Fatalf("first AttachMethodSnapshot() error = %v", err)
+	}
+	second := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	if err := payment.AttachMethodSnapshot(second, "2202********9876", paymentNow); err != nil {
+		t.Fatalf("re-point AttachMethodSnapshot() error = %v", err)
+	}
+	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != second {
+		t.Errorf("PaymentMethodID = %v, want the switched method", payment.PaymentMethodID)
+	}
+	if payment.CardMask == nil || *payment.CardMask != "2202********9876" {
+		t.Errorf("CardMask = %v, want the switched card mask", payment.CardMask)
+	}
+}
+
+// finalizedPaymentRejectsMethodSnapshot proves the snapshot never rewrites
+// history: only a pending payment accepts it.
+func finalizedPaymentRejectsMethodSnapshot(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	if err := payment.MarkSucceeded(paymentNow); err != nil {
+		t.Fatalf("MarkSucceeded() error = %v", err)
+	}
+	methodID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	if err := payment.AttachMethodSnapshot(methodID, testMaskVisa, paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
+		t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+	}
+}
+
+// cardMaskRecordsProviderReportedCard proves a customer-initiated payment
+// snapshot lands from the provider notification (issue #619).
+func cardMaskRecordsProviderReportedCard(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	payment.AttachCardMask(testMaskVisa, paymentNow)
+	if payment.CardMask == nil || *payment.CardMask != testMaskVisa {
+		t.Errorf("CardMask = %v, want the provider-reported mask", payment.CardMask)
+	}
+}
+
+// cardMaskNeverOverwrites proves the snapshot is fill-once: a repeated or
+// later delivery cannot replace the recorded card.
+func cardMaskNeverOverwrites(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	payment.AttachCardMask(testMaskVisa, paymentNow)
+	payment.AttachCardMask("2202********9876", paymentNow)
+	if payment.CardMask == nil || *payment.CardMask != testMaskVisa {
+		t.Errorf("CardMask = %v, want the first recorded mask", payment.CardMask)
+	}
+}
+
+// emptyCardMaskIsNoOp proves a notification without card data leaves an
+// existing snapshot (and the empty one) untouched.
+func emptyCardMaskIsNoOp(t *testing.T) {
+	t.Parallel()
+	payment := newTestPayment(t)
+	payment.AttachCardMask("", paymentNow)
+	if payment.CardMask != nil {
+		t.Errorf("CardMask = %v, want nil", payment.CardMask)
+	}
+}
+
+func TestSubscriptionPayment_CardSnapshot(t *testing.T) {
+	t.Parallel()
+	t.Run("method snapshot attaches id and mask", snapshotMethodAttachesIDAndMask)
+	t.Run("re-pointed payment follows the charged card", rePointedPaymentFollowsTheChargedCard)
+	t.Run("finalized payment rejects the method snapshot", finalizedPaymentRejectsMethodSnapshot)
+	t.Run("card mask records the provider-reported card", cardMaskRecordsProviderReportedCard)
+	t.Run("card mask never overwrites", cardMaskNeverOverwrites)
+	t.Run("empty card mask is a no-op", emptyCardMaskIsNoOp)
+}
+
 func TestSubscriptionPayment_AttachFormDeadline(t *testing.T) {
 	t.Parallel()
 	t.Run("persists the deadline on a fresh pending payment", func(t *testing.T) {

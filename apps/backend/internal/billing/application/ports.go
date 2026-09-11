@@ -137,7 +137,11 @@ type SubscriptionPaymentRepository interface {
 	Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error)
 	GetByID(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
-	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
+	// ListByUserIDWithCard returns the user's payments, newest first, each
+	// with the masked card the payment was charged with resolved for display
+	// (issue #619): the payment's own snapshot first, the bound method's mask
+	// as the fallback for snapshot-less payments.
+	ListByUserIDWithCard(ctx context.Context, userID uuid.UUID) ([]SubscriptionPaymentWithCard, error)
 	ListPendingByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	// ListExpiredPending returns a batch of still-pending payments whose form
 	// deadline ran out before the given instant (issue #616) — the TTL-expiry

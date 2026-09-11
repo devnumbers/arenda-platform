@@ -277,6 +277,18 @@ func (h *paymentHarness) seedSucceededUpgrade(t *testing.T, sub domain.Subscript
 	return payment
 }
 
+// seedPendingUpgradeWithReference seeds the initiated-but-unresolved upgrade
+// payment: pending with the provider reference persisted.
+func (h *paymentHarness) seedPendingUpgradeWithReference(t *testing.T, sub domain.Subscription) domain.SubscriptionPayment {
+	t.Helper()
+	result := h.initiateUpgrade(t, sub)
+	payment, err := h.stores.payments.GetByID(t.Context(), result.PaymentID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	return payment
+}
+
 // deliverRefundNotification feeds the payment a refunded notification through
 // the webhook path.
 func (h *paymentHarness) deliverRefundNotification(t *testing.T, paymentID uuid.UUID) {
@@ -1345,6 +1357,143 @@ func TestWebhook_SucceededPersistsProviderPaymentID(t *testing.T) {
 	}
 	if subsStored.TariffID != h.tariffID(t, domain.TariffBusiness) {
 		t.Errorf("tariff = %v, want business applied", subsStored.TariffID)
+	}
+}
+
+// The card masks shared by the card-snapshot tests.
+const (
+	testCardMaskVisa = "4300********1234"
+	testCardMaskMir  = "2202********9876"
+)
+
+// requireCardMask asserts the recorded card snapshot against the expected
+// value (nil expects no snapshot).
+func requireCardMask(t *testing.T, got, want *string) {
+	t.Helper()
+	switch {
+	case want == nil && got != nil:
+		t.Errorf("CardMask = %v, want nil", got)
+	case want != nil && (got == nil || *got != *want):
+		t.Errorf("CardMask = %v, want %q", got, *want)
+	}
+}
+
+// TestWebhook_CardMaskSnapshot proves the card a provider notification
+// reports for the charge becomes the payment's history snapshot (issue #619):
+// recorded on success and on failure, fill-once across repeated deliveries,
+// and left empty by a notification without card data.
+func TestWebhook_CardMaskSnapshot(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		status      domain.PaymentStatus
+		cardMask    string
+		duplicate   *string // A second delivery's card mask, if any.
+		wantStatus  domain.PaymentStatus
+		wantMask    *string
+		wantSuccess bool
+	}{
+		{
+			name:        "succeeded notification records the card",
+			status:      domain.PaymentStatusSucceeded,
+			cardMask:    testCardMaskVisa,
+			wantStatus:  domain.PaymentStatusSucceeded,
+			wantMask:    new(testCardMaskVisa),
+			wantSuccess: true,
+		},
+		{
+			name:       "failed notification records the attempted card",
+			status:     domain.PaymentStatusFailed,
+			cardMask:   testCardMaskMir,
+			wantStatus: domain.PaymentStatusFailed,
+			wantMask:   new(testCardMaskMir),
+		},
+		{
+			name:       "repeated delivery never replaces the recorded card",
+			status:     domain.PaymentStatusSucceeded,
+			cardMask:   testCardMaskVisa,
+			duplicate:  new(testCardMaskMir),
+			wantStatus: domain.PaymentStatusSucceeded,
+			wantMask:   new(testCardMaskVisa),
+		},
+		{
+			name:       "notification without card data leaves the snapshot empty",
+			status:     domain.PaymentStatusSucceeded,
+			wantStatus: domain.PaymentStatusSucceeded,
+			wantMask:   nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newPaymentHarness(t)
+			sub := h.seedSubscription(t, nil)
+			payment := h.seedPendingUpgradeWithReference(t, sub)
+			deliver := func(mask string) {
+				t.Helper()
+				h.setNotification(&PaymentNotification{
+					InternalPaymentID: payment.ID,
+					ProviderPaymentID: *payment.ProviderPaymentID,
+					Status:            tc.status,
+					AmountKopecks:     payment.AmountKopecks,
+					CardMask:          mask,
+				})
+				if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+					t.Fatalf("HandleWebhook() error = %v", err)
+				}
+			}
+			deliver(tc.cardMask)
+			if tc.duplicate != nil {
+				deliver(*tc.duplicate)
+			}
+
+			stored, err := h.stores.payments.GetByID(t.Context(), payment.ID)
+			if err != nil {
+				t.Fatalf("GetByID() error = %v", err)
+			}
+			if stored.Status != tc.wantStatus {
+				t.Errorf("payment status = %q, want %q", stored.Status, tc.wantStatus)
+			}
+			requireCardMask(t, stored.CardMask, tc.wantMask)
+			if tc.wantSuccess && stored.SucceededAt == nil {
+				t.Error("SucceededAt = nil, want the success timestamp")
+			}
+		})
+	}
+}
+
+// TestListPayments_ResolvesCardAndSucceededAt proves the history read model
+// carries the resolved card mask and the success timestamp per payment
+// (issue #619).
+func TestListPayments_ResolvesCardAndSucceededAt(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, nil)
+	payment := h.seedPendingUpgradeWithReference(t, sub)
+	h.setNotification(&PaymentNotification{
+		InternalPaymentID: payment.ID,
+		ProviderPaymentID: *payment.ProviderPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+		AmountKopecks:     payment.AmountKopecks,
+		CardMask:          testCardMaskVisa,
+	})
+	if err := h.payments.HandleWebhook(t.Context(), testProviderFake, []byte(`{}`)); err != nil {
+		t.Fatalf("HandleWebhook() error = %v", err)
+	}
+
+	views, err := h.payments.ListPayments(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("ListPayments() error = %v", err)
+	}
+	if len(views) != 1 {
+		t.Fatalf("views = %d, want 1", len(views))
+	}
+	view := views[0]
+	if view.CardMask == nil || *view.CardMask != testCardMaskVisa {
+		t.Errorf("view CardMask = %v, want the recorded card", view.CardMask)
+	}
+	if view.Payment.SucceededAt == nil {
+		t.Error("view SucceededAt = nil, want the success timestamp")
 	}
 }
 

@@ -65,6 +65,61 @@ func TestParseWebhookPayment(t *testing.T) {
 	}
 }
 
+// TestParseWebhookPaymentCarriesCardMask proves the masked card number of the
+// charge lands on the notification with or without a RebillId (issue #619):
+// the payment history's card snapshot is taken from every notification that
+// reports the card.
+func TestParseWebhookPaymentCarriesCardMask(t *testing.T) {
+	t.Parallel()
+	paymentID := uuid.MustParse(testPaymentUUID)
+
+	t.Run("with a RebillId", func(t *testing.T) {
+		t.Parallel()
+		payload := map[string]any{
+			fieldTerminalKey: testTerminalKey,
+			fieldOrderID:     paymentID.String(),
+			fieldStatus:      statusConfirmed,
+			fieldSuccess:     true,
+			fieldPaymentID:   json.Number("12345"),
+			fieldAmount:      json.Number("10000"),
+			fieldRebillID:    "rebill-1",
+			fieldPan:         testMaskedPan,
+		}
+		p := newTestProvider("")
+		event, err := p.ParseWebhook(context.Background(), signedWebhookPayload(t, payload))
+		if err != nil {
+			t.Fatalf("ParseWebhook error: %v", err)
+		}
+		if event.Payment == nil || event.Payment.CardMask != testMaskedPan {
+			t.Errorf("CardMask = %v, want %q", event.Payment.CardMask, testMaskedPan)
+		}
+	})
+
+	t.Run("without a RebillId", func(t *testing.T) {
+		t.Parallel()
+		payload := map[string]any{
+			fieldTerminalKey: testTerminalKey,
+			fieldOrderID:     paymentID.String(),
+			fieldStatus:      statusConfirmed,
+			fieldSuccess:     true,
+			fieldPaymentID:   json.Number("12345"),
+			fieldAmount:      json.Number("10000"),
+			fieldPan:         testMaskedPan,
+		}
+		p := newTestProvider("")
+		event, err := p.ParseWebhook(context.Background(), signedWebhookPayload(t, payload))
+		if err != nil {
+			t.Fatalf("ParseWebhook error: %v", err)
+		}
+		if event.Payment == nil || event.Payment.CardMask != testMaskedPan {
+			t.Errorf("CardMask = %v, want %q", event.Payment.CardMask, testMaskedPan)
+		}
+		if event.Payment.SavedMethod != nil {
+			t.Errorf("SavedMethod must stay nil without RebillId, got %+v", *event.Payment.SavedMethod)
+		}
+	})
+}
+
 // TestParseWebhookPaymentWithRebillIdSurfacesSavedMethod covers the token
 // delivery moment of a save-method chain: the RebillId arriving in a payment
 // notification (typically AUTHORIZED) becomes the saved method.

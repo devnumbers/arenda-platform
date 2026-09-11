@@ -44,11 +44,23 @@ type ChangeTariffResult struct {
 	ConfirmURL string
 }
 
+// SubscriptionPaymentWithCard is one row of the user's payment history read
+// (issue #619): the payment aggregate with the masked card it was charged
+// with resolved for display — the payment's own snapshot first, the bound
+// method's mask as the fallback. Nil when no card is known.
+type SubscriptionPaymentWithCard struct {
+	Payment          domain.SubscriptionPayment
+	ResolvedCardMask *string
+}
+
 // SubscriptionPaymentView is the read model of one subscription payment with
 // its tariff resolved — the shape of GET /subscription/payments (issue #250).
 type SubscriptionPaymentView struct {
 	Payment domain.SubscriptionPayment
 	Tariff  domain.Tariff
+	// CardMask is the masked card the payment was charged with, resolved for
+	// display (issue #619); nil when no card is known.
+	CardMask *string
 }
 
 // AdminPaymentFilters carries the optional filters of the admin payment

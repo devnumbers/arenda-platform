@@ -126,6 +126,10 @@ func (h *paymentIntegrationHarness) requirePaymentAppliedTransition(t *testing.T
 	}
 }
 
+// integrationFakeCardMask is the masked card the fake provider reports for
+// every charge.
+const integrationFakeCardMask = "4111********1111"
+
 // TestPaymentFlow_UpgradeEndToEnd proves the headline acceptance criterion of
 // issue #250 against real PostgreSQL and the fake provider adapter: an
 // upgrade creates a pending payment with a payer URL, the confirmation
@@ -161,17 +165,29 @@ func TestPaymentFlow_UpgradeEndToEnd(t *testing.T) {
 	if finalized.Status != domain.PaymentStatusSucceeded {
 		t.Fatalf("payment status = %q, want succeeded", finalized.Status)
 	}
+	// The card snapshot (issue #619): the fake confirm reports the masked
+	// card, and the finalized payment carries it.
+	if finalized.CardMask == nil || *finalized.CardMask != integrationFakeCardMask {
+		t.Errorf("finalized CardMask = %v, want the provider-reported card", finalized.CardMask)
+	}
 
 	h.requireAppliedProSubscription(t, sub.UserID, payment.ID)
 	h.requirePaymentAppliedTransition(t, sub.ID, payment.ID)
 
-	// The payments list serves the finalized payment with its tariff.
+	// The payments list serves the finalized payment with its tariff and the
+	// resolved card.
 	views, err := h.paymentsSvc.ListPayments(h.ctx(), sub.UserID)
 	if err != nil {
 		t.Fatalf("ListPayments: %v", err)
 	}
 	if len(views) != 1 || views[0].Payment.ID != payment.ID || views[0].Tariff.ID != payment.TariffID {
 		t.Errorf("views = %+v, want the single payment with its tariff", views)
+	}
+	if views[0].CardMask == nil || *views[0].CardMask != integrationFakeCardMask {
+		t.Errorf("view CardMask = %v, want the charged card", views[0].CardMask)
+	}
+	if views[0].Payment.SucceededAt == nil {
+		t.Error("view SucceededAt = nil, want the success timestamp")
 	}
 }
 

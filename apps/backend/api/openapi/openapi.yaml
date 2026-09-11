@@ -4250,7 +4250,7 @@ components:
 
     PaymentMethod:
       type: object
-      required: [id, provider, displayMask, isActive, createdAt]
+      required: [id, provider, displayMask, cardSystem, isActive, createdAt]
       properties:
         id:
           type: string
@@ -4259,6 +4259,12 @@ components:
           type: string
         displayMask:
           type: string
+        cardSystem:
+          $ref: '#/components/schemas/CardSystem'
+        expDate:
+          type: string
+          nullable: true
+          description: Card expiry in the provider's display format (MMYY); null when unknown.
         isActive:
           type: boolean
         createdAt:
@@ -4289,6 +4295,12 @@ components:
     SubscriptionPayment:
       type: object
       required: [id, tariff, period, amountKopecks, status, provider, createdAt]
+      description: >-
+        One subscription charge (issue #619): one list row is one payment — a
+        refunded payment keeps its own row with the refunded status and the
+        same positive amount. The sign and the status label are a UI
+        convention the frontend renders on top of the status; amounts in the
+        contract are always positive kopecks.
       properties:
         id:
           type: string
@@ -4307,9 +4319,38 @@ components:
         paymentUrl:
           type: string
           nullable: true
+        paymentMethod:
+          $ref: '#/components/schemas/SubscriptionPaymentCard'
+        succeededAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
+
+    SubscriptionPaymentCard:
+      type: object
+      required: [displayMask, cardSystem]
+      description: >-
+        The card a payment was charged with (issue #619): a snapshot taken at
+        creation or finalization of the payment, so the history survives
+        payment-method deletion. Null for payments the provider reported no
+        card for.
+      properties:
+        displayMask:
+          type: string
+          description: Masked card number, e.g. "4300********1234".
+        cardSystem:
+          $ref: '#/components/schemas/CardSystem'
+
+    CardSystem:
+      type: string
+      enum: [mir, visa, mastercard, unknown]
+      description: >-
+        Card system derived by the backend from the BIN prefix of the masked
+        number (2 — Mir, 4 — Visa, 5 — Mastercard); unknown for old or
+        unrecognized cards.
 
     ChangeTariffRequest:
       type: object
@@ -6175,7 +6216,12 @@ components:
 
     SubscriptionPaymentStatus:
       type: string
-      enum: [pending, succeeded, failed, refunded, partial_refunded, refunding]
+      enum: [pending, succeeded, failed, refunded, refunding]
+      description: >-
+        Lifecycle states of a subscription payment. Refunds are full-amount
+        only (ADR 0037): the legacy partial_refunded is not part of the
+        vocabulary, refunding is the internal reservation shown to the user
+        as pending.
 
     AdminSubscriptionPaymentPeriod:
       type: string

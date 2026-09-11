@@ -606,7 +606,13 @@ type Querier interface {
 	// (updated_before set) by updated_at, the rest by created_at, each with id as
 	// the tie-breaker.
 	ListSubscriptionPaymentsBySelection(ctx context.Context, arg ListSubscriptionPaymentsBySelectionParams) ([]SubscriptionPayment, error)
-	ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
+	// The user's payment history (issues #250, #619): newest first, with the card
+	// the payment was charged with resolved for display — the payment's own
+	// snapshot first, the bound method's mask as the fallback for payments
+	// created before the snapshot existed. A method deleted after the snapshot
+	// was taken changes nothing; a deleted method behind a snapshot-less payment
+	// resolves to NULL.
+	ListSubscriptionPaymentsWithCardByUserID(ctx context.Context, userID pgtype.UUID) ([]ListSubscriptionPaymentsWithCardByUserIDRow, error)
 	ListSubscriptionTransitionsBySubscription(ctx context.Context, subscriptionID pgtype.UUID) ([]SubscriptionTransition, error)
 	// Worker batch selections (issue #252, ADR 0008 lifecycle phases; one
 	// parameterized query per aggregate since issue #286). The phases set the

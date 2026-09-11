@@ -91,13 +91,48 @@ func (r *SubscriptionPaymentRepository) GetByIDForUpdate(ctx context.Context, id
 	return mapSubscriptionPayment(row)
 }
 
-// ListByUserID returns the user's payments, newest first.
-func (r *SubscriptionPaymentRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
-	rows, err := r.q().ListSubscriptionPaymentsByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
+// ListByUserIDWithCard returns the user's payments, newest first, each with
+// the masked card it was charged with resolved for display (issue #619): the
+// payment's own snapshot first, the bound method's mask as the fallback for
+// payments created before the snapshot existed.
+func (r *SubscriptionPaymentRepository) ListByUserIDWithCard(
+	ctx context.Context, userID uuid.UUID,
+) ([]application.SubscriptionPaymentWithCard, error) {
+	rows, err := r.q().ListSubscriptionPaymentsWithCardByUserID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 	if err != nil {
-		return nil, fmt.Errorf("list subscription payments: %w", err)
+		return nil, fmt.Errorf("list subscription payments with card: %w", err)
 	}
-	return mapSubscriptionPayments(rows)
+	result := make([]application.SubscriptionPaymentWithCard, 0, len(rows))
+	for _, row := range rows {
+		payment, err := mapSubscriptionPaymentFromColumns(
+			row.ID, row.UserID, row.SubscriptionID, row.TariffID, row.PaymentMethodID,
+			row.Period, row.AmountKopecks, row.Provider, row.ProviderPaymentID, row.PaymentUrl,
+			row.Status, row.RefundedAmountKopecks, row.ChargeAttempts, row.ErrorCode,
+			row.CreatedAt, row.UpdatedAt, row.SucceededAt, row.ExpiresAt, row.CardMask,
+		)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, application.SubscriptionPaymentWithCard{
+			Payment:          payment,
+			ResolvedCardMask: pgconv.TextToPtrString(row.ResolvedCardMask),
+		})
+	}
+	return result, nil
+}
+
+// ListByUserID returns the user's payments without the resolved card — the
+// inspection convenience over ListByUserIDWithCard.
+func (r *SubscriptionPaymentRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	rows, err := r.ListByUserIDWithCard(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	payments := make([]domain.SubscriptionPayment, 0, len(rows))
+	for _, row := range rows {
+		payments = append(payments, row.Payment)
+	}
+	return payments, nil
 }
 
 // ListPendingByUserID returns the user's pending payments, newest first. The
@@ -233,7 +268,7 @@ func (r *SubscriptionPaymentRepository) GetAdminPayment(ctx context.Context, pay
 		row.ID, row.UserID, row.SubscriptionID, row.TariffID, row.PaymentMethodID,
 		row.Period, row.AmountKopecks, row.Provider, row.ProviderPaymentID, row.PaymentUrl,
 		row.Status, row.RefundedAmountKopecks, row.ChargeAttempts, row.ErrorCode,
-		row.CreatedAt, row.UpdatedAt, row.SucceededAt, row.ExpiresAt,
+		row.CreatedAt, row.UpdatedAt, row.SucceededAt, row.ExpiresAt, row.CardMask,
 	)
 	if err != nil {
 		return application.AdminPaymentRow{}, err
@@ -256,7 +291,7 @@ func mapAdminPaymentRows(
 			row.ID, row.UserID, row.SubscriptionID, row.TariffID, row.PaymentMethodID,
 			row.Period, row.AmountKopecks, row.Provider, row.ProviderPaymentID, row.PaymentUrl,
 			row.Status, row.RefundedAmountKopecks, row.ChargeAttempts, row.ErrorCode,
-			row.CreatedAt, row.UpdatedAt, row.SucceededAt, row.ExpiresAt,
+			row.CreatedAt, row.UpdatedAt, row.SucceededAt, row.ExpiresAt, row.CardMask,
 		)
 		if err != nil {
 			return nil, err
@@ -301,6 +336,7 @@ func mapSubscriptionPaymentFromColumns(
 	errorCode pgtype.Text,
 	createdAt, updatedAt pgtype.Timestamptz,
 	succeededAt, expiresAt pgtype.Timestamptz,
+	cardMask pgtype.Text,
 ) (domain.SubscriptionPayment, error) {
 	return mapSubscriptionPayment(postgres.SubscriptionPayment{
 		ID:                    id,
@@ -321,6 +357,7 @@ func mapSubscriptionPaymentFromColumns(
 		UpdatedAt:             updatedAt,
 		SucceededAt:           succeededAt,
 		ExpiresAt:             expiresAt,
+		CardMask:              cardMask,
 	})
 }
 
@@ -355,6 +392,7 @@ func mapCreatePaymentParams(p domain.SubscriptionPayment) postgres.CreateSubscri
 		ErrorCode:      pgconv.StringPtrToPgtype(p.ErrorCode),
 		SucceededAt:    pgconv.TimePtrToPgtype(p.SucceededAt),
 		ExpiresAt:      pgconv.TimePtrToPgtype(p.ExpiresAt),
+		CardMask:       pgconv.StringPtrToPgtype(p.CardMask),
 	}
 }
 
@@ -371,6 +409,7 @@ func mapUpdatePaymentParams(p domain.SubscriptionPayment) postgres.UpdateSubscri
 		ErrorCode:      pgconv.StringPtrToPgtype(p.ErrorCode),
 		SucceededAt:    pgconv.TimePtrToPgtype(p.SucceededAt),
 		ExpiresAt:      pgconv.TimePtrToPgtype(p.ExpiresAt),
+		CardMask:       pgconv.StringPtrToPgtype(p.CardMask),
 	}
 }
 
@@ -394,6 +433,7 @@ func mapSubscriptionPayment(row postgres.SubscriptionPayment) (domain.Subscripti
 		UpdatedAt:             pgconv.TimestamptzToTime(row.UpdatedAt),
 		SucceededAt:           pgconv.TimestamptzToPtrTime(row.SucceededAt),
 		ExpiresAt:             pgconv.TimestamptzToPtrTime(row.ExpiresAt),
+		CardMask:              pgconv.TextToPtrString(row.CardMask),
 	})
 }
 

@@ -102,7 +102,7 @@ func (r *gatePaymentRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (d
 	return r.GetByID(ctx, id)
 }
 
-func (r *gatePaymentRepo) ListByUserID(context.Context, uuid.UUID) ([]domain.SubscriptionPayment, error) {
+func (r *gatePaymentRepo) ListByUserIDWithCard(context.Context, uuid.UUID) ([]billingapp.SubscriptionPaymentWithCard, error) {
 	return nil, nil
 }
 

@@ -43,6 +43,12 @@ type SubscriptionPayment struct {
 	// sides close the form at the same instant. Nil on merchant-initiated
 	// charges — they carry no payer form.
 	ExpiresAt *time.Time
+	// CardMask is the snapshot of the masked card number the payment was
+	// charged with (issue #619) — "4300********1234" shape. Taken at creation
+	// (the merchant-initiated method being charged) or at finalization (the
+	// card the provider reports), so the payment history survives payment
+	// method deletion. Nil when no card is known for the payment.
+	CardMask *string
 }
 
 // NewSubscriptionPayment builds a pending payment for a tariff purchase. The
@@ -181,6 +187,40 @@ func (p *SubscriptionPayment) MarkFailed(errorCode *string, now time.Time) error
 	p.ErrorCode = errorCode
 	p.UpdatedAt = now.UTC()
 	return nil
+}
+
+// AttachMethodSnapshot records the payment method a merchant-initiated charge
+// runs on together with the snapshot of its card mask (issue #619): the
+// history must describe the card actually charged even after the method is
+// deleted. A pending payment accepts the snapshot — a recovered payment whose
+// card was switched is re-pointed at the method being charged now, mask
+// following; a finalized payment rejects it, history never rewrites.
+func (p *SubscriptionPayment) AttachMethodSnapshot(methodID uuid.UUID, displayMask string, now time.Time) error {
+	if p.Status != PaymentStatusPending {
+		return ErrInvalidPaymentStatus
+	}
+	if methodID == uuid.Nil {
+		return ErrInvalidPayment
+	}
+	p.PaymentMethodID = &methodID
+	if displayMask != "" {
+		p.CardMask = &displayMask
+	}
+	p.UpdatedAt = now.UTC()
+	return nil
+}
+
+// AttachCardMask records the masked card number a provider notification
+// reports for the charge (issue #619) — the customer-initiated payments'
+// snapshot path, taken inside the finalizing transaction. Fill-once: a
+// repeated or later delivery never replaces the recorded card, and a
+// notification without card data changes nothing.
+func (p *SubscriptionPayment) AttachCardMask(mask string, now time.Time) {
+	if mask == "" || p.CardMask != nil {
+		return
+	}
+	p.CardMask = &mask
+	p.UpdatedAt = now.UTC()
 }
 
 // AttachFormDeadline records the payer-form deadline of a customer-initiated

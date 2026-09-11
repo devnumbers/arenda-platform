@@ -426,6 +426,7 @@ type SubscriptionPayment struct {
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	CardMask              pgtype.Text        `json:"card_mask"`
 }
 
 type SubscriptionTransition struct {

@@ -126,9 +126,10 @@ func (s *PaymentService) GetPayment(ctx context.Context, paymentID uuid.UUID) (d
 }
 
 // ListPayments returns the user's subscription payments with their tariffs
-// resolved, newest first (GET /subscription/payments, issue #250).
+// and charged cards resolved, newest first (GET /subscription/payments,
+// issues #250, #619).
 func (s *PaymentService) ListPayments(ctx context.Context, userID uuid.UUID) ([]SubscriptionPaymentView, error) {
-	payments, err := s.payments.ListByUserID(ctx, userID)
+	payments, err := s.payments.ListByUserIDWithCard(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list payments: %w", err)
 	}
@@ -142,12 +143,12 @@ func (s *PaymentService) ListPayments(ctx context.Context, userID uuid.UUID) ([]
 	}
 
 	views := make([]SubscriptionPaymentView, 0, len(payments))
-	for _, p := range payments {
-		tariff, ok := tariffByID[p.TariffID]
+	for _, row := range payments {
+		tariff, ok := tariffByID[row.Payment.TariffID]
 		if !ok {
-			return nil, fmt.Errorf("payment %s references unknown tariff %s", p.ID, p.TariffID)
+			return nil, fmt.Errorf("payment %s references unknown tariff %s", row.Payment.ID, row.Payment.TariffID)
 		}
-		views = append(views, SubscriptionPaymentView{Payment: p, Tariff: tariff})
+		views = append(views, SubscriptionPaymentView{Payment: row.Payment, Tariff: tariff, CardMask: row.ResolvedCardMask})
 	}
 	return views, nil
 }
@@ -410,6 +411,10 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 		}
 
 		now := s.clock.Now().UTC()
+		// The card the provider reports for the charge becomes the payment's
+		// history snapshot (issue #619); both finalizing branches persist it
+		// with their own Update.
+		payment.AttachCardMask(n.CardMask, now)
 		switch n.Status {
 		case domain.PaymentStatusFailed:
 			return s.finalizeFailedPayment(ctx, grace, stores, payment, n, now)

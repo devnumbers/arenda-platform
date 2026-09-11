@@ -1665,6 +1665,84 @@ func TestListSubscriptionPayments_MapsViewToContract(t *testing.T) {
 	}
 }
 
+// TestListSubscriptionPayments_MapsCardAndSucceededAt proves the history
+// contract of issue #619: a payment with a resolved card answers
+// paymentMethod {displayMask, cardSystem} and the success timestamp, a
+// payment without one answers paymentMethod: null.
+func TestListSubscriptionPayments_MapsCardAndSucceededAt(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.Must(uuid.NewV7())
+	succeededAt := time.Date(2026, 8, 14, 10, 5, 0, 0, time.UTC)
+	mask := "2202********4242"
+	h := newTestHandlersOpts(nil, nil, nil, &fakePaymentManager{list: func(
+		_ context.Context, _ uuid.UUID,
+	) ([]billingapp.SubscriptionPaymentView, error) {
+		base := domain.SubscriptionPayment{
+			ID:            uuid.Must(uuid.NewV7()),
+			UserID:        ownerID,
+			TariffID:      uuid.Must(uuid.NewV7()),
+			Period:        domain.PeriodMonth,
+			AmountKopecks: 49000,
+			Provider:      testProviderFake,
+			Status:        domain.PaymentStatusSucceeded,
+			SucceededAt:   &succeededAt,
+			CreatedAt:     succeededAt,
+		}
+		chargeWithCard := base
+		chargeWithCard.ID = uuid.Must(uuid.NewV7())
+		chargeWithoutCard := base
+		chargeWithoutCard.ID = uuid.Must(uuid.NewV7())
+		return []billingapp.SubscriptionPaymentView{
+			{
+				Payment:  chargeWithCard,
+				Tariff:   domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, IsActive: true},
+				CardMask: &mask,
+			},
+			{
+				Payment: chargeWithoutCard,
+				Tariff:  domain.Tariff{Name: domain.TariffPro, ActivePropertyLimit: 5, IsActive: true},
+			},
+		}, nil
+	}}, nil, nil)
+
+	w := httptest.NewRecorder()
+	h.ListSubscriptionPayments(w, ownerRequest(t, http.MethodGet, "/subscription/payments", ownerID))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Items []struct {
+			Status        string  `json:"status"`
+			SucceededAt   *string `json:"succeededAt"`
+			PaymentMethod *struct {
+				DisplayMask string `json:"displayMask"`
+				CardSystem  string `json:"cardSystem"`
+			} `json:"paymentMethod"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Items) != 2 {
+		t.Fatalf("items = %d, want 2", len(resp.Items))
+	}
+	withCard := resp.Items[0]
+	if withCard.PaymentMethod == nil {
+		t.Fatal("paymentMethod = null, want the charged card")
+	}
+	if withCard.PaymentMethod.DisplayMask != mask || withCard.PaymentMethod.CardSystem != "mir" {
+		t.Errorf("paymentMethod = %+v, want the masked Mir card", *withCard.PaymentMethod)
+	}
+	if withCard.SucceededAt == nil {
+		t.Error("succeededAt = null, want the success timestamp")
+	}
+	withoutCard := resp.Items[1]
+	if withoutCard.PaymentMethod != nil {
+		t.Errorf("paymentMethod = %+v, want null without a resolved card", *withoutCard.PaymentMethod)
+	}
+}
+
 // TestListSubscriptionPayments_MapsInt64AmountBoundary proves the payment
 // amount crosses the DTO boundary as a 64-bit integer without truncation: a
 // value far beyond the int32 range answers intact (issue #425).
@@ -1837,6 +1915,7 @@ func TestListPaymentMethods_MapsDomainMethodsToContract(t *testing.T) {
 			Provider:      testProviderFake,
 			ProviderToken: "secret-token",
 			DisplayMask:   "4111********1111",
+			ExpDate:       "1230",
 			IsActive:      true,
 			CreatedAt:     createdAt,
 		}}, nil
@@ -1857,6 +1936,8 @@ func TestListPaymentMethods_MapsDomainMethodsToContract(t *testing.T) {
 			ID          string `json:"id"`
 			Provider    string `json:"provider"`
 			DisplayMask string `json:"displayMask"`
+			CardSystem  string `json:"cardSystem"`
+			ExpDate     string `json:"expDate"`
 			IsActive    bool   `json:"isActive"`
 			CreatedAt   string `json:"createdAt"`
 		} `json:"items"`
@@ -1871,6 +1952,11 @@ func TestListPaymentMethods_MapsDomainMethodsToContract(t *testing.T) {
 	if item.ID != methodID.String() || item.Provider != testProviderFake ||
 		item.DisplayMask != "4111********1111" || !item.IsActive || item.CreatedAt == "" {
 		t.Errorf("item = %+v, want the full display shape", item)
+	}
+	// The card system derives from the mask's BIN prefix (issue #619): 4 —
+	// visa; the expiry passes through for the "{system} •••• {last4}" row.
+	if item.CardSystem != "visa" || item.ExpDate != "1230" {
+		t.Errorf("card fields = %q/%q, want visa/1230", item.CardSystem, item.ExpDate)
 	}
 }
 

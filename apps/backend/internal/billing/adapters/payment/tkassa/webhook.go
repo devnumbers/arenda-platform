@@ -116,6 +116,10 @@ func parsePaymentNotification(data map[string]any) (application.WebhookEvent, er
 			Status:            mapStatus(getString(data, "Status")),
 			ErrorCode:         paymentErrorCode(data),
 			AmountKopecks:     amount,
+			// The masked card the charge ran on (issue #619): the payment
+			// history's snapshot of the card used, on every payment
+			// notification that carries it.
+			CardMask: getString(data, "Pan"),
 		},
 	}
 	// The RebillId of a save-method parent payment arrives in payment

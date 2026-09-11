@@ -4,8 +4,7 @@ export type PaymentStatus =
   | 'pending'
   | 'succeeded'
   | 'failed'
-  | 'refunded'
-  | 'partial_refunded';
+  | 'refunded';
 
 export type PaymentPeriod = 'month' | 'year';
 
@@ -14,7 +13,6 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   succeeded: 'Успешно',
   failed: 'Ошибка',
   refunded: 'Возвращён',
-  partial_refunded: 'Частичный возврат',
 };
 
 export const PAYMENT_PERIOD_LABELS: Record<PaymentPeriod, string> = {

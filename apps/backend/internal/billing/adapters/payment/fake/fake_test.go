@@ -165,6 +165,9 @@ func TestProviderConfirmPaymentFlow(t *testing.T) {
 	if event.Payment.SavedMethod == nil || event.Payment.SavedMethod.ChargeToken != init.SavedMethod.ChargeToken {
 		t.Errorf("expected saved method with the init token, got %+v", event.Payment.SavedMethod)
 	}
+	if event.Payment.CardMask != fakeMaskedPan {
+		t.Errorf("card mask: got %q, want the fake card %q", event.Payment.CardMask, fakeMaskedPan)
+	}
 
 	// Status resolves a confirmed payment as succeeded and reports the
 	// provider payment id of the init.

@@ -1757,6 +1757,9 @@ export interface components {
             id: string;
             provider: string;
             displayMask: string;
+            cardSystem: components["schemas"]["CardSystem"];
+            /** @description Card expiry in the provider's display format (MMYY); null when unknown. */
+            expDate?: string | null;
             isActive: boolean;
             /** Format: date-time */
             createdAt: string;
@@ -1771,6 +1774,7 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
         };
+        /** @description One subscription charge (issue #619): one list row is one payment — a refunded payment keeps its own row with the refunded status and the same positive amount. The sign and the status label are a UI convention the frontend renders on top of the status; amounts in the contract are always positive kopecks. */
         SubscriptionPayment: {
             /** Format: uuid */
             id: string;
@@ -1781,9 +1785,23 @@ export interface components {
             status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
             paymentUrl?: string | null;
+            paymentMethod?: components["schemas"]["SubscriptionPaymentCard"];
+            /** Format: date-time */
+            succeededAt?: string | null;
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description The card a payment was charged with (issue #619): a snapshot taken at creation or finalization of the payment, so the history survives payment-method deletion. Null for payments the provider reported no card for. */
+        SubscriptionPaymentCard: {
+            /** @description Masked card number, e.g. "4300********1234". */
+            displayMask: string;
+            cardSystem: components["schemas"]["CardSystem"];
+        };
+        /**
+         * @description Card system derived by the backend from the BIN prefix of the masked number (2 — Mir, 4 — Visa, 5 — Mastercard); unknown for old or unrecognized cards.
+         * @enum {string}
+         */
+        CardSystem: "mir" | "visa" | "mastercard" | "unknown";
         ChangeTariffRequest: {
             tariffName: components["schemas"]["TariffName"];
             period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
@@ -2696,8 +2714,11 @@ export interface components {
         PropertyStatus: "active" | "maintenance" | "archived";
         /** @enum {string} */
         SubscriptionStatus: "active" | "grace" | "cancelled";
-        /** @enum {string} */
-        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded" | "refunding";
+        /**
+         * @description Lifecycle states of a subscription payment. Refunds are full-amount only (ADR 0037): the legacy partial_refunded is not part of the vocabulary, refunding is the internal reservation shown to the user as pending.
+         * @enum {string}
+         */
+        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "refunding";
         /** @enum {string} */
         AdminSubscriptionPaymentPeriod: "month" | "year";
         /** @enum {string} */

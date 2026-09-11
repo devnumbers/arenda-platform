@@ -176,6 +176,8 @@ func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentR
 	savedMethod := application.SavedMethod{
 		ChargeToken: "fake_token_" + uuid.Must(uuid.NewV7()).String(),
 		CustomerRef: req.CustomerRef,
+		MaskedPan:   fakeMaskedPan,
+		ExpDate:     fakeExpDate,
 	}
 
 	p.pending[req.PaymentID.String()] = pendingEntry{
@@ -307,6 +309,7 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 		p.finalStates[req.PaymentID.String()] = application.PaymentStatusResult{
 			Status:    domain.PaymentStatusFailed,
 			ErrorCode: defaultErrorCode,
+			CardMask:  fakeMaskedPan,
 		}
 		log.InfoContext(ctx, "fake charge failed",
 			"provider_payment_id", providerPaymentID,
@@ -320,7 +323,8 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 	}
 
 	p.finalStates[req.PaymentID.String()] = application.PaymentStatusResult{
-		Status: domain.PaymentStatusSucceeded,
+		Status:   domain.PaymentStatusSucceeded,
+		CardMask: fakeMaskedPan,
 	}
 	log.InfoContext(ctx, "fake charge succeeded",
 		"provider_payment_id", providerPaymentID,
@@ -763,7 +767,7 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 	// The finalized outcome stays known to the provider: a later status read —
 	// the reconciliation of a lost webhook, or the confirm endpoint's
 	// lost-entry fallback — resolves the actual outcome instead of a guess.
-	finalState := application.PaymentStatusResult{Status: status}
+	finalState := application.PaymentStatusResult{Status: status, CardMask: entry.savedMethod.MaskedPan}
 	if errorCode != nil {
 		finalState.ErrorCode = *errorCode
 	}
@@ -776,6 +780,7 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 			Status:            status,
 			ErrorCode:         errorCode,
 			AmountKopecks:     entry.amountKopecks,
+			CardMask:          entry.savedMethod.MaskedPan,
 		},
 	}
 	if !failed {

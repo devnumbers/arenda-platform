@@ -592,12 +592,13 @@ func (w *Workers) planRenewal(
 	if err != nil {
 		return renewalPlan{}, err
 	}
-	// A recovered pending payment may predate a card switch: point it at the
-	// method the subscription charges now, so the record matches the token
-	// actually charged.
-	if pending.PaymentMethodID == nil || *pending.PaymentMethodID != method.ID {
-		methodID := method.ID
-		pending.PaymentMethodID = &methodID
+	// A recovered pending payment may predate a card switch, or the card
+	// snapshot (issue #619): point it at the method the subscription charges
+	// now, so the record matches the token and the card actually charged.
+	if pending.PaymentMethodID == nil || *pending.PaymentMethodID != method.ID || pending.CardMask == nil {
+		if err := pending.AttachMethodSnapshot(method.ID, method.DisplayMask, now); err != nil {
+			return renewalPlan{}, err
+		}
 		if err := stores.payments.Update(ctx, *pending); err != nil {
 			return renewalPlan{}, fmt.Errorf("update renewal payment method: %w", err)
 		}
