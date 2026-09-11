@@ -40,6 +40,7 @@ import {
   buildPropertyManageActions,
   buildPropertyStatusSheetItems,
   propertyStatusSubtitle,
+  statusChangeBlockedByRental,
   type PropertyDetailActionKey,
 } from '../lib/property-detail-status';
 import {
@@ -113,6 +114,12 @@ function PropertySectionSkeleton(): JSX.Element {
  * обновляется (секция «Аренда» — обычное пустое). Полный мастер с датой
  * и залогом остаётся на детализации аренды (#534).
  *
+ * Guard смены статуса (#628; Figma 1583:55882): у арендованного объекта
+ * «Объект на ремонте» и «Перевести в архив» открывают шит «Нельзя изменить
+ * статус, пока объект арендован»; «Завершить» уводит в шит завершения
+ * (#627), после чего смену статуса пользователь повторяет сам. Без аренды
+ * — прежнее поведение (мутация / архивный конфирм).
+ *
  * Наполнение секций живыми данными (#589; Figma 1185:40820 — активная
  * аренда, 1581:53905 — срок подошёл к концу, 1193:48779 — без аренды
  * с платежами, 1193:49273 — нули): «Аренда» — прогресс платежей и
@@ -168,6 +175,7 @@ export function PropertyDetailPage(): JSX.Element {
     const deleteProperty = useDeleteProperty();
 
     const [statusSheetOpen, setStatusSheetOpen] = React.useState(false);
+    const [guardSheetOpen, setGuardSheetOpen] = React.useState(false);
     const [completeSheetOpen, setCompleteSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -278,7 +286,20 @@ export function PropertyDetailPage(): JSX.Element {
         );
     }, [completeRental, currentRentalId, setCompleteSheetOpen]);
 
+    // Guard #628: у арендованного «Объект на ремонте» и «Перевести в
+    // архив» (шит статуса и «Управление») не исполняются — сначала
+    // guard-шит, завершение аренды шитом #627. Архивный конфирм при
+    // аренде не открывается.
+    const handleGuardConfirm = useCallback(() => {
+        setGuardSheetOpen(false);
+        setCompleteSheetOpen(true);
+    }, [setCompleteSheetOpen, setGuardSheetOpen]);
+
     const handleAction = useCallback((key: PropertyDetailActionKey) => {
+        if (statusChangeBlockedByRental(key, hasRental)) {
+            setGuardSheetOpen(true);
+            return;
+        }
         switch (key) {
             case 'about':
                 router.push(ROUTES.propertyAbout(id));
@@ -336,7 +357,7 @@ export function PropertyDetailPage(): JSX.Element {
                 setDeleteOpen(true);
                 break;
         }
-    }, [id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
+    }, [hasRental, id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardSheetOpen, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
 
     const handleDelete = useCallback((mode: DeletePropertyMode) => {
         deleteProperty.mutate(
@@ -616,6 +637,22 @@ export function PropertyDetailPage(): JSX.Element {
                 confirmLabel="Архивировать"
                 pending={archiveProperty.isPending}
                 onConfirm={handleArchive}
+            />
+
+            {/* Guard-шит (#628, Figma 1583:55882): сменить статус
+             * арендованного нельзя — подпись макета R/400 16/18, кнопки
+             * «Отменить»/«Завершить». «Завершить» уводит в шит завершения
+             * аренды (#627); сам статус пользователь меняет повторным
+             * тапом после завершения (двухшаговый флоу макета). */}
+            <ConfirmDialog
+                open={guardSheetOpen}
+                onOpenChange={setGuardSheetOpen}
+                title="Нельзя изменить статус, пока объект арендован"
+                description="Завершите аренду, чтобы изменить статус объекта"
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel="Завершить"
+                cancelLabel="Отменить"
+                onConfirm={handleGuardConfirm}
             />
 
             {/* Шит «Завершить аренду?» (#627, Figma 1583:56380): канон

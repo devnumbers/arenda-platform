@@ -4,6 +4,7 @@ import {
   buildPropertyManageActions,
   buildPropertyStatusSheetItems,
   propertyStatusSubtitle,
+  statusChangeBlockedByRental,
   type PropertyDetailActionKey,
 } from './property-detail-status';
 
@@ -197,4 +198,24 @@ describe('подписи действий (канон домена)', () => {
       expect(items.find((item) => item.key === key)?.label).toBe(label);
     },
   );
+});
+
+describe('statusChangeBlockedByRental (гард смены статуса, #628)', () => {
+  it('с арендой блокирует ремонт и архив', () => {
+    expect(statusChangeBlockedByRental('start-maintenance', true)).toBe(true);
+    expect(statusChangeBlockedByRental('archive', true)).toBe(true);
+  });
+
+  it('с арендой остальные действия проходит', () => {
+    expect(statusChangeBlockedByRental('finish-maintenance', true)).toBe(false);
+    expect(statusChangeBlockedByRental('complete-rental', true)).toBe(false);
+    expect(statusChangeBlockedByRental('edit', true)).toBe(false);
+    expect(statusChangeBlockedByRental('delete', true)).toBe(false);
+    expect(statusChangeBlockedByRental('unarchive', true)).toBe(false);
+  });
+
+  it('без аренды не блокирует ничего', () => {
+    expect(statusChangeBlockedByRental('start-maintenance', false)).toBe(false);
+    expect(statusChangeBlockedByRental('archive', false)).toBe(false);
+  });
 });
