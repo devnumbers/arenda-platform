@@ -91,8 +91,10 @@ export function PropertyCatalogFields({
     return errors;
   };
 
+  const liveErrors = showErrors ? liveAttrErrors() : {};
+
   const showError = (key: AttrKey): string | undefined =>
-    extraErrors?.[key] ?? (showErrors ? liveAttrErrors()[key] : undefined);
+    extraErrors?.[key] ?? liveErrors[key];
 
   const updateAttribute = (key: AttrKey, value: string | number | undefined): void => {
     const next: Record<string, string | number> = { ...attributes };

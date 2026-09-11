@@ -6,22 +6,16 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import {
-  fieldsForType,
-  toWireAttributes,
-  validateAttributes,
-  type AttrErrors,
-  type AttrKey,
-} from '@/features/property-attributes';
+import type { AttrErrors, AttrKey } from '@/features/property-attributes';
 import {
   buildPropertyEditCommand,
   initialPropertyEditDraft,
   propertyEditDirty,
   useProperty,
   useUpdateProperty,
-  type PropertyAttributesPort,
   type PropertyEditDraft,
 } from '@/features/properties';
+import { attributeCatalog } from '../property-fields/attribute-catalog';
 import type { PropertyType } from '@/entities/property';
 import { ApiError } from '@/shared/api/errors';
 import {
@@ -57,15 +51,6 @@ import { PropertyTypePicker } from './property-type-picker';
  * типа. Готовность — обязательные поля + валидный каталог; кнопки
  * сохранения погашены, пока правки нет (propertyEditDirty).
  */
-
-// Порт каталога характеристик: реализации соседней фичи инжектятся
-// здесь (виджету доступны обе фичи) — тот же паттерн, что у сабмита
-// создания.
-const attributeCatalog: PropertyAttributesPort = {
-  toWireAttributes,
-  validateAttributes,
-  fieldKeys: (type) => new Set(fieldsForType(type).map((field) => field.key)),
-};
 
 const NAME_MAX_LENGTH = 64;
 const DESCRIPTION_MAX_LENGTH = 1024;
@@ -190,7 +175,9 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
             value={draft.name}
             onChange={(event) => updateDraft({ name: event.currentTarget.value })}
           />
-          <PropertyHousingTypeChips type={draft.type ?? 'apartment'} onChange={changeType} />
+          {draft.type !== undefined && (
+            <PropertyHousingTypeChips type={draft.type} onChange={changeType} />
+          )}
           {draft.type !== undefined && (
             <PropertyCatalogFields
               type={draft.type}

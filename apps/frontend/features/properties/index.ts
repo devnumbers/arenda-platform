@@ -30,7 +30,6 @@ export {
   type PropertyAttributesPort,
 } from './lib/property-create-submit';
 export {
-  attributesEqual,
   buildPropertyEditCommand,
   initialPropertyEditDraft,
   propertyEditDirty,

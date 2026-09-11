@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, JSX, KeyboardEvent } from 'react';
-import { useAddressSuggestions } from '@/features/properties';
-import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { focusListboxEdge } from '@/shared/ui/select/listbox-keyboard';
 import { TextField } from '@/shared/ui/design';
 import { AddressSuggestionList } from '../property-fields/address-suggestion-list';
+import {
+  SUGGEST_QUERY_MIN_LENGTH,
+  useAddressSuggestionQuery,
+} from '../property-fields/use-address-suggestion-query';
 
 /**
  * Шаг 2 «Адрес» (Figma 1213-52017/52391, 1519-94336): поле с программным
@@ -17,8 +19,6 @@ import { AddressSuggestionList } from '../property-fields/address-suggestion-lis
  * нет, ручной ввод продолжает работать. Выбор подсказки фиксирует полный
  * адрес в черновике и прячет список до следующей правки.
  */
-
-const SUGGEST_QUERY_MIN_LENGTH = 3;
 
 export type AddressStepProps = {
   readonly value: string;
@@ -32,8 +32,7 @@ export function AddressStep({ value, onChange }: AddressStepProps): JSX.Element 
   // список появится после следующей правки значения.
   const [dismissed, setDismissed] = useState(value.trim().length > 0);
   const [inputValue, setInputValue] = useState(value);
-  const debouncedQuery = useDebounce(inputValue, 300);
-  const { data: suggestions } = useAddressSuggestions(debouncedQuery);
+  const { debouncedQuery, suggestions } = useAddressSuggestionQuery(inputValue);
 
   // Программный фокус при входе в шаг.
   useEffect(() => {

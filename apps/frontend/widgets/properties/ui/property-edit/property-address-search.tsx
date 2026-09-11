@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, JSX, KeyboardEvent } from 'react';
 import Image from 'next/image';
-import { useAddressSuggestions } from '@/features/properties';
-import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { focusListboxEdge } from '@/shared/ui/select/listbox-keyboard';
 import { IconButton, PageContent, SearchField, TopNav } from '@/shared/ui/design';
 import { Cancel } from '@/shared/assets/icons';
 import { AddressSuggestionList } from '../property-fields/address-suggestion-list';
+import {
+  SUGGEST_QUERY_MIN_LENGTH,
+  useAddressSuggestionQuery,
+} from '../property-fields/use-address-suggestion-query';
 
 /**
  * Полноэкранный поиск адреса формы правки (карта #583, тикет #590;
@@ -22,8 +24,6 @@ import { AddressSuggestionList } from '../property-fields/address-suggestion-lis
  * иллюстрация 128: «Введите адрес объекта» до поиска, «Адрес не найден»
  * на пустой результат (канон состояний поиска, строка серым 16/18).
  */
-
-const SUGGEST_QUERY_MIN_LENGTH = 3;
 
 export type PropertyAddressSearchProps = {
   /** Текущий адрес формы — стартовое значение поля. */
@@ -44,8 +44,7 @@ export function PropertyAddressSearch({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [inputValue, setInputValue] = useState(value);
-  const debouncedQuery = useDebounce(inputValue, 300);
-  const { data: suggestions } = useAddressSuggestions(debouncedQuery);
+  const { debouncedQuery, suggestions } = useAddressSuggestionQuery(inputValue);
 
   // Программный фокус при открытии (поисковая шапка — каретка в поле).
   useEffect(() => {
@@ -88,7 +87,7 @@ export function PropertyAddressSearch({
             rowClassName="px-3 py-3"
             suggestions={rows}
             onSelect={onSelect}
-            onEscape={hideList}
+            onEscape={refocusField}
           />
         )}
         {showEmptyState && (
@@ -129,8 +128,9 @@ export function PropertyAddressSearch({
     }
   }
 
-  // Escape на строке всплывает с опции: список прячется, фокус в поле.
-  function hideList(): void {
+  // Escape на строке всплывает с опции (runListboxAction его не гасит):
+  // фокус возвращается в поле поиска.
+  function refocusField(): void {
     inputRef.current?.focus();
   }
 
