@@ -1,4 +1,5 @@
 export {
+  fetchGlobalTasks,
   useActiveTasks,
   useCompleteAllTasks,
   useCompletedTasks,

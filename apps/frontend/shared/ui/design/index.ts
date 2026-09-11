@@ -61,6 +61,7 @@ export { MoreSheet, type MoreSheetProps } from './more-sheet';
 export { HubCollapseAnchor } from './hub-collapse';
 export type { TopNavCollapse } from './top-nav';
 export { DesktopMenuButton, type DesktopMenuButtonProps } from './desktop-menu-button';
+export { NavIntentProvider, useNavIntent, type NavIntentHandler } from './nav-intent';
 export { DesktopSidebar } from './desktop-sidebar';
 export { DesktopNavPills } from './desktop-nav-pills';
 export { HeaderLogo, type HeaderLogoProps } from './header-logo';

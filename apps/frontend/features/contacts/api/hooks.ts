@@ -58,6 +58,30 @@ export type ContactBookSort = 'name' | 'property';
 /** Направление сортировки плоской книги. */
 export type ContactBookOrder = 'asc' | 'desc';
 
+/** Чистый fetch плоской книги — общее горло хука и prefetch-прототипа
+ * #610 (кэш прогревается тем же кодом, что читает экран). */
+export async function fetchContactBook(
+  search = '',
+  sort: ContactBookSort = 'name',
+  order: ContactBookOrder = 'asc',
+): Promise<Contact[]> {
+  const params = new URLSearchParams();
+  if (search !== '') {
+    params.set('search', search);
+  }
+  if (sort !== 'name') {
+    params.set('sort', sort);
+  }
+  if (order !== 'asc') {
+    params.set('order', order);
+  }
+  const query = params.toString();
+  const response = await apiClient<ContactsResponse>(
+    `/contacts${query !== '' ? `?${query}` : ''}`,
+  );
+  return response.items.map(mapContact);
+}
+
 /**
  * Плоский список всей видимой книги (глобальная страница контактов, макет
  * 1726:65083): GET /contacts без property_id — сервер отдаёт объединённый
@@ -72,23 +96,7 @@ export function useContactBook(
 ): UseQueryResult<Contact[], ApiError> {
   return useQuery({
     queryKey: contactKeys.list(null, search, sort, order),
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (search !== '') {
-        params.set('search', search);
-      }
-      if (sort !== 'name') {
-        params.set('sort', sort);
-      }
-      if (order !== 'asc') {
-        params.set('order', order);
-      }
-      const query = params.toString();
-      const response = await apiClient<ContactsResponse>(
-        `/contacts${query !== '' ? `?${query}` : ''}`,
-      );
-      return response.items.map(mapContact);
-    },
+    queryFn: () => fetchContactBook(search, sort, order),
     // Набор в поиске и смена сортировки держат прежнюю выдачу, пока едет
     // новый запрос (#609, канон платежей): скелетон — только когда данных
     // нет вовсе.

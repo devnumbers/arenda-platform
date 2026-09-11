@@ -7,6 +7,7 @@ import { MenuLines } from '@/shared/assets/icons';
 import { getActiveMobileTab } from '@/shared/config/get-active-nav-item';
 import { navSectionById, type NavSection } from '@/shared/config/navigation';
 import { cn } from '@/shared/lib/cn';
+import { useNavIntentLink } from './nav-intent';
 
 /** Табы-ссылки из единой нав-модели (#558): «Объекты» и «Уведомления»;
  * третий таб «Еще» — кнопка шита, не раздел навигации (иконка та же, что
@@ -86,11 +87,16 @@ export function TabNavLink({
   readonly active: boolean;
   readonly onClick?: () => void;
 }): JSX.Element {
+  const intent = useNavIntentLink(section.href);
   return (
     <Link
       href={section.href}
+      prefetch={intent.prefetch}
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
+      onPointerEnter={intent.onIntent}
+      onPointerDown={intent.onIntent}
+      onFocus={intent.onIntent}
       className={TAB_TRIGGER_CLASS}
     >
       <TabLabel label={section.label} Icon={section.Icon} active={active} />

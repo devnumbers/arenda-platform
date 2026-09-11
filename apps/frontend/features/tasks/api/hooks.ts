@@ -290,14 +290,39 @@ const globalTasksPath = (
  * смена фильтра (#524) держит прежний срез на экране, пока едет новый
  * запрос: лента не мигает скелетоном (#609, канон платежей).
  */
+/**
+ * Чистый fetch бакета глобального листинга GET /tasks — общее горло хуков
+ * ленты и prefetch-прототипа #610: прогрев кэша идёт тем же кодом, что
+ * читает экран (детали среза — у useGlobalActiveTasks ниже).
+ */
+export function fetchGlobalTasks(
+  completed: boolean,
+  propertyIds: ReadonlyArray<string>,
+  withoutProperty: boolean,
+): Promise<TasksPage> {
+  return apiClient<TasksPageDto>(globalTasksPath(completed, propertyIds, withoutProperty))
+    .then(mapTasksPage);
+}
+
+/**
+ * Активный бакет глобальной ленты GET /tasks (#521, экран #523):
+ * merged-фид читателя (свои задачи + задачи видимых объектов, архивы мимо —
+ * решения #522); фильтр (#524/#547) — срез перечисленных объектов,
+ * «Общие задачи» — безобъектная книга читателя, вместе — union (решение
+ * владельца 2026-09-07); смена фильтра меняет ключ и перечитывает. Лимит —
+ * максимум контракта: лента группируется целиком, как на объекте. today —
+ * календарь читателя (на срезе одного объекта — владельца данных).
+ * Сестринский хук журнала — useGlobalCompletedTasks. keepPreviousData —
+ * смена фильтра (#524) держит прежний срез на экране, пока едет новый
+ * запрос: лента не мигает скелетоном (#609, канон платежей).
+ */
 export function useGlobalActiveTasks(
   propertyIds: ReadonlyArray<string>,
   withoutProperty = false,
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
     queryKey: taskKeys.global(false, propertyIds, withoutProperty),
-    queryFn: async () =>
-      mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(false, propertyIds, withoutProperty))),
+    queryFn: () => fetchGlobalTasks(false, propertyIds, withoutProperty),
     placeholderData: keepPreviousData,
   });
 }
@@ -310,8 +335,7 @@ export function useGlobalCompletedTasks(
 ): UseQueryResult<TasksPage, ApiError> {
   return useQuery({
     queryKey: taskKeys.global(true, propertyIds, withoutProperty),
-    queryFn: async () =>
-      mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(true, propertyIds, withoutProperty))),
+    queryFn: () => fetchGlobalTasks(true, propertyIds, withoutProperty),
     placeholderData: keepPreviousData,
   });
 }
