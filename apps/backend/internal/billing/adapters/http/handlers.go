@@ -923,6 +923,14 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict",
 				"Активный способ оплаты нельзя удалить, пока не выбран другой"))
+	case errors.Is(err, billingapp.ErrPendingPaymentExists):
+		// The one-pending-payment rule (issue #616): the tariff decision is
+		// locked to the payment already in flight — the screens read the code
+		// and show the awaiting-payment state instead of their own.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Есть неоплаченный платёж: дождитесь его завершения или повторите попытку позже",
+				"pending_payment_exists"))
 	case errors.Is(err, billingapp.ErrBindingSessionLimitExceeded):
 		// The per-user binding-session limit (ticket #427): the sliding
 		// window releases the oldest sessions over time, so the standard

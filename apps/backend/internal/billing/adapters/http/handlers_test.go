@@ -750,6 +750,116 @@ func TestGetSubscription_MapsViewToContract(t *testing.T) {
 	}
 }
 
+// TestGetSubscription_PendingPaymentMapped proves the live pending payment of
+// the view maps to the contract's pendingPayment object (issue #616).
+func TestGetSubscription_PendingPaymentMapped(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.Must(uuid.NewV7())
+	expiresAt := time.Date(2026, 9, 14, 10, 15, 0, 0, time.UTC)
+	payment, err := domain.NewSubscriptionPayment(
+		ownerID, uuid.Must(uuid.NewV7()),
+		uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+		domain.PeriodMonth, 99000, testProviderFake, expiresAt.Add(-15*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("NewSubscriptionPayment() error = %v", err)
+	}
+	confirmURL := "https://pay.example/confirm"
+	payment.PaymentURL = &confirmURL
+	payment.ExpiresAt = &expiresAt
+
+	h := newTestHandlers(nil, &fakeSubscriptionViewer{get: func(_ context.Context, _ uuid.UUID) (billingapp.SubscriptionView, error) {
+		return billingapp.SubscriptionView{
+			Subscription: domain.Subscription{ID: uuid.Must(uuid.NewV7()), UserID: ownerID, Status: domain.SubscriptionStatusActive},
+			Tariff:       domain.Tariff{Name: domain.TariffPro},
+			PendingPayment: &billingapp.PendingPaymentView{
+				Payment: payment,
+				Tariff:  domain.Tariff{Name: domain.TariffBusiness, MonthlyPriceKopecks: 99000},
+			},
+		}, nil
+	}}, nil)
+
+	w := httptest.NewRecorder()
+	h.GetSubscription(w, ownerRequest(t, http.MethodGet, "/subscription", ownerID))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		PendingPayment *struct {
+			TariffName    string `json:"tariffName"`
+			Period        string `json:"period"`
+			AmountKopecks int64  `json:"amountKopecks"`
+			ConfirmURL    string `json:"confirmUrl"`
+			ExpiresAt     string `json:"expiresAt"`
+		} `json:"pendingPayment"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.PendingPayment == nil {
+		t.Fatal("pendingPayment = nil, want the live pending payment")
+	}
+	pp := resp.PendingPayment
+	if pp.TariffName != "business" || pp.Period != string(domain.PeriodMonth) || pp.AmountKopecks != 99000 {
+		t.Errorf("pendingPayment = %+v, want business/month/99000", pp)
+	}
+	if pp.ConfirmURL != confirmURL {
+		t.Errorf("confirmUrl = %q, want %q", pp.ConfirmURL, confirmURL)
+	}
+	if !strings.HasPrefix(pp.ExpiresAt, "2026-09-14T10:15") {
+		t.Errorf("expiresAt = %q, want the payment deadline", pp.ExpiresAt)
+	}
+}
+
+// writePendingConflict requests one of the two blocking endpoints through the
+// same sentinel mapping: the Problem must carry code pending_payment_exists
+// (issue #616).
+func writePendingConflict(t *testing.T, target string, err error) *httptest.ResponseRecorder {
+	t.Helper()
+	ownerID := uuid.Must(uuid.NewV7())
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{
+		cancel: func(context.Context, uuid.UUID) error { return err },
+		changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
+			return billingapp.ChangeTariffResult{}, err
+		},
+	})
+	w := httptest.NewRecorder()
+	switch target {
+	case "/subscription/cancel":
+		h.CancelSubscription(w, ownerRequest(t, http.MethodPost, target, ownerID))
+	default:
+		h.ChangeTariff(w, ownerJSONRequest(t, http.MethodPost, target, ownerID, `{"tariffName":"business","period":"year"}`))
+	}
+	return w
+}
+
+// TestBillingErrors_PendingPaymentConflictCarriesCode proves both blocking
+// endpoints answer 409 with the machine-readable pending_payment_exists code.
+func TestBillingErrors_PendingPaymentConflictCarriesCode(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{"/subscription/cancel", "/subscription/change"} {
+		w := writePendingConflict(t, target, billingapp.ErrPendingPaymentExists)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("%s: status = %d, want 409; body: %s", target, w.Code, w.Body.String())
+		}
+		var problem struct {
+			Status int    `json:"status"`
+			Code   string `json:"code"`
+			Title  string `json:"title"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+			t.Fatalf("%s: decode problem: %v", target, err)
+		}
+		if problem.Code != "pending_payment_exists" {
+			t.Errorf("%s: code = %q, want pending_payment_exists", target, problem.Code)
+		}
+		if problem.Status != http.StatusConflict || problem.Title != "Conflict" {
+			t.Errorf("%s: problem = %d/%q, want 409/Conflict", target, problem.Status, problem.Title)
+		}
+	}
+}
+
 // TestGetSubscription_NotFoundIsProblem proves a missing subscription maps to
 // the contract's 404 with an RFC 7807 problem body.
 func TestGetSubscription_NotFoundIsProblem(t *testing.T) {

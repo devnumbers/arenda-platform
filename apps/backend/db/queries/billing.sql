@@ -210,9 +210,10 @@ INSERT INTO subscription_payments (
     refunded_amount_kopecks,
     charge_attempts,
     error_code,
-    succeeded_at
+    succeeded_at,
+    expires_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING *;
 
 -- name: GetSubscriptionPaymentByID :one
@@ -241,9 +242,24 @@ SET
     refunded_amount_kopecks = $6,
     charge_attempts = $7,
     error_code = $8,
-    succeeded_at = $9
+    succeeded_at = $9,
+    expires_at = $10
 WHERE id = $1
 RETURNING *;
+
+-- name: ListExpiredPendingSubscriptionPayments :many
+-- The TTL-expiry batch of the pending-payment worker (issue #616):
+-- still-pending payments whose payer form deadline ran out — the server-side
+-- expiry is the truth that marks them failed and unlocks the tariff choice.
+-- Unlike the reconciliation selections this batch does not require a provider
+-- reference: a crashed initiation must expire too. The worker re-checks and
+-- locks every row in its own transaction.
+SELECT * FROM subscription_payments
+WHERE status = 'pending'
+  AND expires_at IS NOT NULL
+  AND expires_at < $1
+ORDER BY expires_at ASC, id ASC
+LIMIT $2;
 
 -- name: ListSubscriptionPaymentsBySelection :many
 -- The reconciliation batch of the payment phases (issues #252, #254): pending
@@ -277,7 +293,7 @@ LIMIT sqlc.arg('batch_limit');
 SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
-       sp.created_at, sp.updated_at, sp.succeeded_at,
+       sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at,
        u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
@@ -311,7 +327,7 @@ WHERE (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id'))
 SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
-       sp.created_at, sp.updated_at, sp.succeeded_at,
+       sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at,
        u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id

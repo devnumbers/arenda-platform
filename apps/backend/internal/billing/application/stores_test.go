@@ -461,6 +461,34 @@ func (r *fakePaymentRepo) ListPendingByUserID(_ context.Context, userID uuid.UUI
 	return result, nil
 }
 
+// ListExpiredPending mirrors the SQL predicate of the TTL-expiry batch
+// (issue #616): still-pending payments with a deadline in the past, oldest
+// deadline first.
+func (r *fakePaymentRepo) ListExpiredPending(_ context.Context, before time.Time, limit int) ([]domain.SubscriptionPayment, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]domain.SubscriptionPayment, 0)
+	for _, p := range r.payments {
+		if p.UserID == uuid.Nil || p.Status != domain.PaymentStatusPending {
+			continue
+		}
+		if p.ExpiresAt == nil || !p.ExpiresAt.Before(before) {
+			continue
+		}
+		result = append(result, p)
+	}
+	slices.SortFunc(result, func(a, b domain.SubscriptionPayment) int {
+		if c := a.ExpiresAt.Compare(*b.ExpiresAt); c != 0 {
+			return c
+		}
+		return bytes.Compare(a.ID[:], b.ID[:])
+	})
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
 func (r *fakePaymentRepo) Update(_ context.Context, payment domain.SubscriptionPayment) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

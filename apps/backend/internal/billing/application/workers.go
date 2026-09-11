@@ -579,25 +579,9 @@ func (w *Workers) planRenewal(
 
 	// Reuse a pending renewal payment from a crashed run instead of initiating
 	// a duplicate; the pending-payments unique index is the durable backstop.
-	pending := findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
-	if pending == nil {
-		payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, renewalTariff.ID, period, amount, w.provider.Name(), now)
-		if err != nil {
-			return renewalPlan{}, err
-		}
-		payment.PaymentMethodID = &method.ID
-		payment, err = stores.payments.Create(ctx, payment)
-		if err != nil {
-			if !errors.Is(err, ErrAlreadyExists) {
-				return renewalPlan{}, fmt.Errorf("save renewal payment: %w", err)
-			}
-			pending = findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
-			if pending == nil {
-				return renewalPlan{}, fmt.Errorf("pending renewal payment lost after unique-race: %w", err)
-			}
-			payment = *pending
-		}
-		pending = &payment
+	pending, err := pendingRenewalPayment(ctx, stores, sub, renewalTariff, period, amount, w.provider.Name(), now)
+	if err != nil {
+		return renewalPlan{}, err
 	}
 	// A recovered pending payment may predate a card switch: point it at the
 	// method the subscription charges now, so the record matches the token
@@ -610,6 +594,47 @@ func (w *Workers) planRenewal(
 		}
 	}
 	return renewalPlan{ready: true, payment: *pending, method: method, tariff: renewalTariff}, nil
+}
+
+// pendingRenewalPayment resolves the charge target of a renewal: a live
+// pending payment for the same tariff and period from a crashed run — or a
+// fresh pending payment persisted as the durable record that survives a crash
+// before the provider call. A pending form payment whose deadline ran out
+// (issue #616) is expired in the same transaction and replaced. The charge
+// method is pointed at the payment by the caller.
+func pendingRenewalPayment(
+	ctx context.Context, stores *txStores, sub domain.Subscription,
+	renewalTariff domain.Tariff, period domain.SubscriptionPeriod,
+	amount int64, provider domain.PaymentProvider, now time.Time,
+) (*domain.SubscriptionPayment, error) {
+	pending := findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
+	if pending != nil && !pending.IsLivePending(now) {
+		// The pending form payment's deadline ran out (issue #616): fail it
+		// and start a fresh charge instead of reusing a dead payment.
+		if err := expireDeadPendingPayment(ctx, stores, pending, now); err != nil {
+			return nil, err
+		}
+		pending = nil
+	}
+	if pending != nil {
+		return pending, nil
+	}
+	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, renewalTariff.ID, period, amount, provider, now)
+	if err != nil {
+		return nil, err
+	}
+	payment, err = stores.payments.Create(ctx, payment)
+	if err != nil {
+		if !errors.Is(err, ErrAlreadyExists) {
+			return nil, fmt.Errorf("save renewal payment: %w", err)
+		}
+		pending = findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
+		if pending == nil {
+			return nil, fmt.Errorf("pending renewal payment lost after unique-race: %w", err)
+		}
+		return pending, nil
+	}
+	return &payment, nil
 }
 
 // renewalTerms resolves what a renewal buys: a due scheduled change renews
@@ -1062,6 +1087,91 @@ func (w *Workers) expireSubscription(
 func (w *Workers) ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error) {
 	return w.reconcileStalePendingPayments(ctx, "pending upgrade payments",
 		w.phases.stalePendingUpgrades(now, w.config.WorkerBatchSize))
+}
+
+// ProcessExpiredPendingPayments expires still-pending form payments whose
+// deadline ran out (issue #616): the server-side expiry is the truth, so the
+// payment becomes failed and the user's locked tariff choice unlocks. There
+// are no subscription effects — a customer-initiated payment carries no
+// charge method — and no provider call: the provider's own redirect deadline
+// is the same persisted instant, so a success that slipped past the expiry
+// arrives as a late webhook and is reconciled against the provider by the
+// shared out-of-order seam. Every row is re-checked and locked inside its own
+// transaction: a payment resolved between listing and locking is a no-op.
+// Returns the number of payments expired.
+func (w *Workers) ProcessExpiredPendingPayments(ctx context.Context, now time.Time) (int, error) {
+	expired := 0
+	for {
+		payments, err := w.txStoreFactory.payments.ListExpiredPending(ctx, now, w.config.WorkerBatchSize)
+		if err != nil {
+			return expired, fmt.Errorf("list expired pending payments: %w", err)
+		}
+		if len(payments) == 0 {
+			break
+		}
+		batch := 0
+		for _, payment := range payments {
+			if err := w.expirePendingPayment(ctx, payment, now); err != nil {
+				w.log.ErrorContext(ctx, "failed to expire pending payment past its deadline",
+					slog.String(auditKeyPaymentID, payment.ID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			batch++
+		}
+		expired += batch
+		if len(payments) < w.config.WorkerBatchSize {
+			break
+		}
+		if batch == 0 {
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "expire pending payments"))
+			break
+		}
+	}
+	return expired, nil
+}
+
+// expirePendingPayment expires one listed payment inside its own transaction:
+// the row is locked and re-checked, so a payment finalized by another flow
+// between listing and locking is a no-op, not an error. The audit entry
+// matches every other payment failure's shape.
+func (w *Workers) expirePendingPayment(ctx context.Context, listed domain.SubscriptionPayment, now time.Time) error {
+	return w.runInTx(ctx, func(stores *txStores) error {
+		payment, err := stores.paymentForUpdate(ctx, listed.ID)
+		if err != nil {
+			return err
+		}
+		if payment.Status != domain.PaymentStatusPending {
+			// Finalized by another flow between listing and locking: the
+			// persisted state wins.
+			return nil
+		}
+		if payment.IsLivePending(now) {
+			// Its deadline moved back between listing and locking.
+			return nil
+		}
+		if err := payment.MarkExpired(now); err != nil {
+			return err
+		}
+		if err := stores.payments.Update(ctx, payment); err != nil {
+			return fmt.Errorf("mark expired pending payment: %w", err)
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorRole:  auditdomain.ActorRoleSystem,
+			Action:     auditdomain.ActionSubscriptionPaymentFailed,
+			EntityType: auditdomain.EntitySubscriptionPayment,
+			EntityID:   &payment.ID,
+			Context: map[string]any{
+				auditKeyPaymentID: payment.ID,
+				auditKeyProvider:  string(payment.Provider),
+				auditKeyReason:    domain.PaymentErrorCodeFormExpired,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // ReconcilePendingPayments pulls the lost webhooks of every stale pending

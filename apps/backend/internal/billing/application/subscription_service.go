@@ -74,8 +74,9 @@ func NewSubscriptionService(factory txStoreFactory, cfg SubscriptionServiceConfi
 }
 
 // GetSubscription assembles the user's subscription view: the subscription
-// aggregate with its tariff, any scheduled (pending) tariff, and the active
-// payment method resolved (issue #251).
+// aggregate with its tariff, any scheduled (pending) tariff, the active
+// payment method resolved (issue #251), and the live pending payment when one
+// holds the user's tariff decision (issue #616).
 func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.UUID) (SubscriptionView, error) {
 	sub, err := s.subscriptions.GetByUserID(ctx, userID)
 	if err != nil {
@@ -121,14 +122,51 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.U
 		}
 		view.ActivePaymentMethod = &method
 	}
+	pending, found, err := s.livePendingPayment(ctx, userID)
+	if err != nil {
+		return SubscriptionView{}, err
+	}
+	if found {
+		view.PendingPayment = pending
+	}
 	return view, nil
+}
+
+// livePendingPayment resolves the user's live pending payment — a pending
+// form payment whose deadline has not run out and whose confirm URL has been
+// persisted (issue #616) — with its tariff resolved. Merchant-initiated
+// charges carry no payer form and are never surfaced; a payment whose URL has
+// not been persisted yet (the crash window between the pending row and the
+// provider answer) has nothing to confirm and is not surfaced either. The
+// found result is false when no pending payment qualifies.
+func (s *SubscriptionService) livePendingPayment(ctx context.Context, userID uuid.UUID) (*PendingPaymentView, bool, error) {
+	pending, err := s.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return nil, false, fmt.Errorf("list pending payments: %w", err)
+	}
+	for i := range pending {
+		p := pending[i]
+		if !p.IsLiveFormPayment(s.clock.Now().UTC()) || !p.HasPaymentURL() {
+			continue
+		}
+		tariff, err := s.tariffs.GetByID(ctx, p.TariffID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil, false, fmt.Errorf("pending payment %s references missing tariff %s: %w", p.ID, p.TariffID, ErrTariffNotFound)
+			}
+			return nil, false, fmt.Errorf("get pending payment tariff: %w", err)
+		}
+		return &PendingPaymentView{Payment: p, Tariff: tariff}, true, nil
+	}
+	return nil, false, nil
 }
 
 // CancelSubscription cancels the user's subscription (issue #249, ADR 0008):
 // the status moves to cancelled, auto-renew switches off immediately, and the
 // paid tariff keeps working until valid_until — data mutations stay allowed
 // for the rest of the period. The state change, its transition-log entry and
-// the audit record land in one transaction.
+// the audit record land in one transaction. A live pending payment blocks the
+// cancellation (issue #616): the tariff decision is still being paid for.
 func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uuid.UUID) error {
 	return s.runInTx(ctx, func(stores *txStores) error {
 		sub, err := stores.subscriptionForUpdate(ctx, userID)
@@ -139,6 +177,9 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 		// the user cannot cancel what they do not pay for.
 		if !sub.IsPaidSource() {
 			return domain.ErrInvalidSubscriptionState
+		}
+		if err := rejectLivePendingPayment(ctx, stores, userID, s.clock.Now().UTC()); err != nil {
+			return err
 		}
 
 		if _, err := stores.applyTransition(ctx, &sub,
@@ -154,6 +195,47 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 		}
 		return nil
 	})
+}
+
+// rejectLivePendingPayment refuses the flow when a live pending payment — a
+// form payment whose deadline has not run out — holds the user's tariff
+// decision (issue #616). Merchant-initiated charges carry no payer form and
+// no user decision, so they do not block.
+func rejectLivePendingPayment(ctx context.Context, stores *txStores, userID uuid.UUID, now time.Time) error {
+	pending, err := stores.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list pending payments: %w", err)
+	}
+	for _, p := range pending {
+		if p.IsLiveFormPayment(now) {
+			return ErrPendingPaymentExists
+		}
+	}
+	return nil
+}
+
+// rejectConflictingPendingPayment blocks a tariff decision that conflicts
+// with the user's live pending payment (issue #616): one pending payment per
+// user. A request for the pending payment's own tariff and period passes
+// through — the payment path returns it as-is.
+func rejectConflictingPendingPayment(
+	ctx context.Context, stores *txStores, userID, tariffID uuid.UUID,
+	period domain.SubscriptionPeriod, now time.Time,
+) error {
+	pending, err := stores.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list pending payments: %w", err)
+	}
+	for _, p := range pending {
+		if !p.IsLiveFormPayment(now) {
+			continue
+		}
+		if p.TariffID == tariffID && p.Period == period {
+			return nil
+		}
+		return ErrPendingPaymentExists
+	}
+	return nil
 }
 
 // ToggleAutoRenew switches automatic renewal on or off (issue #249). Enabling
@@ -247,6 +329,13 @@ func (s *SubscriptionService) planTariffChange(
 	}
 
 	now := s.clock.Now().UTC()
+	// One pending payment per user (issue #616): a live pending form payment
+	// locks the tariff decision to what it buys — any other selection is
+	// rejected before it is classified, a request matching the pending
+	// payment's own tariff and period passes through to the dedup below.
+	if err := rejectConflictingPendingPayment(ctx, stores, userID, newTariff.ID, req.Period, now); err != nil {
+		return changeTariffPlan{}, err
+	}
 	// A same-tariff request is a manual payment while the subscription is in
 	// grace (a renewal, issue #250) or cancelled (its reactivation, issue
 	// #429); both share the payment path with upgrades.
@@ -416,10 +505,12 @@ func (s *SubscriptionService) executePlannedPayment(ctx context.Context, plan ch
 }
 
 // planPayment is the transactional half of the payment path: it returns an
-// existing pending payment for the same tariff and period when there is one
-// (no duplicate initiation), or persists a fresh pending payment — the durable
-// record of the user's decision that survives a crash before the provider
-// call — together with the tariff-change audit entry. The pending-payments
+// existing live pending payment for the same tariff and period when there is
+// one (no duplicate initiation), expires one whose form deadline has run out
+// — the server-side expiry is the truth (issue #616) — or persists a fresh
+// pending payment: the durable record of the user's decision that survives a
+// crash before the provider call, with its form deadline anchored at creation
+// so the same absolute instant is passed to the provider. The pending-payments
 // partial unique index is the durable backstop for concurrent initiations.
 func (s *SubscriptionService) planPayment(
 	ctx context.Context,
@@ -428,16 +519,27 @@ func (s *SubscriptionService) planPayment(
 	currentTariff, newTariff domain.Tariff,
 	period domain.SubscriptionPeriod,
 ) (created, existing *domain.SubscriptionPayment, err error) {
-	if existing := findPendingPayment(stores, ctx, sub.UserID, newTariff.ID, period); existing != nil {
-		return nil, existing, nil
+	now := s.clock.Now().UTC()
+	if pending := findPendingPayment(stores, ctx, sub.UserID, newTariff.ID, period); pending != nil {
+		if pending.IsLivePending(now) {
+			return nil, pending, nil
+		}
+		// The pending payment's form deadline ran out while still pending:
+		// fail it in this transaction and start fresh.
+		if err := expireDeadPendingPayment(ctx, stores, pending, now); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	amount, err := newTariff.Price(period)
 	if err != nil {
 		return nil, nil, err
 	}
-	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, newTariff.ID, period, amount, s.provider.Name(), s.clock.Now().UTC())
+	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, newTariff.ID, period, amount, s.provider.Name(), now)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := payment.AttachFormDeadline(now.Add(s.config.PaymentFormTTL), now); err != nil {
 		return nil, nil, err
 	}
 	payment, err = stores.payments.Create(ctx, payment)
@@ -467,6 +569,23 @@ func (s *SubscriptionService) planPayment(
 		return nil, nil, fmt.Errorf("record audit: %w", err)
 	}
 	return &payment, nil, nil
+}
+
+// expireDeadPendingPayment finalizes a pending payment whose form deadline
+// ran out (issue #616) — the server-side expiry is the truth — inside the
+// caller's transaction. Shared by the tariff-change planner and the renewal
+// planner, which both meet dead pendings when reusing the same tariff and
+// period.
+func expireDeadPendingPayment(
+	ctx context.Context, stores *txStores, payment *domain.SubscriptionPayment, now time.Time,
+) error {
+	if err := payment.MarkExpired(now); err != nil {
+		return err
+	}
+	if err := stores.payments.Update(ctx, *payment); err != nil {
+		return fmt.Errorf("expire dead pending payment: %w", err)
+	}
+	return nil
 }
 
 // findPendingPayment returns the user's pending payment for the given tariff
@@ -519,11 +638,18 @@ func (s *SubscriptionService) initiatePaymentAtProvider(
 
 // initPaymentRequest builds the provider-neutral initiation request shared by
 // the fresh-initiation and recovery paths: a customer-initiated payment that
-// saves its method for later merchant-initiated charges, with the form
-// deadline from the module config.
+// saves its method for later merchant-initiated charges. The form deadline is
+// the payment's persisted expires_at (issue #616) — the same absolute instant
+// the user-facing countdown and the TTL worker read — so a recovered
+// initiation keeps the original deadline instead of extending it; payments
+// without a persisted deadline (legacy rows) fall back to the module TTL.
 func (s *SubscriptionService) initPaymentRequest(
 	payment domain.SubscriptionPayment, tariff domain.Tariff, purpose PaymentPurposeKind,
 ) InitPaymentRequest {
+	deadline := s.clock.Now().UTC().Add(s.config.PaymentFormTTL)
+	if payment.ExpiresAt != nil {
+		deadline = *payment.ExpiresAt
+	}
 	return InitPaymentRequest{
 		PaymentID:     payment.ID,
 		AmountKopecks: payment.AmountKopecks,
@@ -536,7 +662,7 @@ func (s *SubscriptionService) initPaymentRequest(
 		},
 		SaveMethod:   true,
 		Initiator:    InitiatorCustomer,
-		FormDeadline: s.clock.Now().UTC().Add(s.config.PaymentFormTTL),
+		FormDeadline: deadline,
 	}
 }
 

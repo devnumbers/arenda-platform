@@ -14,6 +14,18 @@ type SubscriptionView struct {
 	Tariff              domain.Tariff
 	PendingTariff       *domain.Tariff
 	ActivePaymentMethod *domain.PaymentMethod
+	// PendingPayment is the user's live pending payment — the unpaid form the
+	// tariff screens show the "awaiting payment" plate for (issue #616). Nil
+	// when no pending payment holds the user's tariff decision.
+	PendingPayment *PendingPaymentView
+}
+
+// PendingPaymentView is the read model of the user's live pending payment
+// (issue #616): the tariff it buys, with the payment carrying the confirm URL
+// and the form deadline the countdown anchors to.
+type PendingPaymentView struct {
+	Payment domain.SubscriptionPayment
+	Tariff  domain.Tariff
 }
 
 // ChangeTariffRequest is the application-layer input of the tariff-change use

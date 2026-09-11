@@ -482,6 +482,13 @@ type Querier interface {
 	// The admin read of one property's contacts (ADR 0054 consequences): the
 	// bound cards only — an unbound contact belongs to no property card.
 	ListContactsAdmin(ctx context.Context, arg ListContactsAdminParams) ([]Contact, error)
+	// The TTL-expiry batch of the pending-payment worker (issue #616):
+	// still-pending payments whose payer form deadline ran out — the server-side
+	// expiry is the truth that marks them failed and unlocks the tariff choice.
+	// Unlike the reconciliation selections this batch does not require a provider
+	// reference: a crashed initiation must expire too. The worker re-checks and
+	// locks every row in its own transaction.
+	ListExpiredPendingSubscriptionPayments(ctx context.Context, arg ListExpiredPendingSubscriptionPaymentsParams) ([]SubscriptionPayment, error)
 	// The actor's visible non-archived properties — the «Объекты» screen's
 	// stacks (ticket #575); the rules of each stack arrive on the feed query's
 	// rows and the application layer groups them. The search ('' = no filter)

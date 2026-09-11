@@ -367,3 +367,152 @@ func TestNewAppliedPaymentTransition(t *testing.T) {
 		t.Errorf("nil payment err = %v, want ErrInvalidTransition", err)
 	}
 }
+
+func TestSubscriptionPayment_AttachFormDeadline(t *testing.T) {
+	t.Parallel()
+	t.Run("persists the deadline on a fresh pending payment", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		deadline := paymentNow.Add(15 * time.Minute)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if payment.ExpiresAt == nil || !payment.ExpiresAt.Equal(deadline) {
+			t.Errorf("ExpiresAt = %v, want %v", payment.ExpiresAt, deadline)
+		}
+	})
+
+	t.Run("second attach is rejected (the deadline never changes)", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(paymentNow.Add(15*time.Minute), paymentNow); err != nil {
+			t.Fatalf("first AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.AttachFormDeadline(paymentNow.Add(30*time.Minute), paymentNow); err == nil {
+			t.Error("second AttachFormDeadline() = nil error, want an error")
+		}
+	})
+
+	t.Run("past deadline is rejected", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(paymentNow.Add(-time.Minute), paymentNow); !errors.Is(err, ErrInvalidPayment) {
+			t.Errorf("err = %v, want ErrInvalidPayment", err)
+		}
+	})
+
+	t.Run("finalized payment rejects the deadline", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := payment.AttachFormDeadline(paymentNow.Add(15*time.Minute), paymentNow); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+}
+
+func TestSubscriptionPayment_MarkExpired(t *testing.T) {
+	t.Parallel()
+	deadline := paymentNow.Add(15 * time.Minute)
+
+	t.Run("past the deadline marks failed with the form-expired code", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.MarkExpired(deadline.Add(time.Minute)); err != nil {
+			t.Fatalf("MarkExpired() error = %v", err)
+		}
+		if payment.Status != PaymentStatusFailed {
+			t.Errorf("Status = %q, want failed", payment.Status)
+		}
+		if payment.ErrorCode == nil || *payment.ErrorCode != PaymentErrorCodeFormExpired {
+			t.Errorf("ErrorCode = %v, want %q", payment.ErrorCode, PaymentErrorCodeFormExpired)
+		}
+	})
+
+	t.Run("before the deadline is rejected", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.MarkExpired(deadline.Add(-time.Second)); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+
+	t.Run("payment without a deadline is rejected", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.MarkExpired(deadline.Add(time.Minute)); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+
+	t.Run("finalized payment is rejected", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if err := payment.MarkExpired(deadline.Add(time.Minute)); !errors.Is(err, ErrInvalidPaymentStatus) {
+			t.Errorf("err = %v, want ErrInvalidPaymentStatus", err)
+		}
+	})
+}
+
+func TestSubscriptionPayment_IsLivePending(t *testing.T) {
+	t.Parallel()
+	deadline := paymentNow.Add(15 * time.Minute)
+
+	t.Run("pending without a deadline is live (merchant-initiated charges)", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if !payment.IsLivePending(paymentNow.Add(time.Hour)) {
+			t.Error("a pending payment without a deadline must stay live")
+		}
+	})
+
+	t.Run("pending within the deadline is live", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if !payment.IsLivePending(deadline.Add(-time.Second)) {
+			t.Error("a pending payment before its deadline must be live")
+		}
+	})
+
+	t.Run("pending past the deadline is dead", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if payment.IsLivePending(deadline) || payment.IsLivePending(deadline.Add(time.Minute)) {
+			t.Error("a pending payment past its deadline must not be live")
+		}
+	})
+
+	t.Run("non-pending payment is never live", func(t *testing.T) {
+		t.Parallel()
+		payment := newTestPayment(t)
+		if err := payment.AttachFormDeadline(deadline, paymentNow); err != nil {
+			t.Fatalf("AttachFormDeadline() error = %v", err)
+		}
+		if err := payment.MarkSucceeded(paymentNow); err != nil {
+			t.Fatalf("MarkSucceeded() error = %v", err)
+		}
+		if payment.IsLivePending(paymentNow) {
+			t.Error("a finalized payment must not be live-pending")
+		}
+	})
+}

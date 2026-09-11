@@ -110,6 +110,11 @@ func (r *gatePaymentRepo) ListPendingByUserID(context.Context, uuid.UUID) ([]dom
 	return nil, nil
 }
 
+// The TTL-expiry batch is unused by the gate; empty results satisfy the port.
+func (r *gatePaymentRepo) ListExpiredPending(context.Context, time.Time, int) ([]domain.SubscriptionPayment, error) {
+	return nil, nil
+}
+
 // The reconciliation selection listing is unused by the gate; empty results
 // satisfy the port.
 func (r *gatePaymentRepo) List(context.Context, billingapp.PaymentSelection) ([]domain.SubscriptionPayment, error) {

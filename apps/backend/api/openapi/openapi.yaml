@@ -2456,7 +2456,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/SubscriptionConflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -2485,7 +2485,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/SubscriptionConflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -4213,6 +4213,14 @@ components:
         activePaymentMethod:
           $ref: '#/components/schemas/PaymentMethod'
           nullable: true
+        pendingPayment:
+          $ref: '#/components/schemas/SubscriptionPendingPayment'
+          nullable: true
+          description: >-
+            The user's live pending payment (issue #616) — present only while
+            an unpaid payment form holds the tariff decision. Its expiry is
+            the server-side truth: past expiresAt the payment turns failed and
+            the tariff choice unlocks.
 
     PaymentMethod:
       type: object
@@ -4228,6 +4236,27 @@ components:
         isActive:
           type: boolean
         createdAt:
+          type: string
+          format: date-time
+
+    SubscriptionPendingPayment:
+      type: object
+      required: [tariffName, period, amountKopecks, confirmUrl, expiresAt]
+      description: >-
+        The live pending subscription payment (issue #616): one per user, with
+        the confirm URL and the absolute expiry instant the countdown anchors
+        to. The TTL itself is a backend constant and does not surface here.
+      properties:
+        tariffName:
+          $ref: '#/components/schemas/TariffName'
+        period:
+          $ref: '#/components/schemas/AdminSubscriptionPaymentPeriod'
+        amountKopecks:
+          type: integer
+          format: int64
+        confirmUrl:
+          type: string
+        expiresAt:
           type: string
           format: date-time
 
@@ -6593,6 +6622,15 @@ components:
             $ref: '#/components/schemas/Problem'
     SubscriptionBlocked:
       description: Subscription is blocked; renew to continue mutating data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SubscriptionConflict:
+      description: >-
+        Conflict. `pending_payment_exists` — a live pending payment holds the
+        user's tariff decision (issue #616): the tariff change and the
+        cancellation stay locked until the payment resolves or expires
       content:
         application/json:
           schema:

@@ -139,6 +139,11 @@ type SubscriptionPaymentRepository interface {
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
 	ListPendingByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
+	// ListExpiredPending returns a batch of still-pending payments whose form
+	// deadline ran out before the given instant (issue #616) — the TTL-expiry
+	// phase's selection. The predicate lives in the SQL adapter; no provider
+	// reference is required, a crashed initiation must expire too.
+	ListExpiredPending(ctx context.Context, before time.Time, limit int) ([]domain.SubscriptionPayment, error)
 	// List returns a batch of payments matching the worker selection (issue
 	// #286) — the single parameterized query behind every reconciliation
 	// batch.

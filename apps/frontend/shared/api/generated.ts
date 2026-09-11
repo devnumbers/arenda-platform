@@ -1733,6 +1733,8 @@ export interface components {
             pendingChangeAt?: string | null;
             pendingPeriod?: components["schemas"]["AdminSubscriptionPaymentPeriod"];
             activePaymentMethod?: components["schemas"]["PaymentMethod"];
+            /** @description The user's live pending payment (issue #616) — present only while an unpaid payment form holds the tariff decision. Its expiry is the server-side truth: past expiresAt the payment turns failed and the tariff choice unlocks. */
+            pendingPayment?: components["schemas"]["SubscriptionPendingPayment"];
         };
         PaymentMethod: {
             /** Format: uuid */
@@ -1742,6 +1744,16 @@ export interface components {
             isActive: boolean;
             /** Format: date-time */
             createdAt: string;
+        };
+        /** @description The live pending subscription payment (issue #616): one per user, with the confirm URL and the absolute expiry instant the countdown anchors to. The TTL itself is a backend constant and does not surface here. */
+        SubscriptionPendingPayment: {
+            tariffName: components["schemas"]["TariffName"];
+            period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+            /** Format: int64 */
+            amountKopecks: number;
+            confirmUrl: string;
+            /** Format: date-time */
+            expiresAt: string;
         };
         SubscriptionPayment: {
             /** Format: uuid */
@@ -2946,6 +2958,15 @@ export interface components {
         };
         /** @description Subscription is blocked; renew to continue mutating data */
         SubscriptionBlocked: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Conflict. `pending_payment_exists` — a live pending payment holds the user's tariff decision (issue #616): the tariff change and the cancellation stay locked until the payment resolves or expires */
+        SubscriptionConflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -5239,7 +5260,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["SubscriptionConflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5268,7 +5289,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["SubscriptionConflict"];
             500: components["responses"]["InternalServerError"];
         };
     };

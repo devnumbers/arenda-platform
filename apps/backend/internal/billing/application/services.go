@@ -12,6 +12,7 @@ const (
 	auditKeyPaymentID     = "payment_id"
 	auditKeyAmountKopecks = "amount_kopecks"
 	auditKeyProvider      = "provider"
+	auditKeyReason        = "reason"
 	auditKeyTariffName    = "tariff_name"
 	auditKeyFromTariffID  = "from_tariff_id"
 	auditKeyToTariffID    = "to_tariff_id"

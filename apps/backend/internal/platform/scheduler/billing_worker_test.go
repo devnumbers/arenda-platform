@@ -75,6 +75,10 @@ func (s *fakeBillingRunner) ProcessPendingUpgradePayments(context.Context, time.
 	return s.pendingUpgradeCount, s.pendingUpgradeErr
 }
 
+func (s *fakeBillingRunner) ProcessExpiredPendingPayments(context.Context, time.Time) (int, error) {
+	return 0, nil
+}
+
 func (s *fakeBillingRunner) ProcessExpiredBindingSessions(context.Context, time.Time) (int, error) {
 	return 0, nil
 }

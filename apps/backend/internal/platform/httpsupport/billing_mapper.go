@@ -32,6 +32,21 @@ func SubscriptionResponse(view billingapp.SubscriptionView) openapi.Subscription
 		period := openapi.AdminSubscriptionPaymentPeriod(*sub.PendingPeriod)
 		resp.PendingPeriod = &period
 	}
+	if view.PendingPayment != nil {
+		pending := view.PendingPayment
+		pp := openapi.SubscriptionPendingPayment{
+			TariffName:    openapi.TariffName(pending.Tariff.Name),
+			Period:        openapi.AdminSubscriptionPaymentPeriod(pending.Payment.Period),
+			AmountKopecks: pending.Payment.AmountKopecks,
+		}
+		if pending.Payment.ExpiresAt != nil {
+			pp.ExpiresAt = *pending.Payment.ExpiresAt
+		}
+		if pending.Payment.HasPaymentURL() {
+			pp.ConfirmUrl = *pending.Payment.PaymentURL
+		}
+		resp.PendingPayment = &pp
+	}
 	if view.ActivePaymentMethod != nil {
 		method := PaymentMethodResponse(*view.ActivePaymentMethod)
 		resp.ActivePaymentMethod = &method

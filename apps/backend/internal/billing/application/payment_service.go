@@ -354,17 +354,25 @@ func (s *PaymentService) applyFinalNotification(ctx context.Context, n *PaymentN
 // already marked failed by asking the provider for its current status — the
 // source of truth (ADR 0010) — before any state is changed. The status query
 // runs outside any transaction, so no row locks are held across the external
-// call. A provider that still reports the payment failed or not yet settled
+// call. The payment's persisted reference addresses the query; a payment
+// whose initiation crashed before the reference was saved (issue #616: the
+// TTL worker expired it in that window) reconciles through the reference the
+// notification itself carries — the same id the persisted reference would
+// hold. A provider that still reports the payment failed or not yet settled
 // makes the notification a no-op; only a provider-confirmed success is applied.
 func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment domain.SubscriptionPayment, n *PaymentNotification) error {
-	if !payment.HasProviderReference() {
-		// Without a provider reference there is nothing to reconcile against;
-		// a success we cannot verify is not applied.
-		s.log.WarnContext(ctx, "cannot reconcile failed payment: missing provider reference",
-			slog.String(auditKeyPaymentID, payment.ID.String()))
-		return nil
+	providerPaymentID := payment.ProviderPaymentID
+	if providerPaymentID == nil || *providerPaymentID == "" {
+		if n.ProviderPaymentID == "" {
+			// Without any provider reference there is nothing to reconcile
+			// against; a success we cannot verify is not applied.
+			s.log.WarnContext(ctx, "cannot reconcile failed payment: missing provider reference",
+				slog.String(auditKeyPaymentID, payment.ID.String()))
+			return nil
+		}
+		providerPaymentID = new(n.ProviderPaymentID)
 	}
-	status, err := s.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
+	status, err := s.provider.PaymentStatus(ctx, payment.ID, *providerPaymentID)
 	if err != nil {
 		return fmt.Errorf("provider status for out-of-order success: %w", err)
 	}
