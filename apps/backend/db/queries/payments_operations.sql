@@ -219,6 +219,14 @@ WHERE owner_id = sqlc.arg('owner')
 -- ordering (op.date, id tiebreak) and filter vocabulary minus the status
 -- filter: paid is the feed's only stored status. property_name is the row's
 -- property label — the global screen's row label.
+--
+-- The page walks the feed's own order by keyset (ticket #597): the window
+-- resumes strictly after the (date, id) the previous page ended on, so
+-- rows created, deleted or renamed between loads never duplicate or drop.
+-- The id tiebreak runs DESC in both directions, so the continuation is
+-- (date ahead of the cursor) or (same date, id below it); the direction
+-- only flips the date comparison. Both cursor args travel together; NULL
+-- (no cursor) reads from the beginning.
 SELECT op.id,
        op.owner_id,
        op.property_id,
@@ -260,11 +268,18 @@ WHERE op.status = 'paid'
   AND (sqlc.arg('type')::text = '' OR op.type = sqlc.arg('type')::text)
   AND (sqlc.arg('categories')::text = ''
        OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
+  AND (sqlc.narg('after_id')::uuid IS NULL
+       OR (sqlc.arg('order')::text = 'asc'
+           AND (op.date > sqlc.narg('after_date')::date
+                OR (op.date = sqlc.narg('after_date') AND op.id < sqlc.narg('after_id')::uuid)))
+       OR (sqlc.arg('order')::text <> 'asc'
+           AND (op.date < sqlc.narg('after_date')::date
+                OR (op.date = sqlc.narg('after_date') AND op.id < sqlc.narg('after_id')::uuid))))
 ORDER BY
   CASE WHEN sqlc.arg('order')::text = 'asc' THEN op.date END ASC,
   CASE WHEN sqlc.arg('order')::text = 'desc' THEN op.date END DESC,
   op.id DESC
-LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+LIMIT sqlc.arg('limit');
 
 -- name: SumPaidOperationTotalsGlobal :many
 -- The period totals by direction of the actor's visible merged feed (ticket

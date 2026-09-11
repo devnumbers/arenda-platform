@@ -239,6 +239,7 @@ SELECT pay.id,
        pay.favorite_order,
        pay.category_slug,
        pay.user_category_id,
+       pay.created_at,
        pc.name AS user_category_name,
        p.name AS property_name,
        t.today::date AS owner_today,
@@ -290,43 +291,47 @@ WHERE (
        OR pay.user_category_id::text = $6::text)
   AND ($7::text = ''
        OR pay.type = $7::text)
-ORDER BY p.name, pay.created_at, pay.id
-LIMIT CASE WHEN $9::int = 0 THEN NULL::bigint
-           ELSE $9::bigint END
-OFFSET COALESCE($8, 0)::bigint
+  AND ($8::timestamptz IS NULL
+       OR (pay.created_at, pay.id) > ($8,
+                                      $9::uuid))
+ORDER BY pay.created_at, pay.id
+LIMIT CASE WHEN $10::int = 0 THEN NULL::bigint
+           ELSE $10::bigint END
 `
 
 type ListGlobalPaymentRulesParams struct {
-	OwnerIds       string      `json:"owner_ids"`
-	Todays         string      `json:"todays"`
-	Actor          pgtype.UUID `json:"actor"`
-	Search         string      `json:"search"`
-	CategorySlugs  string      `json:"category_slugs"`
-	CategoryFilter string      `json:"category_filter"`
-	TypeFilter     string      `json:"type_filter"`
-	PageOffset     int64       `json:"page_offset"`
-	PageLimit      int32       `json:"page_limit"`
+	OwnerIds       string             `json:"owner_ids"`
+	Todays         string             `json:"todays"`
+	Actor          pgtype.UUID        `json:"actor"`
+	Search         string             `json:"search"`
+	CategorySlugs  string             `json:"category_slugs"`
+	CategoryFilter string             `json:"category_filter"`
+	TypeFilter     string             `json:"type_filter"`
+	AfterCreatedAt pgtype.Timestamptz `json:"after_created_at"`
+	AfterID        pgtype.UUID        `json:"after_id"`
+	PageLimit      int32              `json:"page_limit"`
 }
 
 type ListGlobalPaymentRulesRow struct {
-	ID                       pgtype.UUID `json:"id"`
-	OwnerID                  pgtype.UUID `json:"owner_id"`
-	PropertyID               pgtype.UUID `json:"property_id"`
-	Type                     string      `json:"type"`
-	Title                    string      `json:"title"`
-	AmountKopecks            int64       `json:"amount_kopecks"`
-	AutoPay                  bool        `json:"auto_pay"`
-	IsFavorite               bool        `json:"is_favorite"`
-	FavoriteOrder            pgtype.Int8 `json:"favorite_order"`
-	CategorySlug             pgtype.Text `json:"category_slug"`
-	UserCategoryID           pgtype.UUID `json:"user_category_id"`
-	UserCategoryName         pgtype.Text `json:"user_category_name"`
-	PropertyName             string      `json:"property_name"`
-	OwnerToday               pgtype.Date `json:"owner_today"`
-	AggNextPlannedDate       pgtype.Date `json:"agg_next_planned_date"`
-	OverdueCount             int64       `json:"overdue_count"`
-	AggOldestOverdueDate     pgtype.Date `json:"agg_oldest_overdue_date"`
-	OldestOverdueOperationID pgtype.UUID `json:"oldest_overdue_operation_id"`
+	ID                       pgtype.UUID        `json:"id"`
+	OwnerID                  pgtype.UUID        `json:"owner_id"`
+	PropertyID               pgtype.UUID        `json:"property_id"`
+	Type                     string             `json:"type"`
+	Title                    string             `json:"title"`
+	AmountKopecks            int64              `json:"amount_kopecks"`
+	AutoPay                  bool               `json:"auto_pay"`
+	IsFavorite               bool               `json:"is_favorite"`
+	FavoriteOrder            pgtype.Int8        `json:"favorite_order"`
+	CategorySlug             pgtype.Text        `json:"category_slug"`
+	UserCategoryID           pgtype.UUID        `json:"user_category_id"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UserCategoryName         pgtype.Text        `json:"user_category_name"`
+	PropertyName             string             `json:"property_name"`
+	OwnerToday               pgtype.Date        `json:"owner_today"`
+	AggNextPlannedDate       pgtype.Date        `json:"agg_next_planned_date"`
+	OverdueCount             int64              `json:"overdue_count"`
+	AggOldestOverdueDate     pgtype.Date        `json:"agg_oldest_overdue_date"`
+	OldestOverdueOperationID pgtype.UUID        `json:"oldest_overdue_operation_id"`
 }
 
 // The actor's visible merged feed of payment rules (ticket #575): one row
@@ -342,6 +347,13 @@ type ListGlobalPaymentRulesRow struct {
 // the default catalog's label is not in the database — the application
 // layer expands the query into the matching slugs (category_slugs, ” when
 // none) and they match as a set.
+//
+// The reading order is (created_at, id) and the page walks it by keyset
+// (ticket #597): the window resumes strictly after the (created_at, id)
+// the previous page ended on, so rows created, deleted or renamed between
+// loads never duplicate or drop. The property name is deliberately not a
+// sort key — a rename would move rows across the window. Both cursor args
+// travel together; NULL (no cursor) reads from the beginning.
 func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error) {
 	rows, err := q.db.Query(ctx, listGlobalPaymentRules,
 		arg.OwnerIds,
@@ -351,7 +363,8 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 		arg.CategorySlugs,
 		arg.CategoryFilter,
 		arg.TypeFilter,
-		arg.PageOffset,
+		arg.AfterCreatedAt,
+		arg.AfterID,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -373,6 +386,7 @@ func (q *Queries) ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaym
 			&i.FavoriteOrder,
 			&i.CategorySlug,
 			&i.UserCategoryID,
+			&i.CreatedAt,
 			&i.UserCategoryName,
 			&i.PropertyName,
 			&i.OwnerToday,

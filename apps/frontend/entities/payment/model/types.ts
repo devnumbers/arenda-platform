@@ -200,10 +200,13 @@ export type PaymentSearchCategoryView = {
 };
 
 /** Ответ поиска глобальных платежей (#575): совпавшие строки — состав
- * фида без счётчиков — и чипы совпавших категорий. */
+ * фида без счётчиков — и чипы совпавших категорий. nextCursor —
+ * keyset-продолжение порции (#597): opaque-курсор следующей страницы,
+ * null = совпадения исчерпаны. */
 export type GlobalPaymentSearch = {
   readonly items: ReadonlyArray<GlobalPayment>;
   readonly matchedCategories: ReadonlyArray<PaymentSearchCategoryView>;
+  readonly nextCursor: string | null;
 };
 
 /** Ключ стопки объекта (#575): правило за карточкой стека и его флаг

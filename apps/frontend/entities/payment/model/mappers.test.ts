@@ -130,7 +130,7 @@ const globalItemDto: components['schemas']['PaymentGlobalItem'] = {
   oldestOverdueOperationId: null,
 };
 
-describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581)', () => {
+describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581, курсор #597)', () => {
   const searchDto: components['schemas']['PaymentsSearchGlobalResponse'] = {
     items: [globalItemDto],
     matchedCategories: [
@@ -145,6 +145,7 @@ describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #
         count: 1,
       },
     ],
+    nextCursor: 'cursor-of-page-two',
   };
 
   const search = mapGlobalPaymentSearch(searchDto);
@@ -184,5 +185,10 @@ describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #
         count: 1,
       },
     ]);
+  });
+
+  it('nextCursor проходит opaque-строкой, null — исчерпано (#597)', () => {
+    expect(search.nextCursor).toBe('cursor-of-page-two');
+    expect(mapGlobalPaymentSearch({ ...searchDto, nextCursor: null }).nextCursor).toBeNull();
   });
 });

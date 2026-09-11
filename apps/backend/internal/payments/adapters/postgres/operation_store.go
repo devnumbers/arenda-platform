@@ -183,7 +183,7 @@ func (s *OperationStore) CountPaidOperationsByPayment(
 func (s *OperationStore) ListGlobal(
 	ctx context.Context, actor uuid.UUID, q application.GlobalOperationsListQuery,
 ) ([]application.GlobalOperationRow, error) {
-	if q.Limit < 1 || q.Limit > application.MaxOperationsPageSize || q.Offset < 0 {
+	if q.Limit < 1 || q.Limit > application.MaxOperationsPageSize {
 		return nil, application.ErrInvalidInput
 	}
 	rows, err := s.q().ListPaidOperationsGlobal(ctx, postgres.ListPaidOperationsGlobalParams{
@@ -197,7 +197,8 @@ func (s *OperationStore) ListGlobal(
 		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
 		Order:           operationsOrder(q.Asc),
-		Offset:          paginationToInt32(q.Offset),
+		AfterDate:       pgconv.DatePtrToPgtype(q.AfterDate),
+		AfterID:         pgconv.UUIDToPgtypePtr(q.AfterID),
 		Limit:           paginationToInt32(q.Limit),
 	})
 	if err != nil {

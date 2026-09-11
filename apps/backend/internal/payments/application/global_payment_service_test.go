@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -294,7 +295,9 @@ func newSearchPageService(reader *fakeGlobalReader, owner uuid.UUID) *GlobalPaym
 
 // The search page (map #573, rework): the zero page degenerates to the
 // contract's default — the first 50-row page — and the chip filter travels
-// to the rules read beside the raw search query.
+// to the rules read beside the raw search query; the keyset continuation
+// (ticket #597) decodes into the After* keyset key, the empty cursor being
+// the list's beginning.
 func TestSearchGlobalPaymentsPage(t *testing.T) {
 	t.Parallel()
 
@@ -304,19 +307,22 @@ func TestSearchGlobalPaymentsPage(t *testing.T) {
 	actor := uuid.Must(uuid.NewV7())
 
 	// The zero page (the contract's omitted params) is the default first
-	// page: 50 rows, no chip filter.
+	// page: 50 rows, no chip filter, no keyset key.
 	if _, err := service.SearchGlobalPayments(t.Context(), actor, "аренд", GlobalPaymentSearchPage{}); err != nil {
 		t.Fatalf("SearchGlobalPayments: %v", err)
 	}
-	if got := reader.gotQuery; got.Limit != DefaultPaymentRulesPageSize || got.Offset != 0 {
-		t.Errorf("zero page = limit %d offset %d, want limit %d offset 0", got.Limit, got.Offset, DefaultPaymentRulesPageSize)
+	if got := reader.gotQuery; got.Limit != DefaultPaymentRulesPageSize {
+		t.Errorf("zero page = limit %d, want limit %d", got.Limit, DefaultPaymentRulesPageSize)
 	}
 	if got := reader.gotQuery; got.Category != "" || got.Type != "" {
 		t.Errorf("zero page filter = %q/%q, want none", got.Category, got.Type)
 	}
+	if got := reader.gotQuery; got.AfterCreatedAt != nil || got.AfterID != nil {
+		t.Errorf("zero page keyset key = %v/%v, want none", got.AfterCreatedAt, got.AfterID)
+	}
 
 	// The explicit page carries the chip's identity and the window through.
-	page := GlobalPaymentSearchPage{Category: parkingSlug, Type: domain.TypeExpense, Limit: 50, Offset: 100}
+	page := GlobalPaymentSearchPage{Category: parkingSlug, Type: domain.TypeExpense, Limit: 50}
 	if _, err := service.SearchGlobalPayments(t.Context(), actor, "", page); err != nil {
 		t.Fatalf("SearchGlobalPayments: %v", err)
 	}
@@ -324,8 +330,35 @@ func TestSearchGlobalPaymentsPage(t *testing.T) {
 	if got.Category != parkingSlug || got.Type != domain.TypeExpense {
 		t.Errorf("page filter = %q/%q, want parking/expense", got.Category, got.Type)
 	}
-	if got.Limit != 50 || got.Offset != 100 {
-		t.Errorf("page window = limit %d offset %d, want limit 50 offset 100", got.Limit, got.Offset)
+	if got.Limit != 50 {
+		t.Errorf("page window = limit %d, want limit 50", got.Limit)
+	}
+}
+
+// The continuation cursor (ticket #597) decodes into the keyset key the
+// page resumes after; a malformed one is the contract's 400.
+func TestSearchGlobalPaymentsPageCursor(t *testing.T) {
+	t.Parallel()
+
+	owner := uuid.Must(uuid.NewV7())
+	reader := &fakeGlobalReader{owners: []uuid.UUID{owner}}
+	service := newSearchPageService(reader, owner)
+	actor := uuid.Must(uuid.NewV7())
+
+	cursorAt := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	cursorID := uuid.Must(uuid.NewV7())
+	page := GlobalPaymentSearchPage{Limit: 50, Cursor: encodeRuleCursor(cursorAt, cursorID)}
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "", page); err != nil {
+		t.Fatalf("SearchGlobalPayments with cursor: %v", err)
+	}
+	got := reader.gotQuery
+	if got.AfterCreatedAt == nil || !got.AfterCreatedAt.Equal(cursorAt) || got.AfterID == nil || *got.AfterID != cursorID {
+		t.Errorf("keyset key = %v/%v, want %v/%s", got.AfterCreatedAt, got.AfterID, cursorAt, cursorID)
+	}
+
+	page = GlobalPaymentSearchPage{Limit: 50, Cursor: "!!!"}
+	if _, err := service.SearchGlobalPayments(t.Context(), actor, "", page); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("malformed cursor err = %v, want ErrInvalidInput", err)
 	}
 }
 

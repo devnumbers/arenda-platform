@@ -49,6 +49,13 @@ WHERE (
 -- the default catalog's label is not in the database — the application
 -- layer expands the query into the matching slugs (category_slugs, '' when
 -- none) and they match as a set.
+--
+-- The reading order is (created_at, id) and the page walks it by keyset
+-- (ticket #597): the window resumes strictly after the (created_at, id)
+-- the previous page ended on, so rows created, deleted or renamed between
+-- loads never duplicate or drop. The property name is deliberately not a
+-- sort key — a rename would move rows across the window. Both cursor args
+-- travel together; NULL (no cursor) reads from the beginning.
 SELECT pay.id,
        pay.owner_id,
        pay.property_id,
@@ -60,6 +67,7 @@ SELECT pay.id,
        pay.favorite_order,
        pay.category_slug,
        pay.user_category_id,
+       pay.created_at,
        pc.name AS user_category_name,
        p.name AS property_name,
        t.today::date AS owner_today,
@@ -111,10 +119,12 @@ WHERE (
        OR pay.user_category_id::text = sqlc.arg('category_filter')::text)
   AND (sqlc.arg('type_filter')::text = ''
        OR pay.type = sqlc.arg('type_filter')::text)
-ORDER BY p.name, pay.created_at, pay.id
+  AND (sqlc.narg('after_created_at')::timestamptz IS NULL
+       OR (pay.created_at, pay.id) > (sqlc.narg('after_created_at'),
+                                      sqlc.narg('after_id')::uuid))
+ORDER BY pay.created_at, pay.id
 LIMIT CASE WHEN sqlc.arg('page_limit')::int = 0 THEN NULL::bigint
-           ELSE sqlc.arg('page_limit')::bigint END
-OFFSET COALESCE(sqlc.arg('page_offset'), 0)::bigint;
+           ELSE sqlc.arg('page_limit')::bigint END;
 
 -- name: SumGlobalPaymentCounters :one
 -- The main screen's two counters over the whole visible scope (ticket
