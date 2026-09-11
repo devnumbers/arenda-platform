@@ -53,3 +53,20 @@ func TestPropertyService_UpdateProperty_ArchivedConflict(t *testing.T) {
 		t.Errorf("stored name = %q, want the untouched %q", stored.Name, testPropertyName)
 	}
 }
+
+// The unpin branch travels through the same lockEditableProperty guard as
+// the pin (service_pin_test.go pins the pinned=true side only).
+func TestPropertyService_SetPropertyPin_UnpinArchivedConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := pinTestProperty(ownerID)
+	property.Status = domain.PropertyStatusArchived
+	repo := newFakePropertyRepo(property)
+	svc := pinTestService(t, repo, testOwnerPolicy{})
+
+	if _, err := svc.SetPropertyPin(ctx, ownerID, property.ID, false); !errors.Is(err, ErrArchivedProperty) {
+		t.Errorf("archived unpin err = %v, want ErrArchivedProperty", err)
+	}
+}
