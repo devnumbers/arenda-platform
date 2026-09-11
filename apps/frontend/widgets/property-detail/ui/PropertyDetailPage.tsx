@@ -18,7 +18,16 @@ import {
   useUpdateProperty,
   type DeletePropertyMode,
 } from '@/features/properties';
-import {useRentals} from '@/features/rentals';
+import {useRentals, currentRentalOf} from '@/features/rentals';
+import {
+  defaultOperationsPeriod,
+  usePayments,
+  usePropertyOperationsSummary,
+  usePropertyOverdueOperations,
+} from '@/features/payments';
+import {useContacts} from '@/features/contacts';
+import {useActiveTasks} from '@/features/tasks';
+import {clientTodayIso} from '@/entities/payment';
 import {useSubscription} from '@/features/subscription';
 import {isPaidTariff} from '@/entities/user';
 import type {ApiError} from '@/shared/api/errors';
@@ -35,9 +44,21 @@ import {
   resolvePropertySectionEmpty,
   type PropertyDetailSectionKey,
 } from '../lib/property-sections';
-import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog} from '@/shared/ui/design';
+import {propertyPaymentGroups} from '../lib/payments-strip';
+import {operationsSectionTitle} from '../lib/operations-section';
+import {propertyTasksSummary} from '../lib/tasks-summary';
+import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
+import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog, Skeleton} from '@/shared/ui/design';
 import {StarOutline} from '@/shared/assets/icons';
 import {PropertyMediaBlock} from './PropertyMediaBlock';
+import {
+  PropertyRentalBlock,
+} from './PropertyRentalBlock';
+import {PropertyPaymentsIconsBlock} from './PropertyPaymentsIconsBlock';
+import {PropertyOperationsBlock} from './PropertyOperationsBlock';
+import {PropertyContactsBlock} from './PropertyContactsBlock';
+import {PropertyTasksBlock} from './PropertyTasksBlock';
+import {PropertyApartmentBlock} from './PropertyApartmentBlock';
 import {
   PropertySectionCard,
   PropertySectionEmpty,
@@ -59,6 +80,16 @@ function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
 }
 
+/** Плейсхолдер строки секции, пока данные секции едут (§7: скелетон
+ * приглушён внутри серой карточки). */
+function PropertySectionSkeleton(): JSX.Element {
+    return (
+        <div className="flex flex-col gap-3 px-6 pb-6 pt-4" aria-hidden>
+            <Skeleton className="h-11 w-full bg-surface-muted-hover"/>
+        </div>
+    );
+}
+
 /**
  * Детализация объекта — новый каркас карты #583 (тикет #588; Figma
  * 1554:98469 — приветственные пустые, 1554:100751 — обычные, 1186:44996 —
@@ -69,8 +100,17 @@ function showMutationError(error: ApiError): void {
  * шиты смены статуса и подтверждение архивации (1581:55389); тосты
  * результатов (1581:55564 / 1581:54666 / 1581:55041). «Объект» = кебаб
  * «Изменить статус» — секция «Управление» дублирует те же действия.
- * Занятость (Начать ↔ Завершить аренду) приходит из списочного кэша
- * (occupancy — резолюция #584, на детали её нет).
+ * Занятость (Начать ↔ Завершить аренду) приходит из аренд объекта.
+ *
+ * Наполнение секций живыми данными (#589; Figma 1185:40820 — активная
+ * аренда, 1581:53905 — срок подошёл к концу, 1193:48779 — без аренды
+ * с платежами, 1193:49273 — нули): «Аренда» — прогресс платежей и
+ * кнопки Продлить/Завершить; «Регулярные платежи» — группы иконок
+ * категорий с точками просрочки; «Операции в <месяц>» — сводка месяца;
+ * «Контакты» — арендатор + контакты объекта; «Задачи» — сводка
+ * (макетом не покрыта — сверить на приёмке); «<Тип>» — характеристики.
+ * Пустые состояния секций — по фактическим данным секции (#588 задавал
+ * каркас), набор копирайта — по числу объектов.
  */
 export function PropertyDetailPage(): JSX.Element {
     const params = useParams<{ id: string }>();
@@ -82,10 +122,31 @@ export function PropertyDetailPage(): JSX.Element {
     // Количество активных объектов живёт только в списочном ответе (#584) —
     // читаем из общего кэша хаба/лендинга ради выбора набора пустых.
     const listQuery = usePropertiesWithMeta();
-    // Незавершённая аренда для свитча «Начать ↔ Завершить» — из аренд
-    // самого объекта: точный источник, не зависящий от кэша списка.
+    // Текущая (незавершённая) аренда — источник блока «Аренда» (#589) и
+    // арендатора в «Контактах»; точный источник — аренды самого объекта.
     const rentalsQuery = useRentals(id);
     const subscriptionQuery = useSubscription();
+
+    // Данные секций (#589): правила платежей с точками просрочки, сводка
+    // оплаченных операций за текущий месяц (+ all-time — выбор между
+    // сводкой и «Операций еще не было», как на экране операций), контакты
+    // объекта и активные задачи.
+    const today = clientTodayIso();
+    const paymentsQuery = usePayments(id);
+    const overdueQuery = usePropertyOverdueOperations(id);
+    const operationsPeriod = defaultOperationsPeriod(today);
+    const operationsQuery = usePropertyOperationsSummary(id, {
+        status: 'paid',
+        order: 'desc',
+        dateFrom: operationsPeriod.from,
+        dateTo: operationsPeriod.to,
+    });
+    const operationsEverQuery = usePropertyOperationsSummary(id, {
+        status: 'paid',
+        order: 'desc',
+    });
+    const contactsQuery = useContacts(id);
+    const tasksQuery = useActiveTasks(id);
 
     const updateProperty = useUpdateProperty();
     const archiveProperty = useArchiveProperty();
@@ -100,8 +161,38 @@ export function PropertyDetailPage(): JSX.Element {
 
     const property = propertyQuery.data;
 
-    const hasRental =
-        rentalsQuery.data?.some((rental) => rental.status !== 'completed') ?? false;
+    const currentRental = rentalsQuery.data
+        ? currentRentalOf(rentalsQuery.data)
+        : undefined;
+    const hasRental = currentRental !== undefined;
+
+    const payments = paymentsQuery.data ?? [];
+    // Платежи с накопленной просрочкой — красная точка на иконке
+    // (как на «Платежах объекта»: просрочки приходят порциями).
+    const overduePaymentIds = new Set(
+        overdueQuery.data?.flatMap((operation) =>
+            operation.paymentId !== null ? [operation.paymentId] : [],
+        ) ?? [],
+    );
+    const paymentGroups = propertyPaymentGroups(payments, overduePaymentIds, today);
+    const contacts = contactsQuery.data ?? [];
+    const tenant = currentRental?.tenant ?? null;
+    // Арендатор уже показан отдельной строкой с бейджем роли — из книги
+    // его исключаем, чтобы человек не дублировался (макет 1185:40820).
+    const propertyContacts = tenant
+        ? contacts.filter((contact) => contact.id !== tenant.contactId)
+        : contacts;
+    const tasksSummary = tasksQuery.data ? propertyTasksSummary(tasksQuery.data) : null;
+    const apartmentRows = property
+        ? propertyApartmentSummaryRows(property.type, property.attributes)
+        : [];
+    // «Операций еще не было» — только когда оплаченных операций нет
+    // вовсе (all-time сводка), иначе блок месяца с нулями.
+    const operationsNever =
+        operationsEverQuery.isSuccess &&
+        operationsEverQuery.data.incomeTotalKopecks === 0 &&
+        operationsEverQuery.data.expenseTotalKopecks === 0;
+
     // Пока список не загружен, считаем объект единственным — приветственный
     // набор (первый объект); правило переключения наборов — на приёмке.
     const emptySet = resolvePropertyDetailEmptySet(listQuery.data?.items.length ?? 1);
@@ -140,7 +231,7 @@ export function PropertyDetailPage(): JSX.Element {
             },
             onError: showMutationError,
         });
-    }, [archiveProperty, id]);
+    }, [archiveProperty, id, setArchiveOpen]);
 
     const handleAction = useCallback((key: PropertyDetailActionKey) => {
         switch (key) {
@@ -200,7 +291,7 @@ export function PropertyDetailPage(): JSX.Element {
                 setDeleteOpen(true);
                 break;
         }
-    }, [id, router, setPin, unarchiveProperty, updateProperty]);
+    }, [id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
 
     const handleDelete = useCallback((mode: DeletePropertyMode) => {
         deleteProperty.mutate(
@@ -216,7 +307,7 @@ export function PropertyDetailPage(): JSX.Element {
                 },
             },
         );
-    }, [deleteProperty, id, router]);
+    }, [deleteProperty, id, router, setDeleteOpen]);
 
     // Разводим только ошибку основного запроса объекта: 404 (нет объекта
     // или нет доступа) и 403 membership_suspended (лимит тарифа) получают
@@ -305,70 +396,118 @@ export function PropertyDetailPage(): JSX.Element {
                             href={ROUTES.propertyRental(id)}
                             className="mt-20"
                         >
-                            <PropertySectionEmpty
-                                imageSrc={propertySectionImages.rental}
-                                copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
-                                onCta={sectionCTAs.rental}
-                                ctaDisabled={!canMutate}
-                            />
+                            {rentalsQuery.isPending ? (
+                                <PropertySectionSkeleton/>
+                            ) : currentRental !== undefined ? (
+                                <PropertyRentalBlock
+                                    rental={currentRental}
+                                    onExtend={() => router.push(ROUTES.propertyRentalExtend(id))}
+                                    onComplete={() => router.push(ROUTES.propertyRentalComplete(id))}
+                                />
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.rental}
+                                    copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
+                                    onCta={sectionCTAs.rental}
+                                    ctaDisabled={!canMutate}
+                                />
+                            )}
                         </PropertySectionCard>
 
                         <PropertySectionCard
                             title="Регулярные платежи"
                             href={ROUTES.propertyPayments(id)}
                         >
-                            <PropertySectionEmpty
-                                imageSrc={propertySectionImages.payments}
-                                copy={resolvePropertySectionEmpty('payments', emptySet, property.status)}
-                                onCta={sectionCTAs.payments}
-                                ctaDisabled={!canMutate}
-                            />
+                            {paymentsQuery.isPending ? (
+                                <PropertySectionSkeleton/>
+                            ) : payments.length > 0 ? (
+                                <PropertyPaymentsIconsBlock groups={paymentGroups}/>
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.payments}
+                                    copy={resolvePropertySectionEmpty('payments', emptySet, property.status)}
+                                    onCta={sectionCTAs.payments}
+                                    ctaDisabled={!canMutate}
+                                />
+                            )}
                         </PropertySectionCard>
 
                         <PropertySectionCard
-                            title="Операции"
+                            title={operationsSectionTitle(today)}
                             href={ROUTES.propertyOperations(id)}
                         >
-                            <PropertySectionEmpty
-                                imageSrc={propertySectionImages.operations}
-                                copy={resolvePropertySectionEmpty('operations', emptySet, property.status)}
-                            />
+                            {operationsNever ? (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.operations}
+                                    copy={resolvePropertySectionEmpty('operations', emptySet, property.status)}
+                                />
+                            ) : (
+                                <PropertyOperationsBlock
+                                    summary={operationsQuery.data}
+                                    isLoading={operationsQuery.isPending}
+                                />
+                            )}
                         </PropertySectionCard>
 
                         <PropertySectionCard
                             title="Контакты"
                             href={ROUTES.propertyContacts(id)}
                         >
-                            <PropertySectionEmpty
-                                imageSrc={propertySectionImages.contacts}
-                                copy={resolvePropertySectionEmpty('contacts', emptySet, property.status)}
-                                onCta={sectionCTAs.contacts}
-                                ctaDisabled={!canMutate}
-                            />
+                            {contactsQuery.isPending ? (
+                                <PropertySectionSkeleton/>
+                            ) : tenant !== null || propertyContacts.length > 0 ? (
+                                <PropertyContactsBlock
+                                    tenant={tenant}
+                                    contacts={propertyContacts}
+                                    onOpenContact={(contactId) =>
+                                        router.push(ROUTES.propertyContact(id, contactId))
+                                    }
+                                />
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.contacts}
+                                    copy={resolvePropertySectionEmpty('contacts', emptySet, property.status)}
+                                    onCta={sectionCTAs.contacts}
+                                    ctaDisabled={!canMutate}
+                                />
+                            )}
                         </PropertySectionCard>
 
                         <PropertySectionCard
                             title="Задачи"
                             href={ROUTES.propertyTasks(id)}
                         >
-                            <PropertySectionEmpty
-                                imageSrc={propertySectionImages.tasks}
-                                copy={resolvePropertySectionEmpty('tasks', emptySet, property.status)}
-                                onCta={sectionCTAs.tasks}
-                                ctaDisabled={!canMutate}
-                            />
+                            {tasksQuery.isPending ? (
+                                <PropertySectionSkeleton/>
+                            ) : tasksSummary !== null ? (
+                                <PropertyTasksBlock
+                                    summary={tasksSummary}
+                                    onSelect={() => router.push(ROUTES.propertyTasks(id))}
+                                />
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.tasks}
+                                    copy={resolvePropertySectionEmpty('tasks', emptySet, property.status)}
+                                    onCta={sectionCTAs.tasks}
+                                    ctaDisabled={!canMutate}
+                                />
+                            )}
                         </PropertySectionCard>
 
                         <PropertySectionCard
                             title={propertyTypeLabels[property.type]}
                             href={ROUTES.propertyAbout(id)}
                         >
-                            <PropertySectionEmpty
-                                imageSrc={propertySectionImages.about}
-                                copy={resolvePropertySectionEmpty('about', emptySet, property.status)}
-                                onCta={sectionCTAs.about}
-                                ctaDisabled={!canMutate}
-                            />
+                            {apartmentRows.length > 0 ? (
+                                <PropertyApartmentBlock rows={apartmentRows}/>
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.about}
+                                    copy={resolvePropertySectionEmpty('about', emptySet, property.status)}
+                                    onCta={sectionCTAs.about}
+                                    ctaDisabled={!canMutate}
+                                />
+                            )}
                         </PropertySectionCard>
 
                         <PropertySectionCard title="Управление">

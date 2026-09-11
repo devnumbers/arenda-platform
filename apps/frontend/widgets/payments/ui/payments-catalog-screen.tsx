@@ -21,7 +21,7 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { sortPaymentsByNextOccurrence } from '../lib/sort-payments-by-next-occurrence';
+import { sortPaymentsByNextOccurrence } from '@/features/payments';
 import {
   OverdueOperationRow,
   PaymentRow,

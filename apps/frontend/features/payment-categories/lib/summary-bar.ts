@@ -1,5 +1,5 @@
 import type { OperationsSummary } from '@/entities/payment';
-import { categoryStyle } from '@/features/payment-categories';
+import { categoryStyle } from './category-style';
 
 /**
  * Сегменты полосы-разбивки на карточках «Расходы»/«Доходы» (Figma

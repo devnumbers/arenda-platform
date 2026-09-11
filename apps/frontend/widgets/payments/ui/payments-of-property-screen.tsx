@@ -28,7 +28,7 @@ import {
 import { clientTodayIso } from '@/entities/payment';
 import type { Payment } from '@/entities/payment';
 import { daysOverdue } from '../lib/overdue-days';
-import { sortPaymentsByNextOccurrence } from '../lib/sort-payments-by-next-occurrence';
+import { sortPaymentsByNextOccurrence } from '@/features/payments';
 import { PaymentsAddSheet } from './payments-add-sheet';
 import {
   PaymentRow,

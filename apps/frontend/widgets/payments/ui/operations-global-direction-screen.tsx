@@ -27,7 +27,7 @@ import { OperationsFilterChips } from './operations-filter-chips';
 import { OperationsGlobalPeriodPickerDialog } from './operations-period-picker';
 import { OperationsSummaryCard } from './operations-summary-card';
 import { hasNoPaidOperationsEver } from '../lib/operations-empty-states';
-import { summaryBarSegments } from '../lib/summary-bar';
+import { summaryBarSegments } from '@/features/payment-categories';
 import {
   globalDirectionListScope,
   globalDirectionSummaryScope,

@@ -70,6 +70,9 @@ export {
   type OperationsMonth,
 } from './lib/operations-month';
 export {
+  sortPaymentsByNextOccurrence,
+} from './lib/sort-payments-by-next-occurrence';
+export {
   defaultOperationsPeriod,
   operationsCategoryChipLabel,
   operationsCategoryRows,
