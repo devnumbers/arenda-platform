@@ -360,18 +360,31 @@ func TestSearchGlobalPaymentsChipFilterAndPage(t *testing.T) {
 	}
 	assertSearchTitles(t, search, []string{mirrorsTitle})
 
-	// The window walks the matched rows in the feed's stable order: two per
-	// page, the offset resumes where the first page stopped.
+	// The window walks the matched rows in the feed's own (created_at, id)
+	// order by keyset (ticket #597): two per page, the cursor resumes
+	// strictly after the previous page's last row.
 	search, err = svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{Limit: 2})
 	if err != nil {
 		t.Fatalf("search page one: %v", err)
 	}
 	assertSearchTitles(t, search, []string{"Парковка", "Аренда машиноместа"})
-	search, err = svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{Limit: 2, Offset: 2})
+	if search.NextCursor == "" {
+		t.Fatal("page one nextCursor = '', want the continuation of the four-row feed")
+	}
+	search, err = svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{Limit: 2, Cursor: search.NextCursor})
 	if err != nil {
 		t.Fatalf("search page two: %v", err)
 	}
 	assertSearchTitles(t, search, []string{mirrorsTitle, "Страхование квартиры"})
+	// A full page still answers with a continuation — the walk stops on the
+	// short page it produces: the empty third page ends the matches.
+	search, err = svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{Limit: 2, Cursor: search.NextCursor})
+	if err != nil {
+		t.Fatalf("search page three: %v", err)
+	}
+	if len(search.Items) != 0 || search.NextCursor != "" {
+		t.Fatalf("page three = %d rows/%q, want the empty exhausted page", len(search.Items), search.NextCursor)
+	}
 }
 
 // assertSearchTitles checks the matched rows' titles in order.
@@ -616,5 +629,226 @@ func TestListGlobalPaymentObjects_PhotoURL(t *testing.T) {
 	}
 	if len(found) != 1 || found[0].PhotoURL == nil || *found[0].PhotoURL != "/uploads/older.jpg" {
 		t.Errorf("searched photo = %+v, want the oldest photo under the query", found)
+	}
+}
+
+// seedGlobalRuleCreatedAt inserts a payment rule with an explicit created_at
+// — the keyset fixtures pin the (created_at, id) reading order.
+func (h *paymentsHarness) seedGlobalRuleCreatedAt(
+	propertyID, ownerID uuid.UUID, title string, amountKopecks int64, createdAt time.Time,
+) uuid.UUID {
+	h.t.Helper()
+	id, err := uuid.NewV7()
+	if err != nil {
+		h.t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
+		                       recurrence, since, auto_pay, payment_form, category_slug, created_at)
+		 VALUES ($1, $2, $3, 'expense', $4, $5, '{"kind":"monthly","daysOfMonth":[1]}'::jsonb,
+		         '2026-06-01', false, 'transfer', 'utilities', $6)`,
+		id, ownerID, propertyID, title, amountKopecks, createdAt,
+	); err != nil {
+		h.t.Fatalf("seed rule %s: %v", title, err)
+	}
+	return id
+}
+
+// The ticket's acceptance (map #596, ticket #597): a 150-row search walks
+// three full 50-row pages, and the mutations between the loads — the
+// property rename that shifted the old property-name-ordered offset windows,
+// a rule created mid-walk — never duplicate or drop a row: the keyset
+// resumes on the feed's own (created_at, id) order.
+func TestSearchGlobalPaymentsKeyset_MutationsBetweenPages(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	svc := h.globalSvc()
+
+	const total = 150
+	const pageSize = 50
+	wantIDs := make([]uuid.UUID, 0, total)
+	base := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	for i := range total {
+		wantIDs = append(wantIDs, h.seedGlobalRuleCreatedAt(h.propID, h.owner,
+			fmt.Sprintf("Правило %03d", i), 100000+int64(i), base.Add(time.Duration(i)*time.Minute)))
+	}
+
+	page := func(cursor string) paymentsapp.GlobalPaymentSearch {
+		h.t.Helper()
+		search, err := svc.SearchGlobalPayments(h.ctx(), h.owner, "",
+			paymentsapp.GlobalPaymentSearchPage{Limit: pageSize, Cursor: cursor})
+		if err != nil {
+			h.t.Fatalf("search page (cursor %q): %v", cursor, err)
+		}
+		return search
+	}
+
+	first := page("")
+	// The rename between the loads — the offset window's row-shifter — moves
+	// not a single row of the (created_at, id) order.
+	if _, err := h.pool.Exec(h.ctx(),
+		`UPDATE properties SET name = 'Переименовано' WHERE id = $1`, h.propID); err != nil {
+		h.t.Fatalf("rename property: %v", err)
+	}
+	second := page(first.NextCursor)
+	// A rule created between the loads carries the newest created_at — it
+	// lands past the walk, never inside the unwalked window.
+	h.seedGlobalRule(h.propID, h.owner, "Между порциями", "income", 500000, false, false, "rent", nil)
+	third := page(second.NextCursor)
+
+	got := make([]uuid.UUID, 0, total)
+	seen := make(map[uuid.UUID]bool, total)
+	for _, search := range []paymentsapp.GlobalPaymentSearch{first, second, third} {
+		if len(search.Items) != pageSize {
+			t.Errorf("page rows = %d, want a full %d-row page", len(search.Items), pageSize)
+		}
+		for _, item := range search.Items {
+			if seen[item.ID] {
+				t.Errorf("rule %s (row %q) arrived twice", item.ID, item.Title)
+			}
+			seen[item.ID] = true
+			got = append(got, item.ID)
+		}
+	}
+	if len(got) != total {
+		t.Fatalf("three pages carry %d rows, want %d — rows dropped or duplicated", len(got), total)
+	}
+	for i := range wantIDs {
+		if got[i] != wantIDs[i] {
+			t.Fatalf("row %d = %s, want %s — the walk broke the created_at order", i, got[i], wantIDs[i])
+		}
+	}
+	// The third page came back full, so it still answers with a
+	// continuation. The page it produces holds exactly the rule created
+	// between the loads — its newest created_at sorts right past the walk —
+	// and then the matches are exhausted.
+	fourth := page(third.NextCursor)
+	if len(fourth.Items) != 1 || fourth.Items[0].Title != "Между порциями" {
+		t.Errorf("fourth page = %v, want the single mid-walk rule", fourth.Items)
+	}
+	if fourth.NextCursor != "" {
+		t.Errorf("fourth page nextCursor = %q, want '' — the matches are exhausted", fourth.NextCursor)
+	}
+}
+
+// Equal created_at values do not break the walk either: the id tiebreak
+// keeps the keyset partitioning the ties across pages without repetition
+// (the ties' relative order is the id's, not the test's).
+func TestSearchGlobalPaymentsKeyset_CreatedAtTies(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	svc := h.globalSvc()
+
+	const total = 20
+	const pageSize = 6
+	sameMoment := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	want := make(map[uuid.UUID]bool, total)
+	for i := range total {
+		id := h.seedGlobalRuleCreatedAt(h.propID, h.owner,
+			fmt.Sprintf("Двойник %02d", i), 200000+int64(i), sameMoment)
+		want[id] = true
+	}
+
+	cursor := ""
+	seen := make(map[uuid.UUID]bool, total)
+	pages := 0
+	for {
+		search, err := svc.SearchGlobalPayments(h.ctx(), h.owner, "",
+			paymentsapp.GlobalPaymentSearchPage{Limit: pageSize, Cursor: cursor})
+		if err != nil {
+			t.Fatalf("search page %d: %v", pages+1, err)
+		}
+		pages++
+		if pages > total/pageSize+2 {
+			t.Fatal("the walk never ended — the cursor stopped advancing")
+		}
+		for _, item := range search.Items {
+			if seen[item.ID] {
+				t.Errorf("rule %s arrived twice", item.ID)
+			}
+			seen[item.ID] = true
+			if !want[item.ID] {
+				t.Errorf("unexpected rule %s in the walk", item.ID)
+			}
+		}
+		if search.NextCursor == "" {
+			break
+		}
+		cursor = search.NextCursor
+	}
+	if len(seen) != total {
+		t.Errorf("the walk covered %d rules, want all %d", len(seen), total)
+	}
+}
+
+// Deletion between the loads (ticket #597's mutation list) — including the
+// harshest case: the cursor's own anchor row deleted before the next page
+// is fetched. The cursor is a coordinate, not a live reference: the walk
+// resumes at the same (created_at, id) boundary and covers every surviving
+// row exactly once.
+func TestSearchGlobalPaymentsKeyset_DeletedRowsBetweenPages(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	svc := h.globalSvc()
+
+	const total = 60
+	const pageSize = 20
+	base := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	titles := make([]string, 0, total)
+	for i := range total {
+		title := fmt.Sprintf("Правило %03d", i)
+		titles = append(titles, title)
+		h.seedGlobalRuleCreatedAt(h.propID, h.owner, title, 300000+int64(i), base.Add(time.Duration(i)*time.Minute))
+	}
+
+	first, err := svc.SearchGlobalPayments(h.ctx(), h.owner, "",
+		paymentsapp.GlobalPaymentSearchPage{Limit: pageSize})
+	if err != nil {
+		t.Fatalf("page one: %v", err)
+	}
+	if len(first.Items) != pageSize {
+		t.Fatalf("page one rows = %d, want %d", len(first.Items), pageSize)
+	}
+	// Delete an unwalked row and the cursor's anchor row itself.
+	for _, victim := range []string{"Правило 030", titles[pageSize-1]} {
+		if _, err := h.pool.Exec(h.ctx(),
+			`DELETE FROM payments WHERE title = $1 AND owner_id = $2`, victim, h.owner); err != nil {
+			t.Fatalf("delete %s: %v", victim, err)
+		}
+	}
+
+	seen := make(map[string]bool, total-1)
+	seenTitles := func(search paymentsapp.GlobalPaymentSearch) {
+		t.Helper()
+		for _, item := range search.Items {
+			if seen[item.Title] {
+				t.Errorf("row %q arrived twice", item.Title)
+			}
+			seen[item.Title] = true
+		}
+	}
+	seenTitles(first)
+	cursor := first.NextCursor
+	pages := 1
+	for cursor != "" {
+		next, err := svc.SearchGlobalPayments(h.ctx(), h.owner, "",
+			paymentsapp.GlobalPaymentSearchPage{Limit: pageSize, Cursor: cursor})
+		if err != nil {
+			t.Fatalf("walk page %d: %v", pages+1, err)
+		}
+		pages++
+		if pages > total/pageSize+2 {
+			t.Fatal("the walk never ended — the cursor stopped advancing")
+		}
+		seenTitles(next)
+		cursor = next.NextCursor
+	}
+	// The anchor row was delivered on page one before the deletion — that
+	// delivery stands; the unwalked deleted row must never appear.
+	if len(seen) != total-1 {
+		t.Errorf("the walk covered %d rules, want %d — the unwalked deleted row gone, none dropped or duplicated", len(seen), total-1)
+	}
+	if seen["Правило 030"] {
+		t.Error("unwalked deleted row 'Правило 030' came back")
 	}
 }

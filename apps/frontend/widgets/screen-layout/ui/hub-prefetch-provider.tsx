@@ -87,7 +87,7 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
       void client.prefetchInfiniteQuery({
         queryKey: globalOperationKeys.listPaged(scope),
         queryFn: ({ pageParam }) => fetchGlobalOperationsPage(scope, pageParam),
-        initialPageParam: 0,
+        initialPageParam: undefined as string | undefined,
         getNextPageParam: operationsNextPageParam,
       });
       void client.prefetchQuery({

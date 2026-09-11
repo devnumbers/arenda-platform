@@ -528,6 +528,13 @@ type Querier interface {
 	// the default catalog's label is not in the database — the application
 	// layer expands the query into the matching slugs (category_slugs, '' when
 	// none) and they match as a set.
+	//
+	// The reading order is (created_at, id) and the page walks it by keyset
+	// (ticket #597): the window resumes strictly after the (created_at, id)
+	// the previous page ended on, so rows created, deleted or renamed between
+	// loads never duplicate or drop. The property name is deliberately not a
+	// sort key — a rename would move rows across the window. Both cursor args
+	// travel together; NULL (no cursor) reads from the beginning.
 	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
 	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
 	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
@@ -563,6 +570,14 @@ type Querier interface {
 	// ordering (op.date, id tiebreak) and filter vocabulary minus the status
 	// filter: paid is the feed's only stored status. property_name is the row's
 	// property label — the global screen's row label.
+	//
+	// The page walks the feed's own order by keyset (ticket #597): the window
+	// resumes strictly after the (date, id) the previous page ended on, so
+	// rows created, deleted or renamed between loads never duplicate or drop.
+	// The id tiebreak runs DESC in both directions, so the continuation is
+	// (date ahead of the cursor) or (same date, id below it); the direction
+	// only flips the date comparison. Both cursor args travel together; NULL
+	// (no cursor) reads from the beginning.
 	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
 	// The property's rules in creation order (stable for the list response).

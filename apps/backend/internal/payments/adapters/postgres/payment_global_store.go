@@ -85,7 +85,8 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 		CategoryFilter: q.Category,
 		TypeFilter:     string(q.Type),
 		PageLimit:      q.Limit,
-		PageOffset:     int64(q.Offset),
+		AfterCreatedAt: pgconv.TimePtrToPgtype(q.AfterCreatedAt),
+		AfterID:        pgconv.UUIDToPgtypePtr(q.AfterID),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list global payment rules: %w", err)
@@ -107,6 +108,7 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 				UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
 				UserCategoryName: pgconv.TextToPtrString(row.UserCategoryName),
 			},
+			CreatedAt:                pgconv.TimestamptzToTime(row.CreatedAt),
 			Today:                    pgconv.DateFromPgtype(row.OwnerToday),
 			NextPlannedDate:          pgconv.DatePtrFromPgtype(row.AggNextPlannedDate),
 			OverdueCount:             row.OverdueCount,

@@ -1503,9 +1503,11 @@ paths:
         The propertyIds filter narrows the feed to the listed properties,
         each resolved through its view gate — an unknown or non-visible id
         is the privacy 404. Every row carries propertyName, the bound
-        property's display name — the global screen's row label. The period,
-        search, type, category, order and pagination vocabulary is the
-        property listing's. Reads never tick.
+        property's display name. The period, search, type and category
+        vocabulary is the property listing's; the window is keyset
+        pagination over (date, id) (ticket #597): rows shifting between
+        loads never duplicate or drop — pass the previous page's nextCursor
+        back as cursor. Reads never tick.
       security:
         - sessionCookie: []
       parameters:
@@ -1518,12 +1520,14 @@ paths:
         - $ref: '#/components/parameters/OperationsCategoriesFilter'
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
-        - $ref: '#/components/parameters/OperationsOffset'
+        - $ref: '#/components/parameters/OperationsCursor'
       responses:
         '200':
           description: >
             Paid operations page. status is always paid (the feed's only
-            view status); propertyName is the bound property's display name.
+            view status); propertyName is the bound property's display name;
+            nextCursor carries the next page's continuation (null — the feed
+            is exhausted).
           content:
             application/json:
               schema:
@@ -1627,7 +1631,11 @@ paths:
         category chips — one row per (category, direction), the largest count
         first. An empty query degenerates to the unfiltered feed with every
         category of the scope. The list runs in pages of 50 the search
-        screen's infinite scroll walks (map #573 rework); under the
+        screen's infinite scroll walks (map #573 rework); the window is
+        keyset pagination over (created_at, id) (ticket #597) — the feed's
+        own order, stable under renames and creations: rows shifting between
+        loads never duplicate or drop, the previous page's nextCursor comes
+        back as cursor. Under the
         category/type chip filter the page narrows to the chip's rules while
         matchedCategories always describe the whole matched scope — the
         chips never shrink (the operations' canon).
@@ -1638,10 +1646,13 @@ paths:
         - $ref: '#/components/parameters/PaymentsCategoryFilter'
         - $ref: '#/components/parameters/PaymentsTypeFilter'
         - $ref: '#/components/parameters/PaymentsLimit'
-        - $ref: '#/components/parameters/PaymentsOffset'
+        - $ref: '#/components/parameters/PaymentsCursor'
       responses:
         '200':
-          description: The matched rules with their matched-category chips.
+          description: >
+            The matched rules with their matched-category chips; nextCursor
+            carries the next page's continuation (null — the matches are
+            exhausted).
           content:
             application/json:
               schema:
@@ -3885,14 +3896,17 @@ components:
         default: 50
         minimum: 1
         maximum: 100
-    PaymentsOffset:
-      name: offset
+    PaymentsCursor:
+      name: cursor
       in: query
       required: false
+      description: >-
+        The opaque continuation cursor from the previous page's nextCursor
+        (keyset pagination over (created_at, id), ticket #597). A missing or
+        empty value starts the list from the beginning; a malformed value is
+        a 400.
       schema:
-        type: integer
-        default: 0
-        minimum: 0
+        type: string
 
     OperationsStatusFilter:
       name: status
@@ -3940,6 +3954,18 @@ components:
         default: 50
         minimum: 1
         maximum: 100
+    OperationsCursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        The opaque continuation cursor from the previous page's nextCursor
+        (keyset pagination over (date, id), ticket #597) — the global
+        feed's window; the property listings keep the offset vocabulary. A
+        missing or empty value starts the feed from the beginning; a
+        malformed value is a 400.
+      schema:
+        type: string
     OperationsOffset:
       name: offset
       in: query
@@ -5554,7 +5580,7 @@ components:
         The global payment rules search (ticket #575): the matched rows plus
         the matched-category chips.
       type: object
-      required: [items, matchedCategories]
+      required: [items, matchedCategories, nextCursor]
       properties:
         items:
           type: array
@@ -5564,6 +5590,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentSearchCategory'
+        nextCursor:
+          type: string
+          nullable: true
+          description: >
+            The opaque continuation cursor of the keyset window (ticket
+            #597): pass it back as the cursor query parameter to fetch the
+            next page. null — the matches are exhausted.
 
     PaymentObjectKey:
       description: >
@@ -5729,12 +5762,19 @@ components:
 
     OperationsResponse:
       type: object
-      required: [items]
+      required: [items, nextCursor]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/OperationResponse'
+        nextCursor:
+          type: string
+          nullable: true
+          description: >
+            The opaque continuation cursor of the keyset window (ticket
+            #597): pass it back as the cursor query parameter to fetch the
+            next page. null — the feed is exhausted.
 
     OperationsSummaryCategory:
       description: >-

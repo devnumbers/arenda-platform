@@ -598,7 +598,7 @@ export interface paths {
         };
         /**
          * List the actor's visible paid operations (the global «Операции» screen)
-         * @description The global read side of the operations context (ticket #540). The response is the actor's visible merged feed: the paid operations of their own properties plus those of the properties they can view (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule). The feed is paid-only: planned and overdue occurrences are the property screens' vocabulary, cancelled operations do not exist for reads. The operations of archived properties are not in the feed unless includeArchived lifts the cut (#549). The propertyIds filter narrows the feed to the listed properties, each resolved through its view gate — an unknown or non-visible id is the privacy 404. Every row carries propertyName, the bound property's display name — the global screen's row label. The period, search, type, category, order and pagination vocabulary is the property listing's. Reads never tick.
+         * @description The global read side of the operations context (ticket #540). The response is the actor's visible merged feed: the paid operations of their own properties plus those of the properties they can view (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule). The feed is paid-only: planned and overdue occurrences are the property screens' vocabulary, cancelled operations do not exist for reads. The operations of archived properties are not in the feed unless includeArchived lifts the cut (#549). The propertyIds filter narrows the feed to the listed properties, each resolved through its view gate — an unknown or non-visible id is the privacy 404. Every row carries propertyName, the bound property's display name. The period, search, type and category vocabulary is the property listing's; the window is keyset pagination over (date, id) (ticket #597): rows shifting between loads never duplicate or drop — pass the previous page's nextCursor back as cursor. Reads never tick.
          */
         get: operations["listOperations"];
         put?: never;
@@ -658,7 +658,7 @@ export interface paths {
         };
         /**
          * Search the actor's visible payment rules (the global «Платежи» search)
-         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per (category, direction), the largest count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
+         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per (category, direction), the largest count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); the window is keyset pagination over (created_at, id) (ticket #597) — the feed's own order, stable under renames and creations: rows shifting between loads never duplicate or drop, the previous page's nextCursor comes back as cursor. Under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
          */
         get: operations["searchGlobalPayments"];
         put?: never;
@@ -2377,6 +2377,8 @@ export interface components {
         PaymentsSearchGlobalResponse: {
             items: components["schemas"]["PaymentGlobalItem"][];
             matchedCategories: components["schemas"]["PaymentSearchCategory"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
         };
         /** @description One key of a property's stack (ticket #575): the rule behind it and its overdue flag — the red dot. */
         PaymentObjectKey: {
@@ -2460,6 +2462,8 @@ export interface components {
         };
         OperationsResponse: {
             items: components["schemas"]["OperationResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the feed is exhausted. */
+            nextCursor: string | null;
         };
         /** @description One category's total over the summarized scope. Rows without a category snapshot never appear here — their amounts still count in the totals. */
         OperationsSummaryCategory: {
@@ -2990,7 +2994,8 @@ export interface components {
         /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
         PaymentsTypeFilter: "income" | "expense";
         PaymentsLimit: number;
-        PaymentsOffset: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        PaymentsCursor: string;
         /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
         OperationsStatusFilter: "planned" | "paid" | "overdue";
         /** @description Inclusive lower bound of the period on the operation date. */
@@ -3000,6 +3005,8 @@ export interface components {
         /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
         OperationsOrder: "asc" | "desc";
         OperationsLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (date, id), ticket #597) — the global feed's window; the property listings keep the offset vocabulary. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
+        OperationsCursor: string;
         OperationsOffset: number;
         TasksLimit: number;
         TasksOffset: number;
@@ -4356,7 +4363,8 @@ export interface operations {
                 /** @description Sort by the operation date; asc (oldest first) or desc (default, newest first). */
                 order?: components["parameters"]["OperationsOrder"];
                 limit?: components["parameters"]["OperationsLimit"];
-                offset?: components["parameters"]["OperationsOffset"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (date, id), ticket #597) — the global feed's window; the property listings keep the offset vocabulary. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["OperationsCursor"];
             };
             header?: never;
             path?: never;
@@ -4364,7 +4372,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Paid operations page. status is always paid (the feed's only view status); propertyName is the bound property's display name. */
+            /** @description Paid operations page. status is always paid (the feed's only view status); propertyName is the bound property's display name; nextCursor carries the next page's continuation (null — the feed is exhausted). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4447,7 +4455,8 @@ export interface operations {
                 /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
                 type?: components["parameters"]["PaymentsTypeFilter"];
                 limit?: components["parameters"]["PaymentsLimit"];
-                offset?: components["parameters"]["PaymentsOffset"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["PaymentsCursor"];
             };
             header?: never;
             path?: never;
@@ -4455,7 +4464,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The matched rules with their matched-category chips. */
+            /** @description The matched rules with their matched-category chips; nextCursor carries the next page's continuation (null — the matches are exhausted). */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -391,7 +391,13 @@ type GlobalOperationsListQuery struct {
 	DateFrom    *time.Time
 	DateTo      *time.Time
 	Limit       int
-	Offset      int
+	// Cursor is the previous page's opaque continuation ('' = from the
+	// beginning); PrepareGlobalOperationsQuery decodes it into AfterDate and
+	// AfterID — the keyset key the page resumes strictly after (ticket
+	// #597). The pair travels together or not at all.
+	Cursor    string
+	AfterDate *time.Time
+	AfterID   *uuid.UUID
 	// Search is the listing's search predicate (OperationsListQuery.Search).
 	Search string
 	// Asc is false by default and by contract: sorting is newest-first unless
@@ -406,6 +412,14 @@ type GlobalOperationsListQuery struct {
 	// properties' paid rows rejoin under the same visibility predicate.
 	// False — the contract default — keeps the archive excluded.
 	IncludeArchived bool
+}
+
+// GlobalOperationsPage is one walked window of the global feed (ticket
+// #597): the listed rows plus the keyset continuation — the next page's
+// opaque cursor, ” when the feed is exhausted.
+type GlobalOperationsPage struct {
+	Items      []OperationListItem
+	NextCursor string
 }
 
 // GlobalOperationsSummaryQuery is the global summary's request (ticket
@@ -427,17 +441,26 @@ type GlobalOperationsSummaryQuery struct {
 	IncludeArchived bool
 }
 
-// PrepareGlobalOperationsQuery validates the global listing request in place
-// with the property listing's pagination contract: a zero limit becomes the
-// default page, anything out of range or a negative offset is ErrInvalidInput
-// mapped to the contract's 400.
+// PrepareGlobalOperationsQuery validates the global listing request in place:
+// a zero limit becomes the default page, anything out of range is
+// ErrInvalidInput mapped to the contract's 400; the page's continuation
+// cursor (ticket #597) decodes into the AfterDate/AfterID keyset key.
 func PrepareGlobalOperationsQuery(q *GlobalOperationsListQuery) error {
 	if q.Limit == 0 {
 		q.Limit = DefaultOperationsPageSize
 	}
-	if q.Limit < 1 || q.Limit > MaxOperationsPageSize || q.Offset < 0 {
+	if q.Limit < 1 || q.Limit > MaxOperationsPageSize {
 		return ErrInvalidInput
 	}
+	if q.Cursor == "" {
+		return nil
+	}
+	afterDate, afterID, err := decodeOperationCursor(q.Cursor)
+	if err != nil {
+		return err
+	}
+	q.AfterDate = &afterDate
+	q.AfterID = &afterID
 	return nil
 }
 
@@ -449,19 +472,22 @@ func PrepareGlobalOperationsQuery(q *GlobalOperationsListQuery) error {
 // actor-scoped cross-property read (the tasks global feed precedent,
 // ticket #521); the propertyIds entries however are resolved through
 // the view gate first, an unknown or non-visible one being the privacy
-// ErrNotFound. A pure read: never ticks, and no owner calendar is consulted.
+// ErrNotFound. The page walks the feed's own (date, id) order by keyset
+// (ticket #597): a full page answers with the last row's continuation, a
+// short one has reached the feed's end. A pure read: never ticks, and no
+// owner calendar is consulted.
 func (s *OperationService) ListGlobalOperations(
 	ctx context.Context, actor uuid.UUID, q GlobalOperationsListQuery,
-) ([]OperationListItem, error) {
+) (GlobalOperationsPage, error) {
 	if err := PrepareGlobalOperationsQuery(&q); err != nil {
-		return nil, err
+		return GlobalOperationsPage{}, err
 	}
 	if err := resolveGlobalPropertyFilter(ctx, s.policy, s.properties, actor, q.PropertyIDs); err != nil {
-		return nil, err
+		return GlobalOperationsPage{}, err
 	}
 	rows, err := s.operations.ListGlobal(ctx, actor, q)
 	if err != nil {
-		return nil, fmt.Errorf("list global operations: %w", err)
+		return GlobalOperationsPage{}, fmt.Errorf("list global operations: %w", err)
 	}
 	items := make([]OperationListItem, len(rows))
 	for i, row := range rows {
@@ -473,7 +499,12 @@ func (s *OperationService) ListGlobalOperations(
 			PropertyName: row.PropertyName,
 		}
 	}
-	return items, nil
+	nextCursor := ""
+	if len(items) == q.Limit {
+		last := rows[len(rows)-1]
+		nextCursor = encodeOperationCursor(last.Operation.Date, last.Operation.ID)
+	}
+	return GlobalOperationsPage{Items: items, NextCursor: nextCursor}, nil
 }
 
 // SummarizeGlobalOperations returns the period aggregate of the actor's

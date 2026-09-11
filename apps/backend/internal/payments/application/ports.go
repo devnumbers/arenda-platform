@@ -252,8 +252,12 @@ type GlobalPaymentRulesQuery struct {
 	// The search screen's page (50 per page, infinite scroll). The zero
 	// limit means no window — the whole matched scope, the feed's and the
 	// stacks' reads.
-	Limit  int32
-	Offset int32
+	Limit int32
+	// The keyset continuation (ticket #597): resume strictly after the
+	// (CreatedAt, ID) row — the previous page's last one. Both nil = the
+	// window starts at the beginning; the pair travels together.
+	AfterCreatedAt *time.Time
+	AfterID        *uuid.UUID
 }
 
 // GlobalPaymentRuleRow is one raw row of the global payment rules read
@@ -273,7 +277,10 @@ type GlobalPaymentRuleRow struct {
 	AutoPay       bool
 	IsFavorite    bool
 	Category      domain.CategoryRef
-	Today         time.Time
+	// CreatedAt is the rule's creation moment — the feed's first sort key
+	// and the page cursor's anchor (ticket #597).
+	CreatedAt time.Time
+	Today     time.Time
 	// NextPlannedDate is the earliest stored planned operation on or after
 	// today; nil hands the nearest date to the projection fallback.
 	NextPlannedDate *time.Time

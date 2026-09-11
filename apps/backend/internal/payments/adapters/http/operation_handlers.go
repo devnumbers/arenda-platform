@@ -43,7 +43,7 @@ type OperationsManager interface {
 	ListGlobalOperations(
 		ctx context.Context, actor uuid.UUID,
 		cmd application.GlobalOperationsListQuery,
-	) ([]application.OperationListItem, error)
+	) (application.GlobalOperationsPage, error)
 	SummarizeGlobalOperations(
 		ctx context.Context, actor uuid.UUID,
 		cmd application.GlobalOperationsSummaryQuery,
@@ -88,7 +88,9 @@ func (h *OperationsHandlers) ListPaymentOperations(
 		return
 	}
 
-	writeOperations(w, r, items)
+	// The property listing's window is the offset vocabulary — it carries no
+	// keyset continuation.
+	writeOperations(w, r, items, "")
 }
 
 // ListPropertyOperations implements GET /properties/{propertyId}/operations —
@@ -114,7 +116,7 @@ func (h *OperationsHandlers) ListPropertyOperations(
 		return
 	}
 
-	writeOperations(w, r, items)
+	writeOperations(w, r, items, "")
 }
 
 // SummarizePropertyOperations implements GET
@@ -160,13 +162,13 @@ func (h *OperationsHandlers) ListOperations(w http.ResponseWriter, r *http.Reque
 		h.handleOperationError(w, r, err)
 		return
 	}
-	items, err := h.svc.ListGlobalOperations(r.Context(), actor, cmd)
+	page, err := h.svc.ListGlobalOperations(r.Context(), actor, cmd)
 	if err != nil {
 		h.handleOperationError(w, r, err)
 		return
 	}
 
-	writeOperations(w, r, items)
+	writeOperations(w, r, page.Items, page.NextCursor)
 }
 
 // SummarizeOperations implements GET /operations/summary — the global twin
@@ -461,13 +463,15 @@ func globalOperationsFromListParams(
 	if err != nil {
 		return application.GlobalOperationsListQuery{}, err
 	}
-	query := newListOperationsQuery(nil, params.DateFrom, params.DateTo, asc, params.Limit, params.Offset, params.Search)
+	// The global feed's window is the keyset cursor (ticket #597) — the
+	// offset vocabulary belongs to the property listings only.
+	query := newListOperationsQuery(nil, params.DateFrom, params.DateTo, asc, params.Limit, nil, params.Search)
 	return application.GlobalOperationsListQuery{
 		PropertyIDs:     propertyIDs,
 		DateFrom:        query.DateFrom,
 		DateTo:          query.DateTo,
 		Limit:           query.Limit,
-		Offset:          query.Offset,
+		Cursor:          derefString(params.Cursor),
 		Search:          query.Search,
 		Asc:             query.Asc,
 		Type:            typ,
@@ -564,13 +568,18 @@ func operationsSummaryResponse(summary application.OperationsSummary) openapi.Op
 	}
 }
 
-// writeOperations maps the listed items onto the wire response shape.
-func writeOperations(w http.ResponseWriter, r *http.Request, items []application.OperationListItem) {
+// writeOperations maps the listed items onto the wire response shape. The
+// keyset continuation (ticket #597) travels on the global feed's pages — the
+// offset-based property listings pass ” and the wire's nextCursor is null.
+func writeOperations(w http.ResponseWriter, r *http.Request, items []application.OperationListItem, nextCursor string) {
 	out := make([]openapi.OperationResponse, 0, len(items))
 	for _, item := range items {
 		out = append(out, operationResponse(item))
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.OperationsResponse{Items: out})
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.OperationsResponse{
+		Items:      out,
+		NextCursor: httpsupport.StringPtr(nextCursor),
+	})
 }
 
 // operationResponse maps one listed or just-paid operation onto the wire

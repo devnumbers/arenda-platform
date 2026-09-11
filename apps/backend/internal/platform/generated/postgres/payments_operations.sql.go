@@ -368,11 +368,18 @@ WHERE op.status = 'paid'
   AND ($8::text = '' OR op.type = $8::text)
   AND ($9::text = ''
        OR op.category_slug = ANY(string_to_array($9::text, ',')))
+  AND ($10::uuid IS NULL
+       OR ($11::text = 'asc'
+           AND (op.date > $12::date
+                OR (op.date = $12 AND op.id < $10::uuid)))
+       OR ($11::text <> 'asc'
+           AND (op.date < $12::date
+                OR (op.date = $12 AND op.id < $10::uuid))))
 ORDER BY
-  CASE WHEN $10::text = 'asc' THEN op.date END ASC,
-  CASE WHEN $10::text = 'desc' THEN op.date END DESC,
+  CASE WHEN $11::text = 'asc' THEN op.date END ASC,
+  CASE WHEN $11::text = 'desc' THEN op.date END DESC,
   op.id DESC
-LIMIT $12 OFFSET $11
+LIMIT $13
 `
 
 type ListPaidOperationsGlobalParams struct {
@@ -385,8 +392,9 @@ type ListPaidOperationsGlobalParams struct {
 	SearchDigits    string      `json:"search_digits"`
 	Type            string      `json:"type"`
 	Categories      string      `json:"categories"`
+	AfterID         pgtype.UUID `json:"after_id"`
 	Order           string      `json:"order"`
-	Offset          int32       `json:"offset"`
+	AfterDate       pgtype.Date `json:"after_date"`
 	Limit           int32       `json:"limit"`
 }
 
@@ -425,6 +433,14 @@ type ListPaidOperationsGlobalRow struct {
 // ordering (op.date, id tiebreak) and filter vocabulary minus the status
 // filter: paid is the feed's only stored status. property_name is the row's
 // property label — the global screen's row label.
+//
+// The page walks the feed's own order by keyset (ticket #597): the window
+// resumes strictly after the (date, id) the previous page ended on, so
+// rows created, deleted or renamed between loads never duplicate or drop.
+// The id tiebreak runs DESC in both directions, so the continuation is
+// (date ahead of the cursor) or (same date, id below it); the direction
+// only flips the date comparison. Both cursor args travel together; NULL
+// (no cursor) reads from the beginning.
 func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error) {
 	rows, err := q.db.Query(ctx, listPaidOperationsGlobal,
 		arg.Actor,
@@ -436,8 +452,9 @@ func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOper
 		arg.SearchDigits,
 		arg.Type,
 		arg.Categories,
+		arg.AfterID,
 		arg.Order,
-		arg.Offset,
+		arg.AfterDate,
 		arg.Limit,
 	)
 	if err != nil {
