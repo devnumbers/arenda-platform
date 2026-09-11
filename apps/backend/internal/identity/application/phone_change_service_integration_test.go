@@ -29,7 +29,7 @@ func TestPhoneChangeIntegration_HappyPath(t *testing.T) {
 	if err := h.auth.SendCode(ctx, oldPhone, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode for second session: %v", err)
 	}
-	token2Raw, _, err := h.auth.VerifyCode(ctx, oldPhone, &email, h.sender.lastCode(t))
+	token2Raw, _, err := h.auth.VerifyCode(ctx, oldPhone, &email, h.sender.lastCode(t), nil)
 	if err != nil {
 		t.Fatalf("VerifyCode for second session: %v", err)
 	}

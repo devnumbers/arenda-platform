@@ -4,8 +4,7 @@ import {type JSX} from "react";
 import {useRouter} from "next/navigation";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
-import {AuthForm} from "@/features/auth";
-import {useSendCode, useVerifyCode} from "@/features/auth";
+import {AuthForm, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {safeInternalPath} from "@/shared/lib/safe-internal-path";
 import {useSendCooldown} from "@/features/auth";
@@ -80,10 +79,14 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
+        // Автодетект зоны при регистрации (#451): зона устройства едет с каждой
+        // верификацией, бэк применяет её только при создании аккаунта. Когда
+        // браузер не отдал зону — поле не отправляется.
+        const timezone = deviceTimezone();
+        const base = {phone: normalizePhone(draft.phone), code, ...(timezone && {timezone})};
+
         verifyCode.mutate(
-            trimmedEmail
-                ? {phone: normalizePhone(draft.phone), email: trimmedEmail, code}
-                : {phone: normalizePhone(draft.phone), code},
+            trimmedEmail ? {...base, email: trimmedEmail} : base,
             {
                 onSuccess: () => {
                     const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/properties";

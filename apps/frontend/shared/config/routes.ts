@@ -145,9 +145,11 @@ export const ROUTES = {
    * до переезда на новый хром — карта #556). */
   support: '/support',
   profile: '/profile',
-  profilePersonal: '/profile/personal',
   profileNotifications: '/profile/notifications',
   profileAccount: '/profile/account',
+  /** Пикер часового пояса (карта #591, тикет #594): полный список зон РФ
+   * с поиском; сохранение — PATCH /me, назад — на аккаунт. */
+  profileAccountTimezone: '/profile/account/timezone',
   profileChangePhone: '/profile/account/phone',
   profileTariff: '/profile/tariff',
   profileTariffChange: '/profile/tariff/change',

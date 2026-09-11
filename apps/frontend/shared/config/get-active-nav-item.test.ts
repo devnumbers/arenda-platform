@@ -34,7 +34,7 @@ describe('правила активности навигации (#558)', () => 
     expect(activeSectionId('/profile/notifications')).toBe('notifications');
     expect(activeSectionId('/profile/notifications/settings')).toBe('notifications');
     expect(activeSectionId('/profile')).toBeNull();
-    expect(activeSectionId('/profile/personal')).toBeNull();
+    expect(activeSectionId('/profile/account')).toBeNull();
     expect(activeSectionId('/profile/tariff')).toBeNull();
   });
 

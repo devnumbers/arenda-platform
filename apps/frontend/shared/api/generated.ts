@@ -1670,6 +1670,8 @@ export interface components {
             phone: string;
             email?: string;
             code: string;
+            /** @description Browser-detected IANA timezone of the registering device (Intl.DateTimeFormat().resolvedOptions().timeZone). Applied only when this request creates a new user; an absent or invalid value keeps the Europe/Moscow default. Ignored for existing users — the manual choice in the profile picker is never overwritten. */
+            timezone?: string;
         };
         MeResponse: {
             /** Format: uuid */

@@ -34,6 +34,10 @@ export type ListRowProps = {
   /** Дополнение к классу подписи (другой цвет из того же компонента Row
    * Button — подсказки адреса несут #6F787C, Figma 1519:94336). */
   readonly subtitleClassName?: string;
+  /** Дополнение к классу заголовка (другой цвет из того же компонента Row
+   * Button — выбранная зона в пикере часового пояса несёт #2B7FFF,
+   * Figma 1869:71099, #594). */
+  readonly titleClassName?: string;
   /** Роль строки: option — внутри role=listbox (см. выше), button —
    * обычная строка-кнопка (по умолчанию). */
   readonly variant?: 'button' | 'option';
@@ -51,6 +55,7 @@ export function ListRow({
   onSelect,
   disabled = false,
   className,
+  titleClassName,
   variant = 'button',
 }: ListRowProps): JSX.Element {
   const interactive = onSelect !== undefined && !disabled;
@@ -90,7 +95,12 @@ export function ListRow({
     >
       {leading !== undefined && <span className="flex shrink-0 items-center">{leading}</span>}
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="truncate text-base font-medium text-content group-hover/row:text-content-secondary">
+        <span
+          className={cn(
+            'truncate text-base font-medium text-content group-hover/row:text-content-secondary',
+            titleClassName,
+          )}
+        >
           {title}
         </span>
         {subtitle !== undefined && (

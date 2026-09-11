@@ -31,7 +31,7 @@ func TestAttemptWindowIntegration_BlocksAfterMaxFailures(t *testing.T) {
 	// ErrTooManyAttempts once the threshold is reached.
 	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, lastErr = h.auth.VerifyCode(ctx, phone, &email, "000000")
+		_, _, lastErr = h.auth.VerifyCode(ctx, phone, &email, "000000", nil)
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
@@ -66,7 +66,7 @@ func TestAttemptWindowIntegration_UnblocksAfterTTL(t *testing.T) {
 
 	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, lastErr = h.auth.VerifyCode(ctx, phone, &email, "000000")
+		_, _, lastErr = h.auth.VerifyCode(ctx, phone, &email, "000000", nil)
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
@@ -85,7 +85,7 @@ func TestAttemptWindowIntegration_UnblocksAfterTTL(t *testing.T) {
 	}
 	code := h.sender.lastCode(t)
 
-	raw, _, err := h.auth.VerifyCode(ctx, phone, &email, code)
+	raw, _, err := h.auth.VerifyCode(ctx, phone, &email, code, nil)
 	if err != nil {
 		t.Fatalf("VerifyCode after TTL = %v", err)
 	}

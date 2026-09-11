@@ -20,7 +20,9 @@ import (
 type fakeAuthenticator struct {
 	sendCode        func(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error
 	sendCodeByPhone func(ctx context.Context, phone domain.Phone) (bool, error)
-	verifyCode      func(ctx context.Context, phone domain.Phone, email *domain.Email, code string) (domain.RawSession, domain.User, error)
+	verifyCode      func(
+		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string,
+	) (domain.RawSession, domain.User, error)
 }
 
 func (f *fakeAuthenticator) SendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error {
@@ -42,9 +44,10 @@ func (f *fakeAuthenticator) VerifyCode(
 	phone domain.Phone,
 	email *domain.Email,
 	code string,
+	timezone *string,
 ) (domain.RawSession, domain.User, error) {
 	if f.verifyCode != nil {
-		return f.verifyCode(ctx, phone, email, code)
+		return f.verifyCode(ctx, phone, email, code, timezone)
 	}
 	return domain.RawSession{}, domain.User{}, errors.New("unexpected VerifyCode call")
 }
@@ -203,12 +206,16 @@ func TestVerifyCode_WithoutEmail_PassesNilEmailAndSetsCookie(t *testing.T) {
 	}
 
 	var gotEmail *domain.Email
+	var gotTimezone *string
 	auth := &fakeAuthenticator{
-		verifyCode: func(_ context.Context, _ domain.Phone, email *domain.Email, code string) (domain.RawSession, domain.User, error) {
+		verifyCode: func(
+			_ context.Context, _ domain.Phone, email *domain.Email, code string, timezone *string,
+		) (domain.RawSession, domain.User, error) {
 			if code != "123456" {
 				t.Errorf("VerifyCode code = %s, want 123456", code)
 			}
 			gotEmail = email
+			gotTimezone = timezone
 			return raw, user, nil
 		},
 	}
@@ -222,7 +229,44 @@ func TestVerifyCode_WithoutEmail_PassesNilEmailAndSetsCookie(t *testing.T) {
 	if gotEmail != nil {
 		t.Fatalf("VerifyCode email = %v, want nil", gotEmail)
 	}
+	if gotTimezone != nil {
+		t.Fatalf("VerifyCode timezone = %v, want nil for a body without it", *gotTimezone)
+	}
 	if cookie := rr.Header().Get("Set-Cookie"); !strings.Contains(cookie, "session_id=raw-token") {
 		t.Fatalf("Set-Cookie = %q, want session_id=raw-token", cookie)
+	}
+}
+
+func TestVerifyCode_PassesTimezoneToService(t *testing.T) {
+	t.Parallel()
+	phone, err := domain.NewPhone("+79150000002")
+	if err != nil {
+		t.Fatalf("parse phone: %v", err)
+	}
+	user, err := domain.NewOwner(phone)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	raw := domain.RawSession{
+		Token:   testRawToken,
+		Session: domain.Session{UserID: user.ID, ExpiresAt: time.Now().Add(time.Hour)},
+	}
+
+	var gotTimezone *string
+	auth := &fakeAuthenticator{
+		verifyCode: func(_ context.Context, _ domain.Phone, _ *domain.Email, _ string, timezone *string) (domain.RawSession, domain.User, error) {
+			gotTimezone = timezone
+			return raw, user, nil
+		},
+	}
+	h := newTestAuthHandlers(auth)
+
+	rr := doJSON(t, h.VerifyCode, "/auth/verify", `{"phone":"+79150000002","code":"123456","timezone":"Asia/Yekaterinburg"}`)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+	if gotTimezone == nil || *gotTimezone != "Asia/Yekaterinburg" {
+		t.Fatalf("VerifyCode timezone = %v, want Asia/Yekaterinburg", gotTimezone)
 	}
 }
