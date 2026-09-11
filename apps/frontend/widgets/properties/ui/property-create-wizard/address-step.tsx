@@ -2,27 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, JSX, KeyboardEvent } from 'react';
-import {
-  addressSuggestionRow,
-  useAddressSuggestions,
-} from '@/features/properties';
+import { useAddressSuggestions } from '@/features/properties';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { focusListboxEdge } from '@/shared/ui/select/listbox-keyboard';
-import { ListRow, TextField } from '@/shared/ui/design';
+import { TextField } from '@/shared/ui/design';
+import { AddressSuggestionList } from '../property-fields/address-suggestion-list';
 
 /**
  * Шаг 2 «Адрес» (Figma 1213-52017/52391, 1519-94336): поле с программным
  * фокусом на входе в шаг (autoFocus запрещён — паттерн CodeStep) и
- * подсказками DaData строками под полем. Подсказки живут с 3 символов
- * (дебаунс 300мс, как в легаси-AddressField); ошибка сети тихая — списка
- * просто нет, ручной ввод продолжает работать. Выбор подсказки
- * фиксирует полный адрес в черновике и прячет список до следующей правки.
- *
- * Клавиатура списка — общий listbox-паттерн (CODING_STANDARDS, волна B
- * jsx-a11y): контейнер role=listbox, строки role=option с roving focus,
- * стрелки с wrap-around и Home/End ведёт runListboxAction внутри ListRow,
- * Escape гасится на контейнере и возвращает фокус в поле; стрелка у поля
- * входит в список с первого/последнего ряда (focusListboxEdge).
+ * подсказками DaData строками под полем (общий список с поиском адреса
+ * формы правки, property-fields). Подсказки живут с 3 символов (дебаунс
+ * 300мс, как в легаси-AddressField); ошибка сети тихая — списка просто
+ * нет, ручной ввод продолжает работать. Выбор подсказки фиксирует полный
+ * адрес в черновике и прячет список до следующей правки.
  */
 
 const SUGGEST_QUERY_MIN_LENGTH = 3;
@@ -65,31 +58,14 @@ export function AddressStep({ value, onChange }: AddressStepProps): JSX.Element 
         />
       </div>
       {showList && (
-        <div
-          ref={listRef}
-          role="listbox"
-          aria-label="Подсказки адреса"
-          // Контейнер фокусируем программно (требование ARIA-listbox),
-          // Tab-порядок не занимает: в список входят стрелками с поля.
-          tabIndex={-1}
-          className="mt-2"
-          onKeyDown={handleListKeyDown}
-        >
-          {rows.map((suggestion) => {
-            const row = addressSuggestionRow(suggestion.value, suggestion.city);
-            return (
-              <ListRow
-                key={suggestion.value}
-                className="py-3"
-                subtitleClassName="text-content-secondary"
-                title={row.title}
-                subtitle={row.subtitle}
-                variant="option"
-                onSelect={() => select(suggestion.value)}
-              />
-            );
-          })}
-        </div>
+        <AddressSuggestionList
+          containerRef={listRef}
+          containerClassName="mt-2"
+          rowClassName="py-3"
+          suggestions={rows}
+          onSelect={select}
+          onEscape={hideList}
+        />
       )}
     </>
   );
@@ -117,11 +93,9 @@ export function AddressStep({ value, onChange }: AddressStepProps): JSX.Element 
 
   // Escape на строке всплывает с опции (runListboxAction его не гасит):
   // список прячется, фокус возвращается в поле.
-  function handleListKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    if (event.key === 'Escape') {
-      setDismissed(true);
-      inputRef.current?.focus();
-    }
+  function hideList(): void {
+    setDismissed(true);
+    inputRef.current?.focus();
   }
 
   function select(address: string): void {

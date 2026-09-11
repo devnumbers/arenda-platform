@@ -29,6 +29,13 @@ export {
   buildPropertyCreateCommand,
   type PropertyAttributesPort,
 } from './lib/property-create-submit';
+export {
+  attributesEqual,
+  buildPropertyEditCommand,
+  initialPropertyEditDraft,
+  propertyEditDirty,
+  type PropertyEditDraft,
+} from './lib/property-edit';
 export { addressSuggestionRow } from './lib/address-suggestion';
 export {
   PROPERTY_CREATE_RENTAL_STUB_TOAST,
