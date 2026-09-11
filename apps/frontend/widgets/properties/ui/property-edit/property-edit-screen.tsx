@@ -29,7 +29,7 @@ import {
   TopNavTitle,
   useTabBarSuppression,
 } from '@/shared/ui/design';
-import { Cancel, Check } from '@/shared/assets/icons';
+import { BoldHome, Cancel, Check } from '@/shared/assets/icons';
 import { PropertyCatalogFields } from '../property-fields/property-catalog-fields';
 import { PropertyHousingTypeChips } from '../property-fields/property-housing-type-chips';
 import { PropertyAddressSearch } from './property-address-search';
@@ -147,12 +147,20 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
       <EditChrome propertyId={propertyId} onSave={canSubmit ? () => void handleSubmit() : undefined} />
       <PageContent>
         <form
-          className="flex flex-col gap-8 pt-6"
+          className="flex flex-col gap-8 px-6 pt-6"
           onSubmit={(event) => {
             event.preventDefault();
             void handleSubmit();
           }}
         >
+          {/* Заглушка фото (Figma 1550:95852): логики фото у объекта нет —
+              круг декоративный, без кнопки и загрузки (решение владельца
+              11.09). */}
+          <div className="flex justify-center" aria-hidden>
+            <span className="flex h-24 w-24 items-center justify-center rounded-pill bg-surface-muted">
+              <BoldHome className="h-10 w-10 text-[#D3D7D9]" />
+            </span>
+          </div>
           <PropertyTypePicker
             title="Тип объекта"
             placeholder="Выберите тип"
@@ -304,7 +312,8 @@ function PropertyEditLoading(): JSX.Element {
         <TopNavTitle title="Редактирование объекта" />
       </TopNav>
       <PageContent>
-        <div className="flex flex-col gap-8 pt-6" aria-hidden>
+        <div className="flex flex-col gap-8 px-6 pt-6" aria-hidden>
+          <Skeleton className="mx-auto h-24 w-24 rounded-pill" />
           <Skeleton className="h-[78px] w-full" />
           <Skeleton className="h-[78px] w-full" />
           <Skeleton className="h-[78px] w-full" />
