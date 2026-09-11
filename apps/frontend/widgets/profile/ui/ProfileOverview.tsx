@@ -20,6 +20,7 @@ function getFullName(user: User): string {
     return parts.join(' ') || "Пользователь";
 }
 
+/** Скелетон карточки пользователя. */
 function UserCardSkeleton(): JSX.Element {
     return (
         <Card className={styles.userCard}>
@@ -27,6 +28,21 @@ function UserCardSkeleton(): JSX.Element {
             <Skeleton className="h-[18px] w-2/5 rounded-md"/>
             <Skeleton className="h-[18px] w-2/5 rounded-md"/>
         </Card>
+    );
+}
+
+/** Каркас страницы профиля в фазе загрузки — меню и «Выйти» реальными
+ * (вне фазы загрузки, §7), карточка — скелетоном; экспорт для
+ * route-loading (#609). */
+export function ProfileOverviewSkeleton(): JSX.Element {
+    return (
+        <div className={styles.page}>
+            <UserCardSkeleton/>
+            <ProfileMenu/>
+            <Button variant="secondary" fullWidth disabled>
+                Выйти
+            </Button>
+        </div>
     );
 }
 

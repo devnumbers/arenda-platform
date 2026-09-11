@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -27,6 +28,10 @@ type ContactResponse = components['schemas']['ContactResponse'];
  * имени, телефону, почте, имени пользователя мессенджера и роли ('' = без
  * фильтра). Чтение через view-гейт объекта: участник с ролью CanView видит
  * привязанные к объекту контакты (403 — проблема Forbidden).
+ * keepPreviousData — прежний срез держится на экране, пока едет запрос
+ * с новым ?search= (набор не мигает скелетоном, канон платежей #609);
+ * смена propertyId держит список прежнего объекта до прихода нового —
+ * осознанно, как у платежей.
  */
 export function useContacts(
   propertyId: string,
@@ -41,6 +46,7 @@ export function useContacts(
       );
       return response.items.map(mapContact);
     },
+    placeholderData: keepPreviousData,
     enabled: Boolean(propertyId),
   });
 }
@@ -83,6 +89,10 @@ export function useContactBook(
       );
       return response.items.map(mapContact);
     },
+    // Набор в поиске и смена сортировки держат прежнюю выдачу, пока едет
+    // новый запрос (#609, канон платежей): скелетон — только когда данных
+    // нет вовсе.
+    placeholderData: keepPreviousData,
   });
 }
 

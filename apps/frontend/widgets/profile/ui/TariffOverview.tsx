@@ -44,7 +44,8 @@ function isPaymentStale(createdAt: string): boolean {
     return Date.now() - new Date(createdAt).getTime() > PAYMENT_STALE_MS;
 }
 
-function TariffOverviewSkeleton(): JSX.Element {
+/** Скелетон обзора тарифа — экспорт для route-loading (#609). */
+export function TariffOverviewSkeleton(): JSX.Element {
     return (
         <Card className={styles.card}>
             <Skeleton className="h-6 w-2/5 rounded-lg"/>

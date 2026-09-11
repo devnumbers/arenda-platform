@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -285,7 +286,9 @@ const globalTasksPath = (
  * владельца 2026-09-07); смена фильтра меняет ключ и перечитывает. Лимит —
  * максимум контракта: лента группируется целиком, как на объекте. today —
  * календарь читателя (на срезе одного объекта — владельца данных).
- * Сестринский хук журнала — useGlobalCompletedTasks.
+ * Сестринский хук журнала — useGlobalCompletedTasks. keepPreviousData —
+ * смена фильтра (#524) держит прежний срез на экране, пока едет новый
+ * запрос: лента не мигает скелетоном (#609, канон платежей).
  */
 export function useGlobalActiveTasks(
   propertyIds: ReadonlyArray<string>,
@@ -295,10 +298,12 @@ export function useGlobalActiveTasks(
     queryKey: taskKeys.global(false, propertyIds, withoutProperty),
     queryFn: async () =>
       mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(false, propertyIds, withoutProperty))),
+    placeholderData: keepPreviousData,
   });
 }
 
-/** Журнал глобальной ленты — сворачиваемая секция «Выполненные N». */
+/** Журнал глобальной ленты — сворачиваемая секция «Выполненные N».
+ * keepPreviousData — как у активного бакета: смена фильтра без мигания. */
 export function useGlobalCompletedTasks(
   propertyIds: ReadonlyArray<string>,
   withoutProperty = false,
@@ -307,6 +312,7 @@ export function useGlobalCompletedTasks(
     queryKey: taskKeys.global(true, propertyIds, withoutProperty),
     queryFn: async () =>
       mapTasksPage(await apiClient<TasksPageDto>(globalTasksPath(true, propertyIds, withoutProperty))),
+    placeholderData: keepPreviousData,
   });
 }
 

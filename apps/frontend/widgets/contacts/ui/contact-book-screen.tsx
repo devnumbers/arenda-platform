@@ -186,7 +186,8 @@ export function ContactBookScreen({
  * открывает поисковую страницу, «+» справа — создание контакта (кнопка
  * внутри строки-кнопки — паттерн useKeyboardActivation, DESIGN.md §6).
  */
-function BookSearchPill({
+/** Пилюля поиска книги — экспорт для route-loading (#609). */
+export function BookSearchPill({
   onOpenSearch,
   onCreate,
 }: {
@@ -221,7 +222,8 @@ function BookSearchPill({
  * SortingSmallBig 418:4608, убывание — SortingBigSmall 418:4607), хвостовая
  * стрелка всегда вниз (671:7320). Прокидывает все пропсы кнопки: триггер
  * PickerMenu через asChild передаёт ему свои обработчики и aria. */
-function BookSortChip({
+/** Чип сортировки книги — экспорт для route-loading (#609). */
+export function BookSortChip({
   field,
   order,
   ...props

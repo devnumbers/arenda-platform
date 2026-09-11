@@ -9,3 +9,14 @@ export { ProfileOverview } from './ui/ProfileOverview';
 export { TariffChangeForm } from './ui/TariffChangeForm';
 export { TariffChangeSuccess } from './ui/TariffChangeSuccess';
 export { TariffOverview } from './ui/TariffOverview';
+/* Скелетоны route-loading (#609). */
+export { AccountOverviewSkeleton } from './ui/AccountOverview';
+export { NotificationSettingsSkeleton } from './ui/NotificationSettings';
+export { PaymentDetailSkeleton } from './ui/PaymentDetail';
+export { PaymentListSkeleton } from './ui/PaymentList';
+export { PaymentMethodListSkeleton } from './ui/PaymentMethodList';
+export { PersonalDataSkeleton } from './ui/PersonalDataForm';
+export { PhoneChangeSkeleton } from './ui/PhoneChangeForm';
+export { ProfileOverviewSkeleton } from './ui/ProfileOverview';
+export { TariffChangeSkeleton } from './ui/TariffChangeForm';
+export { TariffOverviewSkeleton } from './ui/TariffOverview';

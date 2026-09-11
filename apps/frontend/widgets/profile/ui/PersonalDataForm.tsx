@@ -196,25 +196,31 @@ export function PersonalDataForm(): JSX.Element {
           </Button>
         </div>
       )}
-      {!isError && isPending && (
-        <form className={styles.form}>
-          <div className={styles.fields}>
-            <TextField label="Фамилия" placeholder=" " value="" disabled fullWidth />
-            <TextField label="Имя" placeholder=" " value="" disabled fullWidth />
-            <TextField label="Отчество" placeholder=" " value="" disabled fullWidth />
-            <TextField label="Email" placeholder="email@example.com" value="" disabled fullWidth />
-            <TextField label="Часовой пояс" placeholder=" " value="" disabled fullWidth />
-          </div>
-          <div className={styles.actions}>
-            <Button type="submit" variant="primary" size="large" fullWidth disabled>
-              Сохранить
-            </Button>
-          </div>
-        </form>
-      )}
+      {!isError && isPending && <PersonalDataSkeleton />}
       {!isError && !isPending && (
         <PersonalDataFormView key={me.id} me={me} />
       )}
     </>
+  );
+}
+
+/** Скелетон формы «Мои данные» — выключенные поля реальной формы; экспорт
+ * для route-loading (#609), контент встаёт на место без сдвига (§7). */
+export function PersonalDataSkeleton(): JSX.Element {
+  return (
+    <form className={styles.form}>
+      <div className={styles.fields}>
+        <TextField label="Фамилия" placeholder=" " value="" disabled fullWidth />
+        <TextField label="Имя" placeholder=" " value="" disabled fullWidth />
+        <TextField label="Отчество" placeholder=" " value="" disabled fullWidth />
+        <TextField label="Email" placeholder="email@example.com" value="" disabled fullWidth />
+        <TextField label="Часовой пояс" placeholder=" " value="" disabled fullWidth />
+      </div>
+      <div className={styles.actions}>
+        <Button type="submit" variant="primary" size="large" fullWidth disabled>
+          Сохранить
+        </Button>
+      </div>
+    </form>
   );
 }

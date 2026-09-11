@@ -91,7 +91,8 @@ function PeriodSelector({
   );
 }
 
-function TariffChangeSkeleton(): JSX.Element {
+/** Скелетон формы смены тарифа — экспорт для route-loading (#609). */
+export function TariffChangeSkeleton(): JSX.Element {
   return (
     <div className={styles.list}>
       {[1, 2, 3].map((key) => (

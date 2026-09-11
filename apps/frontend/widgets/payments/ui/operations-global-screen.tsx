@@ -314,7 +314,8 @@ export function OperationsGlobalScreen(): JSX.Element {
  * лупа и подпись «Найти операцию»; тап открывает страницу поиска #543.
  * Кнопка «+» рядом с пилюлей переехала в шапку страницы (решение
  * владельца 2026-09-08 #571 — отмена решения #539). */
-function OperationsSearchPill({
+/** Пилюля поиска операций (#543) — экспорт для route-loading (#609). */
+export function OperationsSearchPill({
   onOpenSearch,
 }: {
   readonly onOpenSearch: () => void;

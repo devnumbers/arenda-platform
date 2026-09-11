@@ -240,17 +240,23 @@ export function NotificationSettings(): JSX.Element {
           </Button>
         </div>
       )}
-      {!isError && isPending && (
-        <div className={styles.container}>
-          <p className={styles.notificationsHint}>
-            Письма об оплате подписки приходят на вашу почту.
-          </p>
-          <GraceEmailRow isSelected={false} isDisabled />
-        </div>
-      )}
+      {!isError && isPending && <NotificationSettingsSkeleton />}
       {!isError && !isPending && (
         <NotificationSettingsView preferences={data} />
       )}
     </>
+  );
+}
+
+/** Скелетон настроек уведомлений (подсказка + выключенная строка e-mail
+ * грейса) — экспорт для route-loading (#609). */
+export function NotificationSettingsSkeleton(): JSX.Element {
+  return (
+    <div className={styles.container}>
+      <p className={styles.notificationsHint}>
+        Письма об оплате подписки приходят на вашу почту.
+      </p>
+      <GraceEmailRow isSelected={false} isDisabled />
+    </div>
   );
 }

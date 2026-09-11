@@ -221,7 +221,8 @@ export function PaymentsGlobalScreen(): JSX.Element {
 /** Пилюля поиска (879:9683): серый rounded-pill, лупа и подпись «Найти
  * платёж»; тап открывает страницу поиска (#581). Слайдеры справа — декор
  * макета: не кнопка, кликается вся пилюля целиком. */
-function PaymentsSearchPill({
+/** Пилюля поиска платежей — экспорт для route-loading (#609). */
+export function PaymentsSearchPill({
   onOpenSearch,
 }: {
   readonly onOpenSearch: () => void;
@@ -515,7 +516,9 @@ function PaymentsGlobalEmpty({
 
 /** Скелетон секции на время загрузки: строка заголовка и пара плиток
  * карточек. */
-function PaymentsGlobalSectionSkeleton(): JSX.Element {
+/** Секция-заглушка хаба «Платежи» (#605): каркас PaymentsGlobalSection —
+ * заголовок и лента плиток-карточек. Экспорт для route-loading (#609). */
+export function PaymentsGlobalSectionSkeleton(): JSX.Element {
   return (
     <section className="flex flex-col gap-4" aria-hidden>
       <Skeleton className="h-6 w-40" />

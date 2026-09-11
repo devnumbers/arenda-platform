@@ -73,7 +73,8 @@ function DeletePaymentMethodModal({
   );
 }
 
-function PaymentMethodListSkeleton(): JSX.Element {
+/** Скелетон способов оплаты — экспорт для route-loading (#609). */
+export function PaymentMethodListSkeleton(): JSX.Element {
   return (
     <div className={styles.list}>
       {[1, 2].map((key) => (

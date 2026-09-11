@@ -11,7 +11,8 @@ import {useMe} from '@/features/auth';
 import {ROUTES} from '@/shared/config/routes';
 import styles from './AccountOverview.module.css';
 
-function AccountOverviewSkeleton(): JSX.Element {
+/** Скелетон обзора аккаунта — экспорт для route-loading (#609). */
+export function AccountOverviewSkeleton(): JSX.Element {
     return <Skeleton className="h-22 rounded-card"/>;
 }
 

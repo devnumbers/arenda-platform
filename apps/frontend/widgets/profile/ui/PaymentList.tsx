@@ -42,7 +42,8 @@ function toViewModel(payment: SubscriptionPayment): PaymentListItem {
   };
 }
 
-function PaymentListSkeleton(): JSX.Element {
+/** Скелетон истории платежей — экспорт для route-loading (#609). */
+export function PaymentListSkeleton(): JSX.Element {
   return (
     <div className={styles.list}>
       {[1, 2].map((key) => (

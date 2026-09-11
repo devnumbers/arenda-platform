@@ -221,26 +221,32 @@ export function PhoneChangeForm(): JSX.Element {
           </Button>
         </div>
       )}
-      {!isMeError && isMeLoading && (
-        <form className={styles.form}>
-          <div className={styles.fields}>
-            <TextField
-              label="Новый номер телефона"
-              type="tel"
-              placeholder="+7 (999) 000-00-00"
-              value=""
-              disabled
-              fullWidth
-            />
-          </div>
-          <div className={styles.actions}>
-            <Button type="submit" variant="primary" size="large" fullWidth disabled>
-              Получить код
-            </Button>
-          </div>
-        </form>
-      )}
+      {!isMeError && isMeLoading && <PhoneChangeSkeleton />}
       {!isMeError && !isMeLoading && <PhoneChangeFormView currentPhone={me.phone} />}
     </>
+  );
+}
+
+/** Скелетон формы смены телефона — выключенное поле реальной формы;
+ * экспорт для route-loading (#609). */
+export function PhoneChangeSkeleton(): JSX.Element {
+  return (
+    <form className={styles.form}>
+      <div className={styles.fields}>
+        <TextField
+          label="Новый номер телефона"
+          type="tel"
+          placeholder="+7 (999) 000-00-00"
+          value=""
+          disabled
+          fullWidth
+        />
+      </div>
+      <div className={styles.actions}>
+        <Button type="submit" variant="primary" size="large" fullWidth disabled>
+          Получить код
+        </Button>
+      </div>
+    </form>
   );
 }

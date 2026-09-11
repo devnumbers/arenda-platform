@@ -19,7 +19,8 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
 import { formatDate } from '@/shared/lib/format-date';
 import styles from './PaymentDetail.module.css';
 
-function PaymentDetailSkeleton(): JSX.Element {
+/** Скелетон карточки платежа — экспорт для route-loading (#609). */
+export function PaymentDetailSkeleton(): JSX.Element {
   return (
     <Card className={styles.card}>
       <Skeleton className="h-[18px] w-full rounded-md" />

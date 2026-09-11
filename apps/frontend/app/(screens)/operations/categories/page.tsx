@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { OperationsGlobalCategoriesScreen } from '@/widgets/payments';
+import { OperationsGlobalCategoriesScreen, OperationsCategoriesLoading } from '@/widgets/payments';
 
 /**
  * Страница «Выбрать категорию» (#544): список категорий с суммами периода
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function OperationsCategoriesRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<OperationsCategoriesLoading />}>
       <OperationsGlobalCategoriesScreen />
     </Suspense>
   );
