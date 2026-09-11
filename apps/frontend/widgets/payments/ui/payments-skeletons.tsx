@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from 'react';
 import {
   Skeleton,
+  SkeletonFormField,
   SkeletonListRow,
   SkeletonRoundAction,
   skeletonBlockClass,
@@ -186,5 +187,74 @@ export function PaymentGroupedListSkeleton({
         </section>
       ))}
     </>
+  );
+}
+
+/**
+ * Скелетоны визардов и формы правки (#607, паритет — §7 DESIGN.md):
+ * композиции примитивов под первый шаг каждого мастера и под форму правки
+ * платежа. Хром шага (TopNav с кнопками и чипом, заголовок шага) рендерится
+ * вне фазы загрузки — скелетон закрывает только зависящий от данных
+ * контент.
+ */
+
+/** Скелетон шага «Категория платежа» (#607): каркас списка CategoryStep —
+ * строки ListRow (иконка 44, название, кружок выбора) с вставкой строк
+ * py-1.5 и зазором 4. Число строк — типовой экран Cold entry (8). */
+export function CategoryRowsSkeleton({ rows = 8 }: { readonly rows?: number }): JSX.Element {
+  const widths = skeletonRowWidths(rows);
+  return (
+    <div aria-hidden className="flex flex-col pt-6">
+      {widths.map((rowWidths, index) => (
+        <SkeletonListRow
+          key={index}
+          subtitle={false}
+          trailing
+          widths={rowWidths}
+          className="gap-4 py-1.5"
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Скелетон формы правки платежа (#607, паритет — §7 DESIGN.md): каркас
+ * PaymentEditForm — «Сумма», «Название платежа» (с нижней строкой
+ * счётчика 13/15, как у TextField с maxLength), пять полей-кнопок
+ * (категория, тип, способ, регулярность, окончание) и danger-кнопка
+ * удаления (только владельцу — как в реальной форме). Sticky-панель
+ * «Сохранить» и хедер вне потока — не зеркалятся.
+ */
+export function PaymentEditFormSkeleton({ canDelete = true }: { readonly canDelete?: boolean }): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-8 px-6">
+      <SkeletonFormField labelWidth="w-16" />
+      <span className="flex flex-col gap-2">
+        <SkeletonFormField labelWidth="w-36" />
+        <Skeleton className="h-[15px] w-12" />
+      </span>
+      <SkeletonFormField labelWidth="w-24" />
+      <SkeletonFormField labelWidth="w-32" />
+      <SkeletonFormField labelWidth="w-28" />
+      <SkeletonFormField labelWidth="w-44" />
+      <SkeletonFormField labelWidth="w-36" />
+      {canDelete && <Skeleton className="h-14 w-full rounded-button" />}
+    </div>
+  );
+}
+
+/**
+ * Скелетон шага «Добавить операцию» (#607): каркас OperationAmountStep —
+ * крупная сумма 44/48 по центру и сегмент «Расход/Доход» (232px), те же
+ * вставки шага (pt-16 pb-16, зазор 8). Нижняя панель «Продолжить» —
+ * постоянная часть шага, её приносит экран реальной кнопкой.
+ */
+export function OperationAmountStepSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col items-center gap-8 px-6 pt-16 pb-16">
+      <Skeleton className="h-12 w-40" />
+      <Skeleton className="h-10 w-[232px] rounded-2xl" />
+    </div>
   );
 }

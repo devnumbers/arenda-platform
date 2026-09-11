@@ -65,9 +65,9 @@ import {
 } from '@/shared/ui/design';
 import {
   PaymentsEmptyCard,
-  PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
+import { PaymentEditFormSkeleton } from './payments-skeletons';
 import { CategoryStep } from './payment-create-wizard/category-step';
 import {
   BRANCH_PERIOD_LABELS,
@@ -134,7 +134,9 @@ export function PaymentEditScreen({
 
   return (
     <>
-      {!canEdit && (
+      {/* У смотрящего и архива — шапка только с «Отменой» (вне потока
+       * контента, как до загрузки). */}
+      {!loading && !canEdit && (
         <TopNav
           leading={
             <IconButton
@@ -147,11 +149,18 @@ export function PaymentEditScreen({
       )}
 
       <PageContent>
+        {/* Хедер правки стабилен во всех фазах (#607): и в загрузке, и в
+         * форме EditingHeader стоит первым ребёнком контейнера — шапка не
+         * меняет позицию, когда данные пришли. */}
         <div className="flex flex-col gap-8">
           {loading && (
             <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
+              <EditingHeader
+                checkDisabled
+                onCancel={() => goBack(router, ROUTES.propertyPayment(propertyId, paymentId))}
+                onSave={() => {}}
+              />
+              <PaymentEditFormSkeleton canDelete={canDelete} />
             </>
           )}
 
@@ -197,7 +206,48 @@ export function PaymentEditScreen({
           )}
         </div>
       </PageContent>
+
+      {/* Sticky-панель — постоянная часть экрана: в загрузке та же кнопка
+       * в покое (#607), форма подменяет её без сдвига. */}
+      {loading && (
+        <StickyBottomBar>
+          <Button className="w-full" disabled>
+            Сохранить изменения
+          </Button>
+        </StickyBottomBar>
+      )}
     </>
+  );
+}
+
+/** Шапка экрана правки (Figma 705:10034): Отмена | «Редактирование» |
+ * Check — быстрая клавиша сохранения наравне со sticky-кнопкой. Общая
+ * форме и фазе загрузки — хедер не меняется, когда данные пришли. */
+function EditingHeader({
+  checkDisabled,
+  onCancel,
+  onSave,
+}: {
+  readonly checkDisabled: boolean;
+  readonly onCancel: () => void;
+  readonly onSave: () => void;
+}): JSX.Element {
+  return (
+    <TopNav
+      leading={
+        <IconButton icon={<Cancel />} label="Отменить правку" onClick={onCancel} />
+      }
+      trailing={
+        <IconButton
+          icon={<Check />}
+          label="Сохранить"
+          disabled={checkDisabled}
+          onClick={onSave}
+        />
+      }
+    >
+      <TopNavTitle title="Редактирование" />
+    </TopNav>
   );
 }
 
@@ -479,27 +529,13 @@ function PaymentEditForm({
 
   return (
     <>
-      {/* Шапка экрана правки (Figma 705:10034): Отмена | «Редактирование»
-       * | Check — быстрая клавиша сохранения наравне со sticky-кнопкой. */}
-      <TopNav
-        leading={
-          <IconButton
-            icon={<Cancel />}
-            label="Отменить правку"
-            onClick={() => goBack(router, ROUTES.propertyPayment(propertyId, payment.id))}
-          />
-        }
-        trailing={
-          <IconButton
-            icon={<Check />}
-            label="Сохранить"
-            disabled={!canSave || updatePayment.isPending}
-            onClick={() => void save()}
-          />
-        }
-      >
-        <TopNavTitle title="Редактирование" />
-      </TopNav>
+      {/* Шапка EditingHeader (Figma 705:10034): Отмена | «Редактирование»
+       * | Check — та же, что в фазе загрузки. */}
+      <EditingHeader
+        checkDisabled={!canSave || updatePayment.isPending}
+        onCancel={() => goBack(router, ROUTES.propertyPayment(propertyId, payment.id))}
+        onSave={() => void save()}
+      />
       {/* Горизонтальный отступ макета (705:10034, 24px) контент приносит сам —
        * PageContent его не вкладывает, как и на экране карточки платежа. */}
       <div className="flex flex-col gap-8 px-6">

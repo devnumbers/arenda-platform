@@ -1,6 +1,11 @@
 import type { JSX } from 'react';
-import { cn } from '@/shared/lib/cn';
-import { Skeleton, skeletonBlockClass, skeletonRowWidths, type SkeletonRowWidths } from '@/shared/ui/design';
+import {
+  Skeleton,
+  SkeletonFormField,
+  skeletonBlockClass,
+  skeletonRowWidths,
+  type SkeletonRowWidths,
+} from '@/shared/ui/design';
 
 /**
  * Скелетоны-архетипы ленты задач (#605, паритет — §7 DESIGN.md):
@@ -80,21 +85,6 @@ export function TasksFeedSkeleton(): JSX.Element {
   );
 }
 
-/** Поле формы-заглушка: каркас TextField/TaskFieldButton — метка 16/18 и
- * серый бокс h-14 rounded-button с зазором 8; тон базовый — бокс сам серый. */
-function SkeletonFormField({
-  labelWidth = 'w-24',
-}: {
-  readonly labelWidth?: string;
-}): JSX.Element {
-  return (
-    <span className="flex flex-col gap-2">
-      <Skeleton className={cn('h-[18px]', labelWidth)} />
-      <Skeleton className="h-14 w-full rounded-button" />
-    </span>
-  );
-}
-
 /**
  * Скелетон формы правки задачи (#606, паритет — §7 DESIGN.md): каркас
  * TaskEditForm (анатомия шага 2 создания) — «Задача», «Комментарий»
@@ -105,6 +95,55 @@ export function TaskEditFormSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-8 px-6">
       <SkeletonFormField labelWidth="w-20" />
+      <SkeletonFormField labelWidth="w-36" />
+      <span className="grid grid-cols-2 gap-2">
+        <SkeletonFormField labelWidth="w-16" />
+        <SkeletonFormField labelWidth="w-16" />
+      </span>
+      <span className="flex flex-col gap-3">
+        <Skeleton className="h-[18px] w-40" />
+        <span className="flex flex-wrap gap-1">
+          <Skeleton className="h-11 w-20 rounded-pill" />
+          <Skeleton className="h-11 w-24 rounded-pill" />
+          <Skeleton className="h-11 w-24 rounded-pill" />
+          <Skeleton className="h-11 w-20 rounded-pill" />
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Скелетон шага создания задачи (#607, паритет — §7 DESIGN.md): шаг 1 —
+ * «Задача» и, на глобальном входе, поле «Объект» с подписью; шаг 2 —
+ * «Комментарий», пара «Дата/Время», чипы повтора (анатомия шага 2 без
+ * поля «Задача»). Контейнеры повторяют шаги формы, чтобы контент занял
+ * место скелетона без сдвига.
+ */
+export function TaskCreateStepSkeleton({
+  step,
+  withObject = false,
+}: {
+  readonly step: 1 | 2;
+  /** Поле «Объект» — только глобальный вход (#525). */
+  readonly withObject?: boolean;
+}): JSX.Element {
+  if (step === 1) {
+    return (
+      <div aria-hidden className={withObject ? 'flex flex-col gap-8 px-6' : 'px-6'}>
+        <SkeletonFormField labelWidth="w-20" />
+        {withObject && (
+          <span className="flex flex-col gap-2">
+            <Skeleton className="h-[18px] w-16" />
+            <Skeleton className="h-14 w-full rounded-button" />
+            <Skeleton className="h-[15px] w-24" />
+          </span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div aria-hidden className="flex flex-col gap-8 px-6">
       <SkeletonFormField labelWidth="w-36" />
       <span className="grid grid-cols-2 gap-2">
         <SkeletonFormField labelWidth="w-16" />

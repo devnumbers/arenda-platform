@@ -31,6 +31,7 @@ import {
 } from '@/shared/ui/design';
 import { TaskTimePicker } from './task-time-picker';
 import { TaskPropertySelectPage } from './task-property-select';
+import { TaskCreateStepSkeleton } from './tasks-skeletons';
 
 /** Лимиты контракта POST /tasks/rules (#498): название 1..255, комментарий
  * до 1000. Ввод обрезается молча — счётчиков на макете нет (макет прячет
@@ -131,6 +132,15 @@ export function TaskCreateScreen({
   // владельца 2026-09-07); с объекта задача всегда на этом объекте.
   const objectSelectAvailable = initialPropertyId === null;
 
+  // Pending-гейт справочников (#607, «Naked data surface»): форма появляется
+  // после загрузки данных шага — имена объектов в поле «Объект», today
+  // пикеров. Срез свой у каждого входа: выключенные запросы (пустой id,
+  // чужой срез) не держат гейт — у них isPending не поднимается осмысленно.
+  const referencePending =
+    initialPropertyId !== null
+      ? propertyQuery.isPending || activeTasksQuery.isPending
+      : propertiesQuery.isPending || propertylessQuery.isPending;
+
   // Подпись поля «Объект»: имя из книги (источник страницы выбора); пока
   // книга не пришла — имя входного объекта из его листинга.
   const selectedProperty = propertiesQuery.data?.find(
@@ -163,7 +173,9 @@ export function TaskCreateScreen({
       </TopNav>
 
       <PageContent>
-        {step === 1 ? (
+        {referencePending ? (
+          <TaskCreateStepSkeleton step={step} withObject={objectSelectAvailable} />
+        ) : step === 1 ? (
           <div className={objectSelectAvailable ? 'flex flex-col gap-8 px-6' : 'px-6'}>
             <TextField
               title="Задача"

@@ -1,9 +1,11 @@
 import type { JSX } from 'react';
 import {
   Skeleton,
+  SkeletonFormField,
   SkeletonListRow,
   SkeletonRoundAction,
   skeletonBlockClass,
+  skeletonRowWidths,
 } from '@/shared/ui/design';
 
 /**
@@ -114,5 +116,59 @@ export function RentalDetailSkeleton(): JSX.Element {
         </section>
       </div>
     </div>
+  );
+}
+
+/**
+ * Скелетон шага 1 визарда создания аренды «Цена и число оплаты» (#607,
+ * паритет — §7 DESIGN.md): каркас AmountDayStep — MoneyField «Арендная
+ * плата» и PickerTriggerBox «День оплаты» (те же вставки шага: pt-6,
+ * зазор 8). Заголовок шага и хром (крестик, чип шага) рендерятся вне
+ * фазы загрузки; кнопка шага скрыта до готовности — в загрузке её нет.
+ */
+export function RentalAmountDayStepSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-8 px-6 pt-6">
+      <SkeletonFormField labelWidth="w-28" />
+      <SkeletonFormField labelWidth="w-24" />
+    </div>
+  );
+}
+
+/** Группа книги-заглушка: метка буквы (16/500, pl-2) и строки контактов
+ * без своей вставки — поля приносит карточка книги (pl-5 pr-4). */
+function SkeletonContactBookGroup({ rows }: { readonly rows: number }): JSX.Element {
+  const widths = skeletonRowWidths(rows);
+  return (
+    <div className="flex flex-col">
+      <div className="pl-2">
+        <Skeleton className={`h-6 w-16 ${MUTED}`} />
+      </div>
+      <div className="flex flex-col">
+        {widths.map((rowWidths, index) => (
+          <SkeletonListRow key={index} tone="muted" widths={rowWidths} className="px-0 py-2" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Скелетон книги контактов на шаге «Контакт арендатора» (#607, паритет —
+ * §7 DESIGN.md): каркас карточки книги канона «Контактов объекта» (#508,
+ * 1539:83613 — pl-5 pr-4 pt-6 pb-3, группы с зазором 16) со строками
+ * ContactRowButton. Свой скелетон зоны: книга шага рендерится внутри
+ * контейнера с собственной вставкой. Строка «Создать контакт» над книгой —
+ * статична, скелетоном не подменяется.
+ */
+export function RentalContactBookSkeleton(): JSX.Element {
+  return (
+    <section
+      aria-hidden
+      className="flex flex-col gap-4 rounded-card bg-surface-muted pb-3 pl-5 pr-4 pt-6"
+    >
+      <SkeletonContactBookGroup rows={2} />
+      <SkeletonContactBookGroup rows={3} />
+    </section>
   );
 }

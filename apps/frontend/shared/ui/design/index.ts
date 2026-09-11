@@ -93,6 +93,7 @@ export { SkeletonCard, type SkeletonCardProps } from './skeleton-card';
 export { SkeletonMedia, type SkeletonMediaProps } from './skeleton-media';
 export { SkeletonButton, type SkeletonButtonProps } from './skeleton-button';
 export { SkeletonRoundAction, type SkeletonRoundActionProps } from './skeleton-round-action';
+export { SkeletonFormField, type SkeletonFormFieldProps } from './skeleton-form-field';
 export {
   SKELETON_ROW_WIDTHS_DEFAULT,
   skeletonBlockClass,
