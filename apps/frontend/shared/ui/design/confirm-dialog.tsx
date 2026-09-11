@@ -20,6 +20,9 @@ export type ConfirmDialogProps = {
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;
   readonly description?: string;
+  /** Дополнение к классу описания: каноника — 14px, макетам с R/400 16
+   * (шит завершения аренды #627) даёт text-base — как в ModalContent. */
+  readonly descriptionClassName?: string;
   readonly confirmLabel: string;
   readonly cancelLabel?: string;
   readonly confirmVariant?: 'primary' | 'danger';
@@ -33,6 +36,7 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
+  descriptionClassName,
   confirmLabel,
   cancelLabel = 'Отмена',
   confirmVariant = 'primary',
@@ -48,7 +52,11 @@ export function ConfirmDialog({
         }
       }}
     >
-      <ModalContent title={title} description={description}>
+      <ModalContent
+        title={title}
+        description={description}
+        descriptionClassName={descriptionClassName}
+      >
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" disabled={pending} onClick={() => onOpenChange(false)}>
             {cancelLabel}

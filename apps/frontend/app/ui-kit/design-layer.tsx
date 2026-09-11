@@ -184,6 +184,7 @@ export function DesignLayerShowcase(): JSX.Element {
     const [pickerEmpty, setPickerEmpty] = useState<string | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [confirmLargeOpen, setConfirmLargeOpen] = useState(false);
     const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
     return (
@@ -1153,6 +1154,9 @@ export function DesignLayerShowcase(): JSX.Element {
                         <Button variant="danger" onClick={() => setDeleteOpen(true)}>
                             Удалить (danger)
                         </Button>
+                        <Button onClick={() => setConfirmLargeOpen(true)}>
+                            Подтвердить (описание 16)
+                        </Button>
                     </div>
                     <ConfirmDialog
                         open={confirmOpen}
@@ -1170,6 +1174,18 @@ export function DesignLayerShowcase(): JSX.Element {
                         confirmLabel="Удалить"
                         confirmVariant="danger"
                         onConfirm={() => setDeleteOpen(false)}
+                    />
+                    {/* #627: подпись макета R/400 16/18 — descriptionClassName
+                     * поверх каноничных 14px. */}
+                    <ConfirmDialog
+                        open={confirmLargeOpen}
+                        onOpenChange={setConfirmLargeOpen}
+                        title="Завершить аренду?"
+                        description="Объект станет свободным, арендный платеж завершится. Данные аренды сохранятся в разделе «Прошлые аренды»"
+                        descriptionClassName="text-base leading-[18px]"
+                        confirmLabel="Завершить"
+                        cancelLabel="Отменить"
+                        onConfirm={() => setConfirmLargeOpen(false)}
                     />
                 </div>
 

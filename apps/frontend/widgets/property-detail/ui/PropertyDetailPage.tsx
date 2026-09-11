@@ -18,7 +18,7 @@ import {
   useUpdateProperty,
   type DeletePropertyMode,
 } from '@/features/properties';
-import {useRentals, currentRentalOf} from '@/features/rentals';
+import {useRentals, currentRentalOf, useCompleteRental} from '@/features/rentals';
 import {
   defaultOperationsPeriod,
   usePayments,
@@ -106,6 +106,13 @@ function PropertySectionSkeleton(): JSX.Element {
  * «Изменить статус» — секция «Управление» дублирует те же действия.
  * Занятость (Начать ↔ Завершить аренду) приходит из аренд объекта.
  *
+ * Быстрое завершение аренды (#627; Figma 1583:56380): «Завершить аренду» —
+ * из шита статуса, «Управления» и кнопки блока «Аренда» — открывает
+ * канон-подтверждение «Завершить аренду?»; подтверждение завершает аренду
+ * сегодняшней датой без возврата залога, тост результата, деталь
+ * обновляется (секция «Аренда» — обычное пустое). Полный мастер с датой
+ * и залогом остаётся на детализации аренды (#534).
+ *
  * Наполнение секций живыми данными (#589; Figma 1185:40820 — активная
  * аренда, 1581:53905 — срок подошёл к концу, 1193:48779 — без аренды
  * с платежами, 1193:49273 — нули): «Аренда» — прогресс платежей и
@@ -161,6 +168,7 @@ export function PropertyDetailPage(): JSX.Element {
     const deleteProperty = useDeleteProperty();
 
     const [statusSheetOpen, setStatusSheetOpen] = React.useState(false);
+    const [completeSheetOpen, setCompleteSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
     const [sharingOpen, setSharingOpen] = React.useState(false);
@@ -171,6 +179,11 @@ export function PropertyDetailPage(): JSX.Element {
         ? currentRentalOf(rentalsQuery.data)
         : undefined;
     const hasRental = currentRental !== undefined;
+    // Один сентинел и для хука, и для гарда мутации (#627): id пуст до
+    // загрузки аренд — сам хук безобиден, вызов мутации гардится в
+    // handleCompleteRental.
+    const currentRentalId = currentRental?.id ?? null;
+    const completeRental = useCompleteRental(id, currentRentalId ?? '');
 
     const payments = paymentsQuery.data ?? [];
     // Платежи с накопленной просрочкой — красная точка на иконке
@@ -245,6 +258,26 @@ export function PropertyDetailPage(): JSX.Element {
         });
     }, [archiveProperty, id, setArchiveOpen]);
 
+    // Быстрое завершение (#627): сегодняшней датой, без записи о возврате
+    // залога (полный мастер с датой и залогом — на детализации аренды,
+    // #534). Повторное завершение — 409: тост ошибки, шит остаётся
+    // открытым (кнопка выходит из loading — можно повторить или отменить).
+    const handleCompleteRental = useCallback(() => {
+        if (currentRentalId === null) {
+            return;
+        }
+        completeRental.mutate(
+            {completedDate: clientTodayIso()},
+            {
+                onSuccess: () => {
+                    setCompleteSheetOpen(false);
+                    notify.scenarios.rentals.completed();
+                },
+                onError: (error) => notify.scenarios.rentals.completeError(error),
+            },
+        );
+    }, [completeRental, currentRentalId, setCompleteSheetOpen]);
+
     const handleAction = useCallback((key: PropertyDetailActionKey) => {
         switch (key) {
             case 'about':
@@ -267,7 +300,7 @@ export function PropertyDetailPage(): JSX.Element {
                 router.push(ROUTES.propertyRentalNew(id));
                 break;
             case 'complete-rental':
-                router.push(ROUTES.propertyRentalComplete(id));
+                setCompleteSheetOpen(true);
                 break;
             case 'start-maintenance':
                 updateProperty.mutate(
@@ -303,7 +336,7 @@ export function PropertyDetailPage(): JSX.Element {
                 setDeleteOpen(true);
                 break;
         }
-    }, [id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
+    }, [id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
 
     const handleDelete = useCallback((mode: DeletePropertyMode) => {
         deleteProperty.mutate(
@@ -414,7 +447,15 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertyRentalBlock
                                     rental={currentRental}
                                     onExtend={() => router.push(ROUTES.propertyRentalExtend(id))}
-                                    onComplete={() => router.push(ROUTES.propertyRentalComplete(id))}
+                                    // Смотрящему — старый путь в мастер с его
+                                    // честным отказом (writeGate ADR 0053 §3):
+                                    // шит с последующим 403 смотрителю не даёт
+                                    // ничего (решение ревью #627).
+                                    onComplete={
+                                        roleCanMutate
+                                            ? () => setCompleteSheetOpen(true)
+                                            : () => router.push(ROUTES.propertyRentalComplete(id))
+                                    }
                                 />
                             ) : (
                                 <PropertySectionEmpty
@@ -575,6 +616,21 @@ export function PropertyDetailPage(): JSX.Element {
                 confirmLabel="Архивировать"
                 pending={archiveProperty.isPending}
                 onConfirm={handleArchive}
+            />
+
+            {/* Шит «Завершить аренду?» (#627, Figma 1583:56380): канон
+             * ConfirmDialog — подпись макета R/400 16/18. Кнопка в loading
+             * на время мутации, закрытие глушится. */}
+            <ConfirmDialog
+                open={completeSheetOpen}
+                onOpenChange={setCompleteSheetOpen}
+                title="Завершить аренду?"
+                description="Объект станет свободным, арендный платеж завершится. Данные аренды сохранятся в разделе «Прошлые аренды»"
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel="Завершить"
+                cancelLabel="Отменить"
+                pending={completeRental.isPending}
+                onConfirm={handleCompleteRental}
             />
 
             <PropertyDeleteModal
