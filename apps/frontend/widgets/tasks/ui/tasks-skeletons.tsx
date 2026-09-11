@@ -85,16 +85,11 @@ export function TasksFeedSkeleton(): JSX.Element {
   );
 }
 
-/**
- * Скелетон формы правки задачи (#606, паритет — §7 DESIGN.md): каркас
- * TaskEditForm (анатомия шага 2 создания) — «Задача», «Комментарий»
- * (min-h-14 при пустом значении), пара полей «Дата/Время», чипы повтора.
- * Sticky-кнопка «Сохранить» вне потока — не зеркалится.
- */
-export function TaskEditFormSkeleton(): JSX.Element {
+/** Поля «Комментарий», «Дата/Время» и чипы повтора — общая часть форм
+ * правки и шага 2 создания (#607). */
+function SkeletonTaskDetailsFields(): JSX.Element {
   return (
-    <div aria-hidden className="flex flex-col gap-8 px-6">
-      <SkeletonFormField labelWidth="w-20" />
+    <>
       <SkeletonFormField labelWidth="w-36" />
       <span className="grid grid-cols-2 gap-2">
         <SkeletonFormField labelWidth="w-16" />
@@ -109,6 +104,21 @@ export function TaskEditFormSkeleton(): JSX.Element {
           <Skeleton className="h-11 w-20 rounded-pill" />
         </span>
       </span>
+    </>
+  );
+}
+
+/**
+ * Скелетон формы правки задачи (#606, паритет — §7 DESIGN.md): каркас
+ * TaskEditForm (анатомия шага 2 создания) — «Задача», «Комментарий»
+ * (min-h-14 при пустом значении), пара полей «Дата/Время», чипы повтора.
+ * Sticky-кнопка «Сохранить» вне потока — не зеркалится.
+ */
+export function TaskEditFormSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-8 px-6">
+      <SkeletonFormField labelWidth="w-20" />
+      <SkeletonTaskDetailsFields />
     </div>
   );
 }
@@ -144,20 +154,7 @@ export function TaskCreateStepSkeleton({
   }
   return (
     <div aria-hidden className="flex flex-col gap-8 px-6">
-      <SkeletonFormField labelWidth="w-36" />
-      <span className="grid grid-cols-2 gap-2">
-        <SkeletonFormField labelWidth="w-16" />
-        <SkeletonFormField labelWidth="w-16" />
-      </span>
-      <span className="flex flex-col gap-3">
-        <Skeleton className="h-[18px] w-40" />
-        <span className="flex flex-wrap gap-1">
-          <Skeleton className="h-11 w-20 rounded-pill" />
-          <Skeleton className="h-11 w-24 rounded-pill" />
-          <Skeleton className="h-11 w-24 rounded-pill" />
-          <Skeleton className="h-11 w-20 rounded-pill" />
-        </span>
-      </span>
+      <SkeletonTaskDetailsFields />
     </div>
   );
 }

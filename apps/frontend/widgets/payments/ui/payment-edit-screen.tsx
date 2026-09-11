@@ -134,8 +134,10 @@ export function PaymentEditScreen({
 
   return (
     <>
-      {/* У смотрящего и архива — шапка только с «Отменой» (вне потока
-       * контента, как до загрузки). */}
+      {/* В загрузке роль неизвестна — показываем хром правки (сценарий
+       * по умолчанию); у смотрящего и архива после загрузки хром
+       * деградирует к «Отмене», а контент — к карточке недоступности
+       * (редкий прямой путь, решение #607). */}
       {!loading && !canEdit && (
         <TopNav
           leading={
@@ -160,7 +162,7 @@ export function PaymentEditScreen({
                 onCancel={() => goBack(router, ROUTES.propertyPayment(propertyId, paymentId))}
                 onSave={() => {}}
               />
-              <PaymentEditFormSkeleton canDelete={canDelete} />
+              <PaymentEditFormSkeleton />
             </>
           )}
 

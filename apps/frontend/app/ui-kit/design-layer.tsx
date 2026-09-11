@@ -47,6 +47,7 @@ import {
     Skeleton,
     SkeletonButton,
     SkeletonCard,
+    SkeletonFormField,
     SkeletonListRow,
     SkeletonMedia,
     SkeletonSection,
@@ -1192,6 +1193,13 @@ export function DesignLayerShowcase(): JSX.Element {
                             <h4 className={styles.groupTitle}>SkeletonButton · CTA-кнопка</h4>
                             <SkeletonButton />
                             <SkeletonButton className="w-2/3" />
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>SkeletonFormField · поле формы</h4>
+                            <div className="flex flex-col gap-6 rounded-card border border-dashed border-content-tertiary p-6">
+                                <SkeletonFormField />
+                                <SkeletonFormField labelWidth="w-36" />
+                            </div>
                         </div>
                     </div>
                 </div>

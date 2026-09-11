@@ -223,10 +223,12 @@ export function CategoryRowsSkeleton({ rows = 8 }: { readonly rows?: number }): 
  * PaymentEditForm — «Сумма», «Название платежа» (с нижней строкой
  * счётчика 13/15, как у TextField с maxLength), пять полей-кнопок
  * (категория, тип, способ, регулярность, окончание) и danger-кнопка
- * удаления (только владельцу — как в реальной форме). Sticky-панель
- * «Сохранить» и хедер вне потока — не зеркалятся.
+ * удаления. Роль в загрузке неизвестна — строка удаления рисуется
+ * всегда: владелец (сценарий по умолчанию) получает точный паритет, а
+ * смотрящему форму всё равно замещает карточка «Правка недоступна».
+ * Sticky-панель «Сохранить» и хедер вне потока — не зеркалятся.
  */
-export function PaymentEditFormSkeleton({ canDelete = true }: { readonly canDelete?: boolean }): JSX.Element {
+export function PaymentEditFormSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-8 px-6">
       <SkeletonFormField labelWidth="w-16" />
@@ -239,7 +241,7 @@ export function PaymentEditFormSkeleton({ canDelete = true }: { readonly canDele
       <SkeletonFormField labelWidth="w-28" />
       <SkeletonFormField labelWidth="w-44" />
       <SkeletonFormField labelWidth="w-36" />
-      {canDelete && <Skeleton className="h-14 w-full rounded-button" />}
+      <Skeleton className="h-14 w-full rounded-button" />
     </div>
   );
 }
