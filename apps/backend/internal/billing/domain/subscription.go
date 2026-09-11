@@ -77,6 +77,13 @@ type Subscription struct {
 	// clears the field) and dropped when the subscription falls to basic or
 	// is overwritten by a service assignment.
 	GraceArchivedPropertyIDs []uuid.UUID
+	// KeepPropertyID is the property the owner chose to keep when cancelling
+	// (issue #617): when the cancelled subscription later expires and the
+	// worker applies the basic limit, this property survives and the excess
+	// ones are archived. Set by Cancel, consumed by the first lifecycle move
+	// that makes it moot (the fall to basic, a resume, a reactivation, a
+	// service overwrite).
+	KeepPropertyID *uuid.UUID
 }
 
 // SetGraceArchive records the ids the grace entry archived, replacing any
@@ -268,6 +275,7 @@ func (s *Subscription) ApplyTariffChange(
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+	s.KeepPropertyID = nil
 	s.Status = SubscriptionStatusActive
 	return nil
 }
@@ -305,6 +313,9 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+	// A reactivation payment (issue #429) supersedes the keep choice of the
+	// cancelled state it pulls the subscription out of (issue #617).
+	s.KeepPropertyID = nil
 	return nil
 }
 
@@ -391,14 +402,37 @@ func (s *Subscription) SetAutoRenew(enabled bool) error {
 // The validity date is retained so the worker can downgrade the subscription to
 // basic once the period expires. Auto-renew is disabled immediately and any
 // scheduled tariff change is dropped: a cancelled subscription no longer
-// switches tariffs, it runs out its paid period and falls to basic.
-func (s *Subscription) Cancel() error {
+// switches tariffs, it runs out its paid period and falls to basic. The
+// optional keepPropertyID (issue #617) records which property the owner wants
+// to survive that fall; the expiry worker honours it when applying the basic
+// limit.
+func (s *Subscription) Cancel(keepPropertyID *uuid.UUID) error {
 	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusGrace {
 		return ErrInvalidSubscriptionState
 	}
 	s.Status = SubscriptionStatusCancelled
 	s.AutoRenewEnabled = false
 	s.ClearPendingChange()
+	s.KeepPropertyID = keepPropertyID
+	return nil
+}
+
+// Resume undoes a cancellation without a charge (issue #617): a cancelled
+// subscription inside its already paid period returns to active with
+// auto-renew switched back on, and the paid remainder is kept as is. The free
+// resume is the counterpart of the paid reactivation (ADR 0008: restoration
+// goes through paying for a tariff) — that one stays for periods that have
+// already expired. The keep choice of the undone cancellation is dropped.
+func (s *Subscription) Resume(now time.Time) error {
+	if s.Status != SubscriptionStatusCancelled {
+		return ErrResumeNotAvailable
+	}
+	if s.ValidUntil == nil || now.After(*s.ValidUntil) {
+		return ErrResumeNotAvailable
+	}
+	s.Status = SubscriptionStatusActive
+	s.AutoRenewEnabled = true
+	s.KeepPropertyID = nil
 	return nil
 }
 
@@ -424,6 +458,7 @@ func (s *Subscription) AssignService(tariffID uuid.UUID, validUntil time.Time) {
 	// The overwrite discards the previous subscription's state, the grace
 	// restoration debt with it (issue #255).
 	s.ClearGraceArchive()
+	s.KeepPropertyID = nil
 }
 
 // ForceApplyTariffChange switches the subscription to the given tariff
@@ -451,6 +486,7 @@ func (s *Subscription) ForceApplyTariffChange(newTariffID uuid.UUID, period Subs
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+	s.KeepPropertyID = nil
 	s.GraceRemindedAt = nil
 	return nil
 }
@@ -493,6 +529,10 @@ func (s *Subscription) DowngradeToBasic(basicTariffID uuid.UUID) {
 	// restoration debt is dropped, the grace archive stays archived
 	// (grace v2, ADR 0055).
 	s.ClearGraceArchive()
+	// The fall to basic is where the cancel keep choice is consumed: the
+	// expiry enforcement that follows keeps this very property alive
+	// (issue #617).
+	s.KeepPropertyID = nil
 }
 
 // FailedRenewalIsCurrent reports whether a failed renewal charge with the

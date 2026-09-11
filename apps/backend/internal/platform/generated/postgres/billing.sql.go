@@ -229,7 +229,7 @@ INSERT INTO user_subscriptions (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (user_id) DO NOTHING
-RETURNING id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids
+RETURNING id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids, keep_property_id
 `
 
 type CreateSubscriptionParams struct {
@@ -285,6 +285,7 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		&i.UpdatedAt,
 		&i.GraceRemindedAt,
 		&i.GraceArchivedPropertyIds,
+		&i.KeepPropertyID,
 	)
 	return i, err
 }
@@ -553,7 +554,7 @@ func (q *Queries) GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.U
 }
 
 const getSubscriptionByID = `-- name: GetSubscriptionByID :one
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids FROM user_subscriptions WHERE id = $1
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids, keep_property_id FROM user_subscriptions WHERE id = $1
 `
 
 func (q *Queries) GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (UserSubscription, error) {
@@ -577,12 +578,13 @@ func (q *Queries) GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (User
 		&i.UpdatedAt,
 		&i.GraceRemindedAt,
 		&i.GraceArchivedPropertyIds,
+		&i.KeepPropertyID,
 	)
 	return i, err
 }
 
 const getSubscriptionByIDForUpdate = `-- name: GetSubscriptionByIDForUpdate :one
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids FROM user_subscriptions WHERE id = $1 FOR UPDATE
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids, keep_property_id FROM user_subscriptions WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error) {
@@ -606,12 +608,13 @@ func (q *Queries) GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UU
 		&i.UpdatedAt,
 		&i.GraceRemindedAt,
 		&i.GraceArchivedPropertyIds,
+		&i.KeepPropertyID,
 	)
 	return i, err
 }
 
 const getSubscriptionByUserID = `-- name: GetSubscriptionByUserID :one
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids FROM user_subscriptions WHERE user_id = $1
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids, keep_property_id FROM user_subscriptions WHERE user_id = $1
 `
 
 func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error) {
@@ -635,12 +638,13 @@ func (q *Queries) GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUI
 		&i.UpdatedAt,
 		&i.GraceRemindedAt,
 		&i.GraceArchivedPropertyIds,
+		&i.KeepPropertyID,
 	)
 	return i, err
 }
 
 const getSubscriptionByUserIDForUpdate = `-- name: GetSubscriptionByUserIDForUpdate :one
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids FROM user_subscriptions WHERE user_id = $1 FOR UPDATE
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids, keep_property_id FROM user_subscriptions WHERE user_id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSubscriptionByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (UserSubscription, error) {
@@ -664,6 +668,7 @@ func (q *Queries) GetSubscriptionByUserIDForUpdate(ctx context.Context, userID p
 		&i.UpdatedAt,
 		&i.GraceRemindedAt,
 		&i.GraceArchivedPropertyIds,
+		&i.KeepPropertyID,
 	)
 	return i, err
 }
@@ -1395,7 +1400,7 @@ func (q *Queries) ListSubscriptionTransitionsBySubscription(ctx context.Context,
 
 const listSubscriptionsBySelection = `-- name: ListSubscriptionsBySelection :many
 
-SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids FROM user_subscriptions
+SELECT id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids, keep_property_id FROM user_subscriptions
 WHERE ($1::uuid IS NULL OR user_id = $1)
   AND user_subscriptions.status = $2
   AND ($3::bool IS NULL OR auto_renew_enabled = $3)
@@ -1513,6 +1518,7 @@ func (q *Queries) ListSubscriptionsBySelection(ctx context.Context, arg ListSubs
 			&i.UpdatedAt,
 			&i.GraceRemindedAt,
 			&i.GraceArchivedPropertyIds,
+			&i.KeepPropertyID,
 		); err != nil {
 			return nil, err
 		}
@@ -1660,9 +1666,10 @@ SET
     last_applied_payment_id = $11,
     current_period = $12,
     grace_reminded_at = $13,
-    grace_archived_property_ids = $14
+    grace_archived_property_ids = $14,
+    keep_property_id = $15
 WHERE id = $1
-RETURNING id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids
+RETURNING id, user_id, tariff_id, source, status, valid_until, auto_renew_enabled, pending_tariff_id, pending_change_at, pending_period, active_payment_method_id, last_applied_payment_id, current_period, created_at, updated_at, grace_reminded_at, grace_archived_property_ids, keep_property_id
 `
 
 type UpdateSubscriptionParams struct {
@@ -1680,6 +1687,7 @@ type UpdateSubscriptionParams struct {
 	CurrentPeriod            pgtype.Text        `json:"current_period"`
 	GraceRemindedAt          pgtype.Timestamptz `json:"grace_reminded_at"`
 	GraceArchivedPropertyIds []pgtype.UUID      `json:"grace_archived_property_ids"`
+	KeepPropertyID           pgtype.UUID        `json:"keep_property_id"`
 }
 
 func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error) {
@@ -1698,6 +1706,7 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		arg.CurrentPeriod,
 		arg.GraceRemindedAt,
 		arg.GraceArchivedPropertyIds,
+		arg.KeepPropertyID,
 	)
 	var i UserSubscription
 	err := row.Scan(
@@ -1718,6 +1727,7 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.UpdatedAt,
 		&i.GraceRemindedAt,
 		&i.GraceArchivedPropertyIds,
+		&i.KeepPropertyID,
 	)
 	return i, err
 }

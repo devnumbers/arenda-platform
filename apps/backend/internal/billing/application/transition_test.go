@@ -188,7 +188,7 @@ func TestApplyTransition_StatusChange(t *testing.T) {
 	userID := sub.UserID
 
 	applied, err := h.apply(t, &sub,
-		func(s *domain.Subscription) error { return s.Cancel() },
+		func(s *domain.Subscription) error { return s.Cancel(nil) },
 		transitionSpec{
 			reason:      domain.TransitionReasonCancelled,
 			initiator:   domain.InitiatorUser,
@@ -349,7 +349,7 @@ func TestApplyTransition_Initiators(t *testing.T) {
 				initiatorID = new(sub.UserID)
 			}
 			applied, err := h.apply(t, &sub,
-				func(s *domain.Subscription) error { return s.Cancel() },
+				func(s *domain.Subscription) error { return s.Cancel(nil) },
 				transitionSpec{
 					reason:      domain.TransitionReasonCancelled,
 					initiator:   tc.initiator,
@@ -594,7 +594,7 @@ func TestApplyTransition_RejectsMisusedPaymentSpec(t *testing.T) {
 			sub := h.seedSubscription(t, domain.TariffPro, nil)
 
 			_, err := h.apply(t, &sub,
-				func(s *domain.Subscription) error { return s.Cancel() },
+				func(s *domain.Subscription) error { return s.Cancel(nil) },
 				tc.spec,
 			)
 			if err == nil {
@@ -678,7 +678,7 @@ func TestApplyTransition_UpdateFailureSkipsTransitionAndAudit(t *testing.T) {
 	delete(h.stores.subscriptions.subs, sub.UserID)
 
 	_, err := h.apply(t, &sub,
-		func(s *domain.Subscription) error { return s.Cancel() },
+		func(s *domain.Subscription) error { return s.Cancel(nil) },
 		transitionSpec{
 			reason:      domain.TransitionReasonCancelled,
 			initiator:   domain.InitiatorUser,
@@ -713,7 +713,7 @@ func TestApplyTransition_AppendFailureFailsTheChange(t *testing.T) {
 
 	err := factory.runInTx(t.Context(), func(stores *txStores) error {
 		_, err := stores.applyTransition(t.Context(), &sub,
-			func(s *domain.Subscription) error { return s.Cancel() },
+			func(s *domain.Subscription) error { return s.Cancel(nil) },
 			transitionSpec{reason: domain.TransitionReasonCancelled, initiator: domain.InitiatorUser},
 		)
 		return err
@@ -742,7 +742,7 @@ func TestApplyTransition_AuditFailureFailsTheChange(t *testing.T) {
 
 	err := factory.runInTx(t.Context(), func(stores *txStores) error {
 		_, err := stores.applyTransition(t.Context(), &sub,
-			func(s *domain.Subscription) error { return s.Cancel() },
+			func(s *domain.Subscription) error { return s.Cancel(nil) },
 			transitionSpec{
 				reason:      domain.TransitionReasonCancelled,
 				initiator:   domain.InitiatorUser,

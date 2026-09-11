@@ -41,6 +41,11 @@ const (
 	// TransitionReasonCancelled marks a user-initiated cancellation (issue
 	// #249): the tariff keeps working until the paid period ends.
 	TransitionReasonCancelled TransitionReason = "cancelled"
+	// TransitionReasonResumed marks the free undo of a cancellation (issue
+	// #617): a cancelled subscription inside its already paid period returns
+	// to active with auto-renew on, no payment involved. The initiator is the
+	// user.
+	TransitionReasonResumed TransitionReason = "resumed"
 	// TransitionReasonDowngradeScheduled marks a user-initiated downgrade
 	// scheduled for the end of the paid period (issue #249); the tariff
 	// transition itself lands when the worker applies the change (#252).

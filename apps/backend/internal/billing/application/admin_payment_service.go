@@ -312,7 +312,7 @@ func (s *PaymentService) applyRefundedPayment(
 		return err
 	}
 
-	if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, triggerRefund); err != nil {
+	if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, triggerRefund, nil); err != nil {
 		return fmt.Errorf("enforce tariff limit after refund: %w", err)
 	}
 

@@ -32,11 +32,15 @@ type capturingArchiver struct {
 	err         error
 	archiveIDs  []uuid.UUID
 	remainingAs []uuid.UUID
+	// The ActivePropertyExists answers — the keep-choice validation of the
+	// cancel flow (issue #617); ids absent from the map do not exist.
+	activeExists map[uuid.UUID]bool
 }
 
 type capturedArchive struct {
 	ownerID uuid.UUID
 	limit   int
+	keep    *uuid.UUID
 }
 
 type capturedRestore struct {
@@ -51,11 +55,17 @@ func (s *capturingArchiver) WithTx(transaction.Tx) (billingapp.ExcessPropertyArc
 
 type boundArchiver struct{ src *capturingArchiver }
 
-func (a boundArchiver) ArchiveExcess(_ context.Context, ownerID uuid.UUID, limit int) ([]uuid.UUID, error) {
+func (a boundArchiver) ArchiveExcess(_ context.Context, ownerID uuid.UUID, limit int, keepPropertyID *uuid.UUID) ([]uuid.UUID, error) {
 	a.src.mu.Lock()
 	defer a.src.mu.Unlock()
-	a.src.calls = append(a.src.calls, capturedArchive{ownerID: ownerID, limit: limit})
+	a.src.calls = append(a.src.calls, capturedArchive{ownerID: ownerID, limit: limit, keep: keepPropertyID})
 	return a.src.archiveIDs, a.src.err
+}
+
+func (a boundArchiver) ActivePropertyExists(_ context.Context, _, propertyID uuid.UUID) (bool, error) {
+	a.src.mu.Lock()
+	defer a.src.mu.Unlock()
+	return a.src.activeExists[propertyID], a.src.err
 }
 
 func (a boundArchiver) RestoreGraceArchive(_ context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error) {
@@ -485,7 +495,7 @@ func TestWorkers_Integration_NonRenewingAndCancelledExpireToBasic(t *testing.T) 
 	if err := h.subscriptions.Update(h.ctx(), cancelledSub); err != nil {
 		t.Fatalf("expire cancelled: %v", err)
 	}
-	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), cancelledUser); err != nil {
+	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), cancelledUser, nil); err != nil {
 		t.Fatalf("CancelSubscription() error = %v", err)
 	}
 
@@ -993,5 +1003,58 @@ func requireDunningEpisodePayments(t *testing.T, h *integrationHarness, userID u
 	}
 	if succeeded != 1 || len(payments) != 3 {
 		t.Fatalf("payments = %d (%d succeeded), want 3 (1 succeeded)", len(payments), succeeded)
+	}
+}
+
+// TestWorkers_Integration_CancelledExpiryCarriesKeepChoice proves the cancel
+// keep-choice hand-off end to end (issue #617): the choice survives on the
+// subscription row, rides into the basic-limit enforcement at expiry, and is
+// consumed by the fall to basic.
+func TestWorkers_Integration_CancelledExpiryCarriesKeepChoice(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	archiver, _ := wireBridges(h)
+	basic, err := h.tariffs.GetByName(h.ctx(), domain.TariffBasic)
+	if err != nil {
+		t.Fatalf("GetByName(basic) error = %v", err)
+	}
+	expired := h.clock.Now().Add(-time.Hour)
+	keepID := uuid.Must(uuid.NewV7())
+	archiver.activeExists = map[uuid.UUID]bool{keepID: true}
+	// The cancel use case validates the keep choice through the same
+	// properties bridge the composition root wires onto both services.
+	h.services.Subscriptions.SetLifecycleBridges(archiver, nil)
+
+	userID, sub := seedPaidProSubscription(t, h)
+	sub.ValidUntil = &expired
+	if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
+		t.Fatalf("expire cancelled: %v", err)
+	}
+	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), userID, &keepID); err != nil {
+		t.Fatalf("CancelSubscription(keep) error = %v", err)
+	}
+	if stored, err := h.subscriptions.GetByUserID(h.ctx(), userID); err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	} else if stored.KeepPropertyID == nil || *stored.KeepPropertyID != keepID {
+		t.Fatalf("stored KeepPropertyID = %v, want %v (the column did not round-trip)", stored.KeepPropertyID, keepID)
+	}
+
+	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+
+	calls := archiver.recorded()
+	if len(calls) != 1 {
+		t.Fatalf("archive calls = %d, want 1", len(calls))
+	}
+	if calls[0].keep == nil || *calls[0].keep != keepID {
+		t.Errorf("archive keep = %v, want %v", calls[0].keep, keepID)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.TariffID != basic.ID || stored.KeepPropertyID != nil {
+		t.Errorf("subscription = %+v, want basic with the keep choice consumed", stored)
 	}
 }

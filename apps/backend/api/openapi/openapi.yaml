@@ -2448,9 +2448,35 @@ paths:
       operationId: cancelSubscription
       security:
         - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelSubscriptionRequest'
       responses:
         '204':
           description: Subscription cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/SubscriptionConflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/resume:
+    post:
+      operationId: resumeSubscription
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: >-
+            Cancellation undone without a charge: the subscription is active
+            again inside its already paid period, auto-renew is enabled and
+            the paid remainder is kept
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -4312,6 +4338,21 @@ components:
         enabled:
           type: boolean
 
+    CancelSubscriptionRequest:
+      type: object
+      properties:
+        keepPropertyId:
+          type: string
+          format: uuid
+          description: |
+            The property the owner chooses to keep when the cancelled
+            subscription later expires and the basic tariff's property limit
+            is applied: the chosen property survives, the excess ones are
+            archived. Must be one of the owner's active properties, otherwise
+            the cancellation answers 409 `invalid_keep_property`. Omitted
+            when there is no choice to make (0 or 1 active properties) — the
+            most recently updated property survives.
+
     AddPaymentMethodRequest:
       type: object
       properties:
@@ -4557,7 +4598,7 @@ components:
         reason:
           type: string
           description: |
-            Why the transition happened: registered, cancelled,
+            Why the transition happened: registered, cancelled, resumed,
             downgrade_scheduled, payment_applied, grace_entered,
             grace_extended, scheduled_change_applied, expired, refunded,
             service_assigned, forced_change.
@@ -6629,8 +6670,14 @@ components:
     SubscriptionConflict:
       description: >-
         Conflict. `pending_payment_exists` — a live pending payment holds the
-        user's tariff decision (issue #616): the tariff change and the
-        cancellation stay locked until the payment resolves or expires
+        user's tariff decision (issue #616): the tariff change, the
+        cancellation and the resume stay locked until the payment resolves or
+        expires. `invalid_keep_property` — the cancellation's keepPropertyId
+        is not one of the owner's active properties (issue #617).
+        `resume_not_available` — the resume endpoint was called on a
+        subscription that is not cancelled or whose paid period has already
+        expired: restoration of an expired period goes through paying for a
+        tariff (issue #617).
       content:
         application/json:
           schema:

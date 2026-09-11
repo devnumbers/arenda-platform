@@ -71,16 +71,24 @@ func (f *fakeSubscriptionViewer) GetSubscription(ctx context.Context, userID uui
 // fakeSubscriptionManager is a func-backed SubscriptionManager (the
 // consumer-side port of these handlers, ADR 0035).
 type fakeSubscriptionManager struct {
-	cancel       func(ctx context.Context, userID uuid.UUID) error
+	cancel       func(ctx context.Context, userID uuid.UUID, keepPropertyID *uuid.UUID) error
+	resume       func(ctx context.Context, userID uuid.UUID) error
 	toggleRenew  func(ctx context.Context, userID uuid.UUID, enabled bool) error
 	changeTariff func(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error)
 }
 
-func (f *fakeSubscriptionManager) CancelSubscription(ctx context.Context, userID uuid.UUID) error {
+func (f *fakeSubscriptionManager) CancelSubscription(ctx context.Context, userID uuid.UUID, keepPropertyID *uuid.UUID) error {
 	if f.cancel != nil {
-		return f.cancel(ctx, userID)
+		return f.cancel(ctx, userID, keepPropertyID)
 	}
 	return errors.New("unexpected CancelSubscription call")
+}
+
+func (f *fakeSubscriptionManager) ResumeSubscription(ctx context.Context, userID uuid.UUID) error {
+	if f.resume != nil {
+		return f.resume(ctx, userID)
+	}
+	return errors.New("unexpected ResumeSubscription call")
 }
 
 func (f *fakeSubscriptionManager) ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error {
@@ -819,7 +827,7 @@ func writePendingConflict(t *testing.T, target string, err error) *httptest.Resp
 	t.Helper()
 	ownerID := uuid.Must(uuid.NewV7())
 	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{
-		cancel: func(context.Context, uuid.UUID) error { return err },
+		cancel: func(context.Context, uuid.UUID, *uuid.UUID) error { return err },
 		changeTariff: func(context.Context, uuid.UUID, billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error) {
 			return billingapp.ChangeTariffResult{}, err
 		},
@@ -1198,7 +1206,7 @@ func TestCancelSubscription_Returns204(t *testing.T) {
 	t.Parallel()
 	ownerID := uuid.Must(uuid.NewV7())
 	called := false
-	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(_ context.Context, got uuid.UUID) error {
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(_ context.Context, got uuid.UUID, _ *uuid.UUID) error {
 		called = true
 		if got != ownerID {
 			t.Errorf("CancelSubscription called with %v, want %v", got, ownerID)
@@ -1214,6 +1222,137 @@ func TestCancelSubscription_Returns204(t *testing.T) {
 	}
 	if !called {
 		t.Error("service was not called")
+	}
+}
+
+// TestCancelSubscription_KeepPropertyForwardsBody proves the optional body
+// (issue #617): a JSON body forwards its keepPropertyId, and a request with
+// no body forwards nil — the default survivor rule.
+func TestCancelSubscription_KeepPropertyForwardsBody(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.Must(uuid.NewV7())
+	keepID := uuid.Must(uuid.NewV7())
+
+	t.Run("with keepPropertyId", func(t *testing.T) {
+		t.Parallel()
+		var got *uuid.UUID
+		h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(_ context.Context, _ uuid.UUID, keep *uuid.UUID) error {
+			got = keep
+			return nil
+		}})
+
+		w := httptest.NewRecorder()
+		h.CancelSubscription(w, ownerJSONRequest(t, http.MethodPost, "/subscription/cancel", ownerID,
+			`{"keepPropertyId": "`+keepID.String()+`"}`))
+
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+		}
+		if got == nil || *got != keepID {
+			t.Errorf("CancelSubscription keepPropertyId = %v, want %v", got, keepID)
+		}
+	})
+
+	t.Run("without a body", func(t *testing.T) {
+		t.Parallel()
+		var got *uuid.UUID
+		h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(_ context.Context, _ uuid.UUID, keep *uuid.UUID) error {
+			got = keep
+			return nil
+		}})
+
+		w := httptest.NewRecorder()
+		h.CancelSubscription(w, ownerRequest(t, http.MethodPost, "/subscription/cancel", ownerID))
+
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+		}
+		if got != nil {
+			t.Errorf("CancelSubscription keepPropertyId = %v, want nil", *got)
+		}
+	})
+
+	t.Run("with a malformed body", func(t *testing.T) {
+		t.Parallel()
+		h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(context.Context, uuid.UUID, *uuid.UUID) error {
+			t.Error("service must not be called on a malformed body")
+			return nil
+		}})
+
+		w := httptest.NewRecorder()
+		h.CancelSubscription(w, ownerJSONRequest(t, http.MethodPost, "/subscription/cancel", ownerID, `{"keep`))
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", w.Code)
+		}
+	})
+}
+
+// TestResumeSubscription_Returns204 proves POST /subscription/resume answers
+// 204 and forwards the owner id to the service (issue #617).
+func TestResumeSubscription_Returns204(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.Must(uuid.NewV7())
+	called := false
+	h := newTestHandlers(nil, nil, &fakeSubscriptionManager{resume: func(_ context.Context, got uuid.UUID) error {
+		called = true
+		if got != ownerID {
+			t.Errorf("ResumeSubscription called with %v, want %v", got, ownerID)
+		}
+		return nil
+	}})
+
+	w := httptest.NewRecorder()
+	h.ResumeSubscription(w, ownerRequest(t, http.MethodPost, "/subscription/resume", ownerID))
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+	if !called {
+		t.Error("service was not called")
+	}
+}
+
+// TestResumeSubscription_ErrorMapping proves the resume conflicts map to 409
+// with the contract codes (issue #617).
+func TestResumeSubscription_ErrorMapping(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  error
+		want int
+		code string
+	}{
+		{name: "not resumable", err: domain.ErrResumeNotAvailable, want: http.StatusConflict, code: "resume_not_available"},
+		{name: "pending payment", err: billingapp.ErrPendingPaymentExists, want: http.StatusConflict, code: "pending_payment_exists"},
+		{name: "no subscription", err: billingapp.ErrSubscriptionNotFound, want: http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{resume: func(context.Context, uuid.UUID) error {
+				return tc.err
+			}})
+
+			w := httptest.NewRecorder()
+			h.ResumeSubscription(w, ownerRequest(t, http.MethodPost, "/subscription/resume", uuid.Must(uuid.NewV7())))
+
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+			if tc.code == "" {
+				return
+			}
+			var problem struct {
+				Code string `json:"code"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+				t.Fatalf("decode problem: %v", err)
+			}
+			if problem.Code != tc.code {
+				t.Errorf("problem code = %q, want %q", problem.Code, tc.code)
+			}
+		})
 	}
 }
 
@@ -1243,12 +1382,13 @@ func TestCancelSubscription_ErrorMapping(t *testing.T) {
 	}{
 		{name: "no subscription", err: billingapp.ErrSubscriptionNotFound, want: http.StatusNotFound},
 		{name: "already cancelled", err: domain.ErrInvalidSubscriptionState, want: http.StatusConflict},
+		{name: "invalid keep property", err: billingapp.ErrInvalidKeepProperty, want: http.StatusConflict},
 		{name: "infrastructure", err: errors.New("connection reset"), want: http.StatusInternalServerError},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(context.Context, uuid.UUID) error {
+			h := newTestHandlers(nil, nil, &fakeSubscriptionManager{cancel: func(context.Context, uuid.UUID, *uuid.UUID) error {
 				return tc.err
 			}})
 

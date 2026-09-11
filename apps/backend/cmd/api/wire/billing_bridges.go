@@ -46,8 +46,8 @@ type propertyArchiver struct {
 
 // ArchiveExcess archives the owner's active properties beyond the limit and
 // returns their ids, newest first.
-func (a propertyArchiver) ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int) ([]uuid.UUID, error) {
-	return a.svc.ArchiveExcessProperties(ctx, a.tx, ownerID, limit)
+func (a propertyArchiver) ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int, keepPropertyID *uuid.UUID) ([]uuid.UUID, error) {
+	return a.svc.ArchiveExcessProperties(ctx, a.tx, ownerID, limit, keepPropertyID)
 }
 
 // RestoreGraceArchive unarchives the grace snapshot ids while the owner's
@@ -83,4 +83,11 @@ type recipientSlotEnforcer struct {
 // Enforce suspends the recipient's excess shared memberships.
 func (e recipientSlotEnforcer) Enforce(ctx context.Context, userID uuid.UUID, trigger string) error {
 	return e.coordinator.EnforceRecipientLimit(ctx, e.tx, userID, trigger)
+}
+
+// ActivePropertyExists reports whether the property belongs to the owner and
+// still occupies a tariff slot — the keep-choice validation read of the
+// cancel flow (issue #617).
+func (a propertyArchiver) ActivePropertyExists(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error) {
+	return a.svc.ActivePropertyExists(ctx, a.tx, ownerID, propertyID)
 }

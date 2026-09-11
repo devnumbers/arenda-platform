@@ -590,7 +590,7 @@ func TestSubscription_CancelInGraceKeepsSnapshot(t *testing.T) {
 	snapshot := archiveIDsOf(2)
 	sub := h.seedGraceSnapshot(t, snapshot)
 
-	if err := h.subs.CancelSubscription(t.Context(), sub.UserID); err != nil {
+	if err := h.subs.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
 		t.Fatalf("CancelSubscription() error = %v", err)
 	}
 

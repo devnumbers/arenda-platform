@@ -167,8 +167,13 @@ func (s *SubscriptionService) livePendingPayment(ctx context.Context, userID uui
 // for the rest of the period. The state change, its transition-log entry and
 // the audit record land in one transaction. A live pending payment blocks the
 // cancellation (issue #616): the tariff decision is still being paid for.
-func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uuid.UUID) error {
-	return s.runInTx(ctx, func(stores *txStores) error {
+// The optional keepPropertyID (issue #617) records the property the owner
+// wants to survive the fall to basic when the cancelled period expires: it
+// must be one of the owner's active properties, and the validation — like the
+// change itself — runs inside the lifecycle transaction over the
+// properties-context bridge.
+func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uuid.UUID, keepPropertyID *uuid.UUID) error {
+	return s.runLifecycleTx(ctx, func(stores *txStores) error {
 		sub, err := stores.subscriptionForUpdate(ctx, userID)
 		if err != nil {
 			return err
@@ -181,14 +186,67 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 		if err := rejectLivePendingPayment(ctx, stores, userID, s.clock.Now().UTC()); err != nil {
 			return err
 		}
+		if keepPropertyID != nil {
+			if stores.archiver == nil {
+				// The bridge is wired in every composition root; refusing
+				// loudly beats storing an unvalidated id (issue #617).
+				return errors.New("cancel keep property: properties bridge is not wired")
+			}
+			exists, err := stores.archiver.ActivePropertyExists(ctx, userID, *keepPropertyID)
+			if err != nil {
+				return fmt.Errorf("validate keep property: %w", err)
+			}
+			if !exists {
+				return ErrInvalidKeepProperty
+			}
+		}
 
 		if _, err := stores.applyTransition(ctx, &sub,
-			func(s *domain.Subscription) error { return s.Cancel() },
+			func(s *domain.Subscription) error { return s.Cancel(keepPropertyID) },
 			transitionSpec{
 				reason:      domain.TransitionReasonCancelled,
 				initiator:   domain.InitiatorUser,
 				initiatorID: &userID,
 				auditAction: auditdomain.ActionSubscriptionCancelled,
+				auditContext: func(_ domain.Subscription, _ domain.Transition) map[string]any {
+					if keepPropertyID == nil {
+						return nil
+					}
+					return map[string]any{auditKeyKeepPropertyID: *keepPropertyID}
+				},
+			},
+		); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+// ResumeSubscription undoes a cancellation without a charge (issue #617): a
+// cancelled subscription inside its already paid period returns to active
+// with auto-renew on and the paid remainder kept. The state change, its
+// transition-log entry (reason "resumed") and the audit record land in one
+// transaction. A live pending payment blocks the resume like every other
+// tariff decision (issue #616): the reactivation payment the user already
+// holds the form for would supersede it. Restoration of an expired period
+// stays on the paid path (issue #429).
+func (s *SubscriptionService) ResumeSubscription(ctx context.Context, userID uuid.UUID) error {
+	return s.runInTx(ctx, func(stores *txStores) error {
+		sub, err := stores.subscriptionForUpdate(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if err := rejectLivePendingPayment(ctx, stores, userID, s.clock.Now().UTC()); err != nil {
+			return err
+		}
+		now := s.clock.Now().UTC()
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { return s.Resume(now) },
+			transitionSpec{
+				reason:      domain.TransitionReasonResumed,
+				initiator:   domain.InitiatorUser,
+				initiatorID: &userID,
+				auditAction: auditdomain.ActionSubscriptionResumed,
 			},
 		); err != nil {
 			return err

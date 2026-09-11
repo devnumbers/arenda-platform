@@ -186,7 +186,7 @@ func TestPaymentFlow_CancelledSameTariffReactivationEndToEnd(t *testing.T) {
 	t.Parallel()
 	h := newPaymentIntegrationHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
-	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), sub.UserID); err != nil {
+	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), sub.UserID, nil); err != nil {
 		t.Fatalf("CancelSubscription(): %v", err)
 	}
 

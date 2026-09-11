@@ -1082,6 +1082,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/subscription/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/subscription/change": {
         parameters: {
             query?: never;
@@ -1780,6 +1796,19 @@ export interface components {
         AutoRenewRequest: {
             enabled: boolean;
         };
+        CancelSubscriptionRequest: {
+            /**
+             * Format: uuid
+             * @description The property the owner chooses to keep when the cancelled
+             *     subscription later expires and the basic tariff's property limit
+             *     is applied: the chosen property survives, the excess ones are
+             *     archived. Must be one of the owner's active properties, otherwise
+             *     the cancellation answers 409 `invalid_keep_property`. Omitted
+             *     when there is no choice to make (0 or 1 active properties) — the
+             *     most recently updated property survives.
+             */
+            keepPropertyId?: string;
+        };
         AddPaymentMethodRequest: {
             /**
              * @description Raw provider token for synchronous providers (e.g. fake).
@@ -1913,7 +1942,7 @@ export interface components {
             fromTariffName?: string | null;
             toTariffName: string;
             /**
-             * @description Why the transition happened: registered, cancelled,
+             * @description Why the transition happened: registered, cancelled, resumed,
              *     downgrade_scheduled, payment_applied, grace_entered,
              *     grace_extended, scheduled_change_applied, expired, refunded,
              *     service_assigned, forced_change.
@@ -2965,7 +2994,7 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
-        /** @description Conflict. `pending_payment_exists` — a live pending payment holds the user's tariff decision (issue #616): the tariff change and the cancellation stay locked until the payment resolves or expires */
+        /** @description Conflict. `pending_payment_exists` — a live pending payment holds the user's tariff decision (issue #616): the tariff change, the cancellation and the resume stay locked until the payment resolves or expires. `invalid_keep_property` — the cancellation's keepPropertyId is not one of the owner's active properties (issue #617). `resume_not_available` — the resume endpoint was called on a subscription that is not cancelled or whose paid period has already expired: restoration of an expired period goes through paying for a tariff (issue #617). */
         SubscriptionConflict: {
             headers: {
                 [name: string]: unknown;
@@ -5249,9 +5278,35 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CancelSubscriptionRequest"];
+            };
+        };
         responses: {
             /** @description Subscription cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SubscriptionConflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    resumeSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancellation undone without a charge: the subscription is active again inside its already paid period, auto-renew is enabled and the paid remainder is kept */
             204: {
                 headers: {
                     [name: string]: unknown;

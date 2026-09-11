@@ -32,6 +32,10 @@ var (
 	// tariff decision is rejected while the previous payment form is unpaid,
 	// and the subscription cannot be cancelled while it holds.
 	ErrPendingPaymentExists = errors.New("pending payment exists")
+	// ErrInvalidKeepProperty is returned when a cancellation carries a
+	// keepPropertyId (issue #617) that is not one of the user's active
+	// properties — a foreign id, an archived or a missing one.
+	ErrInvalidKeepProperty = errors.New("invalid keep property")
 	// ErrAlreadyExists is returned when the pending-payments unique index
 	// rejects a duplicate initiation; the caller resolves it to the existing
 	// pending payment instead of failing.

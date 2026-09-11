@@ -187,6 +187,7 @@ func mapUpdateSubscriptionParams(sub domain.Subscription) postgres.UpdateSubscri
 		CurrentPeriod:            periodTextPtr(sub.CurrentPeriod),
 		GraceRemindedAt:          pgconv.TimePtrToPgtype(sub.GraceRemindedAt),
 		GraceArchivedPropertyIds: pgconv.UUIDSliceToPgtype(sub.GraceArchivedPropertyIDs),
+		KeepPropertyID:           pgconv.UUIDToPgtypePtr(sub.KeepPropertyID),
 	}
 }
 
@@ -217,5 +218,6 @@ func mapSubscription(row postgres.UserSubscription) (domain.Subscription, error)
 		CurrentPeriod:            currentPeriod,
 		GraceRemindedAt:          pgconv.TimestamptzToPtrTime(row.GraceRemindedAt),
 		GraceArchivedPropertyIDs: pgconv.UUIDSliceFromPgtype(row.GraceArchivedPropertyIds),
+		KeepPropertyID:           pgconv.UUIDFromPgtypePtr(row.KeepPropertyID),
 	})
 }

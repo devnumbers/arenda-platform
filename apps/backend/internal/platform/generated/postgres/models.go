@@ -528,4 +528,5 @@ type UserSubscription struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 	GraceRemindedAt          pgtype.Timestamptz `json:"grace_reminded_at"`
 	GraceArchivedPropertyIds []pgtype.UUID      `json:"grace_archived_property_ids"`
+	KeepPropertyID           pgtype.UUID        `json:"keep_property_id"`
 }

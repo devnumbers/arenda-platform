@@ -45,9 +45,11 @@ type SubscriptionViewer interface {
 }
 
 // SubscriptionManager serves the user's own subscription lifecycle mutations
-// (issue #249): cancellation, auto-renew toggling and tariff change.
+// (issue #249): cancellation with the keep choice, resume, auto-renew
+// toggling and tariff change.
 type SubscriptionManager interface {
-	CancelSubscription(ctx context.Context, userID uuid.UUID) error
+	CancelSubscription(ctx context.Context, userID uuid.UUID, keepPropertyID *uuid.UUID) error
+	ResumeSubscription(ctx context.Context, userID uuid.UUID) error
 	ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error
 	ChangeTariff(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error)
 }
@@ -314,7 +316,11 @@ func (h *BillingHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// CancelSubscription implements POST /subscription/cancel (issue #249).
+// CancelSubscription implements POST /subscription/cancel (issues #249,
+// #617). The body is optional: it names the property the owner wants to
+// survive the fall to basic, and is omitted when there is no choice to make
+// (0 or 1 active properties) — the default most-recently-updated survivor
+// rule applies.
 func (h *BillingHandlers) CancelSubscription(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
@@ -323,7 +329,34 @@ func (h *BillingHandlers) CancelSubscription(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := h.managers.CancelSubscription(r.Context(), ownerID); err != nil {
+	var body openapi.CancelSubscriptionRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil && !errors.Is(err, io.EOF) {
+		h.logger.ErrorContext(r.Context(), "failed to decode cancel subscription request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	if err := h.managers.CancelSubscription(r.Context(), ownerID, body.KeepPropertyId); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ResumeSubscription implements POST /subscription/resume (issue #617): the
+// free undo of a cancellation — a cancelled subscription inside its already
+// paid period returns to active with auto-renew on, no charge.
+func (h *BillingHandlers) ResumeSubscription(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.managers.ResumeSubscription(r.Context(), ownerID); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -931,6 +964,21 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
 				"Есть неоплаченный платёж: дождитесь его завершения или повторите попытку позже",
 				"pending_payment_exists"))
+	case errors.Is(err, billingapp.ErrInvalidKeepProperty):
+		// The cancel keep choice (issue #617): the named property is not one
+		// of the owner's active properties.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Выбранный объект недоступен: выберите активный объект",
+				"invalid_keep_property"))
+	case errors.Is(err, domain.ErrResumeNotAvailable):
+		// The free resume (issue #617): the subscription is not cancelled or
+		// its paid period has expired — restoration goes through paying for a
+		// tariff (issue #429).
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Возобновление недоступно: оплаченный период истёк, оплатите тариф",
+				"resume_not_available"))
 	case errors.Is(err, billingapp.ErrBindingSessionLimitExceeded):
 		// The per-user binding-session limit (ticket #427): the sliding
 		// window releases the oldest sessions over time, so the standard

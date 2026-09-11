@@ -170,6 +170,7 @@ const (
 
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
+	ActionSubscriptionResumed          Action = "subscription.resumed"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
 	// ActionSubscriptionServiceAssigned and its neighbours below are the
 	// admin subscription operations of issue #255: service assignment, force

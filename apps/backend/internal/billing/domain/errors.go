@@ -22,6 +22,11 @@ var (
 	// subscription without a validity period (the basic tariff never expires,
 	// so there is nothing to renew).
 	ErrCannotEnableAutoRenew = errors.New("cannot enable auto renew without a validity period")
+	// ErrResumeNotAvailable is returned when the free resume of a cancelled
+	// subscription is impossible (issue #617): the subscription is not in the
+	// cancelled state, or its paid period has already expired — restoration
+	// of an expired period goes through paying for a tariff (ADR 0008).
+	ErrResumeNotAvailable = errors.New("resume not available")
 	// ErrInvalidTransition is returned when a subscription transition record is
 	// built from an incomplete or inconsistent subscription state.
 	ErrInvalidTransition = errors.New("invalid subscription transition")

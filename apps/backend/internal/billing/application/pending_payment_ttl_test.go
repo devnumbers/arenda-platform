@@ -76,7 +76,7 @@ func TestCancelSubscription_LivePendingBlocked(t *testing.T) {
 	sub := h.seedSubscription(t, nil)
 	h.initiateUpgrade(t, sub)
 
-	if err := h.subs.CancelSubscription(t.Context(), sub.UserID); !errors.Is(err, ErrPendingPaymentExists) {
+	if err := h.subs.CancelSubscription(t.Context(), sub.UserID, nil); !errors.Is(err, ErrPendingPaymentExists) {
 		t.Fatalf("err = %v, want ErrPendingPaymentExists", err)
 	}
 
@@ -89,7 +89,7 @@ func TestCancelSubscription_LivePendingBlocked(t *testing.T) {
 	if err := h.stores.payments.Update(t.Context(), payment); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
-	if err := h.subs.CancelSubscription(t.Context(), sub.UserID); err != nil {
+	if err := h.subs.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
 		t.Fatalf("CancelSubscription() after expiry error = %v", err)
 	}
 }
@@ -382,5 +382,38 @@ func TestWebhook_SuccessAfterTTLExpiry_NoPersistedReference_Applies(t *testing.T
 	}
 	if stored.TariffID != h.tariffID(t, domain.TariffBusiness) {
 		t.Errorf("subscription tariff = %v, want the late payment applied", stored.TariffID)
+	}
+}
+
+func TestResumeSubscription_LivePendingBlocked(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, nil)
+	if err := h.subs.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
+		t.Fatalf("seed CancelSubscription() error = %v", err)
+	}
+	// The reactivation payment (issue #429) is a same-tariff request on the
+	// cancelled subscription: the user already holds the form for it, so the
+	// free resume would supersede the decision being paid for.
+	if _, err := h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	}); err != nil {
+		t.Fatalf("seed reactivation payment error = %v", err)
+	}
+	if err := h.subs.ResumeSubscription(t.Context(), sub.UserID); !errors.Is(err, ErrPendingPaymentExists) {
+		t.Fatalf("err = %v, want ErrPendingPaymentExists", err)
+	}
+
+	// Once the form deadline has run out, the resume unlocks.
+	payment := h.singlePending(t, sub.UserID)
+	if err := payment.MarkExpired(h.now.Add(16 * time.Minute)); err != nil {
+		t.Fatalf("MarkExpired() error = %v", err)
+	}
+	if err := h.stores.payments.Update(t.Context(), payment); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if err := h.subs.ResumeSubscription(t.Context(), sub.UserID); err != nil {
+		t.Fatalf("ResumeSubscription() after expiry error = %v", err)
 	}
 }

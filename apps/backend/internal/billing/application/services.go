@@ -9,14 +9,15 @@ import (
 // Audit and log context keys shared by the billing use cases: the same keys
 // appear in audit Entry.Context maps and in slog attribute lists.
 const (
-	auditKeyPaymentID     = "payment_id"
-	auditKeyAmountKopecks = "amount_kopecks"
-	auditKeyProvider      = "provider"
-	auditKeyReason        = "reason"
-	auditKeyTariffName    = "tariff_name"
-	auditKeyFromTariffID  = "from_tariff_id"
-	auditKeyToTariffID    = "to_tariff_id"
-	auditKeyValidUntil    = "valid_until"
+	auditKeyPaymentID      = "payment_id"
+	auditKeyAmountKopecks  = "amount_kopecks"
+	auditKeyProvider       = "provider"
+	auditKeyReason         = "reason"
+	auditKeyTariffName     = "tariff_name"
+	auditKeyFromTariffID   = "from_tariff_id"
+	auditKeyToTariffID     = "to_tariff_id"
+	auditKeyValidUntil     = "valid_until"
+	auditKeyKeepPropertyID = "keep_property_id"
 )
 
 // Services is the billing module's public composition surface: the services

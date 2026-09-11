@@ -30,6 +30,7 @@ export const transitionInitiatorChoices: Choice[] = [
 const transitionReasonNames: Record<string, string> = {
   registered: 'Регистрация',
   cancelled: 'Отмена',
+  resumed: 'Возобновление',
   downgrade_scheduled: 'Запланирован даунгрейд',
   payment_applied: 'Оплата применена',
   grace_entered: 'Вход в грейс',

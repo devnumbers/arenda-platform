@@ -92,7 +92,8 @@ SET
     last_applied_payment_id = $11,
     current_period = $12,
     grace_reminded_at = $13,
-    grace_archived_property_ids = $14
+    grace_archived_property_ids = $14,
+    keep_property_id = $15
 WHERE id = $1
 RETURNING *;
 

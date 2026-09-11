@@ -632,7 +632,7 @@ func applySucceededPayment(
 	if transitionChangedTariff(applied, payment.TariffID) {
 		// The applied payment switched the tariff: the new plan's limit takes
 		// effect with the same commit.
-		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, triggerRenewalDowngrade); err != nil {
+		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, triggerRenewalDowngrade, nil); err != nil {
 			return domain.Transition{}, fmt.Errorf("enforce tariff limit after payment downgrade: %w", err)
 		}
 	}

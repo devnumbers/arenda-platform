@@ -102,7 +102,7 @@ func TestPendingPaymentTTL_Blocks_Integration(t *testing.T) {
 	if !errors.Is(err, billingapp.ErrPendingPaymentExists) {
 		t.Fatalf("ChangeTariff(other) err = %v, want ErrPendingPaymentExists", err)
 	}
-	cancelErr := h.subscriptionsSvc.CancelSubscription(h.ctx(), sub.UserID)
+	cancelErr := h.subscriptionsSvc.CancelSubscription(h.ctx(), sub.UserID, nil)
 	if !errors.Is(cancelErr, billingapp.ErrPendingPaymentExists) {
 		t.Fatalf("CancelSubscription err = %v, want ErrPendingPaymentExists", cancelErr)
 	}

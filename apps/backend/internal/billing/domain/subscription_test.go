@@ -487,7 +487,7 @@ func TestSubscriptionCancel(t *testing.T) {
 		PendingPeriod:    &period,
 	}
 
-	if err := sub.Cancel(); err != nil {
+	if err := sub.Cancel(nil); err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
 	if sub.Status != SubscriptionStatusCancelled {
@@ -506,7 +506,7 @@ func TestSubscriptionCancel(t *testing.T) {
 	}
 
 	cancelled := Subscription{Status: SubscriptionStatusCancelled}
-	if err := cancelled.Cancel(); !errors.Is(err, ErrInvalidSubscriptionState) {
+	if err := cancelled.Cancel(nil); !errors.Is(err, ErrInvalidSubscriptionState) {
 		t.Errorf("second Cancel() error = %v, want ErrInvalidSubscriptionState", err)
 	}
 }
@@ -561,6 +561,138 @@ func TestSubscriptionDowngradeToBasic(t *testing.T) {
 	// debt is dropped (ADR 0055).
 	if sub.GraceArchivedPropertyIDs != nil {
 		t.Errorf("GraceArchivedPropertyIDs = %v, want nil", sub.GraceArchivedPropertyIDs)
+	}
+}
+
+func TestSubscriptionCancelKeepProperty(t *testing.T) {
+	t.Parallel()
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	keepID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17")
+
+	// The keep choice (issue #617) rides on the cancellation: the expiry
+	// worker honours it when the subscription falls to basic.
+	sub := Subscription{Status: SubscriptionStatusActive, ValidUntil: &validUntil, AutoRenewEnabled: true}
+	if err := sub.Cancel(&keepID); err != nil {
+		t.Fatalf("Cancel(keep) error = %v", err)
+	}
+	if sub.KeepPropertyID == nil || *sub.KeepPropertyID != keepID {
+		t.Errorf("KeepPropertyID = %v, want %v", sub.KeepPropertyID, keepID)
+	}
+
+	noKeep := Subscription{Status: SubscriptionStatusActive, ValidUntil: &validUntil}
+	if err := noKeep.Cancel(nil); err != nil {
+		t.Fatalf("Cancel(nil) error = %v", err)
+	}
+	if noKeep.KeepPropertyID != nil {
+		t.Errorf("KeepPropertyID = %v, want nil", noKeep.KeepPropertyID)
+	}
+}
+
+func TestSubscriptionResume(t *testing.T) {
+	t.Parallel()
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+	keepID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17")
+
+	t.Run("resumes a cancelled subscription inside its paid period", func(t *testing.T) {
+		t.Parallel()
+		sub := Subscription{
+			Status:           SubscriptionStatusCancelled,
+			ValidUntil:       &validUntil,
+			AutoRenewEnabled: false,
+			KeepPropertyID:   &keepID,
+		}
+
+		if err := sub.Resume(now); err != nil {
+			t.Fatalf("Resume(now) error = %v", err)
+		}
+		if sub.Status != SubscriptionStatusActive {
+			t.Errorf("Status = %v, want %v", sub.Status, SubscriptionStatusActive)
+		}
+		if !sub.AutoRenewEnabled {
+			t.Error("expected auto-renew enabled after resume")
+		}
+		if sub.ValidUntil == nil || !sub.ValidUntil.Equal(validUntil) {
+			t.Errorf("ValidUntil = %v, want retained %v", sub.ValidUntil, validUntil)
+		}
+		// The keep choice belonged to the cancellation the resume undoes.
+		if sub.KeepPropertyID != nil {
+			t.Errorf("KeepPropertyID = %v, want nil", sub.KeepPropertyID)
+		}
+	})
+
+	t.Run("rejects a subscription that is not cancelled", func(t *testing.T) {
+		t.Parallel()
+		for _, status := range []SubscriptionStatus{SubscriptionStatusActive, SubscriptionStatusGrace} {
+			sub := Subscription{Status: status, ValidUntil: &validUntil}
+			if err := sub.Resume(now); !errors.Is(err, ErrResumeNotAvailable) {
+				t.Errorf("Resume(now) on %q error = %v, want ErrResumeNotAvailable", status, err)
+			}
+		}
+	})
+
+	t.Run("rejects an expired paid period", func(t *testing.T) {
+		t.Parallel()
+		expired := now.Add(-time.Hour)
+		sub := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &expired}
+		if err := sub.Resume(now); !errors.Is(err, ErrResumeNotAvailable) {
+			t.Errorf("Resume(now) after expiry error = %v, want ErrResumeNotAvailable", err)
+		}
+		withoutPeriod := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: nil}
+		if err := withoutPeriod.Resume(now); !errors.Is(err, ErrResumeNotAvailable) {
+			t.Errorf("Resume(now) without period error = %v, want ErrResumeNotAvailable", err)
+		}
+	})
+}
+
+func TestSubscriptionKeepPropertyClearedOnLifecycleMoves(t *testing.T) {
+	t.Parallel()
+	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	businessID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18")
+	keepID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17")
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+	period := PeriodMonth
+	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19")
+
+	// The keep choice (issue #617) is consumed by the first move that makes
+	// it moot: the fall to basic, a service overwrite, and the paid paths
+	// that take the subscription off the cancelled track.
+	fallToBasic := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &validUntil, KeepPropertyID: &keepID}
+	fallToBasic.DowngradeToBasic(basicID)
+	if fallToBasic.KeepPropertyID != nil {
+		t.Errorf("DowngradeToBasic: KeepPropertyID = %v, want nil", fallToBasic.KeepPropertyID)
+	}
+
+	service := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &validUntil, KeepPropertyID: &keepID}
+	service.AssignService(proID, validUntil)
+	if service.KeepPropertyID != nil {
+		t.Errorf("AssignService: KeepPropertyID = %v, want nil", service.KeepPropertyID)
+	}
+
+	reactivation := Subscription{Status: SubscriptionStatusCancelled, KeepPropertyID: &keepID}
+	if err := reactivation.ApplyRenewal(paymentID, period, now); err != nil {
+		t.Fatalf("ApplyRenewal error = %v", err)
+	}
+	if reactivation.KeepPropertyID != nil {
+		t.Errorf("ApplyRenewal: KeepPropertyID = %v, want nil", reactivation.KeepPropertyID)
+	}
+
+	proTariff := Tariff{
+		ID: proID, Name: TariffPro, ActivePropertyLimit: 5,
+		MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000,
+	}
+	businessTariff := Tariff{
+		ID: businessID, Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit,
+		MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000,
+	}
+	upgrade := Subscription{TariffID: proID, Status: SubscriptionStatusCancelled, ValidUntil: &validUntil, KeepPropertyID: &keepID}
+	if err := upgrade.ApplyTariffChange(paymentID, proTariff, businessTariff, period, now); err != nil {
+		t.Fatalf("ApplyTariffChange error = %v", err)
+	}
+	if upgrade.KeepPropertyID != nil {
+		t.Errorf("ApplyTariffChange: KeepPropertyID = %v, want nil", upgrade.KeepPropertyID)
 	}
 }
 

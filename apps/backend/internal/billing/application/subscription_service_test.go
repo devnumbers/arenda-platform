@@ -165,7 +165,7 @@ func TestSubscriptionService_CancelSubscription_CancelsWithTransitionAndAudit(t 
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
-	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); err != nil {
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
 		t.Fatalf("CancelSubscription() error = %v", err)
 	}
 
@@ -178,7 +178,7 @@ func TestSubscriptionService_CancelSubscription_NotFound(t *testing.T) {
 	t.Parallel()
 	h := newSubscriptionHarness(t)
 
-	if err := h.svc.CancelSubscription(t.Context(), uuid.Must(uuid.NewV7())); !errors.Is(err, ErrSubscriptionNotFound) {
+	if err := h.svc.CancelSubscription(t.Context(), uuid.Must(uuid.NewV7()), nil); !errors.Is(err, ErrSubscriptionNotFound) {
 		t.Fatalf("err = %v, want ErrSubscriptionNotFound", err)
 	}
 }
@@ -188,10 +188,10 @@ func TestSubscriptionService_CancelSubscription_AlreadyCancelledRejected(t *test
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
 
-	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); err != nil {
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
 		t.Fatalf("first CancelSubscription() error = %v", err)
 	}
-	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); !errors.Is(err, domain.ErrInvalidSubscriptionState) {
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); !errors.Is(err, domain.ErrInvalidSubscriptionState) {
 		t.Fatalf("second err = %v, want domain.ErrInvalidSubscriptionState", err)
 	}
 	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
@@ -212,7 +212,7 @@ func TestSubscriptionService_CancelSubscription_ServiceSourceRejected(t *testing
 		t.Fatalf("seed Update() error = %v", err)
 	}
 
-	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); !errors.Is(err, domain.ErrInvalidSubscriptionState) {
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); !errors.Is(err, domain.ErrInvalidSubscriptionState) {
 		t.Fatalf("err = %v, want domain.ErrInvalidSubscriptionState", err)
 	}
 }
@@ -278,7 +278,7 @@ func TestSubscriptionService_CancelSubscription_DropsScheduledDowngrade(t *testi
 	}); err != nil {
 		t.Fatalf("ChangeTariff() error = %v", err)
 	}
-	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); err != nil {
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
 		t.Fatalf("CancelSubscription() error = %v", err)
 	}
 
@@ -295,7 +295,7 @@ func TestSubscriptionService_ToggleAutoRenew_CancelledRejected(t *testing.T) {
 	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffPro)
-	if err := h.svc.CancelSubscription(t.Context(), sub.UserID); err != nil {
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
 		t.Fatalf("CancelSubscription() error = %v", err)
 	}
 
@@ -494,7 +494,7 @@ func TestSubscriptionService_ChangeTariff_CancelledSubscriptionRejected(t *testi
 	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
-	if err := sub.Cancel(); err != nil {
+	if err := sub.Cancel(nil); err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
 	if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
@@ -541,4 +541,209 @@ func (h *subscriptionHarness) hasPending(subscriptionID uuid.UUID) bool {
 		}
 	}
 	return false
+}
+
+// withKeepBridge wires the lifecycle bridges with an archiver whose
+// ActivePropertyExists answers from the given map — the properties-side half
+// of the cancel keep-choice validation (issue #617).
+func (h *subscriptionHarness) withKeepBridge(keepID uuid.UUID, exists bool) *fakeArchiverSource {
+	src := &fakeArchiverSource{activeExists: map[uuid.UUID]bool{keepID: exists}}
+	h.svc.SetLifecycleBridges(src, &fakeSlotSource{})
+	return src
+}
+
+func TestSubscriptionService_CancelSubscription_KeepPropertyValidatedAndStored(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffPro)
+	keepID := uuid.Must(uuid.NewV7())
+	src := h.withKeepBridge(keepID, true)
+
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, &keepID); err != nil {
+		t.Fatalf("CancelSubscription(keep) error = %v", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.KeepPropertyID == nil || *stored.KeepPropertyID != keepID {
+		t.Errorf("KeepPropertyID = %v, want %v", stored.KeepPropertyID, keepID)
+	}
+	if len(src.recorded()) != 0 {
+		t.Errorf("cancel must not archive: archive calls = %d, want 0", len(src.recorded()))
+	}
+	entries := h.audit.recorded()
+	if len(entries) != 1 {
+		t.Fatalf("audit entries = %d, want 1", len(entries))
+	}
+	if got, ok := entries[0].Context["keep_property_id"]; !ok || got != keepID {
+		t.Errorf("audit keep_property_id = %v, want %v", got, keepID)
+	}
+}
+
+func TestSubscriptionService_CancelSubscription_KeepPropertyInvalidRejected(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffPro)
+	foreignID := uuid.Must(uuid.NewV7())
+	h.withKeepBridge(foreignID, false)
+
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, &foreignID); !errors.Is(err, ErrInvalidKeepProperty) {
+		t.Fatalf("err = %v, want ErrInvalidKeepProperty", err)
+	}
+
+	// The rejection leaves the subscription untouched: still active, no
+	// transition appended.
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("Status = %q, want still active", stored.Status)
+	}
+	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID() error = %v", err)
+	}
+	if len(transitions) != 0 {
+		t.Fatalf("transitions = %d, want 0", len(transitions))
+	}
+}
+
+func TestSubscriptionService_ResumeSubscription_RestoresCancelledInsidePaidPeriod(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffPro)
+	keepID := uuid.Must(uuid.NewV7())
+	h.withKeepBridge(keepID, true)
+	stored := seedCancelledAndResumed(t, h, sub, keepID)
+
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("Status = %q, want %q", stored.Status, domain.SubscriptionStatusActive)
+	}
+	if !stored.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = false, want enabled by the resume")
+	}
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(*sub.ValidUntil) {
+		t.Errorf("ValidUntil = %v, want the retained paid period %v", stored.ValidUntil, sub.ValidUntil)
+	}
+	if stored.KeepPropertyID != nil {
+		t.Errorf("KeepPropertyID = %v, want dropped with the undone cancellation", stored.KeepPropertyID)
+	}
+	requireResumedTransitionLog(t, h, sub)
+	requireResumedAudit(t, h, sub)
+}
+
+// requireResumedTransitionLog asserts the log holds cancelled then resumed,
+// the resume the newest user-initiated entry with the cancelled from-side.
+// The fake transition repo lists in insertion order — the real repository
+// returns newest first.
+func requireResumedTransitionLog(t *testing.T, h *subscriptionHarness, sub domain.Subscription) {
+	t.Helper()
+	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
+	if err != nil {
+		t.Fatalf("ListBySubscriptionID() error = %v", err)
+	}
+	if len(transitions) != 2 {
+		t.Fatalf("transitions = %d, want 2 (cancelled, resumed)", len(transitions))
+	}
+	resumed := transitions[len(transitions)-1]
+	if resumed.Reason != domain.TransitionReasonResumed {
+		t.Errorf("Reason = %q, want %q", resumed.Reason, domain.TransitionReasonResumed)
+	}
+	if resumed.Initiator != domain.InitiatorUser || resumed.InitiatorID == nil || *resumed.InitiatorID != sub.UserID {
+		t.Errorf("initiator = %q/%v, want user/%v", resumed.Initiator, resumed.InitiatorID, sub.UserID)
+	}
+	if resumed.FromStatus == nil || *resumed.FromStatus != domain.SubscriptionStatusCancelled {
+		t.Errorf("FromStatus = %v, want cancelled", resumed.FromStatus)
+	}
+	if resumed.ToStatus != domain.SubscriptionStatusActive {
+		t.Errorf("ToStatus = %q, want active", resumed.ToStatus)
+	}
+}
+
+// requireResumedAudit asserts the audit trail holds exactly the
+// user-attributed resume entry of the subscription.
+func requireResumedAudit(t *testing.T, h *subscriptionHarness, sub domain.Subscription) {
+	t.Helper()
+	entries := h.audit.recorded()
+	if len(entries) != 1 {
+		t.Fatalf("audit entries = %d, want 1", len(entries))
+	}
+	if entries[0].Action != auditdomain.ActionSubscriptionResumed {
+		t.Errorf("audit action = %q, want %q", entries[0].Action, auditdomain.ActionSubscriptionResumed)
+	}
+	if entries[0].ActorID == nil || *entries[0].ActorID != sub.UserID {
+		t.Errorf("audit actor = %v, want %v", entries[0].ActorID, sub.UserID)
+	}
+	if entries[0].EntityID == nil || *entries[0].EntityID != sub.ID {
+		t.Errorf("audit entity = %v, want %v", entries[0].EntityID, sub.ID)
+	}
+}
+
+// seedCancelledAndResumed drives the seed-cancel-resume sequence of the
+// resume tests: it cancels with the keep choice, wipes the audit capture and
+// resumes, returning the stored post-resume subscription.
+func seedCancelledAndResumed(t *testing.T, h *subscriptionHarness, sub domain.Subscription, keepID uuid.UUID) domain.Subscription {
+	t.Helper()
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, &keepID); err != nil {
+		t.Fatalf("seed CancelSubscription() error = %v", err)
+	}
+	h.audit.entries = nil
+	if err := h.svc.ResumeSubscription(t.Context(), sub.UserID); err != nil {
+		t.Fatalf("ResumeSubscription() error = %v", err)
+	}
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	return stored
+}
+
+func TestSubscriptionService_ResumeSubscription_Rejections(t *testing.T) {
+	t.Parallel()
+
+	t.Run("active subscription is not resumable", func(t *testing.T) {
+		t.Parallel()
+		h := newSubscriptionHarness(t)
+		sub := h.seedPaidSubscription(t, domain.TariffPro)
+		if err := h.svc.ResumeSubscription(t.Context(), sub.UserID); !errors.Is(err, domain.ErrResumeNotAvailable) {
+			t.Fatalf("err = %v, want domain.ErrResumeNotAvailable", err)
+		}
+	})
+
+	t.Run("expired paid period falls to the paid restoration path", func(t *testing.T) {
+		t.Parallel()
+		h := newSubscriptionHarness(t)
+		sub := h.seedPaidSubscription(t, domain.TariffPro)
+		h.withKeepBridge(uuid.Must(uuid.NewV7()), true)
+		if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
+			t.Fatalf("seed CancelSubscription() error = %v", err)
+		}
+		expired := h.now.Add(-time.Hour)
+		sub.ValidUntil = &expired
+		if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
+			t.Fatalf("seed Update() error = %v", err)
+		}
+
+		if err := h.svc.ResumeSubscription(t.Context(), sub.UserID); !errors.Is(err, domain.ErrResumeNotAvailable) {
+			t.Fatalf("err = %v, want domain.ErrResumeNotAvailable", err)
+		}
+	})
+
+	t.Run("second resume is rejected", func(t *testing.T) {
+		t.Parallel()
+		h := newSubscriptionHarness(t)
+		sub := h.seedPaidSubscription(t, domain.TariffPro)
+		if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
+			t.Fatalf("seed CancelSubscription() error = %v", err)
+		}
+		if err := h.svc.ResumeSubscription(t.Context(), sub.UserID); err != nil {
+			t.Fatalf("first ResumeSubscription() error = %v", err)
+		}
+		if err := h.svc.ResumeSubscription(t.Context(), sub.UserID); !errors.Is(err, domain.ErrResumeNotAvailable) {
+			t.Fatalf("second err = %v, want domain.ErrResumeNotAvailable", err)
+		}
+	})
 }

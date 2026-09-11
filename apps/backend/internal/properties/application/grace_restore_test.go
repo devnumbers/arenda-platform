@@ -60,7 +60,7 @@ func TestPropertyService_ArchiveExcessProperties_ReturnsArchivedIDs(t *testing.T
 	)
 	svc := newBridgeTestService(t, repo, nil)
 
-	archived, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 1)
+	archived, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 1, nil)
 	if err != nil {
 		t.Fatalf("ArchiveExcessProperties failed: %v", err)
 	}
@@ -210,3 +210,143 @@ func TestPropertyService_RestoreGraceArchivedProperties_ExhaustedLimitReturnsAll
 }
 
 var _ transaction.Tx = (*fakePropertyTx)(nil)
+
+// TestPropertyService_ArchiveExcessProperties_KeepsChosenProperty proves the
+// cancel keep-choice bridge (issue #617): when billing enforces a lowered
+// limit with a keepPropertyID, that property survives even when it is not the
+// most recently updated one, and the rest of the survivor slots still go to
+// the newest.
+func TestPropertyService_ArchiveExcessProperties_KeepsChosenProperty(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	keepID := uuid.MustParse("22222222-2222-2222-2222-222222222222")  // Updated 06-01 — the oldest.
+	freshID := uuid.MustParse("33333333-3333-3333-3333-333333333333") // Updated 06-03.
+	midID := uuid.MustParse("44444444-4444-4444-4444-444444444444")   // Updated 06-02.
+
+	repo := newFakePropertyRepo(
+		domain.Property{
+			ID: keepID, OwnerID: ownerID, Name: "Chosen", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+		},
+		domain.Property{
+			ID: freshID, OwnerID: ownerID, Name: "Fresh", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		},
+		domain.Property{
+			ID: midID, OwnerID: ownerID, Name: "Mid", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
+		},
+	)
+	svc := newBridgeTestService(t, repo, nil)
+
+	archived, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2, &keepID)
+	if err != nil {
+		t.Fatalf("ArchiveExcessProperties failed: %v", err)
+	}
+	// The chosen property takes one survivor slot; the other goes to the
+	// freshest — "Mid" is the excess.
+	if len(archived) != 1 || archived[0] != midID {
+		t.Fatalf("archived ids = %v, want [%s]", archived, midID)
+	}
+	kept, err := repo.GetByIDAndOwner(ctx, keepID, ownerID)
+	if err != nil {
+		t.Fatalf("get kept property: %v", err)
+	}
+	if kept.Status != domain.PropertyStatusActive {
+		t.Errorf("chosen property status = %q, want active", kept.Status)
+	}
+}
+
+// TestPropertyService_ArchiveExcessProperties_StaleKeepFallsBackToNewest
+// proves the fallback: a keepPropertyID that is no longer one of the owner's
+// active properties (archived, deleted, foreign) changes nothing — the
+// default most-recently-updated survivor rule holds.
+func TestPropertyService_ArchiveExcessProperties_StaleKeepFallsBackToNewest(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	staleKeepID := uuid.MustParse("22222222-2222-2222-2222-222222222222") // Archived before the expiry.
+	freshID := uuid.MustParse("33333333-3333-3333-3333-333333333333")     // Updated 06-03.
+	olderID := uuid.MustParse("44444444-4444-4444-4444-444444444444")     // Updated 06-02.
+
+	repo := newFakePropertyRepo(
+		domain.Property{
+			ID: staleKeepID, OwnerID: ownerID, Name: "Stale", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived, UpdatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+		},
+		domain.Property{
+			ID: freshID, OwnerID: ownerID, Name: "Fresh", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		},
+		domain.Property{
+			ID: olderID, OwnerID: ownerID, Name: "Older", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive, UpdatedAt: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
+		},
+	)
+	svc := newBridgeTestService(t, repo, nil)
+
+	archived, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 1, &staleKeepID)
+	if err != nil {
+		t.Fatalf("ArchiveExcessProperties failed: %v", err)
+	}
+	if len(archived) != 1 || archived[0] != olderID {
+		t.Fatalf("archived ids = %v, want [%s]", archived, olderID)
+	}
+}
+
+// TestPropertyService_ActivePropertyExists proves the keep-choice validation
+// read of the bridge (issue #617): active and maintenance properties count —
+// they occupy tariff slots — while archived, foreign and missing ids do not.
+func TestPropertyService_ActivePropertyExists(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	activeID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	maintenanceID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	archivedID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+
+	repo := newFakePropertyRepo(
+		domain.Property{
+			ID: activeID, OwnerID: ownerID, Name: "Active", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
+		domain.Property{
+			ID: maintenanceID, OwnerID: ownerID, Name: "Maintenance", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusMaintenance,
+		},
+		domain.Property{
+			ID: archivedID, OwnerID: ownerID, Name: "Archived", Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
+		},
+	)
+	svc := newBridgeTestService(t, repo, nil)
+
+	for _, tc := range []struct {
+		name       string
+		propertyID uuid.UUID
+		scope      uuid.UUID
+		want       bool
+	}{
+		{"active", activeID, ownerID, true},
+		{"maintenance occupies a slot", maintenanceID, ownerID, true},
+		{"archived", archivedID, ownerID, false},
+		// A foreign id is the repository's scope miss — ErrNotFound like a
+		// missing one; the SQL-side owner filter is the repo's contract.
+		{"missing", uuid.MustParse("66666666-6666-6666-6666-666666666666"), ownerID, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := svc.ActivePropertyExists(ctx, &fakePropertyTx{}, tc.scope, tc.propertyID)
+			if err != nil {
+				t.Fatalf("ActivePropertyExists failed: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("ActivePropertyExists = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

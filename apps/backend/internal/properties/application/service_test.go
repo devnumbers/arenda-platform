@@ -693,7 +693,7 @@ func TestPropertyService_ArchiveExcessProperties_ArchivesExcess(t *testing.T) {
 		nil,
 	)
 
-	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
+	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2, nil); err != nil {
 		t.Fatalf("ArchiveExcessProperties failed: %v", err)
 	}
 
@@ -745,7 +745,7 @@ func TestPropertyService_ArchiveExcessProperties_WithinLimitDoesNothing(t *testi
 		nil,
 	)
 
-	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2); err != nil {
+	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 2, nil); err != nil {
 		t.Fatalf("ArchiveExcessProperties failed: %v", err)
 	}
 	for _, id := range []uuid.UUID{propertyAID, propertyBID} {
@@ -898,7 +898,7 @@ func TestPropertyService_ArchiveExcessProperties_RecoversSuspendedMembers(t *tes
 	)
 	svc.SetRecipientSlotPolicy(slots)
 
-	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 1); err != nil {
+	if _, err := svc.ArchiveExcessProperties(ctx, &fakePropertyTx{}, ownerID, 1, nil); err != nil {
 		t.Fatalf("ArchiveExcessProperties failed: %v", err)
 	}
 

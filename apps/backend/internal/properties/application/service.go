@@ -845,11 +845,37 @@ func (s *PropertyService) archivePropertyInTx(
 	return archived, nil
 }
 
+// ActivePropertyExists reports whether the property belongs to the scope
+// owner and still occupies a tariff slot: the statuses that count toward the
+// tariff limit are active and maintenance — the same set the excess-archive
+// works on. The keep-choice validation of the cancel flow (issue #617) reads
+// it inside its transaction.
+func (s *PropertyService) ActivePropertyExists(ctx context.Context, tx transaction.Tx, scope, propertyID uuid.UUID) (bool, error) {
+	property, err := s.repo.WithTx(tx).GetByIDAndOwner(ctx, propertyID, scope)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get property: %w", err)
+	}
+	switch property.Status {
+	case domain.PropertyStatusActive, domain.PropertyStatusMaintenance:
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 // ArchiveExcessProperties archives active properties beyond the given limit,
 // keeping the most recently updated properties, so the tariff limit is always
-// enforced. It returns the archived ids in restoration-priority order — the
-// newest archived property first (the grace snapshot of ADR 0055).
-func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transaction.Tx, scope uuid.UUID, limit int) ([]uuid.UUID, error) {
+// enforced. When keepPropertyID is set (issue #617), the owner's chosen
+// property takes a survivor slot as long as it is among the active ones — the
+// cancel flow's promise that it survives the fall to basic; a stale id
+// changes nothing. It returns the archived ids in restoration-priority
+// order — the newest archived property first (the grace snapshot of ADR 0055).
+func (s *PropertyService) ArchiveExcessProperties(
+	ctx context.Context, tx transaction.Tx, scope uuid.UUID, limit int, keepPropertyID *uuid.UUID,
+) ([]uuid.UUID, error) {
 	if limit < 0 {
 		return nil, nil
 	}
@@ -864,6 +890,19 @@ func (s *PropertyService) ArchiveExcessProperties(ctx context.Context, tx transa
 	sort.SliceStable(properties, func(i, j int) bool {
 		return properties[i].UpdatedAt.After(properties[j].UpdatedAt)
 	})
+
+	if keepPropertyID != nil {
+		for i := range properties {
+			if properties[i].ID == *keepPropertyID {
+				chosen := properties[i]
+				rest := make([]domain.Property, 0, len(properties)-1)
+				rest = append(rest, properties[:i]...)
+				rest = append(rest, properties[i+1:]...)
+				properties = append([]domain.Property{chosen}, rest...)
+				break
+			}
+		}
+	}
 
 	if len(properties) <= limit {
 		return nil, nil

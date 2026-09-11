@@ -22,15 +22,20 @@ import (
 
 // ExcessPropertyArchiver is the properties-context bridge of the billing
 // lifecycle inside the caller's transaction: it archives the owner's active
-// properties beyond a tariff limit — keeping the most recently updated — and
-// restores the properties a grace entry archived (ADR 0055). Declared here,
-// at the consumer (the worker phases and the payment application seam), per
-// ADR 0035; the composition root adapts the properties context to it.
+// properties beyond a tariff limit — keeping the most recently updated, or
+// the property the owner chose (issue #617) — restores the properties a
+// grace entry archived (ADR 0055) and answers whether a property of the
+// owner is active. Declared here, at the consumer (the worker phases, the
+// payment application seam and the cancel flow), per ADR 0035; the
+// composition root adapts the properties context to it.
 type ExcessPropertyArchiver interface {
 	// ArchiveExcess archives the owner's active properties beyond the limit
 	// and returns their ids in restoration-priority order — the newest
-	// archived property first.
-	ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int) ([]uuid.UUID, error)
+	// archived property first. When keepPropertyID is set, that property is
+	// kept among the survivors as long as it is one of the owner's active
+	// properties; the remaining survivor slots go to the most recently
+	// updated ones.
+	ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int, keepPropertyID *uuid.UUID) ([]uuid.UUID, error)
 	// RestoreGraceArchive unarchives the given owner's properties — the ids
 	// snapshot taken at the grace entry — while the owner's active count
 	// stays under the limit (a negative limit is unlimited); already-active
@@ -38,6 +43,10 @@ type ExcessPropertyArchiver interface {
 	// could not restore — the debt remainder still archived beyond the
 	// limit, in the given order.
 	RestoreGraceArchive(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error)
+	// ActivePropertyExists reports whether the property belongs to the owner
+	// and is active (not archived) — the keep-choice validation of the
+	// cancel flow (issue #617).
+	ActivePropertyExists(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error)
 }
 
 // ExcessPropertyArchiverSource produces transaction-bound archivers.
@@ -311,7 +320,7 @@ func (w *Workers) applyScheduledChange(ctx context.Context, listed domain.Subscr
 			return err
 		}
 		if transitionChangedTariff(transition, target.ID) {
-			if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade); err != nil {
+			if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade, nil); err != nil {
 				return fmt.Errorf("enforce tariff limit after scheduled downgrade: %w", err)
 			}
 		}
@@ -717,7 +726,7 @@ func (w *Workers) applyFreeRenewal(
 		return err
 	}
 	if transitionChangedTariff(applied, sub.TariffID) {
-		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerFreeDowngrade); err != nil {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerFreeDowngrade, nil); err != nil {
 			return fmt.Errorf("enforce tariff limit after free renewal: %w", err)
 		}
 	}
@@ -1050,8 +1059,10 @@ func (w *Workers) remindGraceExpiring(ctx context.Context, listed domain.Subscri
 // expireSubscription applies the shared expiry path in one transaction: it
 // locks the subscription, re-checks the selection under the lock (the state the
 // listing saw may be gone), downgrades to basic with its transition-log entry,
-// archives the excess properties and enforces the recipient slots. An
-// out-of-selection subscription is a no-op, not an error.
+// archives the excess properties — keeping the property the owner chose at
+// cancel time, when the falling subscription carries one (issue #617) — and
+// enforces the recipient slots. An out-of-selection subscription is a no-op,
+// not an error.
 func (w *Workers) expireSubscription(
 	ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, trigger string, sel SubscriptionSelection,
 ) error {
@@ -1063,6 +1074,9 @@ func (w *Workers) expireSubscription(
 		if !inBatch {
 			return nil
 		}
+		// The keep choice is read before the downgrade consumes it: it names
+		// the property the basic-limit enforcement below must keep alive.
+		keepPropertyID := sub.KeepPropertyID
 		if _, err := stores.applyTransition(ctx, &sub,
 			func(s *domain.Subscription) error { s.DowngradeToBasic(basicTariff.ID); return nil },
 			transitionSpec{
@@ -1072,7 +1086,7 @@ func (w *Workers) expireSubscription(
 		); err != nil {
 			return err
 		}
-		if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, trigger); err != nil {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, trigger, keepPropertyID); err != nil {
 			return fmt.Errorf("enforce tariff limit after expiry downgrade: %w", err)
 		}
 		return nil
