@@ -1,37 +1,52 @@
 'use client';
 
 import type { JSX } from 'react';
-import type { PropertyTasksSummary } from '../lib/tasks-summary';
+import type { Task } from '@/entities/task';
+import type { IsoDate } from '@/shared/lib/calendar';
+import { TaskRow } from '@/features/tasks';
+import { propertyDetailTaskTone } from '../lib/detail-tasks';
+
+type PropertyTasksBlockProps = {
+  readonly tasks: ReadonlyArray<Task>;
+  readonly today: IsoDate;
+  readonly canMutate: boolean;
+  readonly togglingFor: (task: Task) => boolean;
+  readonly onToggle: (task: Task) => void;
+  /** Тап по строке; undefined — строка только для чтения. */
+  readonly onOpenFor: (task: Task) => (() => void) | undefined;
+};
 
 /**
- * Сводка секции «Задачи» (тикет #589): строка «N активных задач» с числом
- * просроченных красным (тон секций просрочки на задачах объекта), тап —
- * в задачи объекта. Макетом кадры карты #583 блок не покрывают —
- * анатомия строки «Управления»/«Контактов», сверить на приёмке.
+ * Секция «Задачи» детали объекта (тикет #589, правка владельца 11.09,
+ * Figma 1185:40816): до 3 канонных строк TaskRow — просрочки от старейшей
+ * (красные), затем по ближайшей дате (сегодня/завтра синие, остальные
+ * серые), недатированные не выводятся; подпись времени с датой («14
+ * сентября, 12:00»), т.к. секций-заголовков здесь нет. Отступ до низа
+ * карточки 24 держит обёртка pb-6 (мера — край ряда, как в «Контактах»).
  */
 export function PropertyTasksBlock({
-  summary,
-  onSelect,
-}: {
-  readonly summary: PropertyTasksSummary;
-  readonly onSelect: () => void;
-}): JSX.Element {
+  tasks,
+  today,
+  canMutate,
+  togglingFor,
+  onToggle,
+  onOpenFor,
+}: PropertyTasksBlockProps): JSX.Element {
   return (
-    <div className="px-3 pb-4 pt-4" data-testid="property-tasks-block">
-      <button
-        type="button"
-        onClick={onSelect}
-        className="flex h-[52px] w-full cursor-pointer items-center rounded-button px-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary hover:bg-surface-muted-hover active:bg-surface-muted-hover"
-      >
-        <span className="flex min-w-0 flex-col justify-center gap-0.5">
-          <span className="truncate text-base font-medium text-content">{summary.title}</span>
-          {summary.overdueCount > 0 && (
-            <span className="truncate text-sm leading-4 text-danger">
-              Просрочено: {summary.overdueCount}
-            </span>
-          )}
-        </span>
-      </button>
+    <div className="pb-6 pt-1" data-testid="property-tasks-block">
+      {tasks.map((task) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          today={today}
+          tone={propertyDetailTaskTone(task, today)}
+          canMutate={canMutate}
+          withDate
+          toggling={togglingFor(task)}
+          onToggle={() => onToggle(task)}
+          onOpen={onOpenFor(task)}
+        />
+      ))}
     </div>
   );
 }

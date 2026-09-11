@@ -4,7 +4,7 @@
  */
 
 import type { TaskSection, TaskSectionKind } from '@/features/tasks';
-import type { TaskRowTone } from './task-row';
+import type { TaskRowTone } from '@/features/tasks';
 
 export function sectionTone(kind: TaskSectionKind): TaskRowTone {
   if (kind === 'overdue') {

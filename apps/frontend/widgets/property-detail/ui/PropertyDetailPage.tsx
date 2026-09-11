@@ -26,7 +26,11 @@ import {
   usePropertyOverdueOperations,
 } from '@/features/payments';
 import {useContacts} from '@/features/contacts';
-import {useActiveTasks} from '@/features/tasks';
+import {
+  useActiveTasks,
+  useCompleteTask,
+  useUncompleteTask,
+} from '@/features/tasks';
 import {clientTodayIso} from '@/entities/payment';
 import {useSubscription} from '@/features/subscription';
 import {isPaidTariff} from '@/entities/user';
@@ -46,7 +50,7 @@ import {
 } from '../lib/property-sections';
 import {propertyPaymentGroups} from '../lib/payments-strip';
 import {operationsSectionTitle} from '../lib/operations-section';
-import {propertyTasksSummary} from '../lib/tasks-summary';
+import {propertyDetailTasks} from '../lib/detail-tasks';
 import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
 import {TopNav, TopNavBackButton, TopNavTitle, IconButton, PageContent, ConfirmDialog, Skeleton} from '@/shared/ui/design';
 import {StarOutline} from '@/shared/assets/icons';
@@ -147,6 +151,8 @@ export function PropertyDetailPage(): JSX.Element {
     });
     const contactsQuery = useContacts(id);
     const tasksQuery = useActiveTasks(id);
+    const completeTask = useCompleteTask(id);
+    const uncompleteTask = useUncompleteTask(id);
 
     const updateProperty = useUpdateProperty();
     const archiveProperty = useArchiveProperty();
@@ -178,11 +184,14 @@ export function PropertyDetailPage(): JSX.Element {
     const contacts = contactsQuery.data ?? [];
     const tenant = currentRental?.tenant ?? null;
     // Арендатор уже показан отдельной строкой с бейджем роли — из книги
-    // его исключаем, чтобы человек не дублировался (макет 1185:40820).
-    const propertyContacts = tenant
-        ? contacts.filter((contact) => contact.id !== tenant.contactId)
-        : contacts;
-    const tasksSummary = tasksQuery.data ? propertyTasksSummary(tasksQuery.data) : null;
+    // его исключаем, чтобы человек не дублировался (макет 1185:40820);
+    // максимум 3 строки блока: арендатор + 2 контакта (решение владельца
+    // 11.09), без арендатора — 3 контакта.
+    const propertyContacts = (
+        tenant ? contacts.filter((contact) => contact.id !== tenant.contactId) : contacts
+    ).slice(0, tenant !== null ? 2 : 3);
+    const detailTasks = tasksQuery.data ? propertyDetailTasks(tasksQuery.data) : [];
+    const tasksToday = tasksQuery.data?.today;
     const apartmentRows = property
         ? propertyApartmentSummaryRows(property.type, property.attributes)
         : [];
@@ -203,6 +212,9 @@ export function PropertyDetailPage(): JSX.Element {
     // его смысл для CTA-кнопок секций, не для этого списка).
     const roleCanMutate =
         property?.access !== undefined && property.access.role !== 'viewer';
+    // Мутации задач (кружок/правка) — без зрителя и архива (контракт #569,
+    // как на экране задач объекта).
+    const canMutateTasks = roleCanMutate && property.status !== 'archived';
     // «Основной объект» — платная возможность: базовому тарифу в шапке
     // звезда апселла, строк пина в «Управлении» нет.
     const isPaid = subscriptionQuery.data
@@ -479,10 +491,38 @@ export function PropertyDetailPage(): JSX.Element {
                         >
                             {tasksQuery.isPending ? (
                                 <PropertySectionSkeleton/>
-                            ) : tasksSummary !== null ? (
+                            ) : detailTasks.length > 0 ? (
                                 <PropertyTasksBlock
-                                    summary={tasksSummary}
-                                    onSelect={() => router.push(ROUTES.propertyTasks(id))}
+                                    tasks={detailTasks}
+                                    today={tasksToday ?? today}
+                                    canMutate={canMutateTasks}
+                                    togglingFor={(task) =>
+                                        (completeTask.isPending || uncompleteTask.isPending)
+                                        && (completeTask.variables === task.id
+                                            || uncompleteTask.variables === task.id)
+                                    }
+                                    onToggle={(task) => {
+                                        if (task.status === 'completed') {
+                                            uncompleteTask.mutate(task.id, {
+                                                onError: (error) =>
+                                                    notify.scenarios.tasks.uncompleteError(error),
+                                            });
+                                        } else {
+                                            completeTask.mutate(task.id, {
+                                                onError: (error) =>
+                                                    notify.scenarios.tasks.completeError(error),
+                                            });
+                                        }
+                                    }}
+                                    onOpenFor={(task) => {
+                                        if (!canMutateTasks || task.status === 'completed'
+                                            || task.ruleId === null) {
+                                            return undefined;
+                                        }
+                                        const ruleId = task.ruleId;
+                                        return () =>
+                                            router.push(ROUTES.propertyTaskEdit(id, ruleId));
+                                    }}
                                 />
                             ) : (
                                 <PropertySectionEmpty

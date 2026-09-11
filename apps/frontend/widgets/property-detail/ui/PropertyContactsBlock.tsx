@@ -62,7 +62,7 @@ export function PropertyContactsBlock({
   onOpenContact,
 }: PropertyContactsBlockProps): JSX.Element {
   return (
-    <div className="flex flex-col px-3 pb-4 pt-4" data-testid="property-contacts-block">
+    <div className="flex flex-col px-3 pb-6 pt-4" data-testid="property-contacts-block">
       {tenant !== null && (
         <TenantRowButton
           tenant={tenant}

@@ -10,6 +10,7 @@ import {
   type IsoDate,
   type Task,
 } from '@/entities/task';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { RoundCheckbox } from '@/shared/ui/design';
 
 /** Цвет акцента строки времени: просрочка красным, сегодня/завтра синим,
@@ -43,6 +44,11 @@ export type TaskRowProps = {
    * + имя объекта; на объектном экране не передаётся — объект и так заголовок
    * страницы. */
   readonly propertyLine?: ReactNode;
+  /** Подпись времени с датой: «14 сентября, 12:00» / вне года «1 января,
+   * 2027, 12:00» (макет детали объекта 1185:40816, где секций-заголовков
+   * нет). По умолчанию — только время, как на экранах задач: дату несёт
+   * секция. */
+  readonly withDate?: boolean;
 };
 
 export function TaskRow({
@@ -54,10 +60,11 @@ export function TaskRow({
   onToggle,
   onOpen,
   propertyLine,
+  withDate = false,
 }: TaskRowProps): JSX.Element {
   const completed = task.status === 'completed';
   const openable = onOpen !== undefined;
-  const timeLabel = timeSubtitle(task, today, tone);
+  const timeLabel = timeSubtitle(task, today, tone, withDate);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     // Фокус на чекбоксе не должен открывать редактирование: строка
@@ -150,12 +157,21 @@ function isRecurring(task: Task): boolean {
  * «N дней назад»; у задачи на весь день просрочка наступает в конце суток,
  * поэтому «0 дней» не бывает. Остальные строки (и просрочка текущих суток)
  * показывают HH:MM; у задачи без времени подписи нет. */
-function timeSubtitle(task: Task, today: IsoDate, tone: TaskRowTone): string | null {
+function timeSubtitle(
+  task: Task,
+  today: IsoDate,
+  tone: TaskRowTone,
+  withDate: boolean,
+): string | null {
   if (task.dueDate === null) {
     return null;
   }
   if (tone === 'danger' && daysOverdue(task.dueDate, today) > 0) {
     return formatOverdueAgo(task.dueDate, today);
+  }
+  if (withDate) {
+    const date = formatDayMonthWithYear(task.dueDate, today);
+    return task.dueTime === null ? date : `${date}, ${task.dueTime}`;
   }
   return task.dueTime;
 }

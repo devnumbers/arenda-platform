@@ -44,7 +44,7 @@ import {
   PickerMenu,
   TopNav,
 } from '@/shared/ui/design';
-import { TaskRow } from './task-row';
+import { TaskRow } from '@/features/tasks';
 import { TaskSectionCard } from './task-section-card';
 import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
 import {

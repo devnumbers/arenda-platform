@@ -51,3 +51,8 @@ export {
   type TaskEditDraft,
   type TaskRuleUpdateCommand,
 } from './lib/task-edit';
+export {
+  TaskRow,
+  type TaskRowProps,
+  type TaskRowTone,
+} from './ui/task-row';
