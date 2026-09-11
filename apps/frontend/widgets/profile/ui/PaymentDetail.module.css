@@ -78,20 +78,6 @@
 }
 }
 
-.rowSkeleton {
-  height: 18px;
-  width: 100%;
-  border-radius: 6px;
-}
-
-.rowSkeleton:nth-child(3) {
-  width: 70%;
-}
-
-.rowSkeleton:nth-child(4) {
-  width: 80%;
-}
-
 .error {
   display: flex;
   flex-direction: column;

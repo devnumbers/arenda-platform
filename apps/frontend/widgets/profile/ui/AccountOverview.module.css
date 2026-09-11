@@ -64,22 +64,6 @@
   color: var(--color-text-muted);
 }
 
-.skeletonRow {
-  height: 88px;
-  border-radius: 24px;
-  background: var(--color-secondary-hover);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
 .error {
   display: flex;
   flex-direction: column;

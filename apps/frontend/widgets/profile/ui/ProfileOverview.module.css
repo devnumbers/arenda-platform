@@ -53,18 +53,6 @@
   color: var(--color-text-muted);
 }
 
-.nameSkeleton {
-  height: 24px;
-  width: 60%;
-  border-radius: 8px;
-}
-
-.fieldSkeleton {
-  height: 18px;
-  width: 40%;
-  border-radius: 6px;
-}
-
 .error {
   display: flex;
   flex-direction: column;

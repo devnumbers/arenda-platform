@@ -3,7 +3,7 @@
 import type {JSX} from 'react';
 import {useRouter} from 'next/navigation';
 import {Card} from '@heroui/react/card';
-import {Skeleton} from '@heroui/react/skeleton';
+import {Skeleton} from '@/shared/ui/design';
 import {notify} from '@/shared/lib/notifications';
 import {Button} from '@/shared/ui/button';
 import {Icon} from '@/shared/ui/icon';
@@ -23,9 +23,9 @@ function getFullName(user: User): string {
 function UserCardSkeleton(): JSX.Element {
     return (
         <Card className={styles.userCard}>
-            <Skeleton className={styles.nameSkeleton}/>
-            <Skeleton className={styles.fieldSkeleton}/>
-            <Skeleton className={styles.fieldSkeleton}/>
+            <Skeleton className="h-6 w-3/5 rounded-lg"/>
+            <Skeleton className="h-[18px] w-2/5 rounded-md"/>
+            <Skeleton className="h-[18px] w-2/5 rounded-md"/>
         </Card>
     );
 }

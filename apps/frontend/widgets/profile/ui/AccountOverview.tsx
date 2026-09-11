@@ -3,6 +3,7 @@
 import type {JSX} from 'react';
 import NextLink from 'next/link';
 import {Card} from '@heroui/react/card';
+import {Skeleton} from '@/shared/ui/design';
 import {Icon} from '@/shared/ui/icon';
 import {Button} from '@/shared/ui/button';
 import {SmallArrowRight} from '@/shared/assets/icons';
@@ -11,11 +12,7 @@ import {ROUTES} from '@/shared/config/routes';
 import styles from './AccountOverview.module.css';
 
 function AccountOverviewSkeleton(): JSX.Element {
-    return (
-        <div className={styles.section}>
-            <div className={styles.skeletonRow}/>
-        </div>
-    );
+    return <Skeleton className="h-22 rounded-card"/>;
 }
 
 export function AccountOverview(): JSX.Element {

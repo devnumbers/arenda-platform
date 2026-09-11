@@ -5,7 +5,7 @@ import NextLink from 'next/link';
 import clsx from 'clsx';
 import {useQueryClient} from '@tanstack/react-query';
 import {Card} from '@heroui/react/card';
-import {Skeleton} from '@heroui/react/skeleton';
+import {Skeleton} from '@/shared/ui/design';
 import {notify} from '@/shared/lib/notifications';
 import {Button} from '@/shared/ui/button';
 import {LinkButton} from '@/shared/ui/link-button';
@@ -47,11 +47,11 @@ function isPaymentStale(createdAt: string): boolean {
 function TariffOverviewSkeleton(): JSX.Element {
     return (
         <Card className={styles.card}>
-            <Skeleton className={styles.nameSkeleton}/>
-            <Skeleton className={styles.priceSkeleton}/>
-            <Skeleton className={styles.rowSkeleton}/>
-            <Skeleton className={styles.rowSkeleton}/>
-            <Skeleton className={styles.rowSkeleton}/>
+            <Skeleton className="h-6 w-2/5 rounded-lg"/>
+            <Skeleton className="h-5 w-3/5 rounded-md"/>
+            <Skeleton className="h-[18px] w-full rounded-md"/>
+            <Skeleton className="h-[18px] w-[70%] rounded-md"/>
+            <Skeleton className="h-[18px] w-[80%] rounded-md"/>
         </Card>
     );
 }
