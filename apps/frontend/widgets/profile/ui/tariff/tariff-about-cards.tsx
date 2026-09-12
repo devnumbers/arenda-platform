@@ -7,7 +7,9 @@ import type {
   TariffFeatureRow,
 } from '@/widgets/profile/lib/tariff-about';
 
-const FEATURE_IMAGES: Record<TariffFeatureRow['kind'], string> = {
+/** Картинки рядов возможностей (48×48, без скругления — как в макетах);
+ * переиспользуются карточками экрана «Выбрать тариф» (#623). */
+export const FEATURE_IMAGES: Record<TariffFeatureRow['kind'], string> = {
   objects: '/images/tariff/tariff-about-objects.png',
   sharing: '/images/tariff/tariff-about-sharing.png',
 };
