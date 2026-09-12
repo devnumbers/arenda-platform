@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
@@ -373,7 +374,9 @@ func (s *PropertyService) SearchProperties(
 ) ([]domain.Property, string, error) {
 	if trimmed := strings.TrimSpace(search); trimmed == "" {
 		return nil, "", fmt.Errorf("%w: empty search", ErrInvalidInput)
-	} else if len(trimmed) > maxSearchQueryLength {
+	} else if utf8.RuneCountInString(trimmed) > maxSearchQueryLength {
+		// The contract's maxLength counts characters (codepoints), not bytes —
+		// a 130-letter Cyrillic query is legal and must not 400.
 		return nil, "", fmt.Errorf("%w: search exceeds %d characters", ErrInvalidInput, maxSearchQueryLength)
 	}
 	if page.Limit == 0 {

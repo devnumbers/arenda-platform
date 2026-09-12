@@ -17,7 +17,9 @@ import {
   PageContent,
   SearchField,
   Skeleton,
+  SkeletonListRow,
   TopNav,
+  skeletonRowWidths,
 } from '@/shared/ui/design';
 
 /** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
@@ -106,7 +108,7 @@ export function PropertiesSearchScreen(): JSX.Element {
           <div
             aria-label="Объекты"
             data-testid="properties-search-results"
-            className="flex flex-col px-6"
+            className="flex flex-col"
           >
             {properties.map((property) => (
               <ListRow
@@ -149,19 +151,15 @@ function PropertySearchAvatar({ property }: { readonly property: Property }): JS
   );
 }
 
-/** Скелетон первых совпадений — только пока данных нет вовсе (первый
- * запрос); правка запроса держит прежнюю выдачу (keepPreviousData). */
+/** Скелетон первых совпадений — канон §7: строки SkeletonListRow (круг
+ * аватара 44, заголовок + подзаголовок), тот же ритм, что у результатов;
+ * показывается только пока данных нет вовсе (первый запрос), правка
+ * запроса держит прежнюю выдачу (keepPreviousData). */
 function PropertiesSearchSkeleton(): JSX.Element {
   return (
-    <div aria-hidden className="flex flex-col gap-6 py-6">
+    <div aria-hidden className="flex flex-col py-6">
       {[0, 1, 2, 3].map((row) => (
-        <div key={row} className="flex items-center gap-3 px-6">
-          <Skeleton className="h-11 w-11 rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-4 w-2/5" />
-            <Skeleton className="h-3.5 w-3/5" />
-          </div>
-        </div>
+        <SkeletonListRow key={row} widths={skeletonRowWidths(4)[row % 4]} />
       ))}
     </div>
   );

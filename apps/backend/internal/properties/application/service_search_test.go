@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -177,7 +178,7 @@ func TestSearchProperties_RejectsInvalidInput(t *testing.T) {
 	t.Parallel()
 
 	svc := newSearchService(t, &searchRecordingRepo{})
-	oversized := string(make([]byte, 256))
+	oversized := strings.Repeat("а", maxSearchQueryLength+1)
 
 	cases := []struct {
 		name   string
@@ -198,5 +199,25 @@ func TestSearchProperties_RejectsInvalidInput(t *testing.T) {
 				t.Fatalf("expected ErrInvalidInput, got %v", err)
 			}
 		})
+	}
+}
+
+// The contract's maxLength counts characters, not bytes: a Cyrillic query
+// at the boundary is twice the bytes but stays legal (the code-review
+// finding — the repo's contract-first rule).
+func TestSearchProperties_LengthCountsCharacters(t *testing.T) {
+	t.Parallel()
+
+	repo := &searchRecordingRepo{page: []domain.Property{}}
+	svc := newSearchService(t, repo)
+
+	atBoundary := strings.Repeat("а", maxSearchQueryLength)
+	if _, _, err := svc.SearchProperties(
+		context.Background(), searchActor, atBoundary, SearchPropertiesPage{},
+	); err != nil {
+		t.Fatalf("expected a 255-character search to pass, got %v", err)
+	}
+	if repo.got.Search != atBoundary {
+		t.Error("expected the search forwarded to the store")
 	}
 }
