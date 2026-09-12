@@ -11,6 +11,7 @@ import {
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
 import { usePropertiesLandingHref } from '@/features/properties';
+import { HubPrefetchProvider } from './hub-prefetch-provider';
 import { PushPermissionGate } from './push-permission-gate';
 import { TopNavUserProvider } from './top-nav-user-provider';
 
@@ -45,20 +46,22 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
 
   return (
     <TabBarVisibilityProvider>
-      <TopNavUserProvider>
-        <div className="flex min-h-screen flex-col tablet:pt-[72px]">
-          <DesktopSidebar propertiesHref={propertiesHref} />
-          <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
-            {children}
+      <HubPrefetchProvider>
+        <TopNavUserProvider>
+          <div className="flex min-h-screen flex-col tablet:pt-[72px]">
+            <DesktopSidebar propertiesHref={propertiesHref} />
+            <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
+              {children}
+            </div>
+            <DesktopNavPills />
+            <TabBar propertiesHref={propertiesHref} />
+            <ServiceWorkerRegister />
+            <ServiceWorkerUpdater />
+            <PullToRefresh contentRef={contentRef} />
+            <PushPermissionGate />
           </div>
-          <DesktopNavPills />
-          <TabBar propertiesHref={propertiesHref} />
-          <ServiceWorkerRegister />
-          <ServiceWorkerUpdater />
-          <PullToRefresh contentRef={contentRef} />
-          <PushPermissionGate />
-        </div>
-      </TopNavUserProvider>
+        </TopNavUserProvider>
+      </HubPrefetchProvider>
     </TabBarVisibilityProvider>
   );
 }

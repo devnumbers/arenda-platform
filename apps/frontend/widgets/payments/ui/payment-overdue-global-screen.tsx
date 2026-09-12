@@ -15,14 +15,13 @@ import {
   EmptyState,
   IconButton,
   PageContent,
-  Skeleton,
   TopNav,
   TopNavTitle,
 } from "@/shared/ui/design";
 import { goBack } from "@/shared/lib/navigation";
 import { globalOverdueList, type OverdueSort } from "../lib/overdue-global-model";
 import { overdueDaysLine } from "../lib/payments-global-model";
-import { PaymentsStateCard } from "./payments-sections";
+import { PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
 
 /**
  * Экран «Просроченные операции» (карта #573, тикет #580; вход — карточка
@@ -85,11 +84,22 @@ export function PaymentOverdueGlobalScreen({
       <PageContent>
         <div data-testid="payments-overdue-screen" className="flex flex-col">
           {pending && (
-            <div className="flex flex-col" aria-hidden>
-              {Array.from({ length: 5 }, (_, index) => (
-                <Skeleton key={index} className="mb-1 h-[60px] w-full" />
-              ))}
-            </div>
+            <>
+              {/* Паритет §7: чип сортировки реальный — вне фазы загрузки
+               * (в непустой книге он стоит над списком, тап до данных лишь
+               * меняет направление); строки канона PaymentRowButton —
+               * иконка, название, объект, сумма и срок. */}
+              <div className="px-6 pb-3">
+                <ChipButton
+                  data-testid="overdue-sort-chip"
+                  trailingIcon={<ChangeVertical />}
+                  onClick={toggleSort}
+                >
+                  {sort === "old" ? "Старые" : "Новые"}
+                </ChipButton>
+              </div>
+              <PaymentsRowsSkeleton />
+            </>
           )}
 
           {feedQuery.isError && (

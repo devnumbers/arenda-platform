@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -106,6 +107,10 @@ func (r *lockingFakePropertyRepo) GetByIDForUpdate(ctx context.Context, id uuid.
 }
 
 func (r *lockingFakePropertyRepo) ListActiveByOwner(_ context.Context, _ uuid.UUID) ([]domain.Property, error) {
+	return nil, nil
+}
+
+func (r *lockingFakePropertyRepo) SearchVisible(_ context.Context, _ uuid.UUID, _ PropertySearchQuery) ([]domain.Property, error) {
 	return nil, nil
 }
 
@@ -587,6 +592,23 @@ func (r *fakePropertyRepo) ListArchivedByOwner(_ context.Context, _ uuid.UUID) (
 		}
 	}
 	return archived, nil
+}
+
+func (r *fakePropertyRepo) SearchVisible(_ context.Context, actor uuid.UUID, q PropertySearchQuery) ([]domain.Property, error) {
+	matches := make([]domain.Property, 0, len(r.data))
+	for _, p := range r.data {
+		if p.OwnerID != actor || p.Status == domain.PropertyStatusArchived {
+			continue
+		}
+		if q.Search != "" && !strings.Contains(p.Name, q.Search) && !strings.Contains(p.Address, q.Search) {
+			continue
+		}
+		matches = append(matches, p)
+	}
+	if len(matches) > int(q.Limit) {
+		matches = matches[:q.Limit]
+	}
+	return matches, nil
 }
 
 func (r *fakePropertyRepo) Update(_ context.Context, _ uuid.UUID, property domain.Property) (domain.Property, error) {

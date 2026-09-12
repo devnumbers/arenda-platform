@@ -52,7 +52,8 @@ import {
   TasksPropertySelectPage,
   type TasksFilterDraft,
 } from './tasks-property-select';
-import { TasksSkeleton, TasksStateCard } from './tasks-of-property-screen';
+import { TasksFeedSkeleton } from './tasks-skeletons';
+import { TasksStateCard } from './tasks-of-property-screen';
 import { sectionKey, sectionTone } from './tasks-section-utils';
 import { SortChip, sortPickerGroups } from './tasks-sort';
 
@@ -223,7 +224,7 @@ export function TasksFeedScreen(): JSX.Element {
           </div>
 
           {!showEmpty && (
-          <div className="mt-6 flex items-center justify-between pr-3.5 pl-6">
+          <div className="mt-4 flex items-center justify-between pr-3.5 pl-6">
             <div className="flex items-center gap-2">
               <PickerMenu title="Сортировать" groups={sortPickerGroups(sort, setSort)}>
                 <SortChip sort={sort} />
@@ -272,11 +273,9 @@ export function TasksFeedScreen(): JSX.Element {
 
         <div className="mt-6 flex flex-col gap-6 pb-6">
           {activeQuery.isPending || completedQuery.isPending ? (
-            <>
-              <TasksSkeleton />
-              <TasksSkeleton />
-              <TasksSkeleton />
-            </>
+            // Паритет §7: секции-карточки со строками задач и свёрнутые
+            // «Выполненные»; чипы выше — вне фазы загрузки.
+            <TasksFeedSkeleton />
           ) : activeQuery.isError ? (
             <TasksStateCard
               title="Не удалось загрузить задачи"

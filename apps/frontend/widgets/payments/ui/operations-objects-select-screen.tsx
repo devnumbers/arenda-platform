@@ -17,12 +17,12 @@ import {
   IconButton,
   ListRow,
   PageContent,
-  Skeleton,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
 import { PaymentsStateCard } from './payments-sections';
+import { OperationsObjectsSkeleton } from './operations-skeletons';
 
 /**
  * Страница «Выбрать объект» (#542, Figma 1733-26805) — мультивыбор для
@@ -113,7 +113,14 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
             }
             onSelect={() => setDraft([])}
           />
-          {propertiesQuery.isPending && <ObjectRowsSkeleton />}
+          {propertiesQuery.isPending && (
+            <>
+              {/* Разделитель в фазе загрузки — как после загрузки, чтобы
+               * контент занял место скелетона без сдвига (§7). */}
+              <div aria-hidden className="mx-6 h-px bg-surface-muted" />
+              <OperationsObjectsSkeleton />
+            </>
+          )}
           {propertiesQuery.isError && (
             <div className="px-6 py-6">
               <PaymentsStateCard
@@ -195,7 +202,8 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
  * дом (BoldHome) у объектов, BoldObjects (Figma 208:2994) у «Все объекты»,
  * BoldArchive у опции архива (#549). Цвет плейсхолдеров — #D3D7D9 по макету
  * (1733-26805/26831, пиксельная сверка 07.09), не text-content-tertiary. */
-function SelectAvatar({ photoUrl, fallback }: {
+/** Круг-плейсхолдер ряда объекта — экспорт для route-loading (#609). */
+export function SelectAvatar({ photoUrl, fallback }: {
   readonly photoUrl?: string;
   readonly fallback: JSX.Element;
 }): JSX.Element {
@@ -210,22 +218,5 @@ function SelectAvatar({ photoUrl, fallback }: {
         fallback
       )}
     </span>
-  );
-}
-
-/** Скелет строк объектов на время загрузки списка. */
-function ObjectRowsSkeleton(): JSX.Element {
-  return (
-    <div aria-hidden className="flex flex-col gap-6 py-6">
-      {[0, 1, 2, 3].map((row) => (
-        <div key={row} className="flex items-center gap-2 px-6">
-          <Skeleton className="h-12 w-12 rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-4 w-2/5" />
-            <Skeleton className="h-3.5 w-3/5" />
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }

@@ -1,22 +1,12 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { PropertiesSearchScreen } from '@/widgets/properties';
 
-/**
- * Страница поиска объектов (#586): поисковая шапка, клиентский фильтр по
- * названию и адресу активной книги. Запрос живёт в query-параметре (?q=)
- * — useSearchParams за Suspense-границей (требование App Router).
- */
-
+/** Поиск по объектам — страница с поисковой шапкой канона (карта #596,
+ * тикет #601; пилюля на хабе «Объекты»). На едином хроме экранов (#565). */
 export const metadata: Metadata = {
   title: 'Поиск объектов — Рентли',
-  description: 'Поиск по объектам',
 };
 
-export default function PropertiesSearchRoutePage() {
-  return (
-    <Suspense fallback={null}>
-      <PropertiesSearchScreen />
-    </Suspense>
-  );
+export default function PropertySearchRoutePage() {
+  return <PropertiesSearchScreen />;
 }

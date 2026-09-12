@@ -154,6 +154,17 @@ type SubscriptionLimiter interface {
 	WithTx(tx transaction.Tx) (SubscriptionLimiter, error)
 }
 
+// PropertySearchQuery is the visible-slice search's parameters (ticket
+// #601): the raw search substring — the store escapes the ILIKE
+// metacharacters — and the keyset window over (name, id). AfterName and
+// AfterID travel together; nil (no cursor) reads from the beginning.
+type PropertySearchQuery struct {
+	Search    string
+	AfterName *string
+	AfterID   *uuid.UUID
+	Limit     int32
+}
+
 type PropertyRepository interface {
 	Create(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
 	GetByIDAndOwner(ctx context.Context, id, scope uuid.UUID) (domain.Property, error)
@@ -167,6 +178,12 @@ type PropertyRepository interface {
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Property, error)
 	ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
 	ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
+	// SearchVisible walks the actor's visible non-archived properties (own
+	// plus actively shared) matching the search substring, in the (name, id)
+	// keyset order — the search endpoint's window (ticket #601). AccessRole
+	// is filled per row: RoleOwner for own rows, the membership role for
+	// shared ones.
+	SearchVisible(ctx context.Context, actor uuid.UUID, q PropertySearchQuery) ([]domain.Property, error)
 	Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
 	// SetPin writes the global pin in one atomic UPDATE (ticket #577, the
 	// PUT favorite's canon): nil clears it, a moment pins the property since

@@ -12,7 +12,9 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
@@ -451,6 +453,78 @@ func (s *PropertyService) listToday(ctx context.Context, actor uuid.UUID) (time.
 	}
 	now := s.clock.Now().UTC()
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), nil
+}
+
+const (
+	// DefaultPropertySearchPageSize is the search page the contract serves
+	// when the client names no limit (ticket #601) — the other searches'
+	// canon (#597).
+	DefaultPropertySearchPageSize = 50
+	MaxPropertySearchPageSize     = 100
+	// MaxSearchQueryLength is the contract's search-parameter bound.
+	maxSearchQueryLength = 255
+)
+
+// SearchPropertiesPage is the search list's page request (ticket #601): the
+// 50-per-page window the search screen's infinite scroll walks. The zero
+// limit means the contract's default page; Cursor is the previous page's
+// opaque continuation ("" = from the beginning).
+type SearchPropertiesPage struct {
+	Limit  int32
+	Cursor string
+}
+
+// SearchProperties narrows the actor's visible slice by the search query —
+// a case-insensitive substring over the property's name and address — and
+// returns the matched cards in pages of 50, the search screen's infinite
+// scroll walking them (ticket #601). The window is the keyset walk over
+// (name, id) (ticket #597's pattern): the page resumes strictly after the
+// cursor's key and answers with the next page's cursor once it came back
+// full. The name sort mirrors the hub's own default (the client sorts the
+// list by name), so the search results read in the same order the hub
+// shows; a rename shifting a row across a window boundary is inherent to
+// the visible-name sort, as in the contacts book (#600).
+func (s *PropertyService) SearchProperties(
+	ctx context.Context, actor uuid.UUID, search string, page SearchPropertiesPage,
+) ([]domain.Property, string, error) {
+	if trimmed := strings.TrimSpace(search); trimmed == "" {
+		return nil, "", fmt.Errorf("%w: empty search", ErrInvalidInput)
+	} else if utf8.RuneCountInString(trimmed) > maxSearchQueryLength {
+		// The contract's maxLength counts characters (codepoints), not bytes —
+		// a 130-letter Cyrillic query is legal and must not 400.
+		return nil, "", fmt.Errorf("%w: search exceeds %d characters", ErrInvalidInput, maxSearchQueryLength)
+	}
+	if page.Limit == 0 {
+		page.Limit = DefaultPropertySearchPageSize
+	}
+	if page.Limit < 1 || page.Limit > MaxPropertySearchPageSize {
+		return nil, "", fmt.Errorf("%w: limit out of range", ErrInvalidInput)
+	}
+	query := PropertySearchQuery{Search: search, Limit: page.Limit}
+	if page.Cursor != "" {
+		afterName, afterID, err := DecodePropertySearchCursor(page.Cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		query.AfterName = &afterName
+		query.AfterID = &afterID
+	}
+	properties, err := s.repo.SearchVisible(ctx, actor, query)
+	if err != nil {
+		return nil, "", fmt.Errorf("search visible properties: %w", err)
+	}
+	properties, err = s.withPhotos(ctx, properties...)
+	if err != nil {
+		return nil, "", err
+	}
+	// A full page answers with the last row's continuation; a short one has
+	// walked the matches to the end — the empty cursor stops the scroll.
+	nextCursor := ""
+	if len(properties) == int(page.Limit) {
+		last := properties[len(properties)-1]
+		nextCursor = EncodePropertySearchCursor(last.Name, last.ID)
+	}
+	return properties, nextCursor, nil
 }
 
 func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {

@@ -87,8 +87,11 @@ type Authenticator interface {
 	// email on file; the caller should then ask the user for an email.
 	SendCodeByPhone(ctx context.Context, phone domain.Phone) (sent bool, err error)
 	// VerifyCode accepts an optional email; nil resolves the email from the
-	// stored user record for the phone.
-	VerifyCode(ctx context.Context, phone domain.Phone, email *domain.Email, code string) (domain.RawSession, domain.User, error)
+	// stored user record for the phone. An optional timezone (browser-detected,
+	// #451) applies only when the verify registers a new user.
+	VerifyCode(
+		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string,
+	) (domain.RawSession, domain.User, error)
 }
 
 // PhoneChanger handles phone-number change for authenticated users.
@@ -237,7 +240,7 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code)
+	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code, body.Timezone)
 	if err != nil {
 		if writeSharedIdentityError(w, r, err, "Неверный телефон, почта или код") {
 			return

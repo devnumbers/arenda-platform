@@ -1,9 +1,13 @@
 'use client';
 
 import {
+  keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
@@ -21,26 +25,42 @@ import type { components } from '@/shared/api/dto';
 type ContactsResponse = components['schemas']['ContactsResponse'];
 type ContactResponse = components['schemas']['ContactResponse'];
 
+/** Порция списка контактов: контракт книги (#600) — порции по 50. */
+export const CONTACTS_PAGE_SIZE = 50;
+
 /**
- * Книга контактов объекта (ADR 0054, экран #508): без пагинации, порядок —
- * серверный. search — серверный регистронезависимый подстрочный фильтр по
- * имени, телефону, почте, имени пользователя мессенджера и роли ('' = без
- * фильтра). Чтение через view-гейт объекта: участник с ролью CanView видит
- * привязанные к объекту контакты (403 — проблема Forbidden).
+ * Порция списка контактов (#600): строки плюс keyset-продолжение —
+ * opaque-курсор следующей порции, null = порций больше нет.
+ */
+export type ContactsPageData = {
+  readonly items: Contact[];
+  readonly nextCursor: string | null;
+};
+
+/**
+ * Книга контактов объекта (ADR 0054, экран #508): порции по 50 keyset-курсором
+ * (#600) — pageParam это курсор прошлого ответа, без него чтение с начала.
+ * search — серверный регистронезависимый подстрочный фильтр по имени,
+ * телефону, почте, имени пользователя мессенджера и роли ('' = без фильтра).
+ * Чтение через view-гейт объекта: участник с ролью CanView видит привязанные
+ * к объекту контакты (403 — проблема Forbidden).
+ * keepPreviousData — прежний срез держится на экране, пока едет запрос
+ * с новым ?search= (набор не мигает скелетоном, канон платежей #609);
+ * смена propertyId держит список прежнего объекта до прихода нового —
+ * осознанно, как у платежей.
  */
 export function useContacts(
   propertyId: string,
   search = '',
-): UseQueryResult<Contact[], ApiError> {
-  return useQuery({
+): UseInfiniteQueryResult<Contact[], ApiError> {
+  return useInfiniteQuery({
     queryKey: contactKeys.list(propertyId, search),
-    queryFn: async () => {
-      const query = search ? `&search=${encodeURIComponent(search)}` : '';
-      const response = await apiClient<ContactsResponse>(
-        `/contacts?property_id=${encodeURIComponent(propertyId)}${query}`,
-      );
-      return response.items.map(mapContact);
-    },
+    queryFn: ({ pageParam }) =>
+      fetchContactsPage({ propertyId, search, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    select: (data) => data.pages.flatMap((page) => page.items),
+    placeholderData: keepPreviousData,
     enabled: Boolean(propertyId),
   });
 }
@@ -52,37 +72,85 @@ export type ContactBookSort = 'name' | 'property';
 /** Направление сортировки плоской книги. */
 export type ContactBookOrder = 'asc' | 'desc';
 
+/** Общее горло порции GET /contacts (#600): с propertyId — срез объекта,
+ * без — плоская книга; sort/order уходят только отличные от дефолта
+ * (сервер нормализует пустые сам), cursor — keyset-продолжение прошлого
+ * ответа, undefined читает с начала. */
+async function fetchContactsPage(params: {
+  propertyId?: string;
+  search?: string;
+  sort?: ContactBookSort;
+  order?: ContactBookOrder;
+  cursor?: string;
+}): Promise<ContactsPageData> {
+  const query = new URLSearchParams();
+  if (params.propertyId) {
+    query.set('property_id', params.propertyId);
+  }
+  if (params.search) {
+    query.set('search', params.search);
+  }
+  if (params.sort && params.sort !== 'name') {
+    query.set('sort', params.sort);
+  }
+  if (params.order && params.order !== 'asc') {
+    query.set('order', params.order);
+  }
+  query.set('limit', String(CONTACTS_PAGE_SIZE));
+  if (params.cursor) {
+    query.set('cursor', params.cursor);
+  }
+  const response = await apiClient<ContactsResponse>(
+    `/contacts?${query.toString()}`,
+  );
+  return {
+    items: response.items.map(mapContact),
+    nextCursor: response.nextCursor ?? null,
+  };
+}
+
+/** Конфиг keyset-обхода плоской книги (#600) — общее горло useContactBook
+ * и прогрева хабов #626: один ключ, один fetch, одно правило продолжения —
+ * прогрев не может разъехаться с экраном. */
+export function contactBookQuery(
+  search = '',
+  sort: ContactBookSort = 'name',
+  order: ContactBookOrder = 'asc',
+) {
+  return {
+    queryKey: contactKeys.list(null, search, sort, order),
+    queryFn: ({ pageParam }: { pageParam?: string }) =>
+      fetchContactsPage({ search, sort, order, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage: ContactsPageData) =>
+      lastPage.nextCursor ?? undefined,
+  };
+}
+
 /**
  * Плоский список всей видимой книги (глобальная страница контактов, макет
  * 1726:65083): GET /contacts без property_id — сервер отдаёт объединённый
  * срез (свои карточки + привязанные к доступным объектам, ADR 0028/0054) с
  * серверными search/sort/order; propertyName в ответе — имя привязанного
- * объекта для подзаголовков и групп.
+ * объекта для подзаголовков и групп. Порции по 50 листаются keyset-курсором
+ * (#600): pageParam — курсор прошлого ответа, смена queryKey начинает свежий
+ * обход с пустого курсора — sentinel не наследует позицию прошлых порций.
+ * Склейка порций без дедупа: один сортировочный ключ, повторы keyset не
+ * порождает (решение тикета #600).
  */
 export function useContactBook(
   search = '',
   sort: ContactBookSort = 'name',
   order: ContactBookOrder = 'asc',
-): UseQueryResult<Contact[], ApiError> {
-  return useQuery({
-    queryKey: contactKeys.list(null, search, sort, order),
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (search !== '') {
-        params.set('search', search);
-      }
-      if (sort !== 'name') {
-        params.set('sort', sort);
-      }
-      if (order !== 'asc') {
-        params.set('order', order);
-      }
-      const query = params.toString();
-      const response = await apiClient<ContactsResponse>(
-        `/contacts${query !== '' ? `?${query}` : ''}`,
-      );
-      return response.items.map(mapContact);
-    },
+): UseInfiniteQueryResult<Contact[], ApiError> {
+  return useInfiniteQuery({
+    ...contactBookQuery(search, sort, order),
+    select: (data: InfiniteData<ContactsPageData>) =>
+      data.pages.flatMap((page) => page.items),
+    // Набор в поиске и смена сортировки держат прежнюю выдачу, пока едет
+    // новый запрос (#609, канон платежей): скелетон — только когда данных
+    // нет вовсе.
+    placeholderData: keepPreviousData,
   });
 }
 

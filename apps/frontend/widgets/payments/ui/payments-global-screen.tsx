@@ -115,7 +115,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
             onAddProperty={() => router.push(ROUTES.propertyNew)}
           />
         ) : (
-          <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-1">
+          <div className="-mx-5 flex min-[1200px]:mx-0 flex-col gap-6 px-6 pt-4">
             {/* Ритм страницы — ровно 24px по бокам, как на «Операциях»:
              * контент кабинета даёт 20px до 1200px, страница выравнивает
              * себя до 24 сама. */}
@@ -221,7 +221,8 @@ export function PaymentsGlobalScreen(): JSX.Element {
 /** Пилюля поиска (879:9683): серый rounded-pill, лупа и подпись «Найти
  * платёж»; тап открывает страницу поиска (#581). Слайдеры справа — декор
  * макета: не кнопка, кликается вся пилюля целиком. */
-function PaymentsSearchPill({
+/** Пилюля поиска платежей — экспорт для route-loading (#609). */
+export function PaymentsSearchPill({
   onOpenSearch,
 }: {
   readonly onOpenSearch: () => void;
@@ -264,7 +265,7 @@ function PaymentsGlobalSection({
         <button
           type="button"
           onClick={onOpen}
-          className="flex cursor-pointer items-center gap-3 rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
         >
           {title}
           <SmallArrowDown
@@ -515,7 +516,9 @@ function PaymentsGlobalEmpty({
 
 /** Скелетон секции на время загрузки: строка заголовка и пара плиток
  * карточек. */
-function PaymentsGlobalSectionSkeleton(): JSX.Element {
+/** Секция-заглушка хаба «Платежи» (#605): каркас PaymentsGlobalSection —
+ * заголовок и лента плиток-карточек. Экспорт для route-loading (#609). */
+export function PaymentsGlobalSectionSkeleton(): JSX.Element {
   return (
     <section className="flex flex-col gap-4" aria-hidden>
       <Skeleton className="h-6 w-40" />

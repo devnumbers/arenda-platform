@@ -38,7 +38,8 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { PaymentsStateCard } from './payments-sections';
+import { OperationDetailSkeleton } from './payments-skeletons';
 import {
   operationDetailRows,
   operationHeroAmount,
@@ -154,12 +155,7 @@ export function OperationDetailScreen({
 
       <PageContent>
         <div className="flex flex-col gap-6">
-          {loading && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
-          )}
+          {loading && <OperationDetailSkeleton />}
 
           {failed && (
             <PaymentsStateCard

@@ -65,18 +65,6 @@
   color: var(--color-text-muted);
 }
 
-.headerSkeleton {
-  height: 24px;
-  width: 50%;
-  border-radius: 8px;
-}
-
-.metaSkeleton {
-  height: 18px;
-  width: 35%;
-  border-radius: 6px;
-}
-
 .error,
 .empty {
   display: flex;

@@ -48,7 +48,7 @@ func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
 			// ErrTooManyAttempts near the threshold), both of which record a
 			// failure via recordFailedLogin; anything else would break the
 			// count assertion below.
-			_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000")
+			_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000", nil)
 			errs <- err
 		})
 	}

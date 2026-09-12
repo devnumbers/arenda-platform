@@ -1,22 +1,41 @@
 'use client';
 
 import type { JSX } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Search } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
-import { usePaymentWizardDraft, type PaymentDraftType } from '@/features/payments';
-import { Button, PageContent, TopNav } from '@/shared/ui/design';
+import {
+  usePaymentWizardDraft,
+  WIZARD_TOTAL_STEPS,
+  type PaymentDraftType,
+} from '@/features/payments';
+import {
+  Button,
+  IconButton,
+  PageContent,
+  StepsChip,
+  TopNav,
+} from '@/shared/ui/design';
 import {
   PaymentsEmptyCard,
-  PaymentsSkeleton,
   PaymentsStateCard,
 } from '../payments-sections';
+import { CategoryRowsSkeleton } from '../payments-skeletons';
+import { WizardHeading } from './wizard-chrome';
 import { PaymentCreateWizardFlow } from './payment-create-wizard-flow';
 
 /**
  * Экран визарда создания платежа (#464): маршрут /properties/[id]/payments/new,
  * тип «Платёж / Автоплатёж» приходит query-параметром (шит выбора #463).
  * Черновик монтируется только после гидрации хранилища, поэтому экран
- * показывает скелет, а мутационный вход закрыт для смотрящего и архива
+ * показывает загрузку, а мутационный вход закрыт для смотрящего и архива
  * (read-only, история 47 спеки #453).
+ *
+ * Загрузка (#607, паритет §7): холодный вход открывает шаг 1 «Категория
+ * платежа» — хром шага (Назад, лупа, чип шага) и заголовок рендерятся
+ * сразу, скелетон закрывает только список категорий.
  */
 
 export type PaymentCreateWizardScreenProps = {
@@ -28,6 +47,7 @@ export function PaymentCreateWizardScreen({
   propertyId,
   draftType,
 }: PaymentCreateWizardScreenProps): JSX.Element {
+  const router = useRouter();
   const propertyQuery = useProperty(propertyId);
   const draftState = usePaymentWizardDraft(propertyId, draftType);
 
@@ -41,12 +61,23 @@ export function PaymentCreateWizardScreen({
     <>
       {loading && (
         <>
-          <TopNav />
-          <PageContent>
-            <div className="flex flex-col gap-4 pt-6">
-              <PaymentsSkeleton />
-              <PaymentsSkeleton />
-            </div>
+          <TopNav
+            leading={
+              <IconButton
+                icon={<ArrowLeft />}
+                label="Назад"
+                onClick={() => goBack(router, ROUTES.propertyPayments(propertyId))}
+              />
+            }
+            trailing={
+              <IconButton icon={<Search />} label="Поиск по категориям" disabled />
+            }
+          >
+            <StepsChip step={1} total={WIZARD_TOTAL_STEPS} size="m" />
+          </TopNav>
+          <PageContent className="pt-0">
+            <WizardHeading title="Категория платежа" subtitle="Выберите категорию" />
+            <CategoryRowsSkeleton />
           </PageContent>
         </>
       )}

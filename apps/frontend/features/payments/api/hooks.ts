@@ -38,6 +38,7 @@ import {
   type PaymentOperationStatusFilter,
 } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
+import { flattenUniqueById } from '../lib/feed-pages';
 
 type PaymentsResponse = components['schemas']['PaymentsResponse'];
 type OperationsResponse = components['schemas']['OperationsResponse'];
@@ -409,14 +410,78 @@ export function usePropertyOperationsSummary(
   });
 }
 
+/** Скоуп глобальной ленты → общая часть query-параметров (объекты, период,
+ * направление, архив, поиск); пагинация и порядок — у порции, сводка их не
+ * принимает. Общее горло хуков и прогрева хабов #626. */
+function operationsScopeParams(scope: GlobalOperationScope): URLSearchParams {
+  const params = new URLSearchParams();
+  if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
+    params.set('propertyIds', scope.propertyIds.join(','));
+  }
+  if (scope.categories !== undefined && scope.categories.length > 0) {
+    params.set('category', scope.categories.join(','));
+  }
+  if (scope.type !== undefined) {
+    params.set('type', scope.type);
+  }
+  if (scope.includeArchived) {
+    params.set('includeArchived', 'true');
+  }
+  if (scope.dateFrom !== undefined) {
+    params.set('date_from', scope.dateFrom);
+  }
+  if (scope.dateTo !== undefined) {
+    params.set('date_to', scope.dateTo);
+  }
+  if (scope.search !== undefined && scope.search !== '') {
+    params.set('search', scope.search);
+  }
+  return params;
+}
+
+/** Порция глобальной ленты (#597): строки плюс keyset-продолжение —
+ * opaque-курсор следующей порции, null = лента исчерпана. */
+export type GlobalOperationsPageData = {
+  readonly items: ReadonlyArray<PaymentOperation>;
+  readonly nextCursor: string | null;
+};
+
+/** Чистый fetch порции глобальной ленты — общее горло хука и прогрева
+ * хабов #626. cursor — keyset-продолжение прошлого ответа (#597);
+ * undefined читает ленту с начала. */
+export async function fetchGlobalOperationsPage(
+  scope: GlobalOperationScope,
+  cursor?: string,
+): Promise<GlobalOperationsPageData> {
+  const params = operationsScopeParams(scope);
+  params.set('order', scope.order);
+  params.set('limit', String(OPERATIONS_PAGE_SIZE));
+  if (cursor) {
+    params.set('cursor', cursor);
+  }
+  const response = await apiClient<OperationsResponse>(`/operations?${params.toString()}`);
+  return {
+    items: response.items.map(mapPaymentOperation),
+    nextCursor: response.nextCursor ?? null,
+  };
+}
+
+/** Есть ли следующая порция: пока сервер отдал keyset-продолжение (#597). */
+export function operationsNextPageParam(
+  lastPage: GlobalOperationsPageData,
+): string | undefined {
+  return lastPage.nextCursor ?? undefined;
+}
+
 /**
- * Порции глобальной ленты операций (#541, контракт /operations #540):
- * платёжные факты всех видимых объектов — свои плюс с активным членством
- * (ADR 0028), архивные исключены сервером; лента paid-only. Тот же
- * пагинационный контракт, что у объектных списков: pageParam — offset,
- * следующая страница есть, пока порция полная. `options.enabled` глушит
+ * Глобальная лента операций (карта #540, #541): платёжные факты видимой
+ * книги (ADR 0028), архивные исключены сервером; лента paid-only. Порции
+ * листаются keyset-курсором (#597): pageParam — курсор прошлого ответа,
+ * смена queryKey начинает свежий обход с пустого курсора — sentinel не
+ * наследует позицию прошлых порций. `options.enabled` глушит
  * запрос (поиск #543 не стреляет, пока запрос не введён);
- * keepPreviousData держит прежнюю страницу, пока едет новая.
+ * keepPreviousData держит прежнюю страницу, пока едет новая; склейка
+ * порций дедуплицируется по id — страховка от повторов на гонках.
  */
 export function useGlobalOperationsPaged(
   scope: GlobalOperationScope,
@@ -424,45 +489,25 @@ export function useGlobalOperationsPaged(
 ): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
   return useInfiniteQuery({
     queryKey: globalOperationKeys.listPaged(scope),
-    queryFn: async ({ pageParam }) => {
-      const params = new URLSearchParams({
-        order: scope.order,
-        limit: String(OPERATIONS_PAGE_SIZE),
-        offset: String(pageParam),
-      });
-      if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
-        params.set('propertyIds', scope.propertyIds.join(','));
-      }
-      if (scope.categories !== undefined && scope.categories.length > 0) {
-        params.set('category', scope.categories.join(','));
-      }
-      if (scope.type !== undefined) {
-        params.set('type', scope.type);
-      }
-      if (scope.includeArchived) {
-        params.set('includeArchived', 'true');
-      }
-      if (scope.dateFrom !== undefined) {
-        params.set('date_from', scope.dateFrom);
-      }
-      if (scope.dateTo !== undefined) {
-        params.set('date_to', scope.dateTo);
-      }
-      if (scope.search !== undefined && scope.search !== '') {
-        params.set('search', scope.search);
-      }
-      const response = await apiClient<OperationsResponse>(`/operations?${params.toString()}`);
-      return response.items.map(mapPaymentOperation);
-    },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < OPERATIONS_PAGE_SIZE
-        ? undefined
-        : allPages.length * OPERATIONS_PAGE_SIZE,
-    select: (data) => data.pages.flat(),
+    queryFn: ({ pageParam }) => fetchGlobalOperationsPage(scope, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: operationsNextPageParam,
+    select: (data) => flattenUniqueById(data.pages.map((page) => page.items)),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });
+}
+
+/** Чистый fetch сводки операций — общее горло хука и прогрева хабов #626. */
+export async function fetchGlobalOperationsSummary(
+  scope: GlobalOperationScope,
+): Promise<OperationsSummary> {
+  const params = operationsScopeParams(scope);
+  const query = params.toString();
+  const response = await apiClient<OperationsSummaryResponse>(
+    `/operations/summary${query.length > 0 ? `?${query}` : ''}`,
+  );
+  return mapOperationsSummary(response);
 }
 
 /**
@@ -505,32 +550,7 @@ export function useGlobalOperationsSummary(
 ): UseQueryResult<OperationsSummary, ApiError> {
   return useQuery({
     queryKey: globalOperationKeys.summary(scope),
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (scope.propertyIds !== undefined && scope.propertyIds.length > 0) {
-        params.set('propertyIds', scope.propertyIds.join(','));
-      }
-      if (scope.type !== undefined) {
-        params.set('type', scope.type);
-      }
-      if (scope.includeArchived) {
-        params.set('includeArchived', 'true');
-      }
-      if (scope.dateFrom !== undefined) {
-        params.set('date_from', scope.dateFrom);
-      }
-      if (scope.dateTo !== undefined) {
-        params.set('date_to', scope.dateTo);
-      }
-      if (scope.search !== undefined && scope.search !== '') {
-        params.set('search', scope.search);
-      }
-      const query = params.toString();
-      const response = await apiClient<OperationsSummaryResponse>(
-        `/operations/summary${query.length > 0 ? `?${query}` : ''}`,
-      );
-      return mapOperationsSummary(response);
-    },
+    queryFn: () => fetchGlobalOperationsSummary(scope),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });
@@ -687,6 +707,15 @@ export function usePayOperation(
   });
 }
 
+/** Чистый fetch фида «Платежей» — общее горло хука и прогрева хабов
+ * #626 (кэш прогревается тем же кодом, что читает экран). */
+export async function fetchGlobalPaymentsFeed(): Promise<GlobalPaymentFeed> {
+  const response = await apiClient<components['schemas']['PaymentsGlobalResponse']>(
+    '/payments',
+  );
+  return mapGlobalPaymentFeed(response);
+}
+
 /**
  * Фид главного экрана «Платежи» (карта #573, #575): все правила видимой
  * книги целиком (пагинации нет) плюс счётчики целого скоупа — карточки
@@ -697,13 +726,19 @@ export function usePayOperation(
 export function useGlobalPayments(): UseQueryResult<GlobalPaymentFeed, ApiError> {
   return useQuery({
     queryKey: globalPaymentKeys.feed,
-    queryFn: async () => {
-      const response = await apiClient<components['schemas']['PaymentsGlobalResponse']>(
-        '/payments',
-      );
-      return mapGlobalPaymentFeed(response);
-    },
+    queryFn: fetchGlobalPaymentsFeed,
   });
+}
+
+/** Чистый fetch стопок объектов «Платежей» — общее горло хука и prefetch. */
+export async function fetchGlobalPaymentObjects(
+  search = '',
+): Promise<ReadonlyArray<GlobalPaymentObject>> {
+  const query = search ? `?search=${encodeURIComponent(search)}` : '';
+  const response = await apiClient<components['schemas']['PaymentObjectsGlobalResponse']>(
+    `/payments/objects${query}`,
+  );
+  return response.items.map(mapGlobalPaymentObject);
 }
 
 /**
@@ -720,13 +755,7 @@ export function useGlobalPaymentObjects(
 ): UseQueryResult<ReadonlyArray<GlobalPaymentObject>, ApiError> {
   return useQuery({
     queryKey: globalPaymentKeys.objects(search),
-    queryFn: async () => {
-      const query = search ? `?search=${encodeURIComponent(search)}` : '';
-      const response = await apiClient<components['schemas']['PaymentObjectsGlobalResponse']>(
-        `/payments/objects${query}`,
-      );
-      return response.items.map(mapGlobalPaymentObject);
-    },
+    queryFn: () => fetchGlobalPaymentObjects(search),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });
@@ -763,10 +792,14 @@ export const PAYMENT_SEARCH_PAGE_SIZE = 50;
 
 /**
  * Поиск глобальных платежей (GET /payments/search, #575; экран #581):
- * бесконечный запрос порциями по PAYMENT_SEARCH_PAGE_SIZE — offset это
- * pageParam; фильтр чипа (category + направление) сужает список серверно.
+ * бесконечный запрос порциями по PAYMENT_SEARCH_PAGE_SIZE; фильтр чипа
+ * (категория, без направления) сужает список серверно.
+ * Порции листаются keyset-курсором (#597): pageParam — nextCursor прошлого
+ * ответа, смена queryKey начинает свежий обход с пустого курсора —
+ * sentinel не наследует позицию прошлых порций при правке запроса.
  * matchedCategories сервер считает по всему скоупу запроса, поэтому в
- * результате они берутся с первой страницы. query и фильтр — части ключа;
+ * результате они берутся с первой страницы; склейка порций дедуплицируется
+ * по id — страховка от повторов на гонках.
  * keepPreviousData держит прежнюю выдачу, пока едет новый запрос (правка
  * запроса не мигает); пустой запрос экран не выполняет.
  */
@@ -784,20 +817,18 @@ export function useGlobalPaymentSearch(
       if (category) params.set('category', category);
       if (type) params.set('type', type);
       params.set('limit', String(PAYMENT_SEARCH_PAGE_SIZE));
-      params.set('offset', String(pageParam));
+      if (pageParam) params.set('cursor', pageParam);
       const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
         `/payments/search?${params.toString()}`,
       );
       return mapGlobalPaymentSearch(response);
     },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.items.length < PAYMENT_SEARCH_PAGE_SIZE
-        ? undefined
-        : allPages.length * PAYMENT_SEARCH_PAGE_SIZE,
+    initialPageParam: '',
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     select: (data): GlobalPaymentSearch => ({
-      items: data.pages.flatMap((page) => page.items),
+      items: flattenUniqueById(data.pages.map((page) => page.items)),
       matchedCategories: data.pages[0]?.matchedCategories ?? [],
+      nextCursor: data.pages[data.pages.length - 1]?.nextCursor ?? null,
     }),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,

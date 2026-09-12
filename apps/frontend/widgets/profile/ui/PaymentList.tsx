@@ -3,7 +3,7 @@
 import type { JSX } from 'react';
 import NextLink from 'next/link';
 import { Card } from '@heroui/react/card';
-import { Skeleton } from '@heroui/react/skeleton';
+import { Skeleton } from '@/shared/ui/design';
 import { Button } from '@/shared/ui/button';
 import {
   useSubscriptionPayments,
@@ -42,13 +42,14 @@ function toViewModel(payment: SubscriptionPayment): PaymentListItem {
   };
 }
 
-function PaymentListSkeleton(): JSX.Element {
+/** Скелетон истории платежей — экспорт для route-loading (#609). */
+export function PaymentListSkeleton(): JSX.Element {
   return (
     <div className={styles.list}>
       {[1, 2].map((key) => (
         <Card key={key} className={styles.card}>
-          <Skeleton className={styles.headerSkeleton} />
-          <Skeleton className={styles.metaSkeleton} />
+          <Skeleton className="h-6 w-1/2 rounded-lg" />
+          <Skeleton className="h-[18px] w-[35%] rounded-md" />
         </Card>
       ))}
     </div>

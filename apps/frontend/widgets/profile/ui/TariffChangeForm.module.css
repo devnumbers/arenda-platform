@@ -169,30 +169,6 @@
   color: var(--color-text-muted);
 }
 
-.nameSkeleton {
-  height: 24px;
-  width: 40%;
-  border-radius: 8px;
-}
-
-.priceSkeleton {
-  height: 20px;
-  width: 60%;
-  border-radius: 6px;
-}
-
-.limitSkeleton {
-  height: 18px;
-  width: 50%;
-  border-radius: 6px;
-}
-
-.buttonSkeleton {
-  height: 48px;
-  width: 100%;
-  border-radius: var(--radius-button);
-}
-
 .error {
   display: flex;
   flex-direction: column;

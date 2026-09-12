@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { OperationsGlobalSearchScreen } from '@/widgets/payments';
+import { OperationsGlobalSearchScreen, OperationsSearchLoading } from '@/widgets/payments';
 
 /**
  * Страница поиска глобальных операций (#543, Figma 1726-90433): шапка
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function OperationsGlobalSearchRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<OperationsSearchLoading />}>
       <OperationsGlobalSearchScreen />
     </Suspense>
   );

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import clsx from 'clsx';
 import { Card } from '@heroui/react/card';
-import { Skeleton } from '@heroui/react/skeleton';
+import { Skeleton } from '@/shared/ui/design';
 import { Modal } from '@heroui/react';
 import { notify } from '@/shared/lib/notifications';
 import { Button } from '@/shared/ui/button';
@@ -73,13 +73,14 @@ function DeletePaymentMethodModal({
   );
 }
 
-function PaymentMethodListSkeleton(): JSX.Element {
+/** Скелетон способов оплаты — экспорт для route-loading (#609). */
+export function PaymentMethodListSkeleton(): JSX.Element {
   return (
     <div className={styles.list}>
       {[1, 2].map((key) => (
         <Card key={key} className={styles.card}>
-          <Skeleton className={styles.maskSkeleton} />
-          <Skeleton className={styles.metaSkeleton} />
+          <Skeleton className="h-6 w-1/2 rounded-lg" />
+          <Skeleton className="h-[18px] w-[35%] rounded-md" />
         </Card>
       ))}
     </div>

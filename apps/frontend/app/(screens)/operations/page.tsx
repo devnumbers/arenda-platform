@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { OperationsGlobalScreen } from '@/widgets/payments';
+import { OperationsGlobalScreen, OperationsLoading } from '@/widgets/payments';
 
 /** Экран «Операции» — глобальная лента по всем объектам (карта #545,
  * тикет #541); на едином хроме экранов (#564), вход — «Операции» в
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function OperationsRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<OperationsLoading />}>
       <OperationsGlobalScreen />
     </Suspense>
   );

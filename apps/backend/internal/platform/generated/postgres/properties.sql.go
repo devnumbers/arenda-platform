@@ -609,6 +609,121 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 	return items, nil
 }
 
+const searchVisibleProperties = `-- name: SearchVisibleProperties :many
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.pinned_at,
+       ((SELECT COUNT(*) FROM property_members pm
+         WHERE pm.property_id = p.id) +
+       (SELECT COUNT(*) FROM property_member_invitations pmi
+         WHERE pmi.property_id = p.id))::bigint AS members_count,
+       CASE WHEN p.owner_id = $1::uuid
+            THEN 'owner'
+            ELSE pm.role END::text AS access_role
+FROM properties p
+LEFT JOIN property_members pm
+       ON pm.property_id = p.id
+      AND pm.user_id = $1::uuid
+      AND pm.status = 'active'
+WHERE (
+       p.owner_id = $1::uuid
+       OR EXISTS (
+            SELECT 1 FROM property_members vpm
+            WHERE vpm.property_id = p.id
+              AND vpm.user_id = $1::uuid
+              AND vpm.status = 'active'
+          )
+      )
+  AND p.status IN ('active', 'maintenance')
+  AND (p.name ILIKE '%' || $2::text || '%' ESCAPE '\'
+       OR p.address ILIKE '%' || $2::text || '%' ESCAPE '\')
+  AND ($3::text IS NULL
+       OR (p.name COLLATE "ru-RU-x-icu" > $3::text
+           OR (p.name COLLATE "ru-RU-x-icu" = $3::text
+               AND p.id > $4::uuid)))
+ORDER BY p.name COLLATE "ru-RU-x-icu" ASC, p.id ASC
+LIMIT $5::int
+`
+
+type SearchVisiblePropertiesParams struct {
+	Actor     pgtype.UUID `json:"actor"`
+	Search    string      `json:"search"`
+	AfterName pgtype.Text `json:"after_name"`
+	AfterID   pgtype.UUID `json:"after_id"`
+	PageLimit int32       `json:"page_limit"`
+}
+
+type SearchVisiblePropertiesRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	OwnerID      pgtype.UUID        `json:"owner_id"`
+	Name         string             `json:"name"`
+	Type         string             `json:"type"`
+	Address      string             `json:"address"`
+	Description  pgtype.Text        `json:"description"`
+	Status       string             `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Attributes   []byte             `json:"attributes"`
+	PinnedAt     pgtype.Timestamptz `json:"pinned_at"`
+	MembersCount int64              `json:"members_count"`
+	AccessRole   string             `json:"access_role"`
+}
+
+// The search endpoint's window (ticket #601): the actor's visible
+// non-archived properties — own plus actively shared (the merged visibility
+// of the main list, ADR 0028) — matching the search as a case-insensitive
+// substring over the name or the address (the store escapes the ILIKE
+// metacharacters; the trgm indexes of migration 000124 serve both fields).
+//
+// The walk is keyset over the display name and id (ticket #597's pattern):
+// the window resumes strictly after the (name, id) the previous page ended
+// on, so rows created, deleted or renamed between loads never duplicate or
+// drop. The name sort mirrors the hub's own default (the client orders the
+// list by name) with the Russian ICU collation matching the contacts book's
+// letter order (#600); id ties off. A rename moving a row across the window
+// boundary is inherent to the visible-name sort. The cursor args travel
+// together; NULL (no cursor) reads from the beginning.
+// access_role names the actor's role on the row: 'owner' for own
+// properties, the active membership's role for shared ones (T11) — the
+// LEFT JOIN row is unique per (property, user).
+func (q *Queries) SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error) {
+	rows, err := q.db.Query(ctx, searchVisibleProperties,
+		arg.Actor,
+		arg.Search,
+		arg.AfterName,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchVisiblePropertiesRow{}
+	for rows.Next() {
+		var i SearchVisiblePropertiesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Type,
+			&i.Address,
+			&i.Description,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Attributes,
+			&i.PinnedAt,
+			&i.MembersCount,
+			&i.AccessRole,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setPropertyPin = `-- name: SetPropertyPin :one
 UPDATE properties
 SET pinned_at = $1::timestamptz

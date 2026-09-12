@@ -2,6 +2,7 @@
 
 import { useState, type ComponentProps, type JSX } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import {
   Add,
   Search,
@@ -32,7 +33,12 @@ import {
   groupBookByProperty,
 } from '../lib/contact-book-model';
 import { ContactRowButton } from '@/entities/contact';
-import { ContactsEmptyState, ContactsErrorCard, ContactsSkeleton } from './contacts-states';
+import {
+  ContactsBookSkeleton,
+  ContactsEmptyState,
+  ContactsErrorCard,
+  ContactsLoadingMore,
+} from './contacts-states';
 
 /**
  * Экран «Контакты» — плоская книга владельца (глобальная страница контактов,
@@ -72,6 +78,14 @@ export function ContactBookScreen({
 
   const contacts = contactsQuery.data ?? [];
 
+  // Порции по 50 листаются sentinel-скроллом (#600), как ленты
+  // платежей/операций: дозагрузка на подлёте к краю списка.
+  const sentinelRef = useInfiniteScroll(() => {
+    if (contactsQuery.hasNextPage && !contactsQuery.isFetchingNextPage) {
+      void contactsQuery.fetchNextPage();
+    }
+  }, contactsQuery.hasNextPage === true);
+
   // Смена сортировки синхронно переписывает query строки (дефолтные
   // значения не пишутся — как на странице «Объекты»).
   const changeSort = (field: ContactBookSort, order: ContactBookOrder): void => {
@@ -106,22 +120,34 @@ export function ContactBookScreen({
       <PageContent>
         <HubCollapseAnchor>
           <HubTitle>Контакты</HubTitle>
-          {contactsQuery.isSuccess && (
-            <div className="mt-6 mb-6 px-6">
-              {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
-               * по макету 1726:65083 согласован владельцем). */}
-              <BookSearchPill
-                onOpenSearch={() => router.push(ROUTES.contactSearch)}
-                onCreate={() => router.push(ROUTES.contactNew)}
-              />
-            </div>
-          )}
+          <div className="mt-4 mb-6 px-6">
+            {/* Пилюля видна всегда — в ней «+» создания (вид пустой книги
+             * по макету 1726:65083 согласован владельцем); вне фазы
+             * загрузки — контент встаёт на её место без сдвига (§7). */}
+            <BookSearchPill
+              onOpenSearch={() => router.push(ROUTES.contactSearch)}
+              onCreate={() => router.push(ROUTES.contactNew)}
+            />
+          </div>
         </HubCollapseAnchor>
 
         {contactsQuery.isPending ? (
-          <ContactsSkeleton className="mt-6" />
+          <>
+            {/* Паритет §7: чип сортировки реальный — вне фазы загрузки
+             * (переключение сортировки во время загрузки безвредно: запрос
+             * уходит с новым ключом); прячется вместе с пустым списком. */}
+            <div className="mb-4 px-6">
+              <PickerMenu
+                title="Сортировать"
+                groups={sortPickerGroups(sortField, sortOrder, changeSort)}
+              >
+                <BookSortChip field={sortField} order={sortOrder} />
+              </PickerMenu>
+            </div>
+            <ContactsBookSkeleton />
+          </>
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} className="mt-6" />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
         ) : (
           <>
             {contacts.length === 0 ? (
@@ -158,6 +184,12 @@ export function ContactBookScreen({
                       </div>
                     </div>
                   ))}
+                  {/* Хвост порций (#600): sentinel дозагрузки и индикатор
+                   * едущей следующей порции. */}
+                  {contactsQuery.hasNextPage === true && (
+                    <div ref={sentinelRef} aria-hidden />
+                  )}
+                  {contactsQuery.isFetchingNextPage && <ContactsLoadingMore tone="muted" />}
                 </section>
               </>
             )}
@@ -174,7 +206,8 @@ export function ContactBookScreen({
  * открывает поисковую страницу, «+» справа — создание контакта (кнопка
  * внутри строки-кнопки — паттерн useKeyboardActivation, DESIGN.md §6).
  */
-function BookSearchPill({
+/** Пилюля поиска книги — экспорт для route-loading (#609). */
+export function BookSearchPill({
   onOpenSearch,
   onCreate,
 }: {
@@ -209,7 +242,8 @@ function BookSearchPill({
  * SortingSmallBig 418:4608, убывание — SortingBigSmall 418:4607), хвостовая
  * стрелка всегда вниз (671:7320). Прокидывает все пропсы кнопки: триггер
  * PickerMenu через asChild передаёт ему свои обработчики и aria. */
-function BookSortChip({
+/** Чип сортировки книги — экспорт для route-loading (#609). */
+export function BookSortChip({
   field,
   order,
   ...props

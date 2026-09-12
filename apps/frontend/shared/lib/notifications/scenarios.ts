@@ -128,8 +128,6 @@ const profile = {
     notify.error('Не удалось загрузить профиль', options)) satisfies ScenarioFn,
   personalDataSaved: ((options?) =>
     notify.success('Данные сохранены', options)) satisfies ScenarioFn,
-  phoneChanged: ((options?) =>
-    notify.success('Номер телефона изменён', options)) satisfies ScenarioFn,
   personalDataSaveError: errorScenario('Не удалось сохранить данные'),
   notificationPreferencesSaveError: errorScenario(
     'Не удалось сохранить настройки уведомлений',

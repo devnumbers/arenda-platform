@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -254,6 +255,52 @@ func (h *PropertyHandlers) ListArchivedProperties(w http.ResponseWriter, r *http
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesResponse{
 		Items: items,
 		Today: openapi_types.Date{Time: page.Today},
+	})
+}
+
+// SearchProperties implements GET /properties/search (ticket #601): the
+// search screen's keyset window over the visible slice, the matched cards
+// plus the next page's continuation (null once the matches are exhausted).
+func (h *PropertyHandlers) SearchProperties(w http.ResponseWriter, r *http.Request, params openapi.SearchPropertiesParams) {
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	page := propertiesapp.SearchPropertiesPage{}
+	if params.Limit != nil {
+		// A number that does not even fit int32 cannot be a valid page: mark
+		// it out of range for the service's own 1..100 validation (the
+		// contract's 400), never silently truncate it.
+		page.Limit = -1
+		if l := *params.Limit; l >= 1 && l <= math.MaxInt32 {
+			page.Limit = int32(l)
+		}
+	}
+	if params.Cursor != nil {
+		page.Cursor = *params.Cursor
+	}
+	properties, nextCursor, err := h.svc.SearchProperties(r.Context(), actor, params.Search, page)
+	if err != nil {
+		h.handlePropertyError(w, r, err)
+		return
+	}
+
+	items := make([]openapi.PropertyResponse, 0, len(properties))
+	for _, property := range properties {
+		items = append(items, h.propertyResponse(property))
+	}
+
+	var cursor *string
+	if nextCursor != "" {
+		cursor = &nextCursor
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertiesSearchResponse{
+		Items:      items,
+		NextCursor: cursor,
 	})
 }
 

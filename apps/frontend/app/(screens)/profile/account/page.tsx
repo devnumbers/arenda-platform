@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
-import { AccountOverview } from '@/widgets/profile';
+import { AccountScreen } from '@/widgets/profile';
 
 export const metadata: Metadata = {
   title: 'Аккаунт — Рентли',
@@ -12,7 +12,7 @@ export default function AccountPage() {
   return (
     <>
       <SubScreenShell title="Аккаунт" fallbackHref={ROUTES.profile}>
-        <AccountOverview />
+        <AccountScreen />
       </SubScreenShell>
     </>
   );

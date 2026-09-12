@@ -129,6 +129,7 @@ export function mapGlobalPaymentFeed(dto: GlobalPaymentFeedDto): GlobalPaymentFe
 export function mapGlobalPaymentSearch(dto: GlobalPaymentSearchDto): GlobalPaymentSearch {
   return {
     items: dto.items.map(mapGlobalPayment),
+    nextCursor: dto.nextCursor ?? null,
     matchedCategories: dto.matchedCategories.map((chip) => ({
       category: {
         source: chip.category.source,

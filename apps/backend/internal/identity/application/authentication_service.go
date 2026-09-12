@@ -124,17 +124,22 @@ func (s *AuthenticationService) SendCodeByPhone(ctx context.Context, phone domai
 
 // VerifyCode verifies a login code and creates a session for the user.
 // A nil email is resolved from the stored user record for the phone.
+// A nil or invalid timezone keeps the creation default (Europe/Moscow,
+// migration 000088); a valid one applies only when this verify creates the
+// account — an existing user's saved zone is never overwritten (#451).
 //
 // The success path runs inside a single runInTx: verify → mark-used →
-// SessionService.Issue → reset attempts → audit. A verification failure rolls
-// that transaction back, then a separate short runInTx records the failed
-// attempt and the failed-login audit so rate-limiting survives the rollback —
-// replacing the pre-refactor early-Commit-on-error (ADR 0033).
+// SessionService.Issue → apply registration timezone → reset attempts → audit.
+// A verification failure rolls that transaction back, then a separate short
+// runInTx records the failed attempt and the failed-login audit so
+// rate-limiting survives the rollback — replacing the pre-refactor
+// early-Commit-on-error (ADR 0033).
 func (s *AuthenticationService) VerifyCode(
 	ctx context.Context,
 	phone domain.Phone,
 	email *domain.Email,
 	code string,
+	timezone *string,
 ) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
 
@@ -142,6 +147,10 @@ func (s *AuthenticationService) VerifyCode(
 	if err != nil {
 		return domain.RawSession{}, domain.User{}, err
 	}
+
+	// Validate before the transaction: an unparsable value is not an error —
+	// the account is simply born on the default zone.
+	registrationTZ := registrationTimezone(timezone)
 
 	// The not-blocked check is authoritative inside LoginCodeService.Verify,
 	// which runs within the runInTx below and returns ErrUserBlocked before any
@@ -167,6 +176,12 @@ func (s *AuthenticationService) VerifyCode(
 			return iErr
 		}
 		raw, user, isNewUser = issued, u, isNew
+
+		updatedUser, tzErr := applyRegistrationTimezone(ctx, stores, isNew, user, registrationTZ)
+		if tzErr != nil {
+			return tzErr
+		}
+		user = updatedUser
 
 		if err := stores.attempts.DeleteByPhone(ctx, phone); err != nil {
 			return fmt.Errorf("reset login attempts: %w", err)
@@ -235,6 +250,43 @@ func (s *AuthenticationService) VerifyCode(
 	}
 
 	return raw, user, nil
+}
+
+// applyRegistrationTimezone fixes the device zone on a brand-new account
+// (#451): the zone travels with the verify request and is persisted in the
+// same transaction that creates the user, so the verify response already
+// carries it. A race that resolved to an existing row (isNew=false) keeps its
+// saved zone untouched, and a nil zone leaves the Europe/Moscow creation
+// default. Returns the user as the caller should see it.
+func applyRegistrationTimezone(
+	ctx context.Context,
+	stores *txStores,
+	isNew bool,
+	user domain.User,
+	tz *domain.Timezone,
+) (domain.User, error) {
+	if !isNew || tz == nil {
+		return user, nil
+	}
+	user.Timezone = *tz
+	if _, err := stores.users.Update(ctx, user); err != nil {
+		return domain.User{}, fmt.Errorf("apply registration timezone: %w", err)
+	}
+	return user, nil
+}
+
+// registrationTimezone validates the browser-detected zone carried by the
+// verify request (#451). An absent or unparsable value is not an error — the
+// account is simply born on the Europe/Moscow default (migration 000088).
+func registrationTimezone(raw *string) *domain.Timezone {
+	if raw == nil {
+		return nil
+	}
+	tz, err := domain.NewTimezone(*raw)
+	if err != nil {
+		return nil
+	}
+	return &tz
 }
 
 // resolveEmail returns the given email or, when it is nil, the email stored

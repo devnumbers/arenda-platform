@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { OperationsGlobalDirectionScreen } from '@/widgets/payments';
+import { OperationsGlobalDirectionScreen, OperationsDirectionLoading } from '@/widgets/payments';
 
 /**
  * Страница «Доходы» (#548): все доходы выбранного скоупа за период.
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function OperationsIncomesRoutePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<OperationsDirectionLoading title="Доходы" />}>
       <OperationsGlobalDirectionScreen type="income" />
     </Suspense>
   );

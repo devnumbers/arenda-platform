@@ -504,7 +504,7 @@ func TestAuthenticationService_VerifyCode_ResolvesEmailFromUser(t *testing.T) {
 	}
 	code := h.sender.sent[0].code
 
-	raw, got, err := h.svc.VerifyCode(ctx, phone, nil, code)
+	raw, got, err := h.svc.VerifyCode(ctx, phone, nil, code, nil)
 	if err != nil {
 		t.Fatalf("VerifyCode error = %v", err)
 	}
@@ -527,7 +527,7 @@ func TestAuthenticationService_VerifyCode_UnknownPhoneWithoutEmail(t *testing.T)
 	h := newAuthServiceHarness()
 	phone := mustPhone(t, "+79150000009")
 
-	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456")
+	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("VerifyCode error = %v, want ErrNotFound", err)
 	}
@@ -539,7 +539,7 @@ func TestAuthenticationService_VerifyCode_UserWithoutEmailWithoutEmail(t *testin
 	phone := mustPhone(t, "+79150000008")
 	h.seedUser(t, phone, nil)
 
-	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456")
+	_, _, err := h.svc.VerifyCode(t.Context(), phone, nil, "123456", nil)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("VerifyCode error = %v, want ErrNotFound", err)
 	}
@@ -559,7 +559,7 @@ func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
 		}
 		code := h.sender.sent[0].code
 
-		raw, user, err := h.svc.VerifyCode(ctx, phone, &email, code)
+		raw, user, err := h.svc.VerifyCode(ctx, phone, &email, code, nil)
 		if err != nil {
 			t.Fatalf("VerifyCode error = %v", err)
 		}
@@ -586,6 +586,132 @@ func TestAuthenticationService_ExplicitEmailFlow(t *testing.T) {
 			t.Fatalf("SendCode error = %v, want ErrEmailDoesNotMatch", err)
 		}
 	})
+}
+
+// The #451 rule: the browser-detected timezone travels with the verify request
+// and is applied only when the verify creates the account. An absent or invalid
+// value keeps the creation default (Europe/Moscow in PostgreSQL), and an
+// existing user's saved zone is never overwritten — the manual choice in the
+// profile picker is authoritative.
+
+// TestRegistrationTimezone_Table covers the raw-request validation in a table:
+// an absent or unparsable value yields nil (the account keeps the
+// Europe/Moscow creation default), a valid IANA identifier is kept.
+func TestRegistrationTimezone_Table(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		raw  *string
+		want *string
+	}{
+		{"nil field keeps the default", nil, nil},
+		{"empty field keeps the default", new(""), nil},
+		{"unparsable zone keeps the default", new("Mars/Olympus"), nil},
+		{"valid zone is kept", new("Asia/Yekaterinburg"), new("Asia/Yekaterinburg")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := registrationTimezone(tt.raw)
+			switch {
+			case tt.want == nil && got != nil:
+				t.Fatalf("registrationTimezone(%v) = %q, want nil", tt.raw, got.String())
+			case tt.want != nil && got == nil:
+				t.Fatalf("registrationTimezone(%v) = nil, want %q", tt.raw, *tt.want)
+			case tt.want != nil && got.String() != *tt.want:
+				t.Fatalf("registrationTimezone(%v) = %q, want %q", tt.raw, got.String(), *tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthenticationService_VerifyCode_RegistrationTimezone_NewUser(t *testing.T) {
+	t.Parallel()
+	h := newAuthServiceHarness()
+	phone := mustPhone(t, "+79150000011")
+	email := mustEmail(t, "tz@example.com")
+	ctx := t.Context()
+
+	if err := h.svc.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+		t.Fatalf("SendCode error = %v", err)
+	}
+	code := h.sender.sent[0].code
+	timezone := "Asia/Yekaterinburg"
+
+	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	if err != nil {
+		t.Fatalf("VerifyCode error = %v", err)
+	}
+	if user.Timezone.String() != timezone {
+		t.Fatalf("returned user timezone = %q, want %q", user.Timezone.String(), timezone)
+	}
+	stored := h.users.byPhone[phone.String()]
+	if stored.Timezone.String() != timezone {
+		t.Fatalf("stored user timezone = %q, want %q", stored.Timezone.String(), timezone)
+	}
+	if len(h.publisher.registered) != 1 {
+		t.Fatalf("PublishUserRegistered calls = %d, want 1 for a new user", len(h.publisher.registered))
+	}
+}
+
+func TestAuthenticationService_VerifyCode_RegistrationTimezone_InvalidFallsBack(t *testing.T) {
+	t.Parallel()
+	h := newAuthServiceHarness()
+	phone := mustPhone(t, "+79150000012")
+	email := mustEmail(t, "badtz@example.com")
+	ctx := t.Context()
+
+	if err := h.svc.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+		t.Fatalf("SendCode error = %v", err)
+	}
+	code := h.sender.sent[0].code
+	timezone := "Mars/Olympus"
+
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	if err != nil {
+		t.Fatalf("VerifyCode error = %v", err)
+	}
+	stored := h.users.byPhone[phone.String()]
+	if stored.Timezone.String() != "" {
+		t.Fatalf("stored user timezone = %q, want the untouched creation default", stored.Timezone.String())
+	}
+}
+
+func TestAuthenticationService_VerifyCode_RegistrationTimezone_ExistingUntouched(t *testing.T) {
+	t.Parallel()
+	h := newAuthServiceHarness()
+	phone := mustPhone(t, "+79150000013")
+	email := mustEmail(t, "moscow@example.com")
+	seeded := h.seedUser(t, phone, &email)
+	saved, err := domain.NewTimezone("Europe/Moscow")
+	if err != nil {
+		t.Fatalf("NewTimezone: %v", err)
+	}
+	seeded.Timezone = saved
+	h.users.byPhone[phone.String()] = seeded
+	ctx := t.Context()
+
+	if err := h.svc.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+		t.Fatalf("SendCode error = %v", err)
+	}
+	code := h.sender.sent[0].code
+	timezone := "Asia/Yekaterinburg"
+
+	_, user, err := h.svc.VerifyCode(ctx, phone, &email, code, &timezone)
+	if err != nil {
+		t.Fatalf("VerifyCode error = %v", err)
+	}
+	if user.Timezone.String() != "Europe/Moscow" {
+		t.Fatalf("returned user timezone = %q, want saved Europe/Moscow", user.Timezone.String())
+	}
+	stored := h.users.byPhone[phone.String()]
+	if stored.Timezone.String() != "Europe/Moscow" {
+		t.Fatalf("stored user timezone = %q, want saved Europe/Moscow", stored.Timezone.String())
+	}
+	if len(h.publisher.registered) != 0 {
+		t.Fatalf("PublishUserRegistered calls = %d, want 0 for an existing user", len(h.publisher.registered))
+	}
 }
 
 func TestAuthenticationService_SendCode_NewPhoneEmailPrecheck(t *testing.T) {
@@ -647,7 +773,7 @@ func TestAuthenticationService_VerifyCode_InvalidCodeRecordsAttemptAndAudit(t *t
 		t.Fatalf("SendCodeByPhone error = %v", err)
 	}
 
-	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000")
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("VerifyCode error = %v, want ErrLoginCodeInvalid", err)
 	}
@@ -688,7 +814,7 @@ func TestAuthenticationService_VerifyCode_TooManyAttemptsBlocks(t *testing.T) {
 
 	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000")
+		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
@@ -723,7 +849,7 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 	// Drive exactly MaxLoginFailures invalid verifications to reach the block.
 	var lastErr error
 	for range domain.MaxLoginFailures {
-		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000")
+		_, _, lastErr = h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last VerifyCode error = %v, want ErrTooManyAttempts", lastErr)
@@ -731,7 +857,7 @@ func TestAuthenticationService_VerifyCode_BlockedPhoneSkipsRecovery(t *testing.T
 
 	// The phone is now blocked. A further verify must return ErrUserBlocked
 	// straight from LoginCodeService.Verify, without recovery.
-	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000")
+	_, _, err := h.svc.VerifyCode(ctx, phone, &email, "000000", nil)
 	if !errors.Is(err, ErrUserBlocked) {
 		t.Fatalf("VerifyCode on blocked phone error = %v, want ErrUserBlocked", err)
 	}

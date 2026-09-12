@@ -233,6 +233,41 @@ paths:
                 $ref: '#/components/schemas/PropertiesResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /properties/search:
+    get:
+      operationId: searchProperties
+      summary: Search the actor's visible properties (the «Объекты» search)
+      description: >
+        The hub's visible slice narrowed by the search query (ticket #601):
+        a case-insensitive substring over the property's name and address.
+        The slice is the main list's — the actor's own properties plus the
+        ones shared with an active membership (ADR 0028), archived excluded.
+        The list runs in pages of 50 the search screen's infinite scroll
+        walks; the window is keyset pagination over (name, id) (ticket
+        #597's pattern) — the hub's own default order, so rows shifting
+        between loads never duplicate or drop, the previous page's nextCursor
+        comes back as cursor. A rename can move a row across a window
+        boundary — inherent to the visible-name sort (the contacts book,
+        #600).
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertiesSearchQuery'
+        - $ref: '#/components/parameters/PropertiesSearchLimit'
+        - $ref: '#/components/parameters/PropertiesSearchCursor'
+      responses:
+        '200':
+          description: >
+            The matched properties; nextCursor carries the next page's
+            continuation (null — the matches are exhausted).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertiesSearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /dadata/suggestions/address:
     get:
       operationId: getAddressSuggestions
@@ -534,9 +569,20 @@ paths:
             type: string
             enum: [asc, desc]
             default: asc
+        - $ref: '#/components/parameters/ContactsLimit'
+        - $ref: '#/components/parameters/ContactsCursor'
       responses:
         '200':
-          description: Contacts list
+          description: >
+            Contacts page. The window is keyset pagination over the listing's
+            own sort key and id (ticket #600): the page always resumes
+            strictly after the cursor's key, so cards created or deleted
+            between loads never duplicate or drop. The sort keys are mutable
+            (display name, property binding): a rename or rebind of a card
+            the walk has already passed can move it across the window
+            boundary. The cursor is bound to the sort/order it was issued
+            under — echoing it with a different sort is a 400. nextCursor is
+            null once the matches are exhausted.
           content:
             application/json:
               schema:
@@ -1493,9 +1539,11 @@ paths:
         The propertyIds filter narrows the feed to the listed properties,
         each resolved through its view gate — an unknown or non-visible id
         is the privacy 404. Every row carries propertyName, the bound
-        property's display name — the global screen's row label. The period,
-        search, type, category, order and pagination vocabulary is the
-        property listing's. Reads never tick.
+        property's display name. The period, search, type and category
+        vocabulary is the property listing's; the window is keyset
+        pagination over (date, id) (ticket #597): rows shifting between
+        loads never duplicate or drop — pass the previous page's nextCursor
+        back as cursor. Reads never tick.
       security:
         - sessionCookie: []
       parameters:
@@ -1508,12 +1556,14 @@ paths:
         - $ref: '#/components/parameters/OperationsCategoriesFilter'
         - $ref: '#/components/parameters/OperationsOrder'
         - $ref: '#/components/parameters/OperationsLimit'
-        - $ref: '#/components/parameters/OperationsOffset'
+        - $ref: '#/components/parameters/OperationsCursor'
       responses:
         '200':
           description: >
             Paid operations page. status is always paid (the feed's only
-            view status); propertyName is the bound property's display name.
+            view status); propertyName is the bound property's display name;
+            nextCursor carries the next page's continuation (null — the feed
+            is exhausted).
           content:
             application/json:
               schema:
@@ -1617,7 +1667,11 @@ paths:
         category chips — one row per (category, direction), the largest count
         first. An empty query degenerates to the unfiltered feed with every
         category of the scope. The list runs in pages of 50 the search
-        screen's infinite scroll walks (map #573 rework); under the
+        screen's infinite scroll walks (map #573 rework); the window is
+        keyset pagination over (created_at, id) (ticket #597) — the feed's
+        own order, stable under renames and creations: rows shifting between
+        loads never duplicate or drop, the previous page's nextCursor comes
+        back as cursor. Under the
         category/type chip filter the page narrows to the chip's rules while
         matchedCategories always describe the whole matched scope — the
         chips never shrink (the operations' canon).
@@ -1628,10 +1682,13 @@ paths:
         - $ref: '#/components/parameters/PaymentsCategoryFilter'
         - $ref: '#/components/parameters/PaymentsTypeFilter'
         - $ref: '#/components/parameters/PaymentsLimit'
-        - $ref: '#/components/parameters/PaymentsOffset'
+        - $ref: '#/components/parameters/PaymentsCursor'
       responses:
         '200':
-          description: The matched rules with their matched-category chips.
+          description: >
+            The matched rules with their matched-category chips; nextCursor
+            carries the next page's continuation (null — the matches are
+            exhausted).
           content:
             application/json:
               schema:
@@ -3875,14 +3932,50 @@ components:
         default: 50
         minimum: 1
         maximum: 100
-    PaymentsOffset:
-      name: offset
+    PaymentsCursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        The opaque continuation cursor from the previous page's nextCursor
+        (keyset pagination over (created_at, id), ticket #597). A missing or
+        empty value starts the list from the beginning; a malformed value is
+        a 400.
+      schema:
+        type: string
+
+    PropertiesSearchQuery:
+      name: search
+      in: query
+      required: true
+      description: >-
+        The case-insensitive substring the matches run over — the property's
+        name or its address (ticket #601). Leading and trailing whitespace
+        never takes part in the match.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    PropertiesSearchLimit:
+      name: limit
       in: query
       required: false
       schema:
         type: integer
-        default: 0
-        minimum: 0
+        default: 50
+        minimum: 1
+        maximum: 100
+    PropertiesSearchCursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        The opaque continuation cursor from the previous page's nextCursor
+        (keyset pagination over (name, id), ticket #597's pattern). A missing
+        or empty value starts the list from the beginning; a malformed value
+        is a 400.
+      schema:
+        type: string
 
     OperationsStatusFilter:
       name: status
@@ -3930,6 +4023,18 @@ components:
         default: 50
         minimum: 1
         maximum: 100
+    OperationsCursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        The opaque continuation cursor from the previous page's nextCursor
+        (keyset pagination over (date, id), ticket #597) — the global
+        feed's window; the property listings keep the offset vocabulary. A
+        missing or empty value starts the feed from the beginning; a
+        malformed value is a 400.
+      schema:
+        type: string
     OperationsOffset:
       name: offset
       in: query
@@ -3938,6 +4043,29 @@ components:
         type: integer
         default: 0
         minimum: 0
+    ContactsLimit:
+      name: limit
+      in: query
+      required: false
+      description: >-
+        The page size of the keyset window (ticket #600). A missing value
+        means the default page; an out-of-range value is a 400.
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 100
+    ContactsCursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        The opaque continuation cursor from the previous page's nextCursor
+        (keyset pagination over the listing's sort key and id, ticket #600).
+        A missing or empty value starts the list from the beginning; a
+        malformed value is a 400.
+      schema:
+        type: string
     TasksLimit:
       name: limit
       in: query
@@ -4062,6 +4190,14 @@ components:
           minLength: 6
           maxLength: 6
           pattern: '^\d{6}$'
+        timezone:
+          type: string
+          description: >-
+            Browser-detected IANA timezone of the registering device
+            (Intl.DateTimeFormat().resolvedOptions().timeZone). Applied only when
+            this request creates a new user; an absent or invalid value keeps the
+            Europe/Moscow default. Ignored for existing users — the manual choice
+            in the profile picker is never overwritten.
 
     MeResponse:
       type: object
@@ -5188,12 +5324,19 @@ components:
 
     ContactsResponse:
       type: object
-      required: [items]
+      required: [items, nextCursor]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/ContactResponse'
+        nextCursor:
+          type: string
+          nullable: true
+          description: >
+            The opaque continuation cursor of the keyset window (ticket
+            #600): pass it back as the cursor query parameter to fetch the
+            next page. null — the matches are exhausted.
 
     Recurrence:
       description: >-
@@ -5587,9 +5730,9 @@ components:
     PaymentsSearchGlobalResponse:
       description: >
         The global payment rules search (ticket #575): the matched rows plus
-        the matched-category chips.
+        the matched-category chips and the whole scope's match count.
       type: object
-      required: [items, matchedCategories]
+      required: [items, matchedCategories, nextCursor, total]
       properties:
         items:
           type: array
@@ -5599,6 +5742,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentSearchCategory'
+        nextCursor:
+          type: string
+          nullable: true
+          description: >
+            The opaque continuation cursor of the keyset window (ticket
+            #597): pass it back as the cursor query parameter to fetch the
+            next page. null — the matches are exhausted.
+        total:
+          type: integer
+          format: int64
+          description: >
+            The whole scope's match count under the query and the chip
+            filter (ticket #599) — «найдено N»: the same predicate as the
+            rows, independent of the window, identical on every walked
+            page.
 
     PaymentObjectKey:
       description: >
@@ -5764,12 +5922,28 @@ components:
 
     OperationsResponse:
       type: object
-      required: [items]
+      required: [items, nextCursor]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/OperationResponse'
+        nextCursor:
+          type: string
+          nullable: true
+          description: >
+            The opaque continuation cursor of the keyset window (ticket
+            #597): pass it back as the cursor query parameter to fetch the
+            next page. null — the feed is exhausted.
+        total:
+          type: integer
+          format: int64
+          description: >
+            The whole scope's paid count under the query's filters (ticket
+            #599) — «найдено N»: the same predicate as the rows,
+            independent of the window, identical on every walked page. The
+            global feed's field (GET /operations): the property-scoped
+            listings sharing this schema omit it.
 
     OperationsSummaryCategory:
       description: >-
@@ -6132,6 +6306,25 @@ components:
             tariff slot shortage (suspended memberships). Zero for owners and
             when the recipient is within their limit.
           default: 0
+
+    PropertiesSearchResponse:
+      description: >
+        The properties search page (ticket #601): the matched cards in the
+        keyset window's order.
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyResponse'
+        nextCursor:
+          type: string
+          nullable: true
+          description: >
+            The opaque continuation cursor of the keyset window (ticket
+            #601): pass it back as the cursor query parameter to fetch the
+            next page. null — the matches are exhausted.
 
     PropertyType:
       type: string

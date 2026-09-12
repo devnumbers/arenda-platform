@@ -34,7 +34,7 @@ func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
 	}
 	code := h.sender.lastCode(t)
 
-	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code)
+	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil)
 	if err != nil {
 		t.Fatalf("VerifyCode: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
 	}
 
 	// The code was marked used: a second verify with the same code fails.
-	if _, _, err := h.auth.VerifyCode(ctx, phone, &email, code); !errors.Is(err, domain.ErrLoginCodeInvalid) {
+	if _, _, err := h.auth.VerifyCode(ctx, phone, &email, code, nil); !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("re-verify used code error = %v, want ErrLoginCodeInvalid", err)
 	}
 }
@@ -92,7 +92,7 @@ func TestAuthenticationIntegration_RegistrationCreatesNewUser(t *testing.T) {
 	}
 	code := h.sender.lastCode(t)
 
-	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code)
+	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil)
 	if err != nil {
 		t.Fatalf("VerifyCode: %v", err)
 	}
@@ -126,6 +126,97 @@ func TestAuthenticationIntegration_RegistrationCreatesNewUser(t *testing.T) {
 	if !h.auditActionExists(t, string(auditdomain.ActionAuthRegistered)) {
 		t.Fatal("audit_log missing auth.registered entry")
 	}
+}
+
+// Registration timezone fixtures for the #451 integration test: the zone a
+// registering device would report versus the Europe/Moscow column default
+// (migration 000088).
+const (
+	testDeviceTimezone  = "Asia/Yekaterinburg"
+	testDefaultTimezone = "Europe/Moscow"
+)
+
+// TestAuthenticationIntegration_RegistrationTimezone proves the #451 rule
+// against real PostgreSQL: a verify that creates the account applies the
+// device timezone, an absent value keeps the Europe/Moscow column default
+// (migration 000088), and an existing user's saved zone is never overwritten.
+func TestAuthenticationIntegration_RegistrationTimezone(t *testing.T) {
+	t.Parallel()
+	t.Run("new user with device timezone", func(t *testing.T) {
+		t.Parallel()
+		h := newIntegrationHarness(t)
+		phone := mustPhone(t, "+79160000021")
+		email := mustEmail(t, "tz-new@example.com")
+		ctx := h.ctx()
+
+		if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+			t.Fatalf("SendCode: %v", err)
+		}
+		timezone := testDeviceTimezone
+		_, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), &timezone)
+		if err != nil {
+			t.Fatalf("VerifyCode: %v", err)
+		}
+
+		got, err := h.users.GetByPhone(ctx, phone)
+		if err != nil {
+			t.Fatalf("GetByPhone: %v", err)
+		}
+		if got.Timezone.String() != testDeviceTimezone {
+			t.Fatalf("registered timezone = %q, want %s", got.Timezone.String(), testDeviceTimezone)
+		}
+	})
+
+	t.Run("new user without timezone keeps the Europe/Moscow default", func(t *testing.T) {
+		t.Parallel()
+		h := newIntegrationHarness(t)
+		phone := mustPhone(t, "+79160000022")
+		email := mustEmail(t, "tz-default@example.com")
+
+		_, user := h.registerAndLogin(t, phone, email)
+
+		got, err := h.users.GetByID(h.ctx(), user.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if got.Timezone.String() != testDefaultTimezone {
+			t.Fatalf("registered timezone = %q, want default %s", got.Timezone.String(), testDefaultTimezone)
+		}
+	})
+
+	t.Run("existing user keeps their saved timezone", func(t *testing.T) {
+		t.Parallel()
+		h := newIntegrationHarness(t)
+		phone := mustPhone(t, "+79160000023")
+		email := mustEmail(t, "tz-existing@example.com")
+		seeded := h.seedVerifiedUser(t, phone, email)
+		// A zone other than the column default: the assertion must be able to
+		// tell "manual choice survived" from "fell back to Europe/Moscow".
+		manual, err := domain.NewTimezone("Europe/Kaliningrad")
+		if err != nil {
+			t.Fatalf("NewTimezone: %v", err)
+		}
+		seeded.Timezone = manual
+		if _, err := h.users.Update(h.ctx(), seeded); err != nil {
+			t.Fatalf("seed saved timezone: %v", err)
+		}
+
+		if err := h.auth.SendCode(h.ctx(), phone, email, domain.LoginCodePurposeLogin); err != nil {
+			t.Fatalf("SendCode: %v", err)
+		}
+		timezone := testDeviceTimezone
+		if _, _, err := h.auth.VerifyCode(h.ctx(), phone, &email, h.sender.lastCode(t), &timezone); err != nil {
+			t.Fatalf("VerifyCode: %v", err)
+		}
+
+		got, err := h.users.GetByPhone(h.ctx(), phone)
+		if err != nil {
+			t.Fatalf("GetByPhone: %v", err)
+		}
+		if got.Timezone.String() != "Europe/Kaliningrad" {
+			t.Fatalf("timezone after login = %q, want saved Europe/Kaliningrad", got.Timezone.String())
+		}
+	})
 }
 
 // TestAuthenticationIntegration_DuplicateEmailRejectedAtSend proves that sending
@@ -165,7 +256,7 @@ func TestAuthenticationIntegration_LoginFailRecordsAttemptAndAudit(t *testing.T)
 		t.Fatalf("SendCode: %v", err)
 	}
 
-	_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000")
+	_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000", nil)
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("VerifyCode wrong code error = %v, want ErrLoginCodeInvalid", err)
 	}

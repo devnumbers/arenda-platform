@@ -21,9 +21,9 @@ import { Button, ChipButton, IconButton, PageContent, Skeleton, TopNav, TopNavTi
 import { operationStatusLabel } from '../lib/operation-status-label';
 import {
   PaymentsHeading,
-  PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
+import { PaymentGroupedListSkeleton } from './payments-skeletons';
 
 /**
  * Подэкран «История операций» (#466, Figma 671:7776): только paid-вхождения,
@@ -81,11 +81,26 @@ export function PaymentHistoryScreen({
 
       <PageContent>
         <div className="flex flex-col gap-2">
+          {/* Чип сортировки — вне фазы загрузки (канон хабов #605); на
+              пустой истории и ошибке прячется вместе с контентом. */}
+          {(historyQuery.isPending || groups.length > 0) && (
+            <div className="px-6 pb-2">
+              <ChipButton
+                trailingIcon={<ChangeVertical />}
+                onClick={toggleOrder}
+                aria-label={
+                  order === 'desc'
+                    ? 'Сортировка: сначала новые — переключить на «сначала старые»'
+                    : 'Сортировка: сначала старые — переключить на «сначала новые»'
+                }
+              >
+                {order === 'desc' ? 'Новые' : 'Старые'}
+              </ChipButton>
+            </div>
+          )}
+
           {historyQuery.isPending && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
+            <PaymentGroupedListSkeleton rowsPerGroup={[1, 1, 1]} />
           )}
 
           {historyQuery.isError && (
@@ -123,20 +138,6 @@ export function PaymentHistoryScreen({
                 </div>
               ) : (
                 <>
-                  <div className="px-6 pb-2">
-                    <ChipButton
-                      trailingIcon={<ChangeVertical />}
-                      onClick={toggleOrder}
-                      aria-label={
-                        order === 'desc'
-                          ? 'Сортировка: сначала новые — переключить на «сначала старые»'
-                          : 'Сортировка: сначала старые — переключить на «сначала новые»'
-                      }
-                    >
-                      {order === 'desc' ? 'Новые' : 'Старые'}
-                    </ChipButton>
-                  </div>
-
                   {groups.map((group) => (
                     <section key={group.label} className="flex flex-col">
                       <PaymentsHeading>{group.label}</PaymentsHeading>

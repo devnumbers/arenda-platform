@@ -85,7 +85,8 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 		CategoryFilter: q.Category,
 		TypeFilter:     string(q.Type),
 		PageLimit:      q.Limit,
-		PageOffset:     int64(q.Offset),
+		AfterCreatedAt: pgconv.TimePtrToPgtype(q.AfterCreatedAt),
+		AfterID:        pgconv.UUIDToPgtypePtr(q.AfterID),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list global payment rules: %w", err)
@@ -107,6 +108,7 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 				UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
 				UserCategoryName: pgconv.TextToPtrString(row.UserCategoryName),
 			},
+			CreatedAt:                pgconv.TimestamptzToTime(row.CreatedAt),
 			Today:                    pgconv.DateFromPgtype(row.OwnerToday),
 			NextPlannedDate:          pgconv.DatePtrFromPgtype(row.AggNextPlannedDate),
 			OverdueCount:             row.OverdueCount,
@@ -116,6 +118,31 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 		})
 	}
 	return out, nil
+}
+
+// CountGlobalPaymentRules counts the search's whole-scope matches (ticket
+// #599): the list's predicate — the search, the chip filter, the visibility
+// — without the per-row aggregates and the keyset window.
+func (s *GlobalPaymentStore) CountGlobalPaymentRules(
+	ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time, q application.GlobalPaymentRulesQuery,
+) (int64, error) {
+	ownerIDs, todaysCSV, err := ownerTodaysCSV(todays)
+	if err != nil {
+		return 0, err
+	}
+	count, err := s.q().CountGlobalPaymentRules(ctx, postgres.CountGlobalPaymentRulesParams{
+		OwnerIds:       ownerIDs,
+		Todays:         todaysCSV,
+		Actor:          pgconv.UUIDToPgtype(actor),
+		Search:         escapeLikePattern(q.Search),
+		CategorySlugs:  strings.Join(q.CategorySlugs, ","),
+		CategoryFilter: q.Category,
+		TypeFilter:     string(q.Type),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count global payment rules: %w", err)
+	}
+	return count, nil
 }
 
 // SumGlobalPaymentCounters returns the scope counters over the whole

@@ -58,9 +58,9 @@ import {
 import {
   OverdueOperationRow,
   PaymentsGroup,
-  PaymentsSkeleton,
   PaymentsStateCard,
 } from './payments-sections';
+import { PaymentDetailSkeleton } from './payments-skeletons';
 
 /**
  * Страница платежа (#465, Figma 671:5889 / 850:15410): шапка со звездой
@@ -133,13 +133,7 @@ export function PaymentDetailScreen({
 
       <PageContent>
         <div className="flex flex-col gap-8">
-          {loading && (
-            <>
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-              <PaymentsSkeleton withHeading />
-            </>
-          )}
+          {loading && <PaymentDetailSkeleton />}
 
           {failed && (
             <PaymentsStateCard

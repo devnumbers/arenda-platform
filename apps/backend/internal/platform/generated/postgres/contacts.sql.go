@@ -182,34 +182,85 @@ WHERE (
       )
   AND (
         $4::text = ''
-        OR concat_ws(' ', c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_username)
+        OR contacts_search_text(c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_username)
            ILIKE '%' || $4::text || '%' ESCAPE '\'
       )
+  AND (
+        $5::uuid IS NULL
+        OR ($6::text = 'name'
+            AND $7::text = 'asc'
+            AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" > $8::text
+                 OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = $8::text
+                     AND c.id > $5::uuid)))
+        OR ($6::text = 'name'
+            AND $7::text = 'desc'
+            AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" < $8::text
+                 OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = $8::text
+                     AND c.id > $5::uuid)))
+        OR ($6::text = 'property'
+            AND $7::text = 'asc'
+            AND (
+                  (c.property_id IS NULL
+                   AND $9::bool = TRUE
+                   AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" > $8::text
+                        OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = $8::text
+                            AND c.id > $5::uuid)))
+               OR (c.property_id IS NOT NULL
+                   AND ($9::bool = TRUE
+                        OR (p.name COLLATE "ru-RU-x-icu" > $10::text
+                            OR (p.name COLLATE "ru-RU-x-icu" = $10::text
+                                AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" > $8::text
+                                     OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = $8::text
+                                         AND c.id > $5::uuid))))))
+                       ))
+        OR ($6::text = 'property'
+            AND $7::text = 'desc'
+            AND (
+                  (c.property_id IS NULL
+                   AND $9::bool = TRUE
+                   AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" < $8::text
+                        OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = $8::text
+                            AND c.id > $5::uuid)))
+               OR (c.property_id IS NOT NULL
+                   AND ($9::bool = TRUE
+                        OR (p.name COLLATE "ru-RU-x-icu" < $10::text
+                            OR (p.name COLLATE "ru-RU-x-icu" = $10::text
+                                AND (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" < $8::text
+                                     OR (concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" = $8::text
+                                         AND c.id > $5::uuid))))))
+                       ))
+      )
 ORDER BY
-  CASE WHEN $5::text = 'property'
+  CASE WHEN $6::text = 'property'
        THEN (c.property_id IS NULL) END DESC,
-  CASE WHEN $5::text = 'name' AND $6::text = 'asc'
+  CASE WHEN $6::text = 'name' AND $7::text = 'asc'
        THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END ASC,
-  CASE WHEN $5::text = 'name' AND $6::text = 'desc'
+  CASE WHEN $6::text = 'name' AND $7::text = 'desc'
        THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
-  CASE WHEN $5::text = 'property' AND $6::text = 'asc'
+  CASE WHEN $6::text = 'property' AND $7::text = 'asc'
        THEN p.name COLLATE "ru-RU-x-icu" END ASC,
-  CASE WHEN $5::text = 'property' AND $6::text = 'asc'
+  CASE WHEN $6::text = 'property' AND $7::text = 'asc'
        THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END ASC,
-  CASE WHEN $5::text = 'property' AND $6::text = 'desc'
+  CASE WHEN $6::text = 'property' AND $7::text = 'desc'
        THEN p.name COLLATE "ru-RU-x-icu" END DESC,
-  CASE WHEN $5::text = 'property' AND $6::text = 'desc'
+  CASE WHEN $6::text = 'property' AND $7::text = 'desc'
        THEN concat_ws(' ', c.first_name, c.last_name, c.patronymic) COLLATE "ru-RU-x-icu" END DESC,
   c.id ASC
+LIMIT $11
 `
 
 type ListContactsParams struct {
-	Scope      string      `json:"scope"`
-	ActorID    pgtype.UUID `json:"actor_id"`
-	PropertyID pgtype.UUID `json:"property_id"`
-	Search     string      `json:"search"`
-	Sort       string      `json:"sort"`
-	Order      string      `json:"order"`
+	Scope             string      `json:"scope"`
+	ActorID           pgtype.UUID `json:"actor_id"`
+	PropertyID        pgtype.UUID `json:"property_id"`
+	Search            string      `json:"search"`
+	AfterID           pgtype.UUID `json:"after_id"`
+	Sort              string      `json:"sort"`
+	Order             string      `json:"order"`
+	AfterName         pgtype.Text `json:"after_name"`
+	AfterUnbound      pgtype.Bool `json:"after_unbound"`
+	AfterPropertyName pgtype.Text `json:"after_property_name"`
+	PageLimit         int32       `json:"page_limit"`
 }
 
 type ListContactsRow struct {
@@ -240,20 +291,40 @@ type ListContactsRow struct {
 // move), and the service has already gated the actor's view capability on
 // the property. property_id must be set for the property scope.
 // search (” = no filter) is a case-insensitive substring match over the
-// name fields, role, phone, email and messenger username; the application
-// layer escapes the ILIKE metacharacters (ESCAPE '\').
+// name fields, role, phone, email and messenger username, glued by
+// contacts_search_text — the same IMMUTABLE expression the trigram index
+// (migration 000124) is built on; the application layer escapes the ILIKE
+// metacharacters (ESCAPE '\').
 // sort 'name' orders by the display name; 'property' — by the bound
 // property's name, unbound cards first in both directions («Общие
 // контакты»), contact name ordering inside the groups. Both keys use the
 // Russian ICU collation to match the client's letter grouping; id ties off.
+//
+// The page walks the listing's own order by keyset (ticket #600): the
+// window resumes strictly after the (sort key, id) the previous page ended
+// on, so cards created or deleted between loads never duplicate or drop.
+// The sort keys are mutable (display name, property binding): a rename or
+// rebind of a card the walk has already passed can move it across the
+// window boundary — inherent to the visible name/property sort. The
+// predicate mirrors the ORDER BY branch by branch — the same CASE-gated
+// keys, the same ICU collations, the unbound-flag leading the property sort
+// and id tying off ascending in both directions. The cursor blob carries
+// its sort/order: the application rejects a cursor echoed under another
+// walk. All cursor args travel together; NULL (no cursor) reads from the
+// beginning.
 func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error) {
 	rows, err := q.db.Query(ctx, listContacts,
 		arg.Scope,
 		arg.ActorID,
 		arg.PropertyID,
 		arg.Search,
+		arg.AfterID,
 		arg.Sort,
 		arg.Order,
+		arg.AfterName,
+		arg.AfterUnbound,
+		arg.AfterPropertyName,
+		arg.PageLimit,
 	)
 	if err != nil {
 		return nil, err

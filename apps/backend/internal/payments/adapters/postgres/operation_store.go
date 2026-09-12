@@ -183,7 +183,7 @@ func (s *OperationStore) CountPaidOperationsByPayment(
 func (s *OperationStore) ListGlobal(
 	ctx context.Context, actor uuid.UUID, q application.GlobalOperationsListQuery,
 ) ([]application.GlobalOperationRow, error) {
-	if q.Limit < 1 || q.Limit > application.MaxOperationsPageSize || q.Offset < 0 {
+	if q.Limit < 1 || q.Limit > application.MaxOperationsPageSize {
 		return nil, application.ErrInvalidInput
 	}
 	rows, err := s.q().ListPaidOperationsGlobal(ctx, postgres.ListPaidOperationsGlobalParams{
@@ -197,7 +197,8 @@ func (s *OperationStore) ListGlobal(
 		Categories:      joinCategorySlugs(q.Categories),
 		IncludeArchived: q.IncludeArchived,
 		Order:           operationsOrder(q.Asc),
-		Offset:          paginationToInt32(q.Offset),
+		AfterDate:       pgconv.DatePtrToPgtype(q.AfterDate),
+		AfterID:         pgconv.UUIDToPgtypePtr(q.AfterID),
 		Limit:           paginationToInt32(q.Limit),
 	})
 	if err != nil {
@@ -218,6 +219,30 @@ func (s *OperationStore) ListGlobal(
 		})
 	}
 	return out, nil
+}
+
+// CountGlobal counts the actor's visible paid operations over the list's
+// predicate — the scope's own count behind the feed's «найдено N» (ticket
+// #599): the keyset key and the window have no say in it, the count SQL has
+// no args for them.
+func (s *OperationStore) CountGlobal(
+	ctx context.Context, actor uuid.UUID, q application.GlobalOperationsListQuery,
+) (int64, error) {
+	count, err := s.q().CountPaidOperationsGlobal(ctx, postgres.CountPaidOperationsGlobalParams{
+		Actor:           pgconv.UUIDToPgtype(actor),
+		PropertyIds:     joinPropertyIDs(q.PropertyIDs),
+		DateFrom:        pgconv.DatePtrToPgtype(q.DateFrom),
+		DateTo:          pgconv.DatePtrToPgtype(q.DateTo),
+		Search:          escapeLikePattern(q.Search),
+		SearchDigits:    searchAmountDigits(q.Search),
+		Type:            operationsTypeFilter(q.Type),
+		Categories:      joinCategorySlugs(q.Categories),
+		IncludeArchived: q.IncludeArchived,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count global operations: %w", err)
+	}
+	return count, nil
 }
 
 // SummarizeGlobal runs the global summary's two aggregations (ticket #540)

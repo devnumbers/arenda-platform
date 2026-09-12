@@ -15,6 +15,7 @@ import {
   PageContent,
   SearchField,
   Skeleton,
+  TopNav,
 } from '@/shared/ui/design';
 import { PaymentObjectAvatar, PaymentsStateCard } from './payments-sections';
 
@@ -26,9 +27,9 @@ import { PaymentObjectAvatar, PaymentsStateCard } from './payments-sections';
  * название, адрес); тап — платежи объекта. Серверная область —
  * GET /payments/objects?search= (#575): фильтр по названию/адресу; ввод
  * живёт в адресе (?q=) и догоняется дебаунсом — useSearchQueryState.
- * Архивные в поиске не участвуют (фильтр сервера). Каркас кабинетный,
- * как поиск платежей: шапка в потоке страницы, «назад» возвращает на
- * «Объекты».
+ * Архивные в поиске не участвуют (фильтр сервера). Шапка — канон поиска
+ * TopNav variant="search" на едином хроме экранов (#565), как у операций
+ * (#543) и контактов (#508); «назад» возвращает на «Платежи объектов».
  */
 export function PaymentsObjectsSearchScreen(): JSX.Element {
   const router = useRouter();
@@ -59,27 +60,26 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
     router.push(ROUTES.propertyPayments(propertyId));
 
   return (
-    <PageContent>
-      {/* Ритм страницы — ровно 24px по бокам, как на «Объектах» и поиске
-       * платежей: шапка держит вставку сама, строки ListRow — полный
-       * вылет (их px-6 и есть 24px, вторая вставка удвоила бы отступ). */}
-      <div className="-mx-5 min-[1200px]:mx-0">
-        <div className="flex items-center gap-1 px-6 pt-1">
-          <IconButton
-            icon={<ArrowLeft />}
-            label="Назад"
-            onClick={() => goBack(router, ROUTES.paymentsObjects)}
-          />
-          <SearchField
-            ref={inputRef}
-            placeholder="Найти объект"
-            aria-label="Найти объект"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            onClear={clear}
-          />
-        </div>
+    <>
+      {/* Канон поиска (TopNav варианта search): «Назад» — goBack на
+       * «Платежи объектов»; хедер-хром (лого/профиль) приносят крылья
+       * TopNav. Строки ListRow — полный вылет, их 24px и есть ритм
+       * страницы, вторая вставка удвоила бы отступ. */}
+      <TopNav
+        variant="search"
+        leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={() => goBack(router, ROUTES.paymentsObjects)} />}
+      >
+        <SearchField
+          ref={inputRef}
+          placeholder="Найти объект"
+          aria-label="Найти объект"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onClear={clear}
+        />
+      </TopNav>
 
+      <PageContent>
         {emptyQuery && (
           <EmptyState
             imageSrc="/images/payments/payments-objects-search.png"
@@ -146,7 +146,7 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
               ))}
             </div>
           ))}
-      </div>
-    </PageContent>
+      </PageContent>
+    </>
   );
 }

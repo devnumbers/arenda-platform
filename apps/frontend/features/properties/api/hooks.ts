@@ -1,9 +1,13 @@
 'use client';
 
 import {
+  keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
@@ -18,6 +22,7 @@ import type { components } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];
+type PropertiesSearchResponse = components['schemas']['PropertiesSearchResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
 type PropertyPhoto = components['schemas']['PropertyPhoto'];
@@ -25,15 +30,19 @@ type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
+/** Чистый fetch списка объектов — общее горло хука и прогрева хабов
+ * #626 (кэш прогревается тем же кодом, что читает экран). */
+export async function fetchProperties(): Promise<Property[]> {
+  const response = await apiClient<PropertiesResponse>('/properties');
+  return response.items.map(mapPropertyResponse);
+}
+
 export function useProperties(
   options: { enabled?: boolean; staleTime?: number } = {},
 ): UseQueryResult<Property[], ApiError> {
   return useQuery({
     queryKey: propertyKeys.list,
-    queryFn: async () => {
-      const response = await apiClient<PropertiesResponse>('/properties');
-      return response.items.map(mapPropertyResponse);
-    },
+    queryFn: fetchProperties,
     enabled: options.enabled,
     staleTime: options.staleTime,
   });
@@ -79,6 +88,67 @@ export function useArchivedProperties(
       return response.items.map(mapPropertyResponse);
     },
     enabled: options.enabled,
+  });
+}
+
+/** Порция поиска объектов: контракт #601 — порции по 50. */
+export const PROPERTIES_SEARCH_PAGE_SIZE = 50;
+
+/**
+ * Порция поиска объектов (#601): строки плюс keyset-продолжение — opaque-
+ * курсор следующей порции, null = совпадения исчерпаны.
+ */
+export type PropertiesSearchPageData = {
+  readonly items: Property[];
+  readonly nextCursor: string | null;
+};
+
+/** Общее горло порции GET /properties/search: search — обязательный
+ * регистронезависимый фильтр по названию и адресу (клиентски тримится),
+ * cursor — keyset-продолжение прошлого ответа, undefined читает с начала. */
+async function fetchPropertiesSearchPage(params: {
+  search: string;
+  cursor?: string;
+}): Promise<PropertiesSearchPageData> {
+  const query = new URLSearchParams({ search: params.search });
+  query.set('limit', String(PROPERTIES_SEARCH_PAGE_SIZE));
+  if (params.cursor) {
+    query.set('cursor', params.cursor);
+  }
+  const response = await apiClient<PropertiesSearchResponse>(
+    `/properties/search?${query.toString()}`,
+  );
+  return {
+    items: response.items.map(mapPropertyResponse),
+    nextCursor: response.nextCursor ?? null,
+  };
+}
+
+/**
+ * Поиск объектов (глобальная страница «Объектов», тикет #601): порции по 50
+ * keyset-курсором — pageParam это курсор прошлого ответа, смена queryKey
+ * (новый запрос) начинает свежий обход с пустого курсора — sentinel не
+ * наследует позицию прошлых порций. Склейка порций без дедупа: один
+ * сортировочный ключ (название, id), повторы keyset не порождает —
+ * канон книги контактов (#600). keepPreviousData — прежняя выдача
+ * держится на экране, пока едет запрос с новым ?search= (канон платежей
+ * #609); скелетон — только когда данных нет вовсе. Пустой (после трима)
+ * запрос контракт не проходит (search обязателен) — чтение не
+ * запускается, экран показывает подсказку.
+ */
+export function usePropertiesSearch(
+  search: string,
+): UseInfiniteQueryResult<Property[], ApiError> {
+  return useInfiniteQuery({
+    queryKey: propertyKeys.search(search),
+    queryFn: ({ pageParam }) =>
+      fetchPropertiesSearchPage({ search, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    select: (data: InfiniteData<PropertiesSearchPageData>) =>
+      data.pages.flatMap((page) => page.items),
+    placeholderData: keepPreviousData,
+    enabled: search.trim() !== '',
   });
 }
 

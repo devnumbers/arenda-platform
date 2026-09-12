@@ -1,7 +1,9 @@
 export { propertyKeys } from '@/shared/api/query-keys';
 export {
+  fetchProperties,
   useProperties,
   useArchivedProperties,
+  usePropertiesSearch,
   useProperty,
   useCreateProperty,
   useUpdateProperty,
@@ -13,3 +15,5 @@ export {
   useDeletePropertyPhoto,
   useDeleteProperty,
 } from './hooks';
+export type { PropertiesSearchPageData } from './hooks';
+export { PROPERTIES_SEARCH_PAGE_SIZE } from './hooks';

@@ -20,7 +20,7 @@ import { canMutateProperty, useProperty } from '@/features/properties';
 import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
 import { ContactKebabMenu } from './contact-kebab-menu';
-import { ContactsErrorCard, ContactsSkeleton } from './contacts-states';
+import { ContactDetailSkeleton, ContactsErrorCard } from './contacts-states';
 
 /** Задержка индикации «скопировано» (мс) — как в PropertySharingModal. */
 const COPIED_RESET_MS = 2000;
@@ -111,7 +111,7 @@ export function ContactDetailScreen({
 
       <PageContent>
         {contactQuery.isPending ? (
-          <ContactsSkeleton />
+          <ContactDetailSkeleton />
         ) : contactQuery.isError || contact === undefined ? (
           <ContactsErrorCard onRetry={() => void contactQuery.refetch()} />
         ) : (
