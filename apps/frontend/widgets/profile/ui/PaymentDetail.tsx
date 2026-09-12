@@ -18,6 +18,7 @@ import {
 import type { SubscriptionPayment } from '@/entities/billing';
 import { PAYMENT_STATUS_LABELS } from '@/entities/billing';
 import { getTariffLabel } from '@/entities/user';
+import { goBack } from '@/shared/lib/navigation';
 import { usePaymentTimer } from './tariff/use-payment-timer';
 import { cn } from '@/shared/lib/cn';
 import { formatDateTimeHeading } from '@/shared/lib/date-format';
@@ -27,6 +28,7 @@ import {
   paymentCardMask,
   paymentPeriodLabel,
   paymentRowAmountProps,
+  paymentStatusTone,
 } from '../lib/payment-history-model';
 
 /** Деталь платежа (#624, Figma 1883-71611 / 1904-40495 / 1892-111236 /
@@ -92,7 +94,7 @@ function PaymentNotFound(): JSX.Element {
   return (
     <div className="flex flex-col items-center gap-4 py-16 text-center">
       <p className="m-0 text-base leading-[18px] text-content-secondary">Платёж не найден</p>
-      <Button onClick={() => router.back()} variant="secondary">
+      <Button onClick={() => goBack(router, ROUTES.profilePayments)} variant="secondary">
         Назад
       </Button>
     </div>
@@ -118,19 +120,6 @@ function DetailRow({
   );
 }
 
-function statusValueClassName(status: SubscriptionPayment['status']): string | undefined {
-  switch (status) {
-    case 'pending':
-      return 'text-primary';
-    case 'failed':
-      return 'text-danger';
-    case 'refunded':
-      return 'text-success';
-    case 'succeeded':
-      return undefined;
-  }
-}
-
 function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment }): JSX.Element {
   const amount = paymentRowAmountProps(payment);
   const cardMask = paymentCardMask(payment);
@@ -142,7 +131,10 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
     new Date(payment.createdAt).getTime() + PAYMENT_STALE_MS,
   ).toISOString();
   const now = usePaymentTimer(resumeDeadline, isBankPending);
-  const showResumeLink = isBankPending && now.getTime() < new Date(resumeDeadline).getTime();
+  const resumeUrl =
+    isBankPending && now.getTime() < new Date(resumeDeadline).getTime()
+      ? payment.paymentUrl
+      : null;
 
   return (
     <>
@@ -180,16 +172,16 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
             <DetailRow
               label="Статус"
               value={PAYMENT_STATUS_LABELS[payment.status]}
-              valueClassName={statusValueClassName(payment.status)}
+              valueClassName={paymentStatusTone(payment.status)}
             />
           </div>
         </section>
       </div>
-      {showResumeLink && (
+      {resumeUrl !== null && (
         <StickyBottomBar>
           <div className="w-full text-white">
             <a
-              href={payment.paymentUrl ?? undefined}
+              href={resumeUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={buttonVariants({ className: 'w-full' })}

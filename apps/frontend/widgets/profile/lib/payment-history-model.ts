@@ -11,11 +11,7 @@ import { PAYMENT_STATUS_LABELS } from '@/entities/billing';
 /**
  * Презентационная модель экрана «Операции» (#624): группировка истории
  * подписочных платежей по датам, знаки и тона сумм, маски карт, копия
- * макета. Знак суммы выводится из статуса платежа (сумма в DTO — сумма
- * списания, всегда положительная): выполнено/не выполнено — «−» (у
- * не выполненного — красным), возврат — «+» зелёным, ожидание — без
- * знака; служебный refunding приходит уже нормализованным в pending
- * (маппер entities/billing, решение владельца #614).
+ * макета.
  *
  * Группировка — канон дат shared/lib («10 августа», год вне текущего);
  * день берётся по локальным часам смотрящего (dateToIsoLocal): бэк для
@@ -67,6 +63,22 @@ export function paymentRowSubtitle(payment: SubscriptionPayment): string | undef
   return payment.status === 'succeeded'
     ? undefined
     : PAYMENT_STATUS_LABELS[payment.status];
+}
+
+/** Цвет строки «Статус» в детали (#624, Figma 1904-40495): ожидание —
+ * синим primary, не выполнено — danger, возврат — success, выполнена —
+ * тёмным (без класса). */
+export function paymentStatusTone(status: SubscriptionPayment['status']): string | undefined {
+  switch (status) {
+    case 'pending':
+      return 'text-primary';
+    case 'failed':
+      return 'text-danger';
+    case 'refunded':
+      return 'text-success';
+    case 'succeeded':
+      return undefined;
+  }
 }
 
 const CARD_SYSTEM_LABELS: Record<SubscriptionPaymentCard['cardSystem'], string | undefined> = {

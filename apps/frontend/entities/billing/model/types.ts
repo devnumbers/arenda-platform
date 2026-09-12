@@ -16,7 +16,7 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
 };
 
 /** Карта, которой платёж был оплачен (#619): снимок на момент создания/
- * финализации платежа — история живёт пережитым удаление способа оплаты.
+ * финализации платежа — история переживает удаление способа оплаты.
  * `cardSystem` бэк выводит из BIN-префикса; без распознавания — unknown. */
 export type SubscriptionPaymentCard = {
   readonly displayMask: string;

@@ -6,6 +6,7 @@ import {
   paymentPeriodLabel,
   paymentRowAmountProps,
   paymentRowSubtitle,
+  paymentStatusTone,
 } from './payment-history-model';
 
 const proTariff = {
@@ -109,6 +110,15 @@ describe('paymentCardMask', () => {
 
   it('платёж без карты — маски нет', () => {
     expect(paymentCardMask(payment({ paymentMethod: undefined }))).toBeUndefined();
+  });
+});
+
+describe('paymentStatusTone', () => {
+  it('цвет статуса в детали (Figma 1904-40495): ожидание синим', () => {
+    expect(paymentStatusTone('pending')).toBe('text-primary');
+    expect(paymentStatusTone('failed')).toBe('text-danger');
+    expect(paymentStatusTone('refunded')).toBe('text-success');
+    expect(paymentStatusTone('succeeded')).toBeUndefined();
   });
 });
 
