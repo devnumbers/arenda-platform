@@ -1,4 +1,5 @@
 import type { Property } from '@/entities/property';
+import { comparePrimaryProperty } from '@/entities/property';
 import { propertyTypeOptions } from '@/features/properties';
 
 /**
@@ -71,22 +72,15 @@ function compareByField(a: Property, b: Property, field: PropertySortField): num
   }
 }
 
-/** Основной объект выше любого не-основного; среди основных — первый
- * отмеченный (раньший pinned_at) выше, время повторной отметки не меняет. */
-function comparePrimary(a: Property, b: Property): number {
-  if (a.pinned_at && b.pinned_at) return a.pinned_at < b.pinned_at ? -1 : a.pinned_at > b.pinned_at ? 1 : 0;
-  if (a.pinned_at) return -1;
-  if (b.pinned_at) return 1;
-  return 0;
-}
-
 export function sortProperties(
   items: readonly Property[],
   sort: PropertySort,
 ): Property[] {
   const direction = sort.direction === 'desc' ? -1 : 1;
   return [...items].sort((a, b) => {
-    const byPrimary = comparePrimary(a, b);
+    // Основной объект выше при любом поле/направлении — правило
+    // pinned_at живёт в каноне entities/property (#584).
+    const byPrimary = comparePrimaryProperty(a, b);
     if (byPrimary !== 0) return byPrimary;
     return compareByField(a, b, sort.field) * direction;
   });

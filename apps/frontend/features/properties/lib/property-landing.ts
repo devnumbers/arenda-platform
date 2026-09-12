@@ -1,5 +1,5 @@
 import { ROUTES } from '@/shared/config/routes';
-import type { Property } from '@/entities/property';
+import { comparePrimaryProperty, type Property } from '@/entities/property';
 
 /**
  * Лендинг таба «Объекты» (карта #583, решение гриллинга 10.09): есть
@@ -18,7 +18,7 @@ export function resolvePropertiesLandingHref(
     (property): property is Property & { readonly pinned_at: string } =>
       property.pinned_at !== null,
   );
-  primaries.sort((a, b) => (a.pinned_at < b.pinned_at ? -1 : a.pinned_at > b.pinned_at ? 1 : 0));
+  primaries.sort(comparePrimaryProperty);
 
   const [firstPrimary] = primaries;
   if (firstPrimary) return ROUTES.property(firstPrimary.id);
