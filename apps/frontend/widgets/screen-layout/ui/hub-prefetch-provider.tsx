@@ -17,8 +17,8 @@ import {
   fetchGlobalOperationsSummary,
   fetchGlobalPaymentObjects,
   fetchGlobalPaymentsFeed,
-  operationsNextPageParam,
 } from '@/features/payments';
+import { keysetNextPageParam } from '@/shared/lib/keyset';
 import { fetchGlobalTasks } from '@/features/tasks';
 import { contactBookQuery } from '@/features/contacts';
 import { fetchProperties } from '@/features/properties';
@@ -87,7 +87,7 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
         queryKey: globalOperationKeys.listPaged(scope),
         queryFn: ({ pageParam }) => fetchGlobalOperationsPage(scope, pageParam),
         initialPageParam: undefined as string | undefined,
-        getNextPageParam: operationsNextPageParam,
+        getNextPageParam: keysetNextPageParam,
       });
       void client.prefetchQuery({
         queryKey: globalOperationKeys.summary(scope),
