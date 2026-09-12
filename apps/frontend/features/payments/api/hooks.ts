@@ -37,6 +37,11 @@ import {
   type PaymentOperationStatusFilter,
 } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
+import { keysetNextPageParam } from '@/shared/lib/keyset';
+import {
+  OPERATIONS_PAGE_SIZE,
+  operationsOffsetNextPageParam,
+} from '../lib/operations-pages';
 import { flattenUniqueById } from '../lib/feed-pages';
 
 type PaymentsResponse = components['schemas']['PaymentsResponse'];
@@ -112,10 +117,7 @@ export function usePropertyOperationsPaged(
       return response.items.map(mapPaymentOperation);
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < OPERATIONS_PAGE_SIZE
-        ? undefined
-        : allPages.length * OPERATIONS_PAGE_SIZE,
+    getNextPageParam: operationsOffsetNextPageParam,
     select: (data) => data.pages.flat(),
     enabled: Boolean(propertyId),
   });
@@ -275,10 +277,6 @@ export function usePaymentOperationsByStatus(
   });
 }
 
-/** Размер порции всех списков операций (правило платформы, резолюция #452:
- * по 50 + бесконечный скролл; серверный дефолт — те же 50). */
-export const OPERATIONS_PAGE_SIZE = 50;
-
 /**
  * Порции операций платежа для подэкранов страницы (#466): «История»
  * (status=paid, порядок по чипу «Новые») и полный список просроченных
@@ -303,10 +301,7 @@ export function usePaymentOperationsPaged(
       return response.items.map(mapPaymentOperation);
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < OPERATIONS_PAGE_SIZE
-        ? undefined
-        : allPages.length * OPERATIONS_PAGE_SIZE,
+    getNextPageParam: operationsOffsetNextPageParam,
     select: (data) => data.pages.flat(),
     enabled: Boolean(propertyId) && Boolean(paymentId),
   });
@@ -357,10 +352,7 @@ export function usePropertyOperationsScopedPaged(
       return response.items.map(mapPaymentOperation);
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length < OPERATIONS_PAGE_SIZE
-        ? undefined
-        : allPages.length * OPERATIONS_PAGE_SIZE,
+    getNextPageParam: operationsOffsetNextPageParam,
     select: (data) => data.pages.flat(),
     placeholderData: keepPreviousData,
     enabled: (options.enabled ?? true) && Boolean(propertyId),
@@ -465,13 +457,6 @@ export async function fetchGlobalOperationsPage(
   };
 }
 
-/** Есть ли следующая порция: пока сервер отдал keyset-продолжение (#597). */
-export function operationsNextPageParam(
-  lastPage: GlobalOperationsPageData,
-): string | undefined {
-  return lastPage.nextCursor ?? undefined;
-}
-
 /**
  * Глобальная лента операций (карта #540, #541): платёжные факты видимой
  * книги (ADR 0028), архивные исключены сервером; лента paid-only. Порции
@@ -490,7 +475,7 @@ export function useGlobalOperationsPaged(
     queryKey: globalOperationKeys.listPaged(scope),
     queryFn: ({ pageParam }) => fetchGlobalOperationsPage(scope, pageParam),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: operationsNextPageParam,
+    getNextPageParam: keysetNextPageParam,
     select: (data) => flattenUniqueById(data.pages.map((page) => page.items)),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
@@ -823,7 +808,7 @@ export function useGlobalPaymentSearch(
       return mapGlobalPaymentSearch(response);
     },
     initialPageParam: '',
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    getNextPageParam: keysetNextPageParam,
     select: (data): GlobalPaymentSearch => ({
       items: flattenUniqueById(data.pages.map((page) => page.items)),
       matchedCategories: data.pages[0]?.matchedCategories ?? [],

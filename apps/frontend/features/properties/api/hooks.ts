@@ -16,6 +16,7 @@ import type { ApiError } from '@/shared/api/errors';
 import { mapPropertyResponse } from '@/entities/property';
 import type { Property } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
+import { keysetNextPageParam } from '@/shared/lib/keyset';
 import type { components, operations } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
@@ -140,7 +141,7 @@ export function usePropertiesSearch(
     queryFn: ({ pageParam }) =>
       fetchPropertiesSearchPage({ search, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    getNextPageParam: keysetNextPageParam,
     select: (data: InfiniteData<PropertiesSearchPageData>) =>
       data.pages.flatMap((page) => page.items),
     placeholderData: keepPreviousData,

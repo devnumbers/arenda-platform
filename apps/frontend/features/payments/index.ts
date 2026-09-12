@@ -21,6 +21,7 @@ export {
   type OperationWizardStep,
 } from './lib/operation-wizard-model';
 export { matchesTitleSearch } from './lib/title-search';
+export { OPERATIONS_PAGE_SIZE, operationsOffsetNextPageParam } from './lib/operations-pages';
 export {
   FORM_OF_PAYMENT_LABELS,
   TYPE_LABELS,
@@ -100,8 +101,6 @@ export {
   type PaymentEditForm,
 } from './lib/update-model';
 export {
-  OPERATIONS_PAGE_SIZE,
-  operationsNextPageParam,
   fetchGlobalOperationsPage,
   fetchGlobalOperationsSummary,
   fetchGlobalPaymentObjects,
