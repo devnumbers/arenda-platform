@@ -187,11 +187,18 @@ export function ContactsNoResults(): JSX.Element {
 
 /** Хвост списка при догрузке порции (#600): тот же паттерн, что у лент
  * платежей/операций (LoadingMoreIndicator) — компактный спиннер-скелетон
- * по центру с ролью status. */
-export function ContactsLoadingMore(): JSX.Element {
+ * по центру с ролью status. tone=muted — внутри серых карточек (книга),
+ * тон скелетона — как у блоков скелетона книги. */
+export function ContactsLoadingMore({
+  tone = 'white',
+}: {
+  readonly tone?: 'white' | 'muted';
+}): JSX.Element {
   return (
     <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <Skeleton className="h-8 w-8" />
+      <Skeleton
+        className={cn('h-8 w-8', tone === 'muted' && 'bg-surface-muted-hover')}
+      />
     </div>
   );
 }

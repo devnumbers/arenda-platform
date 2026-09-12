@@ -189,7 +189,7 @@ export function ContactBookScreen({
                   {contactsQuery.hasNextPage === true && (
                     <div ref={sentinelRef} aria-hidden />
                   )}
-                  {contactsQuery.isFetchingNextPage && <ContactsLoadingMore />}
+                  {contactsQuery.isFetchingNextPage && <ContactsLoadingMore tone="muted" />}
                 </section>
               </>
             )}

@@ -246,7 +246,7 @@ function BookList({
       {query.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
       {query.isFetchingNextPage && (
         <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-          <Skeleton className="h-8 w-8" />
+          <Skeleton className="h-8 w-8 bg-surface-muted-hover" />
         </div>
       )}
     </section>
