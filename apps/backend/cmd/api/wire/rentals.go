@@ -18,9 +18,14 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// Rentals holds the rentals module's service wired by WireRentals.
+// Rentals holds the rentals module's service wired by WireRentals plus the
+// read-only occupancy adapter the properties list projections consume
+// (ticket #585) and the delete-side guard the property deletion consults
+// (issue #632).
 type Rentals struct {
-	RentalService *rentalsapp.RentalService
+	RentalService   *rentalsapp.RentalService
+	OccupancyReader *rentalspg.OccupancyReader
+	DeletionGuard   *rentalspg.DeletionGuard
 }
 
 // WireRentals constructs the rentals context (ADR 0053, ticket #529): the
@@ -51,7 +56,9 @@ func WireRentals(p platformDeps) (*Rentals, error) {
 	)
 
 	return &Rentals{
-		RentalService: rentalsapp.NewRentalService(factory, calendar, p.Policy),
+		RentalService:   rentalsapp.NewRentalService(factory, calendar, p.Policy),
+		OccupancyReader: rentalspg.NewOccupancyReader(p.DB, calendar),
+		DeletionGuard:   rentalspg.NewDeletionGuard(),
 	}, nil
 }
 

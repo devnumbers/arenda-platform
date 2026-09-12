@@ -6,7 +6,7 @@ type PropertyDetailRoutePageProps = {
 };
 
 export const metadata: Metadata = {
-    title: 'Мой объект — Рентли',
+    title: 'Объект — Рентли',
     description: 'Просмотр объекта недвижимости',
 };
 

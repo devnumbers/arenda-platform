@@ -556,6 +556,47 @@ func (q *Queries) ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOper
 	return items, nil
 }
 
+const listPropertyIDsWithOverdueOperations = `-- name: ListPropertyIDsWithOverdueOperations :many
+SELECT DISTINCT op.property_id
+FROM operations op
+WHERE op.owner_id = $1
+  AND op.status = 'planned'
+  AND op.date < $2
+  AND op.property_id = ANY($3::uuid[])
+`
+
+type ListPropertyIDsWithOverdueOperationsParams struct {
+	Owner       pgtype.UUID   `json:"owner"`
+	Today       pgtype.Date   `json:"today"`
+	PropertyIds []pgtype.UUID `json:"property_ids"`
+}
+
+// The payments half of the list red dot (ticket #585, резолюция #584): the
+// subset of the given properties holding at least one overdue planned
+// operation — a stored planned row dated before the owner's today, the same
+// predicate ListOperations resolves as the overdue view status in exactly
+// one place. One batched read per data owner; cancelled tombstones are not
+// planned rows and never match.
+func (q *Queries) ListPropertyIDsWithOverdueOperations(ctx context.Context, arg ListPropertyIDsWithOverdueOperationsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listPropertyIDsWithOverdueOperations, arg.Owner, arg.Today, arg.PropertyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var property_id pgtype.UUID
+		if err := rows.Scan(&property_id); err != nil {
+			return nil, err
+		}
+		items = append(items, property_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const payOperationByID = `-- name: PayOperationByID :execrows
 UPDATE operations
 SET status = 'paid', paid_date = $3

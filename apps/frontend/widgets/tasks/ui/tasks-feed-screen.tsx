@@ -44,7 +44,7 @@ import {
   PickerMenu,
   TopNav,
 } from '@/shared/ui/design';
-import { TaskRow } from './task-row';
+import { TaskRow } from '@/features/tasks';
 import { TaskSectionCard } from './task-section-card';
 import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
 import {
@@ -54,7 +54,8 @@ import {
 } from './tasks-property-select';
 import { TasksFeedSkeleton } from './tasks-skeletons';
 import { TasksStateCard } from './tasks-of-property-screen';
-import { sectionKey, sectionTone } from './tasks-section-utils';
+import { taskSectionTone } from '@/features/tasks';
+import { sectionKey } from './tasks-section-utils';
 import { SortChip, sortPickerGroups } from './tasks-sort';
 
 /**
@@ -350,7 +351,7 @@ function FeedSection({
       key={task.id}
       task={task}
       today={today}
-      tone={sectionTone(section.kind)}
+      tone={taskSectionTone(section.kind)}
       canMutate={canMutateFeedTask(task, propertyOf)}
       toggling={toggling(task)}
       onToggle={() => onToggle(task)}

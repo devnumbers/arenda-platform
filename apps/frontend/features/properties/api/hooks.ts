@@ -13,11 +13,13 @@ import {
 } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
+import type { IsoDate } from '@/shared/lib/calendar';
 import { mapPropertyResponse } from '@/entities/property';
 import type { Property } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
 import { keysetNextPageParam } from '@/shared/lib/keyset';
-import type { components, operations } from '@/shared/api/dto';
+import { resolvePropertiesLandingHref } from '../lib/property-landing';
+import type { components } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];
@@ -29,48 +31,56 @@ type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
-export type DeletePropertyMode =
-  operations['deleteProperty']['parameters']['query']['mode'];
+export type PropertiesListResult = {
+  readonly items: Property[];
+  readonly hiddenSharedCount: number;
+  /** «Сегодня владельца» (ADR 0048) — граница бейджа «Осталось N месяцев» (#586). */
+  readonly today: IsoDate;
+};
 
-/** Чистый fetch списка объектов — общее горло хука и прогрева хабов
- * #626 (кэш прогревается тем же кодом, что читает экран). */
-export async function fetchProperties(): Promise<Property[]> {
+/** Полный payload GET /properties — строки плюс hidden_shared_count (сколько
+ * общих объектов скрыто у получателя из-за тарифного лимита) и «сегодня
+ * владельца» (ADR 0048). Общее горло обоих хуков и прогрева хабов #626:
+ * один cache entry на propertyKeys.list, useProperties и
+ * usePropertiesWithMeta — лишь проекции над ним (кэш прогревается тем же
+ * кодом, что читает экран). */
+export async function fetchProperties(): Promise<PropertiesListResult> {
   const response = await apiClient<PropertiesResponse>('/properties');
-  return response.items.map(mapPropertyResponse);
+  return {
+    items: response.items.map(mapPropertyResponse),
+    hiddenSharedCount: response.hidden_shared_count,
+    today: response.today,
+  };
+}
+
+/** Проекция «только строки» над общим cache entry. Module-level, чтобы
+ * ссылка select была стабильной — react-query кэширует её результат. */
+function selectPropertiesItems(meta: PropertiesListResult): Property[] {
+  return meta.items;
 }
 
 export function useProperties(
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; staleTime?: number } = {},
 ): UseQueryResult<Property[], ApiError> {
   return useQuery({
     queryKey: propertyKeys.list,
     queryFn: fetchProperties,
+    select: selectPropertiesItems,
     enabled: options.enabled,
+    staleTime: options.staleTime,
   });
 }
 
-export type PropertiesListResult = {
-  readonly items: Property[];
-  readonly hiddenSharedCount: number;
-};
-
-// Same /properties endpoint as useProperties, but also surfaces
-// hidden_shared_count (shared objects hidden from the recipient due to a
-// tariff slot shortage). Use this only where the count is needed — the rest
-// of the app keeps useProperties for the plain list. Shares the
-// propertyKeys.list prefix so mutations invalidate both queries together.
+// Тот же cache entry, что у useProperties (один ключ — один запрос,
+// react-query дедуплицирует параллельных наблюдателей). Поверхности
+// hidden_shared_count и today нужны не везде — остальное приложение
+// читает useProperties с проекцией на строки.
 export function usePropertiesWithMeta(
   options: { enabled?: boolean } = {},
 ): UseQueryResult<PropertiesListResult, ApiError> {
   return useQuery({
-    queryKey: [...propertyKeys.list, 'meta'],
-    queryFn: async () => {
-      const response = await apiClient<PropertiesResponse>('/properties');
-      return {
-        items: response.items.map(mapPropertyResponse),
-        hiddenSharedCount: response.hidden_shared_count,
-      };
-    },
+    queryKey: propertyKeys.list,
+    queryFn: fetchProperties,
     enabled: options.enabled,
   });
 }
@@ -237,6 +247,30 @@ export function useUnarchiveProperty(): UseMutationResult<
   });
 }
 
+/**
+ * «Сделать основным / Убрать из основных» (деталь объекта #588): атомарный
+ * PUT pin (канон favorite-toggle, #577) — не read-modify-write PATCH.
+ * Инвалидит список и деталь — порядок карточек держит сервер.
+ */
+export function useSetPropertyPin(): UseMutationResult<
+  PropertyResponse,
+  ApiError,
+  { id: string; pinned: boolean }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pinned }) =>
+      apiClient<PropertyResponse>(`/properties/${id}/pin`, {
+        method: 'PUT',
+        body: JSON.stringify({ pinned }),
+      }),
+    onSuccess: (_, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+    },
+  });
+}
+
 export function useAddressSuggestions(
   query: string,
 ): UseQueryResult<AddressSuggestion[], ApiError> {
@@ -288,15 +322,12 @@ export function useDeletePropertyPhoto(): UseMutationResult<
   });
 }
 
-export function useDeleteProperty(): UseMutationResult<
-  void,
-  ApiError,
-  { id: string; mode: DeletePropertyMode }
-> {
+export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: string }> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, mode }) =>
-      apiClient<void>(`/properties/${id}?mode=${mode}`, {
+    // Deletion is total (ADR 0049): the property and all its data go together.
+    mutationFn: ({ id }) =>
+      apiClient<void>(`/properties/${id}`, {
         method: 'DELETE',
       }),
     onSuccess: (_, { id }) => {
@@ -304,4 +335,16 @@ export function useDeleteProperty(): UseMutationResult<
       queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
+}
+
+/**
+ * Адрес, куда ведёт таб «Объекты» (лендинг таба, карта #583): основной
+ * объект → его страница; основного нет, но активный один → его страница;
+ * иначе список. Пока список не загружен — список (безопасный фолбэк).
+ * Хромовые поверхности (ScreenLayout → TabBar/DesktopSidebar) держат
+ * кэш тёплым с коротким staleTime, чтобы ссылка жила без шторма запросов.
+ */
+export function usePropertiesLandingHref(): string {
+  const { data } = useProperties({ staleTime: 60_000 });
+  return resolvePropertiesLandingHref(data);
 }

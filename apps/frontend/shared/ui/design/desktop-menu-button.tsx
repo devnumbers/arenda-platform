@@ -8,6 +8,9 @@ import { useNavIntentLink } from './nav-intent';
 
 export type DesktopMenuButtonProps = {
   readonly section: NavSection;
+  /** Переопределение адреса (лендинг «Объектов», карта #583);
+   * undefined — href нав-модели. */
+  readonly href?: string;
   readonly active?: boolean;
   readonly className?: string;
 };
@@ -26,13 +29,14 @@ export type DesktopMenuButtonProps = {
  * TabBarRow). */
 export function DesktopMenuButton({
   section,
+  href,
   active = false,
   className,
 }: DesktopMenuButtonProps): JSX.Element {
   const intent = useNavIntentLink();
   return (
     <Link
-      href={section.href}
+      href={href ?? section.href}
       prefetch={intent.prefetch}
       aria-current={active ? 'page' : undefined}
       onPointerEnter={intent.onIntent}

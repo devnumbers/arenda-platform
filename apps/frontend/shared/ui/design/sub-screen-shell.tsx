@@ -7,6 +7,9 @@ import { TopNavBackButton } from './top-nav-back-button';
 export type SubScreenShellProps = {
   /** Заголовок подэкрана в центре шапки (TopNavTitle, 16/18). */
   readonly title: ReactNode;
+  /** Подзаголовок под заголовком (TopNavTitle subtitle, 14/16 серый) —
+   * например счётчик объектов архива (#587). */
+  readonly subtitle?: ReactNode;
   /** Фолбэк ведущей кнопки «Назад» при отсутствии истории — та же
    * семантика, что у TopNavBackButton (history-first goBack). */
   readonly fallbackHref: string;
@@ -26,6 +29,7 @@ export type SubScreenShellProps = {
  * собственного 'use client'. */
 export function SubScreenShell({
   title,
+  subtitle,
   fallbackHref,
   trailing,
   contentClassName,
@@ -37,7 +41,7 @@ export function SubScreenShell({
         leading={<TopNavBackButton fallbackHref={fallbackHref} />}
         trailing={trailing}
       >
-        <TopNavTitle title={title} />
+        <TopNavTitle title={title} subtitle={subtitle} />
       </TopNav>
       <PageContent className={cn('px-6', contentClassName)}>{children}</PageContent>
     </>

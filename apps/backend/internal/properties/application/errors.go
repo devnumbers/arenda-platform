@@ -31,6 +31,11 @@ var (
 	ErrAlreadyArchived   = errors.New("property is already archived")
 	ErrNotArchived       = errors.New("property is not archived")
 	ErrPhotoLimitReached = errors.New("property photo limit reached")
+	// ErrPropertyOccupied is returned when the owner deletes a property that
+	// still has an unfinished rental (issue #632, wire code
+	// property_occupied): the rental must be completed first — the path the
+	// rental completion flow (#627) already serves.
+	ErrPropertyOccupied = errors.New("property has an unfinished rental")
 )
 
 // InvalidStatusTransitionError describes a status change that is not allowed.

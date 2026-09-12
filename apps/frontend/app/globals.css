@@ -212,6 +212,7 @@
     --color-surface-info: var(--dl-surface-info);
 
     --color-danger: var(--dl-danger);
+    --color-danger-soft: var(--dl-danger-soft);
     --color-error: var(--dl-error);
     --color-success: var(--dl-success);
 
@@ -235,6 +236,9 @@
     --text-2xl--line-height: 2rem;
 
     --radius-button: 16px;
+    /* Radius/m из токенов Figma (12px) — CTA пустых состояний секций
+       объекта (#588, решение владельца 11.09), Button radius="m". */
+    --radius-m: 12px;
     --radius-pill: 100px;
     --radius-card: 24px;
     --radius-sheet: 40px;

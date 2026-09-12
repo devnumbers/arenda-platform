@@ -3,9 +3,14 @@ export const ROUTES = {
   properties: '/properties',
   property: (id: string) => `/properties/${id}`,
   propertyArchive: '/properties/archive',
-  propertySearch: '/properties/search',
   propertyNew: '/properties/new',
+  /** Поиск по объектам (#586): вход — пилюля на хабе «Объекты». */
+  propertySearch: '/properties/search',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
+  /** Экран «Об объекте» (деталь #588, шаблон 1550:95856): данные и
+   * характеристики read-only, карандаш в шапке ведёт на правку; вход —
+   * пункт кебаба «Об объекте» и секция «Квартира» на детали. */
+  propertyAbout: (id: string) => `/properties/${id}/about`,
   /** Экран «Платежи объекта» — новый хром (#463). */
   propertyPayments: (id: string) => `/properties/${id}/payments`,
   /** Страницы секций «Платежей объекта» (Figma 1043:57610): клик по

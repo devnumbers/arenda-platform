@@ -35,7 +35,7 @@ import {
 import { OperationsFilterChips } from "./operations-filter-chips";
 import { OperationsPeriodPickerDialog } from "./operations-period-picker";
 import { hasNoPaidOperationsEver } from "../lib/operations-empty-states";
-import { summaryBarSegments } from "../lib/summary-bar";
+import { summaryBarSegments } from "@/features/payment-categories";
 import { OperationsSummaryCard } from "./operations-summary-card";
 
 /**

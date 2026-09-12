@@ -52,6 +52,69 @@ type SuspendedSharedCounter interface {
 	CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
+// PropertyOwners maps the property ids of one list read onto their data
+// owners (the projections resolve «today» and scope per data owner, ADR
+// 0048); the rows carry the owner already, so the service passes it instead
+// of every adapter re-reading the properties.
+type PropertyOwners map[uuid.UUID]uuid.UUID
+
+// OwnerCalendar resolves a user's calendar date (ADR 0048) — the list reads
+// report the reading actor's «today» so the client counts the «Осталось
+// N месяцев» rental badge against the right day boundary (ticket #586; the
+// tasks feed's today rule, #521). Implemented by the calendar adapter shared
+// with rentals/payments; optional — when nil, the lists fall back to the
+// server clock's UTC date.
+type OwnerCalendar interface {
+	Today(ctx context.Context, userID uuid.UUID) (time.Time, error)
+}
+
+// PropertiesPage is one listing read: the merged rows (own + shared, the
+// pinned first) plus the reading actor's calendar date (ADR 0048) the client
+// renders the rental badges against (ticket #586).
+type PropertiesPage struct {
+	Items []domain.Property
+	Today time.Time
+}
+
+// RentalOccupancyReader reports the per-property occupancy projection
+// («Занятость объекта», резолюция #584, ticket #585) computed from each
+// property's single unfinished rental against the data owner's today (ADR
+// 0048). Implemented by the rentals bounded context; injected optionally —
+// when nil, the list reads report no occupancy. Every listed property must
+// be present in the result: without an unfinished rental it reports
+// OccupancyNone.
+type RentalOccupancyReader interface {
+	OccupancyByProperty(ctx context.Context, owners PropertyOwners) (map[uuid.UUID]domain.Occupancy, error)
+}
+
+// OverdueOperationsReader reports which of the given properties have overdue
+// planned operations — stored planned rows dated before the data owner's
+// today (ADR 0048), the same predicate the payments listings resolve as the
+// overdue view status (резолюция #584: the red dot never duplicates the
+// computation). Implemented by the payments bounded context; injected
+// optionally — when nil, the list reads report no overdue flags. Properties
+// without overdue operations may miss from the result.
+type OverdueOperationsReader interface {
+	OverdueByProperty(ctx context.Context, owners PropertyOwners) (map[uuid.UUID]bool, error)
+}
+
+// RentalDeletionGuard gates the property deletion on the rentals bounded
+// context (issue #632). HasUnfinished reports the property's unfinished
+// rental — the delete is refused with ErrPropertyOccupied while the
+// property is rented out; the owner completes the rental first (#627).
+// DeleteByProperty removes the property's rental rows inside the caller's
+// transaction BEFORE the property row itself: the explicit order (the ADR
+// 0025 §2 precedent) defuses the rentals.payment_id RESTRICT FK — left to
+// the FK machinery, the rentals and the payments cascades off the property
+// row run in no guaranteed order and the RESTRICT kills the whole delete.
+// Both methods take the caller's transaction — the same shape as
+// RecipientSlotPolicy. Implemented by the rentals bounded context; injected
+// optionally — when nil, deletion skips both steps (a test wiring).
+type RentalDeletionGuard interface {
+	HasUnfinished(ctx context.Context, tx transaction.Tx, scope, propertyID uuid.UUID) (bool, error)
+	DeleteByProperty(ctx context.Context, tx transaction.Tx, scope, propertyID uuid.UUID) error
+}
+
 // RecipientSlotPolicy enforces the recipient tariff slot invariant for the
 // shared-access memberships of a single property. It is implemented by the
 // access bounded context's SlotCoordinator and injected optionally: when nil,

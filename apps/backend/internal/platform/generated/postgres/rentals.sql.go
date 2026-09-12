@@ -63,6 +63,28 @@ func (q *Queries) DeleteRental(ctx context.Context, arg DeleteRentalParams) (int
 	return result.RowsAffected(), nil
 }
 
+const deleteRentalsByProperty = `-- name: DeleteRentalsByProperty :execrows
+DELETE FROM rentals WHERE property_id = $1 AND owner_id = $2
+`
+
+type DeleteRentalsByPropertyParams struct {
+	PropertyID pgtype.UUID `json:"property_id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+// The property-delete teardown (issue #632): every rental row of the
+// property goes before the property row itself, inside the caller's
+// transaction — the explicit order keeps the payment_id RESTRICT FK from
+// racing the payments cascade off the property row (ADR 0025 §2), the
+// completed rentals included. Scope is the owner like every rentals mutation.
+func (q *Queries) DeleteRentalsByProperty(ctx context.Context, arg DeleteRentalsByPropertyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRentalsByProperty, arg.PropertyID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const existsUnfinishedRental = `-- name: ExistsUnfinishedRental :one
 SELECT EXISTS (
     SELECT 1 FROM rentals
@@ -303,6 +325,51 @@ func (q *Queries) ListRentalsByProperty(ctx context.Context, arg ListRentalsByPr
 			&i.TenantFirstName,
 			&i.TenantLastName,
 			&i.TenantPhone,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnfinishedRentalsByPropertyIDs = `-- name: ListUnfinishedRentalsByPropertyIDs :many
+SELECT property_id, owner_id, start_date, planned_end_date
+FROM rentals
+WHERE completed_date IS NULL
+  AND property_id = ANY($1::uuid[])
+`
+
+type ListUnfinishedRentalsByPropertyIDsRow struct {
+	PropertyID     pgtype.UUID `json:"property_id"`
+	OwnerID        pgtype.UUID `json:"owner_id"`
+	StartDate      pgtype.Date `json:"start_date"`
+	PlannedEndDate pgtype.Date `json:"planned_end_date"`
+}
+
+// The occupancy projection of the properties list (ticket #585, резолюция
+// #584): the unfinished rentals of the given properties in one batched read
+// — exactly one per property (invariant №12), so the result over a listed
+// property is either one row or none. The status itself computes in Go
+// against the data owner's today (ADR 0048), from the same dates the
+// rentals responses report.
+func (q *Queries) ListUnfinishedRentalsByPropertyIDs(ctx context.Context, propertyIds []pgtype.UUID) ([]ListUnfinishedRentalsByPropertyIDsRow, error) {
+	rows, err := q.db.Query(ctx, listUnfinishedRentalsByPropertyIDs, propertyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnfinishedRentalsByPropertyIDsRow{}
+	for rows.Next() {
+		var i ListUnfinishedRentalsByPropertyIDsRow
+		if err := rows.Scan(
+			&i.PropertyID,
+			&i.OwnerID,
+			&i.StartDate,
+			&i.PlannedEndDate,
 		); err != nil {
 			return nil, err
 		}

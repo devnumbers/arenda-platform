@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BoldHome } from '@/shared/assets/icons';
+import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { usePropertiesSearch } from '@/features/properties';
-import type { Property } from '@/entities/property';
+import { PropertyAvatar } from '@/entities/property';
 import {
   Button,
   EmptyState,
@@ -104,7 +104,14 @@ export function PropertiesSearchScreen(): JSX.Element {
             {properties.map((property) => (
               <ListRow
                 key={property.id}
-                leading={<PropertySearchAvatar property={property} />}
+                leading={
+                  <span aria-hidden>
+                    <PropertyAvatar
+                      surface="row"
+                      photoUrl={property.photos?.[0]?.url ?? null}
+                    />
+                  </span>
+                }
                 title={property.name}
                 subtitle={property.address}
                 onSelect={() => router.push(ROUTES.property(property.id))}
@@ -116,25 +123,6 @@ export function PropertiesSearchScreen(): JSX.Element {
         )}
       </PageContent>
     </>
-  );
-}
-
-/** Аватар строки поиска: фото объекта или плейсхолдер-дом (канон аватара
- * объектов, PaymentObjectAvatar #582 — локальный дубликат, чтобы не тянуть
- * платёжный виджет). */
-function PropertySearchAvatar({ property }: { readonly property: Property }): JSX.Element {
-  const photoUrl = property.photos?.[0]?.url ?? null;
-  return (
-    <span
-      aria-hidden
-      className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
-    >
-      {photoUrl !== null ? (
-        <img src={photoUrl} alt="" className="h-full w-full object-cover" />
-      ) : (
-        <BoldHome className="h-6 w-6 text-[#D3D7D9]" />
-      )}
-    </span>
   );
 }
 

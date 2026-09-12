@@ -387,3 +387,17 @@ WHERE op.status = 'paid'
        OR op.category_slug = ANY(string_to_array(sqlc.arg('categories')::text, ',')))
 GROUP BY op.category_slug, op.category_label, op.type
 ORDER BY total_kopecks DESC, op.category_slug;
+
+-- name: ListPropertyIDsWithOverdueOperations :many
+-- The payments half of the list red dot (ticket #585, резолюция #584): the
+-- subset of the given properties holding at least one overdue planned
+-- operation — a stored planned row dated before the owner's today, the same
+-- predicate ListOperations resolves as the overdue view status in exactly
+-- one place. One batched read per data owner; cancelled tombstones are not
+-- planned rows and never match.
+SELECT DISTINCT op.property_id
+FROM operations op
+WHERE op.owner_id = sqlc.arg('owner')
+  AND op.status = 'planned'
+  AND op.date < sqlc.arg('today')
+  AND op.property_id = ANY(sqlc.arg('property_ids')::uuid[]);

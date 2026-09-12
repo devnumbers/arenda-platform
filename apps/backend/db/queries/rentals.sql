@@ -99,6 +99,14 @@ WHERE id = $1 AND owner_id = $2;
 -- (the RESTRICT FK releases only after the rental row is gone, ADR 0053 §3).
 DELETE FROM rentals WHERE id = $1 AND owner_id = $2;
 
+-- name: DeleteRentalsByProperty :execrows
+-- The property-delete teardown (issue #632): every rental row of the
+-- property goes before the property row itself, inside the caller's
+-- transaction — the explicit order keeps the payment_id RESTRICT FK from
+-- racing the payments cascade off the property row (ADR 0025 §2), the
+-- completed rentals included. Scope is the owner like every rentals mutation.
+DELETE FROM rentals WHERE property_id = $1 AND owner_id = $2;
+
 -- name: ExistsUnfinishedRental :one
 -- The create-time app check for invariant №12 (одна незавершённая на
 -- объекте): run inside the transaction under the property lock; the partial
@@ -107,3 +115,15 @@ SELECT EXISTS (
     SELECT 1 FROM rentals
     WHERE owner_id = $1 AND property_id = $2 AND completed_date IS NULL
 );
+
+-- name: ListUnfinishedRentalsByPropertyIDs :many
+-- The occupancy projection of the properties list (ticket #585, резолюция
+-- #584): the unfinished rentals of the given properties in one batched read
+-- — exactly one per property (invariant №12), so the result over a listed
+-- property is either one row or none. The status itself computes in Go
+-- against the data owner's today (ADR 0048), from the same dates the
+-- rentals responses report.
+SELECT property_id, owner_id, start_date, planned_end_date
+FROM rentals
+WHERE completed_date IS NULL
+  AND property_id = ANY(@property_ids::uuid[]);

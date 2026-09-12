@@ -207,6 +207,8 @@ export function DesignLayerShowcase(): JSX.Element {
     const [pickerEmpty, setPickerEmpty] = useState<string | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [confirmLargeOpen, setConfirmLargeOpen] = useState(false);
+    const [deletePropertyOpen, setDeletePropertyOpen] = useState(false);
     const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
     return (
@@ -245,6 +247,16 @@ export function DesignLayerShowcase(): JSX.Element {
         </Button>
         <Button size="small" disabled>
             disabled
+        </Button>
+        {/* Радиус m (12px, токен Figma radius/m) — CTA пустых состояний
+         * секций объекта (#588, решение владельца 11.09). */}
+        {dlButtonVariants.map((variant) => (
+            <Button key={`m-${variant}`} variant={variant} size="small" radius="m">
+                small · m
+            </Button>
+        ))}
+        <Button variant="primary" radius="m">
+            default · m
         </Button>
     </div>
                 </div>
@@ -975,14 +987,16 @@ export function DesignLayerShowcase(): JSX.Element {
                         Один компонент вместо ручной сборки подэкранной шапки: TopNav с
                         ведущим «Назад» (TopNavBackButton), TopNavTitle в центре и
                         PageContent с боковым паддингом 24. trailing — действия экрана
-                        (кебаб объекта), contentClassName переопределяет паддинг контента.
-                        Шапка в этой сборке — fixed на планшете и ПК, поэтому вживую она
-                        видна на любом подэкране (дерево профиля, детализация и правка
-                        объекта); ниже — контентная колонка каркаса.
+                        (кебаб объекта), subtitle — серый подзаголовок под заголовком
+                        (#587, счётчик архива), contentClassName переопределяет паддинг
+                        контента. Шапка в этой сборке — fixed на планшете и ПК, поэтому
+                        вживую она видна на любом подэкране (дерево профиля, детализация
+                        и правка объекта); ниже — контентная колонка каркаса.
                     </p>
                     <div className={styles.column} style={{ maxWidth: 480 }}>
                         <SubScreenShell
                             title="Информация об объекте"
+                            subtitle="7 объектов"
                             fallbackHref="/ui-kit"
                             contentClassName="pt-4 pb-4"
                         >
@@ -1270,6 +1284,12 @@ export function DesignLayerShowcase(): JSX.Element {
                         <Button variant="danger" onClick={() => setDeleteOpen(true)}>
                             Удалить (danger)
                         </Button>
+                        <Button onClick={() => setConfirmLargeOpen(true)}>
+                            Подтвердить (описание 16)
+                        </Button>
+                        <Button variant="danger" onClick={() => setDeletePropertyOpen(true)}>
+                            Удалить объект (столбиком)
+                        </Button>
                     </div>
                     <ConfirmDialog
                         open={confirmOpen}
@@ -1288,6 +1308,40 @@ export function DesignLayerShowcase(): JSX.Element {
                         confirmVariant="danger"
                         onConfirm={() => setDeleteOpen(false)}
                     />
+                    {/* #627: подпись макета R/400 16/18 — descriptionClassName
+                     * поверх каноничных 14px. */}
+                    <ConfirmDialog
+                        open={confirmLargeOpen}
+                        onOpenChange={setConfirmLargeOpen}
+                        title="Завершить аренду?"
+                        description="Объект станет свободным, арендный платеж завершится. Данные аренды сохранятся в разделе «Прошлые аренды»"
+                        descriptionClassName="text-base leading-[18px]"
+                        confirmLabel="Завершить"
+                        cancelLabel="Отменить"
+                        onConfirm={() => setConfirmLargeOpen(false)}
+                    />
+                    {/* #629: stacked + children + titleClassName — кнопки
+                     * столбиком (danger сверху, решение владельца 12.09),
+                     * заголовок H1 28/32, красное предупреждение о
+                     * последствиях (danger-soft) между описанием и кнопками.
+                     * Figma 1583:56558. */}
+                    <ConfirmDialog
+                        open={deletePropertyOpen}
+                        onOpenChange={setDeletePropertyOpen}
+                        title="Удалить объект?"
+                        titleClassName="text-[28px] leading-8"
+                        description="Объект будет удален. Вместо удаления объект можно перевести в архив"
+                        descriptionClassName="text-base leading-[18px]"
+                        confirmLabel="Удалить"
+                        cancelLabel="Отменить"
+                        confirmVariant="danger"
+                        stacked
+                        onConfirm={() => setDeletePropertyOpen(false)}
+                    >
+                        <p className="text-sm leading-4 text-danger-soft">
+                            Будут удалены данные аренд объекта, все операции объекта, платежи, контакты и задачи, связанные с объектом. Это действие нельзя отменить
+                        </p>
+                    </ConfirmDialog>
                 </div>
 
                 <div className={styles.group}>

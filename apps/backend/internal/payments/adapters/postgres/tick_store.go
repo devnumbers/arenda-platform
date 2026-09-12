@@ -17,6 +17,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/payments/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -26,6 +27,9 @@ var (
 	_ application.TickStore         = (*TickStore)(nil)
 	_ application.OwnerCalendar     = (*OwnerCalendar)(nil)
 	_ application.TickZoneDirectory = (*TickZoneDirectory)(nil)
+	// The properties list reads use the same calendar for the response-level
+	// «today» (ticket #586).
+	_ propertiesapp.OwnerCalendar = (*OwnerCalendar)(nil)
 )
 
 // TickStore is the postgres adapter of the materialization tick port.

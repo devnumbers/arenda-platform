@@ -524,14 +524,14 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list archived properties: %v", err)
 	}
-	if len(result) != 1 {
-		t.Fatalf("expected 1 archived property, got %d", len(result))
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 archived property, got %d", len(result.Items))
 	}
-	if result[0].ID != archivedID {
-		t.Errorf("expected property %s, got %s", archivedID, result[0].ID)
+	if result.Items[0].ID != archivedID {
+		t.Errorf("expected property %s, got %s", archivedID, result.Items[0].ID)
 	}
-	if result[0].Status != domain.PropertyStatusArchived {
-		t.Errorf("expected archived status, got %q", result[0].Status)
+	if result.Items[0].Status != domain.PropertyStatusArchived {
+		t.Errorf("expected archived status, got %q", result.Items[0].Status)
 	}
 }
 
@@ -1025,8 +1025,8 @@ func TestListProperties_AccessRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProperties failed: %v", err)
 	}
-	byID := make(map[uuid.UUID]domain.Property, len(result))
-	for _, p := range result {
+	byID := make(map[uuid.UUID]domain.Property, len(result.Items))
+	for _, p := range result.Items {
 		byID[p.ID] = p
 	}
 	if len(byID) != 2 {
@@ -1094,8 +1094,8 @@ func TestListArchivedProperties_AccessRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListArchivedProperties failed: %v", err)
 	}
-	byID := make(map[uuid.UUID]domain.Property, len(result))
-	for _, p := range result {
+	byID := make(map[uuid.UUID]domain.Property, len(result.Items))
+	for _, p := range result.Items {
 		byID[p.ID] = p
 	}
 	if len(byID) != 2 {
@@ -1304,7 +1304,7 @@ func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *te
 	)
 	svc.SetRecipientSlotPolicy(slots)
 
-	if err := svc.DeleteProperty(ctx, ownerID, propertyID, domain.DeletePropertyModeCascade); err != nil {
+	if err := svc.DeleteProperty(ctx, ownerID, propertyID); err != nil {
 		t.Fatalf("DeleteProperty: %v", err)
 	}
 

@@ -1,15 +1,14 @@
 import type { Metadata } from 'next';
-import { SubScreenShell } from '@/shared/ui/design';
-import { ROUTES } from '@/shared/config/routes';
-import { PropertyEditForm } from '@/widgets/properties';
+import { PropertyEditScreen } from '@/widgets/properties';
 
 export const metadata: Metadata = {
-  title: 'Редактировать объект — Рентли',
+  title: 'Редактирование объекта — Рентли',
   description: 'Изменение информации об объекте недвижимости',
 };
 
-/** Правка объекта на едином хроме (карта #556, снос кабинета #568):
- * каркас подэкрана собирает страница, форма — только содержимое. */
+/** Правка объекта по новым макетам (карта #583, тикет #590): страница-
+ * маршрут с полноэкранной формой — хедер с крестиком и галочкой
+ * сохранения, поля и StickyBottomBar собирает клиентский экран. */
 export default async function PropertyEditPage({
   params,
 }: {
@@ -17,9 +16,5 @@ export default async function PropertyEditPage({
 }) {
   const { id } = await params;
 
-  return (
-    <SubScreenShell title="Информация об объекте" fallbackHref={ROUTES.property(id)}>
-      <PropertyEditForm propertyId={id} />
-    </SubScreenShell>
-  );
+  return <PropertyEditScreen propertyId={id} />;
 }

@@ -2,10 +2,9 @@
 
 import type { JSX } from 'react';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import type { SummaryBarSegment } from '../lib/summary-bar';
+import { SummaryBarStrip } from '@/features/payment-categories';
+import type { SummaryBarSegment } from '@/features/payment-categories';
 
-/** Пилюля полосы без операций в периоде (Figma 1510-77101): серая #D3D7D9. */
-const EMPTY_BAR_COLOR = '#D3D7D9';
 
 /**
  * Карточка сводки (Figma 1510-77101, EL-3091ce92): серая карточка radius 24,
@@ -40,16 +39,8 @@ export function OperationsSummaryCard({
         </span>
         <span className="text-sm text-content">{label}</span>
       </div>
-      <div className="mt-4 flex h-1.5 w-full gap-[2px]">
-        {(segments.length > 0 ? segments : [{ color: EMPTY_BAR_COLOR, weight: 1 }]).map(
-          (segment, index) => (
-            <span
-              key={`${segment.color}-${index}`}
-              className="h-full rounded-pill"
-              style={{ backgroundColor: segment.color, flexGrow: segment.weight, flexBasis: 0 }}
-            />
-          ),
-        )}
+      <div className="mt-4">
+        <SummaryBarStrip segments={segments} />
       </div>
     </>
   );

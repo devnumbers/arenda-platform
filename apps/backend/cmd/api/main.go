@@ -135,6 +135,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	injectPropertyListProjections(propertiesMod, paymentsMod, rentalsMod)
 
 	// 8. Cross-module user_registered subscribers.
 	subscribeUserRegistered(eventDispatcher, billingMod, accessMod)
@@ -250,6 +251,20 @@ func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire
 	propertiesMod.PropertyService.SetRecipientSlotPolicy(accessMod.SlotCoordinator)
 	propertiesMod.PropertyService.SetSuspendedSharedCounter(accessMod.SuspendedCounter)
 	propertiesMod.PropertyService.SetSharedMembersDeleteMailer(accessMod.PropertyDeleteMailer)
+}
+
+// injectPropertyListProjections wires the list read projections of the
+// property service (ticket #585): the rentals occupancy reader and the
+// payments overdue reader behind the list endpoints' occupancy and red-dot
+// data. Rentals and payments are wired after properties, so this lands once
+// both modules exist.
+func injectPropertyListProjections(propertiesMod *wire.Properties, paymentsMod *wire.Payments, rentalsMod *wire.Rentals) {
+	propertiesMod.PropertyService.SetRentalOccupancyReader(rentalsMod.OccupancyReader)
+	propertiesMod.PropertyService.SetOverdueOperationsReader(paymentsMod.OverdueOperations)
+	// Deletion guard (issue #632): the property delete consults the rentals
+	// context in its own transaction — the unfinished rental conflicts, the
+	// completed ones are torn down before the property row.
+	propertiesMod.PropertyService.SetRentalDeletionGuard(rentalsMod.DeletionGuard)
 }
 
 // setBillingLifecycleBridges wires the billing worker's cross-context
