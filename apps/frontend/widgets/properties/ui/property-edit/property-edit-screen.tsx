@@ -16,7 +16,7 @@ import {
   type PropertyEditDraft,
 } from '@/features/properties';
 import { attributeCatalog } from '../property-fields/attribute-catalog';
-import type { PropertyType } from '@/entities/property';
+import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import { ApiError } from '@/shared/api/errors';
 import {
   Button,
@@ -29,7 +29,7 @@ import {
   TopNavTitle,
   useTabBarSuppression,
 } from '@/shared/ui/design';
-import { BoldHome, Cancel, Check } from '@/shared/assets/icons';
+import { Cancel, Check } from '@/shared/assets/icons';
 import { PropertyCatalogFields } from '../property-fields/property-catalog-fields';
 import { PropertyHousingTypeChips } from '../property-fields/property-housing-type-chips';
 import { PropertyAddressSearch } from './property-address-search';
@@ -155,11 +155,9 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
         >
           {/* Заглушка фото (Figma 1550:95852): логики фото у объекта нет —
               круг декоративный, без кнопки и загрузки (решение владельца
-              11.09). */}
+              11.09); поверхность hero канона PropertyAvatar. */}
           <div className="flex justify-center" aria-hidden>
-            <span className="flex h-24 w-24 items-center justify-center rounded-pill bg-surface-muted">
-              <BoldHome className="h-10 w-10 text-[#D3D7D9]" />
-            </span>
+            <PropertyAvatar surface="hero" />
           </div>
           <PropertyTypePicker
             title="Тип объекта"
