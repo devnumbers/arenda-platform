@@ -7,15 +7,15 @@ package application
 // unbound-flag with the bound property's name ahead of it — the exact order
 // the store's ORDER BY walks. The encoding keeps the wire opaque (the client
 // never assembles the key); the decode is total — anything malformed is
-// ErrInvalidInput, the contract's 400.
+// ErrInvalidInput, the contract's 400. The wire form is the shared glue
+// (internal/shared/cursor); only the typed payload lives here.
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/cursor"
 )
 
 // contactCursorPayload is the cursor's decoded form: the page's last row in
@@ -70,7 +70,7 @@ func (c ListedContact) CursorKey() ContactCursorKey {
 // EncodeContactCursor turns the page's last row into the next page's cursor,
 // binding the blob to the sort/order the page was walked with.
 func EncodeContactCursor(key ContactCursorKey, sort ListSort, order ListOrder) string {
-	return encodeContactCursorPayload(contactCursorPayload{
+	return cursor.Encode(contactCursorPayload{
 		Name:         key.Name,
 		PropertyName: key.PropertyName,
 		Unbound:      key.Unbound,
@@ -82,10 +82,10 @@ func EncodeContactCursor(key ContactCursorKey, sort ListSort, order ListOrder) s
 
 // DecodeContactCursor parses a client-echoed cursor and returns its keyset
 // key with the bound sort/order; anything malformed is ErrInvalidInput.
-func DecodeContactCursor(cursor string) (ContactCursorKey, ListSort, ListOrder, error) {
+func DecodeContactCursor(blob string) (ContactCursorKey, ListSort, ListOrder, error) {
 	var payload contactCursorPayload
-	if err := decodeContactCursorPayload(cursor, &payload); err != nil {
-		return ContactCursorKey{}, "", "", err
+	if err := cursor.Decode(blob, &payload); err != nil {
+		return ContactCursorKey{}, "", "", fmt.Errorf("contact cursor: %w: %w", ErrInvalidInput, err)
 	}
 	return ContactCursorKey{
 		Unbound:      payload.Unbound,
@@ -93,29 +93,4 @@ func DecodeContactCursor(cursor string) (ContactCursorKey, ListSort, ListOrder, 
 		Name:         payload.Name,
 		ID:           payload.ID,
 	}, payload.Sort, payload.Order, nil
-}
-
-// encodeContactCursorPayload is the shared wire form: JSON in unpadded
-// base64url — URL-safe, opaque, and stable across clients.
-func encodeContactCursorPayload(payload contactCursorPayload) string {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		// String and UUID always marshal, and the payload is fixed-shape.
-		panic(fmt.Sprintf("encode contact cursor: %v", err))
-	}
-	return base64.RawURLEncoding.EncodeToString(raw)
-}
-
-// decodeContactCursorPayload is the shared parse; every failure mode folds
-// into ErrInvalidInput — the client echoed the blob, the server owns its
-// shape.
-func decodeContactCursorPayload(cursor string, payload *contactCursorPayload) error {
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil {
-		return fmt.Errorf("cursor is not base64url: %w", ErrInvalidInput)
-	}
-	if err := json.Unmarshal(raw, payload); err != nil {
-		return fmt.Errorf("cursor is not a cursor payload: %w", ErrInvalidInput)
-	}
-	return nil
 }
