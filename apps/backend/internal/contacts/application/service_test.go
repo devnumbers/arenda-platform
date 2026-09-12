@@ -570,18 +570,30 @@ func TestListContactsCursorDecoded(t *testing.T) {
 	t.Run("cursor decodes into the store keyset key", func(t *testing.T) {
 		t.Parallel()
 		h := newServiceHarness(t, sharedpolicy.RoleOwner)
-		key := ContactCursorKey{PropertyName: studioPropertyName, Name: "Анна", ID: uuid.Must(uuid.NewV7())}
+		key := ContactCursorKey{PropertyName: studioPropertyName, Name: cursorFixtureName, ID: uuid.Must(uuid.NewV7())}
 		var gotQuery ListQuery
 		h.contacts.listFn = func(_ uuid.UUID, q ListQuery) ([]ListedContact, error) {
 			gotQuery = q
 			return nil, nil
 		}
-		q := ListQuery{Scope: ListScopeAll, Limit: DefaultContactsPageSize, Cursor: EncodeContactCursor(key)}
+		cursor := EncodeContactCursor(key, ListSortProperty, ListOrderDesc)
+		q := ListQuery{Scope: ListScopeAll, Sort: ListSortProperty, Order: ListOrderDesc, Limit: DefaultContactsPageSize, Cursor: cursor}
 		if _, err := h.svc.ListContacts(t.Context(), h.owner, q); err != nil {
 			t.Fatalf("list: %v", err)
 		}
 		if gotQuery.After == nil || *gotQuery.After != key {
 			t.Fatalf("after key = %+v, want %+v", gotQuery.After, &key)
+		}
+	})
+
+	t.Run("cursor under another sort is invalid input", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		key := ContactCursorKey{Name: cursorFixtureName, ID: uuid.Must(uuid.NewV7())}
+		cursor := EncodeContactCursor(key, ListSortProperty, ListOrderDesc)
+		q := ListQuery{Scope: ListScopeAll, Sort: ListSortName, Order: ListOrderAsc, Limit: DefaultContactsPageSize, Cursor: cursor}
+		if _, err := h.svc.ListContacts(t.Context(), h.owner, q); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("want ErrInvalidInput, got %v", err)
 		}
 	})
 
@@ -624,12 +636,15 @@ func TestListContactsNextCursor(t *testing.T) {
 			t.Fatalf("list: %v", err)
 		}
 		want := items[len(items)-1].CursorKey()
-		got, err := DecodeContactCursor(page.NextCursor)
+		got, gotSort, gotOrder, err := DecodeContactCursor(page.NextCursor)
 		if err != nil {
 			t.Fatalf("next cursor: %v", err)
 		}
 		if got != want {
 			t.Fatalf("next cursor key = %+v, want %+v", got, want)
+		}
+		if gotSort != ListSortName || gotOrder != ListOrderAsc {
+			t.Fatalf("next cursor sort/order = %q/%q, want name/asc", gotSort, gotOrder)
 		}
 	})
 

@@ -3555,7 +3555,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): rows created, renamed or moved between loads never duplicate or drop — pass the previous page's nextCursor back as cursor. nextCursor is null once the matches are exhausted. */
+            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -18,16 +18,24 @@ import (
 // fixtures (goconst: one home).
 const studioPropertyName = "Студия"
 
+// cursorFixtureName is the shared given-name literal of the cursor fixtures
+// (goconst: one home).
+const cursorFixtureName = "Анна"
+
 func TestContactCursorRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		key  ContactCursorKey
+		name  string
+		key   ContactCursorKey
+		sort  ListSort
+		order ListOrder
 	}{
 		{
-			name: "name sort key",
-			key:  ContactCursorKey{Name: "Пётр Иванов", ID: uuid.Must(uuid.NewV7())},
+			name:  "name sort key",
+			key:   ContactCursorKey{Name: "Пётр Иванов", ID: uuid.Must(uuid.NewV7())},
+			sort:  ListSortName,
+			order: ListOrderAsc,
 		},
 		{
 			name: "property sort key with bound card",
@@ -36,6 +44,8 @@ func TestContactCursorRoundTrip(t *testing.T) {
 				Name:         "Анна Сергеевна",
 				ID:           uuid.Must(uuid.NewV7()),
 			},
+			sort:  ListSortProperty,
+			order: ListOrderDesc,
 		},
 		{
 			name: "property sort key with unbound card",
@@ -44,19 +54,41 @@ func TestContactCursorRoundTrip(t *testing.T) {
 				Name:    "Борис",
 				ID:      uuid.Must(uuid.NewV7()),
 			},
+			sort:  ListSortProperty,
+			order: ListOrderAsc,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := DecodeContactCursor(EncodeContactCursor(tc.key))
+			got, gotSort, gotOrder, err := DecodeContactCursor(EncodeContactCursor(tc.key, tc.sort, tc.order))
 			if err != nil {
 				t.Fatalf("decode: %v", err)
 			}
 			if got != tc.key {
-				t.Fatalf("round trip: want %+v, got %+v", tc.key, got)
+				t.Fatalf("round trip key: want %+v, got %+v", tc.key, got)
+			}
+			if gotSort != tc.sort || gotOrder != tc.order {
+				t.Fatalf("round trip sort/order: want %q/%q, got %q/%q", tc.sort, tc.order, gotSort, gotOrder)
 			}
 		})
+	}
+}
+
+// TestDecodeContactCursorSortBinding pins the sort vocabulary riding in the
+// blob: the decoded cursor carries the sort/order it was encoded with, so
+// the service can reject a cursor echoed under a different walk (#600).
+func TestDecodeContactCursorSortBinding(t *testing.T) {
+	t.Parallel()
+
+	key := ContactCursorKey{Name: cursorFixtureName, ID: uuid.Must(uuid.NewV7())}
+	cursor := EncodeContactCursor(key, ListSortProperty, ListOrderDesc)
+	_, gotSort, gotOrder, err := DecodeContactCursor(cursor)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if gotSort != ListSortProperty || gotOrder != ListOrderDesc {
+		t.Fatalf("bound sort/order = %q/%q, want property/desc", gotSort, gotOrder)
 	}
 }
 
@@ -74,7 +106,7 @@ func TestDecodeContactCursorMalformed(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := DecodeContactCursor(tc.cursor); !errors.Is(err, ErrInvalidInput) {
+			if _, _, _, err := DecodeContactCursor(tc.cursor); !errors.Is(err, ErrInvalidInput) {
 				t.Fatalf("want ErrInvalidInput, got %v", err)
 			}
 		})
@@ -103,7 +135,7 @@ func TestListedContactCursorKeySortName(t *testing.T) {
 		{
 			name: "empty patronymic adds no gap",
 			contact: domain.Contact{
-				ID: id, FirstName: "Анна", LastName: "Иванова", Patronymic: "",
+				ID: id, FirstName: cursorFixtureName, LastName: "Иванова", Patronymic: "",
 				PropertyID: &propertyID,
 			},
 			wantSort: "Анна Иванова",

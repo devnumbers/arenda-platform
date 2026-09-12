@@ -380,7 +380,7 @@ func TestListContactsPagingForwarded(t *testing.T) {
 	nextCursor := application.EncodeContactCursor(application.ContactCursorKey{
 		Name: "Пётр Иванов",
 		ID:   uuid.Must(uuid.NewV7()),
-	})
+	}, application.ListSortName, application.ListOrderAsc)
 	badCursor := "не курсор"
 	var gotQuery application.ListQuery
 	svc := &fakeContactManager{

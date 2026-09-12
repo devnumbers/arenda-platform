@@ -1,6 +1,5 @@
 export {
-  CONTACTS_PAGE_SIZE,
-  fetchContactBookPage,
+  contactBookQuery,
   useContacts,
   useContactBook,
   useCreateContact,

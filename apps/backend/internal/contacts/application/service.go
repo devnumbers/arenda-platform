@@ -176,9 +176,21 @@ func prepareListQuery(q *ListQuery) error {
 	if q.Cursor == "" {
 		return nil
 	}
-	after, err := DecodeContactCursor(q.Cursor)
+	return bindCursor(q)
+}
+
+// bindCursor decodes the echoed cursor into the After keyset key and binds
+// it to the walk it came from: a cursor echoed under a different sort/order
+// would misread every key component — the contract's 400, not a silent
+// wrong window.
+func bindCursor(q *ListQuery) error {
+	after, cursorSort, cursorOrder, err := DecodeContactCursor(q.Cursor)
 	if err != nil {
 		return err
+	}
+	if cursorSort != q.Sort || cursorOrder != q.Order {
+		return fmt.Errorf("cursor sort/order %q/%q does not match query %q/%q: %w",
+			cursorSort, cursorOrder, q.Sort, q.Order, ErrInvalidInput)
 	}
 	q.After = &after
 	return nil
@@ -210,7 +222,7 @@ func (s *ContactService) ListContacts(
 	}
 	nextCursor := ""
 	if len(contacts) == int(q.Limit) && len(contacts) > 0 {
-		nextCursor = EncodeContactCursor(contacts[len(contacts)-1].CursorKey())
+		nextCursor = EncodeContactCursor(contacts[len(contacts)-1].CursorKey(), q.Sort, q.Order)
 	}
 	return ContactBookPage{Items: contacts, NextCursor: nextCursor}, nil
 }

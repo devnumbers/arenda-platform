@@ -21,12 +21,17 @@ import (
 // contactCursorPayload is the cursor's decoded form: the page's last row in
 // the listing's own order — the display name, the unbound-flag with the
 // bound property's display name (the property sort's leading keys, "" when
-// unbound) and the card id (the tie-off).
+// unbound), the card id (the tie-off) and the sort/order the page was walked
+// with. The sort vocabulary rides in the blob: echoing the cursor under a
+// different sort would silently misread every key, so the mismatch is the
+// contract's 400.
 type contactCursorPayload struct {
 	Name         string    `json:"name"`
 	PropertyName string    `json:"propertyName,omitempty"`
 	Unbound      bool      `json:"unbound,omitempty"`
 	ID           uuid.UUID `json:"id"`
+	Sort         ListSort  `json:"sort"`
+	Order        ListOrder `json:"order"`
 }
 
 // ContactCursorKey is the decoded keyset key of a book page (ticket #600):
@@ -62,29 +67,32 @@ func (c ListedContact) CursorKey() ContactCursorKey {
 	}
 }
 
-// EncodeContactCursor turns the page's last row into the next page's cursor.
-func EncodeContactCursor(key ContactCursorKey) string {
+// EncodeContactCursor turns the page's last row into the next page's cursor,
+// binding the blob to the sort/order the page was walked with.
+func EncodeContactCursor(key ContactCursorKey, sort ListSort, order ListOrder) string {
 	return encodeContactCursorPayload(contactCursorPayload{
 		Name:         key.Name,
 		PropertyName: key.PropertyName,
 		Unbound:      key.Unbound,
 		ID:           key.ID,
+		Sort:         sort,
+		Order:        order,
 	})
 }
 
-// DecodeContactCursor parses a client-echoed cursor; anything malformed is
-// ErrInvalidInput.
-func DecodeContactCursor(cursor string) (ContactCursorKey, error) {
+// DecodeContactCursor parses a client-echoed cursor and returns its keyset
+// key with the bound sort/order; anything malformed is ErrInvalidInput.
+func DecodeContactCursor(cursor string) (ContactCursorKey, ListSort, ListOrder, error) {
 	var payload contactCursorPayload
 	if err := decodeContactCursorPayload(cursor, &payload); err != nil {
-		return ContactCursorKey{}, err
+		return ContactCursorKey{}, "", "", err
 	}
 	return ContactCursorKey{
 		Unbound:      payload.Unbound,
 		PropertyName: payload.PropertyName,
 		Name:         payload.Name,
 		ID:           payload.ID,
-	}, nil
+	}, payload.Sort, payload.Order, nil
 }
 
 // encodeContactCursorPayload is the shared wire form: JSON in unpadded

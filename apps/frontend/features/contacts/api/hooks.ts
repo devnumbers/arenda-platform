@@ -6,6 +6,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type InfiniteData,
   type UseInfiniteQueryResult,
   type UseMutationResult,
   type UseQueryResult,
@@ -54,7 +55,8 @@ export function useContacts(
 ): UseInfiniteQueryResult<Contact[], ApiError> {
   return useInfiniteQuery({
     queryKey: contactKeys.list(propertyId, search),
-    queryFn: ({ pageParam }) => fetchContactsPage(propertyId, search, pageParam),
+    queryFn: ({ pageParam }) =>
+      fetchContactsPage({ propertyId, search, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
@@ -70,31 +72,36 @@ export type ContactBookSort = 'name' | 'property';
 /** Направление сортировки плоской книги. */
 export type ContactBookOrder = 'asc' | 'desc';
 
-/** Чистый fetch порции плоской книги — общее горло хука и прогрева хабов
- * #626 (кэш прогревается тем же кодом, что читает экран). cursor —
- * keyset-продолжение прошлого ответа (#600); undefined читает с начала. */
-export async function fetchContactBookPage(
-  search = '',
-  sort: ContactBookSort = 'name',
-  order: ContactBookOrder = 'asc',
-  cursor?: string,
-): Promise<ContactsPageData> {
-  const params = new URLSearchParams();
-  if (search !== '') {
-    params.set('search', search);
+/** Общее горло порции GET /contacts (#600): с propertyId — срез объекта,
+ * без — плоская книга; sort/order уходят только отличные от дефолта
+ * (сервер нормализует пустые сам), cursor — keyset-продолжение прошлого
+ * ответа, undefined читает с начала. */
+async function fetchContactsPage(params: {
+  propertyId?: string;
+  search?: string;
+  sort?: ContactBookSort;
+  order?: ContactBookOrder;
+  cursor?: string;
+}): Promise<ContactsPageData> {
+  const query = new URLSearchParams();
+  if (params.propertyId) {
+    query.set('property_id', params.propertyId);
   }
-  if (sort !== 'name') {
-    params.set('sort', sort);
+  if (params.search) {
+    query.set('search', params.search);
   }
-  if (order !== 'asc') {
-    params.set('order', order);
+  if (params.sort && params.sort !== 'name') {
+    query.set('sort', params.sort);
   }
-  params.set('limit', String(CONTACTS_PAGE_SIZE));
-  if (cursor) {
-    params.set('cursor', cursor);
+  if (params.order && params.order !== 'asc') {
+    query.set('order', params.order);
+  }
+  query.set('limit', String(CONTACTS_PAGE_SIZE));
+  if (params.cursor) {
+    query.set('cursor', params.cursor);
   }
   const response = await apiClient<ContactsResponse>(
-    `/contacts?${params.toString()}`,
+    `/contacts?${query.toString()}`,
   );
   return {
     items: response.items.map(mapContact),
@@ -102,26 +109,21 @@ export async function fetchContactBookPage(
   };
 }
 
-/** Чистый fetch порции книги объекта — общее горло хука. */
-async function fetchContactsPage(
-  propertyId: string,
-  search: string,
-  cursor?: string,
-): Promise<ContactsPageData> {
-  const params = new URLSearchParams({ property_id: propertyId });
-  if (search !== '') {
-    params.set('search', search);
-  }
-  params.set('limit', String(CONTACTS_PAGE_SIZE));
-  if (cursor) {
-    params.set('cursor', cursor);
-  }
-  const response = await apiClient<ContactsResponse>(
-    `/contacts?${params.toString()}`,
-  );
+/** Конфиг keyset-обхода плоской книги (#600) — общее горло useContactBook
+ * и прогрева хабов #626: один ключ, один fetch, одно правило продолжения —
+ * прогрев не может разъехаться с экраном. */
+export function contactBookQuery(
+  search = '',
+  sort: ContactBookSort = 'name',
+  order: ContactBookOrder = 'asc',
+) {
   return {
-    items: response.items.map(mapContact),
-    nextCursor: response.nextCursor ?? null,
+    queryKey: contactKeys.list(null, search, sort, order),
+    queryFn: ({ pageParam }: { pageParam?: string }) =>
+      fetchContactsPage({ search, sort, order, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage: ContactsPageData) =>
+      lastPage.nextCursor ?? undefined,
   };
 }
 
@@ -142,11 +144,9 @@ export function useContactBook(
   order: ContactBookOrder = 'asc',
 ): UseInfiniteQueryResult<Contact[], ApiError> {
   return useInfiniteQuery({
-    queryKey: contactKeys.list(null, search, sort, order),
-    queryFn: ({ pageParam }) => fetchContactBookPage(search, sort, order, pageParam),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    select: (data) => data.pages.flatMap((page) => page.items),
+    ...contactBookQuery(search, sort, order),
+    select: (data: InfiniteData<ContactsPageData>) =>
+      data.pages.flatMap((page) => page.items),
     // Набор в поиске и смена сортировки держат прежнюю выдачу, пока едет
     // новый запрос (#609, канон платежей): скелетон — только когда данных
     // нет вовсе.
