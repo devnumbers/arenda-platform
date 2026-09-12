@@ -23,7 +23,15 @@ function methodRow(
   subscription: Subscription,
 ): TariffAboutRow | undefined {
   const mask = subscription.activePaymentMethod?.displayMask;
-  return mask === undefined ? undefined : { label: 'Способ оплаты', value: mask };
+  return mask === undefined ? undefined : { label: 'Способ оплаты', value: cardNumberTail(mask) };
+}
+
+/** Номер карты как в макетах (#622-правка, 1918-73255: «•••• 0700») —
+ * только хвост из 4 цифр, без BIN и названия системы (решение владельца:
+ * систему карты в интерфейсе не определяем). Маска без 4 цифр — как есть. */
+export function cardNumberTail(mask: string): string {
+  const digits = mask.replace(/\D/g, '');
+  return digits.length < 4 ? mask : `•••• ${digits.slice(-4)}`;
 }
 
 function withMethod(

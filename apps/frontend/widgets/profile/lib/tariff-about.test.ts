@@ -48,7 +48,7 @@ describe('tariffAboutCard', () => {
       tariffAboutCard(subscription({
         activePaymentMethod: {
           id: 'pm-1',
-          displayMask: 'Мир •••• 0700',
+          displayMask: '4111********1111',
           provider: 'tkassa',
           isActive: true,
           createdAt: '2026-08-01T10:00:00Z',
@@ -59,7 +59,7 @@ describe('tariffAboutCard', () => {
       rows: [
         { label: 'Стоимость', value: 'Вы платите 490 ₽ в месяц' },
         { label: 'Следующее списание', value: '10 сентября' },
-        { label: 'Способ оплаты', value: 'Мир •••• 0700' },
+        { label: 'Способ оплаты', value: '•••• 1111' },
       ],
     });
   });
@@ -78,6 +78,38 @@ describe('tariffAboutCard', () => {
       'Стоимость',
       'Следующее списание',
     ]);
+  });
+
+  it('payment method: mask without a system name keeps only the last-4 tail', () => {
+    const card = tariffAboutCard(subscription({
+      activePaymentMethod: {
+        id: 'pm-1',
+        displayMask: 'Мир •••• 0700',
+        provider: 'tkassa',
+        isActive: true,
+        createdAt: '2026-08-01T10:00:00Z',
+      },
+    }));
+    expect(card.rows.at(-1)).toStrictEqual({
+      label: 'Способ оплаты',
+      value: '•••• 0700',
+    });
+  });
+
+  it('payment method: an unparseable mask is shown as is', () => {
+    const card = tariffAboutCard(subscription({
+      activePaymentMethod: {
+        id: 'pm-1',
+        displayMask: '**',
+        provider: 'tkassa',
+        isActive: true,
+        createdAt: '2026-08-01T10:00:00Z',
+      },
+    }));
+    expect(card.rows.at(-1)).toStrictEqual({
+      label: 'Способ оплаты',
+      value: '**',
+    });
   });
 
   it('grace: pay-by row replaces the charge date', () => {
