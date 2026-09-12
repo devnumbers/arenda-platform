@@ -174,7 +174,7 @@ export interface paths {
         get: operations["getProperty"];
         put?: never;
         post?: never;
-        /** @description Deletes the property in the given mode. */
+        /** @description Deletes the property together with all its data: rentals, payments, operations, tasks and attached contacts. Irreversible. */
         delete: operations["deleteProperty"];
         options?: never;
         head?: never;
@@ -3372,10 +3372,7 @@ export interface operations {
     };
     deleteProperty: {
         parameters: {
-            query: {
-                /** @description Deletion mode. `cascade` deletes the property outright. `detach` first suspends the property's billing lifecycle (same as archiving) and then deletes the property. */
-                mode: "cascade" | "detach";
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
@@ -3391,7 +3388,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];

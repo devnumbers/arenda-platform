@@ -301,9 +301,10 @@ func (h *PropertyHandlers) UpdateProperty(w http.ResponseWriter, r *http.Request
 	h.respondWithProperty(w, r, property, http.StatusOK)
 }
 
-// DeleteProperty implements DELETE /properties/{id}.
+// DeleteProperty implements DELETE /properties/{id}. Deletion is total
+// (ADR 0049): the property and all its data go together.
 func (h *PropertyHandlers) DeleteProperty(
-	w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params openapi.DeletePropertyParams,
+	w http.ResponseWriter, r *http.Request, id openapi_types.UUID,
 ) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
@@ -312,14 +313,7 @@ func (h *PropertyHandlers) DeleteProperty(
 		return
 	}
 
-	mode, err := domain.ParseDeletePropertyMode(string(params.Mode))
-	if err != nil {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Bad request", "Некорректный режим удаления"))
-		return
-	}
-
-	if err := h.svc.DeleteProperty(r.Context(), actor, id, mode); err != nil {
+	if err := h.svc.DeleteProperty(r.Context(), actor, id); err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}

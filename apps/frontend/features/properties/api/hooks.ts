@@ -14,7 +14,7 @@ import { mapPropertyResponse } from '@/entities/property';
 import type { Property } from '@/entities/property';
 import { propertyKeys } from '@/shared/api/query-keys';
 import { resolvePropertiesLandingHref } from '../lib/property-landing';
-import type { components, operations } from '@/shared/api/dto';
+import type { components } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];
@@ -24,9 +24,6 @@ type PropertyPhoto = components['schemas']['PropertyPhoto'];
 type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
-
-export type DeletePropertyMode =
-  operations['deleteProperty']['parameters']['query']['mode'];
 
 export function useProperties(
   options: { enabled?: boolean; staleTime?: number } = {},
@@ -248,15 +245,12 @@ export function useDeletePropertyPhoto(): UseMutationResult<
   });
 }
 
-export function useDeleteProperty(): UseMutationResult<
-  void,
-  ApiError,
-  { id: string; mode: DeletePropertyMode }
-> {
+export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: string }> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, mode }) =>
-      apiClient<void>(`/properties/${id}?mode=${mode}`, {
+    // Deletion is total (ADR 0049): the property and all its data go together.
+    mutationFn: ({ id }) =>
+      apiClient<void>(`/properties/${id}`, {
         method: 'DELETE',
       }),
     onSuccess: (_, { id }) => {

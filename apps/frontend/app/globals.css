@@ -212,6 +212,7 @@
     --color-surface-info: var(--dl-surface-info);
 
     --color-danger: var(--dl-danger);
+    --color-danger-soft: var(--dl-danger-soft);
     --color-error: var(--dl-error);
     --color-success: var(--dl-success);
 

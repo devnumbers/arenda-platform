@@ -749,15 +749,14 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 	return properties[0], nil
 }
 
+// DeleteProperty removes the property together with all its data: the FKs
+// cascade rentals, payments, operations, tasks and photos off the property
+// row, contacts unbind (ADR 0054). ADR 0049 closed the ADR 0025 detach
+// branch — deletion is total, there is no mode (issue #629).
 func (s *PropertyService) DeleteProperty(
 	ctx context.Context,
 	actor, id uuid.UUID,
-	mode domain.DeletePropertyMode,
 ) error {
-	if !mode.Valid() {
-		return fmt.Errorf("%w: invalid delete mode %q", ErrInvalidInput, mode)
-	}
-
 	if _, err := s.resolveLifecycleProperty(ctx, actor, id); err != nil {
 		return err
 	}
@@ -799,7 +798,6 @@ func (s *PropertyService) DeleteProperty(
 			Action:     auditdomain.ActionPropertyDeleted,
 			EntityType: auditdomain.EntityProperty,
 			EntityID:   &id,
-			Context:    map[string]any{"mode": string(mode)},
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}

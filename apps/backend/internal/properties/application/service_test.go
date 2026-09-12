@@ -1282,7 +1282,7 @@ func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *te
 	)
 	svc.SetRecipientSlotPolicy(slots)
 
-	if err := svc.DeleteProperty(ctx, ownerID, propertyID, domain.DeletePropertyModeCascade); err != nil {
+	if err := svc.DeleteProperty(ctx, ownerID, propertyID); err != nil {
 		t.Fatalf("DeleteProperty: %v", err)
 	}
 

@@ -16,7 +16,6 @@ import {
   useSetPropertyPin,
   useUnarchiveProperty,
   useUpdateProperty,
-  type DeletePropertyMode,
 } from '@/features/properties';
 import {useRentals, currentRentalOf, useCompleteRental} from '@/features/rentals';
 import {
@@ -74,7 +73,6 @@ import {
   PropertyStatusSheet,
 } from './PropertyDetailActions';
 import {PropertyDetailKebab} from './PropertyDetailKebab';
-import {PropertyDeleteModal} from './PropertyDeleteModal';
 import {PropertySharingModal} from './PropertySharingModal';
 import {PropertySharedBanner} from './PropertySharedBanner';
 import {PropertyDetailLoading} from './PropertyDetailLoading';
@@ -402,9 +400,9 @@ export function PropertyDetailPage(): JSX.Element {
         }
     }, [hasRental, id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardedAction, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
 
-    const handleDelete = useCallback((mode: DeletePropertyMode) => {
+    const handleDelete = useCallback(() => {
         deleteProperty.mutate(
-            {id, mode},
+            {id},
             {
                 onSuccess: () => {
                     setDeleteOpen(false);
@@ -718,17 +716,31 @@ export function PropertyDetailPage(): JSX.Element {
                 onConfirm={handleCompleteRental}
             />
 
-            <PropertyDeleteModal
-                isOpen={deleteOpen}
-                onClose={() => setDeleteOpen(false)}
-                onDelete={handleDelete}
-                membersCount={property?.members_count ?? 0}
-                deletingMode={
-                    deleteProperty.isPending
-                        ? deleteProperty.variables.mode
-                        : null
-                }
-            />
+            {/* Шит удаления (#629, Figma 1583:56558): канон ConfirmDialog,
+             * кнопки столбиком, подтверждение danger сверху (макет — 16/18
+             * под заголовком H1 28/32). Чекбокс «Удалить все данные» срезан
+             * решением владельца 12.09: удаление тотальное (ADR 0049), бэк
+             * уносит аренды, платежи, операции, задачи и контакты каскадом.
+             * Заметка о участниках не перенесена (там письмо и так уходит).
+             * Кнопка в loading на время мутации, закрытие глушится. */}
+            <ConfirmDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                title="Удалить объект?"
+                titleClassName="text-[28px] leading-8"
+                description="Объект будет удален. Вместо удаления объект можно перевести в архив"
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel="Удалить"
+                cancelLabel="Отменить"
+                confirmVariant="danger"
+                stacked
+                pending={deleteProperty.isPending}
+                onConfirm={handleDelete}
+            >
+                <p className="text-sm leading-4 text-danger-soft">
+                    Будут удалены данные аренд объекта, все операции объекта, платежи, контакты и задачи, связанные с объектом. Это действие нельзя отменить
+                </p>
+            </ConfirmDialog>
 
             <PropertySharingModal
                 propertyId={id}

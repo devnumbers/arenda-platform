@@ -87,7 +87,7 @@ func TestPropertyService_DeleteProperty_NotifiesFormerSharedMembers(t *testing.T
 	svc.SetRecipientSlotPolicy(shared)
 	svc.SetSharedMembersDeleteMailer(shared)
 
-	if err := svc.DeleteProperty(ctx, ownerID, propertyID, domain.DeletePropertyModeCascade); err != nil {
+	if err := svc.DeleteProperty(ctx, ownerID, propertyID); err != nil {
 		t.Fatalf("DeleteProperty: %v", err)
 	}
 

@@ -320,7 +320,8 @@ paths:
     delete:
       operationId: deleteProperty
       description: >-
-        Deletes the property in the given mode.
+        Deletes the property together with all its data: rentals, payments,
+        operations, tasks and attached contacts. Irreversible.
       security:
         - sessionCookie: []
       parameters:
@@ -330,23 +331,9 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: mode
-          in: query
-          required: true
-          description: >-
-            Deletion mode. `cascade` deletes the property outright. `detach`
-            first suspends the property's billing lifecycle (same as
-            archiving) and then deletes the property.
-          schema:
-            type: string
-            enum:
-              - cascade
-              - detach
       responses:
         '204':
           description: Property deleted
-        '400':
-          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
