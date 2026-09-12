@@ -4,9 +4,10 @@ import {type JSX, useCallback, useMemo, useState} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
 import {useArchivedProperties, useProperties, usePropertiesWithMeta} from '@/features/properties';
 import {useSubscription} from '@/features/subscription';
-import {Add, ArrowLeft} from '@/shared/assets/icons';
+import {Add, ArrowLeft, Search} from '@/shared/assets/icons';
 import {goBack} from '@/shared/lib/navigation';
-import {HubCollapseAnchor, IconButton, PageContent, TopNav, TopNavTitle} from '@/shared/ui/design';
+import {useKeyboardActivation} from '@/shared/lib/hooks/useKeyboardActivation';
+import {HubCollapseAnchor, HubTitle, IconButton, PageContent, TopNav, TopNavTitle} from '@/shared/ui/design';
 import {ROUTES} from '@/shared/config/routes';
 import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
 import {DEFAULT_PROPERTY_SORT} from '../lib/parse-property-search-params';
@@ -98,19 +99,21 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
         return activeProperties.length < limit;
     }, [subscriptionQuery.data, activeProperties]);
 
-    // Кнопка создания на каноне хаба (как «Создать задачу» #525): «+» в
-    // ряду заголовка на списке и в trailing-слоте хедера на архиве. При
-    // исчерпанном лимите тарифа ведёт на смену тарифа (объяснение — в
-    // имени для screen reader и пустом состоянии списка).
-    const createButton = isActionLoading
-        ? <IconButton icon={<Add/>} label="Создать объект" disabled/>
-        : canAdd
-            ? <IconButton icon={<Add/>} label="Создать объект" onClick={() => router.push(ROUTES.propertyNew)}/>
-            : <IconButton
-                icon={<Add/>}
-                label="Достигнут лимит объектов по тарифу — сменить тариф"
-                onClick={() => router.push(ROUTES.profileTariffChange)}
-            />;
+    const openCreate = useCallback(() => {
+        // При исчерпанном лимите тарифа «+» ведёт на смену тарифа
+        // (объяснение — в имени для screen reader и пустом состоянии списка).
+        if (canAdd) router.push(ROUTES.propertyNew);
+        else router.push(ROUTES.profileTariffChange);
+    }, [canAdd, router]);
+
+    const createButton = (
+        <IconButton
+            icon={<Add/>}
+            label={isActionLoading ? 'Создать объект' : canAdd ? 'Создать объект' : 'Достигнут лимит объектов по тарифу — сменить тариф'}
+            disabled={isActionLoading}
+            onClick={openCreate}
+        />
+    );
 
     const content = (
         <div className={styles.root}>
@@ -166,22 +169,79 @@ export function PropertiesPage({mode = 'active', initialFilters, initialSort}: P
     return (
         <>
             {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
-             * стандартное — в потоке на мобайле, закреплена на десктопе. */}
+             * стандартное — в потоке на мобайле, закреплена на десктопе.
+             * Компакт-бар: лупа поиска в левом слоте (у хаба есть пилюля,
+             * #601), заголовок по центру. */}
             <TopNav
                 mobileWings
-                collapse={{ title: 'Объекты', trailing: createButton }}
+                collapse={{
+                    title: 'Объекты',
+                    search: { href: ROUTES.propertySearch, label: 'Найти объект' },
+                }}
             />
 
             <PageContent>
                 <HubCollapseAnchor>
-                    <div className="mb-4 flex items-center justify-between pr-3.5 pl-6">
-                        <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">Объекты</h1>
-                        {createButton}
+                    <HubTitle>Объекты</HubTitle>
+                    {/* Пилюля поиска с «+» создания (макет 1603:89183,
+                     * канон книги контактов #600): видна всегда, вне фазы
+                     * загрузки — контент встаёт на её место без сдвига
+                     * (§7). */}
+                    <div className="mt-4 mb-4 px-6">
+                        <PropertySearchPill
+                            onOpenSearch={() => router.push(ROUTES.propertySearch)}
+                            onCreate={openCreate}
+                            disabled={isActionLoading}
+                            createLabel={canAdd ? 'Создать объект' : 'Достигнут лимит объектов по тарифу — сменить тариф'}
+                        />
                     </div>
                 </HubCollapseAnchor>
 
                 {content}
             </PageContent>
         </>
+    );
+}
+
+/**
+ * Поисковая пилюля хаба «Объекты» (макет 1603:89183, Search Button
+ * 1758:105271; структура — пилюля книги контактов): серая пилюля 56px,
+ * лупа слева, плейсхолдер «Найти объект»; тап открывает поисковую
+ * страницу /properties/search, «+» справа — создание (кнопка внутри
+ * строки-кнопки — паттерн useKeyboardActivation, DESIGN.md §6). При
+ * исчерпанном лимите тарифа «+» ведёт на смену тарифа.
+ */
+export function PropertySearchPill({
+    onOpenSearch,
+    onCreate,
+    disabled = false,
+    createLabel = 'Создать объект',
+}: {
+    readonly onOpenSearch: () => void;
+    readonly onCreate: () => void;
+    readonly disabled?: boolean;
+    readonly createLabel?: string;
+}): JSX.Element {
+    const activatorProps = useKeyboardActivation({ onSelect: onOpenSearch });
+
+    return (
+        <div
+            {...activatorProps}
+            className="flex h-14 w-full cursor-pointer items-center rounded-pill bg-surface-muted pl-[18px] pr-2 text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary active:opacity-90"
+        >
+            <Search className="h-6 w-6 shrink-0 text-content" aria-hidden/>
+            <span className="min-w-0 flex-1 truncate px-2 text-base font-medium text-content">
+                Найти объект
+            </span>
+            <IconButton
+                icon={<Add/>}
+                label={createLabel}
+                disabled={disabled}
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onCreate();
+                }}
+            />
+        </div>
     );
 }

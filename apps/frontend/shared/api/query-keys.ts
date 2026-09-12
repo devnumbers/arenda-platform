@@ -51,6 +51,9 @@ export const propertyKeys = {
   all: ['properties'] as const,
   list: ['properties', 'list'] as const,
   detail: (id: string) => ['properties', 'detail', id] as const,
+  /** Поиск GET /properties/search (#601): запрос уходит в ключ — смена
+   * запроса начинает свежий keyset-обход с пустого курсора. */
+  search: (query: string) => [...propertyKeys.all, 'search', query] as const,
   addressSuggestions: (query: string) =>
     [...propertyKeys.all, 'address-suggestions', query] as const,
 };

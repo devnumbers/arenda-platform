@@ -3,6 +3,7 @@ export const ROUTES = {
   properties: '/properties',
   property: (id: string) => `/properties/${id}`,
   propertyArchive: '/properties/archive',
+  propertySearch: '/properties/search',
   propertyNew: '/properties/new',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
   /** Экран «Платежи объекта» — новый хром (#463). */

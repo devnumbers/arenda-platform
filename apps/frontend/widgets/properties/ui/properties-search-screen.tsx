@@ -1,0 +1,220 @@
+'use client';
+
+import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, BoldHome } from '@/shared/assets/icons';
+import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
+import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
+import { usePropertiesSearch } from '@/features/properties';
+import type { Property } from '@/entities/property';
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  ListRow,
+  PageContent,
+  SearchField,
+  Skeleton,
+  TopNav,
+} from '@/shared/ui/design';
+
+/** Задержка дебаунса поиска (мс) — серверный фильтр по ?search=. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * Поиск объектов (карта #596, тикет #601, пилюля хаба 1603:89183):
+ * поисковая шапка канона (#565) с полем «Найти объект», «←» в левом слоте
+ * закрывает поиск (возврат на хаб), поле получает программный фокус.
+ * Ввод ищет по серверному ?search= всей видимой срезы — свои объекты плюс
+ * разделяемые, без архивных (дебаунс 300 мс, как у книги контактов).
+ * Состояния — канон соседей: пустое поле — подсказка, по чему ищем;
+ * без совпадений — «Такого объекта нет» (тексты поиска объектов #582);
+ * результаты — строки ListRow (фото/плейсхолдер, название, адрес), тап —
+ * карточка объекта. Порции по 50 листаются sentinel-скроллом (#600).
+ * Кнопок создания в поиске нет — паритет с книгой контактов.
+ */
+export function PropertiesSearchScreen(): JSX.Element {
+  const router = useRouter();
+
+  const [search, setSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Открытие поиска сразу делает поле активным (программный фокус —
+  // устоявшийся a11y-паттерн вместо autoFocus).
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
+  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
+  // Сервер матчит подстроку как есть — пробелы по краям срезаем клиентски.
+  const trimmedSearch = debouncedSearch.trim();
+  const searchQuery = usePropertiesSearch(trimmedSearch);
+
+  const properties = searchQuery.data ?? [];
+  const searching = trimmedSearch.length > 0;
+
+  // Порции по 50 (#601): смена поискового запроса начинает свежий обход
+  // с пустого курсора (queryKey несёт запрос).
+  const sentinelRef = useInfiniteScroll(() => {
+    if (searchQuery.hasNextPage && !searchQuery.isFetchingNextPage) {
+      void searchQuery.fetchNextPage();
+    }
+  }, searchQuery.hasNextPage === true);
+
+  return (
+    <>
+      <TopNav
+        variant="search"
+        leading={
+          <IconButton
+            icon={<ArrowLeft />}
+            label="Закрыть поиск"
+            onClick={() => goBack(router, ROUTES.properties)}
+          />
+        }
+      >
+        <SearchField
+          ref={searchInputRef}
+          aria-label="Поиск объектов"
+          placeholder="Найти объект"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          onClear={() => setSearch('')}
+        />
+      </TopNav>
+
+      <PageContent>
+        {searchQuery.isPending && searching ? (
+          <PropertiesSearchSkeleton />
+        ) : searchQuery.isError ? (
+          <PropertiesSearchErrorCard onRetry={() => void searchQuery.refetch()} />
+        ) : !searching ? (
+          <EmptyState
+            imageSrc="/images/payments/payments-objects-search.png"
+            className="py-16"
+            description="Введите название или адрес объекта"
+          />
+        ) : properties.length === 0 ? (
+          <EmptyState
+            imageSrc="/images/payments/payments-objects-search.png"
+            className="py-16"
+            description="Такого объекта нет"
+          />
+        ) : (
+          <div
+            aria-label="Объекты"
+            data-testid="properties-search-results"
+            className="flex flex-col px-6"
+          >
+            {properties.map((property) => (
+              <ListRow
+                key={property.id}
+                leading={<PropertySearchAvatar property={property} />}
+                title={property.name}
+                subtitle={property.address}
+                onSelect={() => router.push(ROUTES.property(property.id))}
+              />
+            ))}
+            {/* Хвост порций (#600): sentinel дозагрузки и индикатор
+             * едущей следующей порции. */}
+            {searchQuery.hasNextPage === true && (
+              <div ref={sentinelRef} aria-hidden />
+            )}
+            {searchQuery.isFetchingNextPage && <PropertiesSearchLoadingMore />}
+          </div>
+        )}
+      </PageContent>
+    </>
+  );
+}
+
+/** Аватар строки поиска: фото объекта или плейсхолдер-дом (канон аватара
+ * объектов, PaymentObjectAvatar #582 — локальный дубликат, чтобы не тянуть
+ * платёжный виджет). */
+function PropertySearchAvatar({ property }: { readonly property: Property }): JSX.Element {
+  const photoUrl = property.photos?.[0]?.url ?? null;
+  return (
+    <span
+      aria-hidden
+      className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted shadow-[0_0_0_2.5px_var(--dl-surface)]"
+    >
+      {photoUrl !== null ? (
+        <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <BoldHome className="h-6 w-6 text-[#D3D7D9]" />
+      )}
+    </span>
+  );
+}
+
+/** Скелетон первых совпадений — только пока данных нет вовсе (первый
+ * запрос); правка запроса держит прежнюю выдачу (keepPreviousData). */
+function PropertiesSearchSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-6 py-6">
+      {[0, 1, 2, 3].map((row) => (
+        <div key={row} className="flex items-center gap-3 px-6">
+          <Skeleton className="h-11 w-11 rounded-full" />
+          <div className="flex flex-1 flex-col gap-2">
+            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-3.5 w-3/5" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Карточка ошибки с повтором (канон поисков). */
+function PropertiesSearchErrorCard({ onRetry }: { readonly onRetry: () => void }): JSX.Element {
+  return (
+    <section className="mx-6 rounded-card bg-surface-muted px-6 py-6">
+      <h2 className="text-xl font-semibold leading-6 text-content">
+        Не удалось загрузить результаты
+      </h2>
+      <p className="mt-2 text-sm leading-4 text-content-secondary">
+        Проверьте подключение и попробуйте еще раз
+      </p>
+      <div className="mt-4">
+        <Button size="small" variant="secondary" onClick={onRetry}>
+          Повторить
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/** Хвост списка при догрузке порции — тот же паттерн, что у лент
+ * платежей/операций: компактный скелетон-спиннер по центру с ролью status. */
+function PropertiesSearchLoadingMore(): JSX.Element {
+  return (
+    <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
+      <Skeleton className="h-8 w-8" />
+    </div>
+  );
+}
+
+/** Route-loading архетип поиска (#609): поисковая шапка и подсказка —
+ * тот же кадр, что и пустое состояние экрана. */
+export function PropertiesSearchLoading(): JSX.Element {
+  return (
+    <>
+      <TopNav
+        variant="search"
+        leading={<IconButton icon={<ArrowLeft />} label="Закрыть поиск" />}
+      >
+        <SearchField aria-label="Поиск объектов" placeholder="Найти объект" />
+      </TopNav>
+
+      <PageContent>
+        <EmptyState
+          imageSrc="/images/payments/payments-objects-search.png"
+          className="py-16"
+          description="Введите название или адрес объекта"
+        />
+      </PageContent>
+    </>
+  );
+}
