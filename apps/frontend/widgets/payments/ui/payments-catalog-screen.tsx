@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { clientTodayIso } from '@/entities/payment';
 import {
   usePayments,
@@ -16,6 +15,7 @@ import { canMutateProperty, useProperty } from '@/features/properties';
 import {
   Button,
   IconButton,
+  InfiniteQueryTail,
   PageContent,
   StickyBottomBar,
   TopNav,
@@ -135,14 +135,6 @@ function OverdueList({
     status: 'overdue',
     order: 'asc',
   });
-  const sentinelRef = useInfiniteScroll(
-    () => {
-      if (overdueQuery.hasNextPage && !overdueQuery.isFetchingNextPage) {
-        void overdueQuery.fetchNextPage();
-      }
-    },
-    overdueQuery.hasNextPage === true,
-  );
 
   const today = clientTodayIso();
   const operations = overdueQuery.data ?? [];
@@ -185,7 +177,9 @@ function OverdueList({
           />
         ))}
       </section>
-      {overdueQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
+      {/* Хвост порций (#633): sentinel + индикатор догрузки — единообразно
+       * с остальными лентами (до этого — sentinel без индикатора). */}
+      <InfiniteQueryTail query={overdueQuery} />
     </div>
   );
 }

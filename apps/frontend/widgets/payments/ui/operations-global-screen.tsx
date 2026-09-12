@@ -6,7 +6,6 @@ import { Add, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
 import { clientTodayIso } from "@/entities/payment";
 import { useKeyboardActivation } from "@/shared/lib/hooks/useKeyboardActivation";
-import { useInfiniteScroll } from "@/shared/lib/hooks/useInfiniteScroll";
 import {
   defaultOperationsPeriod,
   globalOperationsFiltersParams,
@@ -20,11 +19,10 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from "@/features/payments";
-import { Button, HubCollapseAnchor, HubTitle, IconButton, PageContent, TopNav } from "@/shared/ui/design";
+import { HubCollapseAnchor, HubTitle, IconButton, InfiniteQueryTail, Button, PageContent, TopNav } from "@/shared/ui/design";
 import { PaymentsStateCard } from "./payments-sections";
 import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from "./operations-skeletons";
 import {
-  LoadingMoreIndicator,
   OperationsDateList,
   OperationsNeverHad,
 } from "./operations-list";
@@ -86,12 +84,6 @@ export function OperationsGlobalScreen(): JSX.Element {
     propertyIds: filters.propertyIds,
     includeArchived: filters.archived,
   });
-
-  const sentinelRef = useInfiniteScroll(() => {
-    if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-      void listQuery.fetchNextPage();
-    }
-  }, listQuery.hasNextPage === true);
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   // Скелетон — только пока данных нет вовсе (первая загрузка); ошибка без
@@ -280,16 +272,7 @@ export function OperationsGlobalScreen(): JSX.Element {
                       groups={groups}
                       onSelectOperation={openOperation}
                       renderSubtitle={(operation) => operation.propertyName}
-                      tail={
-                        <>
-                          {listQuery.hasNextPage === true && (
-                            <div ref={sentinelRef} aria-hidden />
-                          )}
-                          {listQuery.isFetchingNextPage && (
-                            <LoadingMoreIndicator />
-                          )}
-                        </>
-                      }
+                      tail={<InfiniteQueryTail query={listQuery} />}
                     />
                   </>
                 )}

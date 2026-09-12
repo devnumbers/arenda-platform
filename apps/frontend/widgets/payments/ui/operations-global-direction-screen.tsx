@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Add, ArrowLeft, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { clientTodayIso, type PaymentType } from '@/entities/payment';
 import {
   defaultOperationsPeriod,
@@ -20,10 +19,17 @@ import {
   useGlobalOperationsPaged,
   useGlobalOperationsSummary,
 } from '@/features/payments';
-import { Button, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import {
+  Button,
+  IconButton,
+  InfiniteQueryTail,
+  PageContent,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
 import { PaymentsStateCard } from './payments-sections';
 import { OperationsDateFeedSkeleton, OperationsSummarySkeleton } from './operations-skeletons';
-import { LoadingMoreIndicator, OperationsDateList, OperationsNeverHad } from './operations-list';
+import { OperationsDateList, OperationsNeverHad } from './operations-list';
 import { OperationsFilterChips } from './operations-filter-chips';
 import { OperationsGlobalPeriodPickerDialog } from './operations-period-picker';
 import { OperationsSummaryCard } from './operations-summary-card';
@@ -87,12 +93,6 @@ export function OperationsGlobalDirectionScreen({
     type,
     includeArchived: filters.archived,
   });
-
-  const sentinelRef = useInfiniteScroll(() => {
-    if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) {
-      void listQuery.fetchNextPage();
-    }
-  }, listQuery.hasNextPage === true);
 
   const groups = groupOperationsByDate(listQuery.data ?? [], today);
   // Скелетон — только пока данных нет вовсе (первая загрузка); ошибка без
@@ -238,16 +238,7 @@ export function OperationsGlobalDirectionScreen({
                       groups={groups}
                       onSelectOperation={openOperation}
                       renderSubtitle={(operation) => operation.propertyName}
-                      tail={
-                        <>
-                          {listQuery.hasNextPage === true && (
-                            <div ref={sentinelRef} aria-hidden />
-                          )}
-                          {listQuery.isFetchingNextPage && (
-                            <LoadingMoreIndicator />
-                          )}
-                        </>
-                      }
+                      tail={<InfiniteQueryTail query={listQuery} />}
                     />
                   </>
                 )}
