@@ -109,6 +109,19 @@ export function useCancelSubscription(): UseMutationResult<void, ApiError, void>
   });
 }
 
+export function useResumeSubscription(): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient<void>('/subscription/resume', { method: 'POST' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+    },
+  });
+}
+
 export function useChangeTariff(): UseMutationResult<
   ChangeTariffResult,
   ApiError,

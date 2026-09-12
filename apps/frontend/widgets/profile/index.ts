@@ -7,5 +7,6 @@ export { PhoneChangeScreen } from './ui/PhoneChangeScreen';
 export { ProfileHub } from './ui/ProfileHub';
 export { TariffChangeForm } from './ui/TariffChangeForm';
 export { TariffChangeSuccess } from './ui/TariffChangeSuccess';
+export { TariffAboutScreen } from './ui/tariff/tariff-about-screen';
 export { TariffScreen } from './ui/tariff/tariff-screen';
 export { TimezonePickerScreen } from './ui/TimezonePickerScreen';

@@ -23,7 +23,7 @@ export function dayMonth(datetime: string): string {
   return formatDayMonth(dateToIso(new Date(datetime)));
 }
 
-function priceLine(subscription: Subscription): string {
+export function priceLine(subscription: Subscription): string {
   const period = subscription.currentPeriod ?? 'month';
   const price = period === 'year'
     ? subscription.tariff.yearlyPriceKopecks

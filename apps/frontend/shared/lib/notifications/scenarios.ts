@@ -157,6 +157,10 @@ const tariff = {
       success: 'Подписка отменена',
       errorFallback: 'Не удалось отменить подписку',
     }, options)) satisfies PromiseScenarioFn,
+  gracePaymentError: ((options?) =>
+    notify.error('Не удалось открыть оплату', options)) satisfies ScenarioFn,
+  resumeError: ((options?) =>
+    notify.error('Не удалось возобновить тариф', options)) satisfies ScenarioFn,
 } as const;
 
 const paymentMethods = {

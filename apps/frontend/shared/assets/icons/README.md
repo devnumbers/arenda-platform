@@ -153,6 +153,7 @@
 | `StatusIconDanger` | `status-icon-danger.svg` | `Color/DangerWhite` | 671:6751 | заменена |
 | `StatusIconGood` | `status-icon-good.svg` | `Color/GoodWhite` | 671:6753 | совпадала |
 | `NotificationDot` | `notification-dot.svg` | `Notification Dot` | 651:6759 | новая |
+| `CheckNoneLine` | `check-none-line.svg` | `Color/CheckNoneLine` | 1386:66530 | новая 12.09.2026 (#621, успех возобновления) |
 
 `NumbersAlerts` (1652:82624) — счётчик с числом: это текстовый компонент,
 а не иконка (число живое) — делается design-компонентом по запросу, в

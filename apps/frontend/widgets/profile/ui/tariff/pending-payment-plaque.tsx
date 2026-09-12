@@ -1,11 +1,12 @@
 'use client';
 
-import { type JSX, useEffect, useState } from 'react';
+import type { JSX } from 'react';
 import { buttonVariants } from '@/shared/ui/design';
 import {
   formatPaymentCountdown,
   pendingPaymentDescription,
 } from '@/widgets/profile/lib/tariff-overview';
+import { usePaymentTimer } from './use-payment-timer';
 import type { PendingPayment } from '@/entities/billing';
 
 /** Синяя плашка «Ожидаем оплату» главного экрана «Тариф» (#620, макет
@@ -24,20 +25,7 @@ export function PendingPaymentPlaque({
   readonly pending: PendingPayment;
   readonly onExpired: () => void;
 }): JSX.Element {
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const expiresMs = new Date(pending.expiresAt).getTime();
-    const timer = setInterval(() => {
-      const current = new Date();
-      setNow(current);
-      if (current.getTime() >= expiresMs) {
-        clearInterval(timer);
-        onExpired();
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [pending.expiresAt, onExpired]);
+  const now = usePaymentTimer(pending.expiresAt, true, onExpired);
 
   return (
     <div className="flex flex-col gap-6 rounded-[32px] bg-[rgba(43,127,255,0.1)] p-8 text-primary">

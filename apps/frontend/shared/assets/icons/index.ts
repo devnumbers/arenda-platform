@@ -205,3 +205,8 @@ export { default as KeySmall } from './key-small.svg';
 export { default as PinSmall } from './pin-small.svg';
 // Уже потреблялись: ClockSmall, HomeMainSmall, Repeat, Star (файлы обновлены
 // свежими экспортами, см. README).
+
+// Экран «О тарифе» (#621, Figma 1934-78524): успех возобновления —
+// Icon/Color/CheckNoneLine 1386:66530, запечённый сине-градиентный круг
+// с белой галкой (ровный круг, не «шестерёнка» GoodWhite).
+export { default as CheckNoneLine } from './check-none-line.svg';
