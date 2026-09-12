@@ -1,6 +1,6 @@
 'use client';
 
-import {type JSX, useCallback, useMemo, useState} from 'react';
+import {type JSX, useState} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
 import {
   useProperties,
@@ -66,19 +66,13 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
 
   const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
 
-  const visible = useMemo(
-    () => sortProperties(data ?? [], sort),
-    [data, sort],
-  );
+  const visible = sortProperties(data ?? [], sort);
 
-  const changeSort = useCallback(
-    (next: PropertySort) => {
-      setSort(next);
-      const query = new URLSearchParams(serializeSortToParams(next)).toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, {scroll: false});
-    },
-    [pathname, router],
-  );
+  const changeSort = (next: PropertySort) => {
+    setSort(next);
+    const query = new URLSearchParams(serializeSortToParams(next)).toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {scroll: false});
+  };
 
   const isEmpty = !isLoading && !isError && visible.length === 0;
   // Служебный ряд (сортировка + «Архив») и список живут только вместе (§7).
@@ -93,17 +87,17 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
 
   const isActionLoading = subscriptionQuery.isPending || data === undefined;
 
-  const canAdd = useMemo(() => {
+  const canAdd = (() => {
     if (!subscriptionQuery.data || data === undefined) return false;
     const limit = subscriptionQuery.data.tariff.activePropertyLimit;
     if (limit < 0) return true;
     return data.length < limit;
-  }, [subscriptionQuery.data, data]);
+  })();
 
-  const openCreate = useCallback(() => {
+  const openCreate = () => {
     if (isActionLoading) return;
     router.push(canAdd ? ROUTES.propertyNew : ROUTES.profileTariffChange);
-  }, [canAdd, isActionLoading, router]);
+  };
 
   const createLabel = canAdd
     ? 'Создать объект'
@@ -201,7 +195,7 @@ function PropertiesSearchPill({
   readonly createDisabled: boolean;
 }): JSX.Element {
   const router = useRouter();
-  const openSearch = useCallback(() => router.push(ROUTES.propertySearch), [router]);
+  const openSearch = () => router.push(ROUTES.propertySearch);
   const activatorProps = useKeyboardActivation({onSelect: openSearch});
 
   return (

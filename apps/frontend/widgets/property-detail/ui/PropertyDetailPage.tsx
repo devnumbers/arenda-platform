@@ -2,7 +2,7 @@
 
 import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
-import React, {useCallback} from 'react';
+import React from 'react';
 import {notify} from '@/shared/lib/notifications';
 import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
@@ -271,7 +271,7 @@ export function PropertyDetailPage(): JSX.Element {
         ? buildPropertyStatusSheetItems(property.status, hasRental)
         : [];
 
-    const handleArchive = useCallback(() => {
+    const handleArchive = () => {
         archiveProperty.mutate(id, {
             onSuccess: () => {
                 setArchiveOpen(false);
@@ -279,13 +279,13 @@ export function PropertyDetailPage(): JSX.Element {
             },
             onError: showMutationError,
         });
-    }, [archiveProperty, id, setArchiveOpen]);
+    };
 
     // Быстрое завершение (#627): сегодняшней датой, без записи о возврате
     // залога (полный мастер с датой и залогом — на детализации аренды,
     // #534). Повторное завершение — 409: тост ошибки, шит остаётся
     // открытым (кнопка выходит из loading — можно повторить или отменить).
-    const handleCompleteRental = useCallback(() => {
+    const handleCompleteRental = () => {
         if (currentRentalId === null) {
             return;
         }
@@ -299,7 +299,7 @@ export function PropertyDetailPage(): JSX.Element {
                 onError: (error) => notify.scenarios.rentals.completeError(error),
             },
         );
-    }, [completeRental, currentRentalId, setCompleteSheetOpen]);
+    };
 
     // Guard #628 (решение владельца 12.09): «Завершить» — одно составное
     // действие: завершает аренду сегодняшней датой (как #627) и тут же
@@ -308,7 +308,7 @@ export function PropertyDetailPage(): JSX.Element {
     // завершения — тост ошибки, аренда остаётся завершённой, повтор —
     // ручной (пункт уже без гарда); отказ завершения — шит остаётся
     // открытым, как в #627.
-    const handleGuardConfirm = useCallback(() => {
+    const handleGuardConfirm = () => {
         if (guardedAction === null) {
             return;
         }
@@ -343,13 +343,13 @@ export function PropertyDetailPage(): JSX.Element {
                 onError: (error) => notify.scenarios.rentals.completeError(error),
             },
         );
-    }, [archiveProperty, completeRental, guardedAction, id, setGuardedAction, updateProperty]);
+    };
 
     // Подтверждение шита пина (#630): исполняет «Сделать основным».
     // Успех закрывает шит (первенство видно в списке, строка «Управления»
     // переключится на «Убрать из основных»); отказ — тост ошибки, шит
     // остаётся открытым, как в #627/#628.
-    const handlePinConfirm = useCallback(() => {
+    const handlePinConfirm = () => {
         setPin.mutate(
             {id, pinned: true},
             {
@@ -357,9 +357,9 @@ export function PropertyDetailPage(): JSX.Element {
                 onError: showMutationError,
             },
         );
-    }, [id, setPin, setPinSheetOpen]);
+    };
 
-    const handleAction = useCallback((key: PropertyDetailActionKey) => {
+    const handleAction = (key: PropertyDetailActionKey) => {
         const guarded = guardedStatusAction(key, hasRental);
         if (guarded !== null) {
             setGuardedAction(guarded);
@@ -433,9 +433,9 @@ export function PropertyDetailPage(): JSX.Element {
                 setDeleteOpen(true);
                 break;
         }
-    }, [hasRental, id, router, setPin, setPinSheetOpen, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardedAction, setDeleteGuardOpen, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
+    };
 
-    const handleDelete = useCallback(() => {
+    const handleDelete = () => {
         deleteProperty.mutate(
             {id},
             {
@@ -449,7 +449,7 @@ export function PropertyDetailPage(): JSX.Element {
                 },
             },
         );
-    }, [deleteProperty, id, router, setDeleteOpen]);
+    };
 
     // Разводим только ошибку основного запроса объекта: 404 (нет объекта
     // или нет доступа) и 403 membership_suspended (лимит тарифа) получают
