@@ -139,7 +139,7 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
   return (
     <>
       <div className="flex flex-col gap-6 py-6">
-        <div className="flex flex-col items-center gap-6 px-6">
+        <div className="flex flex-col items-center gap-6">
           <Image
             src="/images/tariff/tariff-avatar.png"
             alt=""
@@ -161,10 +161,10 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
           </p>
         </div>
         <section className="flex flex-col">
-          <h2 className="mx-0 mt-0 px-6 text-xl font-semibold leading-6 text-content">
+          <h2 className="mx-0 mt-0 text-xl font-semibold leading-6 text-content">
             Подробнее
           </h2>
-          <div className="mt-6 flex flex-col gap-2 px-6">
+          <div className="mt-6 flex flex-col gap-2">
             {cardMask !== undefined && (
               <DetailRow label="Способ оплаты" value={cardMask} />
             )}

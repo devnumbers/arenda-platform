@@ -10,11 +10,17 @@ export const metadata: Metadata = {
 
 /** Экран «Операции» (#624): название — копирайт-решение владельца;
  * домен — Subscription Payments, учётные «Операции» (доходы/расходы)
- * не смешиваются. */
+ * не смешиваются. Боковой инсет 24 несёт контент (строки Row Button,
+ * заголовки дат px-6) — как у учётной «Истории платежей», поэтому
+ * px-6 шела гасится. */
 export default function PaymentsPage() {
   return (
     <>
-      <SubScreenShell title="Операции" fallbackHref={ROUTES.profileTariff}>
+      <SubScreenShell
+        title="Операции"
+        fallbackHref={ROUTES.profileTariff}
+        contentClassName="px-0"
+      >
         <PaymentList />
       </SubScreenShell>
     </>

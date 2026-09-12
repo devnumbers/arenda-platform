@@ -1,12 +1,12 @@
-import type {
-  PaymentPeriod,
-  SubscriptionPayment,
-  SubscriptionPaymentCard,
-} from '@/entities/billing';
 import type { IsoDate } from '@/shared/lib/calendar';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
+import type {
+  PaymentPeriod,
+  SubscriptionPayment,
+} from '@/entities/billing';
 import { PAYMENT_STATUS_LABELS } from '@/entities/billing';
+import { cardNumberTail } from './tariff-about';
 
 /**
  * Презентационная модель экрана «Операции» (#624): группировка истории
@@ -81,26 +81,16 @@ export function paymentStatusTone(status: SubscriptionPayment['status']): string
   }
 }
 
-const CARD_SYSTEM_LABELS: Record<SubscriptionPaymentCard['cardSystem'], string | undefined> = {
-  mir: 'Мир',
-  visa: 'Visa',
-  mastercard: 'Mastercard',
-  unknown: undefined,
-};
-
-/** Маска карты со строкой платежа: «Мир •• 0700» — система от бэка
- * (фронт систему не выводит, #622), банк не называется (решение
- * владельца 11.09, #614); нераспознанная система — без префикса. Без
- * карты (старые платежи) маски нет. */
+/** Маска карты со строкой платежа: «•••• 0700» — только хвост, систему
+ * карты в интерфейсе не показываем (решение владельца 12.09, #624; тот
+ * же формат, что на «О тарифе» — #622). Без карты (старые платежи)
+ * маски нет. */
 export function paymentCardMask(payment: SubscriptionPayment): string | undefined {
   const card = payment.paymentMethod;
   if (card === undefined) {
     return undefined;
   }
-  const digits = card.displayMask.replace(/\D/g, '');
-  const tail = digits.length < 4 ? card.displayMask : `•• ${digits.slice(-4)}`;
-  const label = CARD_SYSTEM_LABELS[card.cardSystem];
-  return label === undefined ? tail : `${label} ${tail}`;
+  return cardNumberTail(card.displayMask);
 }
 
 /** Копия макета детали (#624, Figma 1883-71611): «В месяц» / «В год» —

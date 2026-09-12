@@ -74,38 +74,31 @@ describe('paymentRowSubtitle', () => {
 });
 
 describe('paymentCardMask', () => {
-  it('система карты от бэка + хвост маски: «Мир •• 0700»', () => {
+  it('маска без системы карты: «•••• 0700» (решение владельца 12.09, #624)', () => {
     expect(
       paymentCardMask(
         payment({
           paymentMethod: { displayMask: '4300********0700', cardSystem: 'mir' },
         }),
       ),
-    ).toBe('Мир •• 0700');
+    ).toBe('•••• 0700');
   });
 
-  it('visa и mastercard — латиницей, unknown — без префикса', () => {
+  it('хвост берётся из маски независимо от системы', () => {
     expect(
       paymentCardMask(
         payment({
           paymentMethod: { displayMask: '4111********1111', cardSystem: 'visa' },
         }),
       ),
-    ).toBe('Visa •• 1111');
+    ).toBe('•••• 1111');
     expect(
       paymentCardMask(
         payment({
-          paymentMethod: { displayMask: '5500********4444', cardSystem: 'mastercard' },
+          paymentMethod: { displayMask: '5500********4444', cardSystem: 'unknown' },
         }),
       ),
-    ).toBe('Mastercard •• 4444');
-    expect(
-      paymentCardMask(
-        payment({
-          paymentMethod: { displayMask: '2200********3333', cardSystem: 'unknown' },
-        }),
-      ),
-    ).toBe('•• 3333');
+    ).toBe('•••• 4444');
   });
 
   it('платёж без карты — маски нет', () => {

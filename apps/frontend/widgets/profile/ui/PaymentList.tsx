@@ -39,7 +39,7 @@ function HistorySkeleton(): JSX.Element {
     <div className="flex flex-col gap-6" role="status" aria-label="Загружаем историю операций">
       {[0, 1].map((group) => (
         <section key={group} className="flex flex-col">
-          <Skeleton className="mt-6 h-6 w-32" />
+          <Skeleton className="mx-6 mt-6 h-6 w-32" />
           {[0, 1].map((row) => (
             <div key={row} className="flex items-center gap-3 px-6 py-3">
               <Skeleton className="h-11 w-11 rounded-full" />
