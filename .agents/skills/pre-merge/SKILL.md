@@ -17,7 +17,8 @@ Invoke it with the effort's map (URL or number). A map-less effort works too —
 ### 1. Pin the gate
 
 - Work in the effort branch's worktree. On the main checkout — nothing to gate; stop.
-- Fixed point: `git merge-base origin/dev HEAD`. Verify it resolves and `git diff <fixed-point>...HEAD` is non-empty; capture `git log <fixed-point>..HEAD --oneline`.
+- The branch rides the `dev` it merges into: integrate fresh `dev` into the branch before the gate (the «Интеграция» order in `docs/agents/parallel-dev.md`; merge conflicts go through `/resolving-merge-conflicts`), so the gate sees the branch against what it will actually join.
+- Fixed point: `git merge-base dev HEAD`. Verify it resolves and `git diff <fixed-point>...HEAD` is non-empty; capture `git log <fixed-point>..HEAD --oneline`.
 - Spec source, in order: the map issue and its closed tickets (fetch per `docs/agents/issue-tracker.md`); ticket references from the commit messages; ask the owner.
 - A `golangci-lint` run can be poisoned by a sibling worktree's cache and fail on code that is fine — `golangci-lint cache clean` before suspecting the diff.
 
