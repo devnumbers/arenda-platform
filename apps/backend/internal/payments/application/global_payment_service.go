@@ -63,13 +63,14 @@ type GlobalPaymentFeed struct {
 }
 
 // GlobalPaymentSearch is the global payment rules search's response (ticket
-// #575): the matched rows plus the matched categories — the chips. NextCursor
-// is the keyset continuation (ticket #597) — ” when the matches are
-// exhausted. Total is the whole scope's match count under the query and the
-// chip filter (ticket #599) — «найдено N», the same on every walked page.
+// #575): the matched rows plus the matched categories — the chips, one
+// category identity each (ticket #602). NextCursor is the keyset
+// continuation (ticket #597) — ” when the matches are exhausted. Total is
+// the whole scope's match count under the query and the chip filter
+// (ticket #599) — «найдено N», the same on every walked page.
 type GlobalPaymentSearch struct {
 	Items             []GlobalPaymentItem
-	MatchedCategories []GlobalPaymentSearchCategory
+	MatchedCategories []domain.CategoryRef
 	NextCursor        string
 	Total             int64
 }

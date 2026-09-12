@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { ArrowLeft, ChangeVertical } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import {
   clientTodayIso,
   PaymentRowButton,
@@ -17,7 +16,15 @@ import {
   groupPaidOperations,
   usePaymentOperationsPaged,
 } from '@/features/payments';
-import { Button, ChipButton, IconButton, PageContent, Skeleton, TopNav, TopNavTitle } from '@/shared/ui/design';
+import {
+  Button,
+  ChipButton,
+  IconButton,
+  InfiniteQueryTail,
+  PageContent,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
 import { operationStatusLabel } from '../lib/operation-status-label';
 import {
   PaymentsHeading,
@@ -52,15 +59,6 @@ export function PaymentHistoryScreen({
   const toggleOrder = (): void => {
     setOrder((current) => (current === 'desc' ? 'asc' : 'desc'));
   };
-
-  const sentinelRef = useInfiniteScroll(
-    () => {
-      if (historyQuery.hasNextPage && !historyQuery.isFetchingNextPage) {
-        void historyQuery.fetchNextPage();
-      }
-    },
-    historyQuery.hasNextPage === true,
-  );
 
   const today = clientTodayIso();
   const groups = groupPaidOperations(historyQuery.data ?? [], today);
@@ -151,8 +149,7 @@ export function PaymentHistoryScreen({
                     </section>
                   ))}
 
-                  {historyQuery.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-                  {historyQuery.isFetchingNextPage && <LoadingMoreIndicator />}
+                  <InfiniteQueryTail query={historyQuery} />
                 </>
               )}
             </>
@@ -190,13 +187,5 @@ function HistoryRow({
       signedAmount
       onSelect={onSelect}
     />
-  );
-}
-
-function LoadingMoreIndicator(): JSX.Element {
-  return (
-    <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <Skeleton className="h-8 w-8" />
-    </div>
   );
 }

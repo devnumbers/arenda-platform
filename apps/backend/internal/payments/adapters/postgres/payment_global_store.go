@@ -169,10 +169,11 @@ func (s *GlobalPaymentStore) SumGlobalPaymentCounters(
 }
 
 // SumGlobalPaymentSearchCategories returns the matched categories of the
-// search — the chips' identities and their rule counts.
+// search — the chips' category identities, one per category (ticket #602),
+// the largest match count first.
 func (s *GlobalPaymentStore) SumGlobalPaymentSearchCategories(
 	ctx context.Context, actor uuid.UUID, q application.GlobalPaymentRulesQuery,
-) ([]application.GlobalPaymentSearchCategory, error) {
+) ([]domain.CategoryRef, error) {
 	rows, err := s.q().SumGlobalPaymentSearchCategories(ctx, postgres.SumGlobalPaymentSearchCategoriesParams{
 		Actor:         pgconv.UUIDToPgtype(actor),
 		Search:        escapeLikePattern(q.Search),
@@ -181,16 +182,12 @@ func (s *GlobalPaymentStore) SumGlobalPaymentSearchCategories(
 	if err != nil {
 		return nil, fmt.Errorf("sum global payment search categories: %w", err)
 	}
-	out := make([]application.GlobalPaymentSearchCategory, 0, len(rows))
+	out := make([]domain.CategoryRef, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, application.GlobalPaymentSearchCategory{
-			Category: domain.CategoryRef{
-				Slug:             pgconv.TextToPtrString(row.CategorySlug),
-				UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
-				UserCategoryName: pgconv.TextToPtrString(row.UserCategoryLabel),
-			},
-			Type:      domain.PaymentType(row.Type),
-			RuleCount: row.RuleCount,
+		out = append(out, domain.CategoryRef{
+			Slug:             pgconv.TextToPtrString(row.CategorySlug),
+			UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
+			UserCategoryName: pgconv.TextToPtrString(row.UserCategoryLabel),
 		})
 	}
 	return out, nil

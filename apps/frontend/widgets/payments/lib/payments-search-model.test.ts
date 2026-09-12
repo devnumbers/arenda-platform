@@ -1,72 +1,54 @@
 import { describe, expect, it } from 'vitest';
-import type { PaymentSearchCategoryView } from '@/entities/payment';
+import type { PaymentCategoryView } from '@/entities/payment';
 import {
   effectiveChipKey,
+  searchCategoryChipKey,
   searchCategoryChips,
   searchChipFilter,
 } from './payments-search-model';
 
-const rentChip: PaymentSearchCategoryView = {
-  category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
-  type: 'expense',
-  count: 2,
+const rentCategory: PaymentCategoryView = {
+  source: 'default',
+  slug: 'rent',
+  label: 'Арендная плата',
 };
 
-const rentChipIncome: PaymentSearchCategoryView = {
-  category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
-  type: 'income',
-  count: 1,
+const parkingCategory: PaymentCategoryView = {
+  source: 'default',
+  slug: 'parking',
+  label: 'Парковка',
 };
 
-const parkingChip: PaymentSearchCategoryView = {
-  category: { source: 'default', slug: 'parking', label: 'Парковка' },
-  type: 'expense',
-  count: 2,
+const furnitureCategory: PaymentCategoryView = {
+  source: 'default',
+  slug: 'furniture',
+  label: 'Аренда мебели',
 };
 
-const parkingChipIncome: PaymentSearchCategoryView = {
-  category: { source: 'default', slug: 'parking', label: 'Парковка' },
-  type: 'income',
-  count: 1,
-};
-
-const furnitureChip: PaymentSearchCategoryView = {
-  category: { source: 'default', slug: 'furniture', label: 'Аренда мебели' },
-  type: 'expense',
-  count: 1,
-};
-
-const customChip: PaymentSearchCategoryView = {
-  category: { source: 'custom', id: '0198b6a7-user', label: 'Своя категория' },
-  type: 'income',
-  count: 3,
+const customCategory: PaymentCategoryView = {
+  source: 'custom',
+  id: '0198b6a7-user',
+  label: 'Своя категория',
 };
 
 describe('searchCategoryChips — чипы matchedCategories (#581, Figma 860:22842)', () => {
-  it('ключ дефолтной категории — по слагу, направление в ключ не входит', () => {
-    const chips = searchCategoryChips([rentChip], null);
+  it('ключ дефолтной категории — по слагу', () => {
+    const chips = searchCategoryChips([rentCategory], null);
     expect(chips).toStrictEqual([
       { key: 'default:rent', label: 'Арендная плата', selected: false },
     ]);
   });
 
   it('ключ пользовательской категории — по id', () => {
-    const chips = searchCategoryChips([customChip], null);
+    const chips = searchCategoryChips([customCategory], null);
     expect(chips).toStrictEqual([
       { key: 'custom:0198b6a7-user', label: 'Своя категория', selected: false },
     ]);
   });
 
-  it('одна категория в двух направлениях склеивается в один чип (дубль подписи, решение владельца)', () => {
-    const chips = searchCategoryChips([parkingChip, parkingChipIncome], null);
-    expect(chips).toStrictEqual([
-      { key: 'default:parking', label: 'Парковка', selected: false },
-    ]);
-  });
-
-  it('склейка не теряет остальные категории и порядок сервера (по числу совпадений)', () => {
+  it('сервер отдаёт одну категорию одним чипом (#602), порядок сервера сохраняется', () => {
     const chips = searchCategoryChips(
-      [parkingChip, parkingChipIncome, furnitureChip, customChip],
+      [parkingCategory, furnitureCategory, customCategory],
       'custom:0198b6a7-user',
     );
     expect(chips.map((chip) => chip.label)).toStrictEqual([
@@ -77,14 +59,19 @@ describe('searchCategoryChips — чипы matchedCategories (#581, Figma 860:22
     expect(chips.map((chip) => chip.selected)).toStrictEqual([false, false, true]);
   });
 
-  it('выбор помечается по ключу без направления', () => {
-    const chips = searchCategoryChips([rentChip, rentChipIncome], 'default:rent');
-    expect(chips.map((chip) => chip.selected)).toStrictEqual([true]);
+  it('выбор помечается по ключу', () => {
+    const chips = searchCategoryChips([rentCategory, furnitureCategory], 'default:rent');
+    expect(chips.map((chip) => chip.selected)).toStrictEqual([true, false]);
+  });
+
+  it('searchCategoryChipKey согласован с ключами чипов', () => {
+    expect(searchCategoryChipKey(customCategory)).toBe('custom:0198b6a7-user');
+    expect(searchCategoryChipKey(rentCategory)).toBe('default:rent');
   });
 });
 
 describe('effectiveChipKey — выбор живёт, пока чип есть в выдаче', () => {
-  const categories = [rentChip, furnitureChip];
+  const categories = [rentCategory, furnitureCategory];
 
   it('возвращает выбор, пока он среди чипов', () => {
     expect(effectiveChipKey(categories, 'default:rent')).toBe('default:rent');
@@ -100,11 +87,11 @@ describe('effectiveChipKey — выбор живёт, пока чип есть �
 });
 
 describe('searchChipFilter — чип едет в серверный запрос (порции по 50)', () => {
-  it('дефолтная категория фильтрует по слагу каталога, без направления', () => {
-    expect(searchChipFilter(parkingChip)).toStrictEqual({ category: 'parking' });
+  it('дефолтная категория фильтрует по слагу каталога', () => {
+    expect(searchChipFilter(parkingCategory)).toStrictEqual({ category: 'parking' });
   });
 
-  it('пользовательская категория — по id, без направления', () => {
-    expect(searchChipFilter(customChip)).toStrictEqual({ category: '0198b6a7-user' });
+  it('пользовательская категория — по id', () => {
+    expect(searchChipFilter(customCategory)).toStrictEqual({ category: '0198b6a7-user' });
   });
 });

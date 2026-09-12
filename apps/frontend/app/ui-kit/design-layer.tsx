@@ -33,6 +33,7 @@ import {
     HubTitle,
     SubScreenShell,
     IconButton,
+    InfiniteQueryTail,
     ListRow,
     Modal,
     ModalClose,
@@ -142,6 +143,22 @@ const showcaseObjects: ReadonlyArray<PickerOption> = [
     { value: 'kv-2', label: 'Квартира на набережной', hint: 'Набережная, 15', icon: <ObjectAvatar /> },
     { value: 'kv-3', label: 'Дача', hint: 'Приозёрная, 2', icon: <ObjectAvatar /> },
 ];
+
+/** Заглушка запроса для витрины хвоста: фаза «едет следующая порция» —
+ * индикатор виден постоянно, fetchNextPage никуда не ходит. */
+const STUB_FETCHING_QUERY = {
+    hasNextPage: true,
+    isFetchingNextPage: true,
+    fetchNextPage: () => Promise.resolve(),
+} as const;
+
+/** Холостая фаза той же ленты: продолжение есть (sentinel в DOM), порция
+ * не едет — хвост безмолвен, пока sentinel не войдёт во вьюпорт. */
+const STUB_IDLE_QUERY = {
+    hasNextPage: true,
+    isFetchingNextPage: false,
+    fetchNextPage: () => Promise.resolve(),
+} as const;
 
 /** Витрина дизайн-слоя (ADR 0050, тикет #455): шадкн/ui поверх Radix,
  * Tailwind на токенах, шрифт Onest. Внешний вид сверен с экспортами
@@ -1218,6 +1235,38 @@ export function DesignLayerShowcase(): JSX.Element {
                             <div className="flex flex-col gap-6 rounded-card border border-dashed border-content-tertiary p-6">
                                 <SkeletonFormField />
                                 <SkeletonFormField labelWidth="w-36" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.group}>
+                    <h3 className={styles.groupTitle}>InfiniteQueryTail · хвост бесконечной ленты</h3>
+                    <p className={styles.groupTitle}>
+                        Sentinel дозагрузки и индикатор «Загружаем еще» одной строкой на
+                        экран (#633): компонент сам держит sentinel, подключает
+                        useInfiniteScroll и жив при тёплом кэше (#631). Ниже — оба тона
+                        индикатора догрузки (LoadingMoreIndicator) на статичной заглушке
+                        запроса; в приложении хвост ставится последним элементом ленты.
+                    </p>
+                    <div className={styles.grid}>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>Хвост без догрузки · sentinel ждёт</h4>
+                            <div className="rounded-card border border-dashed border-content-tertiary p-4 text-center text-sm text-content-secondary">
+                                <InfiniteQueryTail query={STUB_IDLE_QUERY} />
+                                ↑ sentinel (пустой div) — невидим, продолжение появится при подходе к краю
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>LoadingMoreIndicator · тон base</h4>
+                            <div className="rounded-card border border-dashed border-content-tertiary">
+                                <InfiniteQueryTail query={STUB_FETCHING_QUERY} />
+                            </div>
+                        </div>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>LoadingMoreIndicator · тон muted</h4>
+                            <div className="flex flex-col gap-2 rounded-card bg-surface-muted p-3">
+                                <InfiniteQueryTail query={STUB_FETCHING_QUERY} tone="muted" />
                             </div>
                         </div>
                     </div>

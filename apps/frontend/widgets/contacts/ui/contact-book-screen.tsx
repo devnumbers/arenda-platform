@@ -2,7 +2,6 @@
 
 import { useState, type ComponentProps, type JSX } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import {
   Add,
   Search,
@@ -22,6 +21,7 @@ import {
   HubCollapseAnchor,
   HubTitle,
   IconButton,
+  InfiniteQueryTail,
   PageContent,
   PickerMenu,
   TopNav,
@@ -37,7 +37,6 @@ import {
   ContactsBookSkeleton,
   ContactsEmptyState,
   ContactsErrorCard,
-  ContactsLoadingMore,
 } from './contacts-states';
 
 /**
@@ -77,14 +76,6 @@ export function ContactBookScreen({
   const contactsQuery = useContactBook('', sortField, sortOrder);
 
   const contacts = contactsQuery.data ?? [];
-
-  // Порции по 50 листаются sentinel-скроллом (#600), как ленты
-  // платежей/операций: дозагрузка на подлёте к краю списка.
-  const sentinelRef = useInfiniteScroll(() => {
-    if (contactsQuery.hasNextPage && !contactsQuery.isFetchingNextPage) {
-      void contactsQuery.fetchNextPage();
-    }
-  }, contactsQuery.hasNextPage === true);
 
   // Смена сортировки синхронно переписывает query строки (дефолтные
   // значения не пишутся — как на странице «Объекты»).
@@ -184,12 +175,9 @@ export function ContactBookScreen({
                       </div>
                     </div>
                   ))}
-                  {/* Хвост порций (#600): sentinel дозагрузки и индикатор
-                   * едущей следующей порции. */}
-                  {contactsQuery.hasNextPage === true && (
-                    <div ref={sentinelRef} aria-hidden />
-                  )}
-                  {contactsQuery.isFetchingNextPage && <ContactsLoadingMore tone="muted" />}
+                  {/* Хвост порций (#633): sentinel + индикатор догрузки —
+                   * серая карточка книги, тон muted. */}
+                  <InfiniteQueryTail query={contactsQuery} tone="muted" />
                 </section>
               </>
             )}

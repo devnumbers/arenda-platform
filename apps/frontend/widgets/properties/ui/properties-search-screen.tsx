@@ -6,17 +6,16 @@ import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { usePropertiesSearch } from '@/features/properties';
 import { PropertyAvatar } from '@/entities/property';
 import {
   Button,
   EmptyState,
   IconButton,
+  InfiniteQueryTail,
   ListRow,
   PageContent,
   SearchField,
-  Skeleton,
   SkeletonListRow,
   TopNav,
   skeletonRowWidths,
@@ -56,14 +55,6 @@ export function PropertiesSearchScreen(): JSX.Element {
 
   const properties = searchQuery.data ?? [];
   const searching = trimmedSearch.length > 0;
-
-  // Порции по 50 (#601): смена поискового запроса начинает свежий обход
-  // с пустого курсора (queryKey несёт запрос).
-  const sentinelRef = useInfiniteScroll(() => {
-    if (searchQuery.hasNextPage && !searchQuery.isFetchingNextPage) {
-      void searchQuery.fetchNextPage();
-    }
-  }, searchQuery.hasNextPage === true);
 
   return (
     <>
@@ -126,12 +117,8 @@ export function PropertiesSearchScreen(): JSX.Element {
                 onSelect={() => router.push(ROUTES.property(property.id))}
               />
             ))}
-            {/* Хвост порций (#600): sentinel дозагрузки и индикатор
-             * едущей следующей порции. */}
-            {searchQuery.hasNextPage === true && (
-              <div ref={sentinelRef} aria-hidden />
-            )}
-            {searchQuery.isFetchingNextPage && <PropertiesSearchLoadingMore />}
+            {/* Хвост порций (#633): sentinel + индикатор догрузки. */}
+            <InfiniteQueryTail query={searchQuery} />
           </div>
         )}
       </PageContent>
@@ -169,16 +156,6 @@ function PropertiesSearchErrorCard({ onRetry }: { readonly onRetry: () => void }
         </Button>
       </div>
     </section>
-  );
-}
-
-/** Хвост списка при догрузке порции — тот же паттерн, что у лент
- * платежей/операций: компактный скелетон-спиннер по центру с ролью status. */
-function PropertiesSearchLoadingMore(): JSX.Element {
-  return (
-    <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <Skeleton className="h-8 w-8" />
-    </div>
   );
 }
 

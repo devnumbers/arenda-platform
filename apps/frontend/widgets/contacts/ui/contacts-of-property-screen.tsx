@@ -13,7 +13,6 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import {
   ContactRowButton,
   contactSortByName,
@@ -26,6 +25,7 @@ import {
   Button,
   ChipButton,
   IconButton,
+  InfiniteQueryTail,
   PageContent,
   PickerMenu,
   SearchField,
@@ -37,7 +37,6 @@ import {
 import {
   ContactsEmptyState,
   ContactsErrorCard,
-  ContactsLoadingMore,
   ContactsNoResults,
   ContactsSearchHint,
   ContactsSkeleton,
@@ -88,14 +87,6 @@ export function ContactsOfPropertyScreen({
   // закрытый поиск не фильтрует вовсе.
   const trimmedSearch = debouncedSearch.trim();
   const contactsQuery = useContacts(propertyId, searchOpen ? trimmedSearch : '');
-
-  // Порции по 50 листаются sentinel-скроллом (#600) — и в книге, и в
-  // поиске; смена запроса начинает свежий обход с пустого курсора.
-  const sentinelRef = useInfiniteScroll(() => {
-    if (contactsQuery.hasNextPage && !contactsQuery.isFetchingNextPage) {
-      void contactsQuery.fetchNextPage();
-    }
-  }, contactsQuery.hasNextPage === true);
 
   const contacts = contactsQuery.data ?? [];
   const searching = trimmedSearch.length > 0;
@@ -169,12 +160,9 @@ export function ContactsOfPropertyScreen({
                 onSelect={() => router.push(ROUTES.propertyContact(propertyId, contact.id))}
               />
             ))}
-            {/* Хвост порций (#600): sentinel дозагрузки и индикатор
-             * едущей следующей порции. */}
-            {contactsQuery.hasNextPage === true && (
-              <div ref={sentinelRef} aria-hidden />
-            )}
-            {contactsQuery.isFetchingNextPage && <ContactsLoadingMore />}
+            {/* Хвост порций (#633): sentinel + индикатор догрузки — белые
+             * строки поиска. */}
+            <InfiniteQueryTail query={contactsQuery} />
           </div>
         ) : contacts.length === 0 ? (
           <ContactsEmptyState />
@@ -205,12 +193,9 @@ export function ContactsOfPropertyScreen({
                   </div>
                 </div>
               ))}
-              {/* Хвост порций (#600): sentinel дозагрузки и индикатор
-               * едущей следующей порции. */}
-              {contactsQuery.hasNextPage === true && (
-                <div ref={sentinelRef} aria-hidden />
-              )}
-              {contactsQuery.isFetchingNextPage && <ContactsLoadingMore tone="muted" />}
+              {/* Хвост порций (#633): sentinel + индикатор догрузки —
+               * серая карточка книги, тон muted. */}
+              <InfiniteQueryTail query={contactsQuery} tone="muted" />
             </section>
           </>
         )}

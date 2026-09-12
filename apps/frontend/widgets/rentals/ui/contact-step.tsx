@@ -12,7 +12,6 @@ import {
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { notify } from '@/shared/lib/notifications';
-import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import {
   ContactRowButton,
   contactSortByName,
@@ -29,7 +28,7 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
-  Skeleton,
+  InfiniteQueryTail,
 } from '@/shared/ui/design';
 import { RentalContactBookSkeleton } from './rental-skeletons';
 import { WizardHeading } from './wizard-chrome';
@@ -187,14 +186,6 @@ function BookList({
 }): JSX.Element {
   const contacts = query.data ?? [];
 
-  // Порции по 50 листаются sentinel-скроллом (#600): книга объекта
-  // дозагружается на подлёте к краю списка.
-  const sentinelRef = useInfiniteScroll(() => {
-    if (query.hasNextPage && !query.isFetchingNextPage) {
-      void query.fetchNextPage();
-    }
-  }, query.hasNextPage === true);
-
   if (query.isPending) {
     // Паритет книги (#607): та же карточка с группами, без своей вставки —
     // контейнер шага приносит px-6.
@@ -241,14 +232,9 @@ function BookList({
           </div>
         </div>
       ))}
-      {/* Хвост порций (#600): sentinel дозагрузки и индикатор едущей
-       * следующей порции — тот же паттерн, что у лент платежей/операций. */}
-      {query.hasNextPage === true && <div ref={sentinelRef} aria-hidden />}
-      {query.isFetchingNextPage && (
-        <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-          <Skeleton className="h-8 w-8 bg-surface-muted-hover" />
-        </div>
-      )}
+      {/* Хвост порций (#633): sentinel + индикатор догрузки — серая
+       * карточка книги, тон muted. */}
+      <InfiniteQueryTail query={query} tone="muted" />
     </section>
   );
 }

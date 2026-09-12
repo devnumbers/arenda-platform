@@ -20,6 +20,7 @@ import type {
   ContactUpdateCommand,
 } from '@/entities/contact';
 import { contactKeys } from '@/shared/api/query-keys';
+import { keysetNextPageParam } from '@/shared/lib/keyset';
 import type { components } from '@/shared/api/dto';
 
 type ContactsResponse = components['schemas']['ContactsResponse'];
@@ -58,7 +59,7 @@ export function useContacts(
     queryFn: ({ pageParam }) =>
       fetchContactsPage({ propertyId, search, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    getNextPageParam: keysetNextPageParam,
     select: (data) => data.pages.flatMap((page) => page.items),
     placeholderData: keepPreviousData,
     enabled: Boolean(propertyId),
@@ -122,8 +123,7 @@ export function contactBookQuery(
     queryFn: ({ pageParam }: { pageParam?: string }) =>
       fetchContactsPage({ search, sort, order, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage: ContactsPageData) =>
-      lastPage.nextCursor ?? undefined,
+    getNextPageParam: keysetNextPageParam,
   };
 }
 

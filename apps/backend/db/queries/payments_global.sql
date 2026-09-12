@@ -198,17 +198,16 @@ WHERE (
 
 -- name: SumGlobalPaymentSearchCategories :many
 -- The matched categories of the payment rules search (ticket #575): one
--- row per (category, direction) present among the matched rules — the
--- search screen's chips — the largest count first. The identity is the
--- rule's category reference resolved: a default catalog slug or the user
--- category. Rules without any category reference cannot appear (the XOR
--- is a durable schema invariant; no such rules exist today). The search
--- predicate is the feed query's.
+-- row per category present among the matched rules — the search screen's
+-- chips — the largest match count first (ticket #602: the count orders the
+-- rows and stays out of the contract; a category's directions are one
+-- chip). The identity is the rule's category reference resolved: a default
+-- catalog slug or the user category. Rules without any category reference
+-- cannot appear (the XOR is a durable schema invariant; no such rules exist
+-- today). The search predicate is the feed query's.
 SELECT pay.category_slug,
        pay.user_category_id,
-       pc.name AS user_category_label,
-       pay.type,
-       COUNT(*)::bigint AS rule_count
+       pc.name AS user_category_label
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
@@ -228,8 +227,8 @@ WHERE (
        OR pc.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR (sqlc.arg('category_slugs')::text <> ''
            AND pay.category_slug = ANY(string_to_array(sqlc.arg('category_slugs')::text, ','))))
-GROUP BY pay.category_slug, pay.user_category_id, pc.name, pay.type
-ORDER BY rule_count DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST, pay.type;
+GROUP BY pay.category_slug, pay.user_category_id, pc.name
+ORDER BY COUNT(*) DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST;
 
 -- name: ListGlobalPaymentObjects :many
 -- The actor's visible non-archived properties — the «Объекты» screen's

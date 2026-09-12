@@ -34,6 +34,8 @@ Done when: the full suite is green.
 
 Run `/improve-codebase-architecture`'s Explore and HTML-report steps, scoped: the Explore subagent walks the branch diff and the modules it touched — the whole codebase is out of scope here. Hunt what isolated slices produce: duplicated shapes across tickets, shallow modules with interface-heavy surfaces, the shared abstraction two tickets each half-built, missed `CONTEXT.md` vocabulary, missed `/codebase-design` terms. Apply the deletion test to suspects.
 
+Doc rot is a candidate too: comments and docstrings in the touched files that still describe behavior the branch removed or replaced. Sweep them with the same pass, and fix them inside the candidate that removed the behavior.
+
 Present the candidates and grill with the owner — which to apply here, and for each pick, the shape of the deepened module and the tests that survive (that skill's grilling loop). A candidate beyond the branch's blast radius is a campaign, not a polish: file it as an issue for a future `/grill-with-docs` and record that it was filed.
 
 Done when: the owner picked candidates — possibly zero, then skip to step 5.

@@ -102,3 +102,8 @@ export {
   type SkeletonWidthClass,
   type SkeletonRowWidths,
 } from './skeleton-parts';
+export { LoadingMoreIndicator } from './loading-more-indicator';
+export {
+  InfiniteQueryTail,
+  type InfiniteQueryTailQuery,
+} from './infinite-query-tail';

@@ -2,7 +2,7 @@
 
 import type { JSX, ReactNode } from 'react';
 import Image from 'next/image';
-import { EmptyState, Skeleton } from '@/shared/ui/design';
+import { EmptyState } from '@/shared/ui/design';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import { PaymentRowButton, type PaymentOperation } from '@/entities/payment';
 import type { PaymentHistoryGroup } from '@/features/payments';
@@ -138,13 +138,5 @@ export function OperationRow({
       signedAmount
       onSelect={onSelect}
     />
-  );
-}
-
-export function LoadingMoreIndicator(): JSX.Element {
-  return (
-    <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
-      <Skeleton className="h-8 w-8" />
-    </div>
   );
 }
