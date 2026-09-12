@@ -36,6 +36,7 @@ docs/reviews
 # Local agent tooling config (workspace MCP config is committed — see .zcode/config.json)
 .zcode/*
 !.zcode/config.json
+!.zcode/postgres-mcp.tools.json
 
 # Personal lefthook overrides (skip jobs etc.)
 lefthook-local.yml
