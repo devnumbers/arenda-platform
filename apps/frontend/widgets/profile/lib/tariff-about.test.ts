@@ -49,6 +49,7 @@ describe('tariffAboutCard', () => {
         activePaymentMethod: {
           id: 'pm-1',
           displayMask: '4111********1111',
+          cardSystem: 'unknown',
           provider: 'tkassa',
           isActive: true,
           createdAt: '2026-08-01T10:00:00Z',
@@ -85,6 +86,7 @@ describe('tariffAboutCard', () => {
       activePaymentMethod: {
         id: 'pm-1',
         displayMask: 'Мир •••• 0700',
+        cardSystem: 'unknown',
         provider: 'tkassa',
         isActive: true,
         createdAt: '2026-08-01T10:00:00Z',
@@ -101,6 +103,7 @@ describe('tariffAboutCard', () => {
       activePaymentMethod: {
         id: 'pm-1',
         displayMask: '**',
+        cardSystem: 'unknown',
         provider: 'tkassa',
         isActive: true,
         createdAt: '2026-08-01T10:00:00Z',

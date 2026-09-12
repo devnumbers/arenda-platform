@@ -33,6 +33,8 @@ export function mapPaymentMethodResponse(
   return {
     id: response.id,
     displayMask: response.displayMask,
+    cardSystem: response.cardSystem,
+    expDate: response.expDate ?? undefined,
     provider: response.provider,
     isActive: response.isActive,
     createdAt: response.createdAt,

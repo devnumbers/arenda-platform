@@ -246,6 +246,12 @@ export function useDeletePaymentMethod(): UseMutationResult<
       void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
       void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
+    onError: () => {
+      // Отказ (409 in use — карта успела стать активной) означает, что
+      // локальный список устарел: пересинхронизируем, иначе гард удаления
+      // и радио продолжат показывать ушедшее состояние (#625).
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+    },
   });
 }
 

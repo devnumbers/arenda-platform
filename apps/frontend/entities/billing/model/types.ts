@@ -41,6 +41,11 @@ export type Tariff = {
 export type PaymentMethod = {
   id: string;
   displayMask: string;
+  /** Система карты — бэк выводит из BIN-префикса маски (#614);
+   * без распознавания — unknown. */
+  cardSystem: 'mir' | 'visa' | 'mastercard' | 'unknown';
+  /** Срок действия в формате провайдера (MMYY); неизвестен — null. */
+  expDate?: string;
   provider: string;
   isActive: boolean;
   createdAt: string;
