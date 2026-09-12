@@ -23,6 +23,18 @@ type GlobalPaymentFeedDto = components['schemas']['PaymentsGlobalResponse'];
 type GlobalPaymentObjectDto = components['schemas']['PaymentObjectItem'];
 type GlobalPaymentSearchDto = components['schemas']['PaymentsSearchGlobalResponse'];
 
+/** DTO категории → доменная вью: nullables нормализуются к опциональности.
+ * Один хелпер для строки правила и чипа поиска — чип та же CategoryView
+ * (#602). */
+function mapCategoryView(dto: components['schemas']['CategoryView']) {
+  return {
+    source: dto.source,
+    slug: dto.slug ?? undefined,
+    id: dto.id ?? undefined,
+    label: dto.label,
+  };
+}
+
 export function mapPayment(dto: PaymentDto): Payment {
   return {
     id: dto.id,
@@ -42,12 +54,7 @@ export function mapPayment(dto: PaymentDto): Payment {
     endDate: dto.endDate ?? undefined,
     autoPay: dto.autoPay,
     paymentForm: dto.paymentForm,
-    category: {
-      source: dto.category.source,
-      slug: dto.category.slug ?? undefined,
-      id: dto.category.id ?? undefined,
-      label: dto.category.label,
-    },
+    category: mapCategoryView(dto.category),
     isFavorite: dto.isFavorite,
     isCompleted: dto.isCompleted,
     pauses: dto.pauses.map((pause) => ({
@@ -101,12 +108,7 @@ export function mapGlobalPayment(dto: GlobalPaymentDto): GlobalPayment {
     title: dto.title,
     amountKopecks: dto.amountKopecks,
     type: dto.type,
-    category: {
-      source: dto.category.source,
-      slug: dto.category.slug ?? undefined,
-      id: dto.category.id ?? undefined,
-      label: dto.category.label,
-    },
+    category: mapCategoryView(dto.category),
     autoPay: dto.autoPay,
     isFavorite: dto.isFavorite,
     favoriteOrder: dto.favoriteOrder,
@@ -129,17 +131,10 @@ export function mapGlobalPaymentFeed(dto: GlobalPaymentFeedDto): GlobalPaymentFe
 export function mapGlobalPaymentSearch(dto: GlobalPaymentSearchDto): GlobalPaymentSearch {
   return {
     items: dto.items.map(mapGlobalPayment),
+    // Чипы — чистые категории: сервер отдаёт одну строку на категорию,
+    // направление и счётчик из контракта убраны (#602).
+    matchedCategories: dto.matchedCategories.map(mapCategoryView),
     nextCursor: dto.nextCursor ?? null,
-    matchedCategories: dto.matchedCategories.map((chip) => ({
-      category: {
-        source: chip.category.source,
-        slug: chip.category.slug ?? undefined,
-        id: chip.category.id ?? undefined,
-        label: chip.category.label,
-      },
-      type: chip.type,
-      count: chip.count,
-    })),
   };
 }
 

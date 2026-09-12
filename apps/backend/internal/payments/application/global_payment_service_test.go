@@ -42,7 +42,7 @@ type fakeGlobalReader struct {
 	owners     []uuid.UUID
 	rules      []GlobalPaymentRuleRow
 	counters   GlobalPaymentCounters
-	categories []GlobalPaymentSearchCategory
+	categories []domain.CategoryRef
 	objects    []GlobalPaymentObject
 	lastDates  map[uuid.UUID]time.Time
 	rulesByID  map[uuid.UUID]domain.Payment
@@ -76,7 +76,7 @@ func (f *fakeGlobalReader) SumGlobalPaymentCounters(
 
 func (f *fakeGlobalReader) SumGlobalPaymentSearchCategories(
 	_ context.Context, _ uuid.UUID, q GlobalPaymentRulesQuery,
-) ([]GlobalPaymentSearchCategory, error) {
+) ([]domain.CategoryRef, error) {
 	f.gotSumQuery = q
 	return f.categories, nil
 }

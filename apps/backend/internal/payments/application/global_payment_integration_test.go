@@ -255,7 +255,8 @@ func assertSharedRow(t *testing.T, sharedItem paymentsapp.GlobalPaymentItem) {
 
 // The search (ticket #575): the title, the default catalog label and the
 // user category name all match; the matched categories are the matched
-// rules' category identities — the chips — with their rule counts.
+// rules' category identities — one chip per category, no direction and no
+// count in the contract (ticket #602).
 func TestSearchGlobalPayments(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
@@ -273,12 +274,12 @@ func TestSearchGlobalPayments(t *testing.T) {
 		name      string
 		query     string
 		wantItems []string
-		wantChips map[string]int64 // «slug or label» → count; the label keys the custom chip.
+		wantChips []string // The matched categories' identities, the server's order.
 	}{
-		{"the title matches", "страх", []string{"Страхование квартиры"}, map[string]int64{"insurance": 1}},
-		{"the default catalog label matches", "коммунал", []string{"Интернет"}, map[string]int64{"utilities": 1}},
-		{"the user category name matches", "кофейн", []string{mirrorsTitle}, map[string]int64{"Кофейни": 1}},
-		{"the chips carry the matched rules' categories", "терне", []string{"Интернет"}, map[string]int64{"utilities": 1}},
+		{"the title matches", "страх", []string{"Страхование квартиры"}, []string{"insurance"}},
+		{"the default catalog label matches", "коммунал", []string{"Интернет"}, []string{"utilities"}},
+		{"the user category name matches", "кофейн", []string{mirrorsTitle}, []string{"Кофейни"}},
+		{"the chips carry the matched rules' categories", "терне", []string{"Интернет"}, []string{"utilities"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -293,10 +294,10 @@ func TestSearchGlobalPayments(t *testing.T) {
 	}
 }
 
-// The chip filter and the page (map #573 rework): the category+type
-// identity narrows the rules list while matchedCategories keep describing
-// the whole query scope; the window walks the matched rows by the feed's
-// stable order.
+// The chip filter and the page (map #573 rework): the filter narrows the
+// rules list while matchedCategories keep describing the whole query scope
+// as category identities (ticket #602); the window walks the matched rows
+// by the feed's stable order.
 func TestSearchGlobalPaymentsChipFilterAndPage(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
@@ -308,10 +309,9 @@ func TestSearchGlobalPaymentsChipFilterAndPage(t *testing.T) {
 	h.seedGlobalRule(h.propID, h.owner, mirrorsTitle, typeIncome, 150000, false, false, "", &category)
 	h.seedGlobalRule(h.propID, h.owner, "Страхование квартиры", typeExpense, 3200000, false, false, "insurance", nil)
 
-	// The default-catalog chip (parking, expense): only the expense parking
-	// rule; the chips still describe the whole query scope. The scope's
-	// chips are the (category, direction) pairs — parking carries both
-	// directions here, one rule each.
+	// The default-catalog chip (parking): the filter narrows the list to
+	// the expense parking rule; the chips still describe the whole query
+	// scope.
 	search, err := svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{
 		Category: parkingSlug, Type: typeExpense, Limit: 50,
 	})
@@ -319,37 +319,11 @@ func TestSearchGlobalPaymentsChipFilterAndPage(t *testing.T) {
 		t.Fatalf("search: %v", err)
 	}
 	assertSearchTitles(t, search, []string{"Парковка"})
-	// The chips are the (category, direction) pairs: parking carries both
-	// directions here, one rule each; Кофейни is the user category's chip.
-	type chipKey struct {
-		identity string
-		typ      string
-	}
-	got := make(map[chipKey]int64, len(search.MatchedCategories))
-	for _, chip := range search.MatchedCategories {
-		identity := ""
-		switch {
-		case chip.Category.Slug != nil:
-			identity = *chip.Category.Slug
-		case chip.Category.UserCategoryName != nil:
-			identity = *chip.Category.UserCategoryName
-		}
-		got[chipKey{identity, string(chip.Type)}] = chip.RuleCount
-	}
-	want := map[chipKey]int64{
-		{parkingSlug, typeExpense}: 1,
-		{parkingSlug, typeIncome}:  1,
-		{"insurance", typeExpense}: 1,
-		{"Кофейни", typeIncome}:    1,
-	}
-	if len(got) != len(want) {
-		t.Fatalf("chips = %+v, want %v", got, want)
-	}
-	for key, count := range want {
-		if got[key] != count {
-			t.Errorf("chip %v count = %d, want %d", key, got[key], count)
-		}
-	}
+	// The chips are the matched categories' identities, one per category —
+	// the two-direction parking is one chip (ticket #602). The count orders
+	// them: parking's two matched rules first, the 1-rule ties by slug with
+	// the user category last (the slug's NULLS LAST).
+	assertSearchChips(t, search, []string{"parking", "insurance", "Кофейни"})
 
 	// The user category chip matches by the category's id, not its name.
 	search, err = svc.SearchGlobalPayments(h.ctx(), h.owner, "", paymentsapp.GlobalPaymentSearchPage{
@@ -405,22 +379,23 @@ func assertSearchTitles(t *testing.T, search paymentsapp.GlobalPaymentSearch, wa
 }
 
 // assertSearchChips checks the matched categories against the expected
-// identity→count map; the label keys the custom chip, the slug the default
-// one.
-func assertSearchChips(t *testing.T, search paymentsapp.GlobalPaymentSearch, wantChips map[string]int64) {
+// identity list in the server's order; the label keys the custom chip, the
+// slug the default one.
+func assertSearchChips(t *testing.T, search paymentsapp.GlobalPaymentSearch, wantChips []string) {
 	t.Helper()
-	if len(search.MatchedCategories) != len(wantChips) {
-		t.Fatalf("chips = %+v, want %v", search.MatchedCategories, wantChips)
+	chips := search.MatchedCategories
+	if len(chips) != len(wantChips) {
+		t.Fatalf("chips = %+v, want %v", chips, wantChips)
 	}
-	for _, chip := range search.MatchedCategories {
+	for i, chip := range chips {
 		var key string
-		if chip.Category.Slug != nil {
-			key = *chip.Category.Slug
-		} else if chip.Category.UserCategoryName != nil {
-			key = *chip.Category.UserCategoryName
+		if chip.Slug != nil {
+			key = *chip.Slug
+		} else if chip.UserCategoryName != nil {
+			key = *chip.UserCategoryName
 		}
-		if wantChips[key] != chip.RuleCount {
-			t.Errorf("chip %q count = %d, want %d", key, chip.RuleCount, wantChips[key])
+		if key != wantChips[i] {
+			t.Errorf("chip %d = %q, want %q", i, key, wantChips[i])
 		}
 	}
 }
