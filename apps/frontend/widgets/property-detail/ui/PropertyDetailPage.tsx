@@ -20,6 +20,7 @@ import {
 import {useRentals, currentRentalOf, useCompleteRental} from '@/features/rentals';
 import {
   defaultOperationsPeriod,
+  overduePaymentIdsOf,
   usePayments,
   usePropertyOperationsSummary,
   usePropertyOverdueOperations,
@@ -214,11 +215,7 @@ export function PropertyDetailPage(): JSX.Element {
     const payments = paymentsQuery.data ?? [];
     // Платежи с накопленной просрочкой — красная точка на иконке
     // (как на «Платежах объекта»: просрочки приходят порциями).
-    const overduePaymentIds = new Set(
-        overdueQuery.data?.flatMap((operation) =>
-            operation.paymentId !== null ? [operation.paymentId] : [],
-        ) ?? [],
-    );
+    const overduePaymentIds = overduePaymentIdsOf(overdueQuery.data ?? []);
     const paymentGroups = propertyPaymentGroups(payments, overduePaymentIds, today);
     const contacts = contactsQuery.data ?? [];
     const tenant = currentRental?.tenant ?? null;

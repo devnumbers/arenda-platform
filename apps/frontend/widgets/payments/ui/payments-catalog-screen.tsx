@@ -21,7 +21,7 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { sortPaymentsByNextOccurrence } from '@/features/payments';
+import { overduePaymentIdsOf, sortPaymentsByNextOccurrence } from '@/features/payments';
 import {
   OverdueOperationRow,
   PaymentRow,
@@ -206,11 +206,7 @@ function RulesList({
   // Точки просрочки на плашках (1323:61133, State=Expired): первая порция
   // просроченных операций объекта (порция 50 — глубже не бейджим).
   const overdueQuery = usePropertyOverdueOperations(propertyId);
-  const overduePaymentIds = new Set(
-    (overdueQuery.data ?? []).flatMap((operation) =>
-      operation.paymentId !== null ? [operation.paymentId] : [],
-    ),
-  );
+  const overduePaymentIds = overduePaymentIdsOf(overdueQuery.data ?? []);
   const today = clientTodayIso();
 
   if (paymentsQuery.isPending) {
