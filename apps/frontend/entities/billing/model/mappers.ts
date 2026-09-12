@@ -4,6 +4,7 @@ import type {
   ChangeTariffResult,
   PaymentMethod,
   PaymentStatus,
+  PendingPayment,
   Subscription,
   SubscriptionPayment,
   Tariff,
@@ -56,6 +57,21 @@ export function mapSubscriptionResponse(
       : undefined,
     pendingChangeAt: response.pendingChangeAt ?? undefined,
     pendingPeriod: response.pendingPeriod ?? undefined,
+    pendingPayment: response.pendingPayment
+      ? mapPendingPaymentResponse(response.pendingPayment)
+      : undefined,
+  };
+}
+
+function mapPendingPaymentResponse(
+  response: NonNullable<SubscriptionResponse['pendingPayment']>,
+): PendingPayment {
+  return {
+    tariffName: response.tariffName,
+    period: response.period,
+    amountKopecks: response.amountKopecks,
+    confirmUrl: response.confirmUrl,
+    expiresAt: response.expiresAt,
   };
 }
 

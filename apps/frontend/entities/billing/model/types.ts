@@ -38,6 +38,16 @@ export type PaymentMethod = {
   createdAt: string;
 };
 
+/** Живая pending-оплата (#616): одна на юзера, с ссылкой подтверждения банка
+ * и абсолютным сроком жизни формы — якорем обратного отсчёта. */
+export type PendingPayment = {
+  tariffName: TariffName;
+  period: PaymentPeriod;
+  amountKopecks: number;
+  confirmUrl: string;
+  expiresAt: string;
+};
+
 export type Subscription = {
   id: string;
   status: SubscriptionStatus;
@@ -49,6 +59,7 @@ export type Subscription = {
   activePaymentMethod?: PaymentMethod;
   pendingChangeAt?: string;
   pendingPeriod?: PaymentPeriod;
+  pendingPayment?: PendingPayment;
 };
 
 export type SubscriptionPayment = {

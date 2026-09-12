@@ -129,6 +129,9 @@ export { default as MenuLines } from './menu-lines.svg';
 // Строка объекта глобальной ленты (#523, Figma 1733-27412): Icon/S/HomeMain
 // 16×16 (обводка 1.2) — отдельная от 24×24 HomeMain таббара, currentColor.
 export { default as HomeMainSmall } from './home-main-small.svg';
+// Главный экран «Тариф» (#620, Figma 1879-70076): Icon/S/Info 16×16
+// (обводка 1.2) в строках hero-карточки — currentColor.
+export { default as InfoSmall } from './info-small.svg';
 // Сортировочный чип (SortingSmallBig/SortingBigSmall/SmallArrowDown)
 // канонично экспортируется в блоке «Направление сортировки» выше.
 export { default as SmallArrowUp } from './small-arrow-up.svg';
@@ -144,6 +147,10 @@ export { default as Checkmark } from './checkmark.svg';
 // Icon/Bold/Objects 208:2994 («Общий контакт») и Icon/Bold/Home 189:931
 // (объекты; в наборе это BoldHome).
 export { default as BoldObjects } from './bold-objects.svg';
+
+// Экран «Тариф» (#620, Figma 1879-70076): плитка «Оплата»
+// (CreditCard 1917:72300) — currentColor.
+export { default as CreditCard } from './credit-card.svg';
 
 // Канонический набор иконок (96, владелец 07.09): Icon/Bold/* и Icon/R/* из
 // Figma «Рентли. Новые экраны сервиса». Полное сопоставление узлов —

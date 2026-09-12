@@ -128,6 +128,7 @@
 | `Team` | `team.svg` | `R/Team` | 472:5276 | новая |
 | `Copy` | `copy.svg` | `R/Copy` | 1323:59291 | заменена |
 | `Info` | `info.svg` | `R/Info` | 1296:48308 | новая |
+| `CreditCard` | `credit-card.svg` | `R/CreditCard` | 1917:72300 | новая (12.09.2026, экран «Тариф» #620) |
 
 ## Таблица канона — S-стиль (9, 16×16 обводка 1.2)
 
@@ -142,6 +143,7 @@
 | `PaintBrushSmall` | `paint-brush-small.svg` | `S/PaintBrush` | 1603:90961 | новая |
 | `KeySmall` | `key-small.svg` | `S/Key` | 1603:91160 | новая |
 | `PinSmall` | `pin-small.svg` | `S/Pin` | 1603:91203 | новая |
+| `InfoSmall` | `info-small.svg` | `S/Info` | 1912:71626 | новая (12.09.2026, экран «Тариф» #620) |
 
 ## Таблица канона — статусы и бейджи (запечённые цвета)
 

@@ -152,6 +152,9 @@ export const ROUTES = {
   profileAccountTimezone: '/profile/account/timezone',
   profileChangePhone: '/profile/account/phone',
   profileTariff: '/profile/tariff',
+  /** Экран «О тарифе» (карта #611, тикет #621): детали тарифа с главного
+   * «Тариф»; до #621 страница живёт как нейтральный каркас. */
+  profileTariffAbout: '/profile/tariff/about',
   profileTariffChange: '/profile/tariff/change',
   profileTariffChangeSuccess: '/profile/tariff/change/success',
   profilePaymentMethods: '/profile/tariff/payment-methods',
