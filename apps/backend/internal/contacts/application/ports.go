@@ -47,12 +47,34 @@ const (
 // match over the name fields, phone, email, messenger username and role
 // (” = no filter); the store escapes the LIKE metacharacters. Sort/Order
 // order the flat listing; the empty values mean the defaults (name/asc).
+// Limit is the keyset page's size (ticket #600); Cursor is the previous
+// page's opaque continuation (” = from the beginning) — the service decodes
+// it into After, the keyset key the SQL resumes strictly after.
 type ListQuery struct {
 	Scope      ListScope
 	PropertyID uuid.UUID // ListScopeProperty only.
 	Search     string
 	Sort       ListSort
 	Order      ListOrder
+	Limit      int32
+	Cursor     string
+	After      *ContactCursorKey
+}
+
+// The page-size vocabulary of the book listing (ticket #600): the
+// contract's default page and its ceiling — an out-of-range limit is the
+// contract's 400.
+const (
+	DefaultContactsPageSize = 50
+	MaxContactsPageSize     = 100
+)
+
+// ContactBookPage is one walked window of the book listing (ticket #600):
+// the rows in the listing's own order plus the keyset continuation — the
+// next page's opaque cursor, ” once the matches are exhausted.
+type ContactBookPage struct {
+	Items      []ListedContact
+	NextCursor string
 }
 
 // ListSort selects the sort key of a book listing: the contact's display

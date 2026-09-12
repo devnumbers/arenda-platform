@@ -139,40 +139,80 @@ func (s *ContactService) GetContact(ctx context.Context, actor, id uuid.UUID) (d
 	return contact, nil
 }
 
-// ListContacts lists a slice of the visible book. The flat book scope reads
-// the merged visibility — the actor's own cards plus the property-bound
-// cards of the properties the actor can view; the store enforces that
-// predicate, visibility being driven by the binding (ADR 0054). The property
-// scope gates the actor's view capability on the property; the unbound scope
-// reads the actor's own cards alone. Sort/order are validated against the
-// known keys; the empty values mean the defaults (name/asc).
-func (s *ContactService) ListContacts(
-	ctx context.Context, actor uuid.UUID, q ListQuery,
-) ([]ListedContact, error) {
+// prepareListQuery validates the listing request in place: the known
+// scope/sort/order keys, the page-size vocabulary and the continuation
+// cursor, decoded into the After keyset key (ticket #600). The empty
+// sort/order normalize to the defaults (name/asc) before the store — the
+// SQL's keyset predicate and ORDER BY branch on the literal keys, so the
+// window and the order must agree.
+func prepareListQuery(q *ListQuery) error {
 	switch q.Scope {
-	case ListScopeProperty:
-		if _, err := s.gate(ctx, actor, q.PropertyID, sharedpolicy.CanView); err != nil {
-			return nil, err
-		}
-	case ListScopeAll, ListScopeWithoutProperty:
+	case ListScopeProperty, ListScopeAll, ListScopeWithoutProperty:
 	default:
-		return nil, ErrInvalidInput
+		return ErrInvalidInput
 	}
 	switch q.Sort {
 	case "", ListSortName, ListSortProperty:
 	default:
-		return nil, ErrInvalidInput
+		return ErrInvalidInput
 	}
 	switch q.Order {
 	case "", ListOrderAsc, ListOrderDesc:
 	default:
-		return nil, ErrInvalidInput
+		return ErrInvalidInput
+	}
+	if q.Sort == "" {
+		q.Sort = ListSortName
+	}
+	if q.Order == "" {
+		q.Order = ListOrderAsc
+	}
+	if q.Limit == 0 {
+		q.Limit = DefaultContactsPageSize
+	}
+	if q.Limit < 1 || q.Limit > MaxContactsPageSize {
+		return ErrInvalidInput
+	}
+	if q.Cursor == "" {
+		return nil
+	}
+	after, err := DecodeContactCursor(q.Cursor)
+	if err != nil {
+		return err
+	}
+	q.After = &after
+	return nil
+}
+
+// ListContacts lists one page of the visible book. The flat book scope reads
+// the merged visibility — the actor's own cards plus the property-bound
+// cards of the properties the actor can view; the store enforces that
+// predicate, visibility being driven by the binding (ADR 0054). The property
+// scope gates the actor's view capability on the property; the unbound scope
+// reads the actor's own cards alone. The window is the listing's keyset walk
+// (ticket #600): the page resumes strictly after the cursor's key and
+// answers with the last row's continuation once it came back full — a short
+// page has reached the end of the matches.
+func (s *ContactService) ListContacts(
+	ctx context.Context, actor uuid.UUID, q ListQuery,
+) (ContactBookPage, error) {
+	if q.Scope == ListScopeProperty {
+		if _, err := s.gate(ctx, actor, q.PropertyID, sharedpolicy.CanView); err != nil {
+			return ContactBookPage{}, err
+		}
+	}
+	if err := prepareListQuery(&q); err != nil {
+		return ContactBookPage{}, err
 	}
 	contacts, err := s.contacts.List(ctx, actor, q)
 	if err != nil {
-		return nil, fmt.Errorf("list contacts: %w", err)
+		return ContactBookPage{}, fmt.Errorf("list contacts: %w", err)
 	}
-	return contacts, nil
+	nextCursor := ""
+	if len(contacts) == int(q.Limit) && len(contacts) > 0 {
+		nextCursor = EncodeContactCursor(contacts[len(contacts)-1].CursorKey())
+	}
+	return ContactBookPage{Items: contacts, NextCursor: nextCursor}, nil
 }
 
 // UpdateContact applies a diff-patch to the card: omitted fields are left

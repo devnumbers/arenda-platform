@@ -544,9 +544,16 @@ paths:
             type: string
             enum: [asc, desc]
             default: asc
+        - $ref: '#/components/parameters/ContactsLimit'
+        - $ref: '#/components/parameters/ContactsCursor'
       responses:
         '200':
-          description: Contacts list
+          description: >
+            Contacts page. The window is keyset pagination over the listing's
+            own sort key and id (ticket #600): rows created, renamed or moved
+            between loads never duplicate or drop — pass the previous page's
+            nextCursor back as cursor. nextCursor is null once the matches
+            are exhausted.
           content:
             application/json:
               schema:
@@ -3974,6 +3981,29 @@ components:
         type: integer
         default: 0
         minimum: 0
+    ContactsLimit:
+      name: limit
+      in: query
+      required: false
+      description: >-
+        The page size of the keyset window (ticket #600). A missing value
+        means the default page; an out-of-range value is a 400.
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 100
+    ContactsCursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        The opaque continuation cursor from the previous page's nextCursor
+        (keyset pagination over the listing's sort key and id, ticket #600).
+        A missing or empty value starts the list from the beginning; a
+        malformed value is a 400.
+      schema:
+        type: string
     TasksLimit:
       name: limit
       in: query
@@ -5179,12 +5209,19 @@ components:
 
     ContactsResponse:
       type: object
-      required: [items]
+      required: [items, nextCursor]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/ContactResponse'
+        nextCursor:
+          type: string
+          nullable: true
+          description: >
+            The opaque continuation cursor of the keyset window (ticket
+            #600): pass it back as the cursor query parameter to fetch the
+            next page. null — the matches are exhausted.
 
     Recurrence:
       description: >-

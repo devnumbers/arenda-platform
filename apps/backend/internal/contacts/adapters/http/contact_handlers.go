@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -25,7 +26,7 @@ import (
 // handler tests run against func-backed fakes.
 type ContactManager interface {
 	CreateContact(ctx context.Context, actor uuid.UUID, cmd application.CreateContactCommand) (domain.Contact, error)
-	ListContacts(ctx context.Context, actor uuid.UUID, q application.ListQuery) ([]application.ListedContact, error)
+	ListContacts(ctx context.Context, actor uuid.UUID, q application.ListQuery) (application.ContactBookPage, error)
 	GetContact(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
 	UpdateContact(ctx context.Context, actor, id uuid.UUID, cmd application.UpdateContactCommand) (domain.Contact, error)
 	DeleteContact(ctx context.Context, actor, id uuid.UUID) error
@@ -111,7 +112,9 @@ func (h *ContactHandlers) CreateContact(w http.ResponseWriter, r *http.Request) 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusCreated, contactResponse(contact))
 }
 
-// ListContacts implements GET /contacts.
+// ListContacts implements GET /contacts. The page vocabulary is the keyset
+// walk (ticket #600): limit is the window's size (the contract default when
+// omitted) and cursor echoes the previous page's nextCursor.
 func (h *ContactHandlers) ListContacts(w http.ResponseWriter, r *http.Request, params openapi.ListContactsParams) {
 	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
@@ -136,18 +139,31 @@ func (h *ContactHandlers) ListContacts(w http.ResponseWriter, r *http.Request, p
 	if params.Order != nil && *params.Order != "" {
 		q.Order = application.ListOrder(*params.Order)
 	}
+	if params.Limit != nil {
+		if *params.Limit < 1 || *params.Limit > application.MaxContactsPageSize {
+			h.handleContactError(w, r, fmt.Errorf("limit %d: %w", *params.Limit, application.ErrInvalidInput))
+			return
+		}
+		q.Limit = int32(*params.Limit)
+	}
+	if params.Cursor != nil {
+		q.Cursor = *params.Cursor
+	}
 
-	contacts, err := h.svc.ListContacts(r.Context(), actor, q)
+	page, err := h.svc.ListContacts(r.Context(), actor, q)
 	if err != nil {
 		h.handleContactError(w, r, err)
 		return
 	}
 
-	items := make([]openapi.ContactResponse, 0, len(contacts))
-	for _, listed := range contacts {
+	items := make([]openapi.ContactResponse, 0, len(page.Items))
+	for _, listed := range page.Items {
 		items = append(items, listContactResponse(listed))
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.ContactsResponse{Items: items})
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.ContactsResponse{
+		Items:      items,
+		NextCursor: httpsupport.StringPtr(page.NextCursor),
+	})
 }
 
 // GetContact implements GET /contacts/{contactId}.

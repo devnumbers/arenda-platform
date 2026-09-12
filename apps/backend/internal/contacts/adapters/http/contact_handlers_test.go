@@ -25,7 +25,7 @@ type fakeContactManager struct {
 	create func(ctx context.Context, actor uuid.UUID, cmd application.CreateContactCommand) (domain.Contact, error)
 	del    func(ctx context.Context, actor, id uuid.UUID) error
 	get    func(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
-	list   func(ctx context.Context, actor uuid.UUID, q application.ListQuery) ([]application.ListedContact, error)
+	list   func(ctx context.Context, actor uuid.UUID, q application.ListQuery) (application.ContactBookPage, error)
 	update func(ctx context.Context, actor, id uuid.UUID, cmd application.UpdateContactCommand) (domain.Contact, error)
 }
 
@@ -40,9 +40,9 @@ func (f *fakeContactManager) CreateContact(
 
 func (f *fakeContactManager) ListContacts(
 	ctx context.Context, actor uuid.UUID, q application.ListQuery,
-) ([]application.ListedContact, error) {
+) (application.ContactBookPage, error) {
 	if f.list == nil {
-		return nil, errors.New("unexpected ListContacts call")
+		return application.ContactBookPage{}, errors.New("unexpected ListContacts call")
 	}
 	return f.list(ctx, actor, q)
 }
@@ -292,9 +292,9 @@ func TestListContacts(t *testing.T) {
 	propertyID := uuid.Must(uuid.NewV7())
 	var gotQueries []application.ListQuery
 	svc := &fakeContactManager{
-		list: func(_ context.Context, _ uuid.UUID, q application.ListQuery) ([]application.ListedContact, error) {
+		list: func(_ context.Context, _ uuid.UUID, q application.ListQuery) (application.ContactBookPage, error) {
 			gotQueries = append(gotQueries, q)
-			return nil, nil
+			return application.ContactBookPage{}, nil
 		},
 	}
 	h := NewContactHandlers(svc, nil)
@@ -335,9 +335,11 @@ func TestListContactsSortAndProjection(t *testing.T) {
 	stored := storedContact()
 	propName := "Моя квартира"
 	svc := &fakeContactManager{
-		list: func(_ context.Context, _ uuid.UUID, q application.ListQuery) ([]application.ListedContact, error) {
+		list: func(_ context.Context, _ uuid.UUID, q application.ListQuery) (application.ContactBookPage, error) {
 			gotQuery = q
-			return []application.ListedContact{{Contact: stored, PropertyName: propName}}, nil
+			return application.ContactBookPage{
+				Items: []application.ListedContact{{Contact: stored, PropertyName: propName}},
+			}, nil
 		},
 	}
 	h := NewContactHandlers(svc, nil)
@@ -365,6 +367,61 @@ func TestListContactsSortAndProjection(t *testing.T) {
 	}
 	if resp.Items[0].PropertyName == nil || *resp.Items[0].PropertyName != propName {
 		t.Fatalf("response propertyName = %v, want %q", resp.Items[0].PropertyName, propName)
+	}
+}
+
+// TestListContactsPagingForwarded pins the page vocabulary on the wire
+// (ticket #600): limit and cursor travel into the query, the service's
+// continuation rides back as the response's nextCursor, and a malformed
+// cursor is the contract's 400.
+func TestListContactsPagingForwarded(t *testing.T) {
+	t.Parallel()
+
+	nextCursor := application.EncodeContactCursor(application.ContactCursorKey{
+		Name: "Пётр Иванов",
+		ID:   uuid.Must(uuid.NewV7()),
+	})
+	badCursor := "не курсор"
+	var gotQuery application.ListQuery
+	svc := &fakeContactManager{
+		list: func(_ context.Context, _ uuid.UUID, q application.ListQuery) (application.ContactBookPage, error) {
+			gotQuery = q
+			if q.Cursor == badCursor {
+				return application.ContactBookPage{}, application.ErrInvalidInput
+			}
+			return application.ContactBookPage{NextCursor: nextCursor}, nil
+		},
+	}
+	h := NewContactHandlers(svc, nil)
+	actor := uuid.Must(uuid.NewV7())
+
+	limit := 25
+	cursor := "cursor-blob"
+	w := httptest.NewRecorder()
+	h.ListContacts(w, contactRequest(t, http.MethodGet, actor, ""),
+		openapi.ListContactsParams{Limit: &limit, Cursor: &cursor})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if gotQuery.Limit != 25 || gotQuery.Cursor != "cursor-blob" {
+		t.Fatalf("query = %+v", gotQuery)
+	}
+
+	var resp openapi.ContactsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.NextCursor == nil || *resp.NextCursor != nextCursor {
+		t.Fatalf("response nextCursor = %v, want %q", resp.NextCursor, nextCursor)
+	}
+
+	// The malformed cursor never reaches the store: the application's
+	// invalid input folds into the contract's 400.
+	w = httptest.NewRecorder()
+	h.ListContacts(w, contactRequest(t, http.MethodGet, actor, ""),
+		openapi.ListContactsParams{Limit: &limit, Cursor: &badCursor})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", w.Code, w.Body.String())
 	}
 }
 
