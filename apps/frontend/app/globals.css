@@ -840,11 +840,15 @@ body > * {
     h1, h2 {
         font-weight: 400;
     }
-}
 
-a {
-    color: inherit;
-    text-decoration: none;
+    /* Легаси-сброс ссылок (перенесён из безслойной части: безслойное правило
+       сильнее @layer utilities и гасило text-white на ссылках-кнопках —
+       primary NextLink+buttonVariants рендерились чёрным на синем, #622).
+       Значения сохранены; утилиты цвета на <a> теперь выигрывают. */
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
 }
 
 .stepEnter {
