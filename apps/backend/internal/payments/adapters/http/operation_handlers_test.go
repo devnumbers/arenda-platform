@@ -1297,3 +1297,72 @@ func TestCreateOperation_ErrorMapping(t *testing.T) {
 		}
 	})
 }
+
+// The scope's match count (ticket #599): the global feed's wire carries
+// «найдено N» — the whole scope's paid count under the query's filters —
+// while the property-scoped listing sharing the schema omits the field.
+func TestListOperations_CarriesScopeTotal(t *testing.T) {
+	t.Parallel()
+
+	global := &fakeOperationsManager{
+		globalList: func(
+			_ context.Context, _ uuid.UUID, _ application.GlobalOperationsListQuery,
+		) (application.GlobalOperationsPage, error) {
+			item := application.OperationListItem{
+				Operation:  fixtureOperation(domain.StatusPaid),
+				ViewStatus: domain.ViewStatusPaid,
+			}
+			return application.GlobalOperationsPage{
+				Items: []application.OperationListItem{item},
+				Total: 7,
+			}, nil
+		},
+	}
+	h := NewOperationsHandlers(global, nil)
+	req := httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), uuid.Must(uuid.NewV7())), http.MethodGet, "/operations", nil,
+	)
+	w := httptest.NewRecorder()
+	h.ListOperations(w, req, openapi.ListOperationsParams{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("global status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode global response: %v", err)
+	}
+	if total, ok := body["total"].(float64); !ok || total != 7 {
+		t.Fatalf("global total = %v, want 7 on the wire", body["total"])
+	}
+
+	// The offset-based property listing has no scope count to answer — the
+	// field stays off its wire.
+	prop := &fakeOperationsManager{
+		byProp: func(
+			_ context.Context, _, _ uuid.UUID, _ application.OperationsListQuery,
+		) ([]application.OperationListItem, error) {
+			item := application.OperationListItem{
+				Operation:  fixtureOperation(domain.StatusPaid),
+				ViewStatus: domain.ViewStatusPaid,
+			}
+			return []application.OperationListItem{item}, nil
+		},
+	}
+	h = NewOperationsHandlers(prop, nil)
+	propID := uuid.Must(uuid.NewV7())
+	req = httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), uuid.Must(uuid.NewV7())), http.MethodGet, "/operations", nil,
+	)
+	w = httptest.NewRecorder()
+	h.ListPropertyOperations(w, req, propID, openapi.ListPropertyOperationsParams{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("property status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	body = nil
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode property response: %v", err)
+	}
+	if _, ok := body["total"]; ok {
+		t.Fatalf("property wire carries total: %s", w.Body.String())
+	}
+}

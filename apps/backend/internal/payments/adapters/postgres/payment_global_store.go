@@ -120,6 +120,31 @@ func (s *GlobalPaymentStore) ListGlobalPaymentRules(
 	return out, nil
 }
 
+// CountGlobalPaymentRules counts the search's whole-scope matches (ticket
+// #599): the list's predicate — the search, the chip filter, the visibility
+// — without the per-row aggregates and the keyset window.
+func (s *GlobalPaymentStore) CountGlobalPaymentRules(
+	ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time, q application.GlobalPaymentRulesQuery,
+) (int64, error) {
+	ownerIDs, todaysCSV, err := ownerTodaysCSV(todays)
+	if err != nil {
+		return 0, err
+	}
+	count, err := s.q().CountGlobalPaymentRules(ctx, postgres.CountGlobalPaymentRulesParams{
+		OwnerIds:       ownerIDs,
+		Todays:         todaysCSV,
+		Actor:          pgconv.UUIDToPgtype(actor),
+		Search:         escapeLikePattern(q.Search),
+		CategorySlugs:  strings.Join(q.CategorySlugs, ","),
+		CategoryFilter: q.Category,
+		TypeFilter:     string(q.Type),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count global payment rules: %w", err)
+	}
+	return count, nil
+}
+
 // SumGlobalPaymentCounters returns the scope counters over the whole
 // visible feed.
 func (s *GlobalPaymentStore) SumGlobalPaymentCounters(

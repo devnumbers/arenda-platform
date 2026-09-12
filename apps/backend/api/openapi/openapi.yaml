@@ -5578,9 +5578,9 @@ components:
     PaymentsSearchGlobalResponse:
       description: >
         The global payment rules search (ticket #575): the matched rows plus
-        the matched-category chips.
+        the matched-category chips and the whole scope's match count.
       type: object
-      required: [items, matchedCategories, nextCursor]
+      required: [items, matchedCategories, nextCursor, total]
       properties:
         items:
           type: array
@@ -5597,6 +5597,14 @@ components:
             The opaque continuation cursor of the keyset window (ticket
             #597): pass it back as the cursor query parameter to fetch the
             next page. null — the matches are exhausted.
+        total:
+          type: integer
+          format: int64
+          description: >
+            The whole scope's match count under the query and the chip
+            filter (ticket #599) — «найдено N»: the same predicate as the
+            rows, independent of the window, identical on every walked
+            page.
 
     PaymentObjectKey:
       description: >
@@ -5775,6 +5783,15 @@ components:
             The opaque continuation cursor of the keyset window (ticket
             #597): pass it back as the cursor query parameter to fetch the
             next page. null — the feed is exhausted.
+        total:
+          type: integer
+          format: int64
+          description: >
+            The whole scope's paid count under the query's filters (ticket
+            #599) — «найдено N»: the same predicate as the rows,
+            independent of the window, identical on every walked page. The
+            global feed's field (GET /operations): the property-scoped
+            listings sharing this schema omit it.
 
     OperationsSummaryCategory:
       description: >-

@@ -63,6 +63,71 @@ func (q *Queries) CountPaidOperationsByPayment(ctx context.Context, arg CountPai
 	return column_1, err
 }
 
+const countPaidOperationsGlobal = `-- name: CountPaidOperationsGlobal :one
+SELECT COUNT(*)
+FROM operations op
+JOIN properties p ON p.id = op.property_id
+WHERE op.status = 'paid'
+  AND (
+       op.owner_id = $1
+       OR EXISTS (
+            SELECT 1 FROM property_members pm
+            WHERE pm.property_id = op.property_id
+              AND pm.user_id = $1
+              AND pm.status = 'active'
+          )
+      )
+  AND ($2::bool OR p.status != 'archived')
+  AND ($3::text = ''
+       OR op.property_id = ANY(string_to_array($3::text, ',')::uuid[])
+       OR ($2::bool AND p.status = 'archived'))
+  AND ($4::date IS NULL OR op.date >= $4)
+  AND ($5::date IS NULL OR op.date <= $5)
+  AND ($6::text = ''
+       OR op.title ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR op.category_label ILIKE '%' || $6::text || '%' ESCAPE '\'
+       OR ($7::text <> ''
+           AND CAST(op.amount_kopecks AS text) LIKE '%' || $7::text || '%'))
+  AND ($8::text = '' OR op.type = $8::text)
+  AND ($9::text = ''
+       OR op.category_slug = ANY(string_to_array($9::text, ',')))
+`
+
+type CountPaidOperationsGlobalParams struct {
+	Actor           pgtype.UUID `json:"actor"`
+	IncludeArchived bool        `json:"include_archived"`
+	PropertyIds     string      `json:"property_ids"`
+	DateFrom        pgtype.Date `json:"date_from"`
+	DateTo          pgtype.Date `json:"date_to"`
+	Search          string      `json:"search"`
+	SearchDigits    string      `json:"search_digits"`
+	Type            string      `json:"type"`
+	Categories      string      `json:"categories"`
+}
+
+// The global feed's whole-scope count (ticket #599): the list query's
+// predicate — paid, the visibility, the archive cut, the propertyIds
+// multi-select, the period, the search over title/category label/amount
+// digits, the direction and category filters — without the keyset key, the
+// ordering and the window. The count is the scope's own, identical on every
+// walked page; the search screen shows it as «найдено N».
+func (q *Queries) CountPaidOperationsGlobal(ctx context.Context, arg CountPaidOperationsGlobalParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPaidOperationsGlobal,
+		arg.Actor,
+		arg.IncludeArchived,
+		arg.PropertyIds,
+		arg.DateFrom,
+		arg.DateTo,
+		arg.Search,
+		arg.SearchDigits,
+		arg.Type,
+		arg.Categories,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createManualOperation = `-- name: CreateManualOperation :exec
 INSERT INTO operations (
     id, owner_id, property_id, payment_id, origin, date, paid_date, status,

@@ -65,11 +65,13 @@ type GlobalPaymentFeed struct {
 // GlobalPaymentSearch is the global payment rules search's response (ticket
 // #575): the matched rows plus the matched categories — the chips. NextCursor
 // is the keyset continuation (ticket #597) — ” when the matches are
-// exhausted.
+// exhausted. Total is the whole scope's match count under the query and the
+// chip filter (ticket #599) — «найдено N», the same on every walked page.
 type GlobalPaymentSearch struct {
 	Items             []GlobalPaymentItem
 	MatchedCategories []GlobalPaymentSearchCategory
 	NextCursor        string
+	Total             int64
 }
 
 // GlobalPaymentObjectKey is one key of a property's stack (ticket #575):
@@ -247,10 +249,27 @@ func (s *GlobalPaymentService) SearchGlobalPayments(
 		last := rows[len(rows)-1]
 		nextCursor = encodeRuleCursor(last.CreatedAt, last.ID)
 	}
+	// The total counts the whole matched scope (ticket #599): the list's
+	// search and chip filters, no keyset key — the cursor only positions
+	// the window, the count is the same on every walked page. An empty
+	// visible scope counts nothing, the store untouched.
+	total := int64(0)
+	if len(todays) > 0 {
+		total, err = s.reader.CountGlobalPaymentRules(ctx, actor, todays, GlobalPaymentRulesQuery{
+			Search:        search,
+			CategorySlugs: defaultCategorySlugsMatching(search),
+			Category:      page.Category,
+			Type:          page.Type,
+		})
+		if err != nil {
+			return GlobalPaymentSearch{}, fmt.Errorf("count global payment rules: %w", err)
+		}
+	}
 	return GlobalPaymentSearch{
 		Items:             items,
 		MatchedCategories: categories,
 		NextCursor:        nextCursor,
+		Total:             total,
 	}, nil
 }
 

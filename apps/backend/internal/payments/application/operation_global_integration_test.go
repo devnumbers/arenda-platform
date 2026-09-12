@@ -639,3 +639,116 @@ func TestListGlobalOperationsKeyset_MutationsBetweenPages(t *testing.T) {
 		}
 	}
 }
+
+// rentFeedTitle is the recurring seeded feed title (goconst).
+const rentFeedTitle = "Аренда"
+
+// The global feed's total (ticket #599): the whole scope's paid count under
+// the query's filters — the same predicate as the rows — constant across
+// the keyset pages, independent of the window's position.
+func TestListGlobalOperations_TotalMatchesScope(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	h.globalFeedFixture()
+
+	// The visible scope: the fixture's four paid facts — the planned, the
+	// cancelled, the archived and the foreign rows stay out.
+	page, err := h.ops.ListGlobalOperations(h.ctx(), h.owner, paymentsapp.GlobalOperationsListQuery{})
+	if err != nil {
+		t.Fatalf("list global: %v", err)
+	}
+	if len(page.Items) != 4 {
+		t.Fatalf("items = %d, want the four paid rows", len(page.Items))
+	}
+	if page.Total != 4 {
+		t.Fatalf("total = %d, want 4", page.Total)
+	}
+
+	// The total answers the query's scope, not the window: a half-page walk
+	// counts the whole feed on both pages.
+	pageOne, err := h.ops.ListGlobalOperations(h.ctx(), h.owner, paymentsapp.GlobalOperationsListQuery{Limit: 2})
+	if err != nil {
+		t.Fatalf("page one: %v", err)
+	}
+	if pageOne.NextCursor == "" {
+		t.Fatal("page one nextCursor = '', want the continuation of the four-row feed")
+	}
+	pageTwo, err := h.ops.ListGlobalOperations(h.ctx(), h.owner, paymentsapp.GlobalOperationsListQuery{
+		Limit: 2, Cursor: pageOne.NextCursor,
+	})
+	if err != nil {
+		t.Fatalf("page two: %v", err)
+	}
+	if pageOne.Total != 4 || pageTwo.Total != 4 {
+		t.Fatalf("totals = %d/%d, want 4/4 — the scope's count on every page", pageOne.Total, pageTwo.Total)
+	}
+
+	// The search narrows the total with the rows: the two Аренда facts.
+	searched, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{Search: rentFeedTitle})
+	if err != nil {
+		t.Fatalf("searched: %v", err)
+	}
+	if searched.Total != 2 {
+		t.Fatalf("searched total = %d, want 2", searched.Total)
+	}
+
+	// The direction filter: the one income (the shared «Аренда» is the
+	// fixture's expense twin) against the three expenses.
+	income := domain.TypeIncome
+	incomes, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{Type: &income})
+	if err != nil {
+		t.Fatalf("incomes: %v", err)
+	}
+	if incomes.Total != 1 {
+		t.Fatalf("income total = %d, want 1", incomes.Total)
+	}
+	expense := domain.TypeExpense
+	expenses, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{Type: &expense})
+	if err != nil {
+		t.Fatalf("expenses: %v", err)
+	}
+	if expenses.Total != 3 {
+		t.Fatalf("expense total = %d, want 3", expenses.Total)
+	}
+}
+
+// The total's filter vocabulary (ticket #599): the propertyIds multi-select
+// and the archive cut narrow the scope's count exactly as they narrow the
+// rows.
+func TestListGlobalOperations_TotalMatchesFilters(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+	ownB, shared, archived, _ := h.globalFeedFixture()
+
+	// The propertyIds multi-select: the one Дом row; the shared book counts
+	// through the membership.
+	byProperty, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{PropertyIDs: []uuid.UUID{ownB}})
+	if err != nil {
+		t.Fatalf("by property: %v", err)
+	}
+	if byProperty.Total != 1 {
+		t.Fatalf("ownB total = %d, want 1", byProperty.Total)
+	}
+	byShared, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{PropertyIDs: []uuid.UUID{shared}})
+	if err != nil {
+		t.Fatalf("by shared: %v", err)
+	}
+	if byShared.Total != 1 {
+		t.Fatalf("shared total = %d, want 1", byShared.Total)
+	}
+
+	// The archive cut lifts: the archived ЖКУ rejoins the scope's count.
+	lifted, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
+		paymentsapp.GlobalOperationsListQuery{IncludeArchived: true, PropertyIDs: []uuid.UUID{archived}})
+	if err != nil {
+		t.Fatalf("archived: %v", err)
+	}
+	if lifted.Total != 1 {
+		t.Fatalf("archived total = %d, want 1 — the lifted cut lets the archived row count", lifted.Total)
+	}
+}

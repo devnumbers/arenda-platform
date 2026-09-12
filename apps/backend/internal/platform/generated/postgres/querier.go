@@ -54,12 +54,28 @@ type Querier interface {
 	// Every started session counts, whatever its later outcome (ticket #427).
 	CountCardBindingSessionsByUserSince(ctx context.Context, arg CountCardBindingSessionsByUserSinceParams) (int64, error)
 	CountContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
+	// The search's whole-scope match count (ticket #599): the list query's
+	// predicate — the visibility, the search over title/user category/catalog
+	// slugs, the chip's category+type filter — without the per-row schedule
+	// aggregates, the ordering, the window and the keyset key. The count is the
+	// scope's own, identical on every walked page; the search screen shows it
+	// as «найдено N». The owner→today join travels with the predicate: the map
+	// covers every visible owner (ListGlobalPaymentOwnerTodays), so its rows
+	// are the list's rows.
+	CountGlobalPaymentRules(ctx context.Context, arg CountGlobalPaymentRulesParams) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
 	// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
 	// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
 	// Cancelled tombstones never count; the nested payment→property path is
 	// enforced in the WHERE clause.
 	CountPaidOperationsByPayment(ctx context.Context, arg CountPaidOperationsByPaymentParams) (int64, error)
+	// The global feed's whole-scope count (ticket #599): the list query's
+	// predicate — paid, the visibility, the archive cut, the propertyIds
+	// multi-select, the period, the search over title/category label/amount
+	// digits, the direction and category filters — without the keyset key, the
+	// ordering and the window. The count is the scope's own, identical on every
+	// walked page; the search screen shows it as «найдено N».
+	CountPaidOperationsGlobal(ctx context.Context, arg CountPaidOperationsGlobalParams) (int64, error)
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
 	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
