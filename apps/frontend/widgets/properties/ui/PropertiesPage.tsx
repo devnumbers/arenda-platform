@@ -56,10 +56,9 @@ export type PropertiesPageProps = {
  */
 export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element {
   const {data, isLoading, isFetching, isError, refetch} = useProperties();
-  // Shares the /properties request with useProperties via the shared
-  // propertyKeys.list prefix; surfaces how many shared objects are hidden
-  // from the recipient by a tariff slot shortage and the actor's today
-  // (ADR 0048) for the rental badges.
+  // Та же запись кэша /properties, что и у useProperties (один ключ — один
+  // запрос): сколько общих объектов скрыто у получателя из-за тарифного
+  // лимита и «сегодня владельца» (ADR 0048) для бейджей аренды.
   const metaQuery = usePropertiesWithMeta();
   const subscriptionQuery = useSubscription();
   const router = useRouter();

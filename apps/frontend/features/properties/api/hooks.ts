@@ -30,11 +30,32 @@ type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
-/** Чистый fetch списка объектов — общее горло хука и прогрева хабов
- * #626 (кэш прогревается тем же кодом, что читает экран). */
-export async function fetchProperties(): Promise<Property[]> {
+export type PropertiesListResult = {
+  readonly items: Property[];
+  readonly hiddenSharedCount: number;
+  /** «Сегодня владельца» (ADR 0048) — граница бейджа «Осталось N месяцев» (#586). */
+  readonly today: IsoDate;
+};
+
+/** Полный payload GET /properties — строки плюс hidden_shared_count (сколько
+ * общих объектов скрыто у получателя из-за тарифного лимита) и «сегодня
+ * владельца» (ADR 0048). Общее горло обоих хуков и прогрева хабов #626:
+ * один cache entry на propertyKeys.list, useProperties и
+ * usePropertiesWithMeta — лишь проекции над ним (кэш прогревается тем же
+ * кодом, что читает экран). */
+export async function fetchProperties(): Promise<PropertiesListResult> {
   const response = await apiClient<PropertiesResponse>('/properties');
-  return response.items.map(mapPropertyResponse);
+  return {
+    items: response.items.map(mapPropertyResponse),
+    hiddenSharedCount: response.hidden_shared_count,
+    today: response.today,
+  };
+}
+
+/** Проекция «только строки» над общим cache entry. Module-level, чтобы
+ * ссылка select была стабильной — react-query кэширует её результат. */
+function selectPropertiesItems(meta: PropertiesListResult): Property[] {
+  return meta.items;
 }
 
 export function useProperties(
@@ -43,37 +64,22 @@ export function useProperties(
   return useQuery({
     queryKey: propertyKeys.list,
     queryFn: fetchProperties,
+    select: selectPropertiesItems,
     enabled: options.enabled,
     staleTime: options.staleTime,
   });
 }
 
-export type PropertiesListResult = {
-  readonly items: Property[];
-  readonly hiddenSharedCount: number;
-  /** «Сегодня владельца» (ADR 0048) — граница бейджа «Осталось N месяцев» (#586). */
-  readonly today: IsoDate;
-};
-
-// Same /properties endpoint as useProperties, but also surfaces
-// hidden_shared_count (shared objects hidden from the recipient due to a
-// tariff slot shortage) and the actor's today (ADR 0048) the rental badges
-// count against. Use this only where the extras are needed — the rest of the
-// app keeps useProperties for the plain list. Shares the propertyKeys.list
-// prefix so mutations invalidate both queries together.
+// Тот же cache entry, что у useProperties (один ключ — один запрос,
+// react-query дедуплицирует параллельных наблюдателей). Поверхности
+// hidden_shared_count и today нужны не везде — остальное приложение
+// читает useProperties с проекцией на строки.
 export function usePropertiesWithMeta(
   options: { enabled?: boolean } = {},
 ): UseQueryResult<PropertiesListResult, ApiError> {
   return useQuery({
-    queryKey: [...propertyKeys.list, 'meta'],
-    queryFn: async () => {
-      const response = await apiClient<PropertiesResponse>('/properties');
-      return {
-        items: response.items.map(mapPropertyResponse),
-        hiddenSharedCount: response.hidden_shared_count,
-        today: response.today,
-      };
-    },
+    queryKey: propertyKeys.list,
+    queryFn: fetchProperties,
     enabled: options.enabled,
   });
 }
