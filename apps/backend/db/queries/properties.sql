@@ -66,6 +66,56 @@ FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
 ORDER BY properties.updated_at DESC;
 
+-- name: SearchVisibleProperties :many
+-- The search endpoint's window (ticket #601): the actor's visible
+-- non-archived properties — own plus actively shared (the merged visibility
+-- of the main list, ADR 0028) — matching the search as a case-insensitive
+-- substring over the name or the address (the store escapes the ILIKE
+-- metacharacters; the trgm indexes of migration 000124 serve both fields).
+--
+-- The walk is keyset over the display name and id (ticket #597's pattern):
+-- the window resumes strictly after the (name, id) the previous page ended
+-- on, so rows created, deleted or renamed between loads never duplicate or
+-- drop. The name sort mirrors the hub's own default (the client orders the
+-- list by name) with the Russian ICU collation matching the contacts book's
+-- letter order (#600); id ties off. A rename moving a row across the window
+-- boundary is inherent to the visible-name sort. The cursor args travel
+-- together; NULL (no cursor) reads from the beginning.
+-- access_role names the actor's role on the row: 'owner' for own
+-- properties, the active membership's role for shared ones (T11) — the
+-- LEFT JOIN row is unique per (property, user).
+SELECT p.*,
+       ((SELECT COUNT(*) FROM property_members pm
+         WHERE pm.property_id = p.id) +
+       (SELECT COUNT(*) FROM property_member_invitations pmi
+         WHERE pmi.property_id = p.id))::bigint AS members_count,
+       CASE WHEN p.owner_id = sqlc.arg('actor')::uuid
+            THEN 'owner'
+            ELSE pm.role END::text AS access_role
+FROM properties p
+LEFT JOIN property_members pm
+       ON pm.property_id = p.id
+      AND pm.user_id = sqlc.arg('actor')::uuid
+      AND pm.status = 'active'
+WHERE (
+       p.owner_id = sqlc.arg('actor')::uuid
+       OR EXISTS (
+            SELECT 1 FROM property_members vpm
+            WHERE vpm.property_id = p.id
+              AND vpm.user_id = sqlc.arg('actor')::uuid
+              AND vpm.status = 'active'
+          )
+      )
+  AND p.status IN ('active', 'maintenance')
+  AND (p.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR p.address ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
+  AND (sqlc.narg('after_name')::text IS NULL
+       OR (p.name COLLATE "ru-RU-x-icu" > sqlc.narg('after_name')::text
+           OR (p.name COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
+               AND p.id > sqlc.narg('after_id')::uuid)))
+ORDER BY p.name COLLATE "ru-RU-x-icu" ASC, p.id ASC
+LIMIT sqlc.arg('page_limit')::int;
+
 -- name: UpdateProperty :one
 UPDATE properties
 SET name = $3, type = $4, address = $5, description = $6, attributes = $7, status = $8

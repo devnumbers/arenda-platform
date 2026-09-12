@@ -233,6 +233,41 @@ paths:
                 $ref: '#/components/schemas/PropertiesResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /properties/search:
+    get:
+      operationId: searchProperties
+      summary: Search the actor's visible properties (the «Объекты» search)
+      description: >
+        The hub's visible slice narrowed by the search query (ticket #601):
+        a case-insensitive substring over the property's name and address.
+        The slice is the main list's — the actor's own properties plus the
+        ones shared with an active membership (ADR 0028), archived excluded.
+        The list runs in pages of 50 the search screen's infinite scroll
+        walks; the window is keyset pagination over (name, id) (ticket
+        #597's pattern) — the hub's own default order, so rows shifting
+        between loads never duplicate or drop, the previous page's nextCursor
+        comes back as cursor. A rename can move a row across a window
+        boundary — inherent to the visible-name sort (the contacts book,
+        #600).
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertiesSearchQuery'
+        - $ref: '#/components/parameters/PropertiesSearchLimit'
+        - $ref: '#/components/parameters/PropertiesSearchCursor'
+      responses:
+        '200':
+          description: >
+            The matched properties; nextCursor carries the next page's
+            continuation (null — the matches are exhausted).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertiesSearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /dadata/suggestions/address:
     get:
       operationId: getAddressSuggestions
@@ -3919,6 +3954,39 @@ components:
       schema:
         type: string
 
+    PropertiesSearchQuery:
+      name: search
+      in: query
+      required: true
+      description: >-
+        The case-insensitive substring the matches run over — the property's
+        name or its address (ticket #601). Leading and trailing whitespace
+        never takes part in the match.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    PropertiesSearchLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 100
+    PropertiesSearchCursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        The opaque continuation cursor from the previous page's nextCursor
+        (keyset pagination over (name, id), ticket #597's pattern). A missing
+        or empty value starts the list from the beginning; a malformed value
+        is a 400.
+      schema:
+        type: string
+
     OperationsStatusFilter:
       name: status
       in: query
@@ -6188,6 +6256,25 @@ components:
             tariff slot shortage (suspended memberships). Zero for owners and
             when the recipient is within their limit.
           default: 0
+
+    PropertiesSearchResponse:
+      description: >
+        The properties search page (ticket #601): the matched cards in the
+        keyset window's order.
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyResponse'
+        nextCursor:
+          type: string
+          nullable: true
+          description: >
+            The opaque continuation cursor of the keyset window (ticket
+            #601): pass it back as the cursor query parameter to fetch the
+            next page. null — the matches are exhausted.
 
     PropertyType:
       type: string
