@@ -12,7 +12,9 @@ import { Modal, ModalContent } from './modal';
  * Кнопки в ряд: отмена (secondary) + подтверждение (primary, для
  * разрушительных действий confirmVariant="danger"); `stacked` ставит их
  * столбиком на всю ширину — подтверждение сверху, отмена под ним
- * (макет удаления объекта #629, Figma 1583:56558). Закрытие — на
+ * (макет удаления объекта #629, Figma 1583:56558; решение владельца
+ * 12.09.2026: чекбокс «Удалить все данные» срезан, удаляется всё вместе
+ * с объектом, кнопка одна). Закрытие — на
  * потребителе: onConfirm вызывается, диалог закрывает потребитель
  * (обычно в onSuccess мутации, как в задачах) или сам через
  * onOpenChange(false). `pending` — подтверждение в полёте: кнопка
@@ -56,6 +58,16 @@ export function ConfirmDialog({
   pending = false,
   onConfirm,
 }: ConfirmDialogProps): JSX.Element {
+  const cancelButton = (
+    <Button variant="secondary" disabled={pending} onClick={() => onOpenChange(false)}>
+      {cancelLabel}
+    </Button>
+  );
+  const confirmButton = (
+    <Button variant={confirmVariant} loading={pending} onClick={onConfirm}>
+      {confirmLabel}
+    </Button>
+  );
   return (
     <Modal
       open={open}
@@ -74,21 +86,13 @@ export function ConfirmDialog({
         {children}
         {stacked ? (
           <div className="flex flex-col gap-2">
-            <Button variant={confirmVariant} loading={pending} onClick={onConfirm}>
-              {confirmLabel}
-            </Button>
-            <Button variant="secondary" disabled={pending} onClick={() => onOpenChange(false)}>
-              {cancelLabel}
-            </Button>
+            {confirmButton}
+            {cancelButton}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" disabled={pending} onClick={() => onOpenChange(false)}>
-              {cancelLabel}
-            </Button>
-            <Button variant={confirmVariant} loading={pending} onClick={onConfirm}>
-              {confirmLabel}
-            </Button>
+            {cancelButton}
+            {confirmButton}
           </div>
         )}
       </ModalContent>

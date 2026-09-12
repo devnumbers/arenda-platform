@@ -185,6 +185,7 @@ export function DesignLayerShowcase(): JSX.Element {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [confirmLargeOpen, setConfirmLargeOpen] = useState(false);
+    const [deletePropertyOpen, setDeletePropertyOpen] = useState(false);
     const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
     return (
@@ -1157,6 +1158,9 @@ export function DesignLayerShowcase(): JSX.Element {
                         <Button onClick={() => setConfirmLargeOpen(true)}>
                             Подтвердить (описание 16)
                         </Button>
+                        <Button variant="danger" onClick={() => setDeletePropertyOpen(true)}>
+                            Удалить объект (столбиком)
+                        </Button>
                     </div>
                     <ConfirmDialog
                         open={confirmOpen}
@@ -1187,6 +1191,28 @@ export function DesignLayerShowcase(): JSX.Element {
                         cancelLabel="Отменить"
                         onConfirm={() => setConfirmLargeOpen(false)}
                     />
+                    {/* #629: stacked + children + titleClassName — кнопки
+                     * столбиком (danger сверху, решение владельца 12.09),
+                     * заголовок H1 28/32, красное предупреждение о
+                     * последствиях (danger-soft) между описанием и кнопками.
+                     * Figma 1583:56558. */}
+                    <ConfirmDialog
+                        open={deletePropertyOpen}
+                        onOpenChange={setDeletePropertyOpen}
+                        title="Удалить объект?"
+                        titleClassName="text-[28px] leading-8"
+                        description="Объект будет удален. Вместо удаления объект можно перевести в архив"
+                        descriptionClassName="text-base leading-[18px]"
+                        confirmLabel="Удалить"
+                        cancelLabel="Отменить"
+                        confirmVariant="danger"
+                        stacked
+                        onConfirm={() => setDeletePropertyOpen(false)}
+                    >
+                        <p className="text-sm leading-4 text-danger-soft">
+                            Будут удалены данные аренд объекта, все операции объекта, платежи, контакты и задачи, связанные с объектом. Это действие нельзя отменить
+                        </p>
+                    </ConfirmDialog>
                 </div>
 
                 <div className={styles.group}>
