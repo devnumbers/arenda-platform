@@ -122,6 +122,13 @@ function PropertySectionSkeleton(): JSX.Element {
  * завершения — тост ошибки, аренда остаётся завершённой. Без аренды —
  * прежнее поведение (мутация / архивный конфирм).
  *
+ * Шит перед пином (#630; Figma 1583:57452): «Сделать основным» из
+ * «Управления» не мутирует сразу — открывает шит-объяснение
+ * «Этот объект будет открываться первым…» с кнопками «Сделать объект
+ * основным» / «Понятно»; «Убрать из основных» остаётся прямым действием
+ * (шита в макетах нет). Только платный тариф — у базового строк пина
+ * нет (canPin), звезда-апселл не тронута.
+ *
  * Наполнение секций живыми данными (#589; Figma 1185:40820 — активная
  * аренда, 1581:53905 — срок подошёл к концу, 1193:48779 — без аренды
  * с платежами, 1193:49273 — нули): «Аренда» — прогресс платежей и
@@ -182,6 +189,8 @@ export function PropertyDetailPage(): JSX.Element {
     // handleGuardConfirm после завершения аренды.
     const [guardedAction, setGuardedAction] = React.useState<GuardedStatusAction | null>(null);
     const [completeSheetOpen, setCompleteSheetOpen] = React.useState(false);
+    // Шит пина #630: подтверждение перед «Сделать основным».
+    const [pinSheetOpen, setPinSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
     const [sharingOpen, setSharingOpen] = React.useState(false);
@@ -335,10 +344,30 @@ export function PropertyDetailPage(): JSX.Element {
         );
     }, [archiveProperty, completeRental, guardedAction, id, setGuardedAction, updateProperty]);
 
+    // Подтверждение шита пина (#630): исполняет «Сделать основным».
+    // Успех закрывает шит (первенство видно в списке, строка «Управления»
+    // переключится на «Убрать из основных»); отказ — тост ошибки, шит
+    // остаётся открытым, как в #627/#628.
+    const handlePinConfirm = useCallback(() => {
+        setPin.mutate(
+            {id, pinned: true},
+            {
+                onSuccess: () => setPinSheetOpen(false),
+                onError: showMutationError,
+            },
+        );
+    }, [id, setPin, setPinSheetOpen]);
+
     const handleAction = useCallback((key: PropertyDetailActionKey) => {
         const guarded = guardedStatusAction(key, hasRental);
         if (guarded !== null) {
             setGuardedAction(guarded);
+            return;
+        }
+        // Пин #630 (Figma 1583:57452) исполняется только после
+        // шита-подтверждения; unpin — прямое действие (шита в макетах нет).
+        if (key === 'pin') {
+            setPinSheetOpen(true);
             return;
         }
         switch (key) {
@@ -351,10 +380,9 @@ export function PropertyDetailPage(): JSX.Element {
             case 'edit':
                 router.push(ROUTES.propertyEdit(id));
                 break;
-            case 'pin':
             case 'unpin':
                 setPin.mutate(
-                    {id, pinned: key === 'pin'},
+                    {id, pinned: false},
                     {onError: showMutationError},
                 );
                 break;
@@ -398,7 +426,7 @@ export function PropertyDetailPage(): JSX.Element {
                 setDeleteOpen(true);
                 break;
         }
-    }, [hasRental, id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardedAction, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
+    }, [hasRental, id, router, setPin, setPinSheetOpen, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardedAction, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
 
     const handleDelete = useCallback(() => {
         deleteProperty.mutate(
@@ -714,6 +742,25 @@ export function PropertyDetailPage(): JSX.Element {
                 cancelLabel="Отменить"
                 pending={completeRental.isPending}
                 onConfirm={handleCompleteRental}
+            />
+
+            {/* Шит пина (#630, Figma 1583:57452): объяснение перед
+             * «Сделать основным» — H3-заголовок канона, подпись макета
+             * R/400 16/18, кнопки столбиком: подтверждение сверху,
+             * «Понятно» закрывает без действия. Кнопка в loading на время
+             * мутации, закрытие глушится; отказ — тост, шит остаётся
+             * открытым. Unpin исполняется без шита (в макетах его нет). */}
+            <ConfirmDialog
+                open={pinSheetOpen}
+                onOpenChange={setPinSheetOpen}
+                title="Сделать объект основным"
+                description="Этот объект будет открываться первым при входе в раздел «Объекты»"
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel="Сделать объект основным"
+                cancelLabel="Понятно"
+                stacked
+                pending={setPin.isPending}
+                onConfirm={handlePinConfirm}
             />
 
             {/* Шит удаления (#629, Figma 1583:56558): канон ConfirmDialog,
