@@ -152,6 +152,14 @@ const STUB_FETCHING_QUERY = {
     fetchNextPage: () => Promise.resolve(),
 } as const;
 
+/** Холостая фаза той же ленты: продолжение есть (sentinel в DOM), порция
+ * не едет — хвост безмолвен, пока sentinel не войдёт во вьюпорт. */
+const STUB_IDLE_QUERY = {
+    hasNextPage: true,
+    isFetchingNextPage: false,
+    fetchNextPage: () => Promise.resolve(),
+} as const;
+
 /** Витрина дизайн-слоя (ADR 0050, тикет #455): шадкн/ui поверх Radix,
  * Tailwind на токенах, шрифт Onest. Внешний вид сверен с экспортами
  * Figma-фреймов «Рентли. Новые экраны сервиса» (node-id — резолюция #449). */
@@ -1228,6 +1236,13 @@ export function DesignLayerShowcase(): JSX.Element {
                         запроса; в приложении хвост ставится последним элементом ленты.
                     </p>
                     <div className={styles.grid}>
+                        <div className="flex w-full flex-col gap-2">
+                            <h4 className={styles.groupTitle}>Хвост без догрузки · sentinel ждёт</h4>
+                            <div className="rounded-card border border-dashed border-content-tertiary p-4 text-center text-sm text-content-secondary">
+                                <InfiniteQueryTail query={STUB_IDLE_QUERY} />
+                                ↑ sentinel (пустой div) — невидим, продолжение появится при подходе к краю
+                            </div>
+                        </div>
                         <div className="flex w-full flex-col gap-2">
                             <h4 className={styles.groupTitle}>LoadingMoreIndicator · тон base</h4>
                             <div className="rounded-card border border-dashed border-content-tertiary">

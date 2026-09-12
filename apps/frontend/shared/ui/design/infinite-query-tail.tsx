@@ -36,17 +36,18 @@ export function InfiniteQueryTail({
   readonly tone?: SkeletonTone;
   readonly className?: string;
 }): JSX.Element | null {
+  const hasNext = query.hasNextPage === true;
   const sentinelRef = useInfiniteScroll(
     () => {
-      if (query.hasNextPage && !query.isFetchingNextPage) {
+      if (hasNext && !query.isFetchingNextPage) {
         void query.fetchNextPage();
       }
     },
-    query.hasNextPage === true,
+    hasNext,
     query.isFetchingNextPage,
   );
 
-  if (query.hasNextPage !== true) {
+  if (!hasNext) {
     return null;
   }
   return (
