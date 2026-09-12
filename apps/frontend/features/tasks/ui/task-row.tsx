@@ -12,11 +12,9 @@ import {
 } from '@/entities/task';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { RoundCheckbox } from '@/shared/ui/design';
+import type { TaskRowTone } from '../lib/task-tone';
 
-/** Цвет акцента строки времени: просрочка красным, сегодня/завтра синим,
- * остальные серым (Figma 1531:12784 — варианты Task Button Miss/Today/
- * Default); выполненные строки — серые. */
-export type TaskRowTone = 'danger' | 'primary' | 'muted';
+export type { TaskRowTone };
 
 const toneClass: Record<TaskRowTone, string> = {
   danger: 'text-danger',

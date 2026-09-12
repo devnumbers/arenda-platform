@@ -1,12 +1,11 @@
 import type { Task, TasksPage } from '@/entities/task';
-import { addDays, type IsoDate } from '@/shared/lib/calendar';
+import type { IsoDate } from '@/shared/lib/calendar';
 
 /**
  * Отбор задач для секции «Задачи» детали объекта (тикет #589, правка
  * владельца 11.09): максимум 3 строки — сначала просрочки от старейшей,
- * затем по ближайшей дате; недатированные не выводятся вовсе. Тон —
- * канон строк задач: просрочка красная, сегодня/завтра синие, остальные
- * серые.
+ * затем по ближайшей дате; недатированные не выводятся вовсе. Тон строк —
+ * канон features/tasks (taskRowTone).
  */
 export function propertyDetailTasks(page: TasksPage): ReadonlyArray<Task> {
   const dated = page.items.flatMap((task) =>
@@ -25,17 +24,4 @@ export function propertyDetailTasks(page: TasksPage): ReadonlyArray<Task> {
   return [...overdue, ...upcoming]
     .slice(0, 3)
     .map((entry) => entry.task);
-}
-
-export type DetailTaskTone = 'danger' | 'primary' | 'muted';
-
-export function propertyDetailTaskTone(task: Task, today: IsoDate): DetailTaskTone {
-  if (task.status === 'overdue') {
-    return 'danger';
-  }
-  const tomorrow = addDays(today, 1);
-  if (task.dueDate === today || task.dueDate === tomorrow) {
-    return 'primary';
-  }
-  return 'muted';
 }

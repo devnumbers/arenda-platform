@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Task, TasksPage } from '@/entities/task';
 
-import { propertyDetailTaskTone, propertyDetailTasks } from './detail-tasks';
+import { propertyDetailTasks } from './detail-tasks';
 
 function taskFixture(overrides: Partial<Task> = {}): Task {
   return {
@@ -58,15 +58,5 @@ describe('propertyDetailTasks', () => {
 
   it('пустая страница — пусто', () => {
     expect(propertyDetailTasks(pageFixture([]))).toEqual([]);
-  });
-});
-
-describe('propertyDetailTaskTone', () => {
-  it('просрочка красная, сегодня/завтра синие, дальше серые', () => {
-    const today = '2026-09-11';
-    expect(propertyDetailTaskTone(taskFixture({ status: 'overdue' }), today)).toBe('danger');
-    expect(propertyDetailTaskTone(taskFixture({ dueDate: '2026-09-11' }), today)).toBe('primary');
-    expect(propertyDetailTaskTone(taskFixture({ dueDate: '2026-09-12' }), today)).toBe('primary');
-    expect(propertyDetailTaskTone(taskFixture({ dueDate: '2026-10-01' }), today)).toBe('muted');
   });
 });

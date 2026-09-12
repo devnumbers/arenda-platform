@@ -3,8 +3,7 @@
 import type { JSX } from 'react';
 import type { Task } from '@/entities/task';
 import type { IsoDate } from '@/shared/lib/calendar';
-import { TaskRow } from '@/features/tasks';
-import { propertyDetailTaskTone } from '../lib/detail-tasks';
+import { TaskRow, taskRowTone } from '@/features/tasks';
 
 type PropertyTasksBlockProps = {
   readonly tasks: ReadonlyArray<Task>;
@@ -39,7 +38,7 @@ export function PropertyTasksBlock({
           key={task.id}
           task={task}
           today={today}
-          tone={propertyDetailTaskTone(task, today)}
+          tone={taskRowTone(task, today)}
           canMutate={canMutate}
           withDate
           toggling={togglingFor(task)}
