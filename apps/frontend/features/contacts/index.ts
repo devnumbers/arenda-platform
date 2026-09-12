@@ -1,5 +1,6 @@
 export {
-  fetchContactBook,
+  CONTACTS_PAGE_SIZE,
+  fetchContactBookPage,
   useContacts,
   useContactBook,
   useCreateContact,
@@ -10,6 +11,7 @@ export {
 export type {
   ContactBookSort,
   ContactBookOrder,
+  ContactsPageData,
 } from './api/hooks';
 export {
   buildContactCreateCommand,

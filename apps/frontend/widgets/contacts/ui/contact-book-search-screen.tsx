@@ -6,12 +6,14 @@ import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { useContactBook } from '@/features/contacts';
 import { IconButton, PageContent, SearchField, TopNav } from '@/shared/ui/design';
 import { contactBookRowSubtitle } from '../lib/contact-book-model';
 import { ContactRowButton } from '@/entities/contact';
 import {
   ContactsErrorCard,
+  ContactsLoadingMore,
   ContactsNoResults,
   ContactsSearchHint,
   ContactsSkeleton,
@@ -50,6 +52,14 @@ export function ContactBookSearchScreen(): JSX.Element {
 
   const contacts = contactsQuery.data ?? [];
   const searching = trimmedSearch.length > 0;
+
+  // Порции по 50 листаются sentinel-скроллом (#600) — смена поискового
+  // запроса начинает свежий обход с пустого курсора.
+  const sentinelRef = useInfiniteScroll(() => {
+    if (contactsQuery.hasNextPage && !contactsQuery.isFetchingNextPage) {
+      void contactsQuery.fetchNextPage();
+    }
+  }, contactsQuery.hasNextPage === true);
 
   return (
     <>
@@ -95,6 +105,12 @@ export function ContactBookSearchScreen(): JSX.Element {
                 onSelect={() => router.push(ROUTES.contact(contact.id))}
               />
             ))}
+            {/* Хвост порций (#600): sentinel дозагрузки и индикатор
+             * едущей следующей порции. */}
+            {contactsQuery.hasNextPage === true && (
+              <div ref={sentinelRef} aria-hidden />
+            )}
+            {contactsQuery.isFetchingNextPage && <ContactsLoadingMore />}
           </div>
         )}
       </PageContent>

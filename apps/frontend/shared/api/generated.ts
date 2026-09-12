@@ -2195,6 +2195,8 @@ export interface components {
         };
         ContactsResponse: {
             items: components["schemas"]["ContactResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #600): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
         };
         /** @description The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts. */
         Recurrence: components["schemas"]["RecurrenceDaily"] | components["schemas"]["RecurrenceWeekly"] | components["schemas"]["RecurrenceMonthly"] | components["schemas"]["RecurrenceYearly"];
@@ -3018,6 +3020,10 @@ export interface components {
         /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (date, id), ticket #597) — the global feed's window; the property listings keep the offset vocabulary. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
         OperationsCursor: string;
         OperationsOffset: number;
+        /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
+        ContactsLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #600). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        ContactsCursor: string;
         TasksLimit: number;
         TasksOffset: number;
         /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
@@ -3538,6 +3544,10 @@ export interface operations {
                 sort?: "name" | "property";
                 /** @description The sort direction: ascending (default) or descending. */
                 order?: "asc" | "desc";
+                /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
+                limit?: components["parameters"]["ContactsLimit"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #600). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["ContactsCursor"];
             };
             header?: never;
             path?: never;
@@ -3545,7 +3555,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Contacts list */
+            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): rows created, renamed or moved between loads never duplicate or drop — pass the previous page's nextCursor back as cursor. nextCursor is null once the matches are exhausted. */
             200: {
                 headers: {
                     [name: string]: unknown;

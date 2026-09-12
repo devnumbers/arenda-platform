@@ -21,7 +21,7 @@ import {
   operationsNextPageParam,
 } from '@/features/payments';
 import { fetchGlobalTasks } from '@/features/tasks';
-import { fetchContactBook } from '@/features/contacts';
+import { fetchContactBookPage, type ContactsPageData } from '@/features/contacts';
 import { fetchProperties } from '@/features/properties';
 import { clientTodayIso } from '@/entities/payment';
 
@@ -118,12 +118,15 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
   },
   {
     prefix: ROUTES.contacts,
-    // Дефолтный срез книги — тот же, что читает useContactBook на экране
-    // (sort/order экрана живут в URL; прогрет только дефолт «Имя ↑»).
+    // Дефолтная порция книги — тот же ключ и тот же fetch, что читает
+    // useContactBook на экране (sort/order экрана живут в URL; прогрет
+    // только дефолт «Имя ↑»); первая порция keyset-обхода (#600).
     prefetch: (client) => {
-      void client.prefetchQuery({
+      void client.prefetchInfiniteQuery({
         queryKey: contactKeys.list(null, '', 'name', 'asc'),
-        queryFn: () => fetchContactBook(),
+        queryFn: ({ pageParam }) => fetchContactBookPage('', 'name', 'asc', pageParam),
+        initialPageParam: undefined as string | undefined,
+        getNextPageParam: (lastPage: ContactsPageData) => lastPage.nextCursor ?? undefined,
       });
     },
   },
