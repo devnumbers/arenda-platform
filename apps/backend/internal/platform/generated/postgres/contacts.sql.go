@@ -302,11 +302,16 @@ type ListContactsRow struct {
 //
 // The page walks the listing's own order by keyset (ticket #600): the
 // window resumes strictly after the (sort key, id) the previous page ended
-// on, so cards created, renamed or moved between loads never duplicate or
-// drop. The predicate mirrors the ORDER BY branch by branch — the same
-// CASE-gated keys, the same ICU collations, the unbound-flag leading the
-// property sort and id tying off ascending in both directions. All cursor
-// args travel together; NULL (no cursor) reads from the beginning.
+// on, so cards created or deleted between loads never duplicate or drop.
+// The sort keys are mutable (display name, property binding): a rename or
+// rebind of a card the walk has already passed can move it across the
+// window boundary — inherent to the visible name/property sort. The
+// predicate mirrors the ORDER BY branch by branch — the same CASE-gated
+// keys, the same ICU collations, the unbound-flag leading the property sort
+// and id tying off ascending in both directions. The cursor blob carries
+// its sort/order: the application rejects a cursor echoed under another
+// walk. All cursor args travel together; NULL (no cursor) reads from the
+// beginning.
 func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error) {
 	rows, err := q.db.Query(ctx, listContacts,
 		arg.Scope,
