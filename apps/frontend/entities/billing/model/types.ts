@@ -9,10 +9,18 @@ export type PaymentStatus =
 export type PaymentPeriod = 'month' | 'year';
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  pending: 'В обработке',
-  succeeded: 'Успешно',
-  failed: 'Ошибка',
-  refunded: 'Возвращён',
+  pending: 'В ожидании',
+  succeeded: 'Выполнена',
+  failed: 'Не выполнено',
+  refunded: 'Возврат',
+};
+
+/** Карта, которой платёж был оплачен (#619): снимок на момент создания/
+ * финализации платежа — история живёт пережитым удаление способа оплаты.
+ * `cardSystem` бэк выводит из BIN-префикса; без распознавания — unknown. */
+export type SubscriptionPaymentCard = {
+  readonly displayMask: string;
+  readonly cardSystem: 'mir' | 'visa' | 'mastercard' | 'unknown';
 };
 
 export const PAYMENT_PERIOD_LABELS: Record<PaymentPeriod, string> = {
@@ -70,6 +78,8 @@ export type SubscriptionPayment = {
   status: PaymentStatus;
   provider: string;
   paymentUrl: string | null;
+  paymentMethod?: SubscriptionPaymentCard;
+  succeededAt?: string;
   createdAt: string;
 };
 

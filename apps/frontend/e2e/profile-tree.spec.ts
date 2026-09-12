@@ -29,7 +29,7 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/tariff/change/success', 'Тариф изменён'],
   ['/profile/tariff/payment-methods', 'Способы оплаты'],
   ['/profile/tariff/payment-methods/add', 'Добавить карту'],
-  ['/profile/tariff/payments', 'История платежей'],
+  ['/profile/tariff/payments', 'Операции'],
 ];
 
 const SCREEN_HEADER = 'header[aria-label="Навигация экрана"]';

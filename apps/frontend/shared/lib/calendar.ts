@@ -20,6 +20,17 @@ export function dateToIso(date: Date): IsoDate {
   return date.toISOString().slice(0, 10);
 }
 
+/** Тот же переход по локальным часам браузера: календарный день того
+ * пояса, где смотрит (#624 — группировка истории подписочных платежей по
+ * датам createdAt-таймстампов, сервер для них календарный день не
+ * считает). Расхождение с TZ собственника ограничено краевыми часами
+ * суток — как у клиентского «сегодня» проекции платежей (#453). */
+export function dateToIsoLocal(date: Date): IsoDate {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 /** Лексикографическое сравнение ISO-строк: −1 / 0 / 1. */
 export function cmp(a: IsoDate, b: IsoDate): -1 | 0 | 1 {
   if (a < b) return -1;

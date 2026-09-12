@@ -75,6 +75,12 @@ function mapPendingPaymentResponse(
   };
 }
 
+/** Служебный `refunding` (возврат в полёте) наружу — как pending:
+ * «В ожидании» без знака (решение владельца 11.09, #614). */
+function mapPaymentStatus(status: SubscriptionPaymentResponse['status']): PaymentStatus {
+  return status === 'refunding' ? 'pending' : status;
+}
+
 export function mapSubscriptionPaymentResponse(
   response: SubscriptionPaymentResponse,
 ): SubscriptionPayment {
@@ -83,9 +89,11 @@ export function mapSubscriptionPaymentResponse(
     tariff: mapTariffResponse(response.tariff),
     period: response.period,
     amountKopecks: response.amountKopecks,
-    status: response.status as PaymentStatus,
+    status: mapPaymentStatus(response.status),
     provider: response.provider,
     paymentUrl: response.paymentUrl ?? null,
+    paymentMethod: response.paymentMethod,
+    succeededAt: response.succeededAt ?? undefined,
     createdAt: response.createdAt,
   };
 }

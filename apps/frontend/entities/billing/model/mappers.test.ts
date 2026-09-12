@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { mapSubscriptionResponse } from './mappers';
+import { mapSubscriptionPaymentResponse, mapSubscriptionResponse } from './mappers';
 import type { components } from '@/shared/api/dto';
 
 type SubscriptionResponse = components['schemas']['Subscription'];
+type SubscriptionPaymentResponse = components['schemas']['SubscriptionPayment'];
 
 const paidPro: SubscriptionResponse = {
   tariff: {
@@ -42,5 +43,51 @@ describe('mapSubscriptionResponse', () => {
       confirmUrl: 'https://payment.tbank.ru/confirm/abc',
       expiresAt: '2026-09-10T12:15:00Z',
     });
+  });
+});
+
+describe('mapSubscriptionPaymentResponse', () => {
+  const chargedPayment: SubscriptionPaymentResponse = {
+    id: '0e6f6c6a-0000-4000-8000-000000000001',
+    tariff: {
+      name: 'pro',
+      activePropertyLimit: 5,
+      monthlyPriceKopecks: 49000,
+      yearlyPriceKopecks: 490000,
+    },
+    period: 'month',
+    amountKopecks: 49000,
+    status: 'succeeded',
+    provider: 'tkassa',
+    createdAt: '2026-08-10T07:56:00Z',
+    succeededAt: '2026-08-10T07:56:10Z',
+    paymentMethod: { displayMask: '4300********0700', cardSystem: 'mir' },
+  };
+
+  it('переносит карту оплаты и момент успеха (#624, DTO #619)', () => {
+    const payment = mapSubscriptionPaymentResponse(chargedPayment);
+    expect(payment.paymentMethod).toStrictEqual({
+      displayMask: '4300********0700',
+      cardSystem: 'mir',
+    });
+    expect(payment.succeededAt).toBe('2026-08-10T07:56:10Z');
+  });
+
+  it('без карты (старый платёж) paymentMethod не определён', () => {
+    const payment = mapSubscriptionPaymentResponse({
+      ...chargedPayment,
+      paymentMethod: undefined,
+      succeededAt: null,
+    });
+    expect(payment.paymentMethod).toBeUndefined();
+    expect(payment.succeededAt).toBeUndefined();
+  });
+
+  it('служебный refunding показывается как pending (решение владельца, #614)', () => {
+    const payment = mapSubscriptionPaymentResponse({
+      ...chargedPayment,
+      status: 'refunding',
+    });
+    expect(payment.status).toBe('pending');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDayMonth, formatDayMonthWithYear, formatOverdueDays, formatRangeBound } from './date-format';
+import { formatDateTimeHeading, formatDayMonth, formatDayMonthWithYear, formatOverdueDays, formatRangeBound } from './date-format';
 
 describe('date-format', () => {
   it('день и склонённый месяц без года: «11 августа»', () => {
@@ -26,5 +26,10 @@ describe('date-format', () => {
     expect(formatOverdueDays(21)).toBe('21 день');
     expect(formatOverdueDays(11)).toBe('11 дней');
     expect(formatOverdueDays(14)).toBe('14 дней');
+  });
+
+  it('заголовок-дата детали платежа: «10 августа 2026, 10:56» (#624)', () => {
+    expect(formatDateTimeHeading('2026-08-10T10:56:00')).toBe('10 августа 2026, 10:56');
+    expect(formatDateTimeHeading('2026-01-01T07:05:00')).toBe('1 января 2026, 07:05');
   });
 });
