@@ -98,6 +98,23 @@ type OverdueOperationsReader interface {
 	OverdueByProperty(ctx context.Context, owners PropertyOwners) (map[uuid.UUID]bool, error)
 }
 
+// RentalDeletionGuard gates the property deletion on the rentals bounded
+// context (issue #632). HasUnfinished reports the property's unfinished
+// rental — the delete is refused with ErrPropertyOccupied while the
+// property is rented out; the owner completes the rental first (#627).
+// DeleteByProperty removes the property's rental rows inside the caller's
+// transaction BEFORE the property row itself: the explicit order (the ADR
+// 0025 §2 precedent) defuses the rentals.payment_id RESTRICT FK — left to
+// the FK machinery, the rentals and the payments cascades off the property
+// row run in no guaranteed order and the RESTRICT kills the whole delete.
+// Both methods take the caller's transaction — the same shape as
+// RecipientSlotPolicy. Implemented by the rentals bounded context; injected
+// optionally — when nil, deletion skips both steps (a test wiring).
+type RentalDeletionGuard interface {
+	HasUnfinished(ctx context.Context, tx transaction.Tx, scope, propertyID uuid.UUID) (bool, error)
+	DeleteByProperty(ctx context.Context, tx transaction.Tx, scope, propertyID uuid.UUID) error
+}
+
 // RecipientSlotPolicy enforces the recipient tariff slot invariant for the
 // shared-access memberships of a single property. It is implemented by the
 // access bounded context's SlotCoordinator and injected optionally: when nil,

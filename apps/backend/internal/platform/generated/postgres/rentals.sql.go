@@ -63,6 +63,28 @@ func (q *Queries) DeleteRental(ctx context.Context, arg DeleteRentalParams) (int
 	return result.RowsAffected(), nil
 }
 
+const deleteRentalsByProperty = `-- name: DeleteRentalsByProperty :execrows
+DELETE FROM rentals WHERE property_id = $1 AND owner_id = $2
+`
+
+type DeleteRentalsByPropertyParams struct {
+	PropertyID pgtype.UUID `json:"property_id"`
+	OwnerID    pgtype.UUID `json:"owner_id"`
+}
+
+// The property-delete teardown (issue #632): every rental row of the
+// property goes before the property row itself, inside the caller's
+// transaction — the explicit order keeps the payment_id RESTRICT FK from
+// racing the payments cascade off the property row (ADR 0025 §2), the
+// completed rentals included. Scope is the owner like every rentals mutation.
+func (q *Queries) DeleteRentalsByProperty(ctx context.Context, arg DeleteRentalsByPropertyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRentalsByProperty, arg.PropertyID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const existsUnfinishedRental = `-- name: ExistsUnfinishedRental :one
 SELECT EXISTS (
     SELECT 1 FROM rentals

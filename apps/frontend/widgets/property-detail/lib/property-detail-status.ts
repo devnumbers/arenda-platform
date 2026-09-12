@@ -111,6 +111,19 @@ export function guardedStatusAction(
   return null;
 }
 
+/**
+ * Гард удаления (#632): у арендованного «Удалить объект» не открывает шит
+ * удаления — сперва «Завершить аренду» (#627), шит-подтверждение уже есть.
+ * Чисто фронтовый перехват тапа: бэк прикрывает тем же правилом —
+ * 409 property_occupied в DeleteProperty.
+ */
+export function deleteBlockedByRental(
+  key: PropertyDetailActionKey,
+  hasRental: boolean,
+): boolean {
+  return key === 'delete' && hasRental;
+}
+
 export type PropertyManageInput = {
   readonly status: PropertyStatus;
   /** Незавершённая аренда есть (occupancy списка, резолюция #584). */

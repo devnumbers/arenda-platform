@@ -86,9 +86,10 @@ var staticPropertyProblems = []httpsupport.ErrorProblem{
 }
 
 // handlePropertyError maps an application error of the property endpoints onto
-// the wire contract: the coded suspended-membership 403 first (T9 — the flat
-// table cannot carry the extension code), then the fixed table, then the
-// dynamic ones whose detail derives from the error itself.
+// the wire contract: the coded suspended-membership 403 and the coded
+// occupied-property 409 first (T9, #632 — the flat table cannot carry the
+// extension codes), then the fixed table, then the dynamic ones whose detail
+// derives from the error itself.
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, propertiesapp.ErrAccessSuspended) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
@@ -96,6 +97,14 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 				httpsupport.ProblemTitleForbidden,
 				"Доступ к объекту приостановлен: превышен лимит объектов по тарифу",
 				"membership_suspended"))
+		return
+	}
+	if errors.Is(err, propertiesapp.ErrPropertyOccupied) {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(),
+				httpsupport.ProblemTitleConflict,
+				"Нельзя удалить объект, пока он арендован",
+				"property_occupied"))
 		return
 	}
 	if httpsupport.WriteErrorProblem(r.Context(), w, err, staticPropertyProblems) {

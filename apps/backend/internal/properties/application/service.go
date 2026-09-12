@@ -70,6 +70,7 @@ type PropertyService struct {
 	sharedDeleteMailer SharedMembersDeleteMailer
 	rentalOccupancy    RentalOccupancyReader
 	overdueOperations  OverdueOperationsReader
+	rentalDeletion     RentalDeletionGuard
 	ownerCalendar      OwnerCalendar
 	logger             *slog.Logger
 }
@@ -134,6 +135,15 @@ func (s *PropertyService) SetSharedMembersDeleteMailer(mailer SharedMembersDelet
 // reads. Optional: when not set, the lists report no occupancy (ticket #585).
 func (s *PropertyService) SetRentalOccupancyReader(reader RentalOccupancyReader) {
 	s.rentalOccupancy = reader
+}
+
+// SetRentalDeletionGuard injects the rentals-context adapter that gates the
+// property deletion on the rentals state (issue #632): an unfinished rental
+// conflicts (ErrPropertyOccupied), completed ones are torn down before the
+// property row. Optional: when not set, deletion skips both steps (the
+// pre-#632 behaviour).
+func (s *PropertyService) SetRentalDeletionGuard(guard RentalDeletionGuard) {
+	s.rentalDeletion = guard
 }
 
 // SetOverdueOperationsReader injects the payments-context adapter that
@@ -773,6 +783,26 @@ func (s *PropertyService) DeleteProperty(
 		property, err = lockDeletableProperty(ctx, stores, actor, id)
 		if err != nil {
 			return err
+		}
+
+		// Deletion guard (issue #632): the check and the rentals teardown
+		// run under the property row lock — CreateRental locks the same row
+		// (ADR 0025 §5), so a rental cannot slip in between the check and
+		// the delete. DeleteByProperty goes before the property row: the
+		// rentals.payment_id RESTRICT FK must not race the payments cascade
+		// off the property row, completed rentals included — every rental
+		// row restricts its managed payment (ADR 0025 §2 explicit order).
+		if s.rentalDeletion != nil {
+			occupied, err := s.rentalDeletion.HasUnfinished(ctx, stores.tx, property.OwnerID, id)
+			if err != nil {
+				return fmt.Errorf("check unfinished rental: %w", err)
+			}
+			if occupied {
+				return ErrPropertyOccupied
+			}
+			if err := s.rentalDeletion.DeleteByProperty(ctx, stores.tx, property.OwnerID, id); err != nil {
+				return fmt.Errorf("delete property rentals: %w", err)
+			}
 		}
 
 		photos, err = stores.photos.GetByPropertyID(ctx, id)

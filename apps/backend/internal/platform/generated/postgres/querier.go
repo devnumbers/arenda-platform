@@ -203,6 +203,12 @@ type Querier interface {
 	// Hard delete of the rental row; it must run before the payment's own delete
 	// (the RESTRICT FK releases only after the rental row is gone, ADR 0053 §3).
 	DeleteRental(ctx context.Context, arg DeleteRentalParams) (int64, error)
+	// The property-delete teardown (issue #632): every rental row of the
+	// property goes before the property row itself, inside the caller's
+	// transaction — the explicit order keeps the payment_id RESTRICT FK from
+	// racing the payments cascade off the property row (ADR 0025 §2), the
+	// completed rentals included. Scope is the owner like every rentals mutation.
+	DeleteRentalsByProperty(ctx context.Context, arg DeleteRentalsByPropertyParams) (int64, error)
 	// The edit invalidation (resolution #496): the rule's uncompleted tasks that
 	// have not fallen due yet — the undated one and the strictly future ones —
 	// are removed; the in-transaction tick stands the single future again with

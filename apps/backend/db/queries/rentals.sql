@@ -99,6 +99,14 @@ WHERE id = $1 AND owner_id = $2;
 -- (the RESTRICT FK releases only after the rental row is gone, ADR 0053 §3).
 DELETE FROM rentals WHERE id = $1 AND owner_id = $2;
 
+-- name: DeleteRentalsByProperty :execrows
+-- The property-delete teardown (issue #632): every rental row of the
+-- property goes before the property row itself, inside the caller's
+-- transaction — the explicit order keeps the payment_id RESTRICT FK from
+-- racing the payments cascade off the property row (ADR 0025 §2), the
+-- completed rentals included. Scope is the owner like every rentals mutation.
+DELETE FROM rentals WHERE property_id = $1 AND owner_id = $2;
+
 -- name: ExistsUnfinishedRental :one
 -- The create-time app check for invariant №12 (одна незавершённая на
 -- объекте): run inside the transaction under the property lock; the partial

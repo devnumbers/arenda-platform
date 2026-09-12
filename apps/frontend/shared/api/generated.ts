@@ -174,7 +174,7 @@ export interface paths {
         get: operations["getProperty"];
         put?: never;
         post?: never;
-        /** @description Deletes the property together with all its data: rentals, payments, operations, tasks and attached contacts. Irreversible. */
+        /** @description Deletes the property together with all its data: rentals, payments, operations, tasks and attached contacts. Irreversible. Blocked while the property has an unfinished rental — complete it first. */
         delete: operations["deleteProperty"];
         options?: never;
         head?: never;
@@ -3391,6 +3391,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     updateProperty: {

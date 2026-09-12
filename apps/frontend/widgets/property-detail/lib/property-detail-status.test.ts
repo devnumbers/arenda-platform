@@ -3,6 +3,7 @@ import {
   buildPropertyKebabItems,
   buildPropertyManageActions,
   buildPropertyStatusSheetItems,
+  deleteBlockedByRental,
   guardedStatusAction,
   propertyStatusSubtitle,
   type PropertyDetailActionKey,
@@ -218,4 +219,19 @@ describe('guardedStatusAction (гард смены статуса, #628)', () =>
     expect(guardedStatusAction('start-maintenance', false)).toBeNull();
     expect(guardedStatusAction('archive', false)).toBeNull();
   });
+});
+
+describe('deleteBlockedByRental (гард удаления, #632)', () => {
+  it.each([
+    ['delete', true, true, 'у арендованного перехватывает тап удаления'],
+    ['archive', true, false, 'у арендованного остальные действия свободны'],
+    ['complete-rental', true, false, 'гард статуса не дублируется'],
+    ['edit', true, false, 'редактирование не гарлится'],
+    ['delete', false, false, 'у свободного объекта удаление проходит'],
+  ] as ReadonlyArray<readonly [PropertyDetailActionKey, boolean, boolean, string]>)(
+    '%s при hasRental=%s — %s',
+    (key, hasRental, blocked) => {
+      expect(deleteBlockedByRental(key, hasRental)).toBe(blocked);
+    },
+  );
 });

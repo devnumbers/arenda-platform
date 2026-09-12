@@ -38,6 +38,7 @@ import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
 import {
   buildPropertyManageActions,
   buildPropertyStatusSheetItems,
+  deleteBlockedByRental,
   guardedStatusAction,
   propertyStatusSubtitle,
   type GuardedStatusAction,
@@ -188,6 +189,9 @@ export function PropertyDetailPage(): JSX.Element {
     // шит закрыт. Само действие (ремонт/архив) применяется в
     // handleGuardConfirm после завершения аренды.
     const [guardedAction, setGuardedAction] = React.useState<GuardedStatusAction | null>(null);
+    // Guard удаления #632: тап «Удалить объект» у арендованного не открывает
+    // шит удаления — сперва «Завершить аренду».
+    const [deleteGuardOpen, setDeleteGuardOpen] = React.useState(false);
     const [completeSheetOpen, setCompleteSheetOpen] = React.useState(false);
     // Шит пина #630: подтверждение перед «Сделать основным».
     const [pinSheetOpen, setPinSheetOpen] = React.useState(false);
@@ -364,6 +368,12 @@ export function PropertyDetailPage(): JSX.Element {
             setGuardedAction(guarded);
             return;
         }
+        // Guard удаления #632: у арендованного сперва «Завершить аренду»
+        // (#627), шит удаления не открывается.
+        if (deleteBlockedByRental(key, hasRental)) {
+            setDeleteGuardOpen(true);
+            return;
+        }
         // Пин #630 (Figma 1583:57452) исполняется только после
         // шита-подтверждения; unpin — прямое действие (шита в макетах нет).
         if (key === 'pin') {
@@ -426,7 +436,7 @@ export function PropertyDetailPage(): JSX.Element {
                 setDeleteOpen(true);
                 break;
         }
-    }, [hasRental, id, router, setPin, setPinSheetOpen, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardedAction, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
+    }, [hasRental, id, router, setPin, setPinSheetOpen, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardedAction, setDeleteGuardOpen, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
 
     const handleDelete = useCallback(() => {
         deleteProperty.mutate(
@@ -727,6 +737,25 @@ export function PropertyDetailPage(): JSX.Element {
                 cancelLabel="Отменить"
                 pending={completeRental.isPending || updateProperty.isPending || archiveProperty.isPending}
                 onConfirm={handleGuardConfirm}
+            />
+
+            {/* Guard удаления (#632): «Удалить объект» у арендованного
+             * не доходит до шита удаления — сперва «Завершить аренду».
+             * Составного действия нет (удаление необратимо): «Завершить
+             * аренду» лишь открывает шит завершения #627, его подтверждение
+             * остаётся за владельцем. Тексты — по образцу гарда статуса. */}
+            <ConfirmDialog
+                open={deleteGuardOpen}
+                onOpenChange={setDeleteGuardOpen}
+                title="Нельзя удалить объект, пока он арендован"
+                description="Завершите аренду, чтобы удалить объект"
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel="Завершить аренду"
+                cancelLabel="Отменить"
+                onConfirm={() => {
+                    setDeleteGuardOpen(false);
+                    setCompleteSheetOpen(true);
+                }}
             />
 
             {/* Шит «Завершить аренду?» (#627, Figma 1583:56380): канон

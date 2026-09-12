@@ -321,7 +321,8 @@ paths:
       operationId: deleteProperty
       description: >-
         Deletes the property together with all its data: rentals, payments,
-        operations, tasks and attached contacts. Irreversible.
+        operations, tasks and attached contacts. Irreversible. Blocked while
+        the property has an unfinished rental — complete it first.
       security:
         - sessionCookie: []
       parameters:
@@ -338,6 +339,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
   /properties/{id}/archive:

@@ -261,6 +261,10 @@ func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire
 func injectPropertyListProjections(propertiesMod *wire.Properties, paymentsMod *wire.Payments, rentalsMod *wire.Rentals) {
 	propertiesMod.PropertyService.SetRentalOccupancyReader(rentalsMod.OccupancyReader)
 	propertiesMod.PropertyService.SetOverdueOperationsReader(paymentsMod.OverdueOperations)
+	// Deletion guard (issue #632): the property delete consults the rentals
+	// context in its own transaction — the unfinished rental conflicts, the
+	// completed ones are torn down before the property row.
+	propertiesMod.PropertyService.SetRentalDeletionGuard(rentalsMod.DeletionGuard)
 }
 
 // setBillingLifecycleBridges wires the billing worker's cross-context
