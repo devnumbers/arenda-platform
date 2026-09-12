@@ -22,6 +22,10 @@ tools/bruno/arenda-api/environments/Local.bru
 .playwright-mcp
 screenshots
 
+# Per-checkout golangci-lint cache (GOLANGCI_LINT_CACHE pinned in the Makefile —
+# the machine-global default cache is poisoned across worktrees)
+/.golangci-lint-cache/
+
 # Playwright e2e run artifacts (frontend)
 apps/frontend/playwright-report
 apps/frontend/test-results

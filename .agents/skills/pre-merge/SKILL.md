@@ -20,7 +20,7 @@ Invoke it with the effort's map (URL or number). A map-less effort works too —
 - The branch rides the `dev` it merges into: integrate fresh `dev` into the branch before the gate (the «Интеграция» order in `docs/agents/parallel-dev.md`; merge conflicts go through `/resolving-merge-conflicts`), so the gate sees the branch against what it will actually join.
 - Fixed point: `git merge-base dev HEAD`. Verify it resolves and `git diff <fixed-point>...HEAD` is non-empty; capture `git log <fixed-point>..HEAD --oneline`.
 - Spec source, in order: the map issue and its closed tickets (fetch per `docs/agents/issue-tracker.md`); ticket references from the commit messages; ask the owner.
-- A `golangci-lint` run can be poisoned by a sibling worktree's cache and fail on code that is fine — `golangci-lint cache clean` before suspecting the diff.
+- Lint runs through `make` cache per-checkout (`GOLANGCI_LINT_CACHE` pinned in the root Makefile), so sibling worktrees cannot poison each other. A bare `golangci-lint` invocation outside `make` still shares the machine-global cache and can replay a sibling tree's paths — run through `make` (or `golangci-lint cache clean`) before suspecting the diff.
 
 Done when: the fixed point resolves, the diff is non-empty, and the spec source is pinned.
 

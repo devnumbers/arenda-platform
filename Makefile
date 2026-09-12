@@ -49,6 +49,20 @@ NPM_AUDIT_DIRS := apps/frontend apps/admin apps/landing tools/property-attribute
 TOOLS_TEST_DIRS := tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate tools/dev-env
 KNIP_VERSION := 6.32.2
 KNIP_DIRS := apps/frontend apps/admin tools/property-attributes tools/hooks tools/migration-lint tools/nolint-gate tools/suppression-gate tools/dev-env
+
+# golangci-lint caches per-package lint results in one machine-global directory
+# by default (os.UserCacheDir()/golangci-lint), shared by every checkout and
+# worktree of this repo. Cache keys are content-based, but cached issues embed
+# the absolute file paths of the tree that produced them: identical package
+# content in two worktrees collides on one entry, and a lint run replays the
+# other tree's paths — "lints the old project" (the standing `cache clean`
+# workaround). Pin the cache inside the checkout: every worktree gets its own
+# cache by construction, and `git worktree remove` drops it with the tree
+# (ignored files do not block removal). The fork trims entries unused for
+# 5 days, so per-checkout caches stay small. GOLANGCI_LINT_CACHE must be an
+# absolute path — $(CURDIR) is.
+export GOLANGCI_LINT_CACHE ?= $(CURDIR)/.golangci-lint-cache
+
 TEST_DATABASE_URL ?= postgres://arenda:arenda@localhost:5435/arenda?sslmode=disable
 # Named LINT_MIGRATIONS_DIR to stay distinct from the MIGRATIONS_DIR env
 # contract checked in check-env (.env.example).
