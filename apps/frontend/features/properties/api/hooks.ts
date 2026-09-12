@@ -128,7 +128,9 @@ async function fetchPropertiesSearchPage(params: {
  * сортировочный ключ (название, id), повторы keyset не порождает —
  * канон книги контактов (#600). keepPreviousData — прежняя выдача
  * держится на экране, пока едет запрос с новым ?search= (канон платежей
- * #609); скелетон — только когда данных нет вовсе.
+ * #609); скелетон — только когда данных нет вовсе. Пустой (после трима)
+ * запрос контракт не проходит (search обязателен) — чтение не
+ * запускается, экран показывает подсказку.
  */
 export function usePropertiesSearch(
   search: string,
@@ -142,6 +144,7 @@ export function usePropertiesSearch(
     select: (data: InfiniteData<PropertiesSearchPageData>) =>
       data.pages.flatMap((page) => page.items),
     placeholderData: keepPreviousData,
+    enabled: search.trim() !== '',
   });
 }
 
