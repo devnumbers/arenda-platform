@@ -30,6 +30,7 @@ import type {
 import { billingKeys } from '@/shared/api/query-keys';
 
 type AutoRenewRequest = components['schemas']['AutoRenewRequest'];
+type CancelSubscriptionRequest = components['schemas']['CancelSubscriptionRequest'];
 type ChangeTariffRequest = Omit<
   components['schemas']['ChangeTariffRequest'],
   'tariffName'
@@ -96,12 +97,19 @@ export function useToggleAutoRenew(): UseMutationResult<
   });
 }
 
-export function useCancelSubscription(): UseMutationResult<void, ApiError, void> {
+export function useCancelSubscription(): UseMutationResult<
+  void,
+  ApiError,
+  CancelSubscriptionRequest | void
+> {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
-      await apiClient<void>('/subscription/cancel', { method: 'POST' });
+    mutationFn: async (request?: CancelSubscriptionRequest | void) => {
+      await apiClient<void>('/subscription/cancel', {
+        method: 'POST',
+        body: JSON.stringify(request ?? {}),
+      });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });

@@ -23,6 +23,8 @@ const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/info/privacy', 'Политика конфиденциальности'],
   ['/profile/info/terms', 'Пользовательское соглашение'],
   ['/profile/tariff', 'Тариф'],
+  ['/profile/tariff/about', 'О тарифе'],
+  ['/profile/tariff/disable', 'Отключение тарифа'],
   ['/profile/tariff/change', 'Сменить тариф'],
   ['/profile/tariff/change/success', 'Тариф изменён'],
   ['/profile/tariff/payment-methods', 'Способы оплаты'],

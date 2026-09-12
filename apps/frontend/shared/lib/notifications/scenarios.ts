@@ -161,6 +161,8 @@ const tariff = {
     notify.error('Не удалось открыть оплату', options)) satisfies ScenarioFn,
   resumeError: ((options?) =>
     notify.error('Не удалось возобновить тариф', options)) satisfies ScenarioFn,
+  disableError: ((options?) =>
+    notify.error('Не удалось отключить тариф', options)) satisfies ScenarioFn,
 } as const;
 
 const paymentMethods = {

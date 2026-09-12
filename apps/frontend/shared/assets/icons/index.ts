@@ -210,3 +210,8 @@ export { default as PinSmall } from './pin-small.svg';
 // Icon/Color/CheckNoneLine 1386:66530, запечённый сине-градиентный круг
 // с белой галкой (ровный круг, не «шестерёнка» GoodWhite).
 export { default as CheckNoneLine } from './check-none-line.svg';
+
+// Экран «Отключение тарифа» (#622, Figma 1933-78038): успех отключения —
+// Icon/Color/Cancel 1933:78037, запечённый красно-градиентный круг
+// с белым крестом (имя Cancel занято контурным 24×24 currentColor).
+export { default as CancelColor } from './cancel-color.svg';
