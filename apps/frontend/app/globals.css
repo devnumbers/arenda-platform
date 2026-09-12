@@ -346,6 +346,34 @@
     }
 }
 
+/* Плавное раскрытие FAQ «Тарифа» (#620, правка владельца 12.09.2026):
+   высота + лёгкий fade, 300ms открытие / 250ms закрытие на --dl-ease —
+   канонический паттерн Radix/shadcn (анимация от нуля до
+   --radix-collapsible-content-height, без max-height-хаков). */
+@keyframes faq-open {
+    from {
+        height: 0;
+        opacity: 0;
+    }
+
+    to {
+        height: var(--radix-collapsible-content-height);
+        opacity: 1;
+    }
+}
+
+@keyframes faq-close {
+    from {
+        height: var(--radix-collapsible-content-height);
+        opacity: 1;
+    }
+
+    to {
+        height: 0;
+        opacity: 0;
+    }
+}
+
 /* Шит «Еще» TabBar (Figma 1721:57140, #560; рецепт — docs/research/
    2026-09-08-sheet-eshche-animation.md): выезд 400ms, закрытие 300ms на
    канонной кривой vaul cubic-bezier(0.32,0.72,0,1), оверлей — канонный

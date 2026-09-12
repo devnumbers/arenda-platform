@@ -12,7 +12,11 @@ export const metadata: Metadata = {
  * в карте #611. */
 export default function TariffAboutPage() {
   return (
-    <SubScreenShell title="О тарифе" fallbackHref={ROUTES.profileTariff}>
+    <SubScreenShell
+      title="О тарифе"
+      fallbackHref={ROUTES.profileTariff}
+      contentClassName="pt-0"
+    >
       <div />
     </SubScreenShell>
   );

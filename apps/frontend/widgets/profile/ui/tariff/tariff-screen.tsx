@@ -42,7 +42,7 @@ export function TariffScreen(): JSX.Element {
   }
 
   return (
-    <div className="flex flex-col gap-4 pt-6">
+    <div className="flex flex-col gap-4">
       <TariffHero hero={tariffHero(subscription)} />
 
       {subscription.pendingPayment !== undefined && (
@@ -95,7 +95,7 @@ function Tile({
 
 function TariffScreenSkeleton(): JSX.Element {
   return (
-    <div className="flex flex-col gap-4 pt-6" role="status" aria-label="Загрузка тарифа">
+    <div className="flex flex-col gap-4" role="status" aria-label="Загрузка тарифа">
       <Skeleton className="h-[212px] rounded-[32px]" />
       <div className="flex items-stretch gap-3">
         <Skeleton className="h-[106px] flex-1 rounded-card" />

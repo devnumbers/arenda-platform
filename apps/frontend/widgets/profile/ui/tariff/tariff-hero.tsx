@@ -25,10 +25,13 @@ export function TariffHero({ hero }: { readonly hero: TariffHeroModel }): JSX.El
   return (
     <div
       className={cn(
-        'relative flex flex-col gap-6 overflow-hidden rounded-[32px] p-8',
+        'relative overflow-hidden rounded-[32px] p-8',
         stopped ? 'bg-surface-muted text-content' : 'bg-primary text-white',
       )}
     >
+      {/* Фото-фон над подложкой bg-primary (она — фолбэк на время загрузки),
+          контент — в relative-обёртке над фото; -z-10 прячет картинку под
+          фон родителя (правка владельца 12.09.2026, #620). */}
       {!stopped && (
         <Image
           src="/images/tariff/tariff-hero.png"
@@ -36,47 +39,49 @@ export function TariffHero({ hero }: { readonly hero: TariffHeroModel }): JSX.El
           fill
           priority
           sizes="(max-width: 607px) calc(100vw - 48px), 512px"
-          className="-z-10 object-cover"
+          className="object-cover"
         />
       )}
 
-      <NextLink
-        href={ROUTES.profileTariffAbout}
-        className={cn('flex items-center justify-between gap-4', heroLinkFocus)}
-      >
-        <h2 className="m-0 text-2xl font-semibold leading-8">{hero.title}</h2>
-        <SmallArrowRight className="shrink-0" aria-hidden />
-      </NextLink>
+      <div className="relative flex flex-col gap-6">
+        <NextLink
+          href={ROUTES.profileTariffAbout}
+          className={cn('flex items-center justify-between gap-4', heroLinkFocus)}
+        >
+          <h2 className="m-0 text-2xl font-semibold leading-8">{hero.title}</h2>
+          <SmallArrowRight className="shrink-0" aria-hidden />
+        </NextLink>
 
-      {(hero.kind === 'paid' || hero.kind === 'grace') && (
-        <div className="flex flex-col gap-2">
-          <p className="m-0 text-lg font-semibold leading-6">{hero.priceLine}</p>
-          {hero.subLine !== undefined && (
-            <p className="m-0 text-base font-medium leading-[18px] opacity-60">{hero.subLine}</p>
-          )}
-        </div>
-      )}
+        {(hero.kind === 'paid' || hero.kind === 'grace') && (
+          <div className="flex flex-col gap-2">
+            <p className="m-0 text-lg font-semibold leading-6">{hero.priceLine}</p>
+            {hero.subLine !== undefined && (
+              <p className="m-0 text-base font-medium leading-[18px] opacity-60">{hero.subLine}</p>
+            )}
+          </div>
+        )}
 
-      {hero.kind === 'basic' && (
-        <p className="m-0 text-base font-medium leading-[18px] opacity-60">{hero.subLine}</p>
-      )}
-
-      {hero.kind === 'stopped' && (
-        <div className="flex flex-col gap-2">
-          {hero.dateLine !== undefined && (
-            <p className="m-0 text-lg font-semibold leading-6">{hero.dateLine}</p>
-          )}
+        {hero.kind === 'basic' && (
           <p className="m-0 text-base font-medium leading-[18px] opacity-60">{hero.subLine}</p>
-        </div>
-      )}
+        )}
 
-      <NextLink
-        href={hero.kind === 'grace' ? ROUTES.profileTariffChange : ROUTES.profileTariffAbout}
-        className={cn('flex items-center gap-1.5 text-base font-medium leading-[18px]', heroLinkFocus)}
-      >
-        <InfoSmall className="h-4 w-4 shrink-0" aria-hidden />
-        {hero.kind === 'grace' ? 'Оплатить тариф' : 'О тарифе'}
-      </NextLink>
+        {hero.kind === 'stopped' && (
+          <div className="flex flex-col gap-2">
+            {hero.dateLine !== undefined && (
+              <p className="m-0 text-lg font-semibold leading-6">{hero.dateLine}</p>
+            )}
+            <p className="m-0 text-base font-medium leading-[18px] opacity-60">{hero.subLine}</p>
+          </div>
+        )}
+
+        <NextLink
+          href={hero.kind === 'grace' ? ROUTES.profileTariffChange : ROUTES.profileTariffAbout}
+          className={cn('flex items-center gap-1.5 text-base font-medium leading-[18px]', heroLinkFocus)}
+        >
+          <InfoSmall className="h-4 w-4 shrink-0" aria-hidden />
+          {hero.kind === 'grace' ? 'Оплатить тариф' : 'О тарифе'}
+        </NextLink>
+      </div>
     </div>
   );
 }

@@ -139,7 +139,7 @@ function FaqEntry({ item }: { readonly item: FaqItem }): JSX.Element {
         />
       </CollapsibleTrigger>
       <CollapsibleContent
-        className="overflow-hidden px-6 pb-3 data-[state=open]:animate-[collapsible-down_200ms_var(--dl-ease)] data-[state=closed]:animate-[collapsible-up_150ms_var(--dl-ease)]"
+        className="overflow-hidden px-6 pb-3 data-[state=open]:animate-[faq-open_300ms_var(--dl-ease)] data-[state=closed]:animate-[faq-close_250ms_var(--dl-ease)]"
       >
         <div className="flex flex-col gap-2">
           {item.answer.map((paragraph, index) => (

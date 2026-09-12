@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function TariffPage() {
   return (
-    <SubScreenShell title="Тариф" fallbackHref={ROUTES.profile}>
+    <SubScreenShell title="Тариф" fallbackHref={ROUTES.profile} contentClassName="pt-0">
       <TariffScreen />
     </SubScreenShell>
   );
