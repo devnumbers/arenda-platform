@@ -228,13 +228,9 @@ func paymentsSearchGlobalResponse(search application.GlobalPaymentSearch) openap
 	for _, item := range search.Items {
 		items = append(items, paymentGlobalItem(item))
 	}
-	categories := make([]openapi.PaymentSearchCategory, 0, len(search.MatchedCategories))
+	categories := make([]openapi.CategoryView, 0, len(search.MatchedCategories))
 	for _, category := range search.MatchedCategories {
-		categories = append(categories, openapi.PaymentSearchCategory{
-			Category: categoryView(category.Category),
-			Type:     openapi.PaymentSearchCategoryType(category.Type),
-			Count:    int(category.RuleCount),
-		})
+		categories = append(categories, categoryView(category))
 	}
 	return openapi.PaymentsSearchGlobalResponse{
 		Items:             items,

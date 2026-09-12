@@ -678,7 +678,7 @@ export interface paths {
         };
         /**
          * Search the actor's visible payment rules (the global «Платежи» search)
-         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per (category, direction), the largest count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); the window is keyset pagination over (created_at, id) (ticket #597) — the feed's own order, stable under renames and creations: rows shifting between loads never duplicate or drop, the previous page's nextCursor comes back as cursor. Under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
+         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per category (ticket #602), the largest match count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); the window is keyset pagination over (created_at, id) (ticket #597) — the feed's own order, stable under renames and creations: rows shifting between loads never duplicate or drop, the previous page's nextCursor comes back as cursor. Under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
          */
         get: operations["searchGlobalPayments"];
         put?: never;
@@ -2387,18 +2387,10 @@ export interface components {
             /** @description The favorite rules in their new order; the server assigns dense 1-based positions in this order (ticket #576). */
             paymentIds: string[];
         };
-        /** @description One matched category of the payment rules search (ticket #575) — the chip's identity plus the number of matched rules behind it. */
-        PaymentSearchCategory: {
-            category: components["schemas"]["CategoryView"];
-            /** @enum {string} */
-            type: "income" | "expense";
-            /** @description The matched rules of this category and direction. */
-            count: number;
-        };
         /** @description The global payment rules search (ticket #575): the matched rows plus the matched-category chips and the whole scope's match count. */
         PaymentsSearchGlobalResponse: {
             items: components["schemas"]["PaymentGlobalItem"][];
-            matchedCategories: components["schemas"]["PaymentSearchCategory"][];
+            matchedCategories: components["schemas"]["CategoryView"][];
             /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
             nextCursor: string | null;
             /**
@@ -3029,7 +3021,7 @@ export interface components {
         PaymentsSearchQuery: string;
         /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
         PaymentsCategoryFilter: string;
-        /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
+        /** @description The rules list's direction filter (map #573 rework): narrows the matched rules to income or expense. The category chips carry no direction (ticket #602), so nothing on the search screen sends it today. Missing — no filter. It never narrows matchedCategories. */
         PaymentsTypeFilter: "income" | "expense";
         PaymentsLimit: number;
         /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
@@ -4531,7 +4523,7 @@ export interface operations {
                 search?: components["parameters"]["PaymentsSearchQuery"];
                 /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
                 category?: components["parameters"]["PaymentsCategoryFilter"];
-                /** @description The chip filter's direction (map #573 rework): the chip is the pair (category, direction), so the filter carries both. Missing — no filter. It never narrows matchedCategories. */
+                /** @description The rules list's direction filter (map #573 rework): narrows the matched rules to income or expense. The category chips carry no direction (ticket #602), so nothing on the search screen sends it today. Missing — no filter. It never narrows matchedCategories. */
                 type?: components["parameters"]["PaymentsTypeFilter"];
                 limit?: components["parameters"]["PaymentsLimit"];
                 /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */

@@ -312,15 +312,6 @@ type GlobalPaymentCounters struct {
 	OverdueOperationsCount int64
 }
 
-// GlobalPaymentSearchCategory is one matched category of the payment rules
-// search (ticket #575): the chip's identity plus the number of matched
-// rules behind it.
-type GlobalPaymentSearchCategory struct {
-	Category  domain.CategoryRef
-	Type      domain.PaymentType
-	RuleCount int64
-}
-
 // GlobalPaymentObject is one visible non-archived property of the «Объекты»
 // read (ticket #575); the service groups the feed's rows onto it. PinnedAt is
 // the property's global pin (ticket #577): nil — not pinned, a moment —
@@ -357,10 +348,11 @@ type GlobalPaymentReader interface {
 		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time,
 	) (GlobalPaymentCounters, error)
 	// SumGlobalPaymentSearchCategories returns the matched categories of the
-	// search — the chips' identities and their rule counts.
+	// search — the chips' category identities, one per category (ticket
+	// #602), the largest match count first.
 	SumGlobalPaymentSearchCategories(
 		ctx context.Context, actor uuid.UUID, q GlobalPaymentRulesQuery,
-	) ([]GlobalPaymentSearchCategory, error)
+	) ([]domain.CategoryRef, error)
 	// CountGlobalPaymentRules counts the search's whole-scope matches under
 	// the query's search and chip filters — the list's predicate with the
 	// window and the keyset key aside (ticket #599): the search screen's

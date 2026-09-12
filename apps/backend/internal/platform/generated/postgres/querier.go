@@ -817,12 +817,13 @@ type Querier interface {
 	// describe the scope, the search screens' rows are the feed query's.
 	SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPaymentCountersParams) (SumGlobalPaymentCountersRow, error)
 	// The matched categories of the payment rules search (ticket #575): one
-	// row per (category, direction) present among the matched rules — the
-	// search screen's chips — the largest count first. The identity is the
-	// rule's category reference resolved: a default catalog slug or the user
-	// category. Rules without any category reference cannot appear (the XOR
-	// is a durable schema invariant; no such rules exist today). The search
-	// predicate is the feed query's.
+	// row per category present among the matched rules — the search screen's
+	// chips — the largest match count first (ticket #602: the count orders the
+	// rows and stays out of the contract; a category's directions are one
+	// chip). The identity is the rule's category reference resolved: a default
+	// catalog slug or the user category. Rules without any category reference
+	// cannot appear (the XOR is a durable schema invariant; no such rules exist
+	// today). The search predicate is the feed query's.
 	SumGlobalPaymentSearchCategories(ctx context.Context, arg SumGlobalPaymentSearchCategoriesParams) ([]SumGlobalPaymentSearchCategoriesRow, error)
 	// The period totals of one property's operations by direction (ticket #473):
 	// the same status/period predicate as ListOperations, aggregated in SQL so

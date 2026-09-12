@@ -1674,8 +1674,10 @@ paths:
         current name. The row composition is GET /payments's, the counters
         are not part of the search contract. matchedCategories lists the
         distinct categories of the matched rules — the search screen's
-        category chips — one row per (category, direction), the largest count
-        first. An empty query degenerates to the unfiltered feed with every
+        category chips — one row per category (ticket #602), the largest
+        match count first. An empty query degenerates to the unfiltered
+        feed with every category of the scope. The list runs in pages of 50
+        the search
         category of the scope. The list runs in pages of 50 the search
         screen's infinite scroll walks (map #573 rework); the window is
         keyset pagination over (created_at, id) (ticket #597) — the feed's
@@ -3927,9 +3929,10 @@ components:
       in: query
       required: false
       description: >-
-        The chip filter's direction (map #573 rework): the chip is the pair
-        (category, direction), so the filter carries both. Missing — no
-        filter. It never narrows matchedCategories.
+        The rules list's direction filter (map #573 rework): narrows the
+        matched rules to income or expense. The category chips carry no
+        direction (ticket #602), so nothing on the search screen sends it
+        today. Missing — no filter. It never narrows matchedCategories.
       schema:
         type: string
         enum: [income, expense]
@@ -5668,22 +5671,6 @@ components:
             type: string
             format: uuid
 
-    PaymentSearchCategory:
-      description: >
-        One matched category of the payment rules search (ticket #575) — the
-        chip's identity plus the number of matched rules behind it.
-      type: object
-      required: [category, type, count]
-      properties:
-        category:
-          $ref: '#/components/schemas/CategoryView'
-        type:
-          type: string
-          enum: [income, expense]
-        count:
-          type: integer
-          description: The matched rules of this category and direction.
-
     PaymentsSearchGlobalResponse:
       description: >
         The global payment rules search (ticket #575): the matched rows plus
@@ -5698,7 +5685,7 @@ components:
         matchedCategories:
           type: array
           items:
-            $ref: '#/components/schemas/PaymentSearchCategory'
+            $ref: '#/components/schemas/CategoryView'
         nextCursor:
           type: string
           nullable: true

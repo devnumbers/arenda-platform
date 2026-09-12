@@ -600,9 +600,7 @@ func (q *Queries) SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPay
 const sumGlobalPaymentSearchCategories = `-- name: SumGlobalPaymentSearchCategories :many
 SELECT pay.category_slug,
        pay.user_category_id,
-       pc.name AS user_category_label,
-       pay.type,
-       COUNT(*)::bigint AS rule_count
+       pc.name AS user_category_label
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
@@ -622,8 +620,8 @@ WHERE (
        OR pc.name ILIKE '%' || $2::text || '%' ESCAPE '\'
        OR ($3::text <> ''
            AND pay.category_slug = ANY(string_to_array($3::text, ','))))
-GROUP BY pay.category_slug, pay.user_category_id, pc.name, pay.type
-ORDER BY rule_count DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST, pay.type
+GROUP BY pay.category_slug, pay.user_category_id, pc.name
+ORDER BY COUNT(*) DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST
 `
 
 type SumGlobalPaymentSearchCategoriesParams struct {
@@ -636,17 +634,16 @@ type SumGlobalPaymentSearchCategoriesRow struct {
 	CategorySlug      pgtype.Text `json:"category_slug"`
 	UserCategoryID    pgtype.UUID `json:"user_category_id"`
 	UserCategoryLabel pgtype.Text `json:"user_category_label"`
-	Type              string      `json:"type"`
-	RuleCount         int64       `json:"rule_count"`
 }
 
 // The matched categories of the payment rules search (ticket #575): one
-// row per (category, direction) present among the matched rules — the
-// search screen's chips — the largest count first. The identity is the
-// rule's category reference resolved: a default catalog slug or the user
-// category. Rules without any category reference cannot appear (the XOR
-// is a durable schema invariant; no such rules exist today). The search
-// predicate is the feed query's.
+// row per category present among the matched rules — the search screen's
+// chips — the largest match count first (ticket #602: the count orders the
+// rows and stays out of the contract; a category's directions are one
+// chip). The identity is the rule's category reference resolved: a default
+// catalog slug or the user category. Rules without any category reference
+// cannot appear (the XOR is a durable schema invariant; no such rules exist
+// today). The search predicate is the feed query's.
 func (q *Queries) SumGlobalPaymentSearchCategories(ctx context.Context, arg SumGlobalPaymentSearchCategoriesParams) ([]SumGlobalPaymentSearchCategoriesRow, error) {
 	rows, err := q.db.Query(ctx, sumGlobalPaymentSearchCategories, arg.Actor, arg.Search, arg.CategorySlugs)
 	if err != nil {
@@ -656,13 +653,7 @@ func (q *Queries) SumGlobalPaymentSearchCategories(ctx context.Context, arg SumG
 	items := []SumGlobalPaymentSearchCategoriesRow{}
 	for rows.Next() {
 		var i SumGlobalPaymentSearchCategoriesRow
-		if err := rows.Scan(
-			&i.CategorySlug,
-			&i.UserCategoryID,
-			&i.UserCategoryLabel,
-			&i.Type,
-			&i.RuleCount,
-		); err != nil {
+		if err := rows.Scan(&i.CategorySlug, &i.UserCategoryID, &i.UserCategoryLabel); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -225,11 +225,7 @@ func TestSearchGlobalPayments_FoldsQueryAndMapsChips(t *testing.T) {
 			gotPage = page
 			id := uuid.Must(uuid.NewV7())
 			return application.GlobalPaymentSearch{
-				MatchedCategories: []application.GlobalPaymentSearchCategory{{
-					Category:  customCategoryRef(id, "Кофейни"),
-					Type:      "income",
-					RuleCount: 3,
-				}},
+				MatchedCategories: []domain.CategoryRef{customCategoryRef(id, "Кофейни")},
 			}, nil
 		},
 	}
@@ -256,12 +252,11 @@ func TestSearchGlobalPayments_FoldsQueryAndMapsChips(t *testing.T) {
 	if len(body.MatchedCategories) != 1 {
 		t.Fatalf("chips = %d, want 1", len(body.MatchedCategories))
 	}
+	// The chip rides out as the bare category view — no direction, no count
+	// in the contract (ticket #602).
 	chip := body.MatchedCategories[0]
-	if chip.Category.Source != openapi.CategoryViewSourceCustom || chip.Category.Label != "Кофейни" {
-		t.Errorf("chip category = %+v, want the custom identity", chip.Category)
-	}
-	if chip.Type != openapi.PaymentSearchCategoryTypeIncome || chip.Count != 3 {
-		t.Errorf("chip = (%q, %d), want (income, 3)", chip.Type, chip.Count)
+	if chip.Source != openapi.CategoryViewSourceCustom || chip.Label != "Кофейни" {
+		t.Errorf("chip = %+v, want the custom identity", chip)
 	}
 }
 

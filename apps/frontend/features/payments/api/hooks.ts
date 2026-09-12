@@ -19,11 +19,10 @@ import type {
   GlobalPaymentSearch,
   OperationCreateCommand,
   OperationsSummary,
-  PaymentSearchCategoryView,
+  PaymentCategoryView,
   Payment,
   PaymentCreateCommand,
   PaymentOperation,
-  PaymentType,
   PaymentUpdateCommand,
 } from '@/entities/payment';
 import {
@@ -771,7 +770,7 @@ export function useGlobalPaymentObjects(
 export function useGlobalPaymentSearchCategories(
   query: string,
   options: { readonly enabled?: boolean } = {},
-): UseQueryResult<ReadonlyArray<PaymentSearchCategoryView>, ApiError> {
+): UseQueryResult<ReadonlyArray<PaymentCategoryView>, ApiError> {
   return useQuery({
     queryKey: globalPaymentKeys.searchCategories(query),
     queryFn: async () => {
@@ -793,9 +792,10 @@ export const PAYMENT_SEARCH_PAGE_SIZE = 50;
 /**
  * Поиск глобальных платежей (GET /payments/search, #575; экран #581):
  * бесконечный запрос порциями по PAYMENT_SEARCH_PAGE_SIZE; фильтр чипа
- * (категория, без направления) сужает список серверно.
+ * (категория; направление из контракта чипов убрано — #602) сужает список
+ * серверно.
  * Порции листаются keyset-курсором (#597): pageParam — nextCursor прошлого
- * ответа, смена queryKey начинает свежий обход с пустого курсора —
+ * ответа, смена queryKey начинает свежий обход с пустым курсором —
  * sentinel не наследует позицию прошлых порций при правке запроса.
  * matchedCategories сервер считает по всему скоупу запроса, поэтому в
  * результате они берутся с первой страницы; склейка порций дедуплицируется
@@ -805,17 +805,16 @@ export const PAYMENT_SEARCH_PAGE_SIZE = 50;
  */
 export function useGlobalPaymentSearch(
   query: string,
-  filter: { readonly category?: string; readonly type?: PaymentType } = {},
+  filter: { readonly category?: string } = {},
   options: { readonly enabled?: boolean } = {},
 ): UseInfiniteQueryResult<GlobalPaymentSearch, ApiError> {
-  const { category = '', type = '' } = filter;
+  const { category = '' } = filter;
   return useInfiniteQuery({
-    queryKey: globalPaymentKeys.search(query, category, type),
+    queryKey: globalPaymentKeys.search(query, category),
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       if (query) params.set('search', query);
       if (category) params.set('category', category);
-      if (type) params.set('type', type);
       params.set('limit', String(PAYMENT_SEARCH_PAGE_SIZE));
       if (pageParam) params.set('cursor', pageParam);
       const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
