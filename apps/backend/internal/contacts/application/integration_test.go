@@ -303,12 +303,13 @@ func TestContactsIntegration_SearchAndScopes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
+			page, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
 				Scope: tc.scope, PropertyID: h.property, Search: tc.search,
 			})
 			if err != nil {
 				t.Fatalf("list: %v", err)
 			}
+			got := page.Items
 			gotIDs := make([]uuid.UUID, 0, len(got))
 			for _, c := range got {
 				gotIDs = append(gotIDs, c.Contact.ID)
@@ -344,12 +345,13 @@ func TestContactsIntegration_PropertyDeleteDetaches(t *testing.T) {
 		t.Fatalf("property: want detached (nil), got %s", *got.PropertyID)
 	}
 
-	unbound, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
+	unboundPage, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
 		Scope: contactsapp.ListScopeWithoutProperty,
 	})
 	if err != nil {
 		t.Fatalf("list unbound: %v", err)
 	}
+	unbound := unboundPage.Items
 	mustEqual(t, "unbound contacts", len(unbound), 1)
 	mustEqual(t, "detached contact", unbound[0].Contact.ID, created.ID)
 }
@@ -485,10 +487,11 @@ func listFlat(
 	t *testing.T, svc *contactsapp.ContactService, actorID uuid.UUID, q contactsapp.ListQuery,
 ) (ids []uuid.UUID, propertyNames map[uuid.UUID]string) {
 	t.Helper()
-	got, err := svc.ListContacts(t.Context(), actorID, q)
+	page, err := svc.ListContacts(t.Context(), actorID, q)
 	if err != nil {
 		t.Fatalf("flat list: %v", err)
 	}
+	got := page.Items
 	ids = make([]uuid.UUID, 0, len(got))
 	propertyNames = make(map[uuid.UUID]string, len(got))
 	for _, listed := range got {
@@ -496,6 +499,39 @@ func listFlat(
 		propertyNames[listed.Contact.ID] = listed.PropertyName
 	}
 	return ids, propertyNames
+}
+
+// walkBook lists the book in portions of limit, echoing nextCursor until a
+// page comes back short, and returns the collected ids. A repeated id, a
+// cursor loop or a missing nextCursor on a full page all fail loudly —
+// the keyset walk must be total (ticket #600).
+func walkBook(
+	t *testing.T, svc *contactsapp.ContactService, actorID uuid.UUID, q contactsapp.ListQuery, limit int32,
+) []uuid.UUID {
+	t.Helper()
+	ids := []uuid.UUID{}
+	seen := map[uuid.UUID]bool{}
+	for pages := 1; ; pages++ {
+		if pages > 10 {
+			t.Fatal("cursor loop: more than 10 pages collected")
+		}
+		q.Limit = limit
+		page, err := svc.ListContacts(t.Context(), actorID, q)
+		if err != nil {
+			t.Fatalf("walk page %d: %v", pages, err)
+		}
+		for _, listed := range page.Items {
+			if seen[listed.Contact.ID] {
+				t.Fatalf("page %d repeats id %s", pages, listed.Contact.ID)
+			}
+			seen[listed.Contact.ID] = true
+			ids = append(ids, listed.Contact.ID)
+		}
+		if page.NextCursor == "" {
+			return ids
+		}
+		q.Cursor = page.NextCursor
+	}
 }
 
 // TestContactsIntegration_FlatBookUnion exercises the merged visibility of
@@ -697,12 +733,13 @@ func TestContactsIntegration_PropertyScopeSpansBooks(t *testing.T) {
 
 	t.Run("owner's property slice spans books", func(t *testing.T) {
 		t.Parallel()
-		got, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
+		propertyPage, err := h.svc.ListContacts(t.Context(), h.owner, contactsapp.ListQuery{
 			Scope: contactsapp.ListScopeProperty, PropertyID: h.property,
 		})
 		if err != nil {
 			t.Fatalf("property list: %v", err)
 		}
+		got := propertyPage.Items
 		if len(got) != 1 || got[0].Contact.ID != memberCard.ID {
 			t.Fatalf("listed = %v, want [%s]", got, memberCard.ID)
 		}
@@ -723,5 +760,91 @@ func TestContactsIntegration_PropertyScopeSpansBooks(t *testing.T) {
 		if len(ids) != 1 || ids[0] != memberCard.ID {
 			t.Fatalf("listed ids = %v, want [%s]", ids, memberCard.ID)
 		}
+	})
+}
+
+// assertSameWalk pins the totality of a keyset walk (ticket #600): two
+// windows collect the same id sequence — want of them, no duplicates, no
+// drops; any skipped or repeated row desynchronizes the two walks.
+func assertSameWalk(t *testing.T, by50, by100 []uuid.UUID, want int) {
+	t.Helper()
+	if len(by50) != want || len(by100) != want {
+		t.Fatalf("walks collected %d/%d ids, want %d each", len(by50), len(by100), want)
+	}
+	for i := range by50 {
+		if by50[i] != by100[i] {
+			t.Fatalf("page size changes the walk at %d: %s vs %s", i, by50[i], by100[i])
+		}
+	}
+}
+
+// TestContactsIntegration_KeysetPages walks a 150-card book in portions of
+// 50 (ticket #600, acceptance): every sort key and direction pages without
+// duplicates or drops — the id sequence collected with 50-per-page windows
+// must equal the one collected with 100-per-page windows — and the search
+// filter pages the same way within its own matched scope.
+func TestContactsIntegration_KeysetPages(t *testing.T) {
+	t.Parallel()
+
+	h := newContactsHarness(t)
+	h.owner = h.seedUser()
+	p1 := h.seedPropertyNamed(h.owner, "Моя квартира")
+	p2 := h.seedPropertyNamed(h.owner, "Студия")
+
+	// 100 unbound cards, 40 bound across two properties, and a tie group of
+	// ten identical display names — the id tie-off is part of the keyset key.
+	for i := 1; i <= 100; i++ {
+		h.create(contactsapp.CreateContactCommand{
+			FirstName: fmt.Sprintf("Контакт %03d", i),
+		})
+	}
+	for i := 1; i <= 20; i++ {
+		prop := p1
+		h.create(contactsapp.CreateContactCommand{
+			FirstName: fmt.Sprintf("Контакт 1%02d", i), PropertyID: &prop,
+		})
+	}
+	for i := 1; i <= 20; i++ {
+		prop := p2
+		h.create(contactsapp.CreateContactCommand{
+			FirstName: fmt.Sprintf("Контакт 2%02d", i), PropertyID: &prop,
+		})
+	}
+	for range 10 {
+		prop := p1
+		h.create(contactsapp.CreateContactCommand{
+			FirstName: "Двойник", PropertyID: &prop,
+		})
+	}
+
+	for _, tc := range []struct {
+		name  string
+		sort  contactsapp.ListSort
+		order contactsapp.ListOrder
+	}{
+		{"name ascending", contactsapp.ListSortName, contactsapp.ListOrderAsc},
+		{"name descending", contactsapp.ListSortName, contactsapp.ListOrderDesc},
+		{"property ascending", contactsapp.ListSortProperty, contactsapp.ListOrderAsc},
+		{"property descending", contactsapp.ListSortProperty, contactsapp.ListOrderDesc},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			base := contactsapp.ListQuery{
+				Scope: contactsapp.ListScopeAll, Sort: tc.sort, Order: tc.order,
+			}
+			by50 := walkBook(t, h.svc, h.owner, base, 50)
+			by100 := walkBook(t, h.svc, h.owner, base, 100)
+			assertSameWalk(t, by50, by100, 150)
+		})
+	}
+
+	t.Run("search pages within the matched scope", func(t *testing.T) {
+		t.Parallel()
+		// «Контакт» matches the numbered cards (140); the tie group and the
+		// search term stay out of each other's way.
+		base := contactsapp.ListQuery{Scope: contactsapp.ListScopeAll, Search: "Контакт"}
+		by50 := walkBook(t, h.svc, h.owner, base, 50)
+		by100 := walkBook(t, h.svc, h.owner, base, 100)
+		assertSameWalk(t, by50, by100, 140)
 	})
 }

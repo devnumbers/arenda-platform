@@ -185,6 +185,24 @@ export function ContactsNoResults(): JSX.Element {
   return <p className={`${searchNoteClass} px-6 pt-16 text-center`}>Такого контакта нет</p>;
 }
 
+/** Хвост списка при догрузке порции (#600): тот же паттерн, что у лент
+ * платежей/операций (LoadingMoreIndicator) — компактный спиннер-скелетон
+ * по центру с ролью status. tone=muted — внутри серых карточек (книга),
+ * тон скелетона — как у блоков скелетона книги. */
+export function ContactsLoadingMore({
+  tone = 'white',
+}: {
+  readonly tone?: 'white' | 'muted';
+}): JSX.Element {
+  return (
+    <div className="flex justify-center py-4" role="status" aria-label="Загружаем еще">
+      <Skeleton
+        className={cn('h-8 w-8', tone === 'muted' && 'bg-surface-muted-hover')}
+      />
+    </div>
+  );
+}
+
 /** Правка недоступна (гейт ADR 0028, тексты — как у правки платежей):
  * смотрящий или архив. */
 export function ContactsUnavailableCard({

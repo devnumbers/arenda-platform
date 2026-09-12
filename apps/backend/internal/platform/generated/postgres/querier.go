@@ -496,6 +496,14 @@ type Querier interface {
 	// property's name, unbound cards first in both directions («Общие
 	// контакты»), contact name ordering inside the groups. Both keys use the
 	// Russian ICU collation to match the client's letter grouping; id ties off.
+	//
+	// The page walks the listing's own order by keyset (ticket #600): the
+	// window resumes strictly after the (sort key, id) the previous page ended
+	// on, so cards created, renamed or moved between loads never duplicate or
+	// drop. The predicate mirrors the ORDER BY branch by branch — the same
+	// CASE-gated keys, the same ICU collations, the unbound-flag leading the
+	// property sort and id tying off ascending in both directions. All cursor
+	// args travel together; NULL (no cursor) reads from the beginning.
 	ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error)
 	// The admin read of one property's contacts (ADR 0054 consequences): the
 	// bound cards only — an unbound contact belongs to no property card.

@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -480,21 +481,24 @@ func TestListContacts(t *testing.T) {
 }
 
 // TestListContactsSortOrderForwarded pins the sort validation: known keys
-// travel to the store as-is, the empty values mean the defaults, unknown
-// keys are the invalid input.
+// travel to the store as-is, the empty values normalize to the defaults
+// (name/asc — the SQL's keyset predicate and ORDER BY branch on the literal
+// keys), unknown keys are the invalid input.
 func TestListContactsSortOrderForwarded(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name    string
-		sort    ListSort
-		order   ListOrder
-		wantErr bool
+		name      string
+		sort      ListSort
+		order     ListOrder
+		wantSort  ListSort
+		wantOrder ListOrder
+		wantErr   bool
 	}{
-		{"defaults", "", "", false},
-		{"name ascending", ListSortName, ListOrderAsc, false},
-		{"property descending", ListSortProperty, ListOrderDesc, false},
-		{"unknown sort", "sideways", ListOrderAsc, true},
-		{"unknown order", ListSortName, "upside", true},
+		{"defaults", "", "", ListSortName, ListOrderAsc, false},
+		{"name ascending", ListSortName, ListOrderAsc, ListSortName, ListOrderAsc, false},
+		{"property descending", ListSortProperty, ListOrderDesc, ListSortProperty, ListOrderDesc, false},
+		{"unknown sort", "sideways", ListOrderAsc, "", "", true},
+		{"unknown order", ListSortName, "upside", "", "", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -517,11 +521,147 @@ func TestListContactsSortOrderForwarded(t *testing.T) {
 			if err != nil {
 				t.Fatalf("list: %v", err)
 			}
-			if gotQuery.Sort != tc.sort || gotQuery.Order != tc.order {
-				t.Fatalf("forwarded sort/order: want %q/%q, got %q/%q", tc.sort, tc.order, gotQuery.Sort, gotQuery.Order)
+			if gotQuery.Sort != tc.wantSort || gotQuery.Order != tc.wantOrder {
+				t.Fatalf("forwarded sort/order: want %q/%q, got %q/%q", tc.wantSort, tc.wantOrder, gotQuery.Sort, gotQuery.Order)
 			}
 		})
 	}
+}
+
+// TestListContactsPageLimit pins the page-size vocabulary of the book
+// listing (ticket #600): the zero limit becomes the contract's default page,
+// out-of-range limits are the invalid input.
+func TestListContactsPageLimit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero limit becomes the default page", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		var gotQuery ListQuery
+		h.contacts.listFn = func(_ uuid.UUID, q ListQuery) ([]ListedContact, error) {
+			gotQuery = q
+			return nil, nil
+		}
+		if _, err := h.svc.ListContacts(t.Context(), h.owner, ListQuery{Scope: ListScopeAll}); err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if gotQuery.Limit != DefaultContactsPageSize {
+			t.Fatalf("limit = %d, want %d", gotQuery.Limit, DefaultContactsPageSize)
+		}
+	})
+
+	t.Run("out-of-range limit is invalid input", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		for _, limit := range []int32{-1, MaxContactsPageSize + 1} {
+			if _, err := h.svc.ListContacts(t.Context(), h.owner, ListQuery{Scope: ListScopeAll, Limit: limit}); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("limit %d: want ErrInvalidInput, got %v", limit, err)
+			}
+		}
+	})
+}
+
+// TestListContactsCursorDecoded pins the continuation's path to the store
+// (ticket #600): the echoed cursor decodes into the store's keyset key, a
+// malformed one is the invalid input.
+func TestListContactsCursorDecoded(t *testing.T) {
+	t.Parallel()
+
+	t.Run("cursor decodes into the store keyset key", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		key := ContactCursorKey{PropertyName: studioPropertyName, Name: cursorFixtureName, ID: uuid.Must(uuid.NewV7())}
+		var gotQuery ListQuery
+		h.contacts.listFn = func(_ uuid.UUID, q ListQuery) ([]ListedContact, error) {
+			gotQuery = q
+			return nil, nil
+		}
+		cursor := EncodeContactCursor(key, ListSortProperty, ListOrderDesc)
+		q := ListQuery{Scope: ListScopeAll, Sort: ListSortProperty, Order: ListOrderDesc, Limit: DefaultContactsPageSize, Cursor: cursor}
+		if _, err := h.svc.ListContacts(t.Context(), h.owner, q); err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if gotQuery.After == nil || *gotQuery.After != key {
+			t.Fatalf("after key = %+v, want %+v", gotQuery.After, &key)
+		}
+	})
+
+	t.Run("cursor under another sort is invalid input", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		key := ContactCursorKey{Name: cursorFixtureName, ID: uuid.Must(uuid.NewV7())}
+		cursor := EncodeContactCursor(key, ListSortProperty, ListOrderDesc)
+		q := ListQuery{Scope: ListScopeAll, Sort: ListSortName, Order: ListOrderAsc, Limit: DefaultContactsPageSize, Cursor: cursor}
+		if _, err := h.svc.ListContacts(t.Context(), h.owner, q); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("want ErrInvalidInput, got %v", err)
+		}
+	})
+
+	t.Run("malformed cursor is invalid input", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		q := ListQuery{Scope: ListScopeAll, Limit: DefaultContactsPageSize, Cursor: "не курсор"}
+		if _, err := h.svc.ListContacts(t.Context(), h.owner, q); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("want ErrInvalidInput, got %v", err)
+		}
+	})
+}
+
+// TestListContactsNextCursor pins the page's continuation (ticket #600): a
+// full page answers with the last row's cursor, a short one has walked to
+// the end of the matches.
+func TestListContactsNextCursor(t *testing.T) {
+	t.Parallel()
+
+	seedPage := func(n int32) []ListedContact {
+		items := make([]ListedContact, n)
+		for i := range items {
+			items[i] = ListedContact{Contact: domain.Contact{
+				ID:        uuid.Must(uuid.NewV7()),
+				FirstName: fmt.Sprintf("Контакт %03d", i),
+			}}
+		}
+		return items
+	}
+
+	t.Run("full page answers with the last row's cursor", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		items := seedPage(DefaultContactsPageSize)
+		h.contacts.listFn = func(_ uuid.UUID, _ ListQuery) ([]ListedContact, error) {
+			return items, nil
+		}
+		page, err := h.svc.ListContacts(t.Context(), h.owner, ListQuery{Scope: ListScopeAll})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		want := items[len(items)-1].CursorKey()
+		got, gotSort, gotOrder, err := DecodeContactCursor(page.NextCursor)
+		if err != nil {
+			t.Fatalf("next cursor: %v", err)
+		}
+		if got != want {
+			t.Fatalf("next cursor key = %+v, want %+v", got, want)
+		}
+		if gotSort != ListSortName || gotOrder != ListOrderAsc {
+			t.Fatalf("next cursor sort/order = %q/%q, want name/asc", gotSort, gotOrder)
+		}
+	})
+
+	t.Run("short page has walked to the end", func(t *testing.T) {
+		t.Parallel()
+		h := newServiceHarness(t, sharedpolicy.RoleOwner)
+		h.contacts.listFn = func(_ uuid.UUID, _ ListQuery) ([]ListedContact, error) {
+			return seedPage(3), nil
+		}
+		page, err := h.svc.ListContacts(t.Context(), h.owner, ListQuery{Scope: ListScopeAll})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if page.NextCursor != "" {
+			t.Fatalf("next cursor = %q, want empty", page.NextCursor)
+		}
+	})
 }
 
 func TestUpdateContactFoldAndNormalize(t *testing.T) {

@@ -64,18 +64,28 @@ func (s *ContactStore) GetByID(ctx context.Context, id uuid.UUID) (domain.Contac
 
 // List returns the actor's visible contacts per the query scope, search and
 // sort (” search = no filter, ” sort/order = the defaults), each with the
-// display name of its bound property.
+// display name of its bound property. The page walks the listing's own order
+// by keyset (ticket #600): the After key — the previous page's last row —
+// resumes the window strictly after it; a nil After reads from the beginning.
 func (s *ContactStore) List(
 	ctx context.Context, actorID uuid.UUID, q application.ListQuery,
 ) ([]application.ListedContact, error) {
-	rows, err := s.q().ListContacts(ctx, postgres.ListContactsParams{
+	params := postgres.ListContactsParams{
 		ActorID:    pgconv.UUIDToPgtype(actorID),
 		Scope:      string(q.Scope),
 		PropertyID: pgconv.UUIDToPgtype(q.PropertyID),
 		Search:     escapeLikePattern(q.Search),
 		Sort:       string(q.Sort),
 		Order:      string(q.Order),
-	})
+		PageLimit:  q.Limit,
+	}
+	if q.After != nil {
+		params.AfterID = pgconv.UUIDToPgtype(q.After.ID)
+		params.AfterName = pgtype.Text{String: q.After.Name, Valid: true}
+		params.AfterPropertyName = pgtype.Text{String: q.After.PropertyName, Valid: true}
+		params.AfterUnbound = pgtype.Bool{Bool: q.After.Unbound, Valid: true}
+	}
+	rows, err := s.q().ListContacts(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list contacts of actor %s: %w", actorID, err)
 	}
