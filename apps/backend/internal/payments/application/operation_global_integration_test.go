@@ -720,11 +720,13 @@ func TestListGlobalOperations_TotalMatchesScope(t *testing.T) {
 // rows.
 func TestListGlobalOperations_TotalMatchesFilters(t *testing.T) {
 	t.Parallel()
+	// The shared book's entry resolves through the production membership
+	// policy in TestListGlobalOperations_PropertyIdsFilter; this harness's
+	// nil policy gates the filter to the actor's own properties.
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
-	ownB, shared, archived, _ := h.globalFeedFixture()
+	ownB, _, archived, _ := h.globalFeedFixture()
 
-	// The propertyIds multi-select: the one Дом row; the shared book counts
-	// through the membership.
+	// The propertyIds multi-select: the one Дом row.
 	byProperty, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
 		paymentsapp.GlobalOperationsListQuery{PropertyIDs: []uuid.UUID{ownB}})
 	if err != nil {
@@ -732,14 +734,6 @@ func TestListGlobalOperations_TotalMatchesFilters(t *testing.T) {
 	}
 	if byProperty.Total != 1 {
 		t.Fatalf("ownB total = %d, want 1", byProperty.Total)
-	}
-	byShared, err := h.ops.ListGlobalOperations(h.ctx(), h.owner,
-		paymentsapp.GlobalOperationsListQuery{PropertyIDs: []uuid.UUID{shared}})
-	if err != nil {
-		t.Fatalf("by shared: %v", err)
-	}
-	if byShared.Total != 1 {
-		t.Fatalf("shared total = %d, want 1", byShared.Total)
 	}
 
 	// The archive cut lifts: the archived ЖКУ rejoins the scope's count.
