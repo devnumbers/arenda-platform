@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { Property } from '@/entities/property';
 import {
   DEFAULT_PROPERTY_SORT,
-  filterPropertiesByQuery,
   parseSortFromParams,
   serializeSortToParams,
   sortProperties,
@@ -142,21 +141,6 @@ describe('sortProperties: основной объект всегда первы�
     });
     const sorted = sortProperties([needsAttention, nonePinned], { field: 'status', direction: 'asc' });
     expect(sorted.map((p) => p.id)).toEqual(['p3', 'na']);
-  });
-});
-
-describe('filterPropertiesByQuery', () => {
-  const lena = makeProperty({ id: 'lena', name: 'Квартира на Ленина', address: 'Москва, ул. Ленина, 1' });
-  const oka = makeProperty({ id: 'oka', name: 'Дом на Оке', address: 'Серпухов, ул. Водопровоdная, 3' });
-
-  it('ищет подстрокой по названию и адресу без регистра', () => {
-    expect(filterPropertiesByQuery([lena, oka], 'ленина').map((p) => p.id)).toEqual(['lena']);
-    expect(filterPropertiesByQuery([lena, oka], 'СЕРПУХОВ').map((p) => p.id)).toEqual(['oka']);
-  });
-
-  it('пустой запрос возвращает всё, пробелы по краям не мешают', () => {
-    expect(filterPropertiesByQuery([lena, oka], '  ')).toHaveLength(2);
-    expect(filterPropertiesByQuery([lena, oka], ' ленина ').map((p) => p.id)).toEqual(['lena']);
   });
 });
 

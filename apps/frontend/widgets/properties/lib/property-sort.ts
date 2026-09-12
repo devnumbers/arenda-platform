@@ -92,20 +92,6 @@ export function sortProperties(
   });
 }
 
-/** Клиентский поиск (#586): подстрока по названию и адресу без регистра. */
-export function filterPropertiesByQuery(
-  items: readonly Property[],
-  query: string,
-): Property[] {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return [...items];
-  return items.filter(
-    (property) =>
-      property.name.toLowerCase().includes(needle)
-      || property.address.toLowerCase().includes(needle),
-  );
-}
-
 type SearchParamsLike = Record<string, string | string[] | undefined>;
 
 function readString(value: string | string[] | undefined): string | undefined {
