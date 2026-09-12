@@ -3,8 +3,8 @@ import {
   buildPropertyKebabItems,
   buildPropertyManageActions,
   buildPropertyStatusSheetItems,
+  guardedStatusAction,
   propertyStatusSubtitle,
-  statusChangeBlockedByRental,
   type PropertyDetailActionKey,
 } from './property-detail-status';
 
@@ -200,22 +200,22 @@ describe('подписи действий (канон домена)', () => {
   );
 });
 
-describe('statusChangeBlockedByRental (гард смены статуса, #628)', () => {
-  it('с арендой блокирует ремонт и архив', () => {
-    expect(statusChangeBlockedByRental('start-maintenance', true)).toBe(true);
-    expect(statusChangeBlockedByRental('archive', true)).toBe(true);
+describe('guardedStatusAction (гард смены статуса, #628)', () => {
+  it('с арендой возвращает блокируемое действие для narrowing', () => {
+    expect(guardedStatusAction('start-maintenance', true)).toBe('start-maintenance');
+    expect(guardedStatusAction('archive', true)).toBe('archive');
   });
 
-  it('с арендой остальные действия проходит', () => {
-    expect(statusChangeBlockedByRental('finish-maintenance', true)).toBe(false);
-    expect(statusChangeBlockedByRental('complete-rental', true)).toBe(false);
-    expect(statusChangeBlockedByRental('edit', true)).toBe(false);
-    expect(statusChangeBlockedByRental('delete', true)).toBe(false);
-    expect(statusChangeBlockedByRental('unarchive', true)).toBe(false);
+  it('с арендой остальные действия не гардит', () => {
+    expect(guardedStatusAction('finish-maintenance', true)).toBeNull();
+    expect(guardedStatusAction('complete-rental', true)).toBeNull();
+    expect(guardedStatusAction('edit', true)).toBeNull();
+    expect(guardedStatusAction('delete', true)).toBeNull();
+    expect(guardedStatusAction('unarchive', true)).toBeNull();
   });
 
-  it('без аренды не блокирует ничего', () => {
-    expect(statusChangeBlockedByRental('start-maintenance', false)).toBe(false);
-    expect(statusChangeBlockedByRental('archive', false)).toBe(false);
+  it('без аренды не гардит ничего', () => {
+    expect(guardedStatusAction('start-maintenance', false)).toBeNull();
+    expect(guardedStatusAction('archive', false)).toBeNull();
   });
 });

@@ -92,16 +92,23 @@ export function buildPropertyStatusSheetItems(
  * Guard смены статуса (#628, Figma 1583:55882): у объекта с незавершённой
  * арендой «Объект на ремонте» и «Перевести в архив» (из шита статуса и
  * из секции «Управление») не исполняются сразу — открывается guard-шит
- * «Нельзя изменить статус, пока объект арендован» с уводом в завершение
- * аренды. Пункты в списках остаются (гард перехватывает тап, не прячет);
- * «Завершить ремонт» и прочие действия мимо гарда. Чисто фронтовый:
- * бэк переход active→maintenance разрешает всегда.
+ * «Нельзя изменить статус, пока объект арендован». Его «Завершить» —
+ * составное действие (решение владельца 12.09, против двухшаговой
+ * аннотации макета): завершает аренду (#627, сегодняшней датой) и тут же
+ * применяет выбранный статус. Пункты в списках остаются (гард
+ * перехватывает тап, не прячет). Возвращает само действие для narrowing
+ * или null — мимо гарда. Чисто фронтовый: бэк переход
+ * active→maintenance разрешает всегда.
  */
-export function statusChangeBlockedByRental(
+export type GuardedStatusAction = 'start-maintenance' | 'archive';
+
+export function guardedStatusAction(
   key: PropertyDetailActionKey,
   hasRental: boolean,
-): boolean {
-  return hasRental && (key === 'start-maintenance' || key === 'archive');
+): GuardedStatusAction | null {
+  if (!hasRental) return null;
+  if (key === 'start-maintenance' || key === 'archive') return key;
+  return null;
 }
 
 export type PropertyManageInput = {

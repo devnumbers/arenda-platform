@@ -39,8 +39,9 @@ import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
 import {
   buildPropertyManageActions,
   buildPropertyStatusSheetItems,
+  guardedStatusAction,
   propertyStatusSubtitle,
-  statusChangeBlockedByRental,
+  type GuardedStatusAction,
   type PropertyDetailActionKey,
 } from '../lib/property-detail-status';
 import {
@@ -116,9 +117,12 @@ function PropertySectionSkeleton(): JSX.Element {
  *
  * Guard смены статуса (#628; Figma 1583:55882): у арендованного объекта
  * «Объект на ремонте» и «Перевести в архив» открывают шит «Нельзя изменить
- * статус, пока объект арендован»; «Завершить» уводит в шит завершения
- * (#627), после чего смену статуса пользователь повторяет сам. Без аренды
- * — прежнее поведение (мутация / архивный конфирм).
+ * статус, пока объект арендован». «Завершить» — составное действие
+ * (решение владельца 12.09, против двухшаговой аннотации макета):
+ * завершает аренду (#627, сегодняшней датой) и тут же применяет
+ * выбранный статус, один объединённый тост; отказ смены статуса после
+ * завершения — тост ошибки, аренда остаётся завершённой. Без аренды —
+ * прежнее поведение (мутация / архивный конфирм).
  *
  * Наполнение секций живыми данными (#589; Figma 1185:40820 — активная
  * аренда, 1581:53905 — срок подошёл к концу, 1193:48779 — без аренды
@@ -175,7 +179,10 @@ export function PropertyDetailPage(): JSX.Element {
     const deleteProperty = useDeleteProperty();
 
     const [statusSheetOpen, setStatusSheetOpen] = React.useState(false);
-    const [guardSheetOpen, setGuardSheetOpen] = React.useState(false);
+    // Guard #628: какое статусное действие запросено из-под гарда; null —
+    // шит закрыт. Само действие (ремонт/архив) применяется в
+    // handleGuardConfirm после завершения аренды.
+    const [guardedAction, setGuardedAction] = React.useState<GuardedStatusAction | null>(null);
     const [completeSheetOpen, setCompleteSheetOpen] = React.useState(false);
     const [archiveOpen, setArchiveOpen] = React.useState(false);
     const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -286,18 +293,54 @@ export function PropertyDetailPage(): JSX.Element {
         );
     }, [completeRental, currentRentalId, setCompleteSheetOpen]);
 
-    // Guard #628: у арендованного «Объект на ремонте» и «Перевести в
-    // архив» (шит статуса и «Управление») не исполняются — сначала
-    // guard-шит, завершение аренды шитом #627. Архивный конфирм при
-    // аренде не открывается.
+    // Guard #628 (решение владельца 12.09): «Завершить» — одно составное
+    // действие: завершает аренду сегодняшней датой (как #627) и тут же
+    // применяет выбранный под гардом статус (ремонт или архив). Кнопка
+    // в loading на всю цепочку. Отказ смены статуса после успешного
+    // завершения — тост ошибки, аренда остаётся завершённой, повтор —
+    // ручной (пункт уже без гарда); отказ завершения — шит остаётся
+    // открытым, как в #627.
     const handleGuardConfirm = useCallback(() => {
-        setGuardSheetOpen(false);
-        setCompleteSheetOpen(true);
-    }, [setCompleteSheetOpen, setGuardSheetOpen]);
+        if (guardedAction === null) {
+            return;
+        }
+        const action = guardedAction;
+        const finishStatus = {
+            onSuccess: () => {
+                setGuardedAction(null);
+                if (action === 'archive') {
+                    notify.scenarios.property.archivedAfterRental();
+                } else {
+                    notify.scenarios.property.maintenanceAfterRental();
+                }
+            },
+            onError: (error: ApiError) => {
+                setGuardedAction(null);
+                showMutationError(error);
+            },
+        };
+        completeRental.mutate(
+            {completedDate: clientTodayIso()},
+            {
+                onSuccess: () => {
+                    if (action === 'archive') {
+                        archiveProperty.mutate(id, finishStatus);
+                    } else {
+                        updateProperty.mutate(
+                            {id, data: {status: 'maintenance'}},
+                            finishStatus,
+                        );
+                    }
+                },
+                onError: (error) => notify.scenarios.rentals.completeError(error),
+            },
+        );
+    }, [archiveProperty, completeRental, guardedAction, id, setGuardedAction, updateProperty]);
 
     const handleAction = useCallback((key: PropertyDetailActionKey) => {
-        if (statusChangeBlockedByRental(key, hasRental)) {
-            setGuardSheetOpen(true);
+        const guarded = guardedStatusAction(key, hasRental);
+        if (guarded !== null) {
+            setGuardedAction(guarded);
             return;
         }
         switch (key) {
@@ -357,7 +400,7 @@ export function PropertyDetailPage(): JSX.Element {
                 setDeleteOpen(true);
                 break;
         }
-    }, [hasRental, id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardSheetOpen, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
+    }, [hasRental, id, router, setPin, unarchiveProperty, updateProperty, setStatusSheetOpen, setGuardedAction, setCompleteSheetOpen, setArchiveOpen, setDeleteOpen, setSharingOpen]);
 
     const handleDelete = useCallback((mode: DeletePropertyMode) => {
         deleteProperty.mutate(
@@ -641,17 +684,22 @@ export function PropertyDetailPage(): JSX.Element {
 
             {/* Guard-шит (#628, Figma 1583:55882): сменить статус
              * арендованного нельзя — подпись макета R/400 16/18, кнопки
-             * «Отменить»/«Завершить». «Завершить» уводит в шит завершения
-             * аренды (#627); сам статус пользователь меняет повторным
-             * тапом после завершения (двухшаговый флоу макета). */}
+             * «Отменить»/«Завершить». «Завершить» — составное действие
+             * (решение владельца 12.09): завершает аренду (#627) и тут же
+             * применяет статус; pending на обе мутации, закрытие глушится. */}
             <ConfirmDialog
-                open={guardSheetOpen}
-                onOpenChange={setGuardSheetOpen}
+                open={guardedAction !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setGuardedAction(null);
+                    }
+                }}
                 title="Нельзя изменить статус, пока объект арендован"
                 description="Завершите аренду, чтобы изменить статус объекта"
                 descriptionClassName="text-base leading-[18px]"
                 confirmLabel="Завершить"
                 cancelLabel="Отменить"
+                pending={completeRental.isPending || updateProperty.isPending || archiveProperty.isPending}
                 onConfirm={handleGuardConfirm}
             />
 

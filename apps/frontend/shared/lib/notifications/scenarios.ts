@@ -105,6 +105,12 @@ const property = {
    * действия, как в макете. */
   movedToArchive: ((options?) =>
     notify.success('Объект переведен в архив', options)) satisfies ScenarioFn,
+  /** Guard-шит #628: «Завершить» завершает аренду и меняет статус одним
+   * действием — один объединённый тост (решение владельца 12.09). */
+  maintenanceAfterRental: ((options?) =>
+    notify.success('Аренда завершена. Объект переведен на ремонт', options)) satisfies ScenarioFn,
+  archivedAfterRental: ((options?) =>
+    notify.success('Аренда завершена. Объект переведен в архив', options)) satisfies ScenarioFn,
   updated: ((options?) =>
     notify.success('Объект обновлён', options)) satisfies ScenarioFn,
   saveError: ((options?) =>
