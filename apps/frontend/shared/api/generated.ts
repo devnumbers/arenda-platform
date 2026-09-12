@@ -148,6 +148,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the actor's visible properties (the «Объекты» search)
+         * @description The hub's visible slice narrowed by the search query (ticket #601): a case-insensitive substring over the property's name and address. The slice is the main list's — the actor's own properties plus the ones shared with an active membership (ADR 0028), archived excluded. The list runs in pages of 50 the search screen's infinite scroll walks; the window is keyset pagination over (name, id) (ticket #597's pattern) — the hub's own default order, so rows shifting between loads never duplicate or drop, the previous page's nextCursor comes back as cursor. A rename can move a row across a window boundary — inherent to the visible-name sort (the contacts book, #600).
+         */
+        get: operations["searchProperties"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dadata/suggestions/address": {
         parameters: {
             query?: never;
@@ -2665,6 +2685,12 @@ export interface components {
              */
             hidden_shared_count: number;
         };
+        /** @description The properties search page (ticket #601): the matched cards in the keyset window's order. */
+        PropertiesSearchResponse: {
+            items: components["schemas"]["PropertyResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #601): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
+        };
         /** @enum {string} */
         PropertyType: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
         /** @enum {string} */
@@ -3008,6 +3034,11 @@ export interface components {
         PaymentsLimit: number;
         /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
         PaymentsCursor: string;
+        /** @description The case-insensitive substring the matches run over — the property's name or its address (ticket #601). Leading and trailing whitespace never takes part in the match. */
+        PropertiesSearchQuery: string;
+        PropertiesSearchLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (name, id), ticket #597's pattern). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        PropertiesSearchCursor: string;
         /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
         OperationsStatusFilter: "planned" | "paid" | "overdue";
         /** @description Inclusive lower bound of the period on the operation date. */
@@ -3316,6 +3347,34 @@ export interface operations {
                     "application/json": components["schemas"]["PropertiesResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    searchProperties: {
+        parameters: {
+            query: {
+                /** @description The case-insensitive substring the matches run over — the property's name or its address (ticket #601). Leading and trailing whitespace never takes part in the match. */
+                search: components["parameters"]["PropertiesSearchQuery"];
+                limit?: components["parameters"]["PropertiesSearchLimit"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (name, id), ticket #597's pattern). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["PropertiesSearchCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matched properties; nextCursor carries the next page's continuation (null — the matches are exhausted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertiesSearchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };

@@ -774,6 +774,24 @@ type Querier interface {
 	// window is new or has expired (TTL reset) and the failure counter must be set
 	// to an absolute value rather than incremented.
 	ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error
+	// The search endpoint's window (ticket #601): the actor's visible
+	// non-archived properties — own plus actively shared (the merged visibility
+	// of the main list, ADR 0028) — matching the search as a case-insensitive
+	// substring over the name or the address (the store escapes the ILIKE
+	// metacharacters; the trgm indexes of migration 000124 serve both fields).
+	//
+	// The walk is keyset over the display name and id (ticket #597's pattern):
+	// the window resumes strictly after the (name, id) the previous page ended
+	// on, so rows created, deleted or renamed between loads never duplicate or
+	// drop. The name sort mirrors the hub's own default (the client orders the
+	// list by name) with the Russian ICU collation matching the contacts book's
+	// letter order (#600); id ties off. A rename moving a row across the window
+	// boundary is inherent to the visible-name sort. The cursor args travel
+	// together; NULL (no cursor) reads from the beginning.
+	// access_role names the actor's role on the row: 'owner' for own
+	// properties, the active membership's role for shared ones (T11) — the
+	// LEFT JOIN row is unique per (property, user).
+	SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error)
 	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
 	// Existence is already proven inside the same transaction under the property
 	// lock; :execrows keeps the store honest independently of that ordering.

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -216,6 +218,63 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 		}, row.MembersCount))
 	}
 	return properties, nil
+}
+
+// SearchVisible walks the actor's visible non-archived properties matching
+// the search — the search endpoint's keyset window (ticket #601). The store
+// escapes the ILIKE metacharacters (ESCAPE '\') and carries the raw keyset
+// key: each row's own (name, id) resumes the walk strictly after itself.
+// access_role arrives resolved per row ('owner' or the membership role).
+func (r *PropertyRepository) SearchVisible(
+	ctx context.Context, actor uuid.UUID, q application.PropertySearchQuery,
+) ([]domain.Property, error) {
+	var afterName pgtype.Text
+	var afterID pgtype.UUID
+	if q.AfterName != nil {
+		afterName = pgtype.Text{String: *q.AfterName, Valid: true}
+	}
+	if q.AfterID != nil {
+		afterID = pgconv.UUIDToPgtype(*q.AfterID)
+	}
+	rows, err := r.q().SearchVisibleProperties(ctx, postgres.SearchVisiblePropertiesParams{
+		Actor:     pgconv.UUIDToPgtype(actor),
+		Search:    escapeLikePattern(q.Search),
+		AfterName: afterName,
+		AfterID:   afterID,
+		PageLimit: q.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	properties := make([]domain.Property, 0, len(rows))
+	for _, row := range rows {
+		p := propertyFromCountsRow(postgres.Property{
+			ID:          row.ID,
+			OwnerID:     row.OwnerID,
+			Name:        row.Name,
+			Type:        row.Type,
+			Address:     row.Address,
+			Description: row.Description,
+			Attributes:  row.Attributes,
+			Status:      row.Status,
+			CreatedAt:   row.CreatedAt,
+			UpdatedAt:   row.UpdatedAt,
+			PinnedAt:    row.PinnedAt,
+		}, row.MembersCount)
+		p.AccessRole = sharedpolicy.Role(row.AccessRole)
+		properties = append(properties, p)
+	}
+	return properties, nil
+}
+
+// likePatternEscaper escapes the ILIKE metacharacters in user-supplied search
+// substrings — the payments and contacts stores' convention (ESCAPE '\').
+var likePatternEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// escapeLikePattern trims and escapes a user-supplied substring so it can be
+// embedded into an ILIKE pattern; the surrounding % travel in the query.
+func escapeLikePattern(q string) string {
+	return likePatternEscaper.Replace(strings.TrimSpace(q))
 }
 
 func (r *PropertyRepository) Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error) {
