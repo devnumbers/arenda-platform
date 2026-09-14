@@ -8,18 +8,18 @@ import type { OperationsPeriod } from '@/features/payments';
  */
 
 /** Скоуп сводки страницы категорий: объекты (#542) и период ленты из
- * адреса; применённый категорийный фильтр в запрос не попадает — иначе
+ * адреса (null — весь период #672: дат в скоупе нет); применённый
+ * категорийный фильтр в запрос не попадает — иначе
  * разбивка сузилась бы до уже выбранных категорий и выбор было бы не
  * с кого менять. Пустой выбор объектов проходит как есть — хук сам
  * опускает пустой параметр (#541). */
 export function globalCategoriesSummaryScope(
-  period: OperationsPeriod,
+  period: OperationsPeriod | null,
   propertyIds: ReadonlyArray<string>,
 ): GlobalOperationScope {
   return {
     order: 'desc',
     propertyIds,
-    dateFrom: period.from,
-    dateTo: period.to,
+    ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
   };
 }
