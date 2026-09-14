@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Публичная поверхность лендинга: корень и юрстраницы (apps/landing/src/app/App.tsx). -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://rentlee.ru/</loc>
+  </url>
+  <url>
+    <loc>https://rentlee.ru/privacy</loc>
+  </url>
+  <url>
+    <loc>https://rentlee.ru/terms</loc>
+  </url>
+</urlset>
