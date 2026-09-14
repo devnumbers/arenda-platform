@@ -38,7 +38,14 @@ updates + сгруппированные weekly version updates в ветку `d
   GitHub Environment `stage` (deployment branch policy: только `dev`).
 - `main` branch → prod: `/opt/arenda/prod`, compose project `arenda-prod`,
   GitHub Environment `production` (deployment branch policy: только `main`).
-- Stage backend использует `APP_ENV=dev`, чтобы T-Kassa sandbox был допустим текущей валидацией конфигурации.
+- Stage backend использует `APP_ENV=stage` и `PAYMENT_PROVIDER=fake`: валидация
+  на stage строгая — как в `production`, с явными исключениями для фейкового
+  платёжного провайдера и фейкового email-sender (тестирование без реальных
+  денег). T-Kassa остаётся легальной на stage: sandbox-`T_KASSA_BASE_URL`
+  проходит валидацию. Смена `APP_ENV`/`PAYMENT_PROVIDER` вносится в секрет
+  `ENV_FILE` окружения `stage` вместе с этим example (набор ключей не менялся);
+  обновлять секрет синхронно с деплоем новой версии бэка — старый бэк значение
+  `APP_ENV=stage` не примет.
 - Prod backend использует `APP_ENV=production`.
 - Deploy-каталоги на сервере содержат только `docker-compose.<env>.yml`,
   `.env.<env>` (+ `.prev`), `.previous-images`, `.deploy-run-id`; репозитория
