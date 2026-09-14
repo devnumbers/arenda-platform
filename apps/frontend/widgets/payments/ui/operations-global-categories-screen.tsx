@@ -42,8 +42,8 @@ import { globalCategoriesSummaryScope } from '../lib/operations-global-categorie
  * и объекты (#542) переживают применение — categories мержится в return через
  * buildReturnUrl + globalOperationsFiltersParams (единый wire-формат с лентой).
  * Кнопка видна при непустом черновике или применённом фильтре (иначе возврат
- * к «Все категории» был бы недостижим); пустой период — EmptyState (Figma
- * 1518-92530, #478), «Выбрать» в этом состоянии не нужен. Шапка — канон
+ * к «Все категории» был бы недостижим); пустая разбивка — EmptyState
+ * (Figma 1518-92530, #478). Шапка — канон
  * выборщика (как у объектной страницы: ✕ «Закрыть» + заголовок в TopNav,
  * #564).
  */
@@ -53,8 +53,8 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
 
   const today = clientTodayIso();
   const filters = readGlobalOperationsFilters(searchParams, today);
-  // Дефолт категорий — весь период (#672, как на лентах #670/#671):
-  // без явного выбора даты в запрос не уходят, чип нейтральный.
+  // Дефолт периода страницы — весь период (#672): даты в запросе только
+  // с явным выбором.
   const period = filters.period;
   // Черновик живёт от монтирования до монтирования: страница монтируется
   // заново на каждый вход, useState инициализируется применённым выбором.
@@ -136,7 +136,7 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
               }
             />
           ) : rows.length === 0 ? (
-            // Пустой период (Figma 1518-92530, #478) — канон EmptyState.
+            // Пустая разбивка (Figma 1518-92530, #478) — канон EmptyState.
             <EmptyState
               imageSrc="/images/payments/operations-categories.png"
               className="py-16"
