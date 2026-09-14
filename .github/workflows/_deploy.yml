@@ -353,8 +353,9 @@ jobs:
             trap 'rm -rf "${SRC_DIR}"' EXIT
 
             # Guard: the main file must import conf.d — otherwise the fragment
-            # would be installed but silently never loaded.
-            if ! grep -Eq 'import[[:space:]]+/etc/caddy/conf\.d' /etc/caddy/Caddyfile; then
+            # would be installed but silently never loaded. Anchored to the line
+            # start so a commented-out import cannot green-light the deploy.
+            if ! grep -Eq '^[[:space:]]*import[[:space:]]+/etc/caddy/conf\.d' /etc/caddy/Caddyfile; then
               echo "GUARD FAILED: /etc/caddy/Caddyfile has no 'import /etc/caddy/conf.d'." >&2
               echo "The one-time monolith split (docs/deployment.md, «Caddy») must run before the first pipeline deploy of the fragment." >&2
               exit 1
@@ -420,10 +421,21 @@ jobs:
                 return 1
               fi
               [ "$(get_status "${BASE_URL}${asset}")" = "200" ] || { echo "landing asset ${asset} is not 200" >&2; return 1; }
+              # Favicon moved to src/assets in the same change (#652): it must
+              # resolve through the hashed /assets path with the immutable cache.
+              icon="$(grep -oE '/assets/[^"]+\.png' <<<"${body}" | head -n1)"
+              if [ -z "${icon}" ]; then
+                echo "no /assets/*.png favicon reference found in the landing HTML" >&2
+                return 1
+              fi
+              icon_headers="$(curl -sS --max-time 15 --retry 3 --retry-delay 2 --retry-all-errors -D - -o /dev/null "${BASE_URL}${icon}")" \
+                || { echo "GET ${icon} failed" >&2; return 1; }
+              head -n1 <<<"${icon_headers}" | grep -qi '^HTTP/.* 200' || { echo "favicon ${icon} is not 200" >&2; return 1; }
+              grep -qi '^cache-control: .*immutable' <<<"${icon_headers}" || { echo "favicon ${icon} lost the immutable cache header" >&2; return 1; }
 
               body="$(get "${BASE_URL}/robots.txt")" || { echo "GET /robots.txt failed" >&2; return 1; }
               grep -q 'Disallow:' <<<"${body}" || { echo "/robots.txt does not contain Disallow rules" >&2; return 1; }
-              rt_type="$(curl -fsS --max-time 15 -o /dev/null -w '%{content_type}' "${BASE_URL}/robots.txt")" \
+              rt_type="$(curl -fsS --max-time 15 --retry 3 --retry-delay 2 --retry-all-errors -o /dev/null -w '%{content_type}' "${BASE_URL}/robots.txt")" \
                 || { echo "GET /robots.txt headers failed" >&2; return 1; }
               case "${rt_type}" in
                 text/plain*) ;;
@@ -442,7 +454,7 @@ jobs:
               bad_status="$(get_status "${BASE_URL}/nosuch-caddy-smoke-$RANDOM")"
               [ "${bad_status}" = "404" ] || { echo "unknown path returned ${bad_status}, expected 404 from the cabinet" >&2; return 1; }
 
-              sw_headers="$(curl -sS --max-time 15 -D - -o /dev/null "${BASE_URL}/sw.js")" || { echo "GET /sw.js failed" >&2; return 1; }
+              sw_headers="$(curl -sS --max-time 15 --retry 3 --retry-delay 2 --retry-all-errors -D - -o /dev/null "${BASE_URL}/sw.js")" || { echo "GET /sw.js failed" >&2; return 1; }
               head -n1 <<<"${sw_headers}" | grep -qi '^HTTP/.* 200' || { echo "/sw.js is not 200" >&2; return 1; }
               grep -qi '^cache-control: no-store' <<<"${sw_headers}" || { echo "/sw.js lost the no-store header" >&2; return 1; }
               grep -qi '^content-type: .*javascript' <<<"${sw_headers}" || { echo "/sw.js content-type is not a JS MIME" >&2; return 1; }

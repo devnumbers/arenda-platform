@@ -419,8 +419,15 @@ test "$(curl -sS -o /dev/null -w '%{http_code}' https://dev.rentlee.ru/nosuchpat
 curl -sSI https://dev.rentlee.ru/sw.js | grep -i '^cache-control: no-store'
 ```
 
-Эти же проверки выполняет шаг «Deploy Caddy fragment» после каждой раскатки;
-их провал откатывает фрагмент на `.prev` (см. раздел «Caddy»).
+Пересекающиеся проверки выполняет шаг «Deploy Caddy fragment» после каждой
+раскатки (он дополнительно грейтит `/login`, лендинг-ассеты и 404); их провал
+откатывает фрагмент на `.prev` (см. раздел «Caddy»). Фрагмент один на оба
+окружения: stage-деплой гоняет smoke против `dev.rentlee.ru`, prod-часть
+фрагмента (`rentlee.ru`, admin) реально проверяется смоуком только на
+prod-выкате — там её подстраховывают validate и откат.
+
+Домен в `robots.txt` (`Sitemap:`) и в `sitemap.xml` (`<loc>`) — продовый
+канон `https://rentlee.ru`; stage-зеркало этим файлом не индексируется.
 
 ## Runtime Guards
 
