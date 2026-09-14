@@ -2,7 +2,8 @@ name: Deploy (reusable)
 
 # Reusable deploy workflow: pulls immutable digest-pinned images from GHCR,
 # verifies cosign signatures, backs up the DB, migrates, rolls out with
-# automatic rollback, and runs external smoke checks.
+# automatic rollback, deploys the Caddy fragment (rentlee.caddy → /etc/caddy/conf.d),
+# and runs external smoke checks.
 # Called by deploy-stage.yml and deploy-prod.yml.
 
 on:
@@ -312,6 +313,144 @@ jobs:
             docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" up -d --wait --remove-orphans
             docker compose --env-file "${ENV_NAME}" -f "${COMPOSE_FILE}" ps
             trap - ERR
+
+      # Caddy fragment (deploy/caddy/rentlee.caddy → /etc/caddy/conf.d/rentlee.caddy):
+      # staged as .new (does not match the *.caddy import glob — no accidental
+      # pickup), previous fragment kept as .prev, atomic mv, validate of the MAIN
+      # file (the fragment resolves only through its import), graceful reload,
+      # inverted-routing smoke. Any validate/smoke failure restores .prev and
+      # reloads; images keep running either way. The step runs after the rollout
+      # so the smoke exercises the new images behind the new routing.
+      - name: Upload Caddy fragment
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
+          source: "deploy/caddy/rentlee.caddy"
+          target: "/tmp/arenda-caddy-${{ inputs.compose_env }}/"
+          strip_components: 2
+
+      - name: Deploy Caddy fragment
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
+          envs: BASE_URL
+          script: |
+            set -euo pipefail
+            CONF_D="/etc/caddy/conf.d"
+            FRAG="${CONF_D}/rentlee.caddy"
+            FRAG_NEW="${FRAG}.new"
+            FRAG_PREV="${FRAG}.prev"
+            SRC_DIR="/tmp/arenda-caddy-${{ inputs.compose_env }}"
+            SRC="${SRC_DIR}/rentlee.caddy"
+            trap 'rm -rf "${SRC_DIR}"' EXIT
+
+            # Guard: the main file must import conf.d — otherwise the fragment
+            # would be installed but silently never loaded.
+            if ! grep -Eq 'import[[:space:]]+/etc/caddy/conf\.d' /etc/caddy/Caddyfile; then
+              echo "GUARD FAILED: /etc/caddy/Caddyfile has no 'import /etc/caddy/conf.d'." >&2
+              echo "The one-time monolith split (docs/deployment.md, «Caddy») must run before the first pipeline deploy of the fragment." >&2
+              exit 1
+            fi
+
+            sudo install -m 644 -o root -g root "${SRC}" "${FRAG_NEW}"
+
+            have_prev=0
+            if [ -f "${FRAG}" ]; then
+              sudo cp -f "${FRAG}" "${FRAG_PREV}"
+              have_prev=1
+            fi
+            sudo mv -f "${FRAG_NEW}" "${FRAG}"
+
+            restore_prev() {
+              echo "================ CADDY FRAGMENT ROLLBACK ================" >&2
+              if [ "${have_prev}" = "1" ]; then
+                sudo mv -f "${FRAG_PREV}" "${FRAG}"
+              else
+                sudo rm -f "${FRAG}"
+              fi
+              sudo systemctl reload caddy
+              echo "Previous Caddy fragment restored and reloaded." >&2
+            }
+
+            fail() {
+              echo "CADDY DEPLOY FAILED: $1" >&2
+              restore_prev
+              exit 1
+            }
+
+            # Validate the MAIN file: the fragment is resolved through its import,
+            # so this catches fragment syntax/provisioning errors in place.
+            sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null \
+              || fail "caddy validate failed with the new fragment"
+
+            # Graceful reload, zero downtime; with a broken config the running
+            # instance keeps the old one — a non-zero exit rolls the file back too.
+            sudo systemctl reload caddy || fail "systemctl reload caddy failed"
+
+            get() {
+              curl -fsS --max-time 15 --retry 5 --retry-delay 2 --retry-all-errors "$1"
+            }
+            get_status() {
+              curl -sS --max-time 15 --retry 5 --retry-delay 2 --retry-all-errors -o /dev/null -w '%{http_code}' "$1"
+            }
+
+            # Inverted-routing smoke (ticket #653): landing is the explicit
+            # exception, cabinet is the catch-all, /api strips, /webhooks does not,
+            # /sw.js passes through with its Next-set no-store untouched.
+            run_smoke() {
+              local path body asset rt_type sw_headers dash_status bad_status
+
+              for path in / /privacy /terms /login /robots.txt /sitemap.xml; do
+                get "${BASE_URL}${path}" >/dev/null || { echo "GET ${path} failed" >&2; return 1; }
+              done
+
+              body="$(get "${BASE_URL}/")" || { echo "GET / failed" >&2; return 1; }
+              grep -q 'id="root"' <<<"${body}" || { echo "/ did not return the landing HTML" >&2; return 1; }
+              asset="$(grep -oE '/assets/[^"]+\.js' <<<"${body}" | head -n1)"
+              if [ -z "${asset}" ]; then
+                echo "no /assets/*.js reference found in the landing HTML" >&2
+                return 1
+              fi
+              [ "$(get_status "${BASE_URL}${asset}")" = "200" ] || { echo "landing asset ${asset} is not 200" >&2; return 1; }
+
+              body="$(get "${BASE_URL}/robots.txt")" || { echo "GET /robots.txt failed" >&2; return 1; }
+              grep -q 'Disallow:' <<<"${body}" || { echo "/robots.txt does not contain Disallow rules" >&2; return 1; }
+              rt_type="$(curl -fsS --max-time 15 -o /dev/null -w '%{content_type}' "${BASE_URL}/robots.txt")" \
+                || { echo "GET /robots.txt headers failed" >&2; return 1; }
+              case "${rt_type}" in
+                text/plain*) ;;
+                *) echo "/robots.txt content-type is '${rt_type}', expected text/plain (SPA fallback?)" >&2; return 1 ;;
+              esac
+
+              body="$(get "${BASE_URL}/api/healthz")" || { echo "GET /api/healthz failed" >&2; return 1; }
+              grep -q '"status":"ok"' <<<"${body}" || { echo "/api/healthz did not report ok" >&2; return 1; }
+
+              [ "$(get_status "${BASE_URL}/properties")" = "200" ] || { echo "/properties (cabinet catch-all) is not 200" >&2; return 1; }
+              dash_status="$(get_status "${BASE_URL}/dashboard")"
+              case "${dash_status}" in
+                307|308) ;;
+                *) echo "/dashboard expected the cabinet redirect (307/308), got ${dash_status}" >&2; return 1 ;;
+              esac
+              bad_status="$(get_status "${BASE_URL}/nosuch-caddy-smoke-$RANDOM")"
+              [ "${bad_status}" = "404" ] || { echo "unknown path returned ${bad_status}, expected 404 from the cabinet" >&2; return 1; }
+
+              sw_headers="$(curl -sS --max-time 15 -D - -o /dev/null "${BASE_URL}/sw.js")" || { echo "GET /sw.js failed" >&2; return 1; }
+              head -n1 <<<"${sw_headers}" | grep -qi '^HTTP/.* 200' || { echo "/sw.js is not 200" >&2; return 1; }
+              grep -qi '^cache-control: no-store' <<<"${sw_headers}" || { echo "/sw.js lost the no-store header" >&2; return 1; }
+              grep -qi '^content-type: .*javascript' <<<"${sw_headers}" || { echo "/sw.js content-type is not a JS MIME" >&2; return 1; }
+            }
+
+            run_smoke || fail "inverted-routing smoke failed"
+
+            echo "Caddy fragment deployed and smoked: ${FRAG}"
 
       - name: Smoke test (external)
         env:

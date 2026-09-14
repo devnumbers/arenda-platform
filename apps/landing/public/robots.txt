@@ -1,0 +1,23 @@
+# robots.txt лендинга — владелец публичной поверхности хоста (карта #649).
+# Disallow зеркалит APP_ROUTE_PREFIXES кабинета (apps/frontend/shared/lib/pwa/app-routes.ts)
+# минус /login — единственная публичная страница кабинета, цель CTA лендинга.
+# При изменении списка роутов фронта синхронизировать этот файл.
+User-agent: *
+Allow: /
+
+Disallow: /dashboard
+Disallow: /properties
+Disallow: /operations
+Disallow: /payments
+Disallow: /participants
+Disallow: /tasks
+Disallow: /contacts
+Disallow: /subscription
+Disallow: /profile
+Disallow: /support
+Disallow: /ui-kit
+
+Disallow: /api/
+Disallow: /webhooks/
+
+Sitemap: https://rentlee.ru/sitemap.xml
