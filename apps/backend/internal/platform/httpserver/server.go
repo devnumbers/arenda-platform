@@ -240,10 +240,11 @@ func New(deps Deps) http.Handler {
 	// The local-only fake confirmation endpoints (issues #250/#251) live
 	// outside the generated contract: the billing wiring constructs their
 	// handlers only under the fake provider, so a production build mounts no
-	// such routes at all (issue #287).
+	// such routes at all (issue #287). The handler owns the route set — the
+	// auto simulator mode adds the GET bank-return routes, the manual one the
+	// fail endpoint (issue #663).
 	if deps.BillingFakeConfirms != nil {
-		r.Post(billinghttp.FakePaymentConfirmRoute, deps.BillingFakeConfirms.ConfirmPayment)
-		r.Post(billinghttp.FakeCardBindingConfirmRoute, deps.BillingFakeConfirms.ConfirmCardBinding)
+		deps.BillingFakeConfirms.MountRoutes(r)
 	}
 
 	return generated

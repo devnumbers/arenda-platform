@@ -294,6 +294,100 @@ func TestProviderStatusRemembersFinalOutcomes(t *testing.T) {
 	}
 }
 
+// TestProviderSentinelAmountFailsConfirm proves the decline sentinel (issue
+// #663): an init amount whose kopecks part is 01 encodes a form-payment
+// decline — the confirm completes the payment as failed instead of succeeded,
+// the Stripe-test-card trick of the fake provider.
+func TestProviderSentinelAmountFailsConfirm(t *testing.T) {
+	t.Parallel()
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	req := validInitRequest(paymentID)
+	req.AmountKopecks = 39901
+	if _, err := p.InitPayment(context.Background(), req); err != nil {
+		t.Fatalf("InitPayment error: %v", err)
+	}
+
+	event, err := p.ConfirmPayment(context.Background(), paymentID.String())
+	if err != nil {
+		t.Fatalf("ConfirmPayment error: %v", err)
+	}
+	if event.Payment == nil || event.Payment.Status != domain.PaymentStatusFailed {
+		t.Fatalf("expected failed payment event for the decline sentinel, got %+v", event)
+	}
+	if event.Payment.ErrorCode == nil || *event.Payment.ErrorCode == "" {
+		t.Errorf("expected an error code on the decline sentinel")
+	}
+
+	status, err := p.PaymentStatus(context.Background(), paymentID, "fake_1")
+	if err != nil {
+		t.Fatalf("PaymentStatus error: %v", err)
+	}
+	if status.Status != domain.PaymentStatusFailed {
+		t.Errorf("status: got %q, want %q", status.Status, domain.PaymentStatusFailed)
+	}
+}
+
+// TestProviderSentinelAmountSticksPending proves the stuck sentinel (issue
+// #663): an init amount whose kopecks part is 02 encodes «the bank never
+// answers» — the confirm resolves nothing (the not-found sentinel drives the
+// caller to the provider status) and the payment stays pending until the TTL.
+func TestProviderSentinelAmountSticksPending(t *testing.T) {
+	t.Parallel()
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	init, err := p.InitPayment(context.Background(), func() application.InitPaymentRequest {
+		req := validInitRequest(paymentID)
+		req.AmountKopecks = 39902
+		return req
+	}())
+	if err != nil {
+		t.Fatalf("InitPayment error: %v", err)
+	}
+
+	_, err = p.ConfirmPayment(context.Background(), paymentID.String())
+	if !errors.Is(err, application.ErrProviderPaymentNotFound) {
+		t.Fatalf("ConfirmPayment(stuck) error = %v, want ErrProviderPaymentNotFound", err)
+	}
+
+	status, err := p.PaymentStatus(context.Background(), paymentID, init.ProviderPaymentID)
+	if err != nil {
+		t.Fatalf("PaymentStatus error: %v", err)
+	}
+	if status.Status != domain.PaymentStatusPending {
+		t.Errorf("status: got %q, want %q (the stuck payment stays pending)", status.Status, domain.PaymentStatusPending)
+	}
+
+	// Repeated confirms behave identically until the TTL purges the session.
+	if _, err := p.ConfirmPayment(context.Background(), paymentID.String()); !errors.Is(err, application.ErrProviderPaymentNotFound) {
+		t.Fatalf("repeated ConfirmPayment(stuck) error = %v, want ErrProviderPaymentNotFound", err)
+	}
+}
+
+// TestProviderSentinelAmountsLeaveChargesAlone proves the sentinels encode the
+// form-payment (CIT) outcome only: a MIT charge with a normal token is not
+// affected by an amount that happens to carry sentinel kopecks — declines
+// there stay encoded by the fake_fail_ token prefix.
+func TestProviderSentinelAmountsLeaveChargesAlone(t *testing.T) {
+	t.Parallel()
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	paymentID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	res, err := p.ChargePayment(context.Background(), application.ChargeRequest{
+		PaymentID:     paymentID,
+		ChargeToken:   "fake_token_normal",
+		AmountKopecks: 39901,
+	})
+	if err != nil {
+		t.Fatalf("ChargePayment error: %v", err)
+	}
+	if res.Status != domain.PaymentStatusSucceeded {
+		t.Errorf("charge status: got %q, want succeeded (sentinel amounts do not affect charges)", res.Status)
+	}
+}
+
 func TestProviderConfirmPaymentUnknownID(t *testing.T) {
 	t.Parallel()
 	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)

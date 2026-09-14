@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -21,15 +23,20 @@ import (
 // to the fake adapter directly and feed the confirmed event through the same
 // synchronous application path a webhook takes.
 
-// The route patterns of the two local confirmation endpoints, registered by
-// the HTTP wiring only under the fake provider. The fake adapter builds the
+// The route patterns of the local confirmation endpoints, registered by
+// MountRoutes only under the fake provider. The fake adapter builds the
 // payer-facing confirmation URLs from the same paths (confirmURL and
 // bindingConfirmURL) — keep both sides in sync.
 const (
-	// FakePaymentConfirmRoute is POST /internal/fake-subscription-payment/{id}/confirm.
+	// FakePaymentConfirmRoute is /internal/fake-subscription-payment/{id}/confirm
+	// — POST for scripts, and in the auto simulator mode also the GET the
+	// browser lands on when it returns from the «bank».
 	FakePaymentConfirmRoute = "/internal/fake-subscription-payment/{id}/confirm"
-	// FakeCardBindingConfirmRoute is POST /internal/fake-card-binding/{requestKey}/confirm.
+	// FakeCardBindingConfirmRoute is /internal/fake-card-binding/{requestKey}/confirm.
 	FakeCardBindingConfirmRoute = "/internal/fake-card-binding/{requestKey}/confirm"
+	// FakePaymentFailRoute is POST /internal/fake-subscription-payment/{id}/fail
+	// — the manual simulator mode's decline endpoint; auto mode never mounts it.
+	FakePaymentFailRoute = "/internal/fake-subscription-payment/{id}/fail"
 )
 
 // FakeConfirmProvider is the fake adapter's local confirmation capability —
@@ -39,6 +46,7 @@ const (
 type FakeConfirmProvider interface {
 	ConfirmPayment(ctx context.Context, internalPaymentID string) (billingapp.WebhookEvent, error)
 	ConfirmCardBinding(ctx context.Context, requestKey string) (billingapp.WebhookEvent, error)
+	ConfirmPaymentFailed(ctx context.Context, internalPaymentID string, errorCode *string) (billingapp.WebhookEvent, error)
 	PaymentStatus(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (billingapp.PaymentStatusResult, error)
 }
 
@@ -50,28 +58,58 @@ type FakeConfirmBackend interface {
 	ApplyProviderEvent(ctx context.Context, event billingapp.WebhookEvent) error
 }
 
-// FakeConfirmHandlers implements POST /internal/fake-subscription-payment/{id}/confirm
-// and POST /internal/fake-card-binding/{requestKey}/confirm: the local-only
-// completion of a pending payment or card-binding session at the fake provider,
-// so the whole flow is drivable end-to-end on a developer machine. The
-// confirmed event flows through the production webhook path, so local runs
-// exercise production behaviour.
+// FakeConfirmHandlers implements the local confirmation endpoints of the fake
+// provider: the completion of a pending payment or card-binding session, so
+// the whole flow is drivable end-to-end on a developer machine. The confirmed
+// event always flows through the production webhook path, so local runs
+// exercise production behaviour. Two simulator modes (issue #663):
+//
+//   - auto (default) — the confirm URLs double as the browser's bank-return:
+//     GET completes the operation and answers 303 into the frontend, while
+//     POST stays scriptable;
+//   - manual (off) — POST-only confirms, plus the fail endpoint that
+//     completes a payment as declined for pending/TTL/decline scenarios.
 type FakeConfirmHandlers struct {
-	provider FakeConfirmProvider
-	backend  FakeConfirmBackend
-	logger   *slog.Logger
+	provider    FakeConfirmProvider
+	backend     FakeConfirmBackend
+	logger      *slog.Logger
+	webOrigin   string
+	autoConfirm bool
 }
 
-// NewFakeConfirmHandlers creates the local confirmation handlers over the fake
-// adapter and the payment service.
-func NewFakeConfirmHandlers(provider FakeConfirmProvider, backend FakeConfirmBackend, logger *slog.Logger) *FakeConfirmHandlers {
+// NewFakeConfirmHandlers creates the local confirmation handlers over the
+// fake adapter and the payment service. The webOrigin argument is the
+// frontend origin the GET bank-return redirects into (without a trailing
+// slash); the autoConfirm flag enables the GET confirm routes of the auto
+// simulator mode.
+func NewFakeConfirmHandlers(
+	provider FakeConfirmProvider, backend FakeConfirmBackend, logger *slog.Logger,
+	webOrigin string, autoConfirm bool,
+) *FakeConfirmHandlers {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &FakeConfirmHandlers{
-		provider: provider,
-		backend:  backend,
-		logger:   logger,
+		provider:    provider,
+		backend:     backend,
+		logger:      logger,
+		webOrigin:   strings.TrimRight(webOrigin, "/"),
+		autoConfirm: autoConfirm,
+	}
+}
+
+// MountRoutes registers the local confirmation endpoints on r according to
+// the simulator mode — the single source of truth the HTTP wiring uses:
+// auto adds the GET bank-return routes that complete and redirect, manual
+// (off) adds the fail endpoint; POST confirms exist in both modes.
+func (h *FakeConfirmHandlers) MountRoutes(r chi.Router) {
+	r.Post(FakePaymentConfirmRoute, h.ConfirmPayment)
+	r.Post(FakeCardBindingConfirmRoute, h.ConfirmCardBinding)
+	if h.autoConfirm {
+		r.Get(FakePaymentConfirmRoute, h.ConfirmPaymentRedirect)
+		r.Get(FakeCardBindingConfirmRoute, h.ConfirmCardBindingRedirect)
+	} else {
+		r.Post(FakePaymentFailRoute, h.FailPayment)
 	}
 }
 
@@ -89,7 +127,7 @@ func (h *FakeConfirmHandlers) ConfirmPayment(w http.ResponseWriter, r *http.Requ
 		writeBillingError(w, r, err)
 		return
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
+	h.writeConfirmAck(r, w)
 }
 
 // ConfirmCardBinding implements
@@ -108,7 +146,7 @@ func (h *FakeConfirmHandlers) ConfirmCardBinding(w http.ResponseWriter, r *http.
 		writeBillingError(w, r, err)
 		return
 	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
+	h.writeConfirmAck(r, w)
 }
 
 // confirmPayment completes a pending payment at the fake provider and applies
@@ -168,6 +206,103 @@ func (h *FakeConfirmHandlers) confirmCardBinding(ctx context.Context, requestKey
 		return fmt.Errorf("confirm fake card binding: %w", err)
 	}
 	return h.backend.ApplyProviderEvent(ctx, event)
+}
+
+// ConfirmPaymentRedirect implements the GET side of
+// /internal/fake-subscription-payment/{id}/confirm — the browser's return from
+// the fake «bank» (issue #663): it completes the payment through the same
+// webhook path as the POST and answers 303 into the frontend payment screen,
+// whose polling flips the UI to the actual outcome. Failure paths keep the
+// POST contract (problem responses) — only the completed operation redirects.
+func (h *FakeConfirmHandlers) ConfirmPaymentRedirect(w http.ResponseWriter, r *http.Request) {
+	paymentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.badRequest(w, r, "Некорректный идентификатор платежа")
+		return
+	}
+	if err := h.confirmPayment(r.Context(), paymentID); err != nil {
+		writeBillingError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, h.paymentReturnURL(paymentID), http.StatusSeeOther)
+}
+
+// ConfirmCardBindingRedirect implements the GET side of
+// /internal/fake-card-binding/{requestKey}/confirm — the browser's return from
+// the fake bank's add-card form (issue #663): it completes the binding session
+// and answers 303 into «Способы оплаты», whose addCardResult effect on mount
+// refreshes the list.
+func (h *FakeConfirmHandlers) ConfirmCardBindingRedirect(w http.ResponseWriter, r *http.Request) {
+	requestKey := chi.URLParam(r, "requestKey")
+	if requestKey == "" {
+		h.badRequest(w, r, "Некорректный идентификатор сессии")
+		return
+	}
+	if err := h.confirmCardBinding(r.Context(), requestKey); err != nil {
+		writeBillingError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, h.bindingReturnURL(), http.StatusSeeOther)
+}
+
+// FailPayment implements POST /internal/fake-subscription-payment/{id}/fail —
+// the manual simulator mode's decline endpoint (issue #663): it completes a
+// pending payment as failed through the webhook path, so decline scenarios
+// stay drivable by scripts. The auto mode never mounts it — declines there
+// are encoded by the sentinel amounts.
+func (h *FakeConfirmHandlers) FailPayment(w http.ResponseWriter, r *http.Request) {
+	paymentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.badRequest(w, r, "Некорректный идентификатор платежа")
+		return
+	}
+	event, err := h.provider.ConfirmPaymentFailed(r.Context(), paymentID.String(), nil)
+	if err != nil {
+		if errors.Is(err, billingapp.ErrProviderPaymentNotFound) {
+			writeBillingError(w, r, billingapp.ErrNotFound)
+			return
+		}
+		writeBillingError(w, r, fmt.Errorf("fail fake payment: %w", err))
+		return
+	}
+	if err := h.backend.ApplyProviderEvent(r.Context(), event); err != nil {
+		writeBillingError(w, r, err)
+		return
+	}
+	h.writeConfirmAck(r, w)
+}
+
+// writeConfirmAck answers the JSON acknowledgement the script-facing POST
+// endpoints share.
+func (h *FakeConfirmHandlers) writeConfirmAck(r *http.Request, w http.ResponseWriter) {
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, map[string]any{"status": "ok"})
+}
+
+// The frontend return routes the GET bank-redirects land on (issue #663).
+// They mirror existing frontend routes (ROUTES in apps/frontend): the change
+// success screen polls the payment status by its paymentId query param; the
+// payment-methods screen consumes the addCard flag with its mount effect.
+const (
+	// Form-payment return: the screen polls the payment status by its
+	// paymentId query param and flips itself to the actual outcome.
+	paymentReturnPath = "/profile/tariff/change/success"
+	// «Способы оплаты» screen — its mount effect consumes the addCard flag.
+	bindingReturnPath = "/profile/tariff/payment-methods"
+)
+
+// paymentReturnURL builds the frontend redirect target of a completed form
+// payment: the payment screen keyed by paymentId — its polling resolves the
+// actual outcome (succeeded, failed, still pending).
+func (h *FakeConfirmHandlers) paymentReturnURL(paymentID uuid.UUID) string {
+	q := url.Values{"paymentId": {paymentID.String()}}
+	return h.webOrigin + paymentReturnPath + "?" + q.Encode()
+}
+
+// bindingReturnURL builds the frontend redirect target of a completed card
+// binding: «Способы оплаты» with the addCardResult flag its mount effect
+// consumes (the same entry point the T-Kassa add-card return uses).
+func (h *FakeConfirmHandlers) bindingReturnURL() string {
+	return h.webOrigin + bindingReturnPath + "?addCard=success"
 }
 
 // badRequest answers a malformed path parameter with a 400 problem.

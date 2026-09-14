@@ -103,10 +103,15 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 	// The local confirmation endpoints exist only under the fake provider:
 	// they drive the fake adapter directly at the adapter level while the
 	// application layer stays provider-neutral (issue #287). Under any other
-	// provider the handlers stay nil and the routes are never mounted.
+	// provider the handlers stay nil and the routes are never mounted. The
+	// handlers carry the fake simulator configuration (issue #663): the web
+	// origin of the GET bank-return redirects and the auto/manual switch.
 	var fakeConfirms *billinghttp.FakeConfirmHandlers
 	if fakeProvider, ok := provider.(*paymentfake.Provider); ok {
-		fakeConfirms = billinghttp.NewFakeConfirmHandlers(fakeProvider, services.Payments, p.Logger)
+		fakeConfirms = billinghttp.NewFakeConfirmHandlers(
+			fakeProvider, services.Payments, p.Logger,
+			p.Cfg.WebOrigin, p.Cfg.FakeAutoConfirm,
+		)
 	}
 
 	return &Billing{

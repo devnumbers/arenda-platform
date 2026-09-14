@@ -117,10 +117,9 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		AdminPayments: paymentsRepo,
 	})
 
-	confirmHandlers := billinghttp.NewFakeConfirmHandlers(provider, services.Payments, logger)
+	confirmHandlers := billinghttp.NewFakeConfirmHandlers(provider, services.Payments, logger, "https://web.test", true)
 	confirmRouter := chi.NewRouter()
-	confirmRouter.Post(billinghttp.FakePaymentConfirmRoute, confirmHandlers.ConfirmPayment)
-	confirmRouter.Post(billinghttp.FakeCardBindingConfirmRoute, confirmHandlers.ConfirmCardBinding)
+	confirmHandlers.MountRoutes(confirmRouter)
 
 	return &integrationHarness{
 		t:                 t,

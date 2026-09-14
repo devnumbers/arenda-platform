@@ -44,6 +44,14 @@ const (
 	senderSMTP     = "smtp"
 )
 
+// FAKE_AUTOCONFIRM values (issue #663): auto completes fake payments and card
+// bindings on the GET bank-return and redirects into the frontend; off is the
+// manual mode with POST-only confirmation endpoints plus the fail endpoint.
+const (
+	fakeConfirmModeAuto = "auto"
+	fakeConfirmModeOff  = "off"
+)
+
 // Log format values of LOG_FORMAT: json is the structured aggregation format
 // (default outside local/dev), pretty the colored local/dev console handler.
 const (
@@ -116,6 +124,13 @@ type Config struct {
 	// delivery is disabled and the reminder worker runs email-only.
 	VAPIDPrivateKey string
 	VAPIDSubject    string
+	// WebOrigin is the frontend origin the fake provider's bank-return
+	// redirects the browser into (issue #663). The env var is read
+	// unconditionally but parsed, defaulted to the APP_BASE_URL origin
+	// (backend and web share an origin behind the reverse proxy), and
+	// validated only when PAYMENT_PROVIDER=fake.
+	WebOrigin       string
+	FakeAutoConfirm bool
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -163,6 +178,7 @@ func Load() (Config, error) {
 		PaymentProvider:   os.Getenv("PAYMENT_PROVIDER"),
 		SMTPTimeout:       10 * time.Second,
 		AppBaseURL:        os.Getenv("APP_BASE_URL"),
+		WebOrigin:         os.Getenv("WEB_ORIGIN"),
 		TKassaTerminalKey: os.Getenv("T_KASSA_TERMINAL_KEY"),
 		TKassaPassword:    os.Getenv("T_KASSA_PASSWORD"),
 		TKassaBaseURL:     os.Getenv("T_KASSA_BASE_URL"),
@@ -655,6 +671,9 @@ func (c *Config) loadPaymentProvider() error {
 		if err := c.loadFakeProviderBaseURL(); err != nil {
 			return err
 		}
+		if err := c.loadFakeSimulator(); err != nil {
+			return err
+		}
 	}
 	if c.PaymentProvider == providerTKassa {
 		if err := c.loadTKassa(); err != nil {
@@ -678,6 +697,37 @@ func (c *Config) loadFakeProviderBaseURL() error {
 	}
 	if u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", c.AppBaseURL)
+	}
+	return nil
+}
+
+// loadFakeSimulator reads the fake payment simulator knobs (issue #663) — a
+// fake-provider concern, so it runs only under PAYMENT_PROVIDER=fake.
+func (c *Config) loadFakeSimulator() error {
+	// WEB_ORIGIN: the frontend origin the fake bank-return redirects the
+	// browser into. Defaults to the APP_BASE_URL origin — behind the reverse
+	// proxy backend and web share an origin, locally they run on different
+	// ports.
+	if c.WebOrigin == "" {
+		u, err := url.Parse(c.AppBaseURL)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return fmt.Errorf("cannot derive WEB_ORIGIN from APP_BASE_URL %q: must be an absolute http(s) URL", c.AppBaseURL)
+		}
+		c.WebOrigin = u.Scheme + "://" + u.Host
+	}
+	u, err := url.Parse(c.WebOrigin)
+	if err != nil || u.Host == "" || (u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS) {
+		return fmt.Errorf("invalid WEB_ORIGIN %q: must be an absolute http(s) origin", c.WebOrigin)
+	}
+	c.WebOrigin = u.Scheme + "://" + u.Host
+
+	switch mode := cmp.Or(os.Getenv("FAKE_AUTOCONFIRM"), fakeConfirmModeAuto); mode {
+	case fakeConfirmModeAuto:
+		c.FakeAutoConfirm = true
+	case fakeConfirmModeOff:
+		c.FakeAutoConfirm = false
+	default:
+		return fmt.Errorf("invalid FAKE_AUTOCONFIRM %q: must be auto or off", mode)
 	}
 	return nil
 }

@@ -18,6 +18,7 @@ import (
 type stubFakeProvider struct {
 	confirm     func(ctx context.Context, internalPaymentID string) (billingapp.WebhookEvent, error)
 	confirmBind func(ctx context.Context, requestKey string) (billingapp.WebhookEvent, error)
+	fail        func(ctx context.Context, internalPaymentID string, errorCode *string) (billingapp.WebhookEvent, error)
 	status      func(ctx context.Context, paymentID uuid.UUID, providerPaymentID string) (billingapp.PaymentStatusResult, error)
 }
 
@@ -33,6 +34,15 @@ func (p *stubFakeProvider) ConfirmCardBinding(ctx context.Context, requestKey st
 		return p.confirmBind(ctx, requestKey)
 	}
 	return billingapp.WebhookEvent{}, errors.New("unexpected ConfirmCardBinding call")
+}
+
+func (p *stubFakeProvider) ConfirmPaymentFailed(
+	ctx context.Context, internalPaymentID string, errorCode *string,
+) (billingapp.WebhookEvent, error) {
+	if p.fail != nil {
+		return p.fail(ctx, internalPaymentID, errorCode)
+	}
+	return billingapp.WebhookEvent{}, errors.New("unexpected ConfirmPaymentFailed call")
 }
 
 func (p *stubFakeProvider) PaymentStatus(
@@ -65,13 +75,21 @@ func (b *stubConfirmBackend) ApplyProviderEvent(ctx context.Context, event billi
 	return errors.New("unexpected ApplyProviderEvent call")
 }
 
-// newFakeConfirmRouter mounts the confirmation handlers exactly the way the
-// wiring does, so the tests drive the endpoints through their real routes.
+// newFakeConfirmRouter mounts the confirmation endpoints the way the wiring
+// does in the auto simulator mode, so the tests drive them through their real
+// routes.
 func newFakeConfirmRouter(provider FakeConfirmProvider, backend FakeConfirmBackend) http.Handler {
-	h := NewFakeConfirmHandlers(provider, backend, nil)
+	return newFakeConfirmRouterMode(provider, backend, true)
+}
+
+// newFakeConfirmRouterMode mounts the endpoints for an explicit simulator
+// mode: autoConfirm picks the auto (GET+POST confirm) vs manual (POST-only
+// confirm plus the fail endpoint) route sets; the web origin is fixed — the
+// redirect tests assert its Location headers against it.
+func newFakeConfirmRouterMode(provider FakeConfirmProvider, backend FakeConfirmBackend, autoConfirm bool) http.Handler {
+	h := NewFakeConfirmHandlers(provider, backend, nil, "https://web.example.com", autoConfirm)
 	r := chi.NewRouter()
-	r.Post(FakePaymentConfirmRoute, h.ConfirmPayment)
-	r.Post(FakeCardBindingConfirmRoute, h.ConfirmCardBinding)
+	h.MountRoutes(r)
 	return r
 }
 
@@ -79,6 +97,13 @@ func postConfirm(t *testing.T, h http.Handler, path string) *httptest.ResponseRe
 	t.Helper()
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, http.NoBody))
+	return w
+}
+
+func getConfirm(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody))
 	return w
 }
 
@@ -333,4 +358,206 @@ func TestFakeConfirmCardBinding_UnknownKeyMapsTo404(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body: %s", w.Code, w.Body.String())
 	}
+}
+
+// TestFakeConfirmPaymentGET_RedirectsToFrontend proves the bank-return path
+// (issue #663): a GET on the payment confirm URL completes the payment through
+// the same webhook path and answers 303 into the frontend payment screen,
+// whose polling flips the UI.
+func TestFakeConfirmPaymentGET_RedirectsToFrontend(t *testing.T) {
+	t.Parallel()
+	payment := pendingPayment()
+	confirmed := billingapp.WebhookEvent{Payment: &billingapp.PaymentNotification{
+		InternalPaymentID: payment.ID,
+		ProviderPaymentID: *payment.ProviderPaymentID,
+		Status:            domain.PaymentStatusSucceeded,
+	}}
+
+	var applied *billingapp.WebhookEvent
+	h := newFakeConfirmRouter(
+		&stubFakeProvider{confirm: func(context.Context, string) (billingapp.WebhookEvent, error) {
+			return confirmed, nil
+		}},
+		&stubConfirmBackend{
+			getPayment: func(context.Context, uuid.UUID) (domain.SubscriptionPayment, error) {
+				return payment, nil
+			},
+			applyEvent: func(_ context.Context, event billingapp.WebhookEvent) error {
+				applied = &event
+				return nil
+			},
+		},
+	)
+
+	w := getConfirm(t, h, "/internal/fake-subscription-payment/"+payment.ID.String()+"/confirm")
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", w.Code, w.Body.String())
+	}
+	want := "https://web.example.com/profile/tariff/change/success?paymentId=" + payment.ID.String()
+	if got := w.Header().Get("Location"); got != want {
+		t.Errorf("Location = %q, want %q", got, want)
+	}
+	if applied == nil || applied.Payment == nil || applied.Payment.InternalPaymentID != payment.ID {
+		t.Errorf("applied event = %+v, want the confirmed payment event", applied)
+	}
+}
+
+// TestFakeConfirmPaymentGET_ErrorMirrorsPOST proves the GET bank-return keeps
+// the POST contract on failure paths: a payment the flow cannot resolve
+// answers the same 404 a script would see, not a redirect.
+func TestFakeConfirmPaymentGET_ErrorMirrorsPOST(t *testing.T) {
+	t.Parallel()
+	h := newFakeConfirmRouter(
+		nil,
+		&stubConfirmBackend{getPayment: func(context.Context, uuid.UUID) (domain.SubscriptionPayment, error) {
+			return domain.SubscriptionPayment{}, billingapp.ErrPaymentNotFound
+		}},
+	)
+
+	w := getConfirm(t, h, "/internal/fake-subscription-payment/"+uuid.Must(uuid.NewV7()).String()+"/confirm")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestFakeConfirmCardBindingGET_RedirectsToPaymentMethods proves the binding
+// bank-return (issue #663): a GET on the binding confirm URL completes the
+// session through the webhook path and answers 303 into «Способы оплаты»,
+// whose addCardResult effect on mount refreshes the list.
+func TestFakeConfirmCardBindingGET_RedirectsToPaymentMethods(t *testing.T) {
+	t.Parallel()
+	confirmed := billingapp.WebhookEvent{MethodBound: &billingapp.MethodBoundNotification{
+		BindingID: testBindingID,
+		Method:    billingapp.SavedMethod{ChargeToken: "token_1"},
+	}}
+	var applied *billingapp.WebhookEvent
+	h := newFakeConfirmRouter(
+		&stubFakeProvider{confirmBind: func(context.Context, string) (billingapp.WebhookEvent, error) {
+			return confirmed, nil
+		}},
+		&stubConfirmBackend{applyEvent: func(_ context.Context, event billingapp.WebhookEvent) error {
+			applied = &event
+			return nil
+		}},
+	)
+
+	w := getConfirm(t, h, "/internal/fake-card-binding/"+testBindingID+"/confirm")
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", w.Code, w.Body.String())
+	}
+	want := "https://web.example.com/profile/tariff/payment-methods?addCard=success"
+	if got := w.Header().Get("Location"); got != want {
+		t.Errorf("Location = %q, want %q", got, want)
+	}
+	if applied == nil || applied.MethodBound == nil {
+		t.Errorf("applied event = %+v, want the method-bound notification", applied)
+	}
+}
+
+// TestFakeFailPayment_AppliesFailedEvent proves the manual-mode fail endpoint:
+// it completes the payment as failed through the webhook path (issue #663) so
+// decline scenarios stay drivable by scripts on a stand.
+func TestFakeFailPayment_AppliesFailedEvent(t *testing.T) {
+	t.Parallel()
+	payment := pendingPayment()
+	failed := billingapp.WebhookEvent{Payment: &billingapp.PaymentNotification{
+		InternalPaymentID: payment.ID,
+		ProviderPaymentID: *payment.ProviderPaymentID,
+		Status:            domain.PaymentStatusFailed,
+	}}
+	var applied *billingapp.WebhookEvent
+	h := newFakeConfirmRouterMode(
+		&stubFakeProvider{fail: func(_ context.Context, id string, _ *string) (billingapp.WebhookEvent, error) {
+			if id != payment.ID.String() {
+				t.Errorf("ConfirmPaymentFailed called with %q, want %q", id, payment.ID.String())
+			}
+			return failed, nil
+		}},
+		&stubConfirmBackend{applyEvent: func(_ context.Context, event billingapp.WebhookEvent) error {
+			applied = &event
+			return nil
+		}},
+		false,
+	)
+
+	w := postConfirm(t, h, "/internal/fake-subscription-payment/"+payment.ID.String()+"/fail")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if applied == nil || applied.Payment == nil || applied.Payment.Status != domain.PaymentStatusFailed {
+		t.Errorf("applied event = %+v, want the failed payment event", applied)
+	}
+}
+
+// TestFakeConfirmRoutesByMode pins the route sets of the two simulator modes
+// (issue #663): auto answers GET (the browser bank-return) and keeps POST for
+// scripts; manual (off) is POST-only on the confirms and adds the fail
+// endpoint for decline scenarios.
+func TestFakeConfirmRoutesByMode(t *testing.T) {
+	t.Parallel()
+	const paymentPath = "/internal/fake-subscription-payment/00000000-0000-0000-0000-000000000000/confirm"
+	const bindingPath = "/internal/fake-card-binding/fake_bind_1/confirm"
+	const failPath = "/internal/fake-subscription-payment/00000000-0000-0000-0000-000000000000/fail"
+
+	// Stubs answer the happy path so the probe requests reach the handlers.
+	provider := &stubFakeProvider{
+		confirm: func(context.Context, string) (billingapp.WebhookEvent, error) {
+			return billingapp.WebhookEvent{}, billingapp.ErrProviderPaymentNotFound
+		},
+		confirmBind: func(context.Context, string) (billingapp.WebhookEvent, error) {
+			return billingapp.WebhookEvent{}, billingapp.ErrProviderBindingNotFound
+		},
+		fail: func(context.Context, string, *string) (billingapp.WebhookEvent, error) {
+			return billingapp.WebhookEvent{}, billingapp.ErrProviderPaymentNotFound
+		},
+	}
+	backend := &stubConfirmBackend{getPayment: func(context.Context, uuid.UUID) (domain.SubscriptionPayment, error) {
+		return domain.SubscriptionPayment{}, billingapp.ErrPaymentNotFound
+	}}
+
+	t.Run("auto mounts GET and POST confirms", func(t *testing.T) {
+		t.Parallel()
+		h := newFakeConfirmRouterMode(provider, backend, true)
+		for _, probe := range []struct{ method, path string }{
+			{http.MethodGet, paymentPath},
+			{http.MethodGet, bindingPath},
+			{http.MethodPost, paymentPath},
+			{http.MethodPost, bindingPath},
+		} {
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), probe.method, probe.path, http.NoBody))
+			if w.Code == http.StatusMethodNotAllowed {
+				t.Errorf("%s %s answered 405 — route not mounted", probe.method, probe.path)
+			}
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, failPath, http.NoBody))
+		// Chi answers 404 for a path with no mounted subtree node — the fail
+		// endpoint must simply not exist in the auto mode.
+		if w.Code != http.StatusNotFound {
+			t.Errorf("fail endpoint in auto mode: status = %d, want 404 (must not be mounted)", w.Code)
+		}
+	})
+
+	t.Run("off mounts POST-only confirms plus fail", func(t *testing.T) {
+		t.Parallel()
+		h := newFakeConfirmRouterMode(provider, backend, false)
+		for _, probe := range []struct{ method, path string }{
+			{http.MethodGet, paymentPath},
+			{http.MethodGet, bindingPath},
+		} {
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), probe.method, probe.path, http.NoBody))
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Errorf("GET %s in manual mode: status = %d, want 405 (manual is POST-only)", probe.method, w.Code)
+			}
+		}
+		for _, path := range []string{paymentPath, bindingPath, failPath} {
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, http.NoBody))
+			if w.Code == http.StatusMethodNotAllowed {
+				t.Errorf("POST %s answered 405 — route not mounted", path)
+			}
+		}
+	})
 }
