@@ -14,13 +14,14 @@ import type { OperationsPeriod } from './operations-filters';
  * правила, что на объектном экране (#477) — чтение отбрасывает битые
  * значения, запись через router.push, «назад» возвращает к прежнему
  * списку; плюс мультивыбор объектов (#539, ?property=csv). Пикер периода
- * пишет с заменой записи истории; дефолт — текущий месяц, все объекты,
- * «Все категории».
+ * пишет с заменой записи истории; null (#670) — сброс периода: from/to
+ * уходят из URL, лента открывается весь период. Дефолт — весь период, все
+ * объекты, «Все категории».
  */
 export function useGlobalOperationsFilters(): {
   readonly filters: GlobalOperationsFilters;
   readonly applyPeriod: (
-    period: OperationsPeriod,
+    period: OperationsPeriod | null,
     options?: { readonly replace?: boolean },
   ) => void;
   readonly applyCategories: (categories: ReadonlyArray<string>) => void;

@@ -154,12 +154,13 @@ export type IsoRangeDraft = {
   readonly end: IsoDate | null;
 };
 
-/** Тап по дню в календаре диапазона: первый тап задаёт границу; второй
+/** Тап по дню в календаре диапазона: пустой черновик (null — пикер открыт
+ * без применённого периода, #670) первый тап делает границей; второй
  * завершает диапазон в любую сторону — раньше или позже первой границы
  * (решение владельца 2026-09-05: 5→1 = период 1–5); тап по тому же числу —
  * период одного дня; по завершённому — перезапуск с новой границы. */
-export function pickIsoRange(draft: IsoRangeDraft, day: IsoDate): IsoRangeDraft {
-  if (draft.end !== null) {
+export function pickIsoRange(draft: IsoRangeDraft | null, day: IsoDate): IsoRangeDraft {
+  if (draft === null || draft.end !== null) {
     return { start: day, end: null };
   }
   if (day < draft.start) {
@@ -173,19 +174,19 @@ export function settleIsoRange(draft: IsoRangeDraft): IsoRange {
   return { from: draft.start, to: draft.end ?? draft.start };
 }
 
-/** Окно ленты пикера диапазона: старт — месяц начала диапазона минус месяц,
- * но не глубже пяти месяцев до текущего (свежий выбор открывается с
- * контекстом, глубокий — у своего начала); конец — текущий месяц плюс два
- * приглушённых будущих. Глубже окно расширяется дорисовкой при прокрутке. */
+/** Окно ленты пикера диапазона: со значением — старт месяц начала диапазона
+ * минус месяц, но не глубже пяти месяцев до текущего (свежий выбор
+ * открывается с контекстом, глубокий — у своего начала); пустой выбор
+ * (null — дефолт «весь период», #670) — те же пять месяцев назад без
+ * преселекта. Конец — текущий месяц плюс два приглушённых будущих. Глубже
+ * окно расширяется дорисовкой при прокрутке. */
 export function rangeFeedWindow(
-  value: IsoRange,
+  value: IsoRange | null,
   today: IsoDate,
 ): { first: CalendarMonthRef; last: CalendarMonthRef } {
   const currentIdx = calendarMonthIndex(calendarMonthOf(today));
-  const firstIdx = Math.min(
-    calendarMonthIndex(calendarMonthOf(value.from)) - 1,
-    currentIdx - 5,
-  );
+  const fromIdx = value !== null ? calendarMonthIndex(calendarMonthOf(value.from)) - 1 : currentIdx - 5;
+  const firstIdx = Math.min(fromIdx, currentIdx - 5);
   return {
     first: calendarMonthOfIndex(firstIdx),
     last: calendarMonthOfIndex(currentIdx + 2),

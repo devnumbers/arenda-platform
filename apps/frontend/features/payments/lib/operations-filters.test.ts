@@ -8,6 +8,7 @@ import {
   operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
+  operationsPeriodChipLabel,
   operationsPeriodDefaultChipLabel,
   operationsPeriodRangeChipLabel,
   readOperationsFilters,
@@ -205,6 +206,17 @@ describe('лейблы чипа периода', () => {
     expect(operationsPeriodRangeChipLabel({ from: '2025-01-01', to: '2026-01-01' })).toBe(
       '01.01.2025 — 01.01.2026',
     );
+  });
+});
+
+describe('operationsPeriodChipLabel', () => {
+  it('без периода (#670) — нейтральный «Период» (весь период)', () => {
+    expect(operationsPeriodChipLabel(null)).toBe('Период');
+  });
+
+  it('с применённым периодом — лейбл диапазона', () => {
+    expect(operationsPeriodChipLabel({ from: '2026-11-01', to: '2026-11-30' })).toBe('1 — 30 ноя');
+    expect(operationsPeriodChipLabel({ from: '2026-11-05', to: '2026-11-05' })).toBe('5 ноя');
   });
 });
 

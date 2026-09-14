@@ -80,6 +80,7 @@ export {
   operationsCategoryRows,
   operationsFiltersHref,
   operationsFiltersParams,
+  operationsPeriodChipLabel,
   operationsPeriodDefaultChipLabel,
   operationsPeriodRangeChipLabel,
   readOperationsFilters,

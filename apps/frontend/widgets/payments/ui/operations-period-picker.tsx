@@ -44,9 +44,11 @@ export function OperationsPeriodPickerDialog({
   );
 }
 
-/** Пикер периода глобальной ленты «Операции» (#541): тот же канон поверх
- * глобальных фильтров — пишет period с заменой записи истории, прочие
- * фильтры (объекты, категории) не трогает. */
+/** Пикер периода глобальной ленты «Операции» (#541, дефолт «весь период»
+ * #670): открывается пустым, пока период не применён; любой подтверждённый
+ * диапазон пишется в URL с заменой записи истории, «Сбросить» возвращает к
+ * «всему периоду» (from/to уходят из адреса). Прочие фильтры (объекты,
+ * категории) не трогаются. */
 export function OperationsGlobalPeriodPickerDialog({
   onClose,
 }: {
@@ -54,20 +56,19 @@ export function OperationsGlobalPeriodPickerDialog({
 }): JSX.Element {
   const { filters, applyPeriod } = useGlobalOperationsFilters();
   const today = clientTodayIso();
-  const applied = filters.period ?? defaultOperationsPeriod(today);
 
   return (
     <CalendarRangePicker
       today={today}
-      value={applied}
+      value={filters.period}
       monthJump={false}
       onClose={onClose}
       onConfirm={(range) => {
-        const stillDefault =
-          filters.period === null && range.from === applied.from && range.to === applied.to;
-        if (!stillDefault) {
-          applyPeriod(range, { replace: true });
-        }
+        applyPeriod(range, { replace: true });
+        onClose();
+      }}
+      onReset={() => {
+        applyPeriod(null, { replace: true });
         onClose();
       }}
     />

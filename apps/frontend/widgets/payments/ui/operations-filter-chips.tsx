@@ -6,8 +6,12 @@ import { SmallArrowDown } from "@/shared/assets/icons";
 import { ChipButton } from "@/shared/ui/design";
 
 export type OperationsFilterChipsProps = {
-  /** Лейбл чипа периода: дефолт — «Сентябрь 2026», выбор — «1 — 30 ноя». */
+  /** Лейбл чипа периода: дефолт — «Сентябрь 2026», выбор — «1 — 30 ноя»,
+   * глобальная лента без периода — нейтральный «Период» (#670). */
   readonly periodLabel: string;
+  /** Период применён — чип синий; по умолчанию true: у непереведённых на
+   * «весь период» экранов период применён всегда (#670). */
+  readonly periodActive?: boolean;
   /** Лейбл чипа категорий: «Все категории», имя или счётчик. */
   readonly categoriesLabel: string;
   /** Активный фильтр категорий подсвечивает чип синим, как период. */
@@ -30,14 +34,17 @@ export type OperationsFilterChipsProps = {
 };
 
 /**
- * Строка чипов фильтров экранов операций (#474/#477): «Период» всегда
- * выбран (период применён всегда), «Категория» — синий только с активным
- * фильтром. Чипы открывают свои шиты выбора (#477, Figma 1492-41825).
- * Глобальная лента (#541) добавляет между ними чип «Объект» — лейбл
- * «Все объекты»/«1 объект»/«N объектов», синий с активным фильтром.
+ * Строка чипов фильтров экранов операций (#474/#477): «Период» синий, пока
+ * период применён (periodActive; у объектных экранов — всегда, у глобальной
+ * ленты #670 — только с явным диапазоном, в дефолте серый «Период»),
+ * «Категория» — синий только с активным фильтром. Чипы открывают свои шиты
+ * выбора (#477, Figma 1492-41825). Глобальная лента (#541) добавляет между
+ * ними чип «Объект» — лейбл «Все объекты»/«1 объект»/«N объектов», синий
+ * с активным фильтром.
  */
 export function OperationsFilterChips({
   periodLabel,
+  periodActive = true,
   categoriesLabel,
   categoriesActive,
   onOpenPeriod,
@@ -50,7 +57,7 @@ export function OperationsFilterChips({
   return (
     <div className={clsx("flex gap-1.5 overflow-x-auto", className)}>
       <ChipButton
-        selected
+        selected={periodActive}
         trailingIcon={<SmallArrowDown />}
         onClick={onOpenPeriod}
       >

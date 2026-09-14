@@ -207,6 +207,15 @@ export function operationsPeriodRangeChipLabel(period: OperationsPeriod): string
 }
 
 /**
+ * Лейбл чипа периода глобальной ленты (#670): без применённого периода —
+ * нейтральный «Период» (дефолт «весь период»), с применённым — формат
+ * диапазона, как operationsPeriodRangeChipLabel.
+ */
+export function operationsPeriodChipLabel(period: OperationsPeriod | null): string {
+  return period !== null ? operationsPeriodRangeChipLabel(period) : 'Период';
+}
+
+/**
  * Черновик выбора и логика тапов диапазона переехали в общий канон пикера
  * (shared/lib/calendar: pickIsoRange/settleIsoRange/booleanRunSegments,
  * подписи границ — formatRangeBound в shared/lib/date-format) вместе с

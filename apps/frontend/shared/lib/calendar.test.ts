@@ -171,6 +171,19 @@ describe('calendar: выбор диапазона (пикер периода о�
       to: '2026-09-30',
     });
   });
+
+  it('пустой старт без применённого периода (#670): первый тап задаёт границу', () => {
+    const draft = pickIsoRange(null, '2026-09-15');
+    expect(draft).toEqual({ start: '2026-09-15', end: null });
+    expect(settleIsoRange(draft)).toEqual({ from: '2026-09-15', to: '2026-09-15' });
+  });
+
+  it('пустой старт: второй тап левее завершает диапазон задом наперёд', () => {
+    let draft = pickIsoRange(null, '2026-09-10');
+    expect(draft).toEqual({ start: '2026-09-10', end: null });
+    draft = pickIsoRange(draft, '2026-09-05');
+    expect(draft).toEqual({ start: '2026-09-05', end: '2026-09-10' });
+  });
 });
 
 describe('calendar: окно ленты пикера диапазона', () => {
@@ -184,6 +197,13 @@ describe('calendar: окно ленты пикера диапазона', () => 
   it('глубокий период — старт от его начала минус месяц (глубже дорисуется скроллом)', () => {
     expect(rangeFeedWindow({ from: '2024-03-10', to: '2024-03-25' }, '2026-09-19')).toEqual({
       first: { year: 2024, month0: 1 },
+      last: { year: 2026, month0: 10 },
+    });
+  });
+
+  it('пустой выбор (#670) — контекст пяти месяцев назад, преселекта нет', () => {
+    expect(rangeFeedWindow(null, '2026-09-19')).toEqual({
+      first: { year: 2026, month0: 3 },
       last: { year: 2026, month0: 10 },
     });
   });
