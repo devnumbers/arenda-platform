@@ -354,8 +354,9 @@ jobs:
 
             # Guard: the main file must import conf.d — otherwise the fragment
             # would be installed but silently never loaded. Anchored to the line
-            # start so a commented-out import cannot green-light the deploy.
-            if ! grep -Eq '^[[:space:]]*import[[:space:]]+/etc/caddy/conf\.d' /etc/caddy/Caddyfile; then
+            # start (a commented-out import cannot green-light) and bounded
+            # after conf.d (a lookalike prefix like conf.d-other cannot either).
+            if ! grep -Eq '^[[:space:]]*import[[:space:]]+/etc/caddy/conf\.d([[:space:]]|/|$)' /etc/caddy/Caddyfile; then
               echo "GUARD FAILED: /etc/caddy/Caddyfile has no 'import /etc/caddy/conf.d'." >&2
               echo "The one-time monolith split (docs/deployment.md, «Caddy») must run before the first pipeline deploy of the fragment." >&2
               exit 1
