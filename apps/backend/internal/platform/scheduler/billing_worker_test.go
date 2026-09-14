@@ -189,6 +189,42 @@ func TestBillingWorker_Tick_RequiresPool(t *testing.T) {
 	}
 }
 
+// TestBillingWorker_TickOnce_RunsOnePass proves the admin-triggered tick of
+// the time-travel rig (issue #665): TickOnce runs the same leader-elected
+// pass synchronously — without the pool it fails loudly, and with the
+// database it runs every phase once and answers nil.
+func TestBillingWorker_TickOnce_RunsOnePass(t *testing.T) {
+	t.Parallel()
+
+	// The no-pool wiring fails the tick instead of pretending it ran.
+	rigless := NewBillingWorker(nil, nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	if err := rigless.TickOnce(context.Background()); err == nil {
+		t.Fatal("expected TickOnce to error when pool is nil")
+	}
+
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+
+	ctx := context.Background()
+	pool, err := database.NewPool(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("new pool: %v", err)
+	}
+	defer pool.Close()
+
+	svc := &fakeBillingRunner{pendingUpgradeCount: 1}
+	w := NewBillingWorker(nil, nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	w.renewals = svc
+	w.scheduled = svc
+	w.lockKey = billingUpgradeTestLockKey
+
+	if err := w.TickOnce(ctx); err != nil {
+		t.Fatalf("TickOnce() error = %v", err)
+	}
+}
+
 func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 	t.Parallel()
 

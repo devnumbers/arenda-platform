@@ -994,17 +994,19 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusServiceUnavailable,
 			httpsupport.Problem(r.Context(), "Payment unavailable",
 				"Оплата временно недоступна, попробуйте позже"))
+	case errors.Is(err, billingapp.ErrTimeTravelDisabled):
+		// The stand-only time-travel rig (issue #665): a service wired
+		// without it refuses the operation — the routes are not mounted on
+		// such a build, so reaching this is a wiring defect the caller sees
+		// as a refusal, not a crash.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Механизм управления временем подписки выключен"))
 	case errors.Is(err, domain.ErrAlreadyOnTariff),
 		errors.Is(err, domain.ErrInvalidTariffChange),
 		errors.Is(err, domain.ErrInvalidSubscriptionState),
 		errors.Is(err, domain.ErrCannotEnableAutoRenew),
 		errors.Is(err, domain.ErrInvalidPaymentStatus):
-		detail, ok := httpsupport.UserFacingDetail(err)
-		if !ok {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
+		writeDetailProblem(w, r, err, http.StatusConflict)
 	case errors.Is(err, billingapp.ErrInvalidFilter):
 		// An admin listing filter outside its whitelist — a request defect,
 		// not a server failure (issue #254).
@@ -1016,14 +1018,27 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, domain.ErrInvalidPayment),
 		errors.Is(err, domain.ErrInvalidTerm),
 		errors.Is(err, domain.ErrInvalidGraceExtension),
+		errors.Is(err, domain.ErrInvalidTimeShift),
 		errors.Is(err, domain.ErrInvalidTariffPricing):
-		detail, ok := httpsupport.UserFacingDetail(err)
-		if !ok {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		writeDetailProblem(w, r, err, http.StatusBadRequest)
 	default:
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
+}
+
+// writeDetailProblem answers with the fixed user-facing detail of a known
+// domain error (the httpsupport table) under the given status; an
+// unrecognized error degrades to an internal problem so nothing sensitive
+// leaks.
+func writeDetailProblem(w http.ResponseWriter, r *http.Request, err error, status int) {
+	detail, ok := httpsupport.UserFacingDetail(err)
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+	title := "Bad request"
+	if status == http.StatusConflict {
+		title = "Conflict"
+	}
+	httpsupport.WriteProblem(r.Context(), w, status, httpsupport.Problem(r.Context(), title, detail))
 }

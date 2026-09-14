@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/cmd/api/wire"
+	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	emailnotifier "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/email"
@@ -169,6 +170,15 @@ func run() error {
 		tasksMod.TickService,
 	)
 
+	// 12a. The stand-only time-travel rig (issue #665): the admin time-shift
+	//      and tick endpoints exist only when the BILLING_TIME_TRAVEL
+	//      railguard is on — nil keeps the routes unmounted.
+	var billingTimeTravel *billinghttp.TimeTravelHandlers
+	if p.Cfg.BillingTimeTravel {
+		billingTimeTravel = billinghttp.NewTimeTravelHandlers(
+			billingMod.Services.Subscriptions, workers.Billing, p.Logger)
+	}
+
 	// 13. HTTP rate limiters.
 	limiters := wire.WireRateLimiters(p.Cfg)
 	defer limiters.Stop()
@@ -194,6 +204,7 @@ func run() error {
 		AdminPayments:            billingMod.Services.Payments,
 		AdminSubscriptions:       billingMod.Services.Subscriptions,
 		BillingFakeConfirms:      billingMod.FakeConfirms,
+		BillingTimeTravel:        billingTimeTravel,
 		ReadonlyGate:             billingMod.MutationGate,
 		Admin:                    adminMod.Service,
 		Properties:               propertiesMod.PropertyService,

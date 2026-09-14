@@ -18,6 +18,8 @@ const (
 	auditKeyToTariffID     = "to_tariff_id"
 	auditKeyValidUntil     = "valid_until"
 	auditKeyKeepPropertyID = "keep_property_id"
+	auditKeyShiftHours     = "shift_hours"
+	auditKeyPreset         = "preset"
 )
 
 // Services is the billing module's public composition surface: the services
@@ -61,6 +63,13 @@ type ServicesConfig struct {
 	// (issue #254); nil keeps the admin read methods answered by an explicit
 	// wiring error.
 	AdminPayments AdminPaymentListing
+	// TimeTravelEnabled turns on the stand-only time-travel rig (issue #665):
+	// the admin time-shift of the subscription lifecycle. The wiring mounts
+	// the rig's endpoints only under the platform's BILLING_TIME_TRAVEL flag,
+	// whose railguard keeps production off; the service-level flag is the
+	// second layer — a service built without it refuses the operation even if
+	// a future caller reaches it past the routes.
+	TimeTravelEnabled bool
 }
 
 // NewServices builds every billing service over one shared txStoreFactory
@@ -84,6 +93,7 @@ func NewServices(factory txStoreFactory, cfg ServicesConfig) Services {
 		Tariffs: NewTariffService(factory, TariffServiceConfig{Log: cfg.Logger}),
 		Subscriptions: NewSubscriptionService(factory, SubscriptionServiceConfig{
 			Clock: cfg.Clock, Provider: cfg.Provider, Config: cfg.Config, Logger: cfg.Logger,
+			TimeTravelEnabled: cfg.TimeTravelEnabled,
 		}),
 		Payments: payments,
 		PaymentMethods: NewPaymentMethodService(factory, cfg.Provider, PaymentMethodServiceConfig{

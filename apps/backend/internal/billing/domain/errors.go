@@ -45,6 +45,10 @@ var (
 	// ErrInvalidGraceExtension is returned when an admin grace extension adds
 	// no time or more than the operational cap allows (issue #255).
 	ErrInvalidGraceExtension = errors.New("invalid grace extension")
+	// ErrInvalidTimeShift is returned when the stand-only time-travel shift
+	// (issue #665) is asked for a zero delta or a subscription without a
+	// validity boundary — there is no time to travel on the free basic state.
+	ErrInvalidTimeShift = errors.New("invalid subscription time shift")
 	// ErrInvalidTariffPricing is returned when a tariff's admin-editable
 	// fields break their invariants: a negative price or a property limit
 	// below -1 (issue #256).

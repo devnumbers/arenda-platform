@@ -93,6 +93,10 @@ func WireBilling(ctx context.Context, p platformDeps, eventDispatcher platformev
 		Publisher:     billingevents.NewPublisher(eventDispatcher),
 		Metrics:       workerMetrics,
 		AdminPayments: paymentRepo,
+		// The time-travel rig (issue #665) follows the platform railguard:
+		// the service-level flag mirrors BILLING_TIME_TRAVEL, the HTTP
+		// wiring mounts the endpoints only under it.
+		TimeTravelEnabled: p.Cfg.BillingTimeTravel,
 	})
 
 	p.Logger.InfoContext(ctx, "billing module initialized",

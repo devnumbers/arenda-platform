@@ -14,6 +14,9 @@ type Querier interface {
 	// The transition log is append-only (enforced by trigger, ADR 0037); the first
 	// transition of a subscription has no prior status or tariff.
 	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
+	// The time-travel twin of AppendSubscriptionTransition: identical columns plus
+	// the shifted created_at (the plain append always stamps now()).
+	AppendSubscriptionTransitionWithCreatedAt(ctx context.Context, arg AppendSubscriptionTransitionWithCreatedAtParams) error
 	// Archiving clears the pin in the same UPDATE: the schema CHECK
 	// (properties_pinned_at_check) demands it, and an unarchived object returns
 	// unpinned (ticket #577).
@@ -217,6 +220,16 @@ type Querier interface {
 	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error
 	DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteStaleLoginAttemptsBatchParams) (int64, error)
+	// The stand-only time-travel rig of issue #665 is the one deliberate writer
+	// that moves history: the dunning retry schedule anchors at the latest
+	// reason='grace_entered' transition (the ListSubscriptionsBySelection bound),
+	// so shifting the schedule data-side means moving those rows in time. UPDATE
+	// is rejected by the immutability trigger (ADR 0037), so the move is a
+	// delete-and-reinsert of the same rows with shifted created_at; DELETE is
+	// deliberately unguarded by that trigger. The queries below are reachable
+	// only from the admin time-shift operation, which the config railguard keeps
+	// out of production (BILLING_TIME_TRAVEL, local/dev/stage stands only).
+	DeleteSubscriptionGraceEntryTransitions(ctx context.Context, subscriptionID pgtype.UUID) error
 	// The hard rule deletion (resolution #496): the completed journal keeps its
 	// rows with rule_id set to NULL by the FK; the uncompleted tasks are
 	// physically removed by DeleteRuleUncompleted before this runs.
@@ -759,6 +772,12 @@ type Querier interface {
 	// property's owner: the actor may be the full-access member. The updated
 	// row travels back for the response.
 	SetPropertyPin(ctx context.Context, arg SetPropertyPinParams) (Property, error)
+	// The other half of the coherent subscription time shift (issue #665): the
+	// dunning retry predicate counts payments created at or after the grace entry
+	// anchor, so the payments must travel by the same delta to keep the relative
+	// order — a +24 h retry boundary stays consumed/unconsumed exactly as it was
+	// before the shift.
+	ShiftSubscriptionPaymentsCreatedAt(ctx context.Context, arg ShiftSubscriptionPaymentsCreatedAtParams) (int64, error)
 	// The main screen's two counters over the whole visible scope (ticket
 	// #575): the favorite rules — the «Все избранные (N)» card — and the
 	// overdue operations summed across the feed's rules — the «Все

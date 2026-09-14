@@ -99,6 +99,15 @@ func (w *BillingWorker) Run(ctx context.Context) {
 	runTickerLoop(ctx, "billing", w.interval, w.logger, w.tick)
 }
 
+// TickOnce runs one leader-elected pass of the lifecycle phases synchronously
+// — the admin-triggered tick of the stand-only time-travel rig (issue #665),
+// so the acceptance observes a phase right after shifting a boundary instead
+// of waiting out BILLING_WORKER_INTERVAL. The production worker loop shares
+// the same code path.
+func (w *BillingWorker) TickOnce(ctx context.Context) error {
+	return w.tick(ctx)
+}
+
 func (w *BillingWorker) tick(ctx context.Context) error {
 	if w.pool == nil {
 		return errors.New("billing worker requires a database pool")

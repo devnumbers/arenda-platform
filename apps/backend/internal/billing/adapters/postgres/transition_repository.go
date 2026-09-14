@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,9 +15,11 @@ import (
 )
 
 // SubscriptionTransitionRepository appends to and reads the immutable
-// subscription transition log. The table rejects UPDATE and DELETE at the
-// database level (ADR 0037), so the repository deliberately has no mutation
-// methods besides Append.
+// subscription transition log. UPDATE is rejected at the database level
+// (ADR 0037), so the repository has no mutation methods besides Append — and
+// ShiftGraceEntryTimes, the stand-only time travel of the dunning anchor
+// (issue #665), which moves rows as a delete-and-reinsert because the trigger
+// leaves DELETE deliberately unguarded.
 type SubscriptionTransitionRepository struct {
 	db postgres.DBTX
 }
@@ -86,6 +89,52 @@ func (r *SubscriptionTransitionRepository) ListBySubscriptionID(
 		transitions = append(transitions, transition)
 	}
 	return transitions, nil
+}
+
+// ShiftGraceEntryTimes moves the created_at of every grace-entry transition by
+// the signed delta (issue #665) — the stand-only time travel of the dunning
+// anchor. The immutability trigger rejects UPDATE (ADR 0037), so each row
+// moves as a delete-and-reinsert of the same values with the shifted
+// timestamp; the row data is copied verbatim from what was read, so nothing
+// but created_at can change. Runs inside the caller's transaction.
+func (r *SubscriptionTransitionRepository) ShiftGraceEntryTimes(
+	ctx context.Context, subscriptionID uuid.UUID, delta time.Duration,
+) (int, error) {
+	rows, err := r.q().ListSubscriptionTransitionsBySubscription(ctx, pgtype.UUID{Bytes: subscriptionID, Valid: true})
+	if err != nil {
+		return 0, fmt.Errorf("list subscription transitions for the time shift: %w", err)
+	}
+	entries := make([]postgres.SubscriptionTransition, 0, len(rows))
+	for _, row := range rows {
+		if domain.TransitionReason(row.Reason) == domain.TransitionReasonGraceEntered {
+			entries = append(entries, row)
+		}
+	}
+	if len(entries) == 0 {
+		return 0, nil
+	}
+	if err := r.q().DeleteSubscriptionGraceEntryTransitions(ctx, pgtype.UUID{Bytes: subscriptionID, Valid: true}); err != nil {
+		return 0, fmt.Errorf("delete grace-entry transitions for the time shift: %w", err)
+	}
+	for _, row := range entries {
+		params := postgres.AppendSubscriptionTransitionWithCreatedAtParams{
+			ID:             row.ID,
+			SubscriptionID: row.SubscriptionID,
+			FromStatus:     row.FromStatus,
+			ToStatus:       row.ToStatus,
+			FromTariffID:   row.FromTariffID,
+			ToTariffID:     row.ToTariffID,
+			Reason:         row.Reason,
+			InitiatorType:  row.InitiatorType,
+			InitiatorID:    row.InitiatorID,
+			PaymentID:      row.PaymentID,
+			CreatedAt:      pgtype.Timestamptz{Time: row.CreatedAt.Time.Add(delta), Valid: true},
+		}
+		if err := r.q().AppendSubscriptionTransitionWithCreatedAt(ctx, params); err != nil {
+			return 0, fmt.Errorf("reinsert shifted grace-entry transition: %w", err)
+		}
+	}
+	return len(entries), nil
 }
 
 func mapTransition(row postgres.SubscriptionTransition) (domain.Transition, error) {

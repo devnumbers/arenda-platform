@@ -119,6 +119,48 @@ SELECT * FROM subscription_transitions
 WHERE subscription_id = $1
 ORDER BY created_at DESC, id DESC;
 
+-- The stand-only time-travel rig of issue #665 is the one deliberate writer
+-- that moves history: the dunning retry schedule anchors at the latest
+-- reason='grace_entered' transition (the ListSubscriptionsBySelection bound),
+-- so shifting the schedule data-side means moving those rows in time. UPDATE
+-- is rejected by the immutability trigger (ADR 0037), so the move is a
+-- delete-and-reinsert of the same rows with shifted created_at; DELETE is
+-- deliberately unguarded by that trigger. The queries below are reachable
+-- only from the admin time-shift operation, which the config railguard keeps
+-- out of production (BILLING_TIME_TRAVEL, local/dev/stage stands only).
+
+-- name: DeleteSubscriptionGraceEntryTransitions :exec
+DELETE FROM subscription_transitions
+WHERE subscription_id = $1 AND reason = 'grace_entered';
+
+-- name: AppendSubscriptionTransitionWithCreatedAt :exec
+-- The time-travel twin of AppendSubscriptionTransition: identical columns plus
+-- the shifted created_at (the plain append always stamps now()).
+INSERT INTO subscription_transitions (
+    id,
+    subscription_id,
+    from_status,
+    to_status,
+    from_tariff_id,
+    to_tariff_id,
+    reason,
+    initiator_type,
+    initiator_id,
+    payment_id,
+    created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+
+-- name: ShiftSubscriptionPaymentsCreatedAt :execrows
+-- The other half of the coherent subscription time shift (issue #665): the
+-- dunning retry predicate counts payments created at or after the grace entry
+-- anchor, so the payments must travel by the same delta to keep the relative
+-- order — a +24 h retry boundary stays consumed/unconsumed exactly as it was
+-- before the shift.
+UPDATE subscription_payments
+SET created_at = created_at + make_interval(secs => sqlc.arg('delta_seconds')::double precision)
+WHERE subscription_id = sqlc.arg('subscription_id');
+
 -- Worker batch selections (issue #252, ADR 0008 lifecycle phases; one
 -- parameterized query per aggregate since issue #286). The phases set the
 -- values through application.SubscriptionSelection / PaymentSelection; a

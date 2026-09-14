@@ -377,6 +377,20 @@ func (r *fakeTransitionRepo) ListBySubscriptionID(_ context.Context, subscriptio
 	return result, nil
 }
 
+func (r *fakeTransitionRepo) ShiftGraceEntryTimes(_ context.Context, subscriptionID uuid.UUID, delta time.Duration) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	moved := 0
+	for i := range r.transitions {
+		t := &r.transitions[i]
+		if t.SubscriptionID == subscriptionID && t.Reason == domain.TransitionReasonGraceEntered {
+			t.CreatedAt = t.CreatedAt.Add(delta)
+			moved++
+		}
+	}
+	return moved, nil
+}
+
 func (r *fakeTransitionRepo) WithTx(transaction.Tx) (SubscriptionTransitionRepository, error) {
 	return r, nil
 }
@@ -582,6 +596,20 @@ func paymentInSelection(p domain.SubscriptionPayment, sel PaymentSelection, tari
 		}
 	}
 	return true
+}
+
+func (r *fakePaymentRepo) ShiftCreatedAt(_ context.Context, subscriptionID uuid.UUID, delta time.Duration) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	moved := int64(0)
+	for id, p := range r.payments {
+		if p.SubscriptionID == subscriptionID {
+			p.CreatedAt = p.CreatedAt.Add(delta)
+			r.payments[id] = p
+			moved++
+		}
+	}
+	return moved, nil
 }
 
 func (r *fakePaymentRepo) WithTx(transaction.Tx) (SubscriptionPaymentRepository, error) {

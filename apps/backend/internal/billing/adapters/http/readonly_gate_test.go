@@ -83,6 +83,10 @@ func (r *gateTransitionRepo) ListBySubscriptionID(context.Context, uuid.UUID) ([
 	return nil, nil
 }
 
+func (r *gateTransitionRepo) ShiftGraceEntryTimes(context.Context, uuid.UUID, time.Duration) (int, error) {
+	return 0, nil
+}
+
 func (r *gateTransitionRepo) WithTx(transaction.Tx) (billingapp.SubscriptionTransitionRepository, error) {
 	return r, nil
 }
@@ -127,6 +131,10 @@ func (r *gatePaymentRepo) Count(context.Context, billingapp.PaymentSelection) (i
 }
 
 func (r *gatePaymentRepo) Update(context.Context, domain.SubscriptionPayment) error { return nil }
+
+func (r *gatePaymentRepo) ShiftCreatedAt(context.Context, uuid.UUID, time.Duration) (int64, error) {
+	return 0, nil
+}
 
 func (r *gatePaymentRepo) WithTx(transaction.Tx) (billingapp.SubscriptionPaymentRepository, error) {
 	return r, nil

@@ -58,6 +58,56 @@ func (q *Queries) AppendSubscriptionTransition(ctx context.Context, arg AppendSu
 	return err
 }
 
+const appendSubscriptionTransitionWithCreatedAt = `-- name: AppendSubscriptionTransitionWithCreatedAt :exec
+INSERT INTO subscription_transitions (
+    id,
+    subscription_id,
+    from_status,
+    to_status,
+    from_tariff_id,
+    to_tariff_id,
+    reason,
+    initiator_type,
+    initiator_id,
+    payment_id,
+    created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+`
+
+type AppendSubscriptionTransitionWithCreatedAtParams struct {
+	ID             pgtype.UUID        `json:"id"`
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
+	FromStatus     pgtype.Text        `json:"from_status"`
+	ToStatus       string             `json:"to_status"`
+	FromTariffID   pgtype.UUID        `json:"from_tariff_id"`
+	ToTariffID     pgtype.UUID        `json:"to_tariff_id"`
+	Reason         string             `json:"reason"`
+	InitiatorType  string             `json:"initiator_type"`
+	InitiatorID    pgtype.UUID        `json:"initiator_id"`
+	PaymentID      pgtype.UUID        `json:"payment_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+// The time-travel twin of AppendSubscriptionTransition: identical columns plus
+// the shifted created_at (the plain append always stamps now()).
+func (q *Queries) AppendSubscriptionTransitionWithCreatedAt(ctx context.Context, arg AppendSubscriptionTransitionWithCreatedAtParams) error {
+	_, err := q.db.Exec(ctx, appendSubscriptionTransitionWithCreatedAt,
+		arg.ID,
+		arg.SubscriptionID,
+		arg.FromStatus,
+		arg.ToStatus,
+		arg.FromTariffID,
+		arg.ToTariffID,
+		arg.Reason,
+		arg.InitiatorType,
+		arg.InitiatorID,
+		arg.PaymentID,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const countActiveSubscriptionsAdmin = `-- name: CountActiveSubscriptionsAdmin :one
 
 SELECT COUNT(*) FROM user_subscriptions WHERE status = 'active'
@@ -483,6 +533,26 @@ type DeletePaymentMethodByIDParams struct {
 // Owner-scoped: the row must belong to the user issuing the deletion.
 func (q *Queries) DeletePaymentMethodByID(ctx context.Context, arg DeletePaymentMethodByIDParams) error {
 	_, err := q.db.Exec(ctx, deletePaymentMethodByID, arg.ID, arg.UserID)
+	return err
+}
+
+const deleteSubscriptionGraceEntryTransitions = `-- name: DeleteSubscriptionGraceEntryTransitions :exec
+
+DELETE FROM subscription_transitions
+WHERE subscription_id = $1 AND reason = 'grace_entered'
+`
+
+// The stand-only time-travel rig of issue #665 is the one deliberate writer
+// that moves history: the dunning retry schedule anchors at the latest
+// reason='grace_entered' transition (the ListSubscriptionsBySelection bound),
+// so shifting the schedule data-side means moving those rows in time. UPDATE
+// is rejected by the immutability trigger (ADR 0037), so the move is a
+// delete-and-reinsert of the same rows with shifted created_at; DELETE is
+// deliberately unguarded by that trigger. The queries below are reachable
+// only from the admin time-shift operation, which the config railguard keeps
+// out of production (BILLING_TIME_TRAVEL, local/dev/stage stands only).
+func (q *Queries) DeleteSubscriptionGraceEntryTransitions(ctx context.Context, subscriptionID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSubscriptionGraceEntryTransitions, subscriptionID)
 	return err
 }
 
@@ -1636,6 +1706,30 @@ func (q *Queries) LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.
 		return nil, err
 	}
 	return items, nil
+}
+
+const shiftSubscriptionPaymentsCreatedAt = `-- name: ShiftSubscriptionPaymentsCreatedAt :execrows
+UPDATE subscription_payments
+SET created_at = created_at + make_interval(secs => $1::double precision)
+WHERE subscription_id = $2
+`
+
+type ShiftSubscriptionPaymentsCreatedAtParams struct {
+	DeltaSeconds   float64     `json:"delta_seconds"`
+	SubscriptionID pgtype.UUID `json:"subscription_id"`
+}
+
+// The other half of the coherent subscription time shift (issue #665): the
+// dunning retry predicate counts payments created at or after the grace entry
+// anchor, so the payments must travel by the same delta to keep the relative
+// order — a +24 h retry boundary stays consumed/unconsumed exactly as it was
+// before the shift.
+func (q *Queries) ShiftSubscriptionPaymentsCreatedAt(ctx context.Context, arg ShiftSubscriptionPaymentsCreatedAtParams) (int64, error) {
+	result, err := q.db.Exec(ctx, shiftSubscriptionPaymentsCreatedAt, arg.DeltaSeconds, arg.SubscriptionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateCardBindingSessionStatus = `-- name: UpdateCardBindingSessionStatus :one

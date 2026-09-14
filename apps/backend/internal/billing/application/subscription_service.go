@@ -37,6 +37,9 @@ type SubscriptionService struct {
 	// still applies, only the excess archiving waits.
 	archiverSource ExcessPropertyArchiverSource
 	slotSource     RecipientSlotEnforcerSource
+	// The stand-only time-travel railguard of the service (issue #665): the
+	// second layer behind the BILLING_TIME_TRAVEL route mounting.
+	timeTravelEnabled bool
 }
 
 // SubscriptionServiceConfig carries the non-transactional dependencies of the
@@ -49,6 +52,9 @@ type SubscriptionServiceConfig struct {
 	Provider paymentInitiationProvider
 	Config   Config
 	Logger   *slog.Logger
+	// TimeTravelEnabled turns on the admin time-shift rig (issue #665); the
+	// wiring sets it from the platform's BILLING_TIME_TRAVEL flag.
+	TimeTravelEnabled bool
 }
 
 // NewSubscriptionService creates a subscription service over the shared
@@ -65,11 +71,12 @@ func NewSubscriptionService(factory txStoreFactory, cfg SubscriptionServiceConfi
 		cfg.Logger = slog.Default()
 	}
 	return &SubscriptionService{
-		txStoreFactory: factory,
-		provider:       cfg.Provider,
-		clock:          cfg.Clock,
-		config:         cfg.Config,
-		log:            cfg.Logger,
+		txStoreFactory:    factory,
+		provider:          cfg.Provider,
+		clock:             cfg.Clock,
+		config:            cfg.Config,
+		log:               cfg.Logger,
+		timeTravelEnabled: cfg.TimeTravelEnabled,
 	}
 }
 

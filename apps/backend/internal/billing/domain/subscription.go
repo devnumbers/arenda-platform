@@ -510,6 +510,37 @@ func (s *Subscription) ExtendGrace(now time.Time, extra time.Duration) error {
 	return nil
 }
 
+// ShiftTime moves the subscription's own temporal boundaries by the signed
+// delta (issue #665): valid_until — the paid-period end or the grace deadline,
+// whatever the current status means by it — and any pending-change deadline
+// travel by the same delta, so the pending-change CHECK
+// (pending_change_at >= valid_until) survives. The reminder flag resets: the
+// shifted window counts as a fresh one for the grace-expiry reminder (#253),
+// the same rule ExtendGrace applies. Status, tariff, source and every
+// non-temporal field stay untouched — the lifecycle phases pick the moved
+// boundaries up on their next tick, unchanged. The caller owns the size limit
+// and the enabling railguard; this method only refuses a zero delta and a
+// subscription without a validity boundary (the free basic state has no time
+// to travel). The dunning retry anchor and the payments' created_at are
+// store-side boundaries the application shift moves alongside (issue #665) —
+// they live outside the aggregate.
+func (s *Subscription) ShiftTime(delta time.Duration) error {
+	if delta == 0 {
+		return ErrInvalidTimeShift
+	}
+	if s.ValidUntil == nil {
+		return ErrInvalidTimeShift
+	}
+	validUntil := s.ValidUntil.Add(delta)
+	s.ValidUntil = &validUntil
+	if s.PendingChangeAt != nil {
+		pendingAt := s.PendingChangeAt.Add(delta)
+		s.PendingChangeAt = &pendingAt
+	}
+	s.GraceRemindedAt = nil
+	return nil
+}
+
 // DowngradeToBasic resets the subscription to the free basic tariff. It clears
 // any validity period, current period, pending change and auto-renewal state,
 // and returns the subscription to the paid track: the free basic plan is the

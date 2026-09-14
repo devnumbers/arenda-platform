@@ -59,7 +59,11 @@ type Deps struct {
 	// non-nil only when the fake provider is active (the billing wiring
 	// constructs it there), so the routes are mounted only in that case —
 	// a production build has no such endpoints at all (issue #287).
-	BillingFakeConfirms      *billinghttp.FakeConfirmHandlers
+	BillingFakeConfirms *billinghttp.FakeConfirmHandlers
+	// BillingTimeTravel serves the stand-only admin time-shift and tick
+	// endpoints (issue #665); non-nil only when the BILLING_TIME_TRAVEL
+	// railguard is on, so a production build mounts no such routes at all.
+	BillingTimeTravel        *billinghttp.TimeTravelHandlers
 	ReadonlyGate             httpsupport.SubscriptionMutationChecker
 	Admin                    *adminapp.AdminService
 	Properties               *propertiesapp.PropertyService
@@ -245,6 +249,13 @@ func New(deps Deps) http.Handler {
 	// fail endpoint (issue #663).
 	if deps.BillingFakeConfirms != nil {
 		deps.BillingFakeConfirms.MountRoutes(r)
+	}
+
+	// The stand-only time-travel rig (issue #665) mounts its admin endpoints
+	// only when the composition root enabled it — the railguard keeps a
+	// production build free of the routes entirely.
+	if deps.BillingTimeTravel != nil {
+		deps.BillingTimeTravel.MountRoutes(r)
 	}
 
 	return generated

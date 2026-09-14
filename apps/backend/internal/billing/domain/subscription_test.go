@@ -1520,3 +1520,112 @@ func TestSubscriptionPaymentFlipsServiceSourceToPaid(t *testing.T) {
 		t.Errorf("Source = %v, want paid after the applied renewal", sub.Source)
 	}
 }
+
+// TestSubscriptionShiftTime proves the stand-only time travel of the
+// subscription's own temporal boundaries (issue #665): a signed shift moves
+// valid_until and any pending-change deadline coherently, resets the grace
+// reminder the way a fresh window does, and touches nothing else — the
+// lifecycle phases pick the moved boundaries up on their next tick. A
+// subscription without a validity boundary (the free basic state) has no time
+// to travel.
+func TestSubscriptionShiftTime(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	graceUntil := now.Add(7 * 24 * time.Hour)
+	remindedAt := now.Add(-6 * time.Hour)
+	pendingAt := now.Add(3 * 24 * time.Hour)
+	pendingTariff := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a21")
+	pendingPeriod := PeriodYear
+
+	sub := Subscription{
+		ID:              uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"),
+		UserID:          uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"),
+		TariffID:        uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13"),
+		Source:          SubscriptionSourcePaid,
+		Status:          SubscriptionStatusGrace,
+		ValidUntil:      &graceUntil,
+		GraceRemindedAt: &remindedAt,
+		PendingTariffID: &pendingTariff,
+		PendingChangeAt: &pendingAt,
+		PendingPeriod:   &pendingPeriod,
+	}
+
+	// A backward shift moves every temporal boundary by the same delta — the
+	// pending-change CHECK (pending_change_at >= valid_until) survives
+	// because both sides travel together.
+	delta := -25 * time.Hour
+	if err := sub.ShiftTime(delta); err != nil {
+		t.Fatalf("ShiftTime() error = %v", err)
+	}
+	wantValid := graceUntil.Add(delta)
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValid) {
+		t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValid)
+	}
+	wantPending := pendingAt.Add(delta)
+	if sub.PendingChangeAt == nil || !sub.PendingChangeAt.Equal(wantPending) {
+		t.Errorf("PendingChangeAt = %v, want %v", sub.PendingChangeAt, wantPending)
+	}
+	if sub.GraceRemindedAt != nil {
+		t.Errorf("GraceRemindedAt = %v, want nil for the fresh reminder window", sub.GraceRemindedAt)
+	}
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	if sub.Status != SubscriptionStatusGrace || sub.Source != SubscriptionSourcePaid || sub.TariffID != tariffID {
+		t.Errorf("status/source/tariff changed: %v/%v/%v", sub.Status, sub.Source, sub.TariffID)
+	}
+	if !sub.HasPendingChange() {
+		t.Error("HasPendingChange() = false, want the scheduled change preserved")
+	}
+
+	// A forward shift works the same way (the raw lever allows both
+	// directions; the presets move the boundary backward).
+	sub2 := Subscription{
+		ID:         uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
+		UserID:     uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"),
+		TariffID:   tariffID,
+		Source:     SubscriptionSourcePaid,
+		Status:     SubscriptionStatusActive,
+		ValidUntil: &graceUntil,
+	}
+	if err := sub2.ShiftTime(48 * time.Hour); err != nil {
+		t.Fatalf("ShiftTime(forward) error = %v", err)
+	}
+	wantForward := graceUntil.Add(48 * time.Hour)
+	if sub2.ValidUntil == nil || !sub2.ValidUntil.Equal(wantForward) {
+		t.Errorf("ValidUntil = %v, want %v", sub2.ValidUntil, wantForward)
+	}
+}
+
+// TestSubscriptionShiftTimeRefusals pins the two rejections of the time
+// travel: a zero delta and a subscription without a validity boundary — the
+// free basic state has no time to travel.
+func TestSubscriptionShiftTimeRefusals(t *testing.T) {
+	t.Parallel()
+	validUntil := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	tariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+
+	// A subscription without a validity boundary has nothing to shift.
+	basic := Subscription{
+		ID:       uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+		UserID:   userID,
+		TariffID: tariffID,
+		Source:   SubscriptionSourcePaid,
+		Status:   SubscriptionStatusActive,
+	}
+	if err := basic.ShiftTime(-time.Hour); !errors.Is(err, ErrInvalidTimeShift) {
+		t.Errorf("ShiftTime(no valid_until) error = %v, want ErrInvalidTimeShift", err)
+	}
+
+	// A zero shift is a rejected no-op, not a silent pass.
+	paid := Subscription{
+		ID:         uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16"),
+		UserID:     userID,
+		TariffID:   tariffID,
+		Source:     SubscriptionSourcePaid,
+		Status:     SubscriptionStatusActive,
+		ValidUntil: &validUntil,
+	}
+	if err := paid.ShiftTime(0); !errors.Is(err, ErrInvalidTimeShift) {
+		t.Errorf("ShiftTime(0) error = %v, want ErrInvalidTimeShift", err)
+	}
+}

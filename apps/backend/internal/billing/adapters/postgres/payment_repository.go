@@ -373,6 +373,24 @@ func (r *SubscriptionPaymentRepository) Update(ctx context.Context, payment doma
 	return nil
 }
 
+// ShiftCreatedAt moves created_at of every payment of the subscription by the
+// signed delta (issue #665) — the stand-only time travel that keeps the
+// dunning retry predicate's relative order (payments counted from the
+// grace-entry anchor) invariant under the shift. Runs inside the caller's
+// transaction. Returns how many rows moved.
+func (r *SubscriptionPaymentRepository) ShiftCreatedAt(
+	ctx context.Context, subscriptionID uuid.UUID, delta time.Duration,
+) (int64, error) {
+	moved, err := r.q().ShiftSubscriptionPaymentsCreatedAt(ctx, postgres.ShiftSubscriptionPaymentsCreatedAtParams{
+		DeltaSeconds:   delta.Seconds(),
+		SubscriptionID: pgtype.UUID{Bytes: subscriptionID, Valid: true},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("shift subscription payments created_at: %w", err)
+	}
+	return moved, nil
+}
+
 func mapCreatePaymentParams(p domain.SubscriptionPayment) postgres.CreateSubscriptionPaymentParams {
 	return postgres.CreateSubscriptionPaymentParams{
 		ID:                    pgtype.UUID{Bytes: p.ID, Valid: true},

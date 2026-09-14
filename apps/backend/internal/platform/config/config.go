@@ -131,6 +131,12 @@ type Config struct {
 	// validated only when PAYMENT_PROVIDER=fake.
 	WebOrigin       string
 	FakeAutoConfirm bool
+	// BillingTimeTravel enables the admin time-shift and tick endpoints of
+	// the subscription lifecycle acceptance rig (issue #665). The railguard
+	// is two-layered: the env flag defaults to off, and turning it on outside
+	// the non-production stands fails the config validation — a production
+	// process with the flag set never starts.
+	BillingTimeTravel bool
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -210,6 +216,7 @@ func Load() (Config, error) {
 		cfg.loadSchedulerIntervals,
 		cfg.loadTrustedProxies,
 		cfg.loadTariffCacheTTL,
+		cfg.loadBillingTimeTravel,
 	} {
 		if err := load(); err != nil {
 			return Config{}, err
@@ -981,6 +988,25 @@ func (c *Config) loadTariffCacheTTL() error {
 			return errors.New("TARIFF_CACHE_TTL must be positive")
 		}
 		c.TariffCacheTTL = d
+	}
+	return nil
+}
+
+// loadBillingTimeTravel reads the stand-only time-travel switch of the
+// subscription lifecycle acceptance rig (issue #665). The flag defaults to
+// off; enabling it outside the non-production stands — the same allowlist the
+// fake providers live on — fails the startup validation, so a production
+// process that asks for the rig never comes up.
+func (c *Config) loadBillingTimeTravel() error {
+	if v := os.Getenv("BILLING_TIME_TRAVEL"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("invalid BILLING_TIME_TRAVEL %q: must be a boolean", v)
+		}
+		c.BillingTimeTravel = b
+	}
+	if c.BillingTimeTravel && !c.allowsFakeProviders() {
+		return fmt.Errorf("BILLING_TIME_TRAVEL=true is not allowed for APP_ENV=%s", c.AppEnv)
 	}
 	return nil
 }

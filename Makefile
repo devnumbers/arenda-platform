@@ -109,6 +109,7 @@ DEFAULT_GOAL := help
 	backend-run backend-lint backend-vulncheck backend-nolint \
 	backend-tkassa-spec-check backend-openapi-check backend-sqlc-check \
 	migrate-up migrate-down check-env \
+	billing-time-shift billing-tick \
 	frontend-install frontend-dev frontend-build frontend-test frontend-api-check frontend-e2e \
 	frontend-e2e-headed frontend-e2e-live-up frontend-e2e-live-down \
 	admin-install admin-dev admin-build admin-typecheck admin-test \
@@ -157,6 +158,30 @@ check-env:
 	set -a; . ./.env; set +a; \
 	test -n "$$DATABASE_URL" || { echo "DATABASE_URL is required in .env"; exit 1; }; \
 	test -n "$$MIGRATIONS_DIR" || { echo "MIGRATIONS_DIR is required in .env"; exit 1; }
+
+# The stand-only time-travel rig of the subscription lifecycle (issue #665;
+# recipe with the full acceptance walkthrough: docs/billing-time-travel.md).
+# Enabled by BILLING_TIME_TRAVEL=true on local/dev/stage only; the admin
+# session cookie comes from the /auth/send + /auth/verify login (see recipe).
+#   make billing-time-shift USER_ID=<uuid> PRESET=retry_24h_due
+#   make billing-time-shift USER_ID=<uuid> HOURS=-25
+#   make billing-tick
+BASE_URL ?= http://localhost:8080
+
+billing-time-shift: ## Admin time shift of a subscription (USER_ID=, HOURS= or PRESET=, ADMIN_COOKIE=, BASE_URL=)
+	@test -n "$(USER_ID)" || { echo "USER_ID is required"; exit 1; }; \
+	test -n "$(ADMIN_COOKIE)" || { echo "ADMIN_COOKIE is required (see docs/billing-time-travel.md)"; exit 1; }; \
+	test $$( [ -n "$(HOURS)" ] && echo 1 || echo 0 ) -ne $$( [ -n "$(PRESET)" ] && echo 1 || echo 0 ) || \
+		{ echo "Set exactly one of HOURS=<int> or PRESET=<period_expired|retry_24h_due|retry_72h_due|reminder_window>"; exit 1; }; \
+	if [ -n "$(HOURS)" ]; then body="$$({ printf '{"shiftHours":'; printf '%s' "$(HOURS)" | tr -d ' '; printf '}'; })"; \
+	else body="$$({ printf '{"preset":"'; printf '%s' "$(PRESET)"; printf '"}'; })"; fi; \
+	curl -sS -X POST "$(BASE_URL)/admin/users/$(USER_ID)/subscription/time-shift" \
+		-H "Cookie: $(ADMIN_COOKIE)" -H 'Content-Type: application/json' -d "$$body" \
+		-w '\nHTTP %{http_code}\n'
+
+billing-tick: ## Run one billing worker pass now (ADMIN_COOKIE=, BASE_URL=)
+	@test -n "$(ADMIN_COOKIE)" || { echo "ADMIN_COOKIE is required (see docs/billing-time-travel.md)"; exit 1; }; \
+	curl -sS -X POST "$(BASE_URL)/admin/billing/tick" -H "Cookie: $(ADMIN_COOKIE)" -w '\nHTTP %{http_code}\n'
 
 backend-lint: ## Run golangci-lint over the backend (integration tags included)
 	cd $(BACKEND_DIR) && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --build-tags=integration ./...
