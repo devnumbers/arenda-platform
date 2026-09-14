@@ -8,7 +8,6 @@ import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
 import { clientTodayIso, formatDayMonthWithYear } from '@/entities/payment';
 import {
-  defaultOperationsPeriod,
   globalOperationsFiltersParams,
   useGlobalOperationsFilters,
   useGlobalOperationsPaged,
@@ -40,8 +39,10 @@ import {
  * операций новыми сверху: иконка, название, подзаголовок-объект, справа
  * сумма и дата (макет 1726-90433); тап — на страницу операции своего
  * объекта. Серверная область — контракт `search` глобальной ленты (#540)
- * с фильтрами из адреса: объекты (#542) и период (дефолт — текущий месяц,
- * как на ленте #541). Пустые состояния и скелетоны — как объектный поиск.
+ * с фильтрами из адреса: объекты (#542) и период — дефолт весь период
+ * (#673, как на лентах #670/#671): без явного диапазона даты в запрос
+ * не уходят, поиск ищет за всё время (прецедент — объектный поиск).
+ * Пустые состояния и скелетоны — как объектный поиск.
  * Ввод живёт в адресе (?q=) и догоняется дебаунсом — useSearchQueryState.
  * Шапка — канон поиска: TopNav варианта search (#564), «Назад» закрывает
  * поиск возвратом на ленту, фильтры ленты при этом сохраняются, поле
@@ -61,11 +62,10 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
   }, []);
 
   const today = clientTodayIso();
-  const period = filters.period ?? defaultOperationsPeriod(today);
 
   const summaryQuery = useGlobalOperationsSummary(
     {
-      ...globalSearchSummaryScope(period, filters.propertyIds, debounced),
+      ...globalSearchSummaryScope(filters.period, filters.propertyIds, debounced),
       includeArchived: filters.archived,
     },
     { enabled: debounced !== '' },
@@ -78,7 +78,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
 
   const listQuery = useGlobalOperationsPaged(
     {
-      ...globalSearchListScope(period, filters.propertyIds, debounced, effectiveSlug),
+      ...globalSearchListScope(filters.period, filters.propertyIds, debounced, effectiveSlug),
       includeArchived: filters.archived,
     },
     { enabled: debounced !== '' },
