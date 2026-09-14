@@ -9,11 +9,11 @@ import type { OperationsPeriod } from '@/features/payments';
  */
 
 /** Скоуп списка направления: фильтры ленты из адреса — объекты (#542),
- * период и категории (дефолт периода решает экран) — плюс тип направления.
- * Пустые выборы проходят как есть — хук сам опускает пустые параметры
- * (#541). */
+ * период (null — весь период #671: дат в скоупе нет) и категории — плюс
+ * тип направления. Пустые выборы проходят как есть — хук сам опускает
+ * пустые параметры (#541). */
 export function globalDirectionListScope(
-  period: OperationsPeriod,
+  period: OperationsPeriod | null,
   propertyIds: ReadonlyArray<string>,
   categories: ReadonlyArray<string>,
   type: PaymentType,
@@ -21,8 +21,7 @@ export function globalDirectionListScope(
   return {
     order: 'desc',
     propertyIds,
-    dateFrom: period.from,
-    dateTo: period.to,
+    ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
     categories,
     type,
   };
@@ -32,15 +31,14 @@ export function globalDirectionListScope(
  * карточка показывает направление целиком (сводка категорийный фильтр не
  * принимает — контракт #540). */
 export function globalDirectionSummaryScope(
-  period: OperationsPeriod,
+  period: OperationsPeriod | null,
   propertyIds: ReadonlyArray<string>,
   type: PaymentType,
 ): GlobalOperationScope {
   return {
     order: 'desc',
     propertyIds,
-    dateFrom: period.from,
-    dateTo: period.to,
+    ...(period !== null ? { dateFrom: period.from, dateTo: period.to } : {}),
     type,
   };
 }

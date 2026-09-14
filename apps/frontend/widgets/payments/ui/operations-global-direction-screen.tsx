@@ -7,13 +7,11 @@ import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { clientTodayIso, type PaymentType } from '@/entities/payment';
 import {
-  defaultOperationsPeriod,
   globalOperationsFiltersParams,
   groupOperationsByDate,
   operationsCategoryChipLabel,
   operationsCategoryRows,
-  operationsPeriodDefaultChipLabel,
-  operationsPeriodRangeChipLabel,
+  operationsPeriodChipLabel,
   operationsPropertyChipLabel,
   useGlobalOperationsFilters,
   useGlobalOperationsPaged,
@@ -46,7 +44,9 @@ export type OperationsGlobalDirectionScreenProps = {
 
 /**
  * Страница направления глобальной ленты (#548, Figma 1858-104152): все
- * доходы или все расходы выбранного скоупа за период. Вход — карточки
+ * доходы или все расходы выбранного скоупа; дефолт периода — весь период
+ * (#671, как на главной #670): без явного диапазона даты в запрос не
+ * уходят, чип «Период» нейтральный. Вход — карточки
  * сводки на главной (отменяет решение #539 о некликабельных карточках).
  * Фильтры — те же глобальные, живут в адресе: чипы периода/объекта/
  * категории открывают общие пикеры и выборщики (#542/#544) с ?return=
@@ -73,16 +73,17 @@ export function OperationsGlobalDirectionScreen({
   const selfRoute = type === 'income' ? ROUTES.operationsIncomes : ROUTES.operationsExpenses;
 
   const today = clientTodayIso();
-  const period = filters.period ?? defaultOperationsPeriod(today);
-  // Пикер периода — канонический оверлей поверх списка.
+  // Дефолт направления — весь период (#671): период в запросе только с
+  // явным выбором, без него даты не уходят; пикер открывается пустым,
+  // «Сбросить» возвращает к дефолту.
   const [periodOpen, setPeriodOpen] = useState(false);
 
   const listQuery = useGlobalOperationsPaged({
-    ...globalDirectionListScope(period, filters.propertyIds, filters.categories, type),
+    ...globalDirectionListScope(filters.period, filters.propertyIds, filters.categories, type),
     includeArchived: filters.archived,
   });
   const summaryQuery = useGlobalOperationsSummary({
-    ...globalDirectionSummaryScope(period, filters.propertyIds, type),
+    ...globalDirectionSummaryScope(filters.period, filters.propertyIds, type),
     includeArchived: filters.archived,
   });
   // All-time сводка направления (без периода/категорий): отличает «операций
@@ -174,11 +175,8 @@ export function OperationsGlobalDirectionScreen({
           <div className="flex flex-col gap-6 pt-4">
             <OperationsFilterChips
               className="px-6"
-              periodLabel={
-                filters.period !== null
-                  ? operationsPeriodRangeChipLabel(period)
-                  : operationsPeriodDefaultChipLabel(period)
-              }
+              periodLabel={operationsPeriodChipLabel(filters.period)}
+              periodActive={filters.period !== null}
               propertyLabel={operationsPropertyChipLabel(filters.propertyIds)}
               propertyActive={filters.propertyIds.length > 0}
               categoriesLabel={operationsCategoryChipLabel(filters.categories, categoryRows)}
