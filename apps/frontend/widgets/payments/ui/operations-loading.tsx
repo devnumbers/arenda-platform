@@ -3,7 +3,7 @@
 import type { JSX } from 'react';
 import { Add, ArrowLeft, BoldObjects, Cancel, Check, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { operationsPropertyChipLabel } from '@/features/payments';
+import { operationsPeriodChipLabel, operationsPropertyChipLabel } from '@/features/payments';
 import {
   Button,
   Checkbox,
@@ -46,7 +46,7 @@ function OperationsFilterChipsLoading(): JSX.Element {
   return (
     <OperationsFilterChips
       className="px-6"
-      periodLabel="Период"
+      periodLabel={operationsPeriodChipLabel(null)}
       periodActive={false}
       propertyLabel={operationsPropertyChipLabel([])}
       propertyActive={false}
@@ -141,7 +141,7 @@ export function OperationsCategoriesLoading(): JSX.Element {
               aria-hidden
               className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"
             >
-              Период
+              {operationsPeriodChipLabel(null)}
             </span>
             <span
               aria-hidden

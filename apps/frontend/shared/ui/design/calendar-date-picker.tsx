@@ -636,7 +636,8 @@ export function CalendarRangePicker({
                   draft={draft}
                   today={today}
                   onPick={(day) => setDraft(pickIsoRange(draft, day))}
-                />              </section>
+                />
+              </section>
             );
           })}
         </div>
