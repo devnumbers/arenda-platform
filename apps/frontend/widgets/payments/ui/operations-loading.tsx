@@ -4,6 +4,7 @@ import type { JSX } from 'react';
 import { Add, ArrowLeft, BoldObjects, Cancel, Check, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { operationsPeriodChipLabel, operationsPropertyChipLabel } from '@/features/payments';
+import { OperationsPeriodChipDisplay } from './operations-filter-chips';
 import {
   Button,
   Checkbox,
@@ -137,12 +138,7 @@ export function OperationsCategoriesLoading(): JSX.Element {
       <PageContent>
         <div className="flex flex-col gap-6 pt-4">
           <div className="flex flex-wrap gap-1.5 px-6">
-            <span
-              aria-hidden
-              className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"
-            >
-              {operationsPeriodChipLabel(null)}
-            </span>
+            <OperationsPeriodChipDisplay period={null} />
             <span
               aria-hidden
               className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"

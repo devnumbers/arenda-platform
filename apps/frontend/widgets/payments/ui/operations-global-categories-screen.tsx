@@ -8,7 +8,6 @@ import { clientTodayIso } from '@/entities/payment';
 import {
   globalOperationsFiltersParams,
   operationsCategoryRows,
-  operationsPeriodChipLabel,
   readGlobalOperationsFilters,
   resolveGlobalFilterReturnPath,
   useGlobalOperationsSummary,
@@ -27,6 +26,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { PaymentsStateCard } from './payments-sections';
+import { OperationsPeriodChipDisplay } from './operations-filter-chips';
 import { OperationsCategoriesSkeleton } from './operations-skeletons';
 import { globalCategoriesSummaryScope } from '../lib/operations-global-categories-model';
 
@@ -99,16 +99,8 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
         <div className="flex flex-col gap-6 pt-4">
           <div className="flex flex-wrap gap-1.5 px-6">
             {/* Чип периода — дисплейный (период наследуется от ленты
-             * через return-параметры): синий только с явным диапазоном,
-             * в дефолте серый «Период» (#672, канон #670). */}
-            <span
-              aria-hidden
-              className={`inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium ${
-                period !== null ? 'bg-primary text-white' : 'bg-surface-muted text-content'
-              }`}
-            >
-              {operationsPeriodChipLabel(period)}
-            </span>
+             * через return-параметры), серый «Период» без явного диапазона. */}
+            <OperationsPeriodChipDisplay period={period} />
             <span
               aria-hidden
               className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"

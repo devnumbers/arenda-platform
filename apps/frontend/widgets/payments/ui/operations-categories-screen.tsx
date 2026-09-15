@@ -9,7 +9,6 @@ import { clientTodayIso } from '@/entities/payment';
 import {
   operationsCategoryRows,
   operationsFiltersParams,
-  operationsPeriodChipLabel,
   readOperationsFilters,
   resolveFilterReturnPath,
   usePropertyOperationsSummary,
@@ -28,6 +27,7 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { PaymentsSkeleton, PaymentsStateCard } from './payments-sections';
+import { OperationsPeriodChipDisplay } from './operations-filter-chips';
 
 export type OperationsCategoriesScreenProps = {
   readonly propertyId: string;
@@ -117,16 +117,8 @@ export function OperationsCategoriesScreen({
       <PageContent className="flex h-[calc(100dvh-72px)] flex-col pb-0">
         <div className="flex shrink-0 flex-wrap gap-1.5 px-6">
           {/* Чип периода — дисплейный (период наследуется от ленты через
-           * return-параметры): синий только с явным диапазоном, в дефолте
-           * серый «Период» (#676, канон #670/#672). */}
-          <span
-            aria-hidden
-            className={`inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium ${
-              period !== null ? 'bg-primary text-white' : 'bg-surface-muted text-content'
-            }`}
-          >
-            {operationsPeriodChipLabel(period)}
-          </span>
+           * return-параметры), серый «Период» без явного диапазона. */}
+          <OperationsPeriodChipDisplay period={period} />
           <span
             aria-hidden
             className="inline-flex h-11 items-center rounded-pill bg-surface-muted px-5 text-sm font-medium text-content"

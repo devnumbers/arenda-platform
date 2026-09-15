@@ -4,6 +4,10 @@ import type { JSX } from "react";
 import clsx from "clsx";
 import { SmallArrowDown } from "@/shared/assets/icons";
 import { ChipButton } from "@/shared/ui/design";
+import {
+  operationsPeriodChipLabel,
+  type OperationsPeriod,
+} from "@/features/payments";
 
 export type OperationsFilterChipsProps = {
   /** Лейбл чипа периода: применённый диапазон — «1 — 30 ноя», без
@@ -81,5 +85,29 @@ export function OperationsFilterChips({
         {categoriesLabel}
       </ChipButton>
     </div>
+  );
+}
+
+/**
+ * Дисплейный чип периода (не кликает): рядом с интерактивными чипами на
+ * страницах выбора категорий (объектной #477 и глобальной #544), где
+ * период наследуется от ленты через return-параметры и меняется нельзя, и
+ * в скелетонах (#474/#544). С применённым периодом — синий с диапазоном,
+ * в дефолте «весь период» — серый «Период» (канон #670).
+ */
+export function OperationsPeriodChipDisplay({
+  period,
+}: {
+  readonly period: OperationsPeriod | null;
+}): JSX.Element {
+  return (
+    <span
+      aria-hidden
+      className={`inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium ${
+        period !== null ? "bg-primary text-white" : "bg-surface-muted text-content"
+      }`}
+    >
+      {operationsPeriodChipLabel(period)}
+    </span>
   );
 }
