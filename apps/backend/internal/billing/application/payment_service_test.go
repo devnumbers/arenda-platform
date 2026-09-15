@@ -529,7 +529,11 @@ func TestChangeTariff_UpgradeUniqueRaceReturnsExistingPayment(t *testing.T) {
 	if _, err := h.stores.payments.Create(t.Context(), existing); err != nil {
 		t.Fatalf("seed Create() error = %v", err)
 	}
-	h.stores.payments.hidePending = 1
+	// Simulate a concurrent winner: the pending lookups are blind while it
+	// appears — the conflict pre-check, the dead-form sweep and the same-target
+	// dedup — so Create itself loses the unique race and the recovery lookup
+	// resolves the existing payment.
+	h.stores.payments.hidePending = 3
 
 	result, err := h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
 		TariffName: domain.TariffBusiness,

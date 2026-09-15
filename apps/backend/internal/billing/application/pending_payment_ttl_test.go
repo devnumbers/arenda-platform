@@ -94,6 +94,104 @@ func TestCancelSubscription_LivePendingBlocked(t *testing.T) {
 	}
 }
 
+// seedDeadFormPayment persists a pending form payment whose deadline has
+// already run out for another tariff and period — the TTL lag a live
+// initiation can meet (issue #690).
+func (h *paymentHarness) seedDeadFormPayment(
+	t *testing.T, sub domain.Subscription, tariff domain.TariffName, period domain.SubscriptionPeriod, amount int64,
+) domain.SubscriptionPayment {
+	t.Helper()
+	created := h.now.Add(-16 * time.Minute)
+	deadline := h.now.Add(-time.Minute)
+	payment, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, tariff), period, amount, testProviderFake, created)
+	if err != nil {
+		t.Fatalf("new payment: %v", err)
+	}
+	if err := payment.AttachFormDeadline(deadline, created); err != nil {
+		t.Fatalf("attach deadline: %v", err)
+	}
+	if _, err := h.stores.payments.Create(t.Context(), payment); err != nil {
+		t.Fatalf("create payment: %v", err)
+	}
+	return payment
+}
+
+// TestChangeTariff_DeadFormOfAnotherTargetUnlocksNewSelection proves the
+// user-level sweep (issue #690): without it, a dead pending form of another
+// target — the tariff/period combination the TTL worker's lag leaves behind —
+// holds the one-form slot and the fresh selection dies on the unique index
+// instead of starting a new form.
+func TestChangeTariff_DeadFormOfAnotherTargetUnlocksNewSelection(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, nil)
+	dead := h.seedDeadFormPayment(t, sub, domain.TariffBusiness, domain.PeriodMonth, 99000)
+
+	second, err := h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffBusiness,
+		Period:     domain.PeriodYear,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff() with a dead form of another target: %v", err)
+	}
+	if second.PaymentID == dead.ID {
+		t.Fatal("ChangeTariff() returned the dead payment, want a fresh one")
+	}
+	swept, err := h.stores.payments.GetByID(t.Context(), dead.ID)
+	if err != nil {
+		t.Fatalf("GetByID(dead) error = %v", err)
+	}
+	if swept.Status != domain.PaymentStatusFailed || swept.ErrorCode == nil ||
+		*swept.ErrorCode != domain.PaymentErrorCodeFormExpired {
+		t.Errorf("dead form = %q/%v, want swept to failed with %q",
+			swept.Status, swept.ErrorCode, domain.PaymentErrorCodeFormExpired)
+	}
+}
+
+// TestChangeTariff_ConcurrentLiveFormWinsTheSlotRace proves the unique-race
+// answer of the user-level form index (issue #690): a live form of another
+// target created between the conflict pre-check and the Create surfaces the
+// pending-exists conflict — the 409 the tariff screens already speak — and
+// leaves no duplicate pending payment behind.
+func TestChangeTariff_ConcurrentLiveFormWinsTheSlotRace(t *testing.T) {
+	t.Parallel()
+	h := newPaymentHarness(t)
+	sub := h.seedSubscription(t, nil)
+
+	// A concurrent initiation wins the form slot between the lookups and the
+	// insert: the conflict pre-check and the dead-form sweep stay blind to it,
+	// so Create itself meets the index.
+	concurrent, err := domain.NewSubscriptionPayment(
+		sub.UserID, sub.ID, h.tariffID(t, domain.TariffBusiness),
+		domain.PeriodMonth, 99000, testProviderFake, h.now)
+	if err != nil {
+		t.Fatalf("NewSubscriptionPayment() error = %v", err)
+	}
+	if err := concurrent.AttachFormDeadline(h.now.Add(15*time.Minute), h.now); err != nil {
+		t.Fatalf("AttachFormDeadline() error = %v", err)
+	}
+	if _, err := h.stores.payments.Create(t.Context(), concurrent); err != nil {
+		t.Fatalf("seed Create() error = %v", err)
+	}
+	h.stores.payments.hidePending = 2
+
+	_, err = h.subs.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffBusiness,
+		Period:     domain.PeriodYear,
+	})
+	if !errors.Is(err, ErrPendingPaymentExists) {
+		t.Fatalf("err = %v, want ErrPendingPaymentExists", err)
+	}
+	payments, err := h.stores.payments.ListByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("ListByUserID() error = %v", err)
+	}
+	if len(payments) != 1 || payments[0].ID != concurrent.ID {
+		t.Errorf("payments = %d, want only the concurrent winner %v", len(payments), concurrent.ID)
+	}
+}
+
 func TestChangeTariff_ExpiredPendingCyclesToFreshPayment(t *testing.T) {
 	t.Parallel()
 	h := newPaymentHarness(t)
