@@ -9,10 +9,10 @@ func setRequiredProductionEnv(t *testing.T) {
 	t.Helper()
 
 	setRequiredLocalEnv(t)
-	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_ENV", envProduction)
 	t.Setenv("APP_BASE_URL", "https://rentlee.ru")
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("T_KASSA_BASE_URL", "https://securepay.tinkoff.ru/v2/")

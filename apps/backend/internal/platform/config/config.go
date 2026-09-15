@@ -17,10 +17,16 @@ import (
 )
 
 // APP_ENV values: local and dev keep relaxed defaults (fake providers, optional
-// T-Kassa base URL, pretty logs); staging and production validate fully.
+// T-Kassa base URL, pretty logs); stage and production validate fully — https,
+// ENCRYPTION_KEY, secure cookies, explicit senders. Stage is the test stand:
+// strict like production except that the fake payment provider and fake email
+// sender are explicitly allowed there; the T-Kassa sandbox host stays legal in
+// every environment.
 const (
-	envLocal = "local"
-	envDev   = "dev"
+	envLocal      = "local"
+	envDev        = "dev"
+	envStage      = "stage"
+	envProduction = "production"
 )
 
 // URL schemes accepted by outbound base-URL validation.
@@ -30,11 +36,27 @@ const (
 )
 
 // providerFake is the shared no-integration value accepted by EMAIL_SENDER,
-// PAYMENT_PROVIDER, and PHOTO_STORAGE_PROVIDER; senderSMTP is the real
-// EMAIL_SENDER backend.
+// PAYMENT_PROVIDER, and PHOTO_STORAGE_PROVIDER; providerTKassa is the real
+// payment processor; senderSMTP is the real EMAIL_SENDER backend.
 const (
-	providerFake = "fake"
-	senderSMTP   = "smtp"
+	providerFake   = "fake"
+	providerTKassa = "tkassa"
+	senderSMTP     = "smtp"
+)
+
+// FAKE_AUTOCONFIRM values (issue #663): auto completes fake payments and card
+// bindings on the GET bank-return and redirects into the frontend; off is the
+// manual mode with POST-only confirmation endpoints plus the fail endpoint.
+const (
+	fakeConfirmModeAuto = "auto"
+	fakeConfirmModeOff  = "off"
+)
+
+// Log format values of LOG_FORMAT: json is the structured aggregation format
+// (default outside local/dev), pretty the colored local/dev console handler.
+const (
+	logFormatJSON   = "json"
+	logFormatPretty = "pretty"
 )
 
 type Config struct {
@@ -102,6 +124,19 @@ type Config struct {
 	// delivery is disabled and the reminder worker runs email-only.
 	VAPIDPrivateKey string
 	VAPIDSubject    string
+	// WebOrigin is the frontend origin the fake provider's bank-return
+	// redirects the browser into (issue #663). The env var is read
+	// unconditionally but parsed, defaulted to the APP_BASE_URL origin
+	// (backend and web share an origin behind the reverse proxy), and
+	// validated only when PAYMENT_PROVIDER=fake.
+	WebOrigin       string
+	FakeAutoConfirm bool
+	// BillingTimeTravel enables the admin time-shift and tick endpoints of
+	// the subscription lifecycle acceptance rig (issue #665). The railguard
+	// is two-layered: the env flag defaults to off, and turning it on outside
+	// the non-production stands fails the config validation — a production
+	// process with the flag set never starts.
+	BillingTimeTravel bool
 }
 
 // RateLimit holds per-key rate-limiting configuration.
@@ -149,6 +184,7 @@ func Load() (Config, error) {
 		PaymentProvider:   os.Getenv("PAYMENT_PROVIDER"),
 		SMTPTimeout:       10 * time.Second,
 		AppBaseURL:        os.Getenv("APP_BASE_URL"),
+		WebOrigin:         os.Getenv("WEB_ORIGIN"),
 		TKassaTerminalKey: os.Getenv("T_KASSA_TERMINAL_KEY"),
 		TKassaPassword:    os.Getenv("T_KASSA_PASSWORD"),
 		TKassaBaseURL:     os.Getenv("T_KASSA_BASE_URL"),
@@ -180,6 +216,7 @@ func Load() (Config, error) {
 		cfg.loadSchedulerIntervals,
 		cfg.loadTrustedProxies,
 		cfg.loadTariffCacheTTL,
+		cfg.loadBillingTimeTravel,
 	} {
 		if err := load(); err != nil {
 			return Config{}, err
@@ -212,11 +249,27 @@ func (c *Config) loadAppEnv() error {
 	if c.AppEnv == "" {
 		return errors.New("APP_ENV is required")
 	}
-	allowedEnvs := map[string]bool{envLocal: true, envDev: true, "staging": true, "production": true}
+	allowedEnvs := map[string]bool{envLocal: true, envDev: true, envStage: true, envProduction: true}
 	if !allowedEnvs[c.AppEnv] {
-		return fmt.Errorf("invalid APP_ENV %q: must be one of local, dev, staging, production", c.AppEnv)
+		return fmt.Errorf("invalid APP_ENV %q: must be one of local, dev, stage, production", c.AppEnv)
 	}
 	return nil
+}
+
+// allowsFakeProviders reports whether the environment profile accepts the fake
+// payment provider and the fake email sender: the relaxed local/dev pair plus
+// the stage stand, which tests payments and emails without real money or real
+// recipients. Production never does.
+func (c *Config) allowsFakeProviders() bool {
+	return c.AppEnv == envLocal || c.AppEnv == envDev || c.AppEnv == envStage
+}
+
+// isStrictEnv reports whether the profile keeps the production-grade
+// requirements (https base URLs, explicit senders, a pinned T-Kassa base URL):
+// stage and production do, local/dev keep relaxed defaults. The stage-only
+// fake-provider exceptions live in allowsFakeProviders.
+func (c *Config) isStrictEnv() bool {
+	return c.AppEnv != envLocal && c.AppEnv != envDev
 }
 
 func (c *Config) loadDaData() error {
@@ -265,12 +318,12 @@ func (c *Config) loadLogging() error {
 	if c.LogFormat == "" {
 		switch c.AppEnv {
 		case envLocal, envDev:
-			c.LogFormat = "pretty"
+			c.LogFormat = logFormatPretty
 		default:
-			c.LogFormat = "json"
+			c.LogFormat = logFormatJSON
 		}
 	}
-	allowedFormats := map[string]bool{"json": true, "pretty": true}
+	allowedFormats := map[string]bool{logFormatJSON: true, logFormatPretty: true}
 	if !allowedFormats[c.LogFormat] {
 		return fmt.Errorf("invalid LOG_FORMAT %q: must be json or pretty", c.LogFormat)
 	}
@@ -552,20 +605,21 @@ func (c *Config) loadEmail() error {
 }
 
 // validateEmailSender pins EMAIL_SENDER to the allowed values and the
-// environment profile: empty defaults to fake in local/dev only and fake is
-// rejected in every stricter environment.
+// environment profile: empty defaults to fake in local/dev only, and fake is
+// rejected everywhere except local/dev/stage — on stage it is the point of
+// the explicit exception, in production it stays forbidden.
 func (c *Config) validateEmailSender() error {
 	allowedEmailSenders := map[string]bool{"": true, providerFake: true, senderSMTP: true}
 	if !allowedEmailSenders[c.EmailSender] {
 		return fmt.Errorf("invalid EMAIL_SENDER %q: must be empty, fake, or smtp", c.EmailSender)
 	}
 	if c.EmailSender == "" {
-		if c.AppEnv != envLocal && c.AppEnv != envDev {
+		if c.isStrictEnv() {
 			return fmt.Errorf("EMAIL_SENDER is required for APP_ENV=%s", c.AppEnv)
 		}
 		c.EmailSender = providerFake
 	}
-	if c.EmailSender == providerFake && c.AppEnv != envLocal && c.AppEnv != envDev {
+	if c.EmailSender == providerFake && !c.allowsFakeProviders() {
 		return fmt.Errorf("EMAIL_SENDER=fake is not allowed for APP_ENV=%s", c.AppEnv)
 	}
 	return nil
@@ -577,7 +631,7 @@ func (c *Config) loadSMTPSettings() error {
 	if c.EmailTemplatesDir == "" {
 		c.EmailTemplatesDir = "apps/backend/templates/email"
 	}
-	if c.EmailSender == senderSMTP && c.AppEnv != envLocal && c.AppEnv != envDev {
+	if c.EmailSender == senderSMTP && c.isStrictEnv() {
 		if !filepath.IsAbs(c.EmailTemplatesDir) {
 			return fmt.Errorf("EMAIL_TEMPLATES_DIR must be an absolute path in %s environment", c.AppEnv)
 		}
@@ -613,19 +667,22 @@ func (c *Config) loadPaymentProvider() error {
 		}
 		c.PaymentProvider = providerFake
 	}
-	allowedPaymentProviders := map[string]bool{providerFake: true, "tkassa": true}
+	allowedPaymentProviders := map[string]bool{providerFake: true, providerTKassa: true}
 	if !allowedPaymentProviders[c.PaymentProvider] {
 		return fmt.Errorf("invalid PAYMENT_PROVIDER %q: must be fake or tkassa", c.PaymentProvider)
 	}
-	if c.AppEnv != envLocal && c.AppEnv != envDev && c.PaymentProvider == providerFake {
+	if !c.allowsFakeProviders() && c.PaymentProvider == providerFake {
 		return fmt.Errorf("PAYMENT_PROVIDER=fake is not allowed for APP_ENV=%s", c.AppEnv)
 	}
 	if c.PaymentProvider == providerFake {
 		if err := c.loadFakeProviderBaseURL(); err != nil {
 			return err
 		}
+		if err := c.loadFakeSimulator(); err != nil {
+			return err
+		}
 	}
-	if c.PaymentProvider == "tkassa" {
+	if c.PaymentProvider == providerTKassa {
 		if err := c.loadTKassa(); err != nil {
 			return err
 		}
@@ -647,6 +704,37 @@ func (c *Config) loadFakeProviderBaseURL() error {
 	}
 	if u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", c.AppBaseURL)
+	}
+	return nil
+}
+
+// loadFakeSimulator reads the fake payment simulator knobs (issue #663) — a
+// fake-provider concern, so it runs only under PAYMENT_PROVIDER=fake.
+func (c *Config) loadFakeSimulator() error {
+	// WEB_ORIGIN: the frontend origin the fake bank-return redirects the
+	// browser into. Defaults to the APP_BASE_URL origin — behind the reverse
+	// proxy backend and web share an origin, locally they run on different
+	// ports.
+	if c.WebOrigin == "" {
+		u, err := url.Parse(c.AppBaseURL)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return fmt.Errorf("cannot derive WEB_ORIGIN from APP_BASE_URL %q: must be an absolute http(s) URL", c.AppBaseURL)
+		}
+		c.WebOrigin = u.Scheme + "://" + u.Host
+	}
+	u, err := url.Parse(c.WebOrigin)
+	if err != nil || u.Host == "" || (u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS) {
+		return fmt.Errorf("invalid WEB_ORIGIN %q: must be an absolute http(s) origin", c.WebOrigin)
+	}
+	c.WebOrigin = u.Scheme + "://" + u.Host
+
+	switch mode := cmp.Or(os.Getenv("FAKE_AUTOCONFIRM"), fakeConfirmModeAuto); mode {
+	case fakeConfirmModeAuto:
+		c.FakeAutoConfirm = true
+	case fakeConfirmModeOff:
+		c.FakeAutoConfirm = false
+	default:
+		return fmt.Errorf("invalid FAKE_AUTOCONFIRM %q: must be auto or off", mode)
 	}
 	return nil
 }
@@ -705,8 +793,8 @@ func (c *Config) validateTKassaCredentials() error {
 	return nil
 }
 
-// validateTKassaAppBaseURL checks the app base URL scheme; non-local/dev
-// environments must run behind https.
+// validateTKassaAppBaseURL checks the app base URL scheme; strict
+// environments (stage/production) must run behind https.
 func (c *Config) validateTKassaAppBaseURL() error {
 	u, err := url.Parse(c.AppBaseURL)
 	if err != nil {
@@ -715,8 +803,8 @@ func (c *Config) validateTKassaAppBaseURL() error {
 	if u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid APP_BASE_URL %q: scheme must be http or https", c.AppBaseURL)
 	}
-	if c.AppEnv != envLocal && c.AppEnv != envDev && u.Scheme != schemeHTTPS {
-		return fmt.Errorf("invalid APP_BASE_URL %q: non-local/dev environments must use https", c.AppBaseURL)
+	if c.isStrictEnv() && u.Scheme != schemeHTTPS {
+		return fmt.Errorf("invalid APP_BASE_URL %q: stage/production environments must use https", c.AppBaseURL)
 	}
 	return nil
 }
@@ -742,7 +830,7 @@ func (c *Config) overrideTKassaMaxRetries() error {
 
 func (c *Config) loadTKassaBaseURL() error {
 	if c.TKassaBaseURL == "" {
-		if c.AppEnv != envLocal && c.AppEnv != envDev {
+		if c.isStrictEnv() {
 			return fmt.Errorf("T_KASSA_BASE_URL is required when PAYMENT_PROVIDER=tkassa for APP_ENV=%s", c.AppEnv)
 		}
 		return nil
@@ -754,14 +842,14 @@ func (c *Config) loadTKassaBaseURL() error {
 	if tku.Scheme != schemeHTTP && tku.Scheme != schemeHTTPS {
 		return fmt.Errorf("invalid T_KASSA_BASE_URL %q: scheme must be http or https", c.TKassaBaseURL)
 	}
-	if c.AppEnv != envLocal && c.AppEnv != envDev {
+	if c.isStrictEnv() {
 		if tku.Scheme != "https" {
-			return fmt.Errorf("invalid T_KASSA_BASE_URL %q: non-local/dev environments must use https", c.TKassaBaseURL)
+			return fmt.Errorf("invalid T_KASSA_BASE_URL %q: stage/production environments must use https", c.TKassaBaseURL)
 		}
 		host := strings.ToLower(tku.Hostname())
 		if host != "securepay.tinkoff.ru" && host != "rest-api-test.tinkoff.ru" {
 			return fmt.Errorf(
-				"invalid T_KASSA_BASE_URL %q: production T-Kassa base URL must be "+
+				"invalid T_KASSA_BASE_URL %q: stage/production T-Kassa base URL must be "+
 					"https://securepay.tinkoff.ru/v2/ or https://rest-api-test.tinkoff.ru/v2/",
 				c.TKassaBaseURL)
 		}
@@ -900,6 +988,25 @@ func (c *Config) loadTariffCacheTTL() error {
 			return errors.New("TARIFF_CACHE_TTL must be positive")
 		}
 		c.TariffCacheTTL = d
+	}
+	return nil
+}
+
+// loadBillingTimeTravel reads the stand-only time-travel switch of the
+// subscription lifecycle acceptance rig (issue #665). The flag defaults to
+// off; enabling it outside the non-production stands — the same allowlist the
+// fake providers live on — fails the startup validation, so a production
+// process that asks for the rig never comes up.
+func (c *Config) loadBillingTimeTravel() error {
+	if v := os.Getenv("BILLING_TIME_TRAVEL"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("invalid BILLING_TIME_TRAVEL %q: must be a boolean", v)
+		}
+		c.BillingTimeTravel = b
+	}
+	if c.BillingTimeTravel && !c.allowsFakeProviders() {
+		return fmt.Errorf("BILLING_TIME_TRAVEL=true is not allowed for APP_ENV=%s", c.AppEnv)
 	}
 	return nil
 }

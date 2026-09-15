@@ -83,6 +83,10 @@ func (r *gateTransitionRepo) ListBySubscriptionID(context.Context, uuid.UUID) ([
 	return nil, nil
 }
 
+func (r *gateTransitionRepo) ShiftGraceEntryTimes(context.Context, uuid.UUID, time.Duration) (int, error) {
+	return 0, nil
+}
+
 func (r *gateTransitionRepo) WithTx(transaction.Tx) (billingapp.SubscriptionTransitionRepository, error) {
 	return r, nil
 }
@@ -102,11 +106,16 @@ func (r *gatePaymentRepo) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (d
 	return r.GetByID(ctx, id)
 }
 
-func (r *gatePaymentRepo) ListByUserID(context.Context, uuid.UUID) ([]domain.SubscriptionPayment, error) {
+func (r *gatePaymentRepo) ListByUserIDWithCard(context.Context, uuid.UUID) ([]billingapp.SubscriptionPaymentWithCard, error) {
 	return nil, nil
 }
 
 func (r *gatePaymentRepo) ListPendingByUserID(context.Context, uuid.UUID) ([]domain.SubscriptionPayment, error) {
+	return nil, nil
+}
+
+// The TTL-expiry batch is unused by the gate; empty results satisfy the port.
+func (r *gatePaymentRepo) ListExpiredPending(context.Context, time.Time, int) ([]domain.SubscriptionPayment, error) {
 	return nil, nil
 }
 
@@ -122,6 +131,10 @@ func (r *gatePaymentRepo) Count(context.Context, billingapp.PaymentSelection) (i
 }
 
 func (r *gatePaymentRepo) Update(context.Context, domain.SubscriptionPayment) error { return nil }
+
+func (r *gatePaymentRepo) ShiftCreatedAt(context.Context, uuid.UUID, time.Duration) (int64, error) {
+	return 0, nil
+}
 
 func (r *gatePaymentRepo) WithTx(transaction.Tx) (billingapp.SubscriptionPaymentRepository, error) {
 	return r, nil

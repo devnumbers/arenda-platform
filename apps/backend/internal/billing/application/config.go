@@ -44,6 +44,12 @@ type Config struct {
 	// the manual lever gives the user extra days, not an unbounded freeze of
 	// the lifecycle.
 	MaxGraceExtensionDays int
+	// MaxTimeShift caps a single stand-only time-travel shift (issue #665):
+	// the acceptance rig moves the temporal boundaries by at most this much
+	// in either direction — the same order of cap as MaxGraceExtensionDays.
+	// A yearly-period subscription sits outside one shift's reach by design:
+	// the operator drives it in two consecutive capped shifts.
+	MaxTimeShift time.Duration
 }
 
 // DefaultConfig returns the billing operational parameters with their
@@ -61,5 +67,6 @@ func DefaultConfig() Config {
 		PendingPaymentStaleness:   5 * time.Minute,
 		GraceExpiryReminderBefore: 48 * time.Hour,
 		MaxGraceExtensionDays:     90,
+		MaxTimeShift:              90 * 24 * time.Hour,
 	}
 }

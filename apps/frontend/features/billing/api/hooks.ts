@@ -30,6 +30,7 @@ import type {
 import { billingKeys } from '@/shared/api/query-keys';
 
 type AutoRenewRequest = components['schemas']['AutoRenewRequest'];
+type CancelSubscriptionRequest = components['schemas']['CancelSubscriptionRequest'];
 type ChangeTariffRequest = Omit<
   components['schemas']['ChangeTariffRequest'],
   'tariffName'
@@ -96,12 +97,32 @@ export function useToggleAutoRenew(): UseMutationResult<
   });
 }
 
-export function useCancelSubscription(): UseMutationResult<void, ApiError, void> {
+export function useCancelSubscription(): UseMutationResult<
+  void,
+  ApiError,
+  CancelSubscriptionRequest | void
+> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request?: CancelSubscriptionRequest | void) => {
+      await apiClient<void>('/subscription/cancel', {
+        method: 'POST',
+        body: JSON.stringify(request ?? {}),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+    },
+  });
+}
+
+export function useResumeSubscription(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
-      await apiClient<void>('/subscription/cancel', { method: 'POST' });
+      await apiClient<void>('/subscription/resume', { method: 'POST' });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
@@ -225,6 +246,12 @@ export function useDeletePaymentMethod(): UseMutationResult<
       void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
       void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
+    onError: () => {
+      // Отказ (409 in use — карта успела стать активной) означает, что
+      // локальный список устарел: пересинхронизируем, иначе гард удаления
+      // и радио продолжат показывать ушедшее состояние (#625).
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+    },
   });
 }
 
@@ -237,29 +264,6 @@ export function useSubscriptionPayments(): UseQueryResult<
     queryFn: () =>
       apiClient<components['schemas']['SubscriptionPaymentsResponse']>('/subscription/payments'),
     select: (data) => data.items.map(mapSubscriptionPaymentResponse),
-  });
-}
-
-export function usePendingPayment(): UseQueryResult<
-  SubscriptionPayment | undefined,
-  ApiError
-> {
-  return useQuery({
-    queryKey: billingKeys.payments,
-    queryFn: () =>
-      apiClient<components['schemas']['SubscriptionPaymentsResponse']>('/subscription/payments'),
-    select: (data) =>
-      data.items
-        .map(mapSubscriptionPaymentResponse)
-        .filter((payment) => payment.status === 'pending')
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        )[0],
-    refetchInterval: (query) =>
-      hasRecentPendingPayment(query.state.data)
-        ? PAYMENT_POLL_INTERVAL_MS
-        : false,
   });
 }
 

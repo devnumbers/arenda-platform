@@ -9,6 +9,7 @@ import {
   cmp,
   dateInMonth,
   dateToIso,
+  dateToIsoLocal,
   daysOverdue,
   fromIso,
   fullMonthsBetween,
@@ -39,6 +40,12 @@ describe('calendar: ISO-парсинг', () => {
 
   it('dateToIso — Date в ISO-строку (UTC)', () => {
     expect(dateToIso(fromIso('2026-08-17'))).toBe('2026-08-17');
+  });
+
+  it('dateToIsoLocal — календарный день по локальным часам браузера (#624)', () => {
+    const wallClock = new Date(2026, 7, 17, 13, 40);
+    expect(dateToIsoLocal(wallClock)).toBe('2026-08-17');
+    expect(dateToIsoLocal(new Date(2026, 0, 3, 0, 5))).toBe('2026-01-03');
   });
 });
 

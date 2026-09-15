@@ -425,6 +425,8 @@ type SubscriptionPayment struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	CardMask              pgtype.Text        `json:"card_mask"`
 }
 
 type SubscriptionTransition struct {
@@ -510,20 +512,22 @@ type UserPopupView struct {
 }
 
 type UserSubscription struct {
-	ID                    pgtype.UUID        `json:"id"`
-	UserID                pgtype.UUID        `json:"user_id"`
-	TariffID              pgtype.UUID        `json:"tariff_id"`
-	Source                string             `json:"source"`
-	Status                string             `json:"status"`
-	ValidUntil            pgtype.Timestamptz `json:"valid_until"`
-	AutoRenewEnabled      bool               `json:"auto_renew_enabled"`
-	PendingTariffID       pgtype.UUID        `json:"pending_tariff_id"`
-	PendingChangeAt       pgtype.Timestamptz `json:"pending_change_at"`
-	PendingPeriod         pgtype.Text        `json:"pending_period"`
-	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
-	LastAppliedPaymentID  pgtype.UUID        `json:"last_applied_payment_id"`
-	CurrentPeriod         pgtype.Text        `json:"current_period"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
-	GraceRemindedAt       pgtype.Timestamptz `json:"grace_reminded_at"`
+	ID                       pgtype.UUID        `json:"id"`
+	UserID                   pgtype.UUID        `json:"user_id"`
+	TariffID                 pgtype.UUID        `json:"tariff_id"`
+	Source                   string             `json:"source"`
+	Status                   string             `json:"status"`
+	ValidUntil               pgtype.Timestamptz `json:"valid_until"`
+	AutoRenewEnabled         bool               `json:"auto_renew_enabled"`
+	PendingTariffID          pgtype.UUID        `json:"pending_tariff_id"`
+	PendingChangeAt          pgtype.Timestamptz `json:"pending_change_at"`
+	PendingPeriod            pgtype.Text        `json:"pending_period"`
+	ActivePaymentMethodID    pgtype.UUID        `json:"active_payment_method_id"`
+	LastAppliedPaymentID     pgtype.UUID        `json:"last_applied_payment_id"`
+	CurrentPeriod            pgtype.Text        `json:"current_period"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	GraceRemindedAt          pgtype.Timestamptz `json:"grace_reminded_at"`
+	GraceArchivedPropertyIds []pgtype.UUID      `json:"grace_archived_property_ids"`
+	KeepPropertyID           pgtype.UUID        `json:"keep_property_id"`
 }

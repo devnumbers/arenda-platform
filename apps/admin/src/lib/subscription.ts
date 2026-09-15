@@ -30,6 +30,7 @@ export const transitionInitiatorChoices: Choice[] = [
 const transitionReasonNames: Record<string, string> = {
   registered: 'Регистрация',
   cancelled: 'Отмена',
+  resumed: 'Возобновление',
   downgrade_scheduled: 'Запланирован даунгрейд',
   payment_applied: 'Оплата применена',
   grace_entered: 'Вход в грейс',
@@ -39,6 +40,7 @@ const transitionReasonNames: Record<string, string> = {
   refunded: 'Возврат платежа',
   service_assigned: 'Назначена служебная',
   forced_change: 'Принудительная смена тарифа',
+  time_shifted: 'Сдвиг времени (стенд)',
 };
 
 export const transitionReasonLabel = (reason: string): string => transitionReasonNames[reason] ?? reason;

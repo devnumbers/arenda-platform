@@ -58,9 +58,10 @@ INSERT INTO user_subscriptions (
     pending_period,
     active_payment_method_id,
     last_applied_payment_id,
-    current_period
+    current_period,
+    grace_archived_property_ids
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING *;
 
@@ -90,7 +91,9 @@ SET
     active_payment_method_id = $10,
     last_applied_payment_id = $11,
     current_period = $12,
-    grace_reminded_at = $13
+    grace_reminded_at = $13,
+    grace_archived_property_ids = $14,
+    keep_property_id = $15
 WHERE id = $1
 RETURNING *;
 
@@ -115,6 +118,48 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
 SELECT * FROM subscription_transitions
 WHERE subscription_id = $1
 ORDER BY created_at DESC, id DESC;
+
+-- The stand-only time-travel rig of issue #665 is the one deliberate writer
+-- that moves history: the dunning retry schedule anchors at the latest
+-- reason='grace_entered' transition (the ListSubscriptionsBySelection bound),
+-- so shifting the schedule data-side means moving those rows in time. UPDATE
+-- is rejected by the immutability trigger (ADR 0037), so the move is a
+-- delete-and-reinsert of the same rows with shifted created_at; DELETE is
+-- deliberately unguarded by that trigger. The queries below are reachable
+-- only from the admin time-shift operation, which the config railguard keeps
+-- out of production (BILLING_TIME_TRAVEL, local/dev/stage stands only).
+
+-- name: DeleteSubscriptionGraceEntryTransitions :exec
+DELETE FROM subscription_transitions
+WHERE subscription_id = $1 AND reason = 'grace_entered';
+
+-- name: AppendSubscriptionTransitionWithCreatedAt :exec
+-- The time-travel twin of AppendSubscriptionTransition: identical columns plus
+-- the shifted created_at (the plain append always stamps now()).
+INSERT INTO subscription_transitions (
+    id,
+    subscription_id,
+    from_status,
+    to_status,
+    from_tariff_id,
+    to_tariff_id,
+    reason,
+    initiator_type,
+    initiator_id,
+    payment_id,
+    created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+
+-- name: ShiftSubscriptionPaymentsCreatedAt :execrows
+-- The other half of the coherent subscription time shift (issue #665): the
+-- dunning retry predicate counts payments created at or after the grace entry
+-- anchor, so the payments must travel by the same delta to keep the relative
+-- order — a +24 h retry boundary stays consumed/unconsumed exactly as it was
+-- before the shift.
+UPDATE subscription_payments
+SET created_at = created_at + make_interval(secs => sqlc.arg('delta_seconds')::double precision)
+WHERE subscription_id = sqlc.arg('subscription_id');
 
 -- Worker batch selections (issue #252, ADR 0008 lifecycle phases; one
 -- parameterized query per aggregate since issue #286). The phases set the
@@ -208,9 +253,11 @@ INSERT INTO subscription_payments (
     refunded_amount_kopecks,
     charge_attempts,
     error_code,
-    succeeded_at
+    succeeded_at,
+    expires_at,
+    card_mask
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING *;
 
 -- name: GetSubscriptionPaymentByID :one
@@ -219,10 +266,18 @@ SELECT * FROM subscription_payments WHERE id = $1;
 -- name: GetSubscriptionPaymentByIDForUpdate :one
 SELECT * FROM subscription_payments WHERE id = $1 FOR UPDATE;
 
--- name: ListSubscriptionPaymentsByUserID :many
-SELECT * FROM subscription_payments
-WHERE user_id = $1
-ORDER BY created_at DESC, id DESC;
+-- name: ListSubscriptionPaymentsWithCardByUserID :many
+-- The user's payment history (issues #250, #619): newest first, with the card
+-- the payment was charged with resolved for display — the payment's own
+-- snapshot first, the bound method's mask as the fallback for payments
+-- created before the snapshot existed. A method deleted after the snapshot
+-- was taken changes nothing; a deleted method behind a snapshot-less payment
+-- resolves to NULL.
+SELECT sp.*, COALESCE(sp.card_mask, pm.display_mask) AS resolved_card_mask
+FROM subscription_payments sp
+LEFT JOIN payment_methods pm ON pm.id = sp.payment_method_id
+WHERE sp.user_id = $1
+ORDER BY sp.created_at DESC, sp.id DESC;
 
 -- name: ListPendingSubscriptionPaymentsByUserID :many
 SELECT * FROM subscription_payments
@@ -239,9 +294,25 @@ SET
     refunded_amount_kopecks = $6,
     charge_attempts = $7,
     error_code = $8,
-    succeeded_at = $9
+    succeeded_at = $9,
+    expires_at = $10,
+    card_mask = $11
 WHERE id = $1
 RETURNING *;
+
+-- name: ListExpiredPendingSubscriptionPayments :many
+-- The TTL-expiry batch of the pending-payment worker (issue #616):
+-- still-pending payments whose payer form deadline ran out — the server-side
+-- expiry is the truth that marks them failed and unlocks the tariff choice.
+-- Unlike the reconciliation selections this batch does not require a provider
+-- reference: a crashed initiation must expire too. The worker re-checks and
+-- locks every row in its own transaction.
+SELECT * FROM subscription_payments
+WHERE status = 'pending'
+  AND expires_at IS NOT NULL
+  AND expires_at < $1
+ORDER BY expires_at ASC, id ASC
+LIMIT $2;
 
 -- name: ListSubscriptionPaymentsBySelection :many
 -- The reconciliation batch of the payment phases (issues #252, #254): pending
@@ -275,7 +346,7 @@ LIMIT sqlc.arg('batch_limit');
 SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
-       sp.created_at, sp.updated_at, sp.succeeded_at,
+       sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at, sp.card_mask,
        u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
@@ -309,7 +380,7 @@ WHERE (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id'))
 SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
-       sp.created_at, sp.updated_at, sp.succeeded_at,
+       sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at, sp.card_mask,
        u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id

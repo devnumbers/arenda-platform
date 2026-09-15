@@ -279,6 +279,14 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessWithArchivedProperty(t, false)
+}
+
+// newHarnessWithArchivedProperty is the harness core with the property
+// store's archived flag fixed at construction: the fake is copied into the
+// factory by value, so a post-construction mutation would not reach it.
+func newHarnessWithArchivedProperty(t *testing.T, archived bool) *harness {
+	t.Helper()
 	j := &journal{}
 	owner, property := mustID(t), mustID(t)
 	store := &fakeRentalStore{journal: j, rentals: map[uuid.UUID]domain.Rental{}}
@@ -288,7 +296,7 @@ func newHarness(t *testing.T) *harness {
 		paid:    3,
 	}
 	audit := &fakeAudit{journal: j}
-	propStore := fakePropertyStore{owner: owner}
+	propStore := fakePropertyStore{owner: owner, archived: archived}
 	factory := NewTxStoreFactory(store, propStore, gateway, fakeTenantReader{exists: true}, audit, fakeUoW{})
 	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
 	return &harness{

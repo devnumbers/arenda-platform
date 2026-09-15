@@ -6,7 +6,7 @@
  * CSS-модулях не переписываются — дублирование переходного периода
  * осознанно (ADR 0050).
  */
-export { Button, type ButtonProps } from './button';
+export { Button, type ButtonProps, buttonVariants } from './button';
 export { IconButton, type IconButtonProps } from './icon-button';
 export { UserButton, type UserButtonProps } from './user-button';
 export { TextField, type TextFieldProps, type TextFieldVariant } from './text-field';

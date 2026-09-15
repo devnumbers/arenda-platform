@@ -126,9 +126,10 @@ func (s *PaymentService) GetPayment(ctx context.Context, paymentID uuid.UUID) (d
 }
 
 // ListPayments returns the user's subscription payments with their tariffs
-// resolved, newest first (GET /subscription/payments, issue #250).
+// and charged cards resolved, newest first (GET /subscription/payments,
+// issues #250, #619).
 func (s *PaymentService) ListPayments(ctx context.Context, userID uuid.UUID) ([]SubscriptionPaymentView, error) {
-	payments, err := s.payments.ListByUserID(ctx, userID)
+	payments, err := s.payments.ListByUserIDWithCard(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list payments: %w", err)
 	}
@@ -142,12 +143,12 @@ func (s *PaymentService) ListPayments(ctx context.Context, userID uuid.UUID) ([]
 	}
 
 	views := make([]SubscriptionPaymentView, 0, len(payments))
-	for _, p := range payments {
-		tariff, ok := tariffByID[p.TariffID]
+	for _, row := range payments {
+		tariff, ok := tariffByID[row.Payment.TariffID]
 		if !ok {
-			return nil, fmt.Errorf("payment %s references unknown tariff %s", p.ID, p.TariffID)
+			return nil, fmt.Errorf("payment %s references unknown tariff %s", row.Payment.ID, row.Payment.TariffID)
 		}
-		views = append(views, SubscriptionPaymentView{Payment: p, Tariff: tariff})
+		views = append(views, SubscriptionPaymentView{Payment: row.Payment, Tariff: tariff, CardMask: row.ResolvedCardMask})
 	}
 	return views, nil
 }
@@ -354,17 +355,25 @@ func (s *PaymentService) applyFinalNotification(ctx context.Context, n *PaymentN
 // already marked failed by asking the provider for its current status — the
 // source of truth (ADR 0010) — before any state is changed. The status query
 // runs outside any transaction, so no row locks are held across the external
-// call. A provider that still reports the payment failed or not yet settled
+// call. The payment's persisted reference addresses the query; a payment
+// whose initiation crashed before the reference was saved (issue #616: the
+// TTL worker expired it in that window) reconciles through the reference the
+// notification itself carries — the same id the persisted reference would
+// hold. A provider that still reports the payment failed or not yet settled
 // makes the notification a no-op; only a provider-confirmed success is applied.
 func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment domain.SubscriptionPayment, n *PaymentNotification) error {
-	if !payment.HasProviderReference() {
-		// Without a provider reference there is nothing to reconcile against;
-		// a success we cannot verify is not applied.
-		s.log.WarnContext(ctx, "cannot reconcile failed payment: missing provider reference",
-			slog.String(auditKeyPaymentID, payment.ID.String()))
-		return nil
+	providerPaymentID := payment.ProviderPaymentID
+	if providerPaymentID == nil || *providerPaymentID == "" {
+		if n.ProviderPaymentID == "" {
+			// Without any provider reference there is nothing to reconcile
+			// against; a success we cannot verify is not applied.
+			s.log.WarnContext(ctx, "cannot reconcile failed payment: missing provider reference",
+				slog.String(auditKeyPaymentID, payment.ID.String()))
+			return nil
+		}
+		providerPaymentID = new(n.ProviderPaymentID)
 	}
-	status, err := s.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
+	status, err := s.provider.PaymentStatus(ctx, payment.ID, *providerPaymentID)
 	if err != nil {
 		return fmt.Errorf("provider status for out-of-order success: %w", err)
 	}
@@ -402,6 +411,10 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 		}
 
 		now := s.clock.Now().UTC()
+		// The card the provider reports for the charge becomes the payment's
+		// history snapshot (issue #619); both finalizing branches persist it
+		// with their own Update.
+		payment.AttachCardMask(n.CardMask, now)
 		switch n.Status {
 		case domain.PaymentStatusFailed:
 			return s.finalizeFailedPayment(ctx, grace, stores, payment, n, now)
@@ -578,8 +591,28 @@ func applySucceededPayment(
 		return domain.Transition{}, fmt.Errorf("get payment tariff: %w", err)
 	}
 
+	// Grace v2 (ADR 0055): an applied payment settles the restoration debt of
+	// the grace window — the properties archived at the grace entry restore
+	// under the (possibly changed) tariff limit, newest-first. The bridge
+	// returns what did not fit: the debt remainder that stays on the
+	// subscription for the next applied payment (the fall to basic drops it).
+	// A bridge failure fails the application, so the provider redelivers and
+	// the seam retries. Only an actually applied payment restores: the no-op
+	// paths above return early.
+	graceSnapshot := sub.GraceArchivedPropertyIDs
+	graceRemaining := graceSnapshot
+	if len(graceSnapshot) > 0 {
+		graceRemaining, err = stores.restoreGraceArchive(ctx, payment.UserID, graceSnapshot, paymentTariff.ActivePropertyLimit)
+		if err != nil {
+			return domain.Transition{}, fmt.Errorf("restore grace archive after payment: %w", err)
+		}
+	}
+
 	applied, err := stores.applyTransition(ctx, &sub,
 		func(s *domain.Subscription) error {
+			// The settled snapshot (or its remainder) commits with the
+			// transition — the aggregate is persisted once, by the seam.
+			s.SetGraceArchive(graceRemaining)
 			if s.TariffID == payment.TariffID {
 				return s.ApplyRenewal(payment.ID, payment.Period, now)
 			}
@@ -604,7 +637,7 @@ func applySucceededPayment(
 	if transitionChangedTariff(applied, payment.TariffID) {
 		// The applied payment switched the tariff: the new plan's limit takes
 		// effect with the same commit.
-		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, triggerRenewalDowngrade); err != nil {
+		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, triggerRenewalDowngrade, nil); err != nil {
 			return domain.Transition{}, fmt.Errorf("enforce tariff limit after payment downgrade: %w", err)
 		}
 	}

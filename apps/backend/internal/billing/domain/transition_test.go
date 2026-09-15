@@ -64,7 +64,7 @@ func TestNewTransition_RecordsAppliedState(t *testing.T) {
 	sub := validSubscription(t)
 	from := SubscriptionStatusActive
 	fromTariff := uuid.Must(uuid.NewV7())
-	if err := sub.Cancel(); err != nil {
+	if err := sub.Cancel(nil); err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
 	actorID := uuid.Must(uuid.NewV7())

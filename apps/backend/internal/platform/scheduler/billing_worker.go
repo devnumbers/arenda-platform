@@ -25,11 +25,13 @@ type ScheduledChangeProcessor interface {
 
 // RenewalProcessor drives the subscription lifecycle phases of the billing
 // worker: auto-renewal charges, grace dunning retries, pending upgrade
-// payments, grace-expiry reminders and expired grace handling (ADR 0008).
+// payments, pending-payment TTL expiry, grace-expiry reminders and expired
+// grace handling (ADR 0008).
 type RenewalProcessor interface {
 	ProcessRenewals(ctx context.Context, now time.Time) (int, error)
 	ProcessGraceRetries(ctx context.Context, now time.Time) (int, error)
 	ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error)
+	ProcessExpiredPendingPayments(ctx context.Context, now time.Time) (int, error)
 	ProcessGraceExpiryReminders(ctx context.Context, now time.Time) (int, error)
 	ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error)
 }
@@ -97,6 +99,15 @@ func (w *BillingWorker) Run(ctx context.Context) {
 	runTickerLoop(ctx, "billing", w.interval, w.logger, w.tick)
 }
 
+// TickOnce runs one leader-elected pass of the lifecycle phases synchronously
+// — the admin-triggered tick of the stand-only time-travel rig (issue #665),
+// so the acceptance observes a phase right after shifting a boundary instead
+// of waiting out BILLING_WORKER_INTERVAL. The production worker loop shares
+// the same code path.
+func (w *BillingWorker) TickOnce(ctx context.Context) error {
+	return w.tick(ctx)
+}
+
 func (w *BillingWorker) tick(ctx context.Context) error {
 	if w.pool == nil {
 		return errors.New("billing worker requires a database pool")
@@ -119,6 +130,10 @@ func (w *BillingWorker) processTick(ctx context.Context) error {
 		// #431).
 		w.processGraceRetries,
 		w.processPendingUpgrades,
+		// The pending-payment TTL expiry runs after the reconciliation: a
+		// payment the provider still settles first keeps its outcome, only
+		// what is left pending past its deadline expires (issue #616).
+		w.processExpiredPendingPayments,
 		// The grace-expiry reminder runs before the expired-grace downgrade:
 		// a window closing this tick is reminded first, and once the window
 		// has ended the reminder is moot (issue #253).
@@ -193,6 +208,20 @@ func (w *BillingWorker) processPendingUpgrades(ctx context.Context, now time.Tim
 	}
 	if count > 0 {
 		w.logger.InfoContext(ctx, "billing worker finalized pending upgrade payments", "count", count)
+	}
+	return nil
+}
+
+// processExpiredPendingPayments expires pending payments past their form
+// deadline (issue #616) and wraps a failure for the joined tick error.
+func (w *BillingWorker) processExpiredPendingPayments(ctx context.Context, now time.Time) error {
+	count, err := w.renewals.ProcessExpiredPendingPayments(ctx, now)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "billing worker pending payment expiry failed", "error", sanitize.Error(err))
+		return fmt.Errorf("expired pending payments: %w", err)
+	}
+	if count > 0 {
+		w.logger.InfoContext(ctx, "billing worker expired pending payments", "count", count)
 	}
 	return nil
 }

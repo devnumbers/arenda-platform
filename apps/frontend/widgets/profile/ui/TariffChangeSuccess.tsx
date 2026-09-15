@@ -3,11 +3,8 @@
 import { useEffect, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import clsx from 'clsx';
-import { StatusIconDanger, StatusIconGood, Sync } from '@/shared/assets/icons';
-import { Icon } from '@/shared/ui/icon';
-import { Button } from '@/shared/ui/button';
-import { LinkButton } from '@/shared/ui/link-button';
+import { Button, StickyBottomBar } from '@/shared/ui/design';
+import { CheckNoneLine, StatusIconDanger, Sync } from '@/shared/assets/icons';
 import {
   PAYMENT_STALE_MS,
   useSubscription,
@@ -17,12 +14,24 @@ import { billingKeys } from '@/shared/api/query-keys';
 import { formatDate } from '@/shared/lib/format-date';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import styles from './TariffChangeSuccess.module.css';
 
 function isPaymentStale(createdAt: string): boolean {
   return Date.now() - new Date(createdAt).getTime() > PAYMENT_STALE_MS;
 }
 
+type TariffChangeSuccessState = {
+  readonly icon: JSX.Element;
+  readonly title: string;
+  readonly descriptions: ReadonlyArray<string>;
+  readonly action: JSX.Element;
+};
+
+/** Успех смены тарифа (#623, канон полноэкранных успехов #621/#622):
+ * шапки нет — в центре иконка 64, заголовок H3 и серое описание, внизу
+ * StickyBottomBar с одним действием. Три варианта поверх одного каркаса:
+ * платёж в обработке (polling статуса по paymentId из редиректа банка),
+ * неуспех («Попробовать снова» на экран выбора) и успех («Хорошо» на
+ * главный «Тариф»; отложенный даунгрейд называет дату вступления). */
 export function TariffChangeSuccess(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -38,110 +47,73 @@ export function TariffChangeSuccess(): JSX.Element {
     }
   }, [payment?.status, queryClient]);
 
-  if (paymentId) {
-    if (isPaymentPending || payment?.status === 'pending') {
-      const isStale = payment ? isPaymentStale(payment.createdAt) : false;
+  let state: TariffChangeSuccessState;
 
-      return (
-        <div className={styles.root}>
-          <div className={styles.card}>
-            <div className={styles.iconWrapper}>
-              <Icon size="l" className={styles.spinner}>
-                <Sync className="text-error" />
-              </Icon>
-            </div>
-
-            <div className={styles.text}>
-              <h2 className={styles.heading}>Платёж обрабатывается</h2>
-              <p className={styles.subtext}>
-                Обычно это занимает до минуты, страница обновится
-                автоматически
-              </p>
-              {isStale && (
-                <p className={styles.subtext}>
-                  Проверяем статус у банка, это может занять несколько минут
-                </p>
-              )}
-            </div>
-
-            <Button
-              variant="primary"
-              size="large"
-              fullWidth
-              onClick={() => goBack(router, ROUTES.profileTariff)}
-            >
-              Вернуться к тарифу
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    if (payment?.status === 'failed') {
-      return (
-        <div className={styles.root}>
-          <div className={styles.card}>
-            <div className={clsx(styles.iconWrapper, styles.iconError)}>
-              <Icon size="l">
-                <StatusIconDanger />
-              </Icon>
-            </div>
-
-            <div className={styles.text}>
-              <h2 className={styles.heading}>Оплата не прошла</h2>
-              <p className={styles.subtext}>
-                Попробуйте сменить тариф ещё раз
-              </p>
-            </div>
-
-            <LinkButton
-              href={ROUTES.profileTariffChange}
-              variant="primary"
-              size="large"
-              fullWidth
-            >
-              Попробовать снова
-            </LinkButton>
-          </div>
-        </div>
-      );
-    }
-  }
-
-  const pending = subscription?.pendingTariff;
-  const pendingChangeAt = subscription?.pendingChangeAt;
-
-  return (
-    <div className={styles.root}>
-      <div className={styles.card}>
-        <div className={styles.iconWrapper}>
-          <Icon size="l">
-            <StatusIconGood />
-          </Icon>
-        </div>
-
-        <div className={styles.text}>
-          <h2 className={styles.heading}>Тариф изменен</h2>
-          {isPending ? (
-            <p className={styles.subtext}>Загрузка сведений о подписке...</p>
-          ) : (
-            <p className={styles.subtext}>
-              {pending && pendingChangeAt
-                ? `Изменения вступят в силу ${formatDate(pendingChangeAt)}.`
-                : 'Тариф успешно изменен.'}
-            </p>
-          )}
-        </div>
-
-        <Button
-          variant="primary"
-          size="large"
-          fullWidth
-          onClick={() => goBack(router, ROUTES.profileTariff)}
-        >
+  if (paymentId && (isPaymentPending || payment?.status === 'pending')) {
+    const isStale = payment ? isPaymentStale(payment.createdAt) : false;
+    state = {
+      icon: <Sync className="h-16 w-16 animate-spin text-error" aria-hidden />,
+      title: 'Платёж обрабатывается',
+      descriptions: isStale
+        ? [
+            'Обычно это занимает до минуты, страница обновится автоматически',
+            'Проверяем статус у банка, это может занять несколько минут',
+          ]
+        : ['Обычно это занимает до минуты, страница обновится автоматически'],
+      action: (
+        <Button onClick={() => goBack(router, ROUTES.profileTariff)}>
           Вернуться к тарифу
         </Button>
+      ),
+    };
+  } else if (paymentId && payment?.status === 'failed') {
+    state = {
+      icon: <StatusIconDanger className="h-16 w-16" aria-hidden />,
+      title: 'Оплата не прошла',
+      descriptions: ['Попробуйте сменить тариф ещё раз'],
+      action: (
+        <Button onClick={() => router.replace(ROUTES.profileTariffChange)}>
+          Попробовать снова
+        </Button>
+      ),
+    };
+  } else {
+    state = {
+      icon: <CheckNoneLine className="h-16 w-16" aria-hidden />,
+      title: 'Тариф изменен',
+      descriptions: [
+        isPending
+          ? 'Загрузка сведений о подписке...'
+          : subscription?.pendingTariff !== undefined &&
+              subscription.pendingChangeAt !== undefined
+            ? `Изменения вступят в силу ${formatDate(subscription.pendingChangeAt)}.`
+            : 'Тариф успешно изменен.',
+      ],
+      action: (
+        <Button onClick={() => goBack(router, ROUTES.profileTariff)}>Хорошо</Button>
+      ),
+    };
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-surface"
+      role="dialog"
+      aria-label={state.title}
+    >
+      <div className="flex flex-1 items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-4 text-center">
+          {state.icon}
+          <p className="m-0 text-xl font-semibold leading-6 text-content">{state.title}</p>
+          {state.descriptions.map((line) => (
+            <p key={line} className="m-0 max-w-72 text-sm leading-4 text-content-secondary">
+              {line}
+            </p>
+          ))}
+        </div>
       </div>
+
+      <StickyBottomBar>{state.action}</StickyBottomBar>
     </div>
   );
 }

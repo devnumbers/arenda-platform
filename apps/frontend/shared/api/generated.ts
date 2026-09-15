@@ -1102,6 +1102,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/subscription/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/subscription/change": {
         parameters: {
             query?: never;
@@ -1753,16 +1769,32 @@ export interface components {
             pendingChangeAt?: string | null;
             pendingPeriod?: components["schemas"]["AdminSubscriptionPaymentPeriod"];
             activePaymentMethod?: components["schemas"]["PaymentMethod"];
+            /** @description The user's live pending payment (issue #616) — present only while an unpaid payment form holds the tariff decision. Its expiry is the server-side truth: past expiresAt the payment turns failed and the tariff choice unlocks. */
+            pendingPayment?: components["schemas"]["SubscriptionPendingPayment"];
         };
         PaymentMethod: {
             /** Format: uuid */
             id: string;
             provider: string;
             displayMask: string;
+            cardSystem: components["schemas"]["CardSystem"];
+            /** @description Card expiry in the provider's display format (MMYY); null when unknown. */
+            expDate?: string | null;
             isActive: boolean;
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description The live pending subscription payment (issue #616): one per user, with the confirm URL and the absolute expiry instant the countdown anchors to. The TTL itself is a backend constant and does not surface here. */
+        SubscriptionPendingPayment: {
+            tariffName: components["schemas"]["TariffName"];
+            period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+            /** Format: int64 */
+            amountKopecks: number;
+            confirmUrl: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /** @description One subscription charge (issue #619): one list row is one payment — a refunded payment keeps its own row with the refunded status and the same positive amount. The sign and the status label are a UI convention the frontend renders on top of the status; amounts in the contract are always positive kopecks. */
         SubscriptionPayment: {
             /** Format: uuid */
             id: string;
@@ -1773,9 +1805,23 @@ export interface components {
             status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
             paymentUrl?: string | null;
+            paymentMethod?: components["schemas"]["SubscriptionPaymentCard"];
+            /** Format: date-time */
+            succeededAt?: string | null;
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description The card a payment was charged with (issue #619): a snapshot taken at creation or finalization of the payment, so the history survives payment-method deletion. Null for payments the provider reported no card for. */
+        SubscriptionPaymentCard: {
+            /** @description Masked card number, e.g. "4300********1234". */
+            displayMask: string;
+            cardSystem: components["schemas"]["CardSystem"];
+        };
+        /**
+         * @description Card system derived by the backend from the BIN prefix of the masked number (2 — Mir, 4 — Visa, 5 — Mastercard); unknown for old or unrecognized cards.
+         * @enum {string}
+         */
+        CardSystem: "mir" | "visa" | "mastercard" | "unknown";
         ChangeTariffRequest: {
             tariffName: components["schemas"]["TariffName"];
             period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
@@ -1787,6 +1833,19 @@ export interface components {
         };
         AutoRenewRequest: {
             enabled: boolean;
+        };
+        CancelSubscriptionRequest: {
+            /**
+             * Format: uuid
+             * @description The property the owner chooses to keep when the cancelled
+             *     subscription later expires and the basic tariff's property limit
+             *     is applied: the chosen property survives, the excess ones are
+             *     archived. Must be one of the owner's active properties, otherwise
+             *     the cancellation answers 409 `invalid_keep_property`. Omitted
+             *     when there is no choice to make (0 or 1 active properties) — the
+             *     most recently updated property survives.
+             */
+            keepPropertyId?: string;
         };
         AddPaymentMethodRequest: {
             /**
@@ -1921,7 +1980,7 @@ export interface components {
             fromTariffName?: string | null;
             toTariffName: string;
             /**
-             * @description Why the transition happened: registered, cancelled,
+             * @description Why the transition happened: registered, cancelled, resumed,
              *     downgrade_scheduled, payment_applied, grace_entered,
              *     grace_extended, scheduled_change_applied, expired, refunded,
              *     service_assigned, forced_change.
@@ -2715,8 +2774,11 @@ export interface components {
         PropertyStatus: "active" | "maintenance" | "archived";
         /** @enum {string} */
         SubscriptionStatus: "active" | "grace" | "cancelled";
-        /** @enum {string} */
-        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded" | "refunding";
+        /**
+         * @description Lifecycle states of a subscription payment. Refunds are full-amount only (ADR 0037): the legacy partial_refunded is not part of the vocabulary, refunding is the internal reservation shown to the user as pending.
+         * @enum {string}
+         */
+        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "refunding";
         /** @enum {string} */
         AdminSubscriptionPaymentPeriod: "month" | "year";
         /** @enum {string} */
@@ -3006,6 +3068,15 @@ export interface components {
         };
         /** @description Subscription is blocked; renew to continue mutating data */
         SubscriptionBlocked: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Conflict. `pending_payment_exists` — a live pending payment holds the user's tariff decision (issue #616): the tariff change, the cancellation and the resume stay locked until the payment resolves or expires. `invalid_keep_property` — the cancellation's keepPropertyId is not one of the owner's active properties (issue #617). `resume_not_available` — the resume endpoint was called on a subscription that is not cancelled or whose paid period has already expired: restoration of an expired period goes through paying for a tariff (issue #617). */
+        SubscriptionConflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -5331,7 +5402,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CancelSubscriptionRequest"];
+            };
+        };
         responses: {
             /** @description Subscription cancelled */
             204: {
@@ -5342,7 +5417,29 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["SubscriptionConflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    resumeSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancellation undone without a charge: the subscription is active again inside its already paid period, auto-renew is enabled and the paid remainder is kept */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SubscriptionConflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5371,7 +5468,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["SubscriptionConflict"];
             500: components["responses"]["InternalServerError"];
         };
     };

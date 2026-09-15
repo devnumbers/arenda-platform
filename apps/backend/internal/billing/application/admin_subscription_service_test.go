@@ -335,7 +335,7 @@ func TestAdminForceChangeTariff_Rejections(t *testing.T) {
 	}
 
 	cancelled := h.seedPaidSubscription(t, domain.TariffPro)
-	if err := cancelled.Cancel(); err != nil {
+	if err := cancelled.Cancel(nil); err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
 	if err := h.stores.subscriptions.Update(t.Context(), cancelled); err != nil {

@@ -100,6 +100,14 @@ type SubscriptionRepository interface {
 type SubscriptionTransitionRepository interface {
 	Append(ctx context.Context, transition domain.Transition) error
 	ListBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) ([]domain.Transition, error)
+	// ShiftGraceEntryTimes moves the created_at of every grace-entry
+	// transition of the subscription by the signed delta (issue #665) — the
+	// stand-only time travel of the dunning anchor, which the retry schedule
+	// reads as the latest reason='grace_entered' row. The immutability trigger
+	// rejects UPDATE (ADR 0037), so the adapter moves the rows as a
+	// delete-and-reinsert of the same values; the trigger leaves DELETE
+	// deliberately unguarded. Returns how many entries moved.
+	ShiftGraceEntryTimes(ctx context.Context, subscriptionID uuid.UUID, delta time.Duration) (int, error)
 	WithTx(tx transaction.Tx) (SubscriptionTransitionRepository, error)
 }
 
@@ -137,8 +145,17 @@ type SubscriptionPaymentRepository interface {
 	Create(ctx context.Context, payment domain.SubscriptionPayment) (domain.SubscriptionPayment, error)
 	GetByID(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.SubscriptionPayment, error)
-	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
+	// ListByUserIDWithCard returns the user's payments, newest first, each
+	// with the masked card the payment was charged with resolved for display
+	// (issue #619): the payment's own snapshot first, the bound method's mask
+	// as the fallback for snapshot-less payments.
+	ListByUserIDWithCard(ctx context.Context, userID uuid.UUID) ([]SubscriptionPaymentWithCard, error)
 	ListPendingByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SubscriptionPayment, error)
+	// ListExpiredPending returns a batch of still-pending payments whose form
+	// deadline ran out before the given instant (issue #616) — the TTL-expiry
+	// phase's selection. The predicate lives in the SQL adapter; no provider
+	// reference is required, a crashed initiation must expire too.
+	ListExpiredPending(ctx context.Context, before time.Time, limit int) ([]domain.SubscriptionPayment, error)
 	// List returns a batch of payments matching the worker selection (issue
 	// #286) — the single parameterized query behind every reconciliation
 	// batch.
@@ -148,6 +165,13 @@ type SubscriptionPaymentRepository interface {
 	// count the whole batch, not one page of it.
 	Count(ctx context.Context, sel PaymentSelection) (int64, error)
 	Update(ctx context.Context, payment domain.SubscriptionPayment) error
+	// ShiftCreatedAt moves created_at of every payment of the subscription by
+	// the signed delta (issue #665) — the other half of the stand-only time
+	// travel: the dunning retry predicate counts payments created at or after
+	// the grace-entry anchor, so the payments must travel with the anchor for
+	// the retry schedule's relative order to survive the shift. Returns how
+	// many rows moved.
+	ShiftCreatedAt(ctx context.Context, subscriptionID uuid.UUID, delta time.Duration) (int64, error)
 	WithTx(tx transaction.Tx) (SubscriptionPaymentRepository, error)
 }
 

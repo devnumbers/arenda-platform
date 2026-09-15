@@ -1,6 +1,6 @@
 // Package logger provides slog.Handler factories for different output formats.
 //
-// JSON output remains the default for staging and production to keep structured
+// JSON output remains the default for stage and production to keep structured
 // log aggregation unchanged. A colored "pretty" handler is used for local and
 // dev environments to make console output easier to read.
 package logger

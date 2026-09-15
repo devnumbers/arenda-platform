@@ -129,6 +129,9 @@ export { default as MenuLines } from './menu-lines.svg';
 // Строка объекта глобальной ленты (#523, Figma 1733-27412): Icon/S/HomeMain
 // 16×16 (обводка 1.2) — отдельная от 24×24 HomeMain таббара, currentColor.
 export { default as HomeMainSmall } from './home-main-small.svg';
+// Главный экран «Тариф» (#620, Figma 1879-70076): Icon/S/Info 16×16
+// (обводка 1.2) в строках hero-карточки — currentColor.
+export { default as InfoSmall } from './info-small.svg';
 // Сортировочный чип (SortingSmallBig/SortingBigSmall/SmallArrowDown)
 // канонично экспортируется в блоке «Направление сортировки» выше.
 export { default as SmallArrowUp } from './small-arrow-up.svg';
@@ -144,6 +147,10 @@ export { default as Checkmark } from './checkmark.svg';
 // Icon/Bold/Objects 208:2994 («Общий контакт») и Icon/Bold/Home 189:931
 // (объекты; в наборе это BoldHome).
 export { default as BoldObjects } from './bold-objects.svg';
+
+// Экран «Тариф» (#620, Figma 1879-70076): плитка «Оплата»
+// (CreditCard 1917:72300) — currentColor.
+export { default as CreditCard } from './credit-card.svg';
 
 // Канонический набор иконок (96, владелец 07.09): Icon/Bold/* и Icon/R/* из
 // Figma «Рентли. Новые экраны сервиса». Полное сопоставление узлов —
@@ -198,3 +205,13 @@ export { default as KeySmall } from './key-small.svg';
 export { default as PinSmall } from './pin-small.svg';
 // Уже потреблялись: ClockSmall, HomeMainSmall, Repeat, Star (файлы обновлены
 // свежими экспортами, см. README).
+
+// Экран «О тарифе» (#621, Figma 1934-78524): успех возобновления —
+// Icon/Color/CheckNoneLine 1386:66530, запечённый сине-градиентный круг
+// с белой галкой (ровный круг, не «шестерёнка» GoodWhite).
+export { default as CheckNoneLine } from './check-none-line.svg';
+
+// Экран «Отключение тарифа» (#622, Figma 1933-78038): успех отключения —
+// Icon/Color/Cancel 1933:78037, запечённый красно-градиентный круг
+// с белым крестом (имя Cancel занято контурным 24×24 currentColor).
+export { default as CancelColor } from './cancel-color.svg';

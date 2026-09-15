@@ -22,6 +22,11 @@ var (
 	// subscription without a validity period (the basic tariff never expires,
 	// so there is nothing to renew).
 	ErrCannotEnableAutoRenew = errors.New("cannot enable auto renew without a validity period")
+	// ErrResumeNotAvailable is returned when the free resume of a cancelled
+	// subscription is impossible (issue #617): the subscription is not in the
+	// cancelled state, or its paid period has already expired — restoration
+	// of an expired period goes through paying for a tariff (ADR 0008).
+	ErrResumeNotAvailable = errors.New("resume not available")
 	// ErrInvalidTransition is returned when a subscription transition record is
 	// built from an incomplete or inconsistent subscription state.
 	ErrInvalidTransition = errors.New("invalid subscription transition")
@@ -40,6 +45,10 @@ var (
 	// ErrInvalidGraceExtension is returned when an admin grace extension adds
 	// no time or more than the operational cap allows (issue #255).
 	ErrInvalidGraceExtension = errors.New("invalid grace extension")
+	// ErrInvalidTimeShift is returned when the stand-only time-travel shift
+	// (issue #665) is asked for a zero delta or a subscription without a
+	// validity boundary — there is no time to travel on the free basic state.
+	ErrInvalidTimeShift = errors.New("invalid subscription time shift")
 	// ErrInvalidTariffPricing is returned when a tariff's admin-editable
 	// fields break their invariants: a negative price or a property limit
 	// below -1 (issue #256).

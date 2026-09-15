@@ -69,6 +69,9 @@ type integrationHarness struct {
 	tariffsSvc        *billingapp.TariffService
 	onboarding        *billingapp.OnboardingService
 	limiter           *billingapp.SubscriptionPropertyLimiter
+	// NewSubscriptionService builds one more subscription service over the
+	// harness's shared factory — the rig-less railguard variant among others.
+	newSubscriptionService func(billingapp.SubscriptionServiceConfig) *billingapp.SubscriptionService
 	// FakeConfirms mounts the local confirmation endpoints the way the wiring
 	// does under the fake provider (issue #287): the fake adapter reports the
 	// completed entry, the confirmed event runs through the production
@@ -110,17 +113,17 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 
 	factory := billingapp.NewTxStoreFactory(tariffs, subscriptions, transitions, paymentsRepo, methodsRepo, bindingsRepo, audit, uow)
 	services := billingapp.NewServices(factory, billingapp.ServicesConfig{
-		Config:        billingapp.DefaultConfig(),
-		Clock:         clk,
-		Logger:        logger,
-		Provider:      provider,
-		AdminPayments: paymentsRepo,
+		Config:            billingapp.DefaultConfig(),
+		Clock:             clk,
+		Logger:            logger,
+		Provider:          provider,
+		AdminPayments:     paymentsRepo,
+		TimeTravelEnabled: true,
 	})
 
-	confirmHandlers := billinghttp.NewFakeConfirmHandlers(provider, services.Payments, logger)
+	confirmHandlers := billinghttp.NewFakeConfirmHandlers(provider, services.Payments, logger, "https://web.test", true)
 	confirmRouter := chi.NewRouter()
-	confirmRouter.Post(billinghttp.FakePaymentConfirmRoute, confirmHandlers.ConfirmPayment)
-	confirmRouter.Post(billinghttp.FakeCardBindingConfirmRoute, confirmHandlers.ConfirmCardBinding)
+	confirmHandlers.MountRoutes(confirmRouter)
 
 	return &integrationHarness{
 		t:                 t,
@@ -141,7 +144,10 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		tariffsSvc:        services.Tariffs,
 		onboarding:        services.Onboarding,
 		limiter:           services.Limiter,
-		fakeConfirms:      confirmRouter,
+		newSubscriptionService: func(cfg billingapp.SubscriptionServiceConfig) *billingapp.SubscriptionService {
+			return billingapp.NewSubscriptionService(factory, cfg)
+		},
+		fakeConfirms: confirmRouter,
 	}
 }
 

@@ -45,9 +45,11 @@ type SubscriptionViewer interface {
 }
 
 // SubscriptionManager serves the user's own subscription lifecycle mutations
-// (issue #249): cancellation, auto-renew toggling and tariff change.
+// (issue #249): cancellation with the keep choice, resume, auto-renew
+// toggling and tariff change.
 type SubscriptionManager interface {
-	CancelSubscription(ctx context.Context, userID uuid.UUID) error
+	CancelSubscription(ctx context.Context, userID uuid.UUID, keepPropertyID *uuid.UUID) error
+	ResumeSubscription(ctx context.Context, userID uuid.UUID) error
 	ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error
 	ChangeTariff(ctx context.Context, userID uuid.UUID, req billingapp.ChangeTariffRequest) (billingapp.ChangeTariffResult, error)
 }
@@ -314,7 +316,11 @@ func (h *BillingHandlers) ToggleAutoRenew(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// CancelSubscription implements POST /subscription/cancel (issue #249).
+// CancelSubscription implements POST /subscription/cancel (issues #249,
+// #617). The body is optional: it names the property the owner wants to
+// survive the fall to basic, and is omitted when there is no choice to make
+// (0 or 1 active properties) — the default most-recently-updated survivor
+// rule applies.
 func (h *BillingHandlers) CancelSubscription(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
@@ -323,7 +329,34 @@ func (h *BillingHandlers) CancelSubscription(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := h.managers.CancelSubscription(r.Context(), ownerID); err != nil {
+	var body openapi.CancelSubscriptionRequest
+	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil && !errors.Is(err, io.EOF) {
+		h.logger.ErrorContext(r.Context(), "failed to decode cancel subscription request", slog.String("error", httpsupport.SanitizeError(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		return
+	}
+
+	if err := h.managers.CancelSubscription(r.Context(), ownerID, body.KeepPropertyId); err != nil {
+		h.handleBillingError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ResumeSubscription implements POST /subscription/resume (issue #617): the
+// free undo of a cancellation — a cancelled subscription inside its already
+// paid period returns to active with auto-renew on, no charge.
+func (h *BillingHandlers) ResumeSubscription(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := httpsupport.OwnerIDFromContext(r)
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	if err := h.managers.ResumeSubscription(r.Context(), ownerID); err != nil {
 		h.handleBillingError(w, r, err)
 		return
 	}
@@ -382,7 +415,8 @@ func (h *BillingHandlers) ChangeTariff(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListSubscriptionPayments implements GET /subscription/payments (issue #250):
-// the user's own subscription payments with their tariffs, newest first.
+// the user's own subscription payments with their tariffs and charged cards,
+// newest first (issue #619).
 func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {
@@ -407,6 +441,8 @@ func (h *BillingHandlers) ListSubscriptionPayments(w http.ResponseWriter, r *htt
 			AmountKopecks: v.Payment.AmountKopecks,
 			Provider:      string(v.Payment.Provider),
 			CreatedAt:     v.Payment.CreatedAt,
+			PaymentMethod: httpsupport.SubscriptionPaymentCardResponse(v.CardMask),
+			SucceededAt:   v.Payment.SucceededAt,
 		}
 		if v.Payment.HasPaymentURL() {
 			url := *v.Payment.PaymentURL
@@ -923,6 +959,29 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict",
 				"Активный способ оплаты нельзя удалить, пока не выбран другой"))
+	case errors.Is(err, billingapp.ErrPendingPaymentExists):
+		// The one-pending-payment rule (issue #616): the tariff decision is
+		// locked to the payment already in flight — the screens read the code
+		// and show the awaiting-payment state instead of their own.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Есть неоплаченный платёж: дождитесь его завершения или повторите попытку позже",
+				"pending_payment_exists"))
+	case errors.Is(err, billingapp.ErrInvalidKeepProperty):
+		// The cancel keep choice (issue #617): the named property is not one
+		// of the owner's active properties.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Выбранный объект недоступен: выберите активный объект",
+				"invalid_keep_property"))
+	case errors.Is(err, domain.ErrResumeNotAvailable):
+		// The free resume (issue #617): the subscription is not cancelled or
+		// its paid period has expired — restoration goes through paying for a
+		// tariff (issue #429).
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Возобновление недоступно: оплаченный период истёк, оплатите тариф",
+				"resume_not_available"))
 	case errors.Is(err, billingapp.ErrBindingSessionLimitExceeded):
 		// The per-user binding-session limit (ticket #427): the sliding
 		// window releases the oldest sessions over time, so the standard
@@ -935,17 +994,19 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusServiceUnavailable,
 			httpsupport.Problem(r.Context(), "Payment unavailable",
 				"Оплата временно недоступна, попробуйте позже"))
+	case errors.Is(err, billingapp.ErrTimeTravelDisabled):
+		// The stand-only time-travel rig (issue #665): a service wired
+		// without it refuses the operation — the routes are not mounted on
+		// such a build, so reaching this is a wiring defect the caller sees
+		// as a refusal, not a crash.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Механизм управления временем подписки выключен"))
 	case errors.Is(err, domain.ErrAlreadyOnTariff),
 		errors.Is(err, domain.ErrInvalidTariffChange),
 		errors.Is(err, domain.ErrInvalidSubscriptionState),
 		errors.Is(err, domain.ErrCannotEnableAutoRenew),
 		errors.Is(err, domain.ErrInvalidPaymentStatus):
-		detail, ok := httpsupport.UserFacingDetail(err)
-		if !ok {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", detail))
+		writeDetailProblem(w, r, err, http.StatusConflict)
 	case errors.Is(err, billingapp.ErrInvalidFilter):
 		// An admin listing filter outside its whitelist — a request defect,
 		// not a server failure (issue #254).
@@ -957,14 +1018,27 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 		errors.Is(err, domain.ErrInvalidPayment),
 		errors.Is(err, domain.ErrInvalidTerm),
 		errors.Is(err, domain.ErrInvalidGraceExtension),
+		errors.Is(err, domain.ErrInvalidTimeShift),
 		errors.Is(err, domain.ErrInvalidTariffPricing):
-		detail, ok := httpsupport.UserFacingDetail(err)
-		if !ok {
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			return
-		}
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", detail))
+		writeDetailProblem(w, r, err, http.StatusBadRequest)
 	default:
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
+}
+
+// writeDetailProblem answers with the fixed user-facing detail of a known
+// domain error (the httpsupport table) under the given status; an
+// unrecognized error degrades to an internal problem so nothing sensitive
+// leaks.
+func writeDetailProblem(w http.ResponseWriter, r *http.Request, err error, status int) {
+	detail, ok := httpsupport.UserFacingDetail(err)
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		return
+	}
+	title := "Bad request"
+	if status == http.StatusConflict {
+		title = "Conflict"
+	}
+	httpsupport.WriteProblem(r.Context(), w, status, httpsupport.Problem(r.Context(), title, detail))
 }

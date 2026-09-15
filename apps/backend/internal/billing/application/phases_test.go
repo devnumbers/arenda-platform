@@ -216,7 +216,7 @@ func TestPhaseScheduler_RenewalOnset(t *testing.T) {
 	requireBoundary(t, "nonRenewingExpired ValidUntilBefore", nonRenewing.ValidUntilBefore, now)
 	requireSelection(t, h.listedUserIDs(t, nonRenewing), idsOf(renewalOff), idsOf(due, stillValid)...)
 
-	if err := renewalOff.Cancel(); err != nil {
+	if err := renewalOff.Cancel(nil); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 	if err := h.stores.subscriptions.Update(t.Context(), renewalOff); err != nil {

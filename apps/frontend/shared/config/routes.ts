@@ -158,6 +158,12 @@ export const ROUTES = {
   profileAccountTimezone: '/profile/account/timezone',
   profileChangePhone: '/profile/account/phone',
   profileTariff: '/profile/tariff',
+  /** Экран «О тарифе» (карта #611, тикет #621): детали тарифа с главного
+   * «Тариф»; до #621 страница живёт как нейтральный каркас. */
+  profileTariffAbout: '/profile/tariff/about',
+  /** Флоу отключения тарифа (карта #611, тикет #622) поверх «О тарифе»;
+   * в #621 страница живёт как нейтральный каркас под кнопку. */
+  profileTariffDisable: '/profile/tariff/disable',
   profileTariffChange: '/profile/tariff/change',
   profileTariffChangeSuccess: '/profile/tariff/change/success',
   profilePaymentMethods: '/profile/tariff/payment-methods',

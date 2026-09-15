@@ -23,7 +23,7 @@ const ACTIVE_SUBSCRIPTIONS_URL = `/users?filter=${encodeURIComponent(JSON.string
 const countFormatter = new Intl.NumberFormat('ru-RU');
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
-type SubscriptionPaymentStatus = 'pending' | 'succeeded' | 'failed' | 'refunded' | 'partial_refunded' | 'refunding';
+type SubscriptionPaymentStatus = 'pending' | 'succeeded' | 'failed' | 'refunded' | 'refunding';
 
 // Структуры синхронизированы со схемой AdminStats в apps/backend/api/openapi/openapi.yaml.
 interface AdminStatsRecentUser {

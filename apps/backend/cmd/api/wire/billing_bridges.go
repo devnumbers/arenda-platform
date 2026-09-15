@@ -37,15 +37,23 @@ func (s propertyArchiverSource) WithTx(tx transaction.Tx) (billingapp.ExcessProp
 
 // propertyArchiver runs the properties context's archiver on the bound
 // transaction: active properties beyond the limit are archived, keeping the
-// newest.
+// newest, and the ids a grace entry archived are restored under the tariff
+// limit (ADR 0055).
 type propertyArchiver struct {
 	svc *propertiesapp.PropertyService
 	tx  transaction.Tx
 }
 
-// ArchiveExcess archives the owner's active properties beyond the limit.
-func (a propertyArchiver) ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int) error {
-	return a.svc.ArchiveExcessProperties(ctx, a.tx, ownerID, limit)
+// ArchiveExcess archives the owner's active properties beyond the limit and
+// returns their ids, newest first.
+func (a propertyArchiver) ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int, keepPropertyID *uuid.UUID) ([]uuid.UUID, error) {
+	return a.svc.ArchiveExcessProperties(ctx, a.tx, ownerID, limit, keepPropertyID)
+}
+
+// RestoreGraceArchive unarchives the grace snapshot ids while the owner's
+// active count stays under the limit and returns the debt remainder.
+func (a propertyArchiver) RestoreGraceArchive(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error) {
+	return a.svc.RestoreGraceArchivedProperties(ctx, a.tx, ownerID, ids, limit)
 }
 
 // recipientSlotSource adapts the access SlotCoordinator to the billing
@@ -75,4 +83,11 @@ type recipientSlotEnforcer struct {
 // Enforce suspends the recipient's excess shared memberships.
 func (e recipientSlotEnforcer) Enforce(ctx context.Context, userID uuid.UUID, trigger string) error {
 	return e.coordinator.EnforceRecipientLimit(ctx, e.tx, userID, trigger)
+}
+
+// ActivePropertyExists reports whether the property belongs to the owner and
+// still occupies a tariff slot — the keep-choice validation read of the
+// cancel flow (issue #617).
+func (a propertyArchiver) ActivePropertyExists(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error) {
+	return a.svc.ActivePropertyExists(ctx, a.tx, ownerID, propertyID)
 }
